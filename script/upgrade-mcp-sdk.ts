@@ -11,8 +11,12 @@
 // the code an edit targets, the script stops and names that edit. Then check whether upstream fixed it (drop the
 // edit) or moved it (update `find`), and run the script again.
 //
+// Before reporting success it checks that the patch file and its patchedDependencies entry exist and that a fresh
+// install carries every edit. Any failure restores the manifests, lockfile and old patch and reinstalls them.
+//
 // Afterwards run `bun typecheck` and the MCP tests in packages/core.
 
+import { rm } from "node:fs/promises"
 import path from "node:path"
 import { $ } from "bun"
 
@@ -131,38 +135,115 @@ if (!version || process.argv.length > 3) {
 
 const root = path.resolve(import.meta.dir, "..")
 const pkg = "@modelcontextprotocol/client"
+const patchFile = `patches/${pkg.replace("/", "%2F")}@${version}.patch`
+const manifests = ["package.json", "packages/core/package.json", "packages/client/package.json", "bun.lock"]
 
-await pin(path.join(root, "packages/core/package.json"))
-await pin(path.join(root, "packages/client/package.json"))
-await dropPatch()
-await $`bun install`.cwd(root)
-await $`bun patch ${pkg}@${version}`.cwd(root).quiet()
+// Every file this script changes, restored if any step fails so the SDK is never left unpatched.
+const backup = new Map<string, string | undefined>()
+for (const file of manifests) backup.set(file, await Bun.file(path.join(root, file)).text())
+const previous = (backup.get("package.json") ?? "").match(
+  /"@modelcontextprotocol\/client@[^"]+": "(patches\/[^"]+)"/,
+)?.[1]
+if (previous) backup.set(previous, await Bun.file(path.join(root, previous)).text())
+if (patchFile !== previous) backup.set(patchFile, undefined)
 
-const dir = path.join(root, "node_modules/.bun", `${pkg.replace("/", "+")}@${version}`, "node_modules", pkg)
-for (const format of formats) {
-  const files = new Map<string, string>()
-  for (const chunk of ["public", "src"] as const) {
-    const matches = await Array.fromAsync(new Bun.Glob(`dist/${chunk}-*.${format.extension}`).scan({ cwd: dir }))
-    if (matches.length !== 1) fail(`expected one dist/${chunk}-*.${format.extension}, found ${matches.length}`)
-    const file = path.join(dir, matches[0])
-    files.set(file, await Bun.file(file).text())
+const failure = await upgrade().then(
+  () => undefined,
+  (error: unknown) => error,
+)
+if (failure !== undefined) {
+  console.error(failure instanceof Error ? failure.message : failure)
+  for (const [file, text] of backup) {
+    if (text === undefined)
+      await Bun.file(path.join(root, file))
+        .delete()
+        .catch(() => {})
+    else await Bun.write(path.join(root, file), text)
   }
-  for (const edit of edits) {
-    const file = Array.from(files.keys()).find((file) => path.basename(file).startsWith(`${edit.chunk}-`))!
-    const text = files.get(file)!
-    const find = edit.find(format)
-    const count = text.split(find).length - 1
-    if (count !== 1) fail(`edit "${edit.name}" matched ${count} times in ${path.relative(dir, file)}, expected 1`)
-    files.set(
-      file,
-      text.replace(find, () => edit.replace(format)),
-    )
-  }
-  for (const [file, text] of files) await Bun.write(file, text)
+  console.error(`Restored ${Array.from(backup.keys()).join(", ")}. Reinstalling the previous version.`)
+  await $`bun install`.cwd(root).nothrow()
+  process.exit(1)
+}
+console.log(`Patched ${pkg}@${version}. Run bun typecheck and the MCP tests in packages/core.`)
+
+async function upgrade() {
+  await pin(path.join(root, "packages/core/package.json"))
+  await pin(path.join(root, "packages/client/package.json"))
+  await dropPatch()
+  await $`bun install`.cwd(root)
+
+  // Edit the copy `bun patch` prepares; where it puts it depends on the Bun version and the install layout.
+  const prepared = await $`bun patch ${pkg}@${version}`.cwd(root).quiet()
+  const output = prepared.stdout.toString() + prepared.stderr.toString()
+  const dir = output.match(/bun patch --commit '([^']+)'/)?.[1]
+  if (!dir) throw new Error(`could not find the prepared directory in the bun patch output:\n${output}`)
+  for (const [file, text] of await apply(path.resolve(root, dir))) await Bun.write(file, text)
+  await $`bun patch --commit ${dir}`.cwd(root)
+  await verify()
 }
 
-await $`bun patch --commit ${path.relative(root, dir)}`.cwd(root)
-console.log(`Patched ${pkg}@${version}. Run bun typecheck and the MCP tests in packages/core.`)
+// Checks the patch file and its entry, then reinstalls the package from scratch and checks every edit landed in
+// the copy the workspace resolves.
+async function verify() {
+  const patch = Bun.file(path.join(root, patchFile))
+  if (!(await patch.exists()) || patch.size === 0) throw new Error(`bun patch --commit did not write ${patchFile}`)
+  const manifest = await Bun.file(path.join(root, "package.json")).json()
+  if (manifest.patchedDependencies?.[`${pkg}@${version}`] !== patchFile)
+    throw new Error(`package.json has no patchedDependencies entry for ${pkg}@${version}`)
+
+  const store = path.join(root, "node_modules/.bun")
+  for (const entry of await Array.fromAsync(
+    new Bun.Glob(`${pkg.replace("/", "+")}@${version}*`).scan({ cwd: store, onlyFiles: false }),
+  ))
+    await rm(path.join(store, entry), { recursive: true, force: true })
+  await $`bun install`.cwd(root)
+  const installed = path.dirname(Bun.resolveSync(`${pkg}/package.json`, path.join(root, "packages/core")))
+  const missing: string[] = []
+  for (const [format, files] of await chunks(installed))
+    for (const edit of edits) {
+      const text = await Bun.file(files[edit.chunk]).text()
+      const replacement = edit.replace(format)
+      if (text.includes(edit.find(format)) || (replacement !== "" && !text.includes(replacement)))
+        missing.push(`${edit.name} (${format.extension})`)
+    }
+  if (missing.length > 0) throw new Error(`the installed ${pkg} at ${installed} is missing: ${missing.join(", ")}`)
+}
+
+// Applies every edit to the chunks under `dir` and returns the edited files. Throws naming the first edit whose
+// code is not found exactly once.
+async function apply(dir: string) {
+  const edited = new Map<string, string>()
+  for (const [format, files] of await chunks(dir)) {
+    for (const file of Object.values(files)) edited.set(file, await Bun.file(file).text())
+    for (const edit of edits) {
+      const text = edited.get(files[edit.chunk])!
+      const find = edit.find(format)
+      const count = text.split(find).length - 1
+      if (count !== 1) throw new Error(`edit "${edit.name}" matched ${count} times in ${files[edit.chunk]}, expected 1`)
+      edited.set(
+        files[edit.chunk],
+        text.replace(find, () => edit.replace(format)),
+      )
+    }
+  }
+  return edited
+}
+
+// The one `public-*` and `src-*` chunk per build under `dir`.
+async function chunks(dir: string) {
+  return Promise.all(
+    formats.map(async (format) => {
+      const find = async (chunk: Edit["chunk"]) => {
+        const matches = await Array.fromAsync(new Bun.Glob(`dist/${chunk}-*.${format.extension}`).scan({ cwd: dir }))
+        const [match] = matches
+        if (match === undefined || matches.length !== 1)
+          throw new Error(`expected one dist/${chunk}-*.${format.extension} in ${dir}, found ${matches.length}`)
+        return path.join(dir, match)
+      }
+      return [format, { public: await find("public"), src: await find("src") }] as const
+    }),
+  )
+}
 
 async function pin(file: string) {
   const text = await Bun.file(file).text()
@@ -174,13 +255,8 @@ async function dropPatch() {
   const file = path.join(root, "package.json")
   const text = await Bun.file(file).text()
   const entry = text.match(/\n\s*"@modelcontextprotocol\/client@[^"]+": "(patches\/[^"]+)",?/)
-  if (!entry) return
+  if (!entry?.[1]) return
   await Bun.file(path.join(root, entry[1])).delete()
   // Removing the last entry leaves a trailing comma behind; valid JSON has none anywhere else.
   await Bun.write(file, text.replace(entry[0], "").replace(/,(\s*\})/g, "$1"))
-}
-
-function fail(message: string): never {
-  console.error(message)
-  process.exit(1)
 }
