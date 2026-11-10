@@ -6,6 +6,7 @@
 //! one writer queue, so they reach the client in the order they were sent.
 
 use std::collections::HashMap;
+use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -33,6 +34,8 @@ pub enum Closed {
     Eof,
     /// One incoming line exceeded [`MAX_MESSAGE_BYTES`].
     TooLarge(usize),
+    /// The client sent a JSON-RPC batch, which ACP does not support (the SDK's `allowBatches: false`).
+    Batch,
     Read(String),
     Write(String),
 }
@@ -198,17 +201,6 @@ impl Connection {
     }
 
     fn receive(&self, handler: &Arc<dyn Handler>, message: Value) {
-        if let Value::Array(batch) = message {
-            // Batches are answered message by message (deviation: the SDK answers with one batch).
-            if batch.is_empty() {
-                self.protocol_error(&RpcError::invalid_request(Value::Array(batch)));
-                return;
-            }
-            for message in batch {
-                self.receive(handler, message);
-            }
-            return;
-        }
         let Value::Object(object) = &message else {
             self.protocol_error(&RpcError::invalid_request(message));
             return;
@@ -396,8 +388,9 @@ async fn read_loop<R: AsyncRead + Unpin>(
             }
         };
         if read == 0 {
-            if !pending.is_empty() {
-                receive_line(&connection, &handler, strip_cr(&pending));
+            if !pending.is_empty() && receive_line(&connection, &handler, strip_cr(&pending)).is_break() {
+                let _ = closed.send(Closed::Batch);
+                return;
             }
             let _ = closed.send(Closed::Eof);
             return;
@@ -409,7 +402,10 @@ async fn read_loop<R: AsyncRead + Unpin>(
                 return;
             }
             pending.extend_from_slice(&rest[..newline]);
-            receive_line(&connection, &handler, strip_cr(&pending));
+            if receive_line(&connection, &handler, strip_cr(&pending)).is_break() {
+                let _ = closed.send(Closed::Batch);
+                return;
+            }
             pending.clear();
             rest = &rest[newline + 1..];
         }
@@ -431,21 +427,26 @@ fn strip_cr(line: &[u8]) -> &[u8] {
     line.strip_suffix(b"\r").unwrap_or(line)
 }
 
-fn receive_line(connection: &Connection, handler: &Arc<dyn Handler>, line: &[u8]) {
+/// Breaks on a batch: the SDK's `receiveWireMessage` closes the connection without running any of it.
+fn receive_line(connection: &Connection, handler: &Arc<dyn Handler>, line: &[u8]) -> ControlFlow<()> {
     let text = String::from_utf8_lossy(line);
     let text = text.trim();
     if text.is_empty() {
-        return;
+        return ControlFlow::Continue(());
     }
     let Ok(message) = serde_json::from_str::<Value>(text) else {
         connection.protocol_error(&RpcError::parse_error());
-        return;
+        return ControlFlow::Continue(());
     };
-    if !message.is_object() && !message.is_array() {
+    if message.is_array() {
+        return ControlFlow::Break(());
+    }
+    if !message.is_object() {
         connection.protocol_error(&RpcError::invalid_request(message));
-        return;
+        return ControlFlow::Continue(());
     }
     connection.receive(handler, message);
+    ControlFlow::Continue(())
 }
 
 #[cfg(test)]
@@ -491,20 +492,30 @@ mod tests {
     #[tokio::test]
     async fn answers_requests_and_protocol_errors_in_order() {
         let (messages, closed) = exchange(
-            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"nope\"}\r\nnot json\n5\n\n[]\n{\"id\":2}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"echo\",\"params\":{\"a\":1}}",
+            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"nope\"}\r\nnot json\n5\n\n{\"id\":2}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"echo\",\"params\":{\"a\":1}}",
         )
         .await;
         assert_eq!(closed, Closed::Eof);
         assert_eq!(
-            messages[..5],
+            messages[..4],
             [
                 json!({ "jsonrpc": "2.0", "id": 1, "error": { "code": -32601, "message": "\"Method not found\": nope", "data": { "method": "nope" } } }),
                 json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "Parse error" } }),
                 json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32600, "message": "Invalid request", "data": 5 } }),
-                json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32600, "message": "Invalid request", "data": [] } }),
                 json!({ "jsonrpc": "2.0", "id": 3, "result": { "a": 1 } }),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn closes_on_a_batch_without_running_it() {
+        for batch in [&b"[]\n"[..], b"[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"echo\"}]\n", b"[[]]"] {
+            let mut input = batch.to_vec();
+            input.extend_from_slice(b"\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"echo\"}\n");
+            let (messages, closed) = exchange(&input).await;
+            assert_eq!(closed, Closed::Batch);
+            assert!(messages.is_empty(), "{messages:?}");
+        }
     }
 
     #[tokio::test]
