@@ -78,6 +78,7 @@ import {
   viewShellRun,
   viewSubagentRun,
   INITIAL_SUBAGENT_RUN_STATE,
+  stoppedShell,
   type ShellRunEvent,
   type SubagentRunState,
 } from "./run-machine"
@@ -162,6 +163,8 @@ const toolMetadata = Schema.decodeUnknownSync(
     shellID: optional(Schema.String),
     status: optional(Schema.String),
     background: optional(Schema.Boolean),
+    interrupted: optional(Schema.Boolean),
+    notice: optional(Schema.String),
     count: optional(Schema.Finite),
     matches: optional(Schema.Finite),
     files: optional(Schema.Array(Schema.Unknown)),
@@ -1364,12 +1367,21 @@ export function ToolDisplay(
 
   const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
   const error = createMemo(() => toolDisplayError(props))
+  const stopped = createMemo(() => stoppedShell({ ...props, metadata: toolMetadata(props.metadata) }))
   const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
 
   return (
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
         <Switch>
+          <Match when={stopped()}>
+            {(stopped) => (
+              <>
+                <Dynamic component={render()} {...props} output={stopped().output} />
+                <ToolErrorCard tool={props.tool} error={stopped().notice} subtitle={errorSubtitle()} />
+              </>
+            )}
+          </Match>
           <Match when={error()}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")

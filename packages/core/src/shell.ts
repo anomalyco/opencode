@@ -1,7 +1,7 @@
 export * as Shell from "./shell.js"
 
 import path from "path"
-import { Context, Deferred, Duration, Effect, Fiber, Latch, Layer, Schema, Schedule, Stream } from "effect"
+import { Context, Deferred, Duration, Effect, Fiber, Latch, Layer, Option, Schema, Schedule, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { produce } from "immer"
 import { Shell } from "@opencode/schema/shell"
@@ -35,6 +35,7 @@ export const DIRECTORY = "shell"
 const SPAN_COMMAND_LIMIT = 200
 
 type Info = Shell.Info
+export type StopReason = "timeout" | "killed"
 type CreateInput = Shell.CreateInput & {
   shell?: string
 }
@@ -52,10 +53,11 @@ type Active = {
   done: Deferred.Deferred<Info, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
   timeout?: (duration: number) => Effect.Effect<void>
+  stop?: (reason: StopReason) => Effect.Effect<void>
 }
 
 type Ended = {
-  status: "exited" | "timeout"
+  status: "exited" | StopReason
   exit?: number
   signal?: string
   completed: number
@@ -81,10 +83,18 @@ export interface Interface {
   // NotFoundError if the command is unknown or is removed before it terminates.
   readonly wait: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
   // A known shell's terminal state and bounded tail. Missing capture remains distinct from its exit status.
-  readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
+  // With `wait`, stops waiting for the exit after that long and returns the output so far, still running.
+  readonly result: (
+    started: Shell.Info,
+    options?: { readonly wait?: Duration.Input },
+  ) => Effect.Effect<ShellResult.Result>
   // Replaces the running command's timeout from now; zero clears it. Ignored once the command has
   // ended or timed out, even while its process is still being killed or its output captured.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
+  // Stops a running command gracefully (SIGTERM, then SIGKILL after 3 s) without forgetting it: it ends
+  // with the given status and stays observable, file included, until retention evicts it. Returns at
+  // once; `wait` observes the exit. Ignored once the command has ended or is already stopping.
+  readonly stop: (id: Shell.ID, reason: StopReason) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
@@ -215,6 +225,14 @@ const layer = () =>
         return command.info
       })
 
+      const stop = Effect.fn("Shell.stop")(function* (id: Shell.ID, reason: StopReason) {
+        const command = yield* require(id)
+        yield* annotate(command.info)
+        if (command.info.status !== "running" || !command.stop) return command.info
+        yield* command.stop(reason)
+        return command.info
+      })
+
       const readRange = (file: string, start: number, length: number) =>
         length <= 0
           ? Effect.succeed(Buffer.alloc(0))
@@ -249,9 +267,20 @@ const layer = () =>
         }
       })
 
-      const result = Effect.fn("Shell.result")(function* (started: Shell.Info) {
+      const result = Effect.fn("Shell.result")(function* (
+        started: Shell.Info,
+        options?: { readonly wait?: Duration.Input },
+      ) {
         yield* annotate(started)
-        const info = yield* wait(started.id).pipe(
+        const ended = wait(started.id).pipe(Effect.map(Option.some))
+        const info = yield* (
+          options?.wait === undefined
+            ? ended
+            : ended.pipe(
+                Effect.timeoutOrElse({ duration: options.wait, orElse: () => Effect.succeed(Option.none<Info>()) }),
+              )
+        ).pipe(
+          Effect.flatMap((info) => (Option.isSome(info) ? Effect.succeed(info.value) : get(started.id))),
           Effect.catchTag("Shell.NotFoundError", () =>
             Effect.succeed({ ...started, status: "killed" as const, time: { ...started.time, completed: Date.now() } }),
           ),
@@ -407,25 +436,24 @@ const layer = () =>
               const end = (outcome: Omit<Ended, "completed">) =>
                 Effect.suspend(() => Deferred.succeed(ended, { ...outcome, completed: Date.now() }))
 
+              // A recorded stop must always kill. The kill runs detached, so interrupting the caller (a timer
+              // being retimed, removed or torn down) neither cancels it nor waits for the process to die.
+              command.stop = (reason) =>
+                Effect.gen(function* () {
+                  if (!(yield* end({ status: reason }))) return
+                  runFork(handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)))
+                }).pipe(Effect.uninterruptible)
+
               command.timeout = (duration) =>
                 Effect.gen(function* () {
                   if (Deferred.isDoneUnsafe(ended)) return
                   if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
                   command.timeoutFiber = undefined
                   if (duration === 0) return
+                  const stop = command.stop
+                  if (!stop) return
                   command.timeoutFiber = runFork(
-                    Effect.sleep(Duration.millis(duration)).pipe(
-                      // A recorded timeout must always kill. The kill runs detached, so interrupting this
-                      // timer (retime, remove, teardown) neither cancels it nor waits for the process to die.
-                      Effect.andThen(
-                        Effect.gen(function* () {
-                          if (!(yield* end({ status: "timeout" }))) return
-                          runFork(
-                            handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
-                          )
-                        }).pipe(Effect.uninterruptible),
-                      ),
-                    ),
+                    Effect.sleep(Duration.millis(duration)).pipe(Effect.andThen(stop("timeout"))),
                   )
                 })
 
@@ -445,7 +473,7 @@ const layer = () =>
                     ),
                   )
                   yield* end({ status: "exited", ...exited })
-                  // A timeout keeps its status but still records how the killed process exited.
+                  // A stop keeps its status but still records how the killed process exited.
                   const outcome = { ...(yield* Deferred.await(ended)), ...exited }
                   // Report the terminal status only once captured output is complete, so a reader that
                   // sees it never reads a partial file.
@@ -475,6 +503,7 @@ const layer = () =>
                   // Keep exited history data-only.
                   const timeoutFiber = command.timeoutFiber
                   command.timeout = undefined
+                  command.stop = undefined
                   command.timeoutFiber = undefined
                   if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 }),
@@ -493,7 +522,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, stop, output, remove })
     }),
   )
 

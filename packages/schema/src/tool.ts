@@ -17,6 +17,11 @@ export interface Context {
   readonly messageID: SessionMessage.ID
   readonly id: CallID
   readonly progress: (update: Metadata) => Effect.Effect<void>
+  /**
+   * Completes when the user asks the call to stop. A tool that awaits it can stop its work and fail with what it
+   * has; a tool that does not is interrupted.
+   */
+  readonly cancel?: Effect.Effect<void>
 }
 
 export interface Namespace {

@@ -214,7 +214,7 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
+        continuing = yield* runStep(next.context, step, input.interruption)
         stepped = true
         step++
         force = false
@@ -232,7 +232,11 @@ const layer = Layer.effect(
     })
 
     /** Owns logical Step policy; each attempt owns its streaming, tools, and durable settlement. */
-    const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
+    const runStep = Effect.fn("SessionRunner.runStep")(function* (
+      first: SessionContext.Loaded,
+      step: number,
+      interruption: DrainInput["interruption"],
+    ) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
@@ -288,6 +292,7 @@ const layer = Layer.effect(
           )
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,
+          interruption,
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
