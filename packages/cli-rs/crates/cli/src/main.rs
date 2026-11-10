@@ -55,14 +55,16 @@ fn main() -> ExitCode {
         set_print_logs();
     }
     commands::acp::before_logger(cli);
-    telemetry::install(telemetry::Options::from_env(cli.global.log_level));
+    let options = telemetry::Options::from_env(cli.global.log_level);
+    let channel = options.channel.clone();
+    telemetry::install(options);
     signals::install();
     let _terminal = signals::on_shutdown("restore the terminal", prompt::restore_terminal);
     let logged = serde_json::to_string(&args).unwrap_or_default();
     log::info!(
         version = help::VERSION,
-        channel = telemetry::CHANNEL,
-        local = telemetry::CHANNEL == "local",
+        channel = channel.as_str(),
+        local = channel == "local",
         client = env::client().as_str(),
         args = logged.as_str();
         "cli starting"
