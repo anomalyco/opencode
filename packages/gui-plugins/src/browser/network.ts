@@ -47,19 +47,23 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
   const proxy = yield* Effect.acquireRelease(
     Effect.tryPromise(() =>
       BrowserProxy.make({
-        open: (target, signal) => {
+        // The proxy calls these from stream callbacks that expect a promise. A stale tunnel must reject there, not
+        // throw through the callback.
+        open: async (target, signal) => {
           const upstream = current()
 
-          return Effect.runPromise(
+          const tunnelID = await Effect.runPromise(
             upstream.rpc["tunnel.open"]({ ...upstream.attachment, target }, { location: upstream.location }),
             { signal },
-          ).then((tunnelID) => {
-            tunnels.set(tunnelID, upstream)
+          )
 
-            return tunnelID
-          })
+          // A binding that changed while the server opened the tunnel does not own the new tunnel ID.
+          if (upstream !== input.upstream()) throw new Error("browser.network.tunnel.closed")
+          tunnels.set(tunnelID, upstream)
+
+          return tunnelID
         },
-        read: (tunnelID, signal) => {
+        read: async (tunnelID, signal) => {
           const upstream = tunnel(tunnelID)
 
           return Effect.runPromise(
@@ -67,7 +71,7 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
             { signal },
           )
         },
-        write: (tunnelID, data, end, signal) => {
+        write: async (tunnelID, data, end, signal) => {
           const upstream = tunnel(tunnelID)
 
           return Effect.runPromise(
@@ -78,12 +82,12 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
             { signal },
           )
         },
-        close: (tunnelID) => {
+        close: async (tunnelID) => {
           const upstream = tunnels.get(tunnelID)
           tunnels.delete(tunnelID)
 
           // A stale tunnel's attachment is gone; never send its ID over a replacement connection.
-          if (!upstream || upstream !== input.upstream()) return Promise.resolve()
+          if (!upstream || upstream !== input.upstream()) return
 
           return Effect.runPromise(
             upstream.rpc["tunnel.close"]({ ...upstream.attachment, tunnelID }, { location: upstream.location }).pipe(
