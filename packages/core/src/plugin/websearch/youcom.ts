@@ -4,7 +4,6 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { App } from "../../app.js"
-import type { WebSearch } from "../../websearch.js"
 import { WebSearchMcp } from "./mcp.js"
 import { WebSearchProvider } from "./provider.js"
 
@@ -35,11 +34,11 @@ const McpOutput = Schema.Struct({
   }),
 })
 
-export const Plugin = define<HttpClient.HttpClient | WebSearch.Service | Scope.Scope>({
+export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
   id: "opencode.websearch.youcom",
   effect: Effect.fn("WebSearchYouCom.Plugin")(function* (ctx) {
     const http = yield* HttpClient.HttpClient
-    yield* WebSearchProvider.registerExplicit(ctx, {
+    yield* WebSearchProvider.register(ctx, {
       id: "youcom",
       name: "You.com",
       env: "YDC_API_KEY",

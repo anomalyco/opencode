@@ -34,8 +34,6 @@ export type Selection = typeof Selection.Type
 
 export interface ProviderImplementation extends Provider {
   readonly execute: (input: ProviderInput) => Effect.Effect<readonly Result[], unknown>
-  /** False keeps the provider out of `random` selection; it still runs when selected by ID. */
-  readonly random?: boolean
 }
 
 export class ProviderRequiredError extends Schema.TaggedError<ProviderRequiredError>()(
@@ -58,8 +56,6 @@ export type Error = ProviderRequiredError | ProviderNotFoundError | DisabledErro
 
 export interface Interface extends State.Transformable<Editor> {
   readonly providers: () => Effect.Effect<readonly Provider[]>
-  /** The providers `random` selection may use. */
-  readonly randomProviders: () => Effect.Effect<readonly Provider[]>
   readonly default: () => Effect.Effect<Provider | undefined, DisabledError>
   readonly select: (selection: Selection) => Effect.Effect<void>
   readonly query: (
@@ -105,11 +101,11 @@ const layer = Layer.effect(
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    const providers = (data: Data, filter: (provider: ProviderImplementation) => boolean = () => true) =>
-      Array.from(data.providers.values())
-        .filter(filter)
-        .map((provider) => ({ id: provider.id, name: provider.name }))
-        .toSorted((a, b) => a.name.localeCompare(b.name))
+    const providers = (data: Data) =>
+      Array.from(data.providers.values(), (provider) => ({
+        id: provider.id,
+        name: provider.name,
+      })).toSorted((a, b) => a.name.localeCompare(b.name))
 
     const state = State.create<Data, Editor>({
       initial: () => ({ providers: new Map() }),
@@ -150,10 +146,9 @@ const layer = Layer.effect(
         if (cooldown.until <= now || !providers.has(id)) cooldowns.delete(id)
       })
       const current = affinity.provider === undefined ? undefined : providers.get(affinity.provider)
-      if (current && current.random !== false && !cooldowns.has(current.id) && !attempted?.has(current.id))
-        return current
+      if (current && !cooldowns.has(current.id) && !attempted?.has(current.id)) return current
       const available = Array.from(providers.values()).filter(
-        (provider) => provider.random !== false && !cooldowns.has(provider.id) && !attempted?.has(provider.id),
+        (provider) => !cooldowns.has(provider.id) && !attempted?.has(provider.id),
       )
       const provider = available[Math.floor(Math.random() * available.length)]
       if (provider) affinity.provider = provider.id
@@ -167,7 +162,7 @@ const layer = Layer.effect(
         const active = preferred.get(undefined)?.provider
         return (
           (active === undefined ? undefined : state.get().providers.get(active)) ??
-          Array.from(state.get().providers.values()).find((provider) => provider.random !== false)
+          state.get().providers.values().next().value
         )
       }
       return choice ? state.get().providers.get(choice) : undefined
@@ -178,9 +173,6 @@ const layer = Layer.effect(
       reload: state.reload,
       providers: Effect.fn("WebSearch.providers")(function* () {
         return providers(state.get())
-      }),
-      randomProviders: Effect.fn("WebSearch.randomProviders")(function* () {
-        return providers(state.get(), (provider) => provider.random !== false)
       }),
       default: Effect.fn("WebSearch.defaultInfo")(function* () {
         const provider = yield* defaultProvider(yield* selection())

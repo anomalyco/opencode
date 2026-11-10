@@ -166,38 +166,6 @@ describe("WebSearch", () => {
     }),
   )
 
-  it.effect("never picks a provider that opts out of random selection", () =>
-    Effect.gen(function* () {
-      const exa = yield* register("exa")
-      const websearch = yield* WebSearch.Service
-      const explicit = WebSearch.ID.make("explicit")
-      yield* websearch.transform((editor) =>
-        editor.add({
-          id: explicit,
-          name: "Explicit",
-          random: false,
-          execute: () => Effect.succeed([{ url: "https://explicit.example.com", time: {} }]),
-        }),
-      )
-      yield* websearch.transform((editor) => editor.default.set("random"))
-
-      expect((yield* websearch.default())?.id).toBe(exa.providerID)
-      const results = yield* Effect.all(
-        Array.from({ length: 20 }, (_, index) =>
-          websearch.query({ query: "q" }, { sessionID: Session.ID.make(`ses_random_${index}`) }),
-        ),
-      )
-      expect(results.every((result) => result.providerID === exa.providerID)).toBe(true)
-      expect((yield* websearch.query({ query: "q", providerID: explicit })).providerID).toBe(explicit)
-
-      exa.failure.cause = TestWebSearch.httpError()
-      expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toMatchObject({
-        _tag: "WebSearch.Request",
-        providerID: exa.providerID,
-      })
-    }),
-  )
-
   it.effect("preserves persisted random selection and keeps its provider", () =>
     Effect.gen(function* () {
       yield* register("exa")
