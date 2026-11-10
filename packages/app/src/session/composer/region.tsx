@@ -454,7 +454,7 @@ export function ActiveSessionComposerRegion(props: {
       ...task,
       agent: task.agent ?? (task.sessionID ? data.session.get(task.sessionID)?.agent : undefined),
       key: task.id,
-      target: task.partID ?? task.id,
+      target: task.id,
     })),
   )
 
