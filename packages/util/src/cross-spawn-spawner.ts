@@ -594,6 +594,8 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
                   ),
                 ),
             ),
+            // A process may never signal readiness; let deadlines cancel the launch callback.
+            { interruptible: true },
           )
 
           const completion = Effect.raceFirst(

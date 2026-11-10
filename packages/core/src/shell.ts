@@ -352,6 +352,8 @@ const layer = () =>
                   }),
                 )
                 .pipe(
+                  // Process creation can stall before a handle exists to arm the running-command timeout.
+                  Effect.timeout(invocation.timeout === 0 ? Duration.infinity : Duration.millis(invocation.timeout)),
                   Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
                 )
               const command: Active = {
