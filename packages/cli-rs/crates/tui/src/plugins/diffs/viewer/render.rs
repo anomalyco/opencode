@@ -331,17 +331,18 @@ impl Viewer {
             return self.image(tui, theme, &entry.file);
         }
         if !image && !entry.patch.is_empty() {
+            let filetype = opentui::syntax::filetype_for_path(&entry.file);
+            let padding = u32::from(compact);
+            if let Some(chunked) = opencode_ui::diff::Chunked::new(app, theme, syntax, &entry.patch, filetype, padding)
+            {
+                let root = chunked.root().clone();
+                rows.push(root.as_any());
+                self.parts.borrow_mut().chunked.push(chunked);
+                return root;
+            }
             let view = if entry.status == tree::Status::Modified { view } else { DiffView::Unified };
-            let diff = opencode_ui::diff::view(
-                app,
-                theme,
-                syntax,
-                &entry.patch,
-                view,
-                opentui::syntax::filetype_for_path(&entry.file),
-                WrapMode::Char,
-                u32::from(compact),
-            );
+            let diff =
+                opencode_ui::diff::view(app, theme, syntax, &entry.patch, view, filetype, WrapMode::Char, padding);
             // The first diff, then each later hunk's `@@` row.
             rows.extend(
                 diff.children()

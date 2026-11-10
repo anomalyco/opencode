@@ -244,6 +244,8 @@ struct State {
 struct Parts {
     scroll: Option<ScrollBox>,
     top_edge: Option<View>,
+    /// The large added files, which mount the chunks near the view in each pass.
+    chunked: Vec<opencode_ui::diff::Chunked>,
     cards: Vec<Card>,
     tree: Option<View>,
     /// What the last full render showed; an equal key rebuilds only the tree.
@@ -900,6 +902,10 @@ impl Viewer {
         let Some(scroll) = &parts.scroll else { return };
         let content = scroll.content_view().rect();
         let viewport = scroll.rect();
+        for chunked in &parts.chunked {
+            let y = (chunked.root().rect().screen_y - content.screen_y).round() as i64;
+            chunked.show(top - y, viewport.height as i64);
+        }
         for card in &parts.cards {
             let Some(header) = &card.header else { continue };
             let rect = card.card.rect();
