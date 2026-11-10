@@ -45,7 +45,18 @@ import {
   type SessionTabView,
 } from "./tab-load-machine"
 import { setSidebarUnread } from "@/shell/sidebar-peek"
+import { createSideFocus } from "@/runtime/plugin/closed-tabs"
+import { createEventListener } from "@solid-primitives/event-listener"
+import {
+  INITIAL_TAB_HINTS_STATE,
+  selectTabHintsShown,
+  transitionTabHints,
+  type TabHintsEffect,
+  type TabHintsEvent,
+} from "./tab-hints-machine"
 import type { SessionInfo } from "@opencode/client/promise"
+
+const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 export const previousSessionCommand = { id: "session.previous", keybind: "alt+arrowup" }
 
@@ -72,6 +83,7 @@ function SessionTabSlot(
     unread: boolean
     attention: boolean
     loading: boolean
+    shortcut?: number
     fallbackTitle?: string
     fallbackDirectory?: string
     onRememberTitle: (sessionID: string, title: string | undefined) => void
@@ -118,6 +130,7 @@ function SessionTabSlot(
         unread={props.unread}
         attention={props.attention}
         loading={props.loading}
+        shortcut={props.shortcut}
         fallbackTitle={props.fallbackTitle}
         fallbackDirectory={props.fallbackDirectory}
         onRememberTitle={props.onRememberTitle}
@@ -146,6 +159,7 @@ function SessionTabEntry(
     orientation: "horizontal" | "vertical"
     serverCtx: ServerCtx | undefined
     view: SessionTabView
+    shortcut?: number
     onUnreadChange: (unread: boolean) => void
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -318,6 +332,7 @@ function SessionTabEntry(
         unread={unread()}
         attention={status.attention()}
         loading={status.loading()}
+        shortcut={props.shortcut}
         fallbackTitle={
           {
             session: language.t("session.tab.session"),
@@ -348,6 +363,7 @@ function DraftTabSlot(
     active: boolean
     orientation: "horizontal" | "vertical"
     title: string
+    shortcut?: number
     onNavigate: (element: HTMLDivElement) => void
   },
 ) {
@@ -381,6 +397,7 @@ function DraftTabSlot(
         }}
         href={tabHref(props.tab)}
         title={props.title}
+        shortcut={props.shortcut}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         onCloseOthers={props.onCloseOthers}
@@ -608,6 +625,63 @@ export function TitlebarTabStrip(props: {
       })),
   )
 
+  // Inside the side panel the same keys pick side tabs, so the numbers stay hidden there.
+  const [hints, setHints] = createSignal(INITIAL_TAB_HINTS_STATE)
+  const side = createSideFocus()
+  let hintTimer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatchHints = (event: TabHintsEvent) => {
+    const next = transitionTabHints(hints(), event)
+
+    if (next.state !== hints()) setHints(next.state)
+    next.effects.forEach(runHintsEffect)
+  }
+
+  function runHintsEffect(effect: TabHintsEffect) {
+    clearTimeout(hintTimer)
+
+    if (effect.type === "delay.clear") return
+    hintTimer = setTimeout(() => dispatchHints({ type: "delay.elapsed", attempt: effect.attempt }), effect.delayMs)
+  }
+
+  const held = (event: KeyboardEvent | PointerEvent) => ({
+    mod: IS_MAC ? event.metaKey : event.ctrlKey,
+    extra: event.shiftKey || event.altKey || (IS_MAC ? event.ctrlKey : event.metaKey),
+  })
+
+  createEventListener(
+    window,
+    "keydown",
+    (event) =>
+      dispatchHints({
+        type: "key.down",
+        key:
+          event.key === (IS_MAC ? "Meta" : "Control")
+            ? "mod"
+            : /^Digit[1-9]$/.test(event.code) || /^[1-9]$/.test(event.key)
+              ? "digit"
+              : "other",
+        ...held(event),
+      }),
+    { capture: true },
+  )
+  createEventListener(window, "keyup", (event) => dispatchHints({ type: "modifiers", ...held(event) }), {
+    capture: true,
+  })
+  createEventListener(
+    window,
+    ["pointermove", "pointerdown"],
+    (event) => dispatchHints({ type: "modifiers", ...held(event) }),
+    { capture: true, passive: true },
+  )
+  createEventListener(window, "blur", () => dispatchHints({ type: "window.left" }))
+  createEventListener(document, "visibilitychange", () => {
+    if (document.hidden) dispatchHints({ type: "window.left" })
+  })
+  onCleanup(() => dispatchHints({ type: "disposed" }))
+
+  const shortcut = (index: number) => (index >= 0 && index < 9 ? index + 1 : undefined)
+
   function selectAdjacentTab(offset: -1 | 1, include?: (key: string) => boolean) {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset, include)
@@ -620,6 +694,7 @@ export function TitlebarTabStrip(props: {
     <div
       data-slot={vertical() ? "vertical-tabs" : "titlebar-tabs"}
       data-orientation={vertical() ? "vertical" : "horizontal"}
+      data-shortcut-hints={selectTabHintsShown(hints()) && !side.focused() ? "" : undefined}
       class="relative min-w-0"
       classList={{ "min-h-0 overflow-hidden": vertical() }}
     >
@@ -739,6 +814,7 @@ export function TitlebarTabStrip(props: {
                       orientation={vertical() ? "vertical" : "horizontal"}
                       serverCtx={serverCtx()}
                       view={views().get(id) ?? hiddenTabView}
+                      shortcut={shortcut(visibleIndex())}
                       onUnreadChange={(value) => setUnread(id, value)}
                       onNavigate={(element) => {
                         ref = element
@@ -759,6 +835,7 @@ export function TitlebarTabStrip(props: {
                     active={props.currentTab === tab && props.highlightActive !== false}
                     orientation={vertical() ? "vertical" : "horizontal"}
                     title={language.t("session.tab.session")}
+                    shortcut={shortcut(visibleIndex())}
                     onNavigate={(element) => {
                       ref = element
                       props.onNavigate(tab, element)

@@ -442,6 +442,16 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             command.register("tabs", () => {
               const current = currentTab()
 
+              const closeCurrent = () => {
+                if (current === tabs.preview()) {
+                  tabs.closePreview()
+
+                  return
+                }
+
+                tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
+              }
+
               return [
                 {
                   ...newTabCommand,
@@ -456,15 +466,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   title: language.t("command.tab.close"),
                   keybind: "mod+w",
                   hidden: true,
-                  onSelect: () => {
-                    if (current === tabs.preview()) {
-                      tabs.closePreview()
-
-                      return
-                    }
-
-                    tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
-                  },
+                  onSelect: closeCurrent,
+                },
+                current && {
+                  id: "tab.closeSession",
+                  category: "tab",
+                  title: language.t("command.tab.closeSession"),
+                  keybind: "mod+alt+w",
+                  onSelect: closeCurrent,
                 },
                 {
                   id: "tab.reopenClosed",
@@ -572,7 +581,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   <SidebarToggle />
                 </Show>
                 <Show when={!mobile() && !props.verticalTabs}>
-                  <div class="flex shrink-0 items-center gap-0.5">
+                  {/* Pulls the first tab's avatar 10px from Search, past the row gap plus the tab's own inset. */}
+                  <div class="-me-0.5 flex shrink-0 items-center gap-0.5">
                     {homeButton()}
                     {searchButton()}
                   </div>

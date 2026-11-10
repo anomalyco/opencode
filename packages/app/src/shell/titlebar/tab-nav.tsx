@@ -10,10 +10,12 @@ import { Menu } from "@opencode/ui/menu"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { displayName } from "@opencode/ui/project-avatar"
+import { displayName, ProjectAvatar } from "@opencode/ui/project-avatar"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
 import {
@@ -69,6 +71,7 @@ export function TabNavItem(
     unread: boolean
     attention: boolean
     loading: boolean
+    shortcut?: number
     fallbackTitle?: string
     fallbackDirectory?: string
     /** Shows a title at once: the optimistic one, or the one to restore when its save fails. */
@@ -103,11 +106,15 @@ export function TabNavItem(
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
 
+  const exporter = createSessionExporter()
+
   // The project icon stays put; status shows where the close button appears on hover.
   const status = () => {
     if (props.preparing || props.loading) return "busy"
 
-    if (!props.session || props.active) return
+    if (!props.session) return
+
+    if (props.active && !serverCtx()?.notification.session.manuallyUnread(props.session.id)) return
 
     if (props.attention) return "attention"
 
@@ -455,7 +462,14 @@ export function TabNavItem(
               <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
             }
           >
-            {(directory) => <SessionTabAvatarView project={project()} directory={directory()} unread={false} />}
+            {(directory) => (
+              <SessionTabAvatarView
+                project={project()}
+                directory={directory()}
+                unread={false}
+                label={props.shortcut?.toString()}
+              />
+            )}
           </Show>
           <Show when={dotted()}>
             <span data-slot="tab-avatar-unread-dot" aria-hidden="true" />
@@ -571,6 +585,18 @@ export function TabNavItem(
           <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
             {language.t("common.rename")}
           </Menu.Item>
+          <Menu.Item
+            disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}
+            onSelect={() => {
+              const session = props.session
+
+              if (session) exporter.export({ server: props.server, sessionID: session.id })
+            }}
+          >
+            {language.t("common.export")}…
+          </Menu.Item>
+          <SessionReadMenuItem server={props.server} session={props.session} />
+          <Menu.Separator />
           <TabCloseMenuItems
             orientation={props.orientation}
             onClose={props.onClose}
@@ -578,8 +604,8 @@ export function TabNavItem(
             onCloseAfter={props.onCloseAfter}
           />
           <Menu.Separator />
-          <Menu.Item data-variant="critical" disabled={!props.session} onSelect={props.onDelete}>
-            {language.t("session.delete.title")}…
+          <Menu.Item disabled={!props.session} onSelect={props.onDelete}>
+            {language.t("common.delete")}…
           </Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>
@@ -592,6 +618,7 @@ export function DraftTabItem(
     ref?: Ref<HTMLDivElement>
     href: string
     title: string
+    shortcut?: number
     active?: boolean
     onNavigate: () => void
     suppressNavigation?: boolean
@@ -666,8 +693,9 @@ export function DraftTabItem(
           }}
           class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
         >
-          <span class="flex size-4 shrink-0 items-center justify-center">
+          <span class="relative flex size-4 shrink-0 items-center justify-center">
             <svg
+              data-slot="tab-icon-face"
               class="text-v2-icon-icon-muted group-data-[active='true']:text-v2-icon-icon-base"
               width="16"
               height="16"
@@ -681,6 +709,13 @@ export function DraftTabItem(
                 stroke="currentColor"
               />
             </svg>
+            <Show when={props.shortcut}>
+              {(shortcut) => (
+                <span data-slot="tab-shortcut-face" aria-hidden="true">
+                  <ProjectAvatar fallback="" label={shortcut().toString()} variant="outline" />
+                </span>
+              )}
+            </Show>
           </span>
           <span
             data-titlebar-tab-title

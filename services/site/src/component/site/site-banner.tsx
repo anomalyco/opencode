@@ -2,39 +2,12 @@ import { useArea } from "~/i18n/content"
 import { announcementsSource } from "~/i18n/content/areas/announcements"
 import { useI18n } from "~/context/i18n"
 import "./site-banner.css"
-import { createSignal, onCleanup, onMount, Show } from "solid-js"
+import { onCleanup, onMount, Show } from "solid-js"
 import { useLanguage } from "~/context/language"
 import { announcementCopy, announcements } from "./announcement"
-import { designCopy } from "./design-copy"
-import { dismissKey } from "./site-banner-script"
+import { bannerVisible, dismissed, dismissKey, message, setBlue, setDismissed, setOnTop } from "./site-banner-script"
 import { ChevronRight, CloseIcon } from "./icons"
 import { setSiteSetting, siteSettings } from "./settings"
-
-const [dismissed, setDismissed] = createSignal<string>()
-
-const message = () => designCopy("home.announcement", announcementCopy(announcements[0]))
-
-/** On when the announcement is on in the "banner" style (the other styles are home only) and its message wasn't dismissed. */
-export const bannerVisible = () =>
-  siteSettings.homeAnnouncement === "on" && siteSettings.announcementStyle === "banner" && dismissed() !== message()
-
-// Whether the banner still covers the top of the screen (it scrolls away with the page), and its blue
-// as painted, which follows the theme and the blue settings.
-const [onTop, setOnTop] = createSignal(true)
-const [blue, setBlue] = createSignal<string>()
-
-/**
- * The banner's blue while it is open and covers the top of the screen, else undefined: the browser
- * bar colour (theme-color) then matches it, so the status bar area and the banner read as one surface.
- */
-export const bannerTopColor = () => (bannerVisible() && onTop() ? blue() : undefined)
-
-/**
- * Runs while the page is parsed, right after the banner: when it is open, gives the theme-color tags
- * its blue before first paint. The stylesheets come before it in the document, so it reads the blue
- * as painted; it skips the tags if they have not applied yet.
- */
-export const bannerThemeColorScript = `(()=>{const a=document.currentScript.parentElement;if(!a.hasAttribute("data-banner"))return;const l=a.querySelector('[data-component="announcement-banner"] a');const c=l&&getComputedStyle(l).backgroundColor;if(!c||c==="transparent"||/, 0\\)$/.test(c))return;document.querySelectorAll('meta[name="theme-color"]').forEach((m)=>{m.content=c})})()`
 
 /**
  * The announcement's "banner" style: a full-width blue bar above the whole page, the footer letters
@@ -42,8 +15,9 @@ export const bannerThemeColorScript = `(()=>{const a=document.currentScript.pare
  * host (Site's root, the product nav demos); the host's data-banner, set before first paint for a
  * saved value, opens it and pushes the page down. While it is on screen the host's fixed elements sit
  * below it through --banner-offset, and --banner-scroll follows the page's scroll so they rise as it
- * scrolls away. ⇧A or ⇧N turns the announcement on and off from any page (bringing back a dismissed
- * banner first), except while typing.
+ * scrolls away. On the development server, ⇧A or ⇧N turns the announcement on and off from any page
+ * (bringing back a dismissed banner first), except while typing. Production renders the banner only
+ * when the default settings turn it on (site.tsx).
  */
 export function SiteBanner() {
   const language = useLanguage()
@@ -87,27 +61,29 @@ export function SiteBanner() {
     const scheme = window.matchMedia("(prefers-color-scheme: dark)")
     scheme.addEventListener("change", paint)
     paint()
-    const key = (event: KeyboardEvent) => {
-      if (!["KeyA", "KeyN"].includes(event.code) || !event.shiftKey || event.metaKey || event.ctrlKey || event.altKey)
-        return
-      if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return
-      event.preventDefault()
-      if (siteSettings.homeAnnouncement === "on" && dismissed() === message()) {
-        localStorage.removeItem(dismissKey)
-        return setDismissed(undefined)
-      }
-      setSiteSetting("homeAnnouncement", siteSettings.homeAnnouncement === "on" ? "off" : "on")
-    }
     scroll()
     window.addEventListener("scroll", scroll, { passive: true })
-    document.addEventListener("keydown", key)
     onCleanup(() => {
       window.removeEventListener("scroll", scroll)
-      document.removeEventListener("keydown", key)
       colors.disconnect()
       scheme.removeEventListener("change", paint)
       host?.style.removeProperty("--banner-scroll")
     })
+    if (import.meta.env.DEV) {
+      const key = (event: KeyboardEvent) => {
+        if (!["KeyA", "KeyN"].includes(event.code) || !event.shiftKey || event.metaKey || event.ctrlKey || event.altKey)
+          return
+        if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return
+        event.preventDefault()
+        if (siteSettings.homeAnnouncement === "on" && dismissed() === message()) {
+          localStorage.removeItem(dismissKey)
+          return setDismissed(undefined)
+        }
+        setSiteSetting("homeAnnouncement", siteSettings.homeAnnouncement === "on" ? "off" : "on")
+      }
+      document.addEventListener("keydown", key)
+      onCleanup(() => document.removeEventListener("keydown", key))
+    }
   })
 
   return (

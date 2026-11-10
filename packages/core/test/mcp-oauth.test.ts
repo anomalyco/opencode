@@ -9,6 +9,7 @@ import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
 import { Cause, Effect, Exit, ManagedRuntime } from "effect"
+import { TestClock } from "effect/testing"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { tmpdir } from "./fixture/tmpdir"
 
@@ -41,7 +42,7 @@ const memoryCredentials = (initial: Credential.Info[]) => {
   const rows = new Map(initial.map((row) => [row.id, row]))
   const unused = () => Effect.die("unused credential method")
   const service = Credential.Service.of({
-    lock: unused,
+    refresh: unused,
     all: unused,
     create: unused,
     activate: unused,
@@ -854,6 +855,152 @@ describe("MCP OAuth refresh across processes", () => {
     ])
   })
 
+  describe("when the refresh fails", () => {
+    // A server whose MCP endpoint accepts only the refreshed token and whose token endpoint the test switches.
+    const guardedServer = () => {
+      const state = {
+        token: "ok" as "ok" | "unavailable" | "invalid_grant",
+        tokenEndpoint: undefined as string | undefined,
+        sent: [] as Array<string | null>,
+      }
+      const server = Bun.serve({
+        port: 0,
+        async fetch(request) {
+          const url = new URL(request.url)
+          if (url.pathname === "/.well-known/oauth-authorization-server")
+            return Response.json({
+              issuer: url.origin,
+              authorization_endpoint: `${url.origin}/authorize`,
+              token_endpoint: state.tokenEndpoint ?? `${url.origin}/token`,
+              response_types_supported: ["code"],
+            })
+          if (request.method === "POST" && url.pathname === "/token") {
+            state.sent.push(new URLSearchParams(await request.text()).get("refresh_token"))
+            if (state.token === "unavailable") return new Response("upstream unavailable", { status: 503 })
+            if (state.token === "invalid_grant") return Response.json({ error: "invalid_grant" }, { status: 400 })
+            return Response.json({ access_token: "a2", token_type: "Bearer", refresh_token: "r2", expires_in: 3600 })
+          }
+          if (request.method === "POST" && url.pathname === "/mcp") {
+            if (request.headers.get("authorization") !== "Bearer a2") return new Response(null, { status: 401 })
+            const body = (await request.json()) as {
+              id: number
+              method: string
+              params?: { protocolVersion?: string }
+            }
+            if (body.method !== "initialize") return new Response(null, { status: 202 })
+            return Response.json({
+              jsonrpc: "2.0",
+              id: body.id,
+              result: {
+                protocolVersion: body.params?.protocolVersion,
+                capabilities: {},
+                serverInfo: { name: "test", version: "1" },
+              },
+            })
+          }
+          return new Response(null, { status: 404 })
+        },
+      })
+      return { server, state, url: `${server.url.origin}/mcp` }
+    }
+
+    const connect = async (runtime: ReturnType<typeof instance>, url: string) => {
+      const current = await connection(runtime, url)
+      return Effect.runPromise(
+        Effect.scoped(
+          McpClient.connect({
+            server: "test",
+            config: remote(url),
+            directory: import.meta.dir,
+            authProvider: current.provider,
+          }),
+        ).pipe(Effect.provide(hostEnvironmentLayer), Effect.exit),
+      )
+    }
+
+    const failure = (exit: Awaited<ReturnType<typeof connect>>) => Exit.isFailure(exit) && Cause.squash(exit.cause)
+
+    test("fails without signing out when the token endpoint answers 503", async () => {
+      const guarded = guardedServer()
+      await using processes = await setup(guarded.url)
+      guarded.state.token = "unavailable"
+
+      const failed = failure(await connect(processes.first, guarded.url))
+      expect(failed).toBeInstanceOf(McpClient.ConnectError)
+      expect(failed instanceof McpClient.ConnectError && [failed.message, failed.answered]).toEqual([
+        "Could not refresh the OAuth token: HTTP 503 (temporarily_unavailable)",
+        false,
+      ])
+      expect(await stored(processes.second)).toEqual({ access: "a1", refresh: "r1" })
+
+      guarded.state.token = "ok"
+      const exit = await connect(processes.first, guarded.url).finally(() => guarded.server.stop(true))
+      expect(Exit.isSuccess(exit)).toBe(true)
+      expect(guarded.state.sent).toEqual(["r1", "r1"])
+      expect(await stored(processes.second)).toEqual({ access: "a2", refresh: "r2" })
+    })
+
+    test("fails without signing out when the token endpoint is unreachable", async () => {
+      const guarded = guardedServer()
+      const closed = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
+      closed.stop(true)
+      guarded.state.tokenEndpoint = `${closed.url.origin}/token`
+      await using processes = await setup(guarded.url)
+
+      const failed = failure(await connect(processes.first, guarded.url))
+      expect(failed).toBeInstanceOf(McpClient.ConnectError)
+      expect(failed instanceof McpClient.ConnectError && failed.answered).toBe(false)
+      expect(await stored(processes.second)).toEqual({ access: "a1", refresh: "r1" })
+
+      guarded.state.tokenEndpoint = undefined
+      const exit = await connect(processes.first, guarded.url).finally(() => guarded.server.stop(true))
+      expect(Exit.isSuccess(exit)).toBe(true)
+    })
+
+    test("signs out when the token endpoint answers invalid_grant", async () => {
+      const guarded = guardedServer()
+      guarded.state.token = "invalid_grant"
+      await using processes = await setup(guarded.url)
+
+      const failed = failure(await connect(processes.first, guarded.url))
+      guarded.server.stop(true)
+      expect(failed).toBeInstanceOf(McpClient.NeedsAuthError)
+      expect(await stored(processes.second)).toBeUndefined()
+    })
+
+    test("keeps the credential when the refresh times out", async () => {
+      const received = Promise.withResolvers<void>()
+      const hung = Bun.serve({
+        port: 0,
+        fetch: () => {
+          received.resolve()
+          return new Promise<Response>(() => {})
+        },
+      })
+      await using processes = await setup(hung.url.href)
+
+      const error = await processes.first
+        .runPromise(
+          Effect.gen(function* () {
+            const credentials = yield* Credential.Service
+            const provider = yield* McpOAuth.connectProvider({
+              config: remote(hung.url.href),
+              credential: yield* credentials.get(id),
+            })
+            const fetchFn = yield* McpOAuth.loggedFetch({ server: "test" }, provider)
+            const pending = refresh(hung, fetchFn, "r1").catch((error: unknown) => error)
+            yield* Effect.promise(() => received.promise)
+            yield* TestClock.adjust("30 seconds")
+            return yield* Effect.promise(() => pending)
+          }).pipe(Effect.provide(TestClock.layer())),
+        )
+        .finally(() => hung.stop(true))
+
+      expect(error instanceof OAuthError && error.code).toBe("temporarily_unavailable")
+      expect(await stored(processes.second)).toEqual({ access: "a1", refresh: "r1" })
+    })
+  })
+
   test("hands a rejected refresh back to the SDK and keeps the credential", async () => {
     const server = Bun.serve({
       port: 0,
@@ -895,8 +1042,7 @@ describe("MCP OAuth refresh across processes", () => {
     const current = await connection(processes.first, endpoint.server.url.href)
 
     const error = await refresh(unreachable, current.fetchFn, "r1").catch((error: unknown) => error)
-    expect(error).toBeInstanceOf(Error)
-    expect(error).not.toBeInstanceOf(OAuthError)
+    expect(error instanceof OAuthError && error.code).toBe("temporarily_unavailable")
     expect(await stored(processes.first)).toEqual({ access: "a1", refresh: "r1" })
 
     const tokens = await refresh(endpoint.server, current.fetchFn, "r1").finally(() => endpoint.server.stop(true))
