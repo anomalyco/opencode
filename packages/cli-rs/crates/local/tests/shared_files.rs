@@ -233,12 +233,12 @@ fn frecency_at_the_limit_under_contention() {
     let mut ts = typescript(&["frecency", dir.to_str().unwrap(), "ts", &WRITES.to_string()]);
     ts.go();
     for i in 0..WRITES {
-        frecency.update(&format!("rs-{i}"), jsonl::now_ms());
+        frecency.update(&format!("rs-{i}"), opencode_util::time::now_ms());
         thread::sleep(Duration::from_millis(1));
     }
     ts.finish();
     // Rust reopens one of TypeScript's files: it counts from TypeScript's line.
-    frecency.update("ts-0", jsonl::now_ms());
+    frecency.update("ts-0", opencode_util::time::now_ms());
     stop.store(true, Ordering::SeqCst);
     let reads = reader.join().unwrap();
 
@@ -281,7 +281,7 @@ fn prompt_stash_under_contention() {
     ts.go();
     for i in 0..WRITES {
         let prompt = json!({ "text": format!("rs-{i}"), "pasted": [] });
-        stash.push(prompt, jsonl::now_ms());
+        stash.push(prompt, opencode_util::time::now_ms());
         thread::sleep(Duration::from_millis(1));
     }
     ts.finish();

@@ -80,7 +80,7 @@ impl Previews {
                 .justify(Justify::Center);
             let image =
                 ImageView::new(app).fit(ImageFit::Cover).width(Length::Percent(100.0)).height(Length::Percent(100.0));
-            match crate::routes::session::messages::images::data_uri(uri).map(|bytes| image.load(&bytes)) {
+            match data_uri(uri).map(|bytes| image.load(&bytes)) {
                 Some(Ok(image)) => cell.add(&image),
                 _ => cell.add(&Text::new(app, "No preview").fg(theme.text.muted)),
             };

@@ -99,7 +99,7 @@ impl Shared {
         self.frecency
             .lock()
             .ok()
-            .and_then(|slot| slot.as_ref().map(|frecency| frecency.score(path, jsonl::now_ms())))
+            .and_then(|slot| slot.as_ref().map(|frecency| frecency.score(path, opencode_util::time::now_ms())))
             .unwrap_or(0.0)
     }
 
@@ -113,7 +113,7 @@ impl Shared {
         let cwd = PathBuf::from(&tui.directory);
         self.writer().run(move || {
             load_frecency(&frecency, &state, &cwd);
-            match jsonl::save_frecency(&state, &cwd, &path, jsonl::now_ms()) {
+            match jsonl::save_frecency(&state, &cwd, &path, opencode_util::time::now_ms()) {
                 Ok((path, visit)) => {
                     if let Some(frecency) = frecency.lock().ok().as_mut().and_then(|slot| slot.as_mut()) {
                         frecency.record(path, visit);
@@ -145,7 +145,7 @@ impl Shared {
         let directory = directory.to_owned();
         self.update_recents(tui, project, move |list| {
             list.retain(|item| item["directory"].as_str() != Some(&directory));
-            list.insert(0, json!({ "directory": directory, "usedAt": jsonl::now_ms() }));
+            list.insert(0, json!({ "directory": directory, "usedAt": opencode_util::time::now_ms() }));
             list.truncate(10);
         });
     }

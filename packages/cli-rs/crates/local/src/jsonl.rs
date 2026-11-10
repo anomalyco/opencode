@@ -12,7 +12,6 @@
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use indexmap::IndexMap;
 use serde_json::{Map, Value, json};
@@ -24,11 +23,6 @@ use crate::storage::write_text_atomic;
 pub const MAX_HISTORY_ENTRIES: usize = 50;
 pub const MAX_STASH_ENTRIES: usize = 50;
 pub const MAX_FRECENCY_ENTRIES: usize = 1000;
-
-/// `Date.now()`.
-pub fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
-}
 
 /// `emptyPrompt()`.
 pub fn empty_prompt() -> Value {
