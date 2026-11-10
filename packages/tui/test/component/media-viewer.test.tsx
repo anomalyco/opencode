@@ -11,7 +11,16 @@ import { expect, test } from "bun:test"
 import { createRoot, type JSX } from "solid-js"
 import type { MediaItem } from "../../src/component/media/model"
 import { createSeekThrottle } from "../../src/component/media/seek-bar"
-import { descendants, header, image, longVideoFixture, renderMedia, showsHeader, video } from "../fixture/media"
+import {
+  descendants,
+  header,
+  image,
+  imageFixture,
+  longVideoFixture,
+  renderMedia,
+  showsHeader,
+  video,
+} from "../fixture/media"
 
 type Viewer = Awaited<ReturnType<typeof renderViewer>>
 
@@ -138,7 +147,7 @@ test("the header names the file without its path, and a long name gives way to t
   expect(viewer.frame()).not.toContain("/home/")
 })
 
-test("the header's name opens a menu to copy the file's path and open its folder, when there is a file", async () => {
+test("the header's name opens a menu to copy the file's path and open its folder, and c copies it, when there is a file", async () => {
   await using viewer = await renderViewer()
   const kept: MediaItem = { id: "kept", kind: "image", mime: "image/png", uri: "media:abc", name: "kept.png" }
   viewer.media().openViewer([image("a"), kept], 0)
@@ -151,15 +160,23 @@ test("the header's name opens a menu to copy the file's path and open its folder
   await viewer.app.mockMouse.click(3, row())
   await viewer.until(() => viewer.frame().includes("Copy path"))
   expect(viewer.frame()).toContain("Open folder")
-  viewer.app.mockInput.pressEscape()
-  await viewer.until(() => viewer.dialog().stack.length === 0)
+  viewer.app.mockInput.pressEnter()
+  await viewer.until(() => viewer.copied.length === 1 && viewer.dialog().stack.length === 0)
+  // c copies it without the menu.
+  await viewer.press("c")
+  await viewer.until(() => viewer.copied.length === 2)
+  expect(viewer.copied).toEqual([imageFixture, imageFixture])
 
   // A file known only by its content has no path to copy.
   await viewer.press("]")
-  await viewer.until(() => showsHeader(viewer.frame(), "kept.png", "2 of 2"))
+  // The copy's toast may still cover the header's right end.
+  await viewer.until(() => header(viewer.frame()).startsWith("kept.png"))
   await viewer.app.mockMouse.click(3, row())
   await viewer.app.renderOnce()
   expect(viewer.dialog().stack.length).toBe(0)
+  await viewer.press("c")
+  expect(viewer.frame()).toContain("No file to copy")
+  expect(viewer.copied).toHaveLength(2)
 })
 
 test("arrows move between images and seek in a video, brackets move on, and unplayable media is explained", async () => {

@@ -31,6 +31,8 @@ export function usePathActions(input: {
   const toast = useToast()
   const [hovered, setHovered] = createSignal(false)
 
+  const copied = () => toast.show({ message: "Path copied to clipboard", variant: "info" })
+
   function openMenu() {
     if (renderer.getSelection()?.getSelectedText()) return
     const path = input.path()
@@ -48,7 +50,7 @@ export function usePathActions(input: {
             onSelect: (dialog) => {
               void clipboard.write(path).then(() => {
                 dialog.clear()
-                toast.show({ message: "Path copied to clipboard", variant: "info" })
+                copied()
               }, toast.error)
             },
           },
@@ -85,5 +87,10 @@ export function usePathActions(input: {
     onMouseOver: () => setHovered(true),
     onMouseOut: () => setHovered(false),
     onMouseUp: openMenu,
+    /** Copies the path, as the menu's first entry does. */
+    copy: () => {
+      const path = input.path()
+      if (path) void clipboard.write(path).then(copied, toast.error)
+    },
   }
 }
