@@ -53,6 +53,8 @@ export type ComposerQueue = {
   editFirst: () => boolean
   // Moves an admitted follow-up ahead of the queued prompts, using the queue's serialized reorder.
   first: (inboxID: string) => void
+  // Steers the next prompt only while the queue is idle; never skips a busy first row.
+  steerFirst: () => void
 }
 
 export type ComposerSession = {

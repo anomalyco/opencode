@@ -124,6 +124,7 @@ function TouchComposer(props: { state: State }) {
     cancelEdit: () => record("Cancelled the edit"),
     editFirst: () => false,
     first() {},
+    steerFirst() {},
   }
 
   const editor = createComposerEditor({
