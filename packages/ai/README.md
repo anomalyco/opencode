@@ -409,6 +409,31 @@ OpenAICompatible.configure({ provider: "nvidia", baseURL: "https://integrate.api
 Every host here uses OpenAI's `/embeddings` API; Cohere through its compatibility API
 (`https://api.cohere.ai/compatibility/v1`). Package entry points are `@opencode/ai/providers/<provider>/embeddings`.
 
+Google embeds through `embedContent`, which also takes images, audio, video and PDFs on `gemini-embedding-2`. Each
+value is its own content and gets its own vector (several parts in one content would be averaged into one). `dimensions`
+is `outputDimensionality`, `inputType` becomes `taskType` `RETRIEVAL_QUERY` or `RETRIEVAL_DOCUMENT`, and `taskType` or
+`title` in `providerOptions` replace or add to it. `gemini-embedding-2` ignores task types; Google recommends writing the
+task into the text instead (`task: search result | query: …`, `title: none | text: …`).
+
+```ts
+import { Google, GoogleVertex } from "@opencode/ai/providers"
+
+const response = await ai.embedding.generate({
+  model: Google.configure().embedding("gemini-embedding-2"),
+  values: [await ai.file("./receipt.png"), "A receipt for two coffees."],
+  dimensions: 768,
+})
+
+GoogleVertex.configure({ project, location: "global" }).embedding("gemini-embedding-2")
+```
+
+The Gemini API sends up to 100 values per `batchEmbedContents` request. Vertex `embedContent` takes one value per
+request, so a call sends one request per value, four at a time, and needs project credentials: Vertex Express Mode API
+keys can't call `embedContent`. `gemini-embedding-2` runs in the `global`, `us` and `eu` Vertex locations. When a call
+is split into several requests, the vectors stay in value order, `usage.inputTokens` is their sum, and each request's
+metadata is listed in order under `providerMetadata.<provider>.responses`. Google has no `/embeddings` entry point yet;
+use `embeddingModel` from `@opencode/ai/providers/google` or `@opencode/ai/providers/google-vertex`.
+
 ## Alibaba Cloud Model Studio
 
 `Alibaba` provides standard Model Studio inference. Configure a region explicitly, then select
