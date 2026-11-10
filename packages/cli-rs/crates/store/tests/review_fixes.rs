@@ -389,3 +389,38 @@ async fn deleting_a_session_drops_its_forms() {
     assert!(data.read(|state| state.forms("ses_form", None).is_none()));
     assert!(data.read(|state| state.form_sessions().is_empty()));
 }
+
+/// `handleEvent` "session.step.failed": a budget refusal refreshes usage limits that were read.
+#[tokio::test]
+async fn a_budget_refusal_refreshes_usage_limits() {
+    let paths = Log::<String>::default();
+    let log = paths.clone();
+    let data = data(
+        handler(move |req: Req| {
+            log.push(req.path.clone());
+            async move { ok(json!({ "location": { "directory": "/project" }, "data": null })) }
+        }),
+        Options::default(),
+    );
+    let location = opencode_store::Location::new("/project");
+    data.catalog_sync(Catalog::UsageLimits, Some(&location)).await.unwrap();
+    let failed = |event: &str, error: &str| {
+        let mut value = durable(
+            "session.step.failed",
+            event,
+            json!({
+                "sessionID": "ses_a", "assistantMessageID": "msg_a",
+                "error": { "type": error, "message": "limit" },
+            }),
+        );
+        value["location"] = json!({ "directory": "/project" });
+        value
+    };
+    emit(&data, failed("evt_other", "provider.rate-limit"));
+    settle().await;
+    assert_eq!(reads(&paths, "/api/experimental/usage/limits"), 1);
+    emit(&data, failed("evt_budget", "provider.budget-limit"));
+    wait(|| reads(&paths, "/api/experimental/usage/limits") == 2).await;
+    emit(&data, failed("evt_model", "provider.model-budget-limit"));
+    wait(|| reads(&paths, "/api/experimental/usage/limits") == 3).await;
+}
