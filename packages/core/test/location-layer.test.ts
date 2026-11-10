@@ -780,7 +780,7 @@ describe("LocationServiceMap", () => {
               Effect.sync(() => {
                 seen.push({ kind: event.kind, agent: event.agent, model: event.model.id })
                 if (event.model.id === "auto")
-                  event.target = Model.Ref.make({ providerID: target.providerID, id: Model.ID.make("hidden") })
+                  event.model = Model.Ref.make({ providerID: target.providerID, id: Model.ID.make("hidden") })
               }),
             )
             const modelState = yield* Model.Service
@@ -809,7 +809,7 @@ describe("LocationServiceMap", () => {
           expect(result.seen[0]).toEqual({ kind: "compaction", agent: "compaction", model: "auto" })
           expect(result.resolved.ref).toEqual(Model.Ref.make({ id: Model.ID.make("hidden"), providerID: router }))
           expect(String(result.resolved.model.id)).toBe("hidden")
-          // A target from another provider would bypass the selection's credentials and provider hooks.
+          // A model from another provider would bypass the selection's credentials and provider hooks.
           expect(result.crossed).toMatchObject({
             _tag: "SessionRunnerModel.ModelUnavailableError",
             providerID: "other",

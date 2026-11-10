@@ -101,22 +101,23 @@ const layer = Layer.effect(
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request) {
         const selected = yield* select(session, available)
-        const event = yield* hooks.trigger("session", "experimental.model.resolve", {
+        const ref = Model.Ref.make({
+          providerID: selected.info.providerID,
+          id: selected.info.id,
+          ...(selected.variant === undefined ? {} : { variant: selected.variant }),
+        })
+        const model = (yield* hooks.trigger("session", "experimental.model.resolve", {
           sessionID: session.id,
           agent: request.agent,
           kind: request.kind,
-          model: Model.Ref.make({
-            providerID: selected.info.providerID,
-            id: selected.info.id,
-            ...(selected.variant === undefined ? {} : { variant: selected.variant }),
-          }),
-        })
-        const target = event.target
-        if (!target) return yield* resolver.resolveModel(selected.info, selected.variant)
-        // Same provider only: the target may be hidden from the picker, and its credentials and hooks stay the selection's.
-        const resolved = target.providerID === selected.info.providerID ? yield* resolver.resolve(target) : undefined
+          model: ref,
+        })).model
+        if (model.providerID === ref.providerID && model.id === ref.id && model.variant === ref.variant)
+          return yield* resolver.resolveModel(selected.info, selected.variant)
+        // Same provider only: the model may be hidden from the picker, and its credentials and hooks stay the selection's.
+        const resolved = model.providerID === ref.providerID ? yield* resolver.resolve(model) : undefined
         if (resolved) return resolved
-        return yield* new ModelUnavailableError({ providerID: target.providerID, modelID: target.id })
+        return yield* new ModelUnavailableError({ providerID: model.providerID, modelID: model.id })
       }),
     })
   }),
