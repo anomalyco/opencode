@@ -8,21 +8,11 @@ import { ActivityRing } from "@opencode/ui/activity-ring"
 import { Button } from "@opencode/ui/button"
 import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
 import { displayName } from "@opencode/ui/project-avatar"
-import { TextInput } from "@opencode/ui/text-input"
 import { Schema } from "effect"
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  on,
-  onCleanup,
-  Show,
-  startTransition,
-} from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, startTransition } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { arrayMove } from "@/runtime/array-move"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -46,7 +36,6 @@ import {
   dedupePins,
   mergeFirstPage,
   mergeRecentSessions,
-  mergeSessionSearch,
   partitionRecentSessions,
   recentSessionKey,
   removePin,
@@ -61,9 +50,6 @@ import { sessionTabTitle } from "./tab-title"
 // Root sessions fetched per server page.
 const PAGE_LIMIT = 50
 
-// The search field waits this long after the last keystroke before asking servers.
-const SEARCH_DEBOUNCE_MS = 250
-
 const RecentSidebarState = Persistence.struct({
   // Ordered `${server}\u0000${sessionID}` keys. Local to this desktop.
   pins: Persistence.array(Schema.String),
@@ -77,15 +63,13 @@ type PageState = {
   exhausted: boolean
   failed: boolean
   olderLoaded: boolean
-  query: string
-  generation: number
 }
 
 type Connection = { conn: ServerConnection.Any; ctx: ServerCtx; server: ServerConnection.Key }
 
 type Hydration = { session: SessionInfo } | { missing: true }
 
-const emptyPage = (query = ""): PageState => ({
+const emptyPage = (): PageState => ({
   sessions: [],
   cursor: undefined,
   loading: false,
@@ -93,8 +77,6 @@ const emptyPage = (query = ""): PageState => ({
   exhausted: false,
   failed: false,
   olderLoaded: false,
-  query,
-  generation: 0,
 })
 
 function mergePage(current: SessionInfo[], next: SessionInfo[]) {
@@ -105,8 +87,7 @@ const page = (state: Record<string, PageState>, server: string) => state[server]
 
 /**
  * The experimental Recent sessions sidebar: pinned sessions first, then every server's newest root sessions in one
- * recency list, with server-backed search. The desktop titlebar renders it in place of the side tabs only while the
- * setting is on and available.
+ * recency list. The desktop titlebar renders it in place of the side tabs only while the setting is on and available.
  */
 export function RecentSessions() {
   const global = useGlobal()
@@ -120,23 +101,16 @@ export function RecentSessions() {
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.recent"), RecentSidebarState, { pins: [] })
 
-  const [pages, setPages] = createStore<{ recent: Record<string, PageState>; search: Record<string, PageState> }>({
-    recent: {},
-    search: {},
-  })
+  const [pages, setPages] = createStore<Record<string, PageState>>({})
 
   const [hydration, setHydration] = createStore<Record<string, Hydration>>({})
 
-  const [query, setQuery] = createSignal("")
-  const [debouncedQuery, setDebouncedQuery] = createSignal("")
   const [clock, setClock] = createSignal(Date.now())
 
-  const controllers = new Map<AbortController, { server: string; mode: "recent" | "search" }>()
+  const controllers = new Map<AbortController, string>()
   const hydrating = new Set<string>()
   const statuses = new Map<string, string>()
   let disposed = false
-  let searchGeneration = 0
-  let debounceTimer: ReturnType<typeof setTimeout> | undefined
 
   const connections = createMemo(() =>
     servers.visible.flatMap((conn): Connection[] => {
@@ -149,20 +123,16 @@ export function RecentSessions() {
 
   const ctxOf = (item: RecentSession) => global.serverCtx(ServerConnection.Key.make(item.server))
 
-  const abortServer = (server: string, mode?: "recent" | "search") => {
+  const abortServer = (server: string) => {
     controllers.forEach((owner, controller) => {
-      if (owner.server !== server) return
-
-      if (mode && owner.mode !== mode) return
-      controller.abort()
+      if (owner === server) controller.abort()
     })
   }
 
   // A server that leaves the visible list owns no rows or hydration; its pins stay for when it returns.
   const dropServer = (server: string) => {
     abortServer(server)
-    setPages("recent", produce((current) => void delete current[server]))
-    setPages("search", produce((current) => void delete current[server]))
+    setPages(produce((current) => void delete current[server]))
     setHydration(
       produce((current) => {
         for (const key of Object.keys(current)) {
@@ -176,7 +146,6 @@ export function RecentSessions() {
   onCleanup(() => {
     disposed = true
     clearInterval(ticker)
-    clearTimeout(debounceTimer)
     controllers.forEach((_, controller) => controller.abort())
   })
 
@@ -189,73 +158,25 @@ export function RecentSessions() {
     if (normalized.length !== state.pins.length) setState("pins", normalized)
   })
 
-  createEffect(
-    on(
-      query,
-      (value) => {
-        clearTimeout(debounceTimer)
-        const next = value.trim()
-
-        if (!next) {
-          setDebouncedQuery("")
-
-          return
-        }
-
-        debounceTimer = setTimeout(() => setDebouncedQuery(next), SEARCH_DEBOUNCE_MS)
-      },
-      { defer: true },
-    ),
-  )
-
-  // Bumping the generation before the fetch effects run drops responses for a query the user has moved past.
-  createEffect(
-    on(
-      debouncedQuery,
-      () => {
-        searchGeneration += 1
-      },
-      { defer: true },
-    ),
-  )
-
-  const fetchPage = async (
-    mode: "recent" | "search",
-    item: Connection,
-    cursor: string | undefined,
-    input: { query?: string; generation?: number },
-  ) => {
+  const fetchPage = async (item: Connection, cursor: string | undefined) => {
     if (disposed) return
 
     if (!connections().some((entry) => entry.server === item.server)) return
 
-    setPages(mode, item.server, (current) => {
-      const query = input.query ?? current?.query ?? ""
-      const changed = !!current && query !== current.query
-
-      return {
-        ...(current ?? emptyPage()),
-        sessions: changed ? [] : (current?.sessions ?? []),
-        cursor: changed ? undefined : current?.cursor,
-        exhausted: changed ? false : (current?.exhausted ?? false),
-        olderLoaded: changed ? false : (current?.olderLoaded ?? false),
-        loading: true,
-        failed: false,
-        query,
-        generation: input.generation ?? current?.generation ?? 0,
-      }
-    })
+    setPages(item.server, (current) => ({
+      ...(current ?? emptyPage()),
+      loading: true,
+      failed: false,
+    }))
 
     const controller = new AbortController()
-    controllers.set(controller, { server: item.server, mode })
+    controllers.set(controller, item.server)
 
     try {
       const response = cursor
         ? await item.ctx.sdk.api.session.list({ cursor, limit: PAGE_LIMIT }, { signal: controller.signal })
         : await item.ctx.sdk.api.session.list(
-            input.query
-              ? { parentID: null, archived: false, order: "desc", limit: PAGE_LIMIT, search: input.query }
-              : { parentID: null, archived: false, order: "desc", limit: PAGE_LIMIT },
+            { parentID: null, archived: false, order: "desc", limit: PAGE_LIMIT },
             { signal: controller.signal },
           )
 
@@ -263,9 +184,7 @@ export function RecentSessions() {
 
       if (!connections().some((entry) => entry.server === item.server)) return
 
-      if (input.generation !== undefined && input.generation !== searchGeneration) return
-
-      setPages(mode, item.server, (current) => {
+      setPages(item.server, (current) => {
         const olderLoaded = current?.olderLoaded ?? false
 
         // Before older pages are loaded a refreshed snapshot replaces the list. Afterwards it only merges, and the
@@ -292,10 +211,8 @@ export function RecentSessions() {
 
       if (!connections().some((entry) => entry.server === item.server)) return
 
-      if (input.generation !== undefined && input.generation !== searchGeneration) return
-
       // Keep the cursor and exhausted state so the next scroll retries this page instead of ending pagination.
-      setPages(mode, item.server, (current) => ({
+      setPages(item.server, (current) => ({
         ...(current ?? emptyPage()),
         loading: false,
         loaded: true,
@@ -320,10 +237,10 @@ export function RecentSessions() {
 
       if (status !== "connected") return
 
-      const current = page(pages.recent, item.server)
+      const current = page(pages, item.server)
 
       if (previous === undefined) {
-        if (!current) void fetchPage("recent", item, undefined, {})
+        if (!current) void fetchPage(item, undefined)
 
         return
       }
@@ -331,8 +248,8 @@ export function RecentSessions() {
       if (previous === status) return
 
       // A reconnect starts from a fresh snapshot; drop the old first-page request so it cannot overwrite it.
-      abortServer(item.server, "recent")
-      void fetchPage("recent", item, undefined, {})
+      abortServer(item.server)
+      void fetchPage(item, undefined)
     })
 
     for (const server of [...statuses.keys()]) {
@@ -343,28 +260,10 @@ export function RecentSessions() {
     }
   })
 
-  // A new query starts one first page per connected server; continuation pages keep their original cursor.
-  createEffect(() => {
-    const value = debouncedQuery()
-
-    if (!value) return
-
-    const generation = searchGeneration
-
-    connections().forEach((item) => {
-      if (item.ctx.sdk.connection.status() !== "connected") return
-      const current = page(pages.search, item.server)
-
-      if (current?.query === value && current.generation === generation) return
-
-      void fetchPage("search", item, undefined, { query: value, generation })
-    })
-  })
-
   const items = createMemo(() =>
     sortRecentSessions(
       connections().flatMap((item) => {
-        const fetched = page(pages.recent, item.server)
+        const fetched = page(pages, item.server)
 
         return mergeRecentSessions(
           item.server,
@@ -496,45 +395,6 @@ export function RecentSessions() {
   const pinned = () => partition().pinned
   const recent = () => partition().recent
 
-  const searchQuery = () => query().trim()
-  const searching = () => searchQuery().length > 0
-  const normalizedQuery = () => searchQuery().toLocaleLowerCase()
-
-  const localMatches = createMemo(() => {
-    const needle = normalizedQuery()
-
-    if (!needle) return []
-
-    return items().filter((item) =>
-      (sessionTabTitle(item.session.title, language.t("session.tab.session")) ?? "")
-        .toLocaleLowerCase()
-        .includes(needle),
-    )
-  })
-
-  const serverMatches = createMemo(() =>
-    connections().flatMap((item) => {
-      const value = page(pages.search, item.server)
-
-      if (!value || value.query !== debouncedQuery()) return []
-
-      return mergeSessionSearch(
-        item.server,
-        item.ctx.data.session.apply(value.sessions),
-        item.ctx.data.session.list(),
-      )
-    }),
-  )
-
-  // Local title matches show on the first keystroke; server matches join them when the debounce returns.
-  const results = createMemo(() => {
-    if (!normalizedQuery()) return []
-
-    return sortRecentSessions([
-      ...new Map([...localMatches(), ...serverMatches()].map((item) => [item.key, item] as const)).values(),
-    ])
-  })
-
   const firstPageLoading = createMemo(() => {
     if (!servers.hydrated()) return true
 
@@ -544,81 +404,36 @@ export function RecentSessions() {
     return connections().some((item) => {
       if (item.ctx.sdk.connection.status() !== "connected") return false
 
-      const value = page(pages.recent, item.server)
+      const value = page(pages, item.server)
 
       return !value?.loaded
     })
   })
 
-  const searchPending = createMemo(() => {
-    if (!searching()) return false
-
-    if (debouncedQuery() !== searchQuery()) return true
-
-    return connections().some((item) => {
-      const value = page(pages.search, item.server)
-
-      return !!value && value.query === searchQuery() && value.loading && !value.loaded
-    })
-  })
-
   const loadingMore = createMemo(() =>
-    searching()
-      ? connections().some((item) => {
-          const value = page(pages.search, item.server)
+    connections().some((item) => {
+      const value = page(pages, item.server)
 
-          return !!value && value.query === searchQuery() && value.loading && value.loaded
-        })
-      : connections().some((item) => {
-          const value = page(pages.recent, item.server)
-
-          return !!value && value.loading && value.loaded
-        }),
+      return !!value && value.loading && value.loaded
+    }),
   )
 
-  const failed = createMemo(() =>
-    searching()
-      ? connections().some((item) => {
-          const value = page(pages.search, item.server)
-
-          return !!value && value.query === debouncedQuery() && value.failed
-        })
-      : connections().some((item) => page(pages.recent, item.server)?.failed),
-  )
+  const failed = createMemo(() => connections().some((item) => page(pages, item.server)?.failed))
 
   const retryFailed = () => {
-    if (searching()) {
-      const value = debouncedQuery()
-      const generation = searchGeneration
-
-      connections().forEach((item) => {
-        const current = page(pages.search, item.server)
-
-        if (!current || current.query !== value || !current.failed || current.loading) return
-
-        if (item.ctx.sdk.connection.status() !== "connected") return
-
-        void fetchPage("search", item, current.cursor, { query: value, generation })
-      })
-
-      return
-    }
-
     connections().forEach((item) => {
-      const current = page(pages.recent, item.server)
+      const current = page(pages, item.server)
 
       if (!current?.failed || current.loading) return
 
       if (item.ctx.sdk.connection.status() !== "connected") return
 
-      void fetchPage("recent", item, current.cursor, {})
+      void fetchPage(item, current.cursor)
     })
   }
 
-  const empty = createMemo(() =>
-    searching()
-      ? results().length === 0 && !searchPending()
-      : pinned().length === 0 && recent().length === 0 && !firstPageLoading(),
+  const empty = createMemo(
+    () => pinned().length === 0 && recent().length === 0 && !firstPageLoading(),
   )
 
   // Every server with a cursor loads its next page together, and the merged list re-sorts. Newly loaded rows can
@@ -626,47 +441,22 @@ export function RecentSessions() {
   // every server reaches the same age. An empty page or a missing next cursor ends that server's list; a failed page
   // keeps its cursor so the next scroll retries it.
   const loadMore = () => {
-    if (searching()) {
-      const value = searchQuery()
-      const generation = searchGeneration
-
-      connections().forEach((item) => {
-        const current = page(pages.search, item.server)
-
-        if (!current || current.query !== value || current.loading || current.exhausted) return
-
-        if (item.ctx.sdk.connection.status() !== "connected") return
-
-        if (current.failed) {
-          void fetchPage("search", item, current.cursor, { query: value, generation })
-
-          return
-        }
-
-        if (current.cursor === undefined) return
-
-        void fetchPage("search", item, current.cursor, { query: value, generation })
-      })
-
-      return
-    }
-
     connections().forEach((item) => {
-      const current = page(pages.recent, item.server)
+      const current = page(pages, item.server)
 
       if (!current?.loaded || current.loading || current.exhausted) return
 
       if (item.ctx.sdk.connection.status() !== "connected") return
 
       if (current.failed) {
-        void fetchPage("recent", item, current.cursor, {})
+        void fetchPage(item, current.cursor)
 
         return
       }
 
       if (current.cursor === undefined) return
 
-      void fetchPage("recent", item, current.cursor, {})
+      void fetchPage(item, current.cursor)
     })
   }
 
@@ -693,14 +483,12 @@ export function RecentSessions() {
     setState("pins", (current) => removePin(current, key))
   }
 
-  // The fetched and search pages are separate caches. Archive and delete drop a row from both so it does not linger
-  // when the live store never held it.
+  // The fetched page is a separate cache. Archive and delete drop a row so it does not linger when the live store
+  // never held it.
   const forget = (server: string, sessionID: string) => {
-    for (const mode of ["recent", "search"] as const) {
-      setPages(mode, server, (current) =>
-        current ? { ...current, sessions: current.sessions.filter((session) => session.id !== sessionID) } : current,
-      )
-    }
+    setPages(server, (current) =>
+      current ? { ...current, sessions: current.sessions.filter((session) => session.id !== sessionID) } : current,
+    )
   }
 
   const selected = (item: RecentSession) => {
@@ -831,23 +619,6 @@ export function RecentSessions() {
 
   return (
     <div data-slot="sidebar-recent" class="flex min-h-0 flex-1 flex-col [app-region:no-drag]">
-      <div class="shrink-0 px-1 pb-2">
-        <TextInput
-          type="search"
-          class="!w-full"
-          surface="invisible"
-          leadingIcon={<Icon name="magnifying-glass" size="small" />}
-          showClearButton
-          clearIcon="circle-xmark"
-          onClearClick={() => setQuery("")}
-          aria-label={language.t("sidebar.recent.search")}
-          placeholder={language.t("sidebar.recent.search")}
-          spellcheck={false}
-          autocomplete="off"
-          value={query()}
-          onInput={(event) => setQuery(event.currentTarget.value)}
-        />
-      </div>
       <div
         data-scrollable
         class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1"
@@ -860,72 +631,53 @@ export function RecentSessions() {
         }}
       >
         <Show
-          when={searching()}
+          when={!firstPageLoading()}
           fallback={
-            <Show
-              when={!firstPageLoading()}
-              fallback={
-                <div class="flex justify-center p-2">
-                  <Loader role="img" aria-hidden="false" aria-label={language.t("common.loading")} />
-                </div>
-              }
-            >
-              <Show when={pinned().length > 0}>
-                <div role="group" aria-labelledby="sidebar-recent-pinned" class="flex shrink-0 flex-col gap-2 pb-2.5">
-                  <SectionHeader id="sidebar-recent-pinned" label={language.t("sidebar.recent.pinned")} />
-                  <DragDropProvider
-                    sensors={[
-                      PointerSensor.configure({
-                        activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
-                      }),
-                    ]}
-                    modifiers={[RestrictToVerticalAxis]}
-                    plugins={(defaults) => [
-                      ...defaults.filter((plugin) => plugin !== Accessibility),
-                      Feedback.configure({ dropAnimation: null }),
-                    ]}
-                    onDragEnd={(event) => {
-                      const source = event.operation.source
-
-                      if (event.canceled || !isSortable(source) || source.initialIndex === source.index) return
-
-                      const visible = pinned().map((item) => item.key)
-                      reorderPinned(arrayMove(visible, source.initialIndex, source.index))
-                    }}
-                  >
-                    <Key each={pinned()} by={(item) => item.key}>
-                      {(item, index) => row(item(), index())}
-                    </Key>
-                  </DragDropProvider>
-                </div>
-              </Show>
-              <Show when={recent().length > 0}>
-                <div role="group" aria-labelledby="sidebar-recent-list" class="flex shrink-0 flex-col gap-2 pb-2.5">
-                  <SectionHeader id="sidebar-recent-list" label={language.t("sidebar.recent.section.recent")} />
-                  <Key each={recent()} by={(item) => item.key}>
-                    {(item) => row(item())}
-                  </Key>
-                </div>
-              </Show>
-              <Show when={empty()}>
-                <div class="flex items-center gap-2 px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
-                  <span>{language.t("sidebar.recent.empty")}</span>
-                  <Show when={failed()}>
-                    <Button variant="ghost-muted" size="small" onClick={retryFailed}>
-                      {language.t("common.retry")}
-                    </Button>
-                  </Show>
-                </div>
-              </Show>
-            </Show>
+            <div class="flex justify-center p-2">
+              <Loader role="img" aria-hidden="false" aria-label={language.t("common.loading")} />
+            </div>
           }
         >
-          <Key each={results()} by={(item) => item.key}>
-            {(item) => row(item())}
-          </Key>
+          <Show when={pinned().length > 0}>
+            <div role="group" aria-labelledby="sidebar-recent-pinned" class="flex shrink-0 flex-col gap-2 pb-2.5">
+              <SectionHeader id="sidebar-recent-pinned" label={language.t("sidebar.recent.pinned")} />
+              <DragDropProvider
+                sensors={[
+                  PointerSensor.configure({
+                    activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+                  }),
+                ]}
+                modifiers={[RestrictToVerticalAxis]}
+                plugins={(defaults) => [
+                  ...defaults.filter((plugin) => plugin !== Accessibility),
+                  Feedback.configure({ dropAnimation: null }),
+                ]}
+                onDragEnd={(event) => {
+                  const source = event.operation.source
+
+                  if (event.canceled || !isSortable(source) || source.initialIndex === source.index) return
+
+                  const visible = pinned().map((item) => item.key)
+                  reorderPinned(arrayMove(visible, source.initialIndex, source.index))
+                }}
+              >
+                <Key each={pinned()} by={(item) => item.key}>
+                  {(item, index) => row(item(), index())}
+                </Key>
+              </DragDropProvider>
+            </div>
+          </Show>
+          <Show when={recent().length > 0}>
+            <div role="group" aria-labelledby="sidebar-recent-list" class="flex shrink-0 flex-col gap-2 pb-2.5">
+              <SectionHeader id="sidebar-recent-list" label={language.t("sidebar.recent.section.recent")} />
+              <Key each={recent()} by={(item) => item.key}>
+                {(item) => row(item())}
+              </Key>
+            </div>
+          </Show>
           <Show when={empty()}>
             <div class="flex items-center gap-2 px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
-              <span>{language.t("sidebar.recent.noResults")}</span>
+              <span>{language.t("sidebar.recent.empty")}</span>
               <Show when={failed()}>
                 <Button variant="ghost-muted" size="small" onClick={retryFailed}>
                   {language.t("common.retry")}

@@ -821,8 +821,6 @@ export const dict = {
   "sidebar.recent.pinned": "Pinned",
   "sidebar.recent.section.recent": "Recent",
   "sidebar.recent.empty": "No recent sessions",
-  "sidebar.recent.search": "Search sessions",
-  "sidebar.recent.noResults": "No sessions found",
   "sidebar.recent.pin": "Pin",
   "sidebar.recent.unpin": "Unpin",
   "sidebar.recent.moveUp": "Move up",

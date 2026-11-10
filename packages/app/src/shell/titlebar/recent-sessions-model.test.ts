@@ -5,7 +5,6 @@ import {
   dedupePins,
   mergeFirstPage,
   mergeRecentSessions,
-  mergeSessionSearch,
   partitionRecentSessions,
   recentSessionKey,
   removePin,
@@ -115,15 +114,6 @@ test("sessions with equal timestamps order by id, and missing updates fall back 
       item("server", session("ses_a", 10)),
     ]).map((entry) => entry.session.id),
   ).toEqual(["ses_a", "ses_b", "ses_old"])
-})
-
-test("search results keep only sessions the server returned but use the live copy", () => {
-  const results = [session("ses_a", 10, { title: "result" })]
-  const known = [session("ses_a", 20, { title: "live" }), session("ses_b", 30)]
-
-  expect(mergeSessionSearch("server", results, known)).toEqual([
-    item("server", session("ses_a", 20, { title: "live" })),
-  ])
 })
 
 test("pins keep their order, leave Recent, and hide archived sessions without dropping the key", () => {

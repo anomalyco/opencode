@@ -106,17 +106,6 @@ export function mergeRecentSessions(
   )
 }
 
-/** Search results with the live store's copy of each matching session. Only sessions the server returned remain. */
-export function mergeSessionSearch(
-  server: string,
-  results: readonly SessionInfo[],
-  known: readonly SessionInfo[],
-) {
-  const current = new Map(known.map((session) => [session.id, session] as const))
-
-  return sortRecentSessions(recent(server, results.map((session) => current.get(session.id) ?? session)))
-}
-
 /**
  * Pinned sessions keep their stored order and leave Recent. A pin whose session is archived is hidden but kept;
  * one that is not loaded yet resolves through `resolvePin`.
