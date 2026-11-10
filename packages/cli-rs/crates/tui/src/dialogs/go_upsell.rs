@@ -738,29 +738,6 @@ fn oauth_code(text: &str) -> Option<String> {
     })
 }
 
-/// Opens a URL in the user's browser (`@opencode/util/open`).
-pub fn open_url(url: &str) -> Result<(), String> {
-    let program = if cfg!(target_os = "macos") {
-        "open"
-    } else if cfg!(windows) {
-        "explorer"
-    } else {
-        "xdg-open"
-    };
-    let mut command = std::process::Command::new(program);
-    // `open` detaches `xdg-open`, so a browser it starts does not stop with this client's group on Ctrl+Z.
-    #[cfg(all(unix, not(target_os = "macos")))]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    command
-        .arg(url)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(drop)
-        .map_err(|error| error.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

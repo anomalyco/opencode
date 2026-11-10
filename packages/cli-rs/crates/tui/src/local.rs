@@ -174,7 +174,7 @@ impl Local {
             watch: RefCell::new(None),
             layers: RefCell::new(Vec::new()),
             go_memory: RefCell::default(),
-            open_url: RefCell::new(Rc::new(crate::dialogs::go_upsell::open_url)),
+            open_url: RefCell::new(Rc::new(crate::features::links::open_url)),
             this: this.clone(),
         })
     }

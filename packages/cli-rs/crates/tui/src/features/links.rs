@@ -64,39 +64,49 @@ pub fn open_url(input: &str) -> Result<(), String> {
             .filter(|url| matches!(url.scheme(), "http" | "https"))
             .ok_or_else(|| format!("Only http and https links can be opened in the browser: {input}"))?,
     };
-    open(url.as_str())
+    open(url.as_str(), true)
 }
 
 /// `openPath`: a file or folder in the system's default app.
 pub fn open_path(path: &str) -> Result<(), String> {
-    open(path)
+    open(path, false)
 }
 
-fn open(target: &str) -> Result<(), String> {
+fn open(target: &str, url: bool) -> Result<(), String> {
     if testing::record(target) {
         return Ok(());
     }
-    let mut command = if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-    } else if cfg!(windows) {
-        let mut command = std::process::Command::new("cmd");
-        command.args(["/c", "start", ""]);
-        command
-    } else {
-        let mut command = std::process::Command::new("xdg-open");
-        // `open` detaches `xdg-open`, so a browser it starts does not stop with this client's group on Ctrl+Z.
-        #[cfg(unix)]
-        std::os::unix::process::CommandExt::process_group(&mut command, 0);
-        command
-    };
-    command
-        .arg(target)
+    let (program, args) = opener(std::env::consts::OS, url);
+    let mut command = std::process::Command::new(program);
+    // `open` detaches `xdg-open`, so a browser it starts does not stop with this client's group on Ctrl+Z.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    std::os::unix::process::CommandExt::process_group(&mut command, 0);
+    command.args(args).arg(target);
+    spawn(command).map(drop)
+}
+
+/// The system opener. On Windows, `cmd /c start` would parse `&`, `|` and `%VAR%` in the target; these programs
+/// take it verbatim.
+fn opener(os: &str, url: bool) -> (&'static str, &'static [&'static str]) {
+    match os {
+        "macos" => ("open", &[]),
+        "windows" if url => ("rundll32", &["url.dll,FileProtocolHandler"]),
+        "windows" => ("explorer", &[]),
+        _ => ("xdg-open", &[]),
+    }
+}
+
+/// Starts `command` and waits for it off the UI thread, so the exited opener does not stay a zombie.
+fn spawn(mut command: std::process::Command) -> Result<u32, String> {
+    let mut child = command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map(drop)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    let id = child.id();
+    std::thread::spawn(move || child.wait());
+    Ok(id)
 }
 
 /// A sink for tests: while a [`Capture`] lives on the UI thread, opens and copies are recorded instead of
@@ -166,5 +176,24 @@ mod tests {
         }
         assert_eq!(open_path("/tmp/project"), Ok(()));
         assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/v2/docs", "/tmp/project"]);
+    }
+
+    #[test]
+    fn windows_opens_without_a_shell() {
+        assert_eq!(opener("windows", true), ("rundll32", &["url.dll,FileProtocolHandler"][..]));
+        assert_eq!(opener("windows", false), ("explorer", &[][..]));
+        assert_eq!(opener("linux", true), ("xdg-open", &[][..]));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_exited_opener_is_reaped() {
+        // An unreaped child stays in `/proc` as a zombie.
+        let id = spawn(std::process::Command::new("true")).unwrap();
+        let reaped = (0..500).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            std::fs::metadata(format!("/proc/{id}")).is_err()
+        });
+        assert!(reaped, "the opener {id} was never reaped");
     }
 }
