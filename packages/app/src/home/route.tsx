@@ -1,6 +1,7 @@
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Show } from "solid-js"
+import { usePlatform } from "@/runtime/platform/platform"
 import { createHomeController } from "./model"
 import { createHomeProjectsController } from "./projects/controller"
 import { HomeUtilityNav } from "./projects/view"
@@ -12,6 +13,7 @@ import { HomeSessions } from "./sessions/region"
 
 export function Home() {
   const mobile = createMediaQuery("(max-width: 767px)")
+  const platform = usePlatform()
   const home = createHomeController()
   const projects = createHomeProjectsController(home)
   const sessions = createHomeSessionsController(home)
@@ -26,7 +28,8 @@ export function Home() {
         bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]
       `}
     >
-      <Show when={mobile()}>
+      {/* A host that fixes the project shows only its sessions, without the projects to choose from. */}
+      <Show when={mobile() && !platform.project}>
         <div class="relative z-40 -mb-3 shrink-0 px-3 pt-3">
           <HomeProjects projects={projects} scroll={scroll} dropdown />
         </div>
@@ -44,7 +47,7 @@ export function Home() {
             max-md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,720px)] lg:grid-rows-1 lg:gap-8 lg:px-6
           `}
         >
-          <Show when={!mobile()}>
+          <Show when={!mobile() && !platform.project}>
             <HomeProjects projects={projects} scroll={scroll} />
           </Show>
           <HomeSessions sessions={sessions} search={search} scroll={scroll} />

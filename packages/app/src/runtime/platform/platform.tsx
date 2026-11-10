@@ -21,15 +21,13 @@ type OpenFilePathPickerOptions = { title?: string; multiple?: boolean; extension
 
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 
-type PlatformName = "web" | "desktop"
-
 type DesktopOS = "macos" | "windows" | "linux"
 
 export type FatalRendererErrorLog = {
   error: string
   url: string
   version?: string
-  platform: PlatformName
+  platform: Platform["platform"]
   os?: DesktopOS
 }
 
@@ -53,6 +51,21 @@ type PlatformBase = {
 
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
+
+  /** Show the host's own settings in place of the Settings screen, which then never opens */
+  openSettings?(): void
+
+  /** Ids of built-in plugins the host leaves out because it has its own, such as its terminal */
+  omitPlugins?: readonly string[]
+
+  /** CSS font stacks of the host's interface and code, used in place of the bundled Inter and IBM Plex Mono */
+  fonts?: { sans: string; mono: string }
+
+  /** Directory of the one project the host works in, such as an editor's open folder; the app offers no other */
+  project?: string
+
+  /** Identity for window-scoped persistence, such as a desktop window or an editor's workspace; without it every browser tab shares one */
+  windowID?: string
 
   /** Restart the app  */
   restart(): Promise<void>
@@ -139,19 +152,38 @@ type PlatformBase = {
   plugins?: Bridge
 }
 
+/**
+ * The host the app runs in. Every editor extension shares `ide`, and app code never checks for it: what an editor
+ * does differently comes from the optional capabilities above (`openSettings`, `project`, `fonts`...). Checks on
+ * `platform` name only `web`, a browser tab, or `desktop`, the Electron app, and say what those get, so that a new
+ * editor needs no app changes.
+ */
 export type Platform = PlatformBase &
   (
-    | { platform: "web"; os?: never; windowID?: never }
+    | {
+        platform: "web"
+        os?: never
+      }
+    | {
+        /** An editor extension's webview, such as VS Code's */
+        platform: "ide"
+        os?: never
+        project: string
+        windowID: string
+      }
     | {
         platform: "desktop"
         os?: DesktopOS
-        /** Stable platform window identity for window-scoped persistence */
         windowID: string
         openDirectoryPickerDialog(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>
       }
   )
 
-export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
+export const {
+  use: usePlatform,
+  provider: PlatformProvider,
+  context: PlatformContext,
+} = createSimpleContext({
   name: "Platform",
   init: (props: { value: Platform }) => {
     return props.value

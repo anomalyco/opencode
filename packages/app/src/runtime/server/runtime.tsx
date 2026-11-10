@@ -22,6 +22,7 @@ import {
   type ServerControllersEvent,
 } from "./machine"
 import { pathKey } from "@/workspaces/path-key"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useServerHealth } from "@/runtime/server/health"
 import { selectServerHostname } from "@/runtime/server/health-machine"
 import { createServerSdkContext } from "./client"
@@ -203,6 +204,7 @@ function createServerController(
   const settings = useSettings()
   const tabs = useTabs()
   const currentRoute = useCurrentRoute()
+  const platform = usePlatform()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
 
@@ -349,6 +351,8 @@ function createServerController(
       forDirectory,
       forSession: (session: SessionInfo): Project | undefined => projectForSession(session, list()),
       last: () => list().find((project) => project.id === projects.last()),
+      // The project of the folder a host fixes, such as an editor's open folder, once the server knows it.
+      fixed: () => (platform.project ? forDirectory(platform.project) : undefined),
       // Marks the project of a directory as used from this client, and as the last one.
       touch(directory: string) {
         const id = forDirectory(directory)?.id

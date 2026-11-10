@@ -76,7 +76,8 @@ export type LocationDialogTransition = {
   readonly stop: boolean
 }
 
-export function createLocationDialogState(drilled?: PromptProject): LocationDialogState {
+/** A `fixed` project, which the host chose, has no projects step to step back to. */
+export function createLocationDialogState(drilled?: PromptProject, fixed = false): LocationDialogState {
   if (!drilled) return { type: "projects", query: "", history: [] }
 
   return {
@@ -84,7 +85,7 @@ export function createLocationDialogState(drilled?: PromptProject): LocationDial
     project: drilled,
     direct: true,
     query: "",
-    history: [{ type: "projects", query: "", active: projectEntryID(drilled) }],
+    history: fixed ? [] : [{ type: "projects", query: "", active: projectEntryID(drilled) }],
   }
 }
 

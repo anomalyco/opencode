@@ -50,7 +50,9 @@ export function PluginRoot(props: ParentProps) {
 
   const os = platform.platform === "desktop" ? platform.os : undefined
 
-  const localBuiltins = builtins.filter((definition) => runsOn(definition, os))
+  const localBuiltins = builtins.filter(
+    (definition) => runsOn(definition, os) && !platform.omitPlugins?.includes(definition.id),
+  )
 
   // The GUIs of the plugins on the app's own server, as main sends them, and the plugins whose GUI cannot load because a
   // built-in claims the id, which Extensions › Plugins shows. Settled once the loader first publishes, even empty after

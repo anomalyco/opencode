@@ -1,0 +1,25 @@
+{
+  "name": "@opencode/vscode-webview",
+  "private": true,
+  "version": "2.2.5",
+  "type": "module",
+  "license": "MIT",
+  "description": "The opencode app as a VS Code webview view",
+  "scripts": {
+    "typecheck": "bun check --no-script -b",
+    "typecheck:tsc": "tsc -b",
+    "dev": "vite build --watch --mode development",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@opencode/app": "workspace:*",
+    "@solidjs/router": "catalog:",
+    "solid-js": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "typescript": "catalog:",
+    "vite": "8.2.4"
+  }
+}

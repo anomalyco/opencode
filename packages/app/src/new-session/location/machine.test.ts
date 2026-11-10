@@ -109,6 +109,16 @@ describe("location dialog steps", () => {
     }
   })
 
+  test("a fixed project's worktree step has no projects to step back to", () => {
+    const fixed = createLocationDialogState(opencode, true)
+    expect(fixed.history).toEqual([])
+
+    expect(transitionLocationDialog(fixed, key("Escape"))).toMatchObject({ effects: [{ type: "close" }] })
+
+    for (const event of [key("Backspace"), key("ArrowLeft"), back])
+      expect(transitionLocationDialog(fixed, event).state).toEqual(fixed)
+  })
+
   test("a typed worktree search keeps Backspace for the input", () => {
     const state = transitionLocationDialog(createLocationDialogState(opencode), query("feat")).state
     expect(transitionLocationDialog(state, key("Backspace"))).toEqual({

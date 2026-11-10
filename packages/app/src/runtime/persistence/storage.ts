@@ -487,7 +487,7 @@ export const Persist = {
 
 function resolveTarget(target: PersistTarget, platform: Platform): PersistTarget {
   if (target.scope !== "window") return target
-  const windowID = platform.platform === "desktop" ? platform.windowID : "browser"
+  const windowID = platform.windowID ?? "browser"
 
   if (!windowID) throw new Error("Desktop window ID is required for window-scoped storage")
 

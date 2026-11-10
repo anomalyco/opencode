@@ -65,9 +65,10 @@ export interface App {
    * Where the code runs. Main is always `desktop`.
    * - `web`: a browser tab.
    * - `desktop`: the Electron app.
+   * - `ide`: an editor extension's webview, such as VS Code's.
    */
-  readonly platform: "web" | "desktop"
-  /** A packaged desktop app, not a development run. Always false on the web. */
+  readonly platform: "web" | "desktop" | "ide"
+  /** A packaged desktop app, not a development run. Always false outside desktop. */
   readonly packaged: boolean
 }
 

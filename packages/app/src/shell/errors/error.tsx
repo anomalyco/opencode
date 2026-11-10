@@ -427,7 +427,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         />
         <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
           <Button size="large" onClick={platform.restart}>
-            {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
+            {language.t(platform.platform === "desktop" ? "error.page.action.restart" : "error.page.action.reload")}
           </Button>
           <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
             <Button

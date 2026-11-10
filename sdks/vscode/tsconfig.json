@@ -6,6 +6,7 @@
     "sourceMap": true,
     "rootDir": "src",
     "typeRoots": ["./node_modules/@types"],
+    "types": ["node"],
     "strict": true /* enable all strict type-checking options */,
     "skipLibCheck": true
     /* Additional Checks */

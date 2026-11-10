@@ -14,6 +14,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@opencode/ui/project-avatar"
 import { projectForSession } from "@/shell/layout/helpers"
+import { usePlatform } from "@/runtime/platform/platform"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { looksLikeSessionID } from "@/session/search"
@@ -197,6 +198,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     server: ServerConnection.key(serverSDK.server),
     known: createKnownServerSessions(() => serverCtx),
     projects: serverCtx.projects.list,
+    fixed: serverCtx.projects.fixed,
     load: (search, signal) =>
       serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
     get: (sessionID, signal) => serverSDK.api.session.get({ sessionID }, { signal }),
@@ -273,6 +275,8 @@ export function createServerSessionEntries(props: {
   /** Hides sessions deleted since they were loaded. */
   apply?: (sessions: SessionInfo[]) => SessionInfo[]
   projects: () => Project[]
+  /** The project a host fixes; only its sessions are listed. */
+  fixed: () => Project | undefined
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
   get: (sessionID: string, signal: AbortSignal) => Promise<SessionInfo>
   untitled: () => string
@@ -281,6 +285,7 @@ export function createServerSessionEntries(props: {
   recentLimit?: number
 }) {
   const [sourceState, setSourceState] = createSignal(INITIAL_SESSION_SOURCE_STATE)
+  const platform = usePlatform()
 
   const runs = new Map<
     number,
@@ -383,11 +388,15 @@ export function createServerSessionEntries(props: {
   const entries = (sessions: SessionInfo[], search: string): CommandPaletteEntry[] => {
     const projects = props.projects()
     const category = search ? props.category() : props.recentCategory()
+    const fixed = props.fixed()
 
     return sessions.flatMap((session) => {
       if (!!session.time.archived !== !!props.archived) return []
 
       const project = projectForSession(session, projects)
+
+      // A host that fixes the project lists only its sessions, and none until the server knows the project.
+      if (platform.project && session.projectID !== fixed?.id) return []
 
       return [
         {

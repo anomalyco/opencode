@@ -2,6 +2,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useSettingsCommand } from "@/settings/command"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { projectSearchCommand } from "@/shell/titlebar/titlebar"
 
 export function useNewSessionCommands(input: {
@@ -18,6 +19,7 @@ export function useNewSessionCommands(input: {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
 
   useSettingsCommand()
   command.register("palette", () => [
@@ -54,7 +56,8 @@ export function useNewSessionCommands(input: {
       ...projectSearchCommand,
       title: language.t("session.new.project.search"),
       category: language.t("command.category.project"),
-      disabled: input.project.empty(),
+      // A host that fixes the project leaves nothing to search.
+      disabled: input.project.empty() || !!platform.project,
       onSelect: input.project.open,
     },
   ])

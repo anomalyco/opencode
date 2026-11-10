@@ -1,5 +1,5 @@
 import { produce, reconcile, unwrap } from "solid-js/store"
-import { createEffect, createMemo } from "solid-js"
+import { createEffect, createMemo, useContext } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -8,6 +8,7 @@ import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@op
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
+import { PlatformContext } from "@/runtime/platform/platform"
 
 export type Settings = typeof settingsSchema.Type
 
@@ -80,12 +81,12 @@ export function sansInput(font: string | undefined) {
   return input(font)
 }
 
-export function monoFontFamily(font: string | undefined) {
-  return stack(font, monoBase)
+export function monoFontFamily(font: string | undefined, base = monoBase) {
+  return stack(font, base)
 }
 
-export function sansFontFamily(font: string | undefined) {
-  return stack(font, sansBase)
+export function sansFontFamily(font: string | undefined, base = sansBase) {
+  return stack(font, base)
 }
 
 export function terminalInput(font: string | undefined) {
@@ -338,6 +339,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
+    // Stories render settings without a platform.
+    const platform = useContext(PlatformContext)
 
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
@@ -347,9 +350,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
-      const mono = monoFontFamily(store.appearance?.mono)
+      const mono = monoFontFamily(store.appearance?.mono, platform?.fonts?.mono)
       root.style.setProperty("--font-family-mono", mono)
-      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans, platform?.fonts?.sans))
+      // The host's fonts are its own, already loaded.
+      if (platform?.fonts) return
       // Inline code can first appear during history backfill. Load its selected
       // face with the shell so that font discovery does not resize that mount.
       void document.fonts?.load(`440 13px ${mono}`).catch(() => undefined)

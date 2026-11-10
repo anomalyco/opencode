@@ -1,7 +1,7 @@
 {
   "name": "opencode",
-  "displayName": "opencode",
-  "description": "opencode for VS Code",
+  "displayName": "OpenCode",
+  "description": "OpenCode for VS Code",
   "version": "2.2.5",
   "publisher": "sst-dev",
   "repository": {
@@ -15,7 +15,7 @@
     "theme": "dark"
   },
   "engines": {
-    "vscode": "^1.94.0"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "Other"
@@ -23,10 +23,172 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "opencode",
+          "title": "OpenCode",
+          "icon": "images/sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "opencode": [
+        {
+          "type": "webview",
+          "id": "opencode.sidebar",
+          "name": "OpenCode",
+          "icon": "images/sidebar.svg"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "OpenCode",
+        "order": 1,
+        "properties": {
+          "opencode.followUpBehavior": {
+            "type": "string",
+            "enum": [
+              "steer",
+              "queue"
+            ],
+            "enumItemLabels": [
+              "Steer",
+              "Queue"
+            ],
+            "enumDescriptions": [
+              "Read a message sent while the agent is working at its next step, so it can change course.",
+              "Hold a message sent while the agent is working until it finishes."
+            ],
+            "default": "steer",
+            "description": "What happens to a message you send while the agent is working.",
+            "order": 1
+          },
+          "opencode.autoAcceptPermissions": {
+            "type": "boolean",
+            "default": false,
+            "description": "Approve the agent's permission requests without asking. Turning auto-accept on or off from a session changes it for that session's project only.",
+            "order": 2
+          },
+          "opencode.showAgent": {
+            "type": "boolean",
+            "default": false,
+            "description": "Switch between agents in the composer. When hidden, sessions use the Build agent.",
+            "order": 3
+          }
+        }
+      },
+      {
+        "title": "Timeline",
+        "order": 2,
+        "properties": {
+          "opencode.timeline.detail": {
+            "type": "string",
+            "enum": [
+              "everything",
+              "detailed",
+              "compact",
+              "quiet",
+              "text-only"
+            ],
+            "enumItemLabels": [
+              "Everything",
+              "Detailed",
+              "Compact",
+              "Quiet",
+              "Messages only"
+            ],
+            "enumDescriptions": [
+              "Show all activity separately. Expand shell output, edits, and thinking.",
+              "Expand shell output and edits. Show subagents separately and group other activity.",
+              "Show subagents separately. Group other activity with details collapsed.",
+              "Show subagents separately and group edits. Hide other activity.",
+              "Hide all activity."
+            ],
+            "default": "compact",
+            "description": "How much of the agent's activity appears in the session timeline.",
+            "order": 1
+          },
+          "opencode.timeline.changedFiles": {
+            "type": "boolean",
+            "default": false,
+            "description": "List the files each turn changed when it finishes.",
+            "order": 2
+          }
+        }
+      },
+      {
+        "title": "Notifications",
+        "order": 3,
+        "properties": {
+          "opencode.notifications.agent": {
+            "type": "boolean",
+            "default": false,
+            "description": "Notify when the agent is complete or needs attention.",
+            "order": 1
+          },
+          "opencode.notifications.permissions": {
+            "type": "boolean",
+            "default": true,
+            "description": "Notify when a permission is required.",
+            "order": 2
+          },
+          "opencode.notifications.questions": {
+            "type": "boolean",
+            "default": true,
+            "description": "Notify when the agent asks a question.",
+            "order": 3
+          },
+          "opencode.notifications.errors": {
+            "type": "boolean",
+            "default": false,
+            "description": "Notify when an error occurs.",
+            "order": 4
+          }
+        }
+      },
+      {
+        "title": "Sounds",
+        "order": 4,
+        "properties": {
+          "opencode.sounds.agent": {
+            "type": "boolean",
+            "default": true,
+            "description": "Play a sound when the agent is complete or needs attention.",
+            "order": 1
+          },
+          "opencode.sounds.permissions": {
+            "type": "boolean",
+            "default": true,
+            "description": "Play a sound when a permission is required.",
+            "order": 2
+          },
+          "opencode.sounds.questions": {
+            "type": "boolean",
+            "default": true,
+            "description": "Play a sound when the agent asks a question.",
+            "order": 3
+          },
+          "opencode.sounds.errors": {
+            "type": "boolean",
+            "default": true,
+            "description": "Play a sound when an error occurs.",
+            "order": 4
+          },
+          "opencode.sounds.interface": {
+            "type": "boolean",
+            "default": true,
+            "description": "Play subtle sounds when the wordmark appears and when you play with it.",
+            "order": 5
+          }
+        }
+      }
+    ],
     "commands": [
       {
         "command": "opencode.openTerminal",
-        "title": "Open opencode",
+        "title": "Open OpenCode",
         "icon": {
           "light": "images/button-dark.svg",
           "dark": "images/button-light.svg"
@@ -34,7 +196,7 @@
       },
       {
         "command": "opencode.openNewTerminal",
-        "title": "Open opencode in new tab",
+        "title": "Open OpenCode in new tab",
         "icon": {
           "light": "images/button-dark.svg",
           "dark": "images/button-light.svg"
@@ -43,6 +205,12 @@
       {
         "command": "opencode.addFilepathToTerminal",
         "title": "Add Filepath to Terminal"
+      },
+      {
+        "command": "opencode.openSettings",
+        "title": "Settings",
+        "category": "OpenCode",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
@@ -51,12 +219,19 @@
           "command": "opencode.openNewTerminal",
           "group": "navigation"
         }
+      ],
+      "view/title": [
+        {
+          "command": "opencode.openSettings",
+          "when": "view == opencode.sidebar",
+          "group": "navigation"
+        }
       ]
     },
     "keybindings": [
       {
         "command": "opencode.openTerminal",
-        "title": "Run opencode",
+        "title": "Run OpenCode",
         "key": "cmd+escape",
         "mac": "cmd+escape",
         "win": "ctrl+escape",
@@ -64,7 +239,7 @@
       },
       {
         "command": "opencode.openNewTerminal",
-        "title": "Run opencode",
+        "title": "Run OpenCode",
         "key": "cmd+shift+escape",
         "mac": "cmd+shift+escape",
         "win": "ctrl+shift+escape",
@@ -72,7 +247,7 @@
       },
       {
         "command": "opencode.addFilepathToTerminal",
-        "title": "opencode: Insert At-Mentioned",
+        "title": "OpenCode: Insert At-Mentioned",
         "key": "cmd+alt+k",
         "mac": "cmd+alt+k",
         "win": "ctrl+alt+K",
@@ -82,19 +257,20 @@
   },
   "scripts": {
     "vscode:prepublish": "bun run package",
-    "compile": "bun run check-types && bun run lint && node esbuild.js",
+    "compile": "bun run check-types && bun run lint && bun run build:webview && node esbuild.js",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "bun run check-types && bun run lint && node esbuild.js --production",
+    "package": "bun run check-types && bun run lint && bun run build:webview && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "bun run compile-tests && bun run compile && bun run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "build:webview": "bun run --cwd ../../packages/vscode-webview build"
   },
   "devDependencies": {
-    "@types/vscode": "^1.94.0",
+    "@types/vscode": "^1.106.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@typescript-eslint/eslint-plugin": "^8.31.1",

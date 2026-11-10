@@ -33,6 +33,7 @@ import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useSettings } from "@/settings/model"
+import { usePlatform } from "@/runtime/platform/platform"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
 import { NewSessionBranch } from "./workspace/selector"
 import { NewSessionBrickBreaker } from "./brick-breaker"
@@ -69,6 +70,7 @@ export function NewSessionView(props: {
   )
 
   const settings = useSettings()
+  const platform = usePlatform()
 
   const [wordmark, setWordmark] = createSignal(createWordmarkState(false))
   const [logo, setLogo] = createSignal<HTMLDivElement>()
@@ -124,13 +126,13 @@ export function NewSessionView(props: {
                       root={props.workspace.project.root()}
                       branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
                       onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
-                      onClick={() => location()}
+                      onClick={platform.project ? undefined : () => location()}
                       onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
                     />
                   )}
                 </Show>
               </div>
-              <Show when={props.project.empty()}>
+              <Show when={props.project.empty() && !platform.project}>
                 <PromptProjectAddButton controller={props.project} />
               </Show>
             </div>
@@ -282,7 +284,8 @@ function NewSessionLocation(props: {
   root: string
   branch?: JSX.Element
   onboarding: boolean
-  onClick: () => void
+  /** Opens the project step; without it the host fixes the project and it only shows. */
+  onClick?: () => void
   /** Opens the project's worktree step; without it the project has no worktrees to choose. */
   onWorktree?: () => void
 }) {
@@ -317,41 +320,58 @@ function NewSessionLocation(props: {
 
   const fitted = createMemo(() => fitPath(path() ?? "", layout.width, layout.font))
 
+  const project = () => (
+    <>
+      <ProjectAvatar
+        class="shrink-0"
+        fallback={displayName(props.project)}
+        src={getProjectAvatarSource(props.project.id, props.project.icon)}
+        variant={getProjectAvatarVariant(props.project.icon?.color)}
+        generated={getProjectAvatarGenerated(props.project)}
+      />
+      <span class="min-w-0 truncate">{displayName(props.project)}</span>
+    </>
+  )
+
   return (
     <div class="relative flex min-h-9 min-w-0 items-center gap-3 ps-2 pe-1.5 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
       <div class="flex min-w-0 max-w-full flex-wrap items-center gap-x-0 gap-y-1 py-1.5">
         <div class="flex min-w-0 max-w-full items-center">
-          <Tooltip
-            placement="top"
-            openDelay={800}
-            value={
-              <span class="flex items-center gap-2">
-                {language.t("session.new.project.trigger.tooltip")}
-                <Show when={command.keybindParts("project.select").length}>
-                  <Keybind keys={command.keybindParts("project.select")} variant="neutral" />
-                </Show>
+          <Show
+            when={props.onClick}
+            fallback={
+              <span class="flex h-7 min-w-0 items-center gap-1.5 ps-1.5 pe-2 text-v2-text-text-muted">
+                {project()}
               </span>
             }
-            class="flex min-w-0"
           >
-            <button
-              type="button"
-              data-action="prompt-project"
-              aria-haspopup="dialog"
-              aria-description={language.t("session.new.project.trigger.tooltip")}
-              class={`${TRIGGER} min-w-0`}
-              onClick={props.onClick}
-            >
-              <ProjectAvatar
-                class="shrink-0"
-                fallback={displayName(props.project)}
-                src={getProjectAvatarSource(props.project.id, props.project.icon)}
-                variant={getProjectAvatarVariant(props.project.icon?.color)}
-                generated={getProjectAvatarGenerated(props.project)}
-              />
-              <span class="min-w-0 truncate">{displayName(props.project)}</span>
-            </button>
-          </Tooltip>
+            {(onClick) => (
+              <Tooltip
+                placement="top"
+                openDelay={800}
+                value={
+                  <span class="flex items-center gap-2">
+                    {language.t("session.new.project.trigger.tooltip")}
+                    <Show when={command.keybindParts("project.select").length}>
+                      <Keybind keys={command.keybindParts("project.select")} variant="neutral" />
+                    </Show>
+                  </span>
+                }
+                class="flex min-w-0"
+              >
+                <button
+                  type="button"
+                  data-action="prompt-project"
+                  aria-haspopup="dialog"
+                  aria-description={language.t("session.new.project.trigger.tooltip")}
+                  class={`${TRIGGER} min-w-0`}
+                  onClick={onClick()}
+                >
+                  {project()}
+                </button>
+              </Tooltip>
+            )}
+          </Show>
           <Show when={props.onWorktree}>
             {(onWorktree) => (
               <>
