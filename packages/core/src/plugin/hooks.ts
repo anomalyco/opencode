@@ -1,8 +1,8 @@
 export * as PluginHooks from "./hooks.js"
 
 import type { AISDKHooks } from "@opencode/plugin/effect/aisdk"
-import type { ModelRequestHooks } from "@opencode/plugin/effect/model"
-import type { SessionHooks } from "@opencode/plugin/effect/session"
+import type { ModelHttpRequest, ModelHttpResponse, ModelRequestHooks } from "@opencode/plugin/effect/model"
+import type { SessionHooks, SessionHttpRequest, SessionHttpResponse } from "@opencode/plugin/effect/session"
 import type { ShellHooks } from "@opencode/plugin/effect/shell"
 import type { ToolFailures, ToolHooks } from "@opencode/plugin/effect/tool"
 import type { ModelHookOptions } from "@opencode/plugin/effect/registration"
@@ -67,14 +67,22 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const callbacks = new Map<string, Entry[]>()
-    const key = (domain: keyof Domains, name: PropertyKey) => `${domain}.${String(name)}`
+    // The session HTTP hooks are model HTTP hooks that skip calls made outside a Session.
+    const key = (domain: keyof Domains, name: PropertyKey) =>
+      domain === "session" && (name === "http.request" || name === "http.response")
+        ? `model.experimental.${name}`
+        : `${domain}.${String(name)}`
 
     const register: Interface["register"] = Effect.fn("PluginHooks.register")(
       function* (domain, name, callback, options) {
         const scope = yield* Scope.Scope
         const id = key(domain, name)
         let active = true
-        const entry = { callback, options }
+        const entry = {
+          callback:
+            domain !== "session" ? callback : name === "http.request" ? sessionRequest(callback) : name === "http.response" ? sessionResponse(callback) : callback,
+          options,
+        }
         callbacks.set(id, [...(callbacks.get(id) ?? []), entry])
         const dispose = Effect.sync(() => {
           if (!active) return
@@ -107,5 +115,38 @@ const layer = Layer.effect(
     return Service.of({ has, register, trigger })
   }),
 )
+
+function sessionRequest(callback: Function) {
+  return (event: ModelHttpRequest): Effect.Effect<void> => {
+    if (event.session === undefined) return Effect.void
+    const legacy: SessionHttpRequest = {
+      sessionID: event.session.id,
+      agent: event.session.agent,
+      model: event.model,
+      kind: event.kind,
+      request: event.request,
+    }
+    return Effect.map(callback(legacy), () => {
+      event.request = legacy.request
+    })
+  }
+}
+
+function sessionResponse(callback: Function) {
+  return (event: ModelHttpResponse): Effect.Effect<void> => {
+    if (event.session === undefined) return Effect.void
+    const legacy: SessionHttpResponse = {
+      sessionID: event.session.id,
+      agent: event.session.agent,
+      model: event.model,
+      kind: event.kind,
+      request: event.request,
+      response: event.response,
+    }
+    return Effect.map(callback(legacy), () => {
+      event.response = legacy.response
+    })
+  }
+}
 
 export const node = makeLocationNode({ service: Service, layer, deps: [] })

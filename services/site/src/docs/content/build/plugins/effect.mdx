@@ -1306,21 +1306,23 @@ effect: (ctx) =>
   }),
 ```
 
-Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
-it. Both hooks run for every request a session issues; `event.kind` is `"primary"`, `"compaction"`, `"title"`, or
-`"generate"` depending on which flow issued it.
+Modify native provider requests or responses with the experimental model HTTP hooks. They run for every HTTP request
+to a model provider, including Generate text, image and decision calls made outside a Session. Bodies are one-shot
+streams; clone or replace a body before reading it. `event.kind` says why the call was made, and `event.session` is set
+exactly when a Session made it. The session `http.request` and `http.response` hooks are deprecated; they still run, as
+model hooks that skip calls without a Session.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
-    const session = ctx.session
-    yield* session.hook("http.request", (event) =>
+    const model = ctx.model
+    yield* model.hook("experimental.http.request", (event) =>
       Effect.sync(() => {
-        event.request.headers.set("x-session-id", event.sessionID)
+        if (event.session) event.request.headers.set("x-session-id", event.session.id)
         if (event.kind === "title") event.request.headers.set("x-priority", "background")
       }),
     )
-    yield* session.hook("http.response", (event) =>
+    yield* model.hook("experimental.http.response", (event) =>
       Effect.sync(() => {
         event.response = new Response(event.response.body, {
           status: event.response.status,
@@ -1409,7 +1411,9 @@ interface SessionHooks {
   readonly generate: SessionGenerate
   readonly title: SessionTitle
   readonly "model.request": SessionModelRequest
+  /** @deprecated Use ctx.model.hook("experimental.http.request") */
   readonly "http.request": SessionHttpRequest
+  /** @deprecated Use ctx.model.hook("experimental.http.response") */
   readonly "http.response": SessionHttpResponse
   readonly "experimental.ws.handshake": SessionWebSocketHandshake
   readonly "experimental.ws.send": SessionWebSocketSend

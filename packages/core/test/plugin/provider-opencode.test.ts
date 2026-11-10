@@ -932,9 +932,8 @@ describe("OpencodePlugin", () => {
           yield* drain
           const rejected = (providerID: Provider.ID) =>
             hooks
-              .trigger("session", "http.response", {
-                sessionID: Session.ID.make("ses_console"),
-                agent: Agent.ID.make("build"),
+              .trigger("model", "experimental.http.response", {
+                session: { id: Session.ID.make("ses_console"), agent: Agent.ID.make("build") },
                 model: Model.Ref.make({ providerID, id: Model.ID.make("model") }),
                 kind: "primary",
                 request: new Request("https://inference.example/v1/responses"),

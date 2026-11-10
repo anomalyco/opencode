@@ -63,6 +63,7 @@ const run = Effect.fnUntraced(function* (
   yield* WarmingPlugin.Plugin.effect(
     host({
       model: {
+        hook: () => Effect.die("unused model.hook"),
         list: () => Effect.succeed({ location: { directory }, data: [{ ...model, settings: { cache } }] }),
         default: () => Effect.die("unused model.default"),
         transform: () => Effect.die("unused model.transform"),

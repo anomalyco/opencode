@@ -4,6 +4,7 @@ import type { Model } from "@opencode/schema/model"
 import type { Session } from "@opencode/schema/session"
 import type { Effect, Types } from "effect"
 import type { ProviderRecord } from "./provider.js"
+import type { SessionRequestKind } from "./session.js"
 import type { ModelHooks, Transform } from "./registration.js"
 
 export interface ModelEditor {
@@ -28,30 +29,38 @@ export interface ModelEditor {
  * Why a model request is being made. Session requests use `primary`, `compaction`, `title` and `generate`; the
  * stateless generate API uses `text`, `image` and `decision`. Experimental.
  */
-export type ModelRequestKind = "primary" | "compaction" | "title" | "generate" | "text" | "image" | "decision"
+export type ModelRequestKind = SessionRequestKind | "text" | "image" | "decision"
 
-/** Who is making a model request. `sessionID` and `agent` are set only when a Session makes it. Experimental. */
-export interface ModelRequestScope {
-  readonly model: Model.Ref
-  readonly kind: ModelRequestKind
-  readonly sessionID?: Session.ID
-  readonly agent?: Agent.ID
+/** The Session that made a model request. Experimental. */
+export interface ModelRequestSession {
+  readonly id: Session.ID
+  readonly agent: Agent.ID
 }
 
+/**
+ * Which model is called and why. `session` is set exactly when a Session makes the request, so checking it narrows
+ * `kind` to the Session kinds. Experimental.
+ */
+export type ModelRequestScope = { readonly model: Model.Ref } & (
+  | { readonly kind: SessionRequestKind; readonly session: ModelRequestSession }
+  | { readonly kind: "text" | "image" | "decision"; readonly session?: undefined }
+)
+
 /** An HTTP request to a model provider, before it is sent. Replace `request` to change it. Experimental. */
-export interface ModelHttpRequest extends ModelRequestScope {
+export type ModelHttpRequest = ModelRequestScope & {
   request: Request
 }
 
 /** The provider's HTTP response to `request`. Replace `response` to change what the model client reads. Experimental. */
-export interface ModelHttpResponse extends ModelRequestScope {
+export type ModelHttpResponse = ModelRequestScope & {
   readonly request: Request
   response: Response
 }
 
 /**
- * Hooks on every model request, whichever Session or API makes it: Session steps, compaction and titles, and
- * `generate` text, image and decision calls.
+ * Hooks on every HTTP request to a model provider, whichever Session or API makes it: Session steps, compaction,
+ * titles and warming, and `generate` text, image and decision calls. Use these to read or change what is sent on the
+ * wire (URL, headers, body) or the raw response. WebSocket traffic doesn't pass through them. Experimental.
  */
 export interface ModelRequestHooks {
   readonly "experimental.http.request": ModelHttpRequest

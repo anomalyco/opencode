@@ -1503,31 +1503,14 @@ await ctx.session.hook(
 
 #### Native HTTP
 
-Modify native provider requests or responses. Their bodies are one-shot streams; clone or replace a body before reading
-it.
-
-Both hooks run for every request a session issues. `event.kind` says which flow issued it: `"primary"` for the agent
-loop, `"compaction"` for checkpoint summaries, `"title"` for title generation, and `"generate"` for transient
-`ctx.session.generate` calls. Use it instead of the agent ID to tell auxiliary requests apart.
-
-```ts
-await ctx.session.hook("http.request", (event) => {
-  event.request.headers.set("x-session-id", event.sessionID)
-  if (event.kind === "title") event.request.headers.set("x-priority", "background")
-})
-
-await ctx.session.hook("http.response", (event) => {
-  event.response = new Response(event.response.body, {
-    status: event.response.status,
-    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
-  })
-})
-```
+`http.request` and `http.response` are deprecated. Use the [model HTTP hooks](#models-experimental), which run for
+the same requests and for calls made outside a Session. The session hooks still work: each one is registered as a
+model hook that skips calls without a Session, so both kinds run in plugin order.
 
 #### Native WebSocket (experimental)
 
 Providers that stream over a WebSocket open one connection per session and reuse it across requests, so
-`http.request` and `http.response` never see that traffic. The `experimental.ws.handshake` hook runs once per model
+the HTTP hooks never see that traffic. The `experimental.ws.handshake` hook runs once per model
 call before the connection is selected. It carries the same `sessionID`, `agent`, `model`, and `kind` as the HTTP
 hooks, plus the connection `url` and `headers`. Changing `url` or `headers` changes which socket the request uses, so a
 rotated bearer token reopens the connection.
@@ -1615,7 +1598,9 @@ interface SessionHooks {
   title: SessionRequestHook & { result?: string }
   "experimental.model.resolve": SessionModelResolveHook
   "model.request": SessionModelRequestHook
+  /** @deprecated Use ctx.model.hook("experimental.http.request") */
   "http.request": SessionHttpRequestHook
+  /** @deprecated Use ctx.model.hook("experimental.http.response") */
   "http.response": SessionHttpResponseHook
   "experimental.ws.handshake": SessionWebSocketHandshakeHook
   "experimental.ws.send": SessionWebSocketSendHook
@@ -1706,23 +1691,33 @@ interface SessionHookContext {
 
 ### Models (experimental)
 
-Model HTTP hooks see every HTTP request to a model provider, whichever Session or API makes it: Session steps,
-compaction and titles, and [Generate](#generate-experimental) text, image and decision calls. They work like the
-session [Native HTTP](#native-http) hooks and wrap them: a model request hook runs before the session one, and a model
-response hook runs after it.
+Model HTTP hooks run for every HTTP request to a model provider, whichever Session or API makes it: Session steps,
+compaction, titles and cache warming, and [Generate](#generate-experimental) text, image and decision calls. Use them to
+read or change what goes on the wire (URL, headers, body) or the raw response. Request and response bodies are one-shot
+streams; clone or replace a body before reading it. WebSocket traffic doesn't pass through them; see
+[Native WebSocket](#native-websocket-experimental).
 
-`event.kind` is `"primary"`, `"compaction"`, `"title"` or `"generate"` for Session requests, and `"text"`, `"image"`
-or `"decision"` for Generate. `sessionID` and `agent` are set only for Session requests. Generate calls made through
-the HTTP API run in the global config location, so only globally configured plugins see them.
+`event.kind` says why the call was made: `"primary"`, `"compaction"`, `"title"` or `"generate"` for Session requests,
+and `"text"`, `"image"` or `"decision"` for Generate. `event.session` is set exactly when a Session made the call.
+Generate calls made through the HTTP API run in the global config location, so only globally configured plugins see
+them.
 
 ```ts
 await ctx.model.hook(
   "experimental.http.request",
   (event) => {
     event.request.headers.set("x-request-kind", event.kind)
+    if (event.session) event.request.headers.set("x-session-id", event.session.id)
   },
   { providerID: "openai" },
 )
+
+await ctx.model.hook("experimental.http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
 ```
 
 #### Reference
@@ -1736,12 +1731,10 @@ interface ModelHookContext {
   ): Promise<Registration>
 }
 
-interface ModelRequestScope {
-  model: { providerID: string; id: string }
-  kind: "primary" | "compaction" | "title" | "generate" | "text" | "image" | "decision"
-  sessionID?: string
-  agent?: string
-}
+type ModelRequestScope = { model: { providerID: string; id: string } } & (
+  | { kind: "primary" | "compaction" | "title" | "generate"; session: { id: string; agent: string } }
+  | { kind: "text" | "image" | "decision"; session?: undefined }
+)
 
 interface ModelRequestHooks {
   "experimental.http.request": ModelRequestScope & { request: Request }

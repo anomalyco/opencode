@@ -6,6 +6,7 @@ import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Location } from "@opencode/core/location"
+import { ModelHttp } from "@opencode/core/model-http"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -235,6 +236,48 @@ describe("SessionModelRequest HTTP hooks", () => {
         "send:primary:create",
         "receive:primary:created",
       ])
+    }),
+  )
+})
+
+describe("model HTTP hooks", () => {
+  it.effect("run for every call, and session http hooks only for calls with a Session", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const seen: string[] = []
+      yield* hooks.register("model", "experimental.http.request", (event) =>
+        Effect.sync(() => {
+          seen.push(`model:${event.kind}:${event.session?.id ?? "-"}`)
+          event.request = new Request(event.request, { headers: { "x-model-hook": "1" } })
+        }),
+      )
+      yield* hooks.register("session", "http.request", (event) =>
+        Effect.sync(() => {
+          seen.push(`session:${event.kind}:${event.sessionID}:${event.request.headers.get("x-model-hook")}`)
+        }),
+      )
+      const sent: string[] = []
+      const send = (scope: Parameters<typeof ModelHttp.middleware>[1]) =>
+        Effect.gen(function* () {
+          const http = yield* ModelHttp.middleware(hooks, scope)
+          if (!http) throw new Error("Expected HTTP middleware")
+          yield* http(HttpClientRequest.post("https://example.test/v1/responses"), (request) =>
+            Effect.sync(() => {
+              sent.push(request.headers["x-model-hook"] ?? "")
+              return HttpClientResponse.fromWeb(request, new Response("{}", { status: 200 }))
+            }),
+          )
+        })
+
+      yield* send({ model: model.ref, kind: "text" })
+      yield* send({
+        model: model.ref,
+        kind: "primary",
+        session: { id: session.id, agent: Agent.ID.make("build") },
+      })
+
+      expect(seen).toEqual(["model:text:-", "model:primary:ses_hook_kind", "session:primary:ses_hook_kind:1"])
+      expect(sent).toEqual(["1", "1"])
     }),
   )
 })
