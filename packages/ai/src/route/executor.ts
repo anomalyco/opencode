@@ -20,14 +20,15 @@ const normalizedHeaders = (headers: Headers.Headers) =>
 const clampRetryAfterMs = (millis: number) => Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.ceil(millis)))
 
 const retryAfterMs = (headers: Record<string, string>) => {
-  const millis = Number(headers["retry-after-ms"])
-  if (Number.isFinite(millis)) return clampRetryAfterMs(millis)
+  const rawMillis = headers["retry-after-ms"]?.trim()
+  const millis = rawMillis ? Number(rawMillis) : NaN
+  if (Number.isFinite(millis) && millis >= 0) return clampRetryAfterMs(millis)
 
-  const value = headers["retry-after"]
+  const value = headers["retry-after"]?.trim()
   if (!value) return undefined
 
   const seconds = Number(value)
-  if (Number.isFinite(seconds)) return clampRetryAfterMs(seconds * 1000)
+  if (Number.isFinite(seconds)) return seconds >= 0 ? clampRetryAfterMs(seconds * 1000) : undefined
 
   const date = Date.parse(value)
   if (!Number.isNaN(date)) return clampRetryAfterMs(date - Date.now())
