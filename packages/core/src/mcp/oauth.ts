@@ -42,6 +42,9 @@ type Refresh = (send: FetchLike, url: string | URL, init: RequestInit, token: st
 // Providers backed by a stored credential refresh under its cross-process lock; see connectProvider.
 const lockedRefreshes = new WeakMap<OAuthClientProvider, Refresh>()
 
+// Like provider logins: a stored access token this close to expiry is refreshed before it is sent.
+const REFRESH_AHEAD = 5 * 60 * 1000
+
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 class RefreshRejected extends Data.TaggedError("McpOAuth.RefreshRejected")<{
@@ -293,7 +296,7 @@ const toCredential = (input: {
     methodID: input.methodID,
     access: input.tokens.access_token,
     refresh: input.tokens.refresh_token ?? "",
-    // 0 is non-expiring; toTokens then omits expires_in so the SDK does not force a refresh.
+    // 0 means the server gave no lifetime, so the token is only refreshed after a 401.
     expires: input.tokens.expires_in ? Date.now() + input.tokens.expires_in * 1000 : 0,
     metadata: {
       serverUrl: input.serverUrl,
@@ -398,6 +401,9 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
           }),
         ),
     )
+  const lockedFetch = yield* sender(refresh)
+  // auth() reads tokens() again while it refreshes; that read must not start another refresh.
+  let refreshing = false
   const result = provider({
     config: input.config,
     fetch,
@@ -413,7 +419,21 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
         const oauth = await read()
         if (!oauth) return undefined
         presented = oauth.refresh
-        return toTokens(oauth)
+        if (refreshing || !oauth.refresh || !oauth.expires || oauth.expires - Date.now() > REFRESH_AHEAD)
+          return toTokens(oauth)
+        // A failed refresh keeps the current token; a 401 then still runs the SDK's own refresh.
+        refreshing = true
+        await auth(result, { serverUrl: input.config.url, fetchFn: lockedFetch })
+          .catch((error) =>
+            run(Effect.logWarning("mcp oauth refresh ahead of expiry failed", { errors: ErrorSummary.from(error) })),
+          )
+          .finally(() => {
+            refreshing = false
+          })
+        const latest = await read()
+        if (!latest) return undefined
+        presented = latest.refresh
+        return toTokens(latest)
       },
       saveTokens: async (tokens) => {
         const previous = await read()

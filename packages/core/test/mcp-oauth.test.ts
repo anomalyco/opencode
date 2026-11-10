@@ -31,7 +31,7 @@ const credential = (input: { access: string; refresh: string; expires?: number; 
       methodID,
       access: input.access,
       refresh: input.refresh,
-      expires: input.expires ?? Date.now() - 1000,
+      expires: input.expires ?? Date.now() + 3_600_000,
       metadata: { serverUrl: input.url, tokenType: "Bearer" },
     },
   })
@@ -696,15 +696,35 @@ describe("MCP OAuth refresh across processes", () => {
   const id = Credential.ID.make("cred_shared")
 
   // A token endpoint that rotates refresh tokens and rejects reuse. The test releases each response.
+  // `/mcp` answers initialize and records the bearer token each request carries.
   const rotatingServer = () => {
     const state = { current: "r1", generation: 1 }
     const sent: string[] = []
+    const bearers: Array<string | null> = []
     const received = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()
     const server = Bun.serve({
       port: 0,
       async fetch(request) {
         const url = new URL(request.url)
+        if (request.method === "POST" && url.pathname === "/mcp") {
+          bearers.push(request.headers.get("authorization"))
+          const body = (await request.json()) as {
+            id: number
+            method: string
+            params?: { protocolVersion?: string }
+          }
+          if (body.method !== "initialize") return new Response(null, { status: 202 })
+          return Response.json({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              protocolVersion: body.params?.protocolVersion,
+              capabilities: {},
+              serverInfo: { name: "test", version: "1" },
+            },
+          })
+        }
         if (request.method !== "POST" || url.pathname !== "/token") return new Response(null, { status: 404 })
         const token = new URLSearchParams(await request.text()).get("refresh_token") ?? ""
         sent.push(token)
@@ -721,7 +741,7 @@ describe("MCP OAuth refresh across processes", () => {
         })
       },
     })
-    return { server, sent, received: received.promise, release: () => release.resolve() }
+    return { server, sent, bearers, received: received.promise, release: () => release.resolve() }
   }
 
   const instance = (file: string) =>
@@ -746,14 +766,14 @@ describe("MCP OAuth refresh across processes", () => {
     return value?.type === "oauth" ? { access: value.access, refresh: value.refresh } : undefined
   }
 
-  const setup = async (url: string) => {
+  const setup = async (url: string, expires?: number) => {
     const tmp = await tmpdir()
     const file = path.join(tmp.path, "opencode.db")
     const first = instance(file)
     const second = instance(file)
     await first.runPromise(
       Credential.Service.use((credentials) =>
-        credentials.create({ ...credential({ access: "a1", refresh: "r1", url }), id }),
+        credentials.create({ ...credential({ access: "a1", refresh: "r1", url, expires }), id }),
       ),
     )
     return {
@@ -1048,5 +1068,87 @@ describe("MCP OAuth refresh across processes", () => {
     const tokens = await refresh(endpoint.server, current.fetchFn, "r1").finally(() => endpoint.server.stop(true))
     expect([tokens.access_token, tokens.refresh_token]).toEqual(["a2", "r2"])
     expect(await stored(processes.second)).toEqual({ access: "a2", refresh: "r2" })
+  })
+
+  describe("ahead of expiry", () => {
+    const connect = (provider: Awaited<ReturnType<typeof connection>>["provider"], url: string) =>
+      Effect.runPromise(
+        Effect.scoped(
+          McpClient.connect({
+            server: "test",
+            config: remote(url),
+            directory: import.meta.dir,
+            authProvider: provider,
+          }),
+        ).pipe(Effect.provide(hostEnvironmentLayer)),
+      )
+
+    test("refreshes a token that expires within five minutes before sending it", async () => {
+      const endpoint = rotatingServer()
+      endpoint.release()
+      const url = `${endpoint.server.url.origin}/mcp`
+      await using processes = await setup(url, Date.now() + 60_000)
+      const current = await connection(processes.first, url)
+
+      await connect(current.provider, url).finally(() => endpoint.server.stop(true))
+
+      expect(endpoint.sent).toEqual(["r1"])
+      expect(endpoint.bearers[0]).toBe("Bearer a2")
+      expect(await stored(processes.second)).toEqual({ access: "a2", refresh: "r2" })
+    })
+
+    test("sends a token with more than five minutes left as is", async () => {
+      const endpoint = rotatingServer()
+      endpoint.release()
+      const url = `${endpoint.server.url.origin}/mcp`
+      await using processes = await setup(url, Date.now() + 6 * 60_000)
+      const current = await connection(processes.first, url)
+
+      await connect(current.provider, url).finally(() => endpoint.server.stop(true))
+
+      expect(endpoint.sent).toEqual([])
+      expect(endpoint.bearers[0]).toBe("Bearer a1")
+    })
+
+    test("never refreshes ahead a token without a lifetime", async () => {
+      const endpoint = rotatingServer()
+      endpoint.release()
+      const url = `${endpoint.server.url.origin}/mcp`
+      await using processes = await setup(url, 0)
+      const current = await connection(processes.first, url)
+
+      await connect(current.provider, url).finally(() => endpoint.server.stop(true))
+
+      expect(endpoint.sent).toEqual([])
+      expect(endpoint.bearers[0]).toBe("Bearer a1")
+    })
+
+    test("sends one refresh while concurrent requests keep the still-valid token", async () => {
+      const endpoint = rotatingServer()
+      const url = `${endpoint.server.url.origin}/mcp`
+      await using processes = await setup(url, Date.now() + 60_000)
+      const current = await connection(processes.first, url)
+
+      const pending = Promise.all([current.provider.tokens(), current.provider.tokens(), current.provider.tokens()])
+      await endpoint.received
+      endpoint.release()
+      const tokens = await pending.finally(() => endpoint.server.stop(true))
+
+      expect(endpoint.sent).toEqual(["r1"])
+      expect(tokens.map((value) => value?.access_token)).toEqual(["a2", "a1", "a1"])
+      expect(await stored(processes.second)).toEqual({ access: "a2", refresh: "r2" })
+    })
+
+    test("keeps sending the current token when the refresh fails", async () => {
+      const endpoint = rotatingServer()
+      endpoint.release()
+      const url = `${endpoint.server.url.origin}/mcp`
+      await using processes = await setup(url, Date.now() + 60_000)
+      const current = await connection(processes.first, url)
+      endpoint.server.stop(true)
+
+      expect((await current.provider.tokens())?.access_token).toBe("a1")
+      expect(await stored(processes.second)).toEqual({ access: "a1", refresh: "r1" })
+    })
   })
 })
