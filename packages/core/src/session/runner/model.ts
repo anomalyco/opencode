@@ -77,28 +77,26 @@ const layer = Layer.effect(
     const resolver = yield* ModelResolver.Service
     const agents = yield* Agent.Service
     const hooks = yield* PluginHooks.Service
+    // Location plugins populate and filter the catalog asynchronously during layer startup.
     const select = Effect.fn("SessionRunnerModel.select")(function* (
       session: SessionSchema.Info,
       available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
     ) {
-      // Location plugins populate and filter the catalog asynchronously during layer startup.
-      if (!session.model) {
-        const agent = (yield* agents.select(session.agent)).info?.model
-        const preferred =
-          agent && (yield* available()).find((model) => model.providerID === agent.providerID && model.id === agent.id)
-        const resolved = preferred ? yield* resolver.resolveModel(preferred, agent.variant) : yield* resolver.resolve()
-        if (resolved) return resolved
-        return yield* new ModelNotSelectedError({ sessionID: session.id })
+      const find = (ref: Model.Ref) =>
+        available().pipe(
+          Effect.map((models) => models.find((model) => model.providerID === ref.providerID && model.id === ref.id)),
+        )
+      if (session.model) {
+        const info = yield* find(session.model)
+        if (info) return { info, variant: session.model.variant }
+        return yield* new ModelUnavailableError({ providerID: session.model.providerID, modelID: session.model.id })
       }
-      const selected = (yield* available()).find(
-        (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
-      )
-      if (!selected)
-        return yield* new ModelUnavailableError({
-          providerID: session.model.providerID,
-          modelID: session.model.id,
-        })
-      return yield* resolver.resolveModel(selected, session.model.variant)
+      const agent = (yield* agents.select(session.agent)).info?.model
+      const preferred = agent && (yield* find(agent))
+      if (preferred) return { info: preferred, variant: agent.variant }
+      const info = yield* resolver.fallback()
+      if (info) return { info, variant: undefined }
+      return yield* new ModelNotSelectedError({ sessionID: session.id })
     })
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request) {
@@ -107,15 +105,16 @@ const layer = Layer.effect(
           sessionID: session.id,
           agent: request.agent,
           kind: request.kind,
-          model: selected.ref,
+          model: Model.Ref.make({
+            providerID: selected.info.providerID,
+            id: selected.info.id,
+            ...(selected.variant === undefined ? {} : { variant: selected.variant }),
+          }),
         })
         const target = event.target
-        if (!target) return selected
+        if (!target) return yield* resolver.resolveModel(selected.info, selected.variant)
         // Same provider only: the target may be hidden from the picker, and its credentials and hooks stay the selection's.
-        if (target.providerID !== selected.ref.providerID)
-          return yield* new ModelUnavailableError({ providerID: target.providerID, modelID: target.id })
-        if (target.id === selected.ref.id && target.variant === selected.ref.variant) return selected
-        const resolved = yield* resolver.resolve(target)
+        const resolved = target.providerID === selected.info.providerID ? yield* resolver.resolve(target) : undefined
         if (resolved) return resolved
         return yield* new ModelUnavailableError({ providerID: target.providerID, modelID: target.id })
       }),

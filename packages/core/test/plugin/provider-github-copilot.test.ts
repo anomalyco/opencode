@@ -21,7 +21,7 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
-import { Flag } from "@opencode/core/flag"
+import { Bus } from "@opencode/core/bus"
 import { advance, drain } from "../lib/clock"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { testEffect } from "../lib/effect"
@@ -647,7 +647,11 @@ describe("GithubCopilotPlugin", () => {
             return HttpClientResponse.fromWeb(
               request,
               Response.json({
-                data: [remote("routed"), remote("other"), remote("fallback", { is_chat_fallback: true })],
+                data: [
+                  remote("routed", { billing: { auto_discount: 0.1 } }),
+                  remote("other", { billing: { auto_discount: 0.1 } }),
+                  remote("fallback", { is_chat_fallback: true }),
+                ],
               }),
             )
           }
@@ -667,11 +671,7 @@ describe("GithubCopilotPlugin", () => {
         }),
       )
       yield* connect({ apiEndpoint: "https://copilot.test" })
-      const flags = yield* Flag.Service
-      yield* addPlugin().pipe(
-        Effect.provideService(HttpClient.HttpClient, api),
-        Effect.provideService(Flag.Service, { ...flags, enabled: (key) => Effect.succeed(key === "copilot_auto") }),
-      )
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
       const models = yield* Model.Service
       yield* advance(() => state.listed)
       yield* drain
@@ -722,11 +722,22 @@ describe("GithubCopilotPlugin", () => {
         options: {},
         tools: {},
       })
+      // The compaction request itself keeps the pick's token; the request after it routes again.
       expect(yield* token("routed")).toBe("token-routed")
-      expect(yield* resolve("compaction")).toBe("routed")
       expect(yield* resolve("primary")).toBe("other")
       expect(yield* token("other")).toBe("token-other")
       expect(picks).toHaveLength(2)
+
+      state.pick = "routed"
+      const bus = yield* Bus.Service
+      yield* bus.publish(
+        Credential.Event.Switched,
+        { integrationID: Integration.ID.make("github-copilot"), credentialID: null },
+        { global: true },
+      )
+      yield* drain
+      expect(yield* resolve("primary")).toBe("routed")
+      expect(picks).toHaveLength(3)
 
       state.available = false
       expect(yield* resolve("primary", ids.child)).toBe("fallback")

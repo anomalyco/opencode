@@ -7,7 +7,6 @@ import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
 import { CopilotModels } from "../../github-copilot/models.js"
 import { App } from "../../app.js"
-import { Flag } from "../../flag.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
 import { Agent } from "../../agent.js"
@@ -171,10 +170,13 @@ export const GithubCopilotPlugin = define({
     const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
     const outbound = yield* FetchHttpClient.Fetch
-    const auto = yield* Flag.enabled("copilot_auto")
-    // Each Session keeps the model Copilot's Auto router picked until the pick's token nears expiry or the Session is
-    // compacted. The token unlocks the picked model and its Auto discount, and Copilot rejects it for any other model.
-    const routes = new Map<Session.ID, { model: string; token?: string; until: number; stale?: boolean }>()
+    // Each Session keeps the model Copilot's Auto router picked until its token nears expiry, the Session is compacted,
+    // or the account switches. The token unlocks the pick and its Auto discount; Copilot rejects it for any other model.
+    const routes = new Map<Session.ID, { model: string; token?: string; until: number }>()
+    yield* ProviderRefresh.onSwitch(
+      "github-copilot",
+      Effect.sync(() => routes.clear()),
+    )
     const discovered = yield* ProviderRefresh.start({
       integrationID: "github-copilot",
       initial: {} as {
@@ -258,7 +260,7 @@ export const GithubCopilotPlugin = define({
       const loaded = discovered.current
       if (loaded.models) {
         const url = loaded.baseURL ?? baseURL()
-        const router = auto ? CopilotModels.autoModel(url, loaded.models) : undefined
+        const router = CopilotModels.autoModel(url, loaded.models)
         evt.add({
           info: item.provider,
           models: [
@@ -362,28 +364,21 @@ export const GithubCopilotPlugin = define({
           if (evt.model.id !== CopilotModels.auto || evt.kind === "title") return
           const now = yield* Clock.currentTimeMillis
           const cached = routes.get(evt.sessionID)
-          const current =
-            cached && cached.until > now && !(cached.stale && evt.kind === "primary")
-              ? cached
-              : yield* route(evt.sessionID)
+          const current = cached && cached.until > now ? cached : yield* route(evt.sessionID)
           if (!current) return
-          if (current !== cached) {
-            routes.delete(evt.sessionID)
-            routes.set(evt.sessionID, current)
-            const oldest = routes.keys().next().value
-            if (routes.size > 500 && oldest) routes.delete(oldest)
-          }
+          routes.set(evt.sessionID, current)
           evt.target = Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make(current.model) })
         }),
       { providerID: Provider.ID.githubCopilot },
     )
-    // Compaction rewrites the prompt, so the next request routes again, like Copilot's own clients.
+    // Compaction rewrites the prompt, so the request after it routes again, like Copilot's own clients. The compaction
+    // request itself still carries the current pick's token.
     yield* ctx.session.hook(
       "compaction",
       (evt) =>
         Effect.sync(() => {
           const route = routes.get(evt.sessionID)
-          if (route) route.stale = true
+          if (route) route.until = 0
         }),
       { providerID: Provider.ID.githubCopilot },
     )
