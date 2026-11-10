@@ -4877,6 +4877,7 @@ pub struct SessionRevertCommitted {
 pub enum SessionUsageRecordedDataSource {
     Title,
     Compaction,
+    Generate,
     Unknown(String),
 }
 
@@ -4885,6 +4886,7 @@ impl SessionUsageRecordedDataSource {
         match self {
             Self::Title => "title",
             Self::Compaction => "compaction",
+            Self::Generate => "generate",
             Self::Unknown(value) => value,
         }
     }
@@ -4895,6 +4897,7 @@ impl From<&str> for SessionUsageRecordedDataSource {
         match value {
             "title" => Self::Title,
             "compaction" => Self::Compaction,
+            "generate" => Self::Generate,
             _ => Self::Unknown(value.to_owned()),
         }
     }
