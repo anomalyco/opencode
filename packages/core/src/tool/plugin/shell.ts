@@ -215,7 +215,7 @@ export const Plugin = {
                     invocation.env.AI_AGENT ||= "opencode"
                     invocation.env.OPENCODE_SESSION_ID = context.sessionID
                     finalTimeout = yield* prepare(invocation, context)
-                    if (autoBackground && input.background !== true) invocation.timeout = 0
+                    if (autoBackground) invocation.timeout = 0
                   }),
               )
               yield* context.progress({ shellID: info.id })

@@ -4,6 +4,7 @@ import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream, Tracer } from "effect"
+import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -1487,7 +1488,7 @@ describe("ShellTool", () => {
     }),
   )
 
-  it.live("preserves explicit background timeout limits with timeout backgrounding enabled", () =>
+  it.live("preserves explicit background timeout limits with timeout backgrounding disabled", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(
@@ -1498,6 +1499,29 @@ describe("ShellTool", () => {
             const id = ID.make(String(result.metadata?.shellID))
             const shell = yield* Shell.Service
             expect((yield* shell.wait(id)).status).toBe("timeout")
+          }),
+        false,
+      )
+    }),
+  )
+
+  it.effect("ignores explicit background timeouts with timeout backgrounding enabled", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(
+        tmp.path,
+        (registry) =>
+          Effect.gen(function* () {
+            const result = yield* executeTool(
+              registry,
+              call({ command: progressOverflowCommand(0, "release"), background: true, timeout: 10 }),
+            )
+            const id = ID.make(String(result.metadata?.shellID))
+            const shell = yield* Shell.Service
+            yield* TestClock.adjust("1 second")
+            expect((yield* shell.get(id)).status).toBe("running")
+            yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+            expect(yield* shell.wait(id)).toMatchObject({ status: "exited", exit: 0 })
           }),
         true,
       )
