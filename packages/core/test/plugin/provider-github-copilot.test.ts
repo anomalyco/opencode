@@ -199,6 +199,31 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("serves an Enterprise login from its own endpoint until the first model list arrives", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const requests: string[] = []
+      yield* providers.transform((editor) => {
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-4o"), (model) => {
+          model.package = "@opencode/ai/providers/openai-compatible"
+        })
+      })
+      yield* connect({ enterpriseUrl: "company.ghe.com" })
+      // The account lookup never answers, so the first refresh is still running when the model is read.
+      const pending = HttpClient.make((request) =>
+        Effect.sync(() => requests.push(request.url)).pipe(Effect.andThen(Effect.never)),
+      )
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, pending))
+      yield* advance(() => requests.length > 0)
+
+      expect(requests).toEqual(["https://api.company.ghe.com/copilot_internal/user"])
+      expect(required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-4o"))).settings).toMatchObject({
+        baseURL: "https://copilot-api.company.ghe.com",
+      })
+    }),
+  )
+
   it.effect("registers GitHub Copilot device OAuth", () =>
     Effect.gen(function* () {
       yield* addPlugin()
