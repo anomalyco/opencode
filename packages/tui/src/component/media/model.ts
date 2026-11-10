@@ -244,16 +244,26 @@ export function viewerMedia(items: readonly MediaItem[], item?: MediaItem) {
   return { items: unique, index: item ? (seen.get(mediaSource(item)) ?? 0) : unique.length - 1 }
 }
 
+const KIND_NAMES = { image: "Image", video: "Video", other: "File" }
+
+/** The name to show for `item`: its file name without the path a pasted file carries as its name, or its kind. */
+export function mediaName(item: Pick<MediaItem, "name" | "kind">) {
+  return item.name?.split(/[\\/]/).at(-1) || KIND_NAMES[item.kind]
+}
+
+/** The file `item` shows: its path on this machine, or a `file:` URL's path on the session's server. */
+export function mediaPath(item: Pick<MediaItem, "path" | "uri">) {
+  if (item.path) return item.path
+  if (!/^file:/i.test(item.uri)) return undefined
+  const pathname = URL.parse(item.uri)?.pathname ?? item.uri
+  // A Windows server's path comes back from its URL as /C:/…
+  return (decode(pathname) ?? pathname).replace(/^\/(?=[a-z]:\/)/i, "")
+}
+
 // A file: URL names a path on the session's server whatever Location or encoding it came with; other URIs, such as
 // media: refs and data: URIs, name their content.
 function mediaSource(item: MediaItem) {
-  if (!/^file:/i.test(item.uri)) return item.uri
-  const pathname = URL.parse(item.uri)?.pathname ?? item.uri
-  try {
-    return decodeURIComponent(pathname)
-  } catch {
-    return pathname
-  }
+  return mediaPath({ uri: item.uri }) ?? item.uri
 }
 
 function item(id: string, mime: string, uri: string, name?: string): MediaItem[] {

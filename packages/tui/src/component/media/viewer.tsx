@@ -12,10 +12,13 @@ import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanu
 import { useNewDesigns } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { MEDIA_VIEWER_Z_INDEX, registerMediaViews, useMedia, type MediaViewerRequest } from "../../context/media"
+import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
+import { usePathActions } from "../../ui/working-directory-actions"
 import { Locale } from "../../util/locale"
-import { isPlayableVideo, type MediaItem } from "./model"
+import path from "node:path"
+import { isPlayableVideo, mediaName, mediaPath, type MediaItem } from "./model"
 import { MediaPip } from "./pip"
 import { Control, createTransport, TransportControls } from "./seek-bar"
 import { createImageSource, createVideoFile } from "./source"
@@ -28,7 +31,6 @@ const CARD_HEIGHT = 4
 const CARD_GAP = 2
 /** How long a message such as "Volume 80%" stays on the picture. */
 const OSD_MS = 1_200
-const KIND = { image: "Image", video: "Video", other: "File" }
 const PLAYABLE_HINT = "The viewer plays MP4, MOV and M4V files with H.264 video and AAC audio."
 const KEYS = [
   {
@@ -77,6 +79,17 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const header = theme.surface("dialog")
   const newDesigns = useNewDesigns()
   const closeClick = createMediaClick(media.closeViewer)
+  // The name opens a menu to copy the file's path, and to open its folder when the file is on this machine.
+  const localServer = useTuiTerminalEnvironment().localServer === true
+  const fileActions = usePathActions({
+    title: () => mediaName(current()),
+    path: () => mediaPath(current()),
+    folder: () => {
+      const file = mediaPath(current())
+      return file && (current().path || localServer) ? path.dirname(file) : undefined
+    },
+  })
+  const nameClick = createMediaClick(fileActions.onMouseUp)
   const items = props.request.items
   // Sound is off in a remote session, where it would play on the remote machine.
   const remote = renderer.capabilities?.remote === true
@@ -324,7 +337,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
     const area = layout()
     const bytes = item.path ? Bun.file(item.path).size : 0
     const rows = [
-      ["Name", item.name ?? item.id],
+      ["Name", mediaName(item)],
       ["Type", item.mime || item.kind],
       ["Resolution", size() || "…"],
       item.kind === "video" && ["Duration", metadata() ? formatDuration(metadata()!.duration) : "…"],
@@ -356,7 +369,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
           ? `${percent()} · ${area.crop.width}×${area.crop.height} at ${area.crop.left},${area.crop.top}`
           : "fit",
       ],
-      item.path && ["Path", Locale.truncateMiddle(item.path, 40)],
+      mediaPath(item) && ["Path", Locale.truncateMiddle(mediaPath(item)!, 40)],
     ]
     return rows.filter((row): row is string[] => Array.isArray(row))
   }
@@ -430,15 +443,20 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
         gap={2}
       >
         <text
-          attributes={newDesigns() ? undefined : TextAttributes.BOLD}
+          attributes={
+            (newDesigns() ? TextAttributes.NONE : TextAttributes.BOLD) |
+            (fileActions.hovered() && mediaPath(current()) ? TextAttributes.UNDERLINE : TextAttributes.NONE)
+          }
           fg={header.text.base}
           wrapMode="none"
           truncate
           flexShrink={1}
           selectable={false}
+          onMouseOver={fileActions.onMouseOver}
+          onMouseOut={fileActions.onMouseOut}
+          {...nameClick}
         >
-          {/* A pasted file's name can be its whole path; the details show that. */}
-          {current().name?.split(/[\\/]/).at(-1) || KIND[current().kind]}
+          {mediaName(current())}
         </text>
         <box flexDirection="row" gap={2} flexShrink={0}>
           <text fg={header.text.muted} selectable={false}>
@@ -723,7 +741,7 @@ function Card(props: { item: MediaItem; width: number; current: boolean; onOpen:
         wrapMode="none"
         selectable={false}
       >
-        {Locale.truncateMiddle(props.item.name ?? props.item.kind, props.width)}
+        {Locale.truncateMiddle(mediaName(props.item), props.width)}
       </text>
     </box>
   )

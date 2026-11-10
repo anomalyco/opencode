@@ -5,6 +5,7 @@ import { Keymap } from "../../context/keymap"
 import { MEDIA_PIP_Z_INDEX, useMedia, type MediaPipRequest } from "../../context/media"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
+import { mediaName } from "./model"
 import { Control, createTransport, TransportControls } from "./seek-bar"
 import { createVideoFile } from "./source"
 import { createMediaClick } from "./tile"
@@ -138,7 +139,7 @@ export function MediaPip(props: { pip: MediaPipRequest }) {
           ⠿
         </text>
         <text fg={theme.text.base} wrapMode="none" truncate flexGrow={1} flexShrink={1} selectable={false}>
-          {props.pip.item.name ?? "video"}
+          {mediaName(props.pip.item)}
         </text>
         <Control id="media-pip-expand" run={expand}>
           ⤢

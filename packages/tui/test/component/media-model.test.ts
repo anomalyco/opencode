@@ -4,6 +4,8 @@ import {
   collectSessionMedia,
   isPlayableVideo,
   mediaKind,
+  mediaName,
+  mediaPath,
   mentionedVideos,
   viewerMedia,
   type MediaItem,
@@ -200,6 +202,19 @@ test("collects the existing videos a finished reply names, in order with its too
   expect(asked).toEqual(["/work/gone.mp4", "/work/out/a.mp4", "/work/b.mp4", "/work/c\\d.mp4"])
   // Without existence checks, text adds nothing.
   expect(collectSessionMedia([reply("done", 2)], location).map((item) => item.id)).toEqual(["done:tool:call:0"])
+})
+
+test.each([
+  // [name, path, uri, shown name, file]
+  ["/home/me/Pictures/shot.png", undefined, "data:image/png;base64,AAAA", "shot.png", undefined],
+  ["C:\\Users\\me\\clip.mp4", "C:\\Users\\me\\clip.mp4", "", "clip.mp4", "C:\\Users\\me\\clip.mp4"],
+  [undefined, undefined, "file:///work/my%20clip.mp4", "Video", "/work/my clip.mp4"],
+  [undefined, undefined, "file:///C:/work/clip.mp4", "Video", "C:/work/clip.mp4"],
+  ["clip.mp4", undefined, "media:abc", "clip.mp4", undefined],
+] as const)("%p shows as %p", (name, path, uri, shown, file) => {
+  const item: MediaItem = { id: "item", kind: "video", mime: "video/mp4", uri, name, path }
+  expect(mediaName(item)).toBe(shown)
+  expect(mediaPath(item)).toBe(file)
 })
 
 test("the viewer shows each file once, at its first appearance", () => {

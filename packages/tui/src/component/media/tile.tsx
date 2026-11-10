@@ -3,7 +3,7 @@ import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, createUniqueId, Match, onCleanup, Show, Switch } from "solid-js"
 import { useMedia } from "../../context/media"
 import { useTheme } from "../../context/theme"
-import { isPlayableVideo, type MediaItem } from "./model"
+import { isPlayableVideo, mediaName, type MediaItem } from "./model"
 import { createImageSource, createVideoFile } from "./source"
 
 /** A hovered video tile plays once the pointer rests this long, so sweeping across tiles opens no players. */
@@ -71,7 +71,7 @@ export function MediaTile(props: { item: MediaItem; width: number; height: numbe
           <TileVideo item={props.item} active={active()} />
         </Match>
         <Match when={isPlayableVideo(props.item) && media.posterShown(key)}>
-          <TileLabel item={props.item} text={`▶ ${props.item.name ?? "video"}`} />
+          <TileLabel item={props.item} text={`▶ ${mediaName(props.item)}`} />
         </Match>
         {/* Further off screen, a video tile draws nothing. */}
         <Match when={isPlayableVideo(props.item)}>{null}</Match>
@@ -85,7 +85,7 @@ function TileLabel(props: { item: MediaItem; text?: string }) {
   return (
     <box width="100%" height="100%" alignItems="center" justifyContent="center">
       <text fg={theme.text.muted} wrapMode="none" truncate selectable={false}>
-        {props.text ?? (props.item.name ? `${props.item.kind} · ${props.item.name}` : props.item.kind)}
+        {props.text ?? (props.item.name ? `${props.item.kind} · ${mediaName(props.item)}` : props.item.kind)}
       </text>
     </box>
   )

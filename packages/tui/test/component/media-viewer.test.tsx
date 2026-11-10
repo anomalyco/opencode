@@ -9,6 +9,7 @@ import {
 import { ManualClock, setRendererCapabilities } from "@opentui/core/testing"
 import { expect, test } from "bun:test"
 import { createRoot, type JSX } from "solid-js"
+import type { MediaItem } from "../../src/component/media/model"
 import { createSeekThrottle } from "../../src/component/media/seek-bar"
 import { descendants, header, image, longVideoFixture, renderMedia, showsHeader, video } from "../fixture/media"
 
@@ -133,6 +134,32 @@ test("the header names the file without its path, and a long name gives way to t
   expect(line).not.toContain("/home/me")
   // Shortened in the middle, keeping its start and extension, with a gap before the position.
   expect(line).toMatch(/^long-name-\S*\.\.\.\S*-end\.png {2,}1 of 2  esc$/)
+  // The filmstrip's labels leave the path out too.
+  expect(viewer.frame()).not.toContain("/home/")
+})
+
+test("the header's name opens a menu to copy the file's path and open its folder, when there is a file", async () => {
+  await using viewer = await renderViewer()
+  const kept: MediaItem = { id: "kept", kind: "image", mime: "image/png", uri: "media:abc", name: "kept.png" }
+  viewer.media().openViewer([image("a"), kept], 0)
+  await viewer.until(() => showsHeader(viewer.frame(), "a.png", "1 of 2"))
+  const row = () =>
+    viewer
+      .frame()
+      .split("\n")
+      .findIndex((line) => line.trim() !== "")
+  await viewer.app.mockMouse.click(3, row())
+  await viewer.until(() => viewer.frame().includes("Copy path"))
+  expect(viewer.frame()).toContain("Open folder")
+  viewer.app.mockInput.pressEscape()
+  await viewer.until(() => viewer.dialog().stack.length === 0)
+
+  // A file known only by its content has no path to copy.
+  await viewer.press("]")
+  await viewer.until(() => showsHeader(viewer.frame(), "kept.png", "2 of 2"))
+  await viewer.app.mockMouse.click(3, row())
+  await viewer.app.renderOnce()
+  expect(viewer.dialog().stack.length).toBe(0)
 })
 
 test("arrows move between images and seek in a video, brackets move on, and unplayable media is explained", async () => {
