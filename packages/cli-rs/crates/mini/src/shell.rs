@@ -126,6 +126,7 @@ pub fn run(input: Input) -> error::Result<()> {
             environment: input.target.environment.clone(),
         },
         initial: RefCell::new(input.initial_input.clone()),
+        cli_variant: RefCell::new(input.target.model.as_ref().and_then(|model| model.variant.clone())),
         waiting: RefCell::new(Vec::new()),
         stream: RefCell::new(None),
         settle_after: RefCell::new(None),
@@ -255,8 +256,11 @@ struct Mini {
     theme_input: ThemeInput,
     settings: Cell<MiniSettings>,
     input: Meta,
-    /// The piped stdin and `--prompt`, sent once the session is ready.
+    /// The piped stdin and `--prompt`, sent once the session and the model catalog are ready.
     initial: RefCell<Option<String>>,
+    /// The variant of `--model provider/model#variant`, which wins over the catalog when the first session's models
+    /// load (`ctx.variant`).
+    cli_variant: RefCell<Option<String>>,
     /// Prompts submitted before the session was ready.
     waiting: RefCell<Vec<RunPrompt>>,
     stream: RefCell<Option<tokio::task::JoinHandle<()>>>,
@@ -432,6 +436,7 @@ impl Mini {
         if self.state.borrow().closed {
             return;
         }
+        let variant = opened_variant(&target);
         let session = Session {
             id: target.session.id.0.clone(),
             title: target.session.title.clone(),
@@ -439,7 +444,7 @@ impl Mini {
             directory: target.location.directory.0.clone(),
             model: target.model.as_ref().map(|model| {
                 let mut value = json!({ "providerID": model.provider_id.0, "id": model.id });
-                if let Some(variant) = &model.variant {
+                if let Some(variant) = &variant {
                     value["variant"] = json!(variant);
                 }
                 value
@@ -447,10 +452,8 @@ impl Mini {
         };
         self.trace("session.open", json!({ "sessionID": session.id, "resume": target.resume }));
         self.set_title(session.title.as_deref());
-        let model = target
-            .model
-            .as_ref()
-            .map(|model| (model.id.clone(), Some(model.provider_id.0.clone()), model.variant.clone()));
+        let model =
+            target.model.as_ref().map(|model| (model.id.clone(), Some(model.provider_id.0.clone()), variant.clone()));
         self.patch(|state| {
             state.agent = session.agent.clone().unwrap_or_default();
             state.model = model;
@@ -480,7 +483,8 @@ impl Mini {
         if target.model.is_none() {
             self.load_default_model(&session.directory);
         }
-        self.load_models(&session.directory, target.model.as_ref().and_then(|model| model.variant.clone()));
+        let cli_variant = self.cli_variant.take();
+        self.load_models(&session.directory, cli_variant, variant);
         let proxy = self.app.proxy();
         let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
         let (connected, receiver) = tokio::sync::watch::channel(false);
@@ -496,12 +500,14 @@ impl Mini {
         *self.stream.borrow_mut() = Some(task);
     }
 
-    /// `loadCurrentModel`: the provider catalog, then the current model's variants and the variant to use.
-    fn load_models(self: &Rc<Self>, directory: &str, session_variant: Option<String>) {
+    /// `loadCurrentModel`: the provider catalog, then the current model's variants and the variant to use. The
+    /// `--model` flag's variant wins, even over a catalog that does not list it. Prompts wait for the catalog
+    /// (`await modelTask`).
+    fn load_models(self: &Rc<Self>, directory: &str, cli_variant: Option<String>, session_variant: Option<String>) {
         let client = self.client.clone();
         let directory = directory.to_owned();
         let mini = self.clone();
-        self.app.spawn(async move { crate::variants::load(&client, &directory).await }, move |_, result| {
+        self.app.spawn(async move { crate::variants::load(&client, &directory).await }, move |cx, result| {
             let providers = result.unwrap_or_else(|error| {
                 log::warn!("mini could not load the providers: {error}");
                 Vec::new()
@@ -510,13 +516,20 @@ impl Mini {
             if let Some(model) = mini.selection() {
                 let variants = crate::variants::variants_for(mini.providers().as_slice(), &model);
                 let saved = crate::variants::saved_variant(&mini.preferences, &model);
-                let variant =
-                    crate::variants::resolve_variant(None, session_variant.as_deref(), saved.as_deref(), &variants);
+                let variant = crate::variants::resolve_variant(
+                    cli_variant.as_deref(),
+                    session_variant.as_deref(),
+                    saved.as_deref(),
+                    &variants,
+                );
                 *mini.variants.borrow_mut() = variants;
                 mini.set_variant(variant);
             }
             mini.footers.models_changed();
             mini.paint_status();
+            if mini.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected) {
+                mini.send_waiting(cx);
+            }
         });
     }
 
@@ -1033,8 +1046,7 @@ impl Mini {
         if self.state.borrow().closed {
             return false;
         }
-        let ready = self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected);
-        if !ready {
+        if !self.ready() {
             self.waiting.borrow_mut().push(prompt);
             return true;
         }
@@ -1042,7 +1054,16 @@ impl Mini {
         true
     }
 
+    /// The stream is connected and the model catalog loaded once, so a prompt uses the model's variant.
+    fn ready(&self) -> bool {
+        self.providers.borrow().is_some()
+            && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected)
+    }
+
     fn send_waiting(self: &Rc<Self>, _cx: &mut Cx<'_>) {
+        if !self.ready() {
+            return;
+        }
         let initial = self.initial.borrow_mut().take();
         if let Some(text) = initial.filter(|text| !text.trim().is_empty()) {
             self.prompt.push_history(&RunPrompt::text(text.clone()));
@@ -1996,6 +2017,17 @@ impl Mini {
     }
 }
 
+/// The variant a session opens with: the one its model names, else, when resuming with the session's own model,
+/// the session's variant (`pickVariant` in `runtime.boot.ts`, `session.shared.ts:108-113`).
+fn opened_variant(target: &SessionTarget) -> Option<String> {
+    let model = target.model.as_ref()?;
+    if model.variant.is_some() || !target.resume {
+        return model.variant.clone();
+    }
+    let session = target.session.model.as_ref()?;
+    (session.provider_id == model.provider_id && session.id == model.id).then(|| session.variant.clone())?
+}
+
 /// Whether an event's `sessionID(event)` names `session` (`stream-v2.transport.ts:180-183,1048-1053`).
 fn own_event(event: &Value, session: &str) -> bool {
     let data = &event["data"];
@@ -2063,6 +2095,29 @@ fn capitalize(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `-m provider/model` on a session of that model keeps the session's variant (`pickVariant`).
+    #[test]
+    fn a_resumed_session_keeps_its_variant_for_its_own_model() {
+        use serde::Deserialize;
+        let target = |model: &str, resume: bool| {
+            let session = json!({ "id": "ses_1", "projectID": "proj", "title": "t", "cost": 0,
+                "model": { "providerID": "p", "id": "m", "variant": "high" },
+                "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+                "time": { "created": 1, "updated": 1 }, "location": { "directory": "/tmp" } });
+            SessionTarget {
+                session: opencode_api::generated::SessionInfo::deserialize(&session).unwrap(),
+                location: Default::default(),
+                model: Some(target::parse_model(Some(model)).unwrap().unwrap()),
+                agent: None,
+                resume,
+            }
+        };
+        assert_eq!(opened_variant(&target("p/m", true)).as_deref(), Some("high"));
+        assert_eq!(opened_variant(&target("p/m#low", true)).as_deref(), Some("low"));
+        assert_eq!(opened_variant(&target("p/other", true)), None);
+        assert_eq!(opened_variant(&target("p/m", false)), None);
+    }
 
     #[test]
     fn the_trace_keeps_only_this_sessions_events() {
