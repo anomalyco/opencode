@@ -70,6 +70,8 @@ struct Inner {
     theme: RefCell<Theme>,
     parent: View,
     surface: RefCell<Option<View>>,
+    /// The surface's `+N more` line.
+    more: RefCell<Option<Text>>,
     current: RefCell<Option<ToastOptions>>,
     queue: RefCell<VecDeque<ToastOptions>>,
     timer: Cell<Option<TimerId>>,
@@ -87,11 +89,12 @@ impl Toasts {
     /// Creates the toasts. A toast floats over the top right of `parent`; the TUI uses the app's main box, which
     /// sits beneath the dialog host.
     pub fn new(app: &App, theme: Theme, parent: &View) -> Self {
-        Self(Rc::new(Inner {
+        let toasts = Self(Rc::new(Inner {
             app: app.clone(),
             theme: RefCell::new(theme),
             parent: parent.clone(),
             surface: RefCell::new(None),
+            more: RefCell::new(None),
             current: RefCell::new(None),
             queue: RefCell::new(VecDeque::new()),
             timer: Cell::new(None),
@@ -99,7 +102,14 @@ impl Toasts {
             remaining: Cell::new(Duration::ZERO),
             paused: Cell::new(false),
             hovered: Cell::new(false),
-        }))
+        }));
+        // TS sizes the toast by `useTerminalDimensions()`.
+        app.on_resize(bind!(toasts.0, |inner, _cx, width, _| {
+            if let Some(surface) = inner.surface.borrow().as_ref() {
+                surface.max_width(max_width(width));
+            }
+        }));
+        toasts
     }
 
     pub fn set_theme(&self, theme: Theme) {
@@ -112,7 +122,10 @@ impl Toasts {
         let busy = self.0.current.borrow().is_some() && (self.0.paused.get() || !self.0.queue.borrow().is_empty());
         if busy {
             self.0.queue.borrow_mut().push_back(options);
-            self.paint();
+            // TS keeps the surface mounted and updates `+N more`; a new surface would drop a selection on it.
+            if let Some(more) = self.0.more.borrow().as_ref() {
+                more.set_text(format!("+{} more", self.pending())).visible(true);
+            }
             return;
         }
         let duration = options.length();
@@ -215,14 +228,20 @@ impl Toasts {
         }
         let current = self.0.current.borrow().clone();
         let Some(toast) = current else { return };
-        let surface = surface(self, &toast, self.pending());
+        let (surface, more) = surface(self, &toast, self.pending());
         self.0.parent.add(&surface);
         *self.0.surface.borrow_mut() = Some(surface);
+        *self.0.more.borrow_mut() = Some(more);
     }
 }
 
-// `ToastSurface`.
-fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
+// `maxWidth={Math.min(60, dimensions().width - 6)}`.
+fn max_width(width: u16) -> i32 {
+    60.min(i32::from(width) - 6)
+}
+
+// `ToastSurface`, and its `+N more` line.
+fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> (View, Text) {
     let app = &toasts.0.app;
     let theme = toasts.0.theme.borrow().clone();
     let hovered = toasts.0.hovered.get();
@@ -286,14 +305,13 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
             );
         }
     }
-    if pending > 0 {
-        body.add(&Text::new(app, format!("+{pending} more")).fg(theme.text.muted).margin_edge(Edge::Top, 1));
-    }
+    let more = Text::new(app, format!("+{pending} more")).fg(theme.text.muted).margin_edge(Edge::Top, 1);
+    body.add(&more.visible(pending > 0));
     let surface = View::new(app)
         .absolute()
         .position(Edge::Top, 1)
         .position(Edge::Right, 2)
-        .max_width(60.min(i32::from(width) - 6))
+        .max_width(max_width(width))
         .justify(Justify::Center)
         .align_items(Align::Start)
         .border(BorderStyle::Heavy)
@@ -325,5 +343,5 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
         let toasts = Toasts(inner);
         app.defer(move |_cx| toasts.activate());
     });
-    surface
+    (surface, more)
 }
