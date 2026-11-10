@@ -68,7 +68,6 @@ export function createSidebarActivityListener() {
       )
     })
   })
-
 }
 
 export function SidebarOrganized(props: {
@@ -244,7 +243,7 @@ function ProjectList(props: {
     return buildHomeSessionRecords({
       sessions: () =>
         current.data.session.apply(
-          mergeSidebarSessions(sessions.isPending ? [] : (sessions.data?.() ?? []), current.data.session.list()),
+          mergeSidebarSessions(sessions.isPending ? [] : (sessions.data?.() ?? []), current.data.session.known()),
         ),
       projects,
       projectDirectories: () => undefined,

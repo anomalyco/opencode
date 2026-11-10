@@ -11,7 +11,7 @@ import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/
 import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
 import { Schema } from "effect"
-import { createEffect, createMemo, onCleanup, Show, startTransition } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, Show, startTransition, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { arrayMove } from "@/runtime/array-move"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -31,6 +31,7 @@ import {
   addPin,
   dedupePins,
   INITIAL_RECENT_PAGE_STATE,
+  RECENT_PAGE_LIMIT,
   mergeRecentSessions,
   partitionRecentSessions,
   recentPageFailed,
@@ -51,17 +52,12 @@ import { notifySessionTabsRemoved } from "./session-events"
 import { TabNavItem } from "./tab-nav"
 import { sessionTabTitle } from "./tab-title"
 
-// Root sessions fetched per server page.
-const PAGE_LIMIT = 50
-
 const RecentSidebarState = Persistence.struct({
   // Ordered `${server}\u0000${sessionID}` keys. Local to this desktop.
   pins: Persistence.array(Schema.String),
 })
 
 type Connection = { conn: ServerConnection.Any; ctx: ServerCtx; server: ServerConnection.Key }
-
-type Hydration = { session: SessionInfo } | { missing: true }
 
 /**
  * The experimental Recent sessions sidebar: pinned sessions first, then every server's newest root sessions in one
@@ -82,12 +78,11 @@ export function RecentSessions() {
 
   const [pages, setPages] = createStore<Record<string, RecentPageState>>({})
 
-  const [hydration, setHydration] = createStore<Record<string, Hydration>>({})
+  const [hydration, setHydration] = createStore<Record<string, SessionInfo>>({})
 
   const controllers = new Map<AbortController, string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   const hydrationControllers = new Map<string, AbortController>()
-  const hydrating = new Set<string>()
   const statuses = new Map<string, { ctx: ServerCtx; status: string }>()
   let attempt = 0
   let disposed = false
@@ -126,7 +121,6 @@ export function RecentSessions() {
       if (server && splitRecentSessionKey(key)?.server !== server) return
 
       controller.abort()
-      hydrating.delete(key)
 
       if (server) hydrationControllers.delete(key)
     })
@@ -142,10 +136,15 @@ export function RecentSessions() {
     )
   }
 
-  function hydrate(item: Connection, key: string, sessionID: string) {
-    if (disposed || hydrating.has(key)) return
+  function rememberPin(item: Connection, key: string, info: SessionInfo) {
+    batch(() => {
+      if (item.ctx.data.session.get(info.id)) item.ctx.data.session.remember(info)
+      setHydration(key, reconcile(info))
+    })
+  }
 
-    hydrating.add(key)
+  function hydrate(item: Connection, key: string, sessionID: string) {
+    if (disposed || hydrationControllers.has(key)) return
 
     const controller = new AbortController()
     hydrationControllers.set(key, controller)
@@ -158,7 +157,7 @@ export function RecentSessions() {
 
           if (!isCurrent(item)) return
 
-          setHydration(key, { session: response })
+          rememberPin(item, key, response)
         },
         (cause) => {
           if (controller.signal.aborted || disposed) return
@@ -167,15 +166,18 @@ export function RecentSessions() {
 
           if (!isSessionNotFoundError(cause)) return
 
-          setHydration(key, { missing: true })
-          removePinKey(key)
+          batch(() => {
+            item.ctx.data.session.forget(sessionID)
+            forget(item.server, sessionID)
+            setHydration(produce((cache) => void delete cache[key]))
+            removePinKey(key)
+          })
         },
       )
       .finally(() => {
         if (hydrationControllers.get(key) !== controller) return
 
         hydrationControllers.delete(key)
-        hydrating.delete(key)
       })
   }
 
@@ -217,8 +219,8 @@ export function RecentSessions() {
     void item.ctx.sdk.api.session
       .list(
         effect.cursor
-          ? { cursor: effect.cursor, limit: PAGE_LIMIT }
-          : { parentID: null, archived: false, order: "desc", limit: PAGE_LIMIT },
+          ? { cursor: effect.cursor, limit: RECENT_PAGE_LIMIT }
+          : { parentID: null, archived: false, order: "desc", limit: RECENT_PAGE_LIMIT },
         { signal: controller.signal },
       )
       .then(
@@ -227,11 +229,31 @@ export function RecentSessions() {
 
           if (!isCurrent(item)) return
 
-          dispatch(item, {
-            type: "succeeded",
-            attempt: effect.attempt,
-            sessions: response.data,
-            next: response.cursor.next ?? undefined,
+          const page = pages[item.server]
+
+          if (page?.status !== "loading" || page.attempt !== effect.attempt) return
+
+          batch(() => {
+            if (page.kind === "refresh") {
+              const covered = new Map(response.data.map((info) => [info.id, info]))
+
+              for (const key of state.pins) {
+                const pin = splitRecentSessionKey(key)
+
+                if (pin?.server !== item.server) continue
+                const info = covered.get(pin.sessionID)
+
+                if (info) rememberPin(item, key, info)
+                else hydrate(item, key, pin.sessionID)
+              }
+            }
+
+            dispatch(item, {
+              type: "succeeded",
+              attempt: effect.attempt,
+              sessions: response.data,
+              next: response.cursor.next ?? undefined,
+            })
           })
         },
         () => {
@@ -246,11 +268,13 @@ export function RecentSessions() {
   }
 
   function dispatch(item: Connection, event: RecentPageEvent) {
-    const previous = pages[item.server] ?? INITIAL_RECENT_PAGE_STATE
-    const next = transitionRecentPage(previous, event)
+    untrack(() => {
+      const previous = pages[item.server] ?? INITIAL_RECENT_PAGE_STATE
+      const next = transitionRecentPage(previous, event)
 
-    if (next.state !== previous) setPages(item.server, reconcile(next.state))
-    next.effects.forEach((effect) => runEffect(item, effect))
+      if (next.state !== previous) setPages(item.server, reconcile(next.state))
+      next.effects.forEach((effect) => runEffect(item, effect))
+    })
   }
 
   function load(item: Connection, kind: "first" | "next" | "refresh") {
@@ -287,18 +311,11 @@ export function RecentSessions() {
       statuses.set(item.server, { ctx: item.ctx, status })
 
       // A replaced controller owns no old requests or pin snapshots, even before it reconnects.
-      if (replaced) {
-        abortPages(item.server)
-        abortHydration(item.server)
-        clearTimer(item.server)
-        clearHydration(item.server)
-      }
+      if (replaced) dropServer(item.server)
 
       if (status !== "connected") return
 
-      const current = pages[item.server]
-
-      if (!current || current.status === "idle") {
+      if (!untrack(() => pages[item.server])) {
         load(item, "first")
 
         return
@@ -306,14 +323,8 @@ export function RecentSessions() {
 
       if (!replaced && previous?.status === status) return
 
-      // A reconnect or a new controller starts from a fresh snapshot and revalidates hydrated pins.
+      // Page one supplies the fresh records; only pins outside it need a separate get.
       abortHydration(item.server)
-      clearHydration(item.server)
-      state.pins.forEach((key) => {
-        const parsed = splitRecentSessionKey(key)
-
-        if (parsed?.server === item.server) hydrate(item, key, parsed.sessionID)
-      })
       load(item, "refresh")
     })
 
@@ -331,8 +342,9 @@ export function RecentSessions() {
 
       return mergeRecentSessions(
         item.server,
-        fetched ? item.ctx.data.session.apply(fetched.sessions) : [],
-        item.ctx.data.session.list(),
+        fetched?.sessions ?? [],
+        item.ctx.data.session.known(),
+        item.ctx.data.session.apply,
       )
     }),
   )
@@ -348,9 +360,9 @@ export function RecentSessions() {
 
         const value = hydration[key]
 
-        if (!value || "missing" in value) return
+        if (!value) return
 
-        const session = item.ctx.data.session.apply([value.session])[0]
+        const session = item.ctx.data.session.apply([value])[0]
 
         if (session) result.set(key, { key, server: item.server, session })
       })
@@ -367,7 +379,7 @@ export function RecentSessions() {
     const list = connections()
 
     state.pins.forEach((key) => {
-      if (loaded.has(key) || hydrating.has(key) || hydration[key]) return
+      if (loaded.has(key) || hydrationControllers.has(key) || hydration[key]) return
       const parsed = splitRecentSessionKey(key)
 
       if (!parsed) return
@@ -377,6 +389,8 @@ export function RecentSessions() {
       if (!item) return
 
       if (item.ctx.sdk.connection.status() !== "connected") return
+
+      if (!recentPageLoaded(pages[item.server])) return
 
       // A live entry that is archived is hidden and keeps its pin; one pending removal is already gone.
       if (item.ctx.data.session.get(parsed.sessionID)) return
@@ -390,7 +404,13 @@ export function RecentSessions() {
     connections().forEach((item) => {
       onCleanup(
         item.ctx.data.on("session.deleted", (event) => {
-          removePinKey(recentSessionKey(item.server, event.data.sessionID))
+          const key = recentSessionKey(item.server, event.data.sessionID)
+          hydrationControllers.get(key)?.abort()
+          batch(() => {
+            removePinKey(key)
+            forget(item.server, event.data.sessionID)
+            setHydration(produce((cache) => void delete cache[key]))
+          })
         }),
       )
     })
@@ -403,9 +423,9 @@ export function RecentSessions() {
         const key = recentSessionKey(item.server, sessionID)
         const value = hydration[key]
 
-        if (!value || "missing" in value) return
+        if (!value) return
 
-        setHydration(key, { session: { ...value.session, time: { ...value.session.time, archived } } })
+        setHydration(key, "time", "archived", archived)
       }
 
       onCleanup(
@@ -436,14 +456,10 @@ export function RecentSessions() {
 
     if (live) return live.time.archived !== undefined
 
-    const value = hydration[key]
-
-    if (!value || "missing" in value) return false
-
-    return value.session.time.archived !== undefined
+    return hydration[key]?.time.archived !== undefined
   }
 
-  const endpoints = createMemo(() => recentSessionEndpoints(servers.visible, servers.ownUrl()))
+  const endpoints = createMemo(() => recentSessionEndpoints(servers.list, servers.ownUrl()))
 
   const openSessions = createMemo(() =>
     new Set(tabs.store.flatMap((tab) => tab.type === "session" ? [recentSessionKey(tab.server, tab.sessionId)] : [])),
@@ -502,7 +518,7 @@ export function RecentSessions() {
 
   // Every server with a cursor loads its next page together, and the merged list re-sorts. Newly loaded rows can
   // therefore appear above rows already shown: one merged recency order is kept rather than holding rows back until
-  // every server reaches the same age. An empty page or a missing next cursor ends that server's list; a failed page
+  // every server reaches the same age. A short page or a missing next cursor ends that server's list; a failed page
   // keeps its cursor so the next scroll retries it.
   const loadMore = () => {
     connections().forEach((item) => {
@@ -573,9 +589,9 @@ export function RecentSessions() {
   }
 
   const removePinKey = (key: string) => {
-    if (!state.pins.includes(key)) return
+    const next = removePin(state.pins, key, endpoints())
 
-    setState("pins", (current) => removePin(current, key))
+    if (next.length !== state.pins.length) setState("pins", next)
   }
 
   // The fetched page is a separate cache. Archive and delete drop a row so it does not linger when the live store
@@ -647,10 +663,8 @@ export function RecentSessions() {
       .then(() => {
         if (state.pins.includes(item.key)) {
           setHydration(item.key, {
-            session: {
-              ...item.session,
-              time: { ...item.session.time, archived: item.session.time.archived ?? Date.now() },
-            },
+            ...item.session,
+            time: { ...item.session.time, archived: item.session.time.archived ?? Date.now() },
           })
         }
 

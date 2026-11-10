@@ -1,7 +1,10 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { ServerConnection } from "@/runtime/server/registry"
+import { mergeHomeSessionIndex } from "@/home/sessions/index"
 
 const separator = "\u0000"
+
+export const RECENT_PAGE_LIMIT = 50
 
 /** Bounds a hanging server request; matches the Home session list's fetch deadline. */
 export const RECENT_PAGE_TIMEOUT_MS = 30_000
@@ -42,8 +45,17 @@ export function addPin(pins: readonly string[], key: string) {
   return pins.includes(key) ? [...pins] : [...pins, key]
 }
 
-export function removePin(pins: readonly string[], key: string) {
-  return pins.includes(key) ? pins.filter((pin) => pin !== key) : [...pins]
+export function removePin(pins: readonly string[], key: string, endpoints: ReadonlyMap<string, string>) {
+  const target = splitRecentSessionKey(key)
+
+  return pins.filter((pin) => {
+    if (pin === key) return false
+    const other = splitRecentSessionKey(pin)
+
+    if (!target || !other || other.sessionID !== target.sessionID) return true
+
+    return (endpoints.get(other.server) ?? other.server) !== (endpoints.get(target.server) ?? target.server)
+  })
 }
 
 /** Drops duplicate and malformed keys, keeping the first occurrence of each. */
@@ -180,7 +192,8 @@ function finishLoading(
   event: Extract<RecentPageEvent, { type: "succeeded" }>,
 ): RecentPageTransition {
   const incoming = [...event.sessions]
-  const next = event.next
+  // The server returns an anchor for every non-empty page, including a short final page.
+  const next = incoming.length < RECENT_PAGE_LIMIT ? undefined : event.next
 
   if (state.kind === "next") {
     return {
@@ -188,7 +201,7 @@ function finishLoading(
         status: "ready",
         sessions: mergeSessions(state.sessions, incoming),
         cursor: next,
-        exhausted: incoming.length === 0 || !next,
+        exhausted: !next,
         olderLoaded: true,
       },
       effects: [{ type: "timer.cancel" }],
@@ -201,7 +214,7 @@ function finishLoading(
         status: "ready",
         sessions: incoming,
         cursor: next,
-        exhausted: incoming.length === 0 || !next,
+        exhausted: !next,
         olderLoaded: false,
       },
       effects: [{ type: "timer.cancel" }],
@@ -210,7 +223,7 @@ function finishLoading(
 
   // A reconnect snapshot with older pages loaded. A short final page replaces the list; an empty overlap means the
   // snapshot starts fresh; otherwise rows in page one's window that the snapshot dropped are ghosts.
-  if (incoming.length === 0 || !next) {
+  if (!next) {
     return {
       state: { status: "ready", sessions: incoming, cursor: undefined, exhausted: true, olderLoaded: false },
       effects: [{ type: "timer.cancel" }],
@@ -291,10 +304,6 @@ export function recentPageLoaded(state: RecentPageState | undefined) {
   return !!state && (state.status === "ready" || state.status === "failed")
 }
 
-export function recentPageLoading(state: RecentPageState | undefined) {
-  return state?.status === "loading"
-}
-
 export function recentPageFailed(state: RecentPageState | undefined) {
   return state?.status === "failed"
 }
@@ -303,23 +312,16 @@ export function recentPageHasMore(state: RecentPageState | undefined) {
   return !!state && (state.status === "ready" || state.status === "failed") && !state.exhausted && !!state.cursor
 }
 
-function recent(server: string, sessions: readonly SessionInfo[]) {
-  return sessions.flatMap((session): RecentSession[] => {
-    if (session.parentID || session.time.archived !== undefined) return []
-
-    return [{ key: recentSessionKey(server, session.id), server, session }]
-  })
-}
-
 /** One server's sessions plus the live store, keeping root, unarchived sessions. Live entries win. */
 export function mergeRecentSessions(
   server: string,
   fetched: readonly SessionInfo[],
   known: readonly SessionInfo[],
+  apply: (rows: SessionInfo[]) => SessionInfo[] = (rows) => rows,
 ) {
-  return sortRecentSessions(
-    recent(server, [...new Map([...fetched, ...known].map((session) => [session.id, session] as const)).values()]),
-  )
+  const sessions = apply(mergeHomeSessionIndex(fetched, known))
+
+  return sortRecentSessions(sessions.map((session) => ({ key: recentSessionKey(server, session.id), server, session })))
 }
 
 /**

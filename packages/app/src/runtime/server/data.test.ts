@@ -357,6 +357,22 @@ test("bounds per-session recency state", () => {
   expect(recency.apply([{ ...session, id: "ses_0", time: { created: 0, updated: 0 } }])[0].time.updated).toBe(0)
 })
 
+test("the newest indexed row keeps its pre-rename time across a large page batch", () => {
+  const recency = createSessionRecency()
+  const rows = Array.from({ length: 600 }, (_, i) => ({ ...session, id: `ses_${i}`, time: { created: 0, updated: 600 - i } }))
+  recency.apply(rows)
+  recency.renamed(rows[0].id, undefined, 1_000)
+  expect(recency.apply([{ ...rows[0], time: { created: 0, updated: 1_000 } }])[0].time.updated).toBe(600)
+})
+
+test("reading passively synced metadata leaves an accepted send pending for indexed lists", () => {
+  const recency = createSessionRecency()
+  const indexed = { ...session, time: { created: 0, updated: 10 } }
+  recency.acceptSend(session.id, indexed, 1_000)
+  expect(recency.project({ ...session, time: { created: 0, updated: 20 } }).time.updated).toBe(1_000)
+  expect(recency.apply([indexed])[0].time.updated).toBe(1_000)
+})
+
 test("a shutdown interruption does not refresh the session", async () => {
   let gets = 0
 
@@ -377,7 +393,7 @@ test("a shutdown interruption does not refresh the session", async () => {
   }
 })
 
-test("an execution end refetches the session and applies the refreshed time", async () => {
+test.each([true, false])("an execution end refetches the session once (already loaded: %s)", async (loaded) => {
   let gets = 0
   const requested = Promise.withResolvers<void>()
   const refreshed = { ...session, time: { created: 0, updated: 50 } }
@@ -396,7 +412,7 @@ test("an execution end refetches the session and applies the refreshed time", as
   })
 
   try {
-    setup.seed(10)
+    if (loaded) setup.seed(10)
     setup.emit("session.execution.succeeded", 50)
     await requested.promise
     await setup.data.session.sync(session.id)

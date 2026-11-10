@@ -6,6 +6,7 @@ import {
   dedupePins,
   INITIAL_RECENT_PAGE_STATE,
   RECENT_PAGE_TIMEOUT_MS,
+  RECENT_PAGE_LIMIT,
   mergeRecentSessions,
   partitionRecentSessions,
   recentSessionEndpoints,
@@ -47,8 +48,8 @@ test("pinning appends once and unpinning keeps the other order", () => {
 
   expect(pins).toEqual(["a", "b"])
   expect(addPin(pins, "a")).toEqual(["a", "b"])
-  expect(removePin(pins, "a")).toEqual(["b"])
-  expect(removePin(pins, "missing")).toEqual(["a", "b"])
+  expect(removePin(pins, "a", new Map())).toEqual(["b"])
+  expect(removePin(pins, "missing", new Map())).toEqual(["a", "b"])
 })
 
 test("dedupe keeps the first occurrence and drops keys without a session", () => {
@@ -84,9 +85,11 @@ test("merging prefers the live store and keeps root, unarchived sessions", () =>
       [session("ses_a", 20, { title: "loaded" }), session("ses_live", 5)],
     ),
   ).toEqual([
-    item("server", session("ses_a", 20, { title: "loaded" })),
+    item("server", session("ses_a", 10, { title: "loaded" })),
     item("server", session("ses_live", 5)),
   ])
+  const ended = session("ses_a", 30, { time: { created: 1, updated: 30, idle: 29 } })
+  expect(mergeRecentSessions("server", [session("ses_a", 10)], [ended])).toEqual([item("server", ended)])
 })
 
 test("sessions with equal timestamps order by id, and missing updates fall back to creation", () => {
@@ -143,6 +146,7 @@ test("opening a sidecar pin excludes its HTTP alias while keeping a different se
   }
 
   const open = new Set([items[1].key])
+  expect(removePin(items.map((row) => row.key), items[1].key, options.endpoints)).toEqual([items[2].key])
   const result = partitionRecentSessions({ ...options, items, pins: addPin([], items[0].key), open })
 
   expect(result.pinned.map((row) => row.server)).toEqual(["sidecar"])
@@ -205,7 +209,7 @@ const readyPage = (
   olderLoaded: options.olderLoaded ?? false,
 })
 
-test("the first page replaces the list and ends when it has no next cursor", () => {
+test("a short first page ends even though the server returns a next cursor", () => {
   const started = transitionRecentPage(INITIAL_RECENT_PAGE_STATE, { type: "load", kind: "first", attempt: 1 })
   expect(started.state).toMatchObject({ status: "loading", kind: "first", attempt: 1, sessions: [] })
   expect(started.effects).toEqual([
@@ -214,14 +218,14 @@ test("the first page replaces the list and ends when it has no next cursor", () 
   ])
 
   const page = [session("ses_a", 20), session("ses_b", 10)]
-  const ended = transitionRecentPage(started.state, { type: "succeeded", attempt: 1, sessions: page, next: undefined })
+  const ended = transitionRecentPage(started.state, { type: "succeeded", attempt: 1, sessions: page, next: "at-last" })
   expect(ended.state).toMatchObject({ status: "ready", sessions: page, cursor: undefined, exhausted: true })
   expect(ended.effects).toEqual([{ type: "timer.cancel" }])
 })
 
 test("a next page merges into the rows already held and keeps a cursor", () => {
   const first = [session("ses_a", 20)]
-  const next = [session("ses_b", 10)]
+  const next = Array.from({ length: RECENT_PAGE_LIMIT }, (_, i) => session(`ses_b${i}`, 10 - i))
   const state = readyPage(first, { cursor: "cursor-2" })
   const started = transitionRecentPage(state, { type: "load", kind: "next", attempt: 2 })
 
@@ -236,11 +240,21 @@ test("a next page merges into the rows already held and keeps a cursor", () => {
 
   expect(page.state).toMatchObject({
     status: "ready",
-    sessions: [first[0], next[0]],
+    sessions: [...first, ...next],
     cursor: "cursor-3",
     exhausted: false,
     olderLoaded: true,
   })
+
+  const third = transitionRecentPage(page.state, { type: "load", kind: "next", attempt: 3 })
+
+  const final = transitionRecentPage(third.state, {
+    type: "succeeded", attempt: 3, sessions: [session("ses_last", 1)], next: "at-last",
+  })
+
+  expect(final.state.exhausted).toBe(true)
+  expect(final.state.cursor).toBeUndefined()
+  expect(final.state.sessions.at(-1)?.id).toBe("ses_last")
 })
 
 test("an empty page ends pagination without dropping rows already shown", () => {
@@ -299,7 +313,7 @@ test("a short final page from a reconnect replaces the snapshot and ends paginat
     type: "succeeded",
     attempt: 1,
     sessions: [session("ses_first", 100)],
-    next: undefined,
+    next: "at-last",
   })
 
   expect(page.state).toMatchObject({
@@ -314,7 +328,7 @@ test("a short final page from a reconnect replaces the snapshot and ends paginat
 test("a disconnected snapshot with a gap resets the list and its cursor", () => {
   const state = readyPage([session("ses_old", 10)], { cursor: "cursor-old", olderLoaded: true })
   const started = transitionRecentPage(state, { type: "load", kind: "refresh", attempt: 1 })
-  const incoming = [session("ses_new", 100), session("ses_later", 90)]
+  const incoming = Array.from({ length: RECENT_PAGE_LIMIT }, (_, i) => session(`ses_new${i}`, 100 - i))
 
   const page = transitionRecentPage(started.state, {
     type: "succeeded",
@@ -336,22 +350,19 @@ test("a reconnect snapshot drops page-one ghosts and keeps older rows and the ad
   const first = session("ses_first", 100)
   const ghost = session("ses_ghost", 90)
   const older = session("ses_older", 10)
+  const incoming = [first, ...Array.from({ length: RECENT_PAGE_LIMIT - 1 }, (_, i) => session(`ses_new${i}`, 99 - i))]
   const state = readyPage([first, ghost, older], { cursor: "cursor-old", olderLoaded: true })
   const started = transitionRecentPage(state, { type: "load", kind: "refresh", attempt: 1 })
 
   const page = transitionRecentPage(started.state, {
     type: "succeeded",
     attempt: 1,
-    sessions: [first, session("ses_newer", 80)],
+    sessions: incoming,
     next: "cursor-page-2",
   })
 
   expect(page.state.status).toBe("ready")
-  expect(page.state.sessions.map((session) => session.id).toSorted()).toEqual([
-    "ses_first",
-    "ses_newer",
-    "ses_older",
-  ])
+  expect(page.state.sessions.map((session) => session.id).toSorted()).toEqual([...incoming, older].map(s => s.id).toSorted())
   expect(page.state.cursor).toBe("cursor-old")
   expect(page.state.olderLoaded).toBe(true)
 })

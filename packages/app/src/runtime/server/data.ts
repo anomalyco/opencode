@@ -34,7 +34,12 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
   const recency = createSessionRecency()
   const [version, setVersion] = createStore({ value: 0 })
   const changed = () => setVersion("value", (value) => value + 1)
-  const refresh = createSessionRefresh((sessionID) => input.data.session.sync(sessionID))
+
+  const refresh = createSessionRefresh((sessionID) => {
+    input.data.session.invalidate(sessionID)
+
+    return input.data.session.sync(sessionID)
+  })
 
   onCleanup(
     input.data.on("session.deleted", (event) => {
@@ -51,16 +56,15 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
       changed()
     }),
   )
-  // The client already invalidates the session at execution end. Coalesce the follow-up read so overlapping ends
-  // share one refresh; the sync machinery keeps an older response from committing after a newer one.
+  // The SDK invalidates and syncs loaded sessions on execution end. Desktop also needs a fresh record for roots
+  // that only appear in a fetched index. Coalesce those reads across overlapping ends.
   SESSION_EXECUTION_ENDED.forEach((type) =>
     onCleanup(
       input.data.on(type, (event) => {
         // Shutdown interruptions do not advance the projected idle/updated markers.
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
         queueMicrotask(() => {
-          // Child sessions never appear in recency lists. An unknown record may be a root, so refresh it.
-          if (input.data.session.get(event.data.sessionID)?.parentID) return
+          if (input.data.session.get(event.data.sessionID)) return
           refresh(event.data.sessionID)
         })
       }),
@@ -87,7 +91,13 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
     ...input.data,
     session: {
       ...input.data.session,
-      list: () => apply(input.data.session.list()),
+      list: () => {
+        version.value
+
+        return mutation.apply(input.data.session.list()).map(recency.project)
+      },
+      // Index consumers merge the raw server snapshots before applying pending sends and rename protection.
+      known: input.data.session.list,
       apply,
       remember(info: SessionInfo) {
         const raw = syntheticTimes.get(info.time)
@@ -150,7 +160,26 @@ export function createSessionRecency() {
 
   const observedPrior = (sessionID: string) => observed.get(sessionID)?.values[0]
 
+  // Reading live metadata for status must not settle a send or change another list's ordering.
+  function project(info: SessionInfo) {
+    const send = sends.get(info.id)
+    const updated = rawTime(info)
+
+    if (send) return withTime(info, Math.max(updated, send.sentAt, floors.get(info.id) ?? 0))
+
+    const rename = renames.get(info.id)
+
+    const projected = rename
+      ? rename.ats.has(updated)
+        ? (rename.previous ?? observedPrior(info.id) ?? Math.min(info.time.created, rename.latest))
+        : Math.max(updated, rename.previous ?? 0)
+      : updated
+
+    return withTime(info, Math.max(projected, floors.get(info.id) ?? 0))
+  }
+
   return {
+    project,
     acceptSend(sessionID: string, info: SessionInfo | undefined, sentAt: number) {
       const previous = sends.get(sessionID)
       const renamedAt = renames.get(sessionID)?.latest ?? 0
@@ -202,12 +231,12 @@ export function createSessionRecency() {
       const pending = new Map<string, { newest: number; settled: number }>()
 
       // Settle state from the whole batch first, so [stale, fresh] and [fresh, stale] compute the same values.
-      for (const info of infos) {
+      for (const [index, info] of infos.entries()) {
         const rename = renames.get(info.id)
         const updated = rawTime(info)
         const renameTime = rename?.ats.has(updated) ?? false
 
-        if (!renameTime) observe(info.id, updated)
+        if (index < RECENCY_SESSION_LIMIT && !renameTime) observe(info.id, updated)
 
         if (!sends.has(info.id) && !rename) continue
 
@@ -241,22 +270,7 @@ export function createSessionRecency() {
         }
       })
 
-      return infos.map((info) => {
-        const send = sends.get(info.id)
-        const updated = rawTime(info)
-
-        if (send) return withTime(info, Math.max(updated, send.sentAt, floors.get(info.id) ?? 0))
-
-        const rename = renames.get(info.id)
-
-        const projected = rename
-          ? rename.ats.has(updated)
-            ? (rename.previous ?? observedPrior(info.id) ?? Math.min(info.time.created, rename.latest))
-            : Math.max(updated, rename.previous ?? 0)
-          : updated
-
-        return withTime(info, Math.max(projected, floors.get(info.id) ?? 0))
-      })
+      return infos.map(project)
     },
     // True when apply settled a send or raised a floor, so the caller can rerun other readers once.
     takeMutated() {

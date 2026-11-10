@@ -337,11 +337,8 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
 }
 
 /** Only local/dev desktop builds offer the Recent side-tab organization. */
-function recentSessionsAvailable(platform: { platform: "web" | "desktop" }) {
-  return (
-    platform.platform === "desktop" &&
-    (import.meta.env.VITE_OPENCODE_CHANNEL === "local" || import.meta.env.VITE_OPENCODE_CHANNEL === "dev")
-  )
+export function recentSessionsAvailable(platform: "web" | "desktop", channel: ImportMetaEnv["VITE_OPENCODE_CHANNEL"]) {
+  return platform === "desktop" && (channel === "local" || channel === "dev")
 }
 
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
@@ -350,7 +347,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
 
-    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(usePlatform())
+    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
       ? ["list", "projects", "customize", "recent"]
       : ["list", "projects", "customize"]
 

@@ -279,7 +279,7 @@ export function createHomeSessionsController(home: HomeController) {
 
     return retainHomeSessions(
       ctx.data.session.apply(
-        mergeHomeSessionIndex([...fetchedSessions(), ...scopedSessions()], ctx.data.session.list()),
+        mergeHomeSessionIndex([...fetchedSessions(), ...scopedSessions()], ctx.data.session.known()),
       ),
       HOME_SESSION_LIMIT,
       Date.now(),
