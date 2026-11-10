@@ -27,6 +27,7 @@ import path from "path"
 import { SessionRunner } from "./session/runner/index.js"
 import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
+import { SubagentMetadata } from "./session/subagent-metadata.js"
 import {
   AttachmentError,
   BusyError,
@@ -310,7 +311,9 @@ const layer = Layer.effect(
               agent: input.agent,
               // Children inherit metadata and permissions the way they inherit
               // location, so host policies that read them treat the family uniformly.
-              metadata: input.metadata ?? parent?.metadata,
+              // The per-link subagent switch is not host metadata, though: a silent
+              // child must not silence the sessions created beneath it.
+              metadata: input.metadata ?? SubagentMetadata.inherit(parent?.metadata),
               permissions: input.permissions ?? parent?.permissions,
               model: input.model,
             },
