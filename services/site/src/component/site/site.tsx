@@ -41,6 +41,7 @@ import { staticRender } from "~/lib/static-render"
 import { staticPath, staticPaths } from "~/static/routes"
 import { clientStrings } from "~/client/strings"
 import { useViewportCover } from "~/lib/viewport"
+import { markdownShortcut } from "./markdown-key"
 import { loadMarkdownPages, markdownKey, markdownPagesLoaded } from "./use-markdown"
 import type { MarkdownPages } from "./markdown-pages"
 import { LiveMeta } from "~/component/head-meta"
@@ -63,6 +64,7 @@ import {
 import { monoFontChoice, monoFontLatin } from "./mono-fonts"
 import { NavVersions } from "./nav-versions"
 import { closeAllMenus, closeMenusOnLinks, onCloseMenus, takeMenuNavigation } from "./menu-open"
+import { keepOnPixels, sectionNavScroll, watchNavAway } from "./site-frame"
 import { watchSurfaces } from "./surface"
 import { designCopy, designMode } from "./design-copy"
 import { bannerDismissScript, bannerThemeColorScript, bannerTopColor, bannerVisible } from "./site-banner-script"
@@ -585,30 +587,11 @@ export function Site(props: {
       ? { logo: logoDark, wordmark: wordmarkDark, suffix: "dark" as const }
       : { logo: logoLight, wordmark: wordmarkLight, suffix: "light" as const }
 
-  // A page's own nav (the docs nav) scrolls in its own box under the fixed logo and lockup. It holds
-  // the wheel only while it has something to scroll (data-scrolls, site.css), fades out at an edge
-  // only while items pass under it (data-fade-top, data-fade-bottom), and starts with the current
-  // page in view.
+  // A page's own nav (the docs nav) scrolls in its own box under the fixed logo and lockup (site-frame.ts).
   onMount(() => {
-    if (!props.nav) return
-    const nav = document.querySelector<HTMLElement>('[data-component="sidebar"] > [data-component="section-nav"]')
-    if (!nav) return
-    const update = () => {
-      nav.toggleAttribute("data-scrolls", nav.scrollHeight > nav.clientHeight)
-      nav.toggleAttribute("data-fade-top", nav.scrollTop > 0)
-      nav.toggleAttribute("data-fade-bottom", nav.scrollTop + nav.clientHeight < nav.scrollHeight - 1)
-    }
-    const current = nav.querySelector<HTMLElement>('[aria-current="page"]')
-    if (current && current.offsetTop + current.offsetHeight > nav.clientHeight)
-      nav.scrollTop = current.offsetTop - nav.clientHeight / 2
-    const resize = new ResizeObserver(update)
-    ;[nav, ...nav.children].forEach((element) => resize.observe(element))
-    nav.addEventListener("scroll", update, { passive: true })
-    update()
-    onCleanup(() => {
-      resize.disconnect()
-      nav.removeEventListener("scroll", update)
-    })
+    const nav =
+      props.nav && document.querySelector<HTMLElement>('[data-component="sidebar"] > [data-component="section-nav"]')
+    if (nav) onCleanup(sectionNavScroll(nav))
   })
 
   // In the docs layout the sidebar leaves with the article at the page's end, but the logo and the
@@ -662,7 +645,8 @@ export function Site(props: {
     syncDark()
     media.addEventListener("change", syncDark)
 
-    // Number keys 1-n open the matching nav item, unless the user is typing or using a shortcut.
+    // Number keys 1-n open the matching nav item, unless the user is typing or using a shortcut. The
+    // static pages have their own copy of these listeners (src/client/entry.ts and menus.ts).
     const navigateWithNumber = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
       if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return
@@ -746,29 +730,8 @@ export function Site(props: {
       setMenu(false)
       setSectionNav(false)
     }
-    // Typing "m" then "d" toggles the Markdown view.
-    let lastKey = { key: "", time: 0 }
-    const markdownShortcut = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
-      if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return
-      const key = event.key.toLowerCase()
-      if (key === "m") prefetchMarkdown()
-      const quick = lastKey.key === "m" && event.timeStamp - lastKey.time < 600
-      lastKey = { key, time: event.timeStamp }
-      if (key !== "d" || !quick) return
-      lastKey = { key: "", time: 0 }
-      // The funnel's queue (lib/funnel.ts), as the switch reports its own clicks.
-      window.__ocFunnel?.push({
-        event: {
-          name: "ui.clicked",
-          action: "clicked",
-          target: `markdown-view:${markdown() ? "off" : "on"}`,
-          properties: { via: "shortcut" },
-        },
-        at: performance.now(),
-      })
-      toggleMarkdown()
-    }
+    // Typing "m" then "d" toggles the Markdown view (markdown-key.ts).
+    const markdownKeys = markdownShortcut({ prefetch: prefetchMarkdown, toggle: toggleMarkdown, shown: markdown })
     // The pre-paint script hid the page while it waited for the Markdown view, whose code it started
     // loading (entry-server.tsx).
     const booted = () => delete document.querySelector<HTMLElement>("[data-site]")?.dataset.markdownBoot
@@ -786,7 +749,7 @@ export function Site(props: {
         .finally(booted)
 
     document.addEventListener("keydown", navigateWithNumber)
-    document.addEventListener("keydown", markdownShortcut)
+    document.addEventListener("keydown", markdownKeys)
     document.addEventListener("keydown", closeOnEscape)
     document.addEventListener("click", closeLogoMenu)
     document.addEventListener("contextmenu", closeLogoMenu)
@@ -817,7 +780,7 @@ export function Site(props: {
         document.removeEventListener(type, markLink, true)
       media.removeEventListener("change", syncDark)
       document.removeEventListener("keydown", navigateWithNumber)
-      document.removeEventListener("keydown", markdownShortcut)
+      document.removeEventListener("keydown", markdownKeys)
       document.removeEventListener("keydown", closeOnEscape)
       document.removeEventListener("click", closeLogoMenu)
       document.removeEventListener("contextmenu", closeLogoMenu)
@@ -827,27 +790,12 @@ export function Site(props: {
     })
   })
 
-  // The fixed sidebar nav fades out once the footer's own list scrolls up into its space, so the two
-  // never overlap; it comes back as the footer leaves. Footer columns keep the sidebar column empty.
+  // The fixed sidebar nav steps aside for the footer's own list (site-frame.ts). Footer columns keep
+  // the sidebar column empty.
   createEffect(() => {
-    const list = siteSettings.footerLayout === "list"
-    let observer: IntersectionObserver | undefined
-    const watch = () => {
-      observer?.disconnect()
-      setNavAway(false)
-      if (!list || !sidebarNav || !footerNav) return
-      const clear = window.innerHeight - sidebarNav.getBoundingClientRect().bottom - 24
-      observer = new IntersectionObserver(([entry]) => setNavAway(entry.isIntersecting), {
-        rootMargin: `0px 0px ${-Math.max(0, clear)}px 0px`,
-      })
-      observer.observe(footerNav)
-    }
-    watch()
-    window.addEventListener("resize", watch)
-    onCleanup(() => {
-      observer?.disconnect()
-      window.removeEventListener("resize", watch)
-    })
+    setNavAway(false)
+    if (siteSettings.footerLayout === "list" && sidebarNav && footerNav)
+      onCleanup(watchNavAway(sidebarNav, footerNav, setNavAway))
   })
 
   // Any navigation (another page, its query or a hash) closes every open menu (menu-open.ts).
@@ -1107,6 +1055,7 @@ export function Site(props: {
     </A>
   )
 
+  // The pages that never hydrate show the theme with theme-switch.ts.
   const chooseTheme = (value: (typeof themes)[number]) => {
     setTheme(value)
     localStorage.setItem("opencode-theme", value)
@@ -1779,27 +1728,7 @@ function ThemeToggle(props: { theme: (typeof themes)[number]; onChange: (theme: 
   )
 }
 
-// The content above the footer has fluid heights (wrapping text, media sized by width), so the
-// theme control often lands between device pixels and its thin icon strokes blur at 1x. This
-// moves it back onto the pixel grid whenever the page's size changes.
-function snapToPixels(el: HTMLElement) {
-  let frame = 0
-  const snap = () => {
-    frame = 0
-    el.style.translate = ""
-    const rect = el.getBoundingClientRect()
-    const shift = (value: number) =>
-      (Math.round(value * devicePixelRatio) - value * devicePixelRatio) / devicePixelRatio
-    const x = shift(rect.left)
-    const y = shift(rect.top)
-    if (Math.abs(x) > 0.001 || Math.abs(y) > 0.001) el.style.translate = `${x}px ${y}px`
-  }
-  const observer = new ResizeObserver(() => {
-    if (!frame) frame = requestAnimationFrame(snap)
-  })
-  onMount(() => observer.observe(document.body))
-  onCleanup(() => {
-    observer.disconnect()
-    cancelAnimationFrame(frame)
-  })
+// The theme switch, kept on whole pixels (site-frame.ts).
+function snapToPixels(element: HTMLElement) {
+  onMount(() => onCleanup(keepOnPixels(element)))
 }

@@ -4,9 +4,12 @@
 // menus, the phone menus, the Contents rail, search, the status bars and the funnel.
 import { Funnel } from "../lib/funnel"
 import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
+import { activeSection, keepInRail, markStuck } from "../component/site/contents-spy"
 import { fanMotion } from "../component/site/fan-motion"
 import { holdOpenMenu } from "../component/site/menu-hold"
 import { navMenusOnIntent } from "../component/site/nav-intent"
+import { sectionNavScroll } from "../component/site/site-frame"
+import { showTheme, themes, type Theme } from "../component/site/theme-switch"
 
 // The page reports to the Console's funnel like the site's (lib/funnel.ts), in its language (English but on the V1
 // docs' other languages), at the host's root like the site; their config is built in, as a chunk would bring Vite's
@@ -33,28 +36,15 @@ const inline = (key: string) =>
   html.dir === "rtl" ? ({ ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" }[key] ?? key) : key
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms))
 
-// The theme switch: system, light, dark, saved as the site saves it (opencode-theme), so the docs
-// and the site share one choice.
-const themes = ["system", "light", "dark"] as const
-type Theme = (typeof themes)[number]
-function showTheme(theme: Theme) {
-  site.dataset.theme = theme
-  const next = themes[(themes.indexOf(theme) + 1) % 3]
-  const cycle = $('[data-component="theme-toggle"] [data-slot="cycle"]')
-  cycle?.setAttribute("aria-label", fill(strings.cycle, { theme: strings[theme], next: strings[next] }))
-  $$("[data-slot=icon]", cycle ?? undefined).forEach((icon, index) =>
-    icon.toggleAttribute("data-current", index === themes.indexOf(theme)),
-  )
-  $$<HTMLMetaElement>('meta[name="theme-color"]').forEach(
-    (meta) =>
-      (meta.content = theme === "dark" || (theme === "system" && meta.media.includes("dark")) ? "#0c0c0c" : "#fbfbfb"),
-  )
-  $<HTMLMetaElement>('meta[name="color-scheme"]')!.content = theme === "system" ? "light dark" : theme
-}
-showTheme((site.dataset.theme as Theme) ?? "system")
+// The theme switch (component/site/theme-switch.ts), saved as the site saves it, so the docs and the
+// site share one choice.
+const show = (theme: Theme) =>
+  showTheme(site, theme, (current, next) => fill(strings.cycle, { theme: strings[current], next: strings[next] }))
+show((site.dataset.theme as Theme) ?? "system")
 
 // Copy with feedback in place (DESIGN.md): the button's data-state shows "Copied" or "Failed" for
-// 1.5s, and the live region after it says so.
+// 1.5s, and the live region after it says so. The static pages' copied() (src/client/copy.ts) also
+// draws the copy icon as a check and keeps a resting state, which the docs' buttons don't have.
 async function copied(
   button: HTMLElement,
   write: () => Promise<unknown>,
@@ -87,7 +77,7 @@ on("click", (event) => {
   if (cycle) {
     const theme = themes[(themes.indexOf(site.dataset.theme as Theme) + 1) % 3]
     localStorage.setItem("opencode-theme", theme)
-    return showTheme(theme)
+    return show(theme)
   }
 
   const copy = target.closest<HTMLElement>("[data-code]")
@@ -387,33 +377,19 @@ on("keydown", (event) => {
   if (event.key === "0") location.assign("/")
 })
 
-// The section nav scrolls under the logo and lockup: it holds the wheel only while it can scroll and
-// fades at an edge while items pass under it (site.css, docs.css). It starts with the current page in view.
+// The section nav scrolls under the logo and lockup, as on the site's pages (component/site/site-frame.ts).
 const nav = $('[data-component="sidebar"] > [data-component="section-nav"]')!
-function fade() {
-  nav.toggleAttribute("data-scrolls", nav.scrollHeight > nav.clientHeight)
-  nav.toggleAttribute("data-fade-top", nav.scrollTop > 0)
-  nav.toggleAttribute("data-fade-bottom", nav.scrollTop + nav.clientHeight < nav.scrollHeight - 1)
-}
-const currentPage = $<HTMLElement>('[aria-current="page"]', nav)
-if (currentPage && currentPage.offsetTop + currentPage.offsetHeight > nav.clientHeight)
-  nav.scrollTop = currentPage.offsetTop - nav.clientHeight / 2
-new ResizeObserver(fade).observe(nav)
-nav.addEventListener("scroll", fade, { passive: true })
+sectionNavScroll(nav)
 
 // The sidebar leaves with the article at the page's end, but the logo and lockup stay fixed
 // (site.css): while it is on its way out its items pass under them, and data-under fades them there,
 // as Site does on the site's own pages. The scroll spy below sets it, in the same frame.
 const sidebar = nav.parentElement!
 
-// The Contents rail and its phone bar mark the section being read: the last heading past a third of
-// the window, or at the end of the page the one the address names (else the last in view). The rail
-// keeps it in view; the phone bar draws its lines once pinned (data-stuck).
+// The Contents rail and its phone bar mark the section being read, the rail keeps it in view and the
+// phone bar draws its lines once pinned, as on the site's pages (component/site/contents-spy.ts).
 const links = $$<HTMLAnchorElement>(":is([data-component=on-this-page], [data-component=contents-menu]) a")
-const headings = [...new Set(links.map((link) => decodeURIComponent(link.hash.slice(1))))].flatMap((id) => {
-  const heading = document.getElementById(id)
-  return heading ? [heading] : []
-})
+const ids = [...new Set(links.map((link) => decodeURIComponent(link.hash.slice(1))))]
 // The phone Contents bar names the section being read. A new name replaces
 // the old within the label's own line: the old leaves upward (4px, fading out, 150ms) as the new comes
 // up from 4px below (fading in, 200ms), both on the strong ease-out, transform and opacity only. A swap
@@ -460,18 +436,8 @@ function nameSection(title: string, animate: boolean) {
 let spied = ""
 function spy() {
   sidebar.toggleAttribute("data-under", sidebar.getBoundingClientRect().top < -0.5)
-  const tops = headings.map((heading) => ({ id: heading.id, top: heading.getBoundingClientRect().top }))
-  const visible = tops.filter((item) => item.top >= 0 && item.top < innerHeight)
-  const bottom = scrollY + innerHeight >= html.scrollHeight - 2
-  const end = visible.find((item) => `#${item.id}` === decodeURIComponent(location.hash)) ?? visible.at(-1)
-  const id = (bottom && end ? end : tops.filter((item) => item.top <= innerHeight / 3).at(-1))?.id ?? tops[0]?.id
-  // Desktop hides the Contents bar (display: none), so it has no offsetParent and nothing to measure.
-  const contents = $<HTMLElement>("[data-component=contents-menu]")
-  if (contents?.offsetParent)
-    contents.toggleAttribute(
-      "data-stuck",
-      scrollY > 0 && contents.getBoundingClientRect().top <= parseFloat(getComputedStyle(contents).top) + 0.5,
-    )
+  const id = activeSection(ids)
+  markStuck($("[data-component=contents-menu]"))
   if (id === spied) return
   const named = links.find(
     (link) => link.closest("[data-docs-contents]") && decodeURIComponent(link.hash.slice(1)) === id,
@@ -483,13 +449,7 @@ function spy() {
       ? link.setAttribute("aria-current", "location")
       : link.removeAttribute("aria-current"),
   )
-  const link = $("[data-component=on-this-page] [aria-current]")
-  const box = link?.closest<HTMLElement>("[data-component=aside] > *")
-  if (!link || !box) return
-  const item = link.getBoundingClientRect()
-  const view = box.getBoundingClientRect()
-  if (item.top < view.top) box.scrollTop -= view.top - item.top + 24
-  if (item.bottom > view.bottom) box.scrollTop += item.bottom - view.bottom + 24
+  keepInRail($("[data-component=on-this-page] [aria-current]"))
 }
 let frame = 0
 const schedule = () => {

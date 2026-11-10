@@ -63,7 +63,8 @@ export default function Press() {
   const markdown = useMarkdown("/press", pressMarkdown, { releases: () => data() ?? [] })
   const [copied, setCopied] = createSignal<string>()
   // The boilerplate accordion: OpenCode open from the server render. Rows animate only once someone
-  // has toggled one, so the first paint never runs the opening animation.
+  // has toggled one, so the first paint never runs the opening animation. The static page drives the
+  // same markup from src/client/islands/press.ts.
   const [openProducts, setOpenProducts] = createSignal(["OpenCode"])
   const [accordionReady, setAccordionReady] = createSignal(false)
   onMount(() => {

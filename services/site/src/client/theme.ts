@@ -1,11 +1,9 @@
-import { $, $$, on, site, t, target } from "./dom"
+import { showTheme, themes, type Theme } from "~/component/site/theme-switch"
+import { on, site, t, target } from "./dom"
 
-// The footer's theme switch: system, light, dark, saved as `opencode-theme` (the docs share it). The
-// inline script in the page (preload-settings.ts themeScript) applied the saved theme before first
-// paint; this keeps the switch's label, the browser bar colour and form controls in step.
+// The footer's theme switch: system, light, dark (theme-switch.ts), in step with the browser bar
+// colour and form controls.
 
-const themes = ["system", "light", "dark"] as const
-type Theme = (typeof themes)[number]
 const dark = matchMedia("(prefers-color-scheme: dark)")
 
 /** The browser bar colour in a scheme: the "Like letters?" bar's blue while it fills the bottom. */
@@ -35,23 +33,10 @@ export function setBarColor(color: string | undefined) {
 }
 
 function show(theme: Theme) {
-  site.dataset.theme = theme
-  const next = themes[(themes.indexOf(theme) + 1) % 3]
-  $$('[data-component="theme-toggle"] [data-slot="cycle"]').forEach((cycle) => {
-    cycle.setAttribute(
-      "aria-label",
-      t("site.theme.cycle", { theme: t(`site.theme.${theme}`), next: t(`site.theme.${next}`) }),
-    )
-    $$('[data-slot="icon"]', cycle).forEach((icon, index) =>
-      icon.toggleAttribute("data-current", index === themes.indexOf(theme)),
-    )
-  })
-  $$<HTMLMetaElement>('meta[name="theme-color"]').forEach(
-    (meta) =>
-      (meta.content =
-        // #fbfbfb: Settings › Light background as production renders it (settings-defaults.json).
-        barColor ?? (theme === "dark" || (theme === "system" && meta.media.includes("dark")) ? "#0c0c0c" : "#fbfbfb")),
+  showTheme(
+    site,
+    theme,
+    (current, next) => t("site.theme.cycle", { theme: t(`site.theme.${current}`), next: t(`site.theme.${next}`) }),
+    barColor,
   )
-  const scheme = $<HTMLMetaElement>('meta[name="color-scheme"]')
-  if (scheme) scheme.content = theme === "system" ? "light dark" : theme
 }

@@ -69,16 +69,16 @@ const budgets: Record<string, number> = {
   "static pages": 10.4,
   "[...404].tsx": 102.9,
   "desktop.tsx": 126.4,
-  "devices.tsx": 55.9,
+  "devices.tsx": 57.1,
   "font/index.tsx": 119,
   "ide.tsx": 126.4,
   "index.tsx": 113.6,
   "mini.tsx": 126.4,
   "mobile.tsx": 126.4,
-  "product/index.tsx": 111.4,
+  "product/index.tsx": 111.2,
   "sdk.tsx": 126.4,
   "terminal.tsx": 126.4,
-  "video-editor/index.tsx": 54.3,
+  "video-editor/index.tsx": 55.5,
 }
 type Chunk = { file: string; imports?: string[] }
 const manifest: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()

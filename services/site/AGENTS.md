@@ -19,9 +19,16 @@ Read the design-system rules in `DESIGN.md` (also shown at `/dev/components#rule
 
 - A button that opens a menu, popover, dropdown, sheet or dialog sets `aria-expanded="true"` while it is open and is styled from that attribute, not hover: filled and split buttons fill with the link blue (like the product cards' split chevron), neutral buttons keep their pressed grey, and text or nav triggers take the current-item colour with the chevron flipped; Escape closes and returns focus to the trigger.
 
+## Static pages
+
+- The reading pages in `staticPaths` (`src/static/routes.ts`: legal, Brand, Press, the changelog and Browse) render in production as plain HTML from the same components, without hydration (`src/static/render.tsx`). They load one small script, `src/client/entry.ts`, which reads the markup the components render and loads each island in `src/client/islands/` only when the page has it.
+- Behaviour both renderings need lives in framework-free modules in `src/component/site/` that the component and the script both call, such as `contents-spy.ts`, `changelog-motion.ts`, `tooltips.ts`, `site-frame.ts`, `theme-switch.ts` and `sheet-motion.ts`. Put new behaviour there. Where a component renders its state from signals and the script keeps its own copy, each names the other in a comment: change both.
+- `vite dev` renders these pages hydrated, because Design mode and Settings need the app, so a change that only works hydrated looks right there. Check them in a production build served by `perf/serve.ts`: `bun run build`, then `bun perf/serve.ts --port 4300`, and open the page on that port.
+- To serve a page hydrated again, remove its path from `staticPaths`.
+
 ## Funnel
 
-- Every page and the docs report to the Console's funnel through `src/lib/funnel.ts`: `entry-client.tsx` and `src/docs/client.ts` start it, and it loads the Console's tracker (`/console/funnel/v1.js`) with `src/lib/funnel-config.ts` once the visitor first presses a key or the pointer, or the page is idle. Keep the stub free of imports, and imported only by `entry-client.tsx` on the site, so it stays in the entry chunk and the config and the tracker stay out of every page's first JavaScript.
+- Every page and the docs report to the Console's funnel through `src/lib/funnel.ts`: `entry-client.tsx`, the static pages' `src/client/entry.ts` and `src/docs/client.ts` start it, and it loads the Console's tracker (`/console/funnel/v1.js`) with `src/lib/funnel-config.ts` once the visitor first presses a key or the pointer, or the page is idle. Keep the stub free of imports, and imported only by those entry scripts, so it stays in each one's first file and the config and the tracker stay out of every page's first JavaScript.
 - The tracker reads the markup: `data-section` names a part of a page (`section.viewed`, and every click's section), `data-funnel` names a control, `data-funnel-copy` (with `data-funnel-method`) marks what a copy button or a selection inside copies, `data-funnel-surface` names a page's surface (the 404 page), and `data-funnel="ignore"` leaves a control out. Give a new page a surface in `surfaceOf` (`test/funnel.test.ts` fails until you do) and its main parts a `data-section`.
 - `data-section` names, `data-funnel` slugs and surfaces are analytics keys: rename one only together with the reports that read it.
 - Never send what a visitor typed. Code that reports its own events (search, the Markdown shortcut) pushes them onto `window.__ocFunnel` (`Funnel.track` in the docs), with counts and lengths, never text.

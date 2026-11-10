@@ -14,7 +14,8 @@ export type HeroMedia = HeroFile & { themes?: { light: HeroFile; dark: HeroFile 
  */
 export function ProductHero(props: { slug: string; media: HeroMedia | undefined; design?: string }) {
   // The page's colour scheme for the hero's themed files: read while hydrating, so the files match
-  // what the hero's inline script picked, then kept in step with the theme and the system setting.
+  // what the hero's inline script picked, then kept in step with the theme and the system setting
+  // (on a static page, src/client/islands/product-hero.ts).
   const [scheme, setScheme] = createSignal(pageScheme())
   onMount(() => {
     const sync = () => setScheme(pageScheme())

@@ -1,7 +1,8 @@
 import { checkPath, copyPath } from "~/component/site/icon-paths"
 import { on, t, target, wait } from "./dom"
 
-// Copy with feedback in place (DESIGN.md), for the static pages and their islands.
+// Copy with feedback in place (DESIGN.md), for the static pages and their islands. The docs keep a
+// smaller one (src/docs/client.ts copied), as their buttons show their state from data-state alone.
 
 /**
  * Copies, then marks `button` with data-state "copied" (or "failed") for 1.5s, draws its copy icon as

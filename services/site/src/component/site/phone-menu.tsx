@@ -5,7 +5,8 @@ import { useI18n } from "~/context/i18n"
 /**
  * The small-screen header's menu button and the sheet it opens, shared by the site's top bar
  * (site.tsx) and the 404 arcade (arcade/chrome.tsx). The caller owns the open state, Escape and
- * returning focus to the button; the sheet closes itself on its backdrop and on a chosen link.
+ * returning focus to the button; the sheet closes itself on its backdrop and on a chosen link. The
+ * static pages drive the same markup from src/client/menus.ts.
  */
 export function MenuToggle(props: { open: boolean; onToggle: () => void; ref?: (element: HTMLButtonElement) => void }) {
   const i18n = useI18n()
