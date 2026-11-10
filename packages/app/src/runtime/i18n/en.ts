@@ -878,7 +878,6 @@ export const dict = {
   "sidebar.view.show": "Show",
   "sidebar.view.show.recent": "Recent sessions",
   "sidebar.view.show.subagents": "Subagents",
-  "sidebar.view.show.archived": "Archived",
   "sidebar.view.show.serverLabels": "Server labels",
   "sidebar.view.filter.status": "Status",
   "sidebar.view.filter.server": "Server",

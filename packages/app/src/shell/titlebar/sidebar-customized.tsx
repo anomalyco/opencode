@@ -43,7 +43,6 @@ const ViewState = Persistence.struct({
   show: Persistence.struct({
     recent: Schema.Boolean,
     subagents: Schema.Boolean,
-    archived: Schema.Boolean,
     serverLabels: Schema.Boolean,
   }),
   collapsed: Persistence.record(Schema.Boolean),
@@ -53,8 +52,6 @@ const RECENT_STEP = 5
 
 // One ungrouped list holds every project's sessions, so it shows more before "Show more".
 const RECENT_STEP_UNGROUPED = 10
-
-const ARCHIVED_LIMIT = 50
 
 type Row = SidebarRow & {
   conn: ServerConnection.Any | undefined
@@ -92,7 +89,7 @@ export function SidebarCustomized(props: {
   const [view, setView] = persisted(Persist.global("sidebar.view"), ViewState, {
     grouping: "project",
     ordering: "manual",
-    show: { recent: true, subagents: false, archived: false, serverLabels: true },
+    show: { recent: true, subagents: false, serverLabels: true },
     collapsed: {},
   })
 
@@ -120,25 +117,6 @@ export function SidebarCustomized(props: {
 
   const recentQueries = useQueries(() => ({
     queries: connected().map((conn) => homeSessionsQuery(conn, ctxOf(ServerConnection.key(conn)))),
-  }))
-
-  const archivedQueries = useQueries(() => ({
-    queries: connected().map((conn) => {
-      const ctx = ctxOf(ServerConnection.key(conn))
-
-      return {
-        queryKey: ["sidebar-archived-sessions", ServerConnection.key(conn)] as const,
-        enabled: view.show.archived && !!ctx,
-        staleTime: 30_000,
-        queryFn: async ({ signal }: { signal: AbortSignal }) =>
-          (
-            await ctx!.sdk.api.session.list(
-              { limit: ARCHIVED_LIMIT, order: "desc", parentID: null, archived: true },
-              { signal },
-            )
-          ).data,
-      }
-    }),
   }))
 
   // Server groupings only separate anything once a second server is added; the saved choice returns with it.
@@ -188,7 +166,6 @@ export function SidebarCustomized(props: {
           open: true,
           active: current === tab,
           parentKey: undefined,
-          archived: false,
           status: "idle",
           updated: 0,
           created: 0,
@@ -217,7 +194,6 @@ export function SidebarCustomized(props: {
         open: true,
         active: isActive(tab.server, tab.sessionId),
         parentKey: undefined,
-        archived: false,
         status: status(ctx, session),
         updated: session?.time.updated ?? 0,
         created: session?.time.created ?? 0,
@@ -244,15 +220,13 @@ export function SidebarCustomized(props: {
         { activity: false },
       )
 
-      const archived = view.show.archived ? ctx.data.session.apply(archivedQueries[index]?.data ?? []) : []
-
       const children = view.show.subagents
         ? ctx.data.session.list().filter((session) => !!session.parentID && session.time.archived === undefined)
         : []
 
       const seen = new Set<string>()
 
-      return [...indexed, ...archived, ...children].flatMap((session): Row[] => {
+      return [...indexed, ...children].flatMap((session): Row[] => {
         const key = sessionRowKey(server, session.id)
 
         if (openKeys.has(key) || seen.has(key)) return []
@@ -268,7 +242,6 @@ export function SidebarCustomized(props: {
             open: false,
             active: isActive(server, session.id),
             parentKey: session.parentID ? sessionRowKey(server, session.parentID) : undefined,
-            archived: session.time.archived !== undefined,
             status: status(ctx, session),
             updated: session.time.updated,
             created: session.time.created,

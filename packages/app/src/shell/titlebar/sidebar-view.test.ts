@@ -8,7 +8,6 @@ function row(overrides: Partial<SidebarRow> & { key: string }): SidebarRow {
     open: true,
     active: false,
     parentKey: undefined,
-    archived: false,
     status: "idle",
     updated: 0,
     created: 0,
@@ -21,7 +20,7 @@ function state(overrides: Partial<SidebarViewState> = {}): SidebarViewState {
   return {
     grouping: "none",
     ordering: "manual",
-    show: { recent: true, subagents: true, archived: false, serverLabels: false },
+    show: { recent: true, subagents: true, serverLabels: false },
     filters: { status: [], server: [], project: [] },
     collapsed: {},
     ...overrides,
@@ -124,11 +123,7 @@ describe("sidebarView", () => {
     ["status filter", { filters: { status: ["running"], server: [], project: [] } }, matched],
     ["server filter", { filters: { status: [], server: ["b"], project: [] } }, matched],
     ["project filter", { filters: { status: [], server: [], project: ["none"] } }, matched],
-    [
-      "hidden recent",
-      { show: { recent: false, subagents: true, archived: false, serverLabels: false } },
-      ["match", "miss", "active"],
-    ],
+    ["hidden recent", { show: { recent: false, subagents: true, serverLabels: false } }, ["match", "miss", "active"]],
   ])("%s drops non-matching rows but keeps the active row", (_, overrides, expected) => {
     const rows = [
       row({ key: "active", open: false, active: true }),
@@ -145,20 +140,12 @@ describe("sidebarView", () => {
     expect(keys(rows, state({ filters: { status: [], server: [], project: ["p2"] } }))).toEqual(["p2"])
   })
 
-  test("hides archived and subagent rows unless shown", () => {
-    const rows = [
-      row({ key: "parent" }),
-      row({ key: "sub", open: false, parentKey: "parent" }),
-      row({ key: "archived", open: false, archived: true }),
-    ]
+  test("hides subagent rows unless shown", () => {
+    const rows = [row({ key: "parent" }), row({ key: "sub", open: false, parentKey: "parent" })]
 
-    const hidden = { recent: true, subagents: false, archived: false, serverLabels: false }
+    const hidden = { recent: true, subagents: false, serverLabels: false }
     expect(keys(rows, state({ show: hidden }))).toEqual(["parent"])
-    expect(keys(rows, state({ show: { ...hidden, subagents: true, archived: true } }))).toEqual([
-      "parent",
-      "sub",
-      "archived",
-    ])
+    expect(keys(rows, state({ show: { ...hidden, subagents: true } }))).toEqual(["parent", "sub"])
   })
 
   test("collapsed groups hide their open keys but keep the active row", () => {

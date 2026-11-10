@@ -4,7 +4,7 @@ export type SidebarOrdering = "manual" | "updated" | "created" | "attention"
 
 export type SidebarStatus = "input" | "failed" | "unread" | "running" | "idle"
 
-export type SidebarShow = { recent: boolean; subagents: boolean; archived: boolean; serverLabels: boolean }
+export type SidebarShow = { recent: boolean; subagents: boolean; serverLabels: boolean }
 
 export type SidebarShowKey = keyof SidebarShow
 
@@ -25,12 +25,11 @@ export type SidebarRow = {
   key: string
   server: string
   projectID: string | undefined
-  /** An open tab, as opposed to a recent, archived or subagent session. */
+  /** An open tab, as opposed to a recent or subagent session. */
   open: boolean
   active: boolean
   /** The row key of the parent session, for subagent rows. */
   parentKey: string | undefined
-  archived: boolean
   status: SidebarStatus
   updated: number
   created: number
@@ -67,7 +66,7 @@ export const SIDEBAR_GROUPINGS: readonly SidebarGrouping[] = ["none", "project",
 
 export const SIDEBAR_ORDERINGS: readonly SidebarOrdering[] = ["manual", "updated", "created", "attention"]
 
-export const SIDEBAR_SHOW_KEYS: readonly SidebarShowKey[] = ["recent", "subagents", "archived", "serverLabels"]
+export const SIDEBAR_SHOW_KEYS: readonly SidebarShowKey[] = ["recent", "subagents", "serverLabels"]
 
 export function sidebarView<R extends SidebarRow>(rows: readonly R[], state: SidebarViewState): SidebarView<R> {
   const kept = keptRows(rows, state)
@@ -113,9 +112,7 @@ function keptRows<R extends SidebarRow>(rows: readonly R[], state: SidebarViewSt
 function isVisible(row: SidebarRow, state: SidebarViewState) {
   if (row.parentKey !== undefined && !state.show.subagents) return false
 
-  if (row.archived && !state.show.archived) return false
-
-  if (!row.open && row.parentKey === undefined && !row.archived && !state.show.recent) return false
+  if (!row.open && row.parentKey === undefined && !state.show.recent) return false
   const filters = state.filters
 
   if (filters.status.length > 0 && !filters.status.includes(row.status)) return false
