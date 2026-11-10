@@ -612,6 +612,18 @@ describe("Job", () => {
 
       yield* Deferred.succeed(latch, undefined)
       yield* jobs.wait({ id: job.id })
+      // The settlement commit owns the terminal row while this generation is settling.
+      // Settling must not overwrite it with a stale running-period value.
+      expect(yield* jobs.pendingBackground).toMatchObject([
+        { notificationID: background.notificationID, status: "running" },
+      ])
+      yield* jobs.recordSubagentReport({
+        notificationID: background.notificationID,
+        recovery,
+        status: "completed",
+        output: "done",
+        startedAt: job.started_at,
+      })
       expect(yield* jobs.pendingBackground).toMatchObject([
         { notificationID: background.notificationID, status: "completed", output: "done" },
       ])
@@ -772,6 +784,164 @@ describe("Job", () => {
 
       yield* jobs.deleteBackgroundRow(notificationID)
       expect(yield* jobs.pendingBackground).toEqual([])
+    }),
+  )
+
+  it.live("persists a background marker before forking background work", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const notificationID = SessionMessage.ID.create()
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: SessionSchema.ID.make("ses_atomic_parent"),
+        childSessionID: SessionSchema.ID.make("ses_atomic_child"),
+        agent: "explore",
+        description: "Atomic start",
+      }
+      const job = yield* jobs.start({
+        id: recovery.childSessionID,
+        type: "subagent",
+        recovery,
+        notificationID,
+        background: true,
+        // The row must already be durable when the run begins, not after an async handoff.
+        run: jobs.pendingBackground.pipe(
+          Effect.map((rows) =>
+            String(rows.some((row) => row.notificationID === notificationID && row.status === "running")),
+          ),
+        ),
+      })
+
+      expect(job.notificationID).toBe(notificationID)
+      expect((yield* jobs.wait({ id: job.id })).info).toMatchObject({ status: "completed", output: "true" })
+      expect(yield* jobs.pendingBackground).toMatchObject([{ notificationID, status: "completed", output: "true" }])
+      yield* jobs.completeBackground(notificationID)
+    }),
+  )
+
+  it.live("promotes joined foreground work to background while it is still live", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const parent = SessionSchema.ID.make("ses_promote_parent")
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: parent,
+        childSessionID: SessionSchema.ID.make("ses_promote_child"),
+        agent: "explore",
+        description: "Promote work",
+      }
+      const latch = yield* Deferred.make<void>()
+      const foreground = yield* jobs.start({
+        id: recovery.childSessionID,
+        type: "subagent",
+        recovery,
+        run: Deferred.await(latch).pipe(Effect.as("foreground")),
+      })
+      const waiting = yield* jobs
+        .block({ id: foreground.id, sessionID: parent })
+        .pipe(Effect.forkChild({ startImmediately: true }))
+
+      const promoted = yield* jobs.start({
+        id: foreground.id,
+        type: "subagent",
+        recovery,
+        background: true,
+        run: Effect.die("Joined work must not run twice"),
+      })
+      expect(promoted.notificationID).toEqual(expect.any(String))
+      expect(yield* Fiber.join(waiting)).toMatchObject({ type: "backgrounded", info: { id: foreground.id } })
+      expect(yield* jobs.pendingBackground).toMatchObject([{ id: foreground.id, status: "running" }])
+
+      yield* Deferred.succeed(latch, undefined)
+      yield* jobs.wait({ id: foreground.id })
+      const marker = (yield* jobs.pendingBackground)[0]
+      if (!marker) return yield* Effect.die("background marker missing")
+      expect(marker.status).toBe("completed")
+      yield* jobs.completeBackground(marker.notificationID)
+    }),
+  )
+
+  it.live("distinguishes caller cancellation from teardown", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const cancelled = yield* Deferred.make<void>()
+      const explicit = yield* jobs.start({
+        id: "job_explicit_cancel",
+        type: "test",
+        run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(cancelled, undefined))),
+      })
+      expect(yield* jobs.isCancelled(explicit.id)).toBe(false)
+      yield* jobs.cancel(explicit.id)
+      expect(yield* jobs.isCancelled(explicit.id)).toBe(true)
+      yield* Deferred.await(cancelled).pipe(Effect.timeout("1 second"))
+
+      const scope = yield* Scope.make()
+      const abandoned = yield* Job.make.pipe(Scope.provide(scope))
+      const job = yield* abandoned.start({ id: "job_teardown_cancel", type: "test", run: Effect.never })
+      yield* Scope.close(scope, Exit.void)
+      // Scope teardown is a shutdown, not a caller cancellation: restart recovery depends on it.
+      expect(yield* abandoned.isCancelled(job.id)).toBe(false)
+    }),
+  )
+
+  it.live("matches a creation-tick cancellation without a bound generation exactly once", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: SessionSchema.ID.make("ses_creation_parent"),
+        childSessionID: SessionSchema.ID.make("ses_creation_child"),
+        agent: "explore",
+        description: "Cancelled on creation",
+      }
+      yield* jobs.start({
+        id: recovery.childSessionID,
+        type: "subagent",
+        recovery,
+        background: true,
+        run: Effect.never,
+      })
+      yield* jobs.cancel(recovery.childSessionID)
+
+      // The started hook never ran, so no generation was bound; the cancel still owns this period.
+      expect(yield* jobs.prepareSubagentReport(recovery.childSessionID)).toMatchObject({ mode: "background" })
+      expect(yield* jobs.prepareSubagentReport(recovery.childSessionID)).toEqual({ mode: "none" })
+    }),
+  )
+
+  it.live("excludes settling and consumed work from running background snapshots", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const latch = yield* Deferred.make<void>()
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: SessionSchema.ID.make("ses_snapshot_parent"),
+        childSessionID: SessionSchema.ID.make("ses_snapshot_child"),
+        agent: "explore",
+        description: "Snapshot work",
+      }
+      const job = yield* jobs.start({
+        id: recovery.childSessionID,
+        type: "subagent",
+        recovery,
+        background: true,
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
+      const notificationID = job.notificationID
+      if (!notificationID) return yield* Effect.die("background marker missing")
+
+      expect(yield* jobs.runningBackground).toEqual([recovery])
+      expect(yield* jobs.prepareSubagentReport(recovery.childSessionID)).toMatchObject({ mode: "background" })
+      expect(yield* jobs.runningBackground).toEqual([])
+
+      // A settling live entry without its row must not leak back into the durable list.
+      yield* jobs.deleteBackgroundRow(notificationID)
+      expect(yield* jobs.backgroundJobs).toEqual([])
+
+      yield* Deferred.succeed(latch, undefined)
+      yield* jobs.wait({ id: recovery.childSessionID })
+      yield* jobs.completeBackground(notificationID)
+      expect(yield* jobs.runningBackground).toEqual([])
     }),
   )
 

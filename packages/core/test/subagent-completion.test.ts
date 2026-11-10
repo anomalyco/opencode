@@ -118,4 +118,42 @@ describe("SubagentCompletion", () => {
       expect(completed).toEqual([notificationID])
     }),
   )
+
+  it.effect("preserves a pre-formatted cancelled body so restart replay keeps running-work context", () =>
+    Effect.gen(function* () {
+      const notificationID = SessionMessage.ID.create()
+      const sent: SyntheticInput[] = []
+      const sessions: SubagentCompletion.SyntheticSession = {
+        synthetic: (input) =>
+          Effect.sync(() => {
+            sent.push(input)
+            return input
+          }),
+      }
+      const jobs = {
+        completeBackground: () => Effect.void,
+      } satisfies Pick<Job.Interface, "completeBackground">
+      const output = ["Subagent cancelled", "", "Background work still running:", "- shell (shell_1): bun test"].join(
+        "\n",
+      )
+
+      yield* SubagentCompletion.deliver(sessions, jobs, { status: "cancelled", output, notificationID, recovery })
+      yield* SubagentCompletion.deliver(sessions, jobs, { status: "cancelled", error: "Cancel failed", recovery })
+
+      expect(sent[0]?.text).toBe(
+        [
+          '<subagent sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
+          output,
+          "</subagent>",
+        ].join("\n"),
+      )
+      expect(sent[1]?.text).toBe(
+        [
+          '<subagent sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
+          "Cancel failed",
+          "</subagent>",
+        ].join("\n"),
+      )
+    }),
+  )
 })

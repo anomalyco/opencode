@@ -7,6 +7,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Instance } from "@opencode/core/instance/service"
 import { Job } from "@opencode/core/job"
+import { JobTable } from "@opencode/core/job/sql"
 import { KV } from "@opencode/core/kv"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
@@ -218,10 +219,43 @@ describe("SessionExecution lifecycle", () => {
       yield* Deferred.await(running)
       expect(yield* execution.interrupt(child)).toBeTrue()
       yield* execution.awaitIdle(child)
-      expect((yield* jobs.wait({ id: child })).info?.status).toBe("cancelled")
-      expect(yield* jobs.pendingBackground).toMatchObject([{ id: child, status: "cancelled" }])
-      expect((yield* claims(database))[child]).toBe(false)
+      expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false })
+      // Wave 2 reports a user cancel as soon as the busy period settles and acknowledges it.
+      const immediate = (yield* SessionInbox.list(database.db, parent)).find((item) => item.type === "synthetic")
+      expect(immediate).toMatchObject({
+        payload: { text: expect.stringContaining("Subagent cancelled"), metadata: { state: "cancelled" } },
+      })
+      expect(yield* jobs.pendingBackground).toEqual([])
       yield* Scope.close(scope, Exit.void)
+
+      // Reproduce a crash after the terminal commit but before admission: the child is idle,
+      // the admitted notice is gone, and only the durable marker remains.
+      if (!immediate) return yield* Effect.die("cancelled report missing")
+      yield* database.db
+        .delete(SessionInboxTable)
+        .where(eq(SessionInboxTable.id, immediate.id))
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(JobTable)
+        .values({
+          notification_id: immediate.id,
+          id: child,
+          session_id: parent,
+          child_session_id: child,
+          kind: "subagent",
+          title: "Cancelled inspection",
+          status: "cancelled",
+          recovery: {
+            kind: "subagent",
+            parentSessionID: parent,
+            childSessionID: child,
+            agent: "general",
+            description: "Cancelled inspection",
+          },
+        })
+        .run()
+        .pipe(Effect.orDie)
 
       const restartedScope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(restartedScope, Exit.void))
@@ -1686,6 +1720,7 @@ function buildExecution(
     const store = yield* SessionStore.Service
     const jobs = overrideJobs ?? (yield* Job.Service)
     const sessions = yield* Session.Service
+    const inbox = yield* SessionInbox.Service
     const sessionLayer = Layer.effect(
       Session.Service,
       Effect.gen(function* () {
@@ -1735,6 +1770,7 @@ function buildExecution(
             }),
           ),
         ),
+        Layer.provide(Layer.succeed(SessionInbox.Service, inbox)),
         // Do not reuse the outer harness's selector with its already-captured Location map.
         Layer.provide(
           AppNodeBuilder.build(Instance.node, [LocationServiceMap.node.replace(locations)]).pipe(Layer.fresh),

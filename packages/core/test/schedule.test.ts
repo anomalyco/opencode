@@ -63,6 +63,7 @@ const execution = Layer.succeed(
     isActive: () => Effect.succeed(false),
     resume: () => Effect.void,
     interrupt: () => Effect.succeed(false),
+    periodStartSeq: () => Effect.succeed(undefined),
     wake: (sessionID) =>
       Effect.suspend(() => {
         wakes.push(sessionID)

@@ -127,6 +127,7 @@ const executionNode = makeGlobalNode({
         resume: complete,
         wake: () => Effect.void,
         interrupt: () => Effect.succeed(false),
+        periodStartSeq: () => Effect.succeed(undefined),
         awaitIdle: (id) => complete(id).pipe(Effect.exit, Effect.asVoid),
       })
     }),

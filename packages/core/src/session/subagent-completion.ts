@@ -85,7 +85,7 @@ export const deliver = Effect.fnUntraced(function* <E>(
       ? (input.output ?? NO_TEXT)
       : input.status === "error"
         ? (input.error ?? "Subagent failed")
-        : "Subagent cancelled"
+        : (input.output ?? input.error ?? "Subagent cancelled")
   yield* sessions.synthetic({
     ...(input.notificationID ? { id: input.notificationID } : {}),
     sessionID: recovery.parentSessionID,

@@ -51,7 +51,7 @@ export type ListFilter = {
  * represented by a running background job is not repeated.
  */
 export const outstanding = Effect.fnUntraced(function* (
-  jobs: Pick<Job.Interface, "runningBackground">,
+  jobs: Pick<Job.Interface, "runningBackground"> & { readonly get?: Job.Interface["get"] },
   store: Lookup,
   sessionID: SessionSchema.ID,
   active?: ReadonlySet<SessionSchema.ID>,
@@ -82,6 +82,14 @@ export const outstanding = Effect.fnUntraced(function* (
   const children = new Set(items.flatMap((item) => (item.kind === "subagent" ? [item.childSessionID] : [])))
   for (const activeID of active) {
     if (activeID === sessionID || children.has(activeID)) continue
+    // Foreground-blocking work is the caller's inline result, and cancelled work is
+    // acknowledged elsewhere: neither is still running for this report.
+    const tracked = jobs.get ? yield* jobs.get(activeID) : undefined
+    if (
+      tracked &&
+      ((tracked.status === "running" && tracked.notificationID === undefined) || tracked.status === "cancelled")
+    )
+      continue
     if (!(yield* descends(store, parents, activeID, sessionID))) continue
     const info = yield* store.get(activeID)
     if (!info?.parentID) continue

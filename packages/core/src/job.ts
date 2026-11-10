@@ -82,6 +82,8 @@ type Active = {
   isBackgrounded: boolean
   settling: boolean
   consumed: boolean
+  reported: boolean
+  cancelledByCaller: boolean
   recovery?: Recovery
   cancel?: Effect.Effect<void>
 }
@@ -105,7 +107,7 @@ type BackgroundResult = {
   backgrounded?: Deferred.Deferred<Info>
 }
 
-type StartResult = { info: Info } | { info: Info; job: Active }
+type StartResult = { info: Info } | { info: Info; job: Active } | { info: Info; backgrounded: Deferred.Deferred<Info> }
 
 type BlockWait = {
   done: Deferred.Deferred<Info>
@@ -126,6 +128,7 @@ export type StartInput = {
   metadata?: Record<string, unknown>
   recovery?: Recovery
   notificationID?: SessionMessage.ID
+  background?: boolean
   run: Effect.Effect<string, unknown>
   // Runs when the job is cancelled (`cancel`, `cancelSession`), before its work is interrupted. Teardown, such as
   // a server shutdown, interrupts the work without it.
@@ -167,6 +170,8 @@ export interface Interface {
   readonly runningBackground: Effect.Effect<readonly Recovery[]>
   readonly backgroundJobs: Effect.Effect<readonly JobList.Item[]>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
+  /** Whether an explicit caller cancellation stopped this job (not shutdown teardown). */
+  readonly isCancelled: (id: string) => Effect.Effect<boolean>
   readonly currentGeneration: (
     id: string,
   ) => Effect.Effect<{ readonly generation: number; readonly running: boolean } | undefined>
@@ -327,7 +332,9 @@ export const make = Effect.gen(function* () {
           return [{ info: snapshot(next), done: job.done, scope: job.scope }, remaining]
         }
         // A consumed job's notification row is gone; persisting here would resurrect it.
-        if (status !== "cancelled") yield* persistBackground(next)
+        // A settling generation's row belongs to the settlement commit; leaving it alone keeps
+        // conflict-retained markers and late settlements consistent.
+        if (status !== "cancelled" && !job.settling && !job.consumed) yield* persistBackground(next)
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
       }),
     )
@@ -356,12 +363,21 @@ export const make = Effect.gen(function* () {
             const existing = jobs.get(input.id)
             // A settling generation is already reporting; new work starts a fresh generation.
             if (existing?.info.status === "running" && !existing.settling) {
-              return [{ info: snapshot(existing) }, jobs]
+              if (!input.background || existing.isBackgrounded) return [{ info: snapshot(existing) }, jobs]
+              // Joining live work after its start must register the durable marker before a fast
+              // drain can settle and classify the period as foreground.
+              const updated = yield* markBackground(existing)
+              return [
+                { info: snapshot(updated), backgrounded: existing.backgrounded },
+                new Map(jobs).set(input.id, updated),
+              ]
             }
             const scope = yield* Scope.fork(state.scope, "parallel")
             // Closing the registry interrupts the work without settling it; interrupt its observers too.
             yield* Scope.addFinalizer(scope, Deferred.interrupt(done))
-            const job = {
+            const notificationID =
+              input.notificationID ?? (input.background && input.recovery ? SessionMessage.ID.create() : undefined)
+            const job: Active = {
               info: {
                 id: input.id,
                 type: input.type,
@@ -369,22 +385,28 @@ export const make = Effect.gen(function* () {
                 status: "running" as const,
                 started_at,
                 metadata: input.metadata,
-                ...(input.notificationID ? { notificationID: input.notificationID } : {}),
+                ...(notificationID ? { notificationID } : {}),
               },
               done,
               backgrounded,
               scope,
               generation: yield* Ref.updateAndGet(state.generations, (generation) => generation + 1),
               blockingSessions: new Map<SessionSchema.ID, number>(),
-              isBackgrounded: false,
+              isBackgrounded: input.background === true,
               settling: false,
               consumed: false,
+              reported: false,
+              cancelledByCaller: false,
               recovery: input.recovery,
               cancel: input.cancel,
             }
+            // Background work becomes durable before its run is forked, so no drain can observe
+            // an unmarked period.
+            if (job.isBackgrounded) yield* persistBackground(job)
             return [{ info: snapshot(job), job }, new Map(jobs).set(input.id, job)]
           }),
         )
+        if ("backgrounded" in result) yield* Deferred.succeed(result.backgrounded, result.info)
         if ("job" in result)
           yield* restore(input.run).pipe(
             Effect.exit,
@@ -523,13 +545,15 @@ export const make = Effect.gen(function* () {
         const next = {
           ...job,
           blockingSessions: new Map<SessionSchema.ID, number>(),
+          cancelledByCaller: persist,
           info: {
             ...job.info,
             status: "cancelled" as const,
             completed_at,
           },
         }
-        if (persist) yield* persistBackground(next)
+        // Settling work owns its outbox row: the settlement commit writes or deletes it.
+        if (persist && !job.settling) yield* persistBackground(next)
         return [
           { info: snapshot(next), done: job.done, scope: job.scope, generation: job.scope, cancel: job.cancel },
           new Map(jobs).set(id, next),
@@ -587,7 +611,9 @@ export const make = Effect.gen(function* () {
   const runningBackground: Interface["runningBackground"] = SynchronizedRef.get(state.jobs).pipe(
     Effect.map((jobs) =>
       [...jobs.values()].flatMap((job) =>
-        job.isBackgrounded && job.info.status === "running" && job.recovery ? [job.recovery] : [],
+        job.isBackgrounded && job.info.status === "running" && !job.settling && !job.consumed && job.recovery
+          ? [job.recovery]
+          : [],
       ),
     ),
     Effect.withSpan("Job.runningBackground"),
@@ -614,23 +640,30 @@ export const make = Effect.gen(function* () {
     return { generation: job.generation, running: job.info.status === "running" && !job.settling }
   })
 
+  const isCancelled: Interface["isCancelled"] = Effect.fn("Job.isCancelled")(function* (id) {
+    return (yield* SynchronizedRef.get(state.jobs)).get(id)?.cancelledByCaller === true
+  })
+
   const prepareSubagentReport: Interface["prepareSubagentReport"] = Effect.fn("Job.prepareSubagentReport")(
     function* (id, boundGeneration) {
       return yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [SubagentReportState, Map<string, Active>] => {
         const job = jobs.get(id)
-        if (!job) return [{ mode: "none" }, jobs]
+        // A generation reports at most once, even when an earlier attempt only observed a cancel.
+        if (!job || job.reported) return [{ mode: "none" }, jobs]
         const live = job.info.status === "running" && !job.settling
-        // An external cancel within this busy period already consumed the job, but it still belongs here.
+        // A cancel within this busy period already consumed the live entry, but it still belongs
+        // here. A creation-tick interruption never bound a generation, so any cancel matches.
         const cancelled =
-          job.info.status === "cancelled" && boundGeneration !== undefined && job.generation === boundGeneration
+          job.info.status === "cancelled" && (boundGeneration === undefined || job.generation === boundGeneration)
         if (!live && !cancelled) return [{ mode: "none" }, jobs]
-        if (!job.isBackgrounded) {
-          return [
-            { mode: "foreground" },
-            job.info.status === "running" ? new Map(jobs).set(id, { ...job, settling: true }) : jobs,
-          ]
+        const updated: Active = {
+          ...job,
+          reported: true,
+          ...(job.info.status === "running" ? { settling: true } : {}),
         }
-        if (!job.info.notificationID || job.recovery?.kind !== "subagent") return [{ mode: "none" }, jobs]
+        const next = new Map(jobs).set(id, updated)
+        if (!job.isBackgrounded) return [{ mode: "foreground" }, next]
+        if (!job.info.notificationID || job.recovery?.kind !== "subagent") return [{ mode: "none" }, next]
         return [
           {
             mode: "background",
@@ -638,7 +671,7 @@ export const make = Effect.gen(function* () {
             recovery: job.recovery,
             startedAt: job.info.started_at,
           },
-          job.info.status === "running" ? new Map(jobs).set(id, { ...job, settling: true }) : jobs,
+          next,
         ]
       })
     },
@@ -696,6 +729,7 @@ export const make = Effect.gen(function* () {
     runningBackground,
     backgroundJobs: JobList.read(db, state.jobs),
     completeBackground,
+    isCancelled,
     currentGeneration,
     prepareSubagentReport,
     recordSubagentReport,
