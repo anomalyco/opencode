@@ -32,6 +32,11 @@ export interface Events {
   readonly settled: Effect.Effect<void>
   /** The live connection closed on its own. Runs under the lock; the owner decides how to stop. */
   readonly closed: (reason: string) => Effect.Effect<void>
+  /**
+   * The server no longer knows this connection's session. Runs under the lock. Resolves true when the owner took over
+   * reconnecting; otherwise the connection stops and starts again in place.
+   */
+  readonly expired?: Effect.Effect<boolean>
   /** A catalog changed: the server said so, or the connection was torn down and every catalog emptied. */
   readonly changed: (kind: Kind) => Effect.Effect<void>
   /**
@@ -132,6 +137,7 @@ export function make(input: Input): Connection {
     Effect.gen(function* () {
       if (state.client !== client) return
       yield* Effect.logInfo("mcp session expired, reconnecting", { server: input.name })
+      if (input.events.expired && (yield* input.events.expired)) return
       yield* stop
       yield* start
     }).pipe(input.lock)

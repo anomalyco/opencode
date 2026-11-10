@@ -2552,6 +2552,7 @@ export type ConfigEntry =
           schedules?: boolean
           artifacts?: boolean
           codemode_vm?: boolean
+          mcp_resilience?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number

@@ -16,5 +16,7 @@ export const registry = {
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
+  mcp_resilience:
+    "Keep an MCP server's tools when its connection drops on its own and reconnect it on the next call that needs it, and offer each server's last listed tools from a disk cache while it starts.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
