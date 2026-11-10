@@ -14,6 +14,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@opencode/ui/project-avatar"
 import { projectForSession } from "@/shell/layout/helpers"
+import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { looksLikeSessionID } from "@/session/search"
@@ -279,8 +280,6 @@ export function createServerSessionEntries(props: {
   category: () => string
   recentCategory: () => string
   recentLimit?: number
-  /** Shows no recent rows until the first server list settles, so they open in the server's order. */
-  waitForRecentSnapshot?: boolean
 }) {
   const [sourceState, setSourceState] = createSignal(INITIAL_SESSION_SOURCE_STATE)
 
@@ -294,15 +293,11 @@ export function createServerSessionEntries(props: {
     }
   >()
 
-  // Let the newest metadata win duplicates before ranking the merged sessions newest-first.
+  // The server's list carries each step's `time.updated` bump. Like Home, keep the cached time until a run ends.
   const known = createMemo(() => {
-    const merged = [
-      ...new Map(
-        [...(props.known?.() ?? []), ...sourceState().loaded]
-          .toSorted((a, b) => a.time.updated - b.time.updated)
-          .map((session) => [session.id, session] as const),
-      ).values(),
-    ].toSorted((a, b) => b.time.updated - a.time.updated)
+    const merged = mergeRootSessionIndex(props.known?.() ?? [], sourceState().loaded).toSorted(
+      (a, b) => b.time.updated - a.time.updated,
+    )
 
     return props.apply?.(merged) ?? merged
   })
@@ -435,18 +430,7 @@ export function createServerSessionEntries(props: {
     items(text: string) {
       const search = text.trim()
 
-      if (!search) {
-        // Cached lists only learn a step's newer time on refresh, so the first paint waits for this open's own list.
-        // Once it lands, `known` merges it and later empty queries can show the merged order at once.
-        const source = sourceState()
-
-        const first =
-          source.status === "idle" ? source.issued === 0 : source.status !== "disposed" && source.attempt === 1
-
-        if (props.waitForRecentSnapshot && first) return []
-
-        return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
-      }
+      if (!search) return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
 
       // The server matches titles, so narrow the loaded sessions before building entries for them. Building an entry
       // per known session on every keystroke is what made search slow once the loaded index grew.

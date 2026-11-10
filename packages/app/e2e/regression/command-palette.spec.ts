@@ -297,7 +297,7 @@ declare global {
   }
 }
 
-test("titlebar search opens recent sessions in the server's order on every open", async ({ page }) => {
+test("titlebar search keeps recent order stable across agent steps", async ({ page }) => {
   const busy = { ...paletteSession, time: { ...paletteSession.time } }
 
   const fresh = {
@@ -308,8 +308,7 @@ test("titlebar search opens recent sessions in the server's order on every open"
   }
 
   const mock = await openPaletteWorkspace(page, true, [busy, fresh])
-  // A step does not promote a session live, so Home keeps its loaded order. The server already lists the busy session
-  // first, and search shows that order on every open.
+  // A step bumps the busy session's time on the server, but only a finished run reorders recent sessions.
   busy.time.updated = 1700000002000
   // SAFETY: a step in a session whose transcript is not open; only its session ID and time matter here.
   await mock.push([
@@ -350,7 +349,7 @@ test("titlebar search opens recent sessions in the server's order on every open"
     const listed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/session")
     await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
     await listed
-    await expect(dialog.getByRole("option")).toHaveText([/Palette fixture session/, /Fresh fixture session/])
+    await expect(dialog.getByRole("option")).toHaveText([/Fresh fixture session/, /Palette fixture session/])
     await dialog.getByRole("combobox").press("Escape")
     await expect(dialog).toHaveCount(0)
   }
@@ -358,7 +357,7 @@ test("titlebar search opens recent sessions in the server's order on every open"
   await openAndClose()
   await openAndClose()
 
-  expect(await page.evaluate(() => window.__paletteOrders)).toEqual([[paletteSession.title, fresh.title]])
+  expect(await page.evaluate(() => window.__paletteOrders)).toEqual([[fresh.title, paletteSession.title]])
 })
 
 const olderSession = {
