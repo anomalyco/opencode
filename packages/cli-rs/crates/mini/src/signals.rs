@@ -18,7 +18,7 @@ pub fn show_timing() -> bool {
     std::env::var("OPENCODE_SHOW_TTFD").is_ok_and(|value| matches!(value.to_lowercase().as_str(), "1" | "true"))
 }
 
-/// The JSONL trace (`createTrace`), on when `OPENCODE_DIRECT_TRACE` is set to anything.
+/// The JSONL trace (`createTrace`), on when `OPENCODE_DIRECT_TRACE` is set and not empty.
 #[derive(Clone)]
 pub struct Trace {
     path: PathBuf,
@@ -29,7 +29,7 @@ pub struct Trace {
 impl Trace {
     /// Starts a trace under `<log>/direct/<stamp>-<pid>.jsonl` and points `<log>/direct/latest.json` at it.
     pub fn from_env(log: &Path, cwd: &str, argv: &[String]) -> Option<Self> {
-        std::env::var_os("OPENCODE_DIRECT_TRACE")?;
+        std::env::var_os("OPENCODE_DIRECT_TRACE").filter(|value| !value.is_empty())?;
         Self::start(log, std::process::id(), cwd, argv)
             .inspect_err(|error| log::warn!("mini trace failed to start: {error}"))
             .ok()
