@@ -157,7 +157,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -946,7 +946,7 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 [[package]]
 name = "opentui"
 version = "0.8.3"
-source = "git+https://github.com/anomalyco/opentui?rev=c08bb0e90176196a840c0368fa2b54baa960173b#c08bb0e90176196a840c0368fa2b54baa960173b"
+source = "git+https://github.com/anomalyco/opentui?rev=48b6da69de5c81acc319dc63b0ba8144d80173d5#48b6da69de5c81acc319dc63b0ba8144d80173d5"
 dependencies = [
  "libc",
  "opentui-sys",
@@ -963,7 +963,7 @@ dependencies = [
 [[package]]
 name = "opentui-sys"
 version = "0.8.3"
-source = "git+https://github.com/anomalyco/opentui?rev=c08bb0e90176196a840c0368fa2b54baa960173b#c08bb0e90176196a840c0368fa2b54baa960173b"
+source = "git+https://github.com/anomalyco/opentui?rev=48b6da69de5c81acc319dc63b0ba8144d80173d5#48b6da69de5c81acc319dc63b0ba8144d80173d5"
 
 [[package]]
 name = "percent-encoding"
@@ -1119,7 +1119,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1175,7 +1175,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2128,7 +2128,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
