@@ -8,6 +8,8 @@ import { Effect, Exit, Fiber, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppProcess } from "@opencode/util/process"
+import { ProcessLauncher } from "@opencode/util/process-launcher"
+import { Teardown } from "@opencode/util/teardown"
 import { testEffect } from "../lib/effect"
 
 // Every test spawns a real child, so all of them use the live clock. The spawner's 1s post-exit capture deadline
@@ -391,6 +393,170 @@ describe("AppProcess", () => {
         expect(Exit.isFailure(exit)).toBe(true)
       }),
     )
+  })
+
+  describe("launcher thread", () => {
+    const run = (file: string, args: string[], maxOutputBytes?: number) =>
+      Effect.gen(function* () {
+        const launcher = yield* ProcessLauncher.thread()
+        expect(launcher).toBeDefined()
+        return yield* ProcessLauncher.run(
+          launcher!,
+          { file, args, stdin: "ignore", combineOutput: false, maxOutputBytes },
+          file,
+        )
+      })
+
+    it.live(
+      "returns the exit code and the collected, capped output",
+      Effect.gen(function* () {
+        const script = "process.stdout.write('0123456789');process.stderr.write('err');process.exit(3)"
+        const reply = yield* run(NODE, ["-e", script], 5)
+        expect(reply).toMatchObject({ code: 3, signal: null, stdoutTruncated: true, stderrTruncated: false })
+        if (reply.type !== "exited") return
+        expect(Buffer.from(reply.stdout).toString("utf8")).toBe("01234")
+        expect(Buffer.from(reply.stderr).toString("utf8")).toBe("err")
+      }),
+    )
+
+    it.live(
+      "reports a command that cannot start",
+      Effect.gen(function* () {
+        const reply = yield* run(path.join(tmpdir(), `opencode-missing-command-${randomUUID()}`), [])
+        expect(reply).toMatchObject({ error: { method: "spawn", code: "ENOENT" } })
+      }),
+    )
+
+    const spawn = (script: string) =>
+      Effect.gen(function* () {
+        const launcher = yield* ProcessLauncher.thread()
+        expect(launcher).toBeDefined()
+        const child = ProcessLauncher.spawn(launcher!, { file: NODE, args: ["-e", script], stdout: true, stderr: true })
+        const closed = new Promise<readonly [number | null, NodeJS.Signals | null]>((resolve) =>
+          child.once("close", (code, signal) => resolve([code, signal])),
+        )
+        return { child, closed }
+      })
+    const text = (stream: NodeJS.ReadableStream | null) =>
+      new Promise<string>((resolve) => {
+        const chunks: Buffer[] = []
+        stream?.on("data", (chunk: Buffer) => chunks.push(chunk)).once("end", () => resolve(Buffer.concat(chunks).toString()))
+      })
+
+    it.live(
+      "streams a spawned child's output and reports its exit",
+      Effect.gen(function* () {
+        const { child, closed } = yield* spawn("process.stdout.write('out');process.stderr.write('err');process.exit(3)")
+        const [stdout, stderr, [code, signal]] = yield* Effect.promise(() =>
+          Promise.all([text(child.stdout), text(child.stderr), closed]),
+        )
+        expect(child.pid).toBeGreaterThan(0)
+        expect({ stdout, stderr, code, signal }).toEqual({ stdout: "out", stderr: "err", code: 3, signal: null })
+      }),
+    )
+
+    it.live(
+      "holds back a spawned child that writes faster than it is read, and loses nothing",
+      Effect.gen(function* () {
+        const megabytes = 16
+        const script = `const b=Buffer.alloc(1<<20,97);let n=0;const w=()=>{while(n<${megabytes}){n++;if(!process.stdout.write(b))return process.stdout.once('drain',w)}};w()`
+        const { child, closed } = yield* spawn(script)
+        const stdout = child.stdout!
+        let bytes = 0
+        let buffered = 0
+        // A reader that takes one chunk per event-loop turn, far slower than the child writes.
+        stdout.on("data", (chunk: Buffer) => {
+          bytes += chunk.length
+          buffered = Math.max(buffered, stdout.readableLength)
+          stdout.pause()
+          setImmediate(() => stdout.resume())
+        })
+        const [code] = yield* Effect.promise(() => closed)
+        expect(code).toBe(0)
+        expect(bytes).toBe(megabytes << 20)
+        // Unread output stays bounded by the launcher's window instead of growing with what the child wrote.
+        expect(buffered).toBeLessThan(4 << 20)
+      }),
+    )
+
+    it.live(
+      "kills a spawned child",
+      Effect.gen(function* () {
+        const { child, closed } = yield* spawn("process.stdout.write('ready');setInterval(()=>{},60000)")
+        yield* Effect.promise(() => new Promise<void>((resolve) => child.stdout!.once("data", () => resolve())))
+        const pid = child.pid!
+        expect(child.kill()).toBe(true)
+        yield* Effect.promise(() => closed)
+        expect(() => process.kill(pid, 0)).toThrow()
+        expect(child.kill()).toBe(false)
+      }),
+    )
+
+    // Only Windows acts on ProcessLauncher.Enabled, so only there do these differ from the in-process tests above.
+    if (process.platform === "win32") {
+      const offThread = Effect.provideService(ProcessLauncher.Enabled, true)
+
+      it.live(
+        "run returns the same result shape off the calling thread",
+        Effect.gen(function* () {
+          const svc = yield* AppProcess.Service
+          const script = "process.stdin.on('data', c => process.stdout.write(c));process.stderr.write('0123456789')"
+          const result = yield* svc.run(cmd("-e", script), { stdin: "hello", maxErrorBytes: 5 }).pipe(offThread)
+          expect(result).toMatchObject({ exitCode: 0, stdoutTruncated: false, stderrTruncated: true })
+          expect(result.command).toBe(`${NODE} -e ${script}`)
+          expect(result.stdout.toString("utf8")).toBe("hello")
+          expect(result.stderr.toString("utf8")).toBe("01234")
+        }),
+      )
+
+      it.live(
+        "run combines output in emission order off the calling thread",
+        Effect.gen(function* () {
+          const svc = yield* AppProcess.Service
+          const script = [
+            'process.stdout.write("out 1\\n")',
+            'setTimeout(() => process.stderr.write("err 1\\n"), 100)',
+            'setTimeout(() => process.stdout.write("out 2\\n"), 200)',
+          ].join(";")
+          const result = yield* svc.run(cmd("-e", script), { combineOutput: true }).pipe(offThread)
+          expect(result.output?.toString("utf8")).toBe("out 1\nerr 1\nout 2\n")
+          expect(result.stdout.length + result.stderr.length).toBe(0)
+        }),
+      )
+
+      it.live(
+        "run maps a missing working directory to AppProcessError off the calling thread",
+        Effect.gen(function* () {
+          const svc = yield* AppProcess.Service
+          const error = yield* svc.run(ChildProcess.make(NODE, [], { cwd: MISSING_CWD })).pipe(offThread, Effect.flip)
+          expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+          expect(error.command).toBe(NODE)
+        }),
+      )
+
+      it.live(
+        "run launches off the calling thread, and interruption stops the child before it returns",
+        Effect.acquireUseRelease(
+          Effect.promise(() => fs.mkdtemp(path.join(tmpdir(), "opencode-process-launcher-"))),
+          (directory) => {
+            const ready = path.join(directory, "ready")
+            const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready + ".tmp")},String(process.pid));fs.renameSync(${JSON.stringify(ready + ".tmp")},${JSON.stringify(ready)});setInterval(()=>{},60000)`
+            // The launcher thread tracks a pending run without a pid; the in-process spawner tracks "child <pid>".
+            const pending = () => Teardown.pending().some((entry) => entry.label.startsWith(`child running: ${NODE}`))
+            return Effect.gen(function* () {
+              const svc = yield* AppProcess.Service
+              const fiber = yield* svc.run(cmd("-e", script)).pipe(offThread, Effect.forkChild)
+              const pid = Number(yield* waitForFile(ready))
+              expect(pending()).toBe(true)
+              yield* Fiber.interrupt(fiber)
+              expect(pending()).toBe(false)
+              expect(() => process.kill(pid, 0)).toThrow()
+            })
+          },
+          (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+        ),
+      )
+    }
   })
 
   describe("spawn (inherited)", () => {

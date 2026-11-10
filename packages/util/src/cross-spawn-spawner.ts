@@ -27,9 +27,11 @@ import {
 // ast-grep-ignore: no-star-import
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
+import type { Worker } from "node:worker_threads"
 import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem, path } from "./effect/app-node-platform.js"
+import { ProcessLauncher } from "./process-launcher.js"
 import { Teardown } from "./teardown.js"
 
 /** Closing a child's scope escalates to SIGKILL after this, unless the command sets its own `forceKillAfter`. */
@@ -121,7 +123,7 @@ const flatten = (command: ChildProcess.Command) => {
   }
 }
 
-const toPlatformError = (
+export const toPlatformError = (
   method: string,
   err: NodeJS.ErrnoException,
   command: ChildProcess.Command,
@@ -382,11 +384,37 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     )
   }
 
-  const launchProcess = (command: ChildProcess.StandardCommand, file: string, opts: NodeChildProcess.SpawnOptions) =>
+  // The launcher thread takes a Windows child that has no input and plain piped or ignored output. Anything else
+  // (input, extra descriptors, inherited stdio, a detached group) is created here.
+  const offThread = (opts: NodeChildProcess.SpawnOptions) =>
+    globalThis.process.platform === "win32" &&
+    !opts.detached &&
+    Array.isArray(opts.stdio) &&
+    opts.stdio.length === 3 &&
+    opts.stdio[0] === "ignore" &&
+    opts.stdio.slice(1).every((stream) => stream === "overlapped" || stream === "ignore")
+
+  const launchProcess = (
+    command: ChildProcess.StandardCommand,
+    file: string,
+    opts: NodeChildProcess.SpawnOptions,
+    launcher: Worker | undefined,
+  ) =>
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(file, command.args.map(unwrap), opts)
+      const proc = launcher
+        ? ProcessLauncher.spawn(launcher, {
+            file,
+            args: command.args.map(unwrap),
+            cwd: opts.cwd === undefined ? undefined : String(opts.cwd),
+            // The launcher thread's own environment can be stale, so it always gets this thread's.
+            env: { ...(opts.env ?? globalThis.process.env) },
+            shell: opts.shell,
+            stdout: Array.isArray(opts.stdio) && opts.stdio[1] !== "ignore",
+            stderr: Array.isArray(opts.stdio) && opts.stdio[2] !== "ignore",
+          })
+        : launch(file, command.args.map(unwrap), opts)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
@@ -432,7 +460,13 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     opts: NodeChildProcess.SpawnOptions,
   ) {
     yield* Effect.logDebug("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
-    const [proc, closed, exited, settle] = yield* launchProcess(command, yield* executable(command.command), opts)
+    const launcher = offThread(opts) && (yield* ProcessLauncher.Enabled) ? yield* ProcessLauncher.thread() : undefined
+    const [proc, closed, exited, settle] = yield* launchProcess(
+      command,
+      yield* executable(command.command),
+      opts,
+      launcher,
+    )
     const stopOutput = yield* Deferred.make<void>()
     // Register before process release so the deadline remains active during termination.
     yield* Effect.forkScoped(
@@ -471,6 +505,10 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
   ) => {
     if (globalThis.process.platform === "win32") {
       return Effect.callback<void, PlatformError.PlatformError>((resume) => {
+        // A child on the launcher thread is stopped there, so stopping it does not create a process here either.
+        if (proc instanceof ProcessLauncher.RemoteChild) {
+          return proc.killTree((err) => resume(err ? Effect.fail(toPlatformError("kill", err, command)) : Effect.void))
+        }
         NodeChildProcess.exec(`taskkill /pid ${proc.pid} /T /F`, { windowsHide: true }, (err) => {
           if (err) return resume(Effect.fail(toPlatformError("kill", toError(err), command)))
           resume(Effect.void)

@@ -7,6 +7,7 @@ import { Cause, Deferred, Effect, Exit, PlatformError, Redacted, Stream } from "
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { ProcessLauncher } from "@opencode/util/process-launcher"
 import { Teardown } from "@opencode/util/teardown"
 import { appExecutionAlias } from "../fixture/app-execution-alias"
 import { testEffect } from "../lib/effect"
@@ -259,10 +260,13 @@ describe("cross-spawn spawner", () => {
   })
 
   describe("process control", () => {
-    for (const mode of ["exit", "SIGKILL"] as const) {
+    // Windows can create a child with no input on the launcher thread; the same contracts hold there.
+    const threads = process.platform === "win32" ? [false, true] : [false]
+    const cases = threads.flatMap((offThread) => (["exit", "SIGKILL"] as const).map((mode) => ({ offThread, mode })))
+    for (const { offThread, mode } of cases) {
       const test = mode === "SIGKILL" && process.platform === "win32" ? fx.live.skip : fx.live
       test(
-        `finishes capture after ${mode} while a grandchild holds stdio`,
+        `finishes capture after ${mode} while a grandchild holds stdio${offThread ? " (launcher thread)" : ""}`,
         Effect.gen(function* () {
           const tmp = yield* Effect.acquireRelease(
             Effect.promise(() => tmpdir()),
@@ -300,8 +304,30 @@ describe("cross-spawn spawner", () => {
           if (Exit.isSuccess(exit)) expect(exit.value).toBe(ChildProcessSpawner.ExitCode(0))
           expect(yield* handle.isRunning).toBe(false)
           expect(alive(Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8"))))).toBe(true)
-        }),
+        }).pipe(Effect.provideService(ProcessLauncher.Enabled, offThread)),
         10_000,
+      )
+    }
+
+    if (process.platform === "win32") {
+      fx.live(
+        "streams output, reports the exit code and kills a child on the launcher thread",
+        Effect.gen(function* () {
+          const finished = yield* js('process.stdout.write("out");process.stderr.write("err");process.exit(7)', {
+            stdin: "ignore",
+          })
+          const [stdout, stderr, code] = yield* Effect.all(
+            [decodeByteStream(finished.stdout), decodeByteStream(finished.stderr), finished.exitCode],
+            { concurrency: "unbounded" },
+          )
+          expect({ stdout, stderr, code }).toEqual({ stdout: "out", stderr: "err", code: ChildProcessSpawner.ExitCode(7) })
+
+          const running = yield* js("setInterval(() => {}, 10_000)", { stdin: "ignore" })
+          expect(yield* running.isRunning).toBe(true)
+          yield* running.kill()
+          expect(yield* running.isRunning).toBe(false)
+          expect(alive(running.pid)).toBe(false)
+        }).pipe(Effect.provideService(ProcessLauncher.Enabled, true)),
       )
     }
 

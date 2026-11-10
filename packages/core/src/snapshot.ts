@@ -5,6 +5,8 @@ import path from "path"
 import { Clock, Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FSUtil } from "@opencode/util/fs-util"
+import { ProcessLauncher } from "@opencode/util/process-launcher"
+import { Flag } from "./flag.js"
 import { Git } from "./git.js"
 import { Global } from "@opencode/util/global"
 import { Location } from "./location.js"
@@ -73,6 +75,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
+    const flags = yield* Flag.Service
     const git = yield* Git.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
@@ -216,14 +219,27 @@ const layer = Layer.effect(
         .pipe(Effect.mapError((cause) => failure("restore", cause)))
     })
 
-    return Service.of({ transform: state.transform, reload: state.reload, capture, files, diff, restore })
+    // Snapshot Git commands are most of a busy server's process launches; see ProcessLauncher.Enabled.
+    const launched = <A, E>(effect: Effect.Effect<A, E>) =>
+      Effect.flatMap(flags.enabled("process_launcher"), (enabled) =>
+        Effect.provideService(effect, ProcessLauncher.Enabled, enabled),
+      )
+
+    return Service.of({
+      transform: state.transform,
+      reload: state.reload,
+      capture: () => launched(capture()),
+      files: (input) => launched(files(input)),
+      diff: (input) => launched(diff(input)),
+      restore: (input) => launched(restore(input)),
+    })
   }).pipe(Effect.withSpan("Snapshot.boot")),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Git.node, Global.node, Location.node],
+  deps: [Flag.node, FSUtil.node, Git.node, Global.node, Location.node],
 })
 
 export const noopLayer = Layer.succeed(

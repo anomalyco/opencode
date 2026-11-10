@@ -16686,6 +16686,9 @@
               "codemode_vm": {
                 "type": "boolean"
               },
+              "process_launcher": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },
