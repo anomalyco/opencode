@@ -5,7 +5,10 @@
 //! the persistent PTY, authenticates with a `ticket` query parameter that the caller first requests over
 //! HTTP with `x-opencode-ticket: 1`; other sockets send the `authorization` header in the handshake.
 
+use std::time::Duration;
+
 use tokio::net::TcpStream;
+use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
@@ -66,6 +69,41 @@ pub async fn connect(url: &Url, headers: &[(String, String)]) -> Result<Socket, 
     let connector = tokio_tungstenite::Connector::Rustls(crate::transport::tls_config());
     let (socket, _) = tokio_tungstenite::connect_async_tls_with_config(request, None, false, Some(connector)).await?;
     Ok(socket)
+}
+
+/// How long a closing socket waits for the peer to answer its close frame.
+pub const CLOSE_GRACE: Duration = Duration::from_secs(1);
+
+/// Runs `reader` until it ends, or until `writer` ends (its sender dropped after the close frame went out,
+/// at most [`CLOSE_GRACE`] later) and the peer had [`CLOSE_GRACE`] to answer. The split halves share one
+/// stream, so a reader parked on a silent peer would otherwise keep the TCP stream open for good.
+pub async fn read_until_closed(reader: impl Future<Output = ()>, writer: oneshot::Receiver<()>) {
+    let closed = async {
+        let _ = writer.await;
+        tokio::time::sleep(CLOSE_GRACE).await;
+    };
+    tokio::select! {
+        () = reader => {}
+        () = closed => {}
+    }
+}
+
+/// A server that accepts one socket and then never reads it, so it never answers a close frame. The
+/// task ends once the client closes the TCP stream.
+#[cfg(test)]
+pub(crate) async fn silent_peer() -> (Url, tokio::task::JoinHandle<()>) {
+    use tokio::io::AsyncReadExt;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+        let mut buffer = [0_u8; 256];
+        let eof = async { while socket.get_mut().read(&mut buffer).await.unwrap_or(0) > 0 {} };
+        tokio::time::timeout(std::time::Duration::from_secs(10), eof).await.expect("the client kept the stream open");
+    });
+    (crate::js::parse_url(&format!("ws://{address}/socket")).unwrap(), server)
 }
 
 #[cfg(test)]
