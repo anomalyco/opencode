@@ -8,6 +8,7 @@ import { State } from "./state.js"
 import { Location } from "./location.js"
 import { freeze } from "immer"
 import { AISDKNative } from "./aisdk-native.js"
+import { Variant } from "./variant.js"
 
 export const ID = Model.ID
 export type ID = typeof ID.Type
@@ -43,6 +44,9 @@ export const Cost = Model.Cost
 
 export const Type = Model.Type
 export type Type = Model.Type
+
+export const ReasoningControl = Model.ReasoningControl
+export type ReasoningControl = Model.ReasoningControl
 
 export const Ref = Model.Ref
 export type Ref = typeof Ref.Type
@@ -204,7 +208,7 @@ const layer = Layer.effect(
                 Array.from(models, ([id, model]) => {
                   const reusable = merged.get(model)
                   if (reusable && reusable.provider === provider) return [id, reusable.model]
-                  const value = {
+                  const effective = {
                     ...model,
                     ...(provider?.canonical === undefined ? {} : { canonical: provider.canonical }),
                     package: model.package ?? provider?.package,
@@ -219,6 +223,8 @@ const layer = Layer.effect(
                     headers: Provider.mergeHeaders(provider?.headers, model.headers),
                     body: Provider.mergeOverlay(provider?.body, model.body),
                   } satisfies Info
+                  // Spelled here, where the final package, API model ID and limits are known.
+                  const value = { ...effective, variants: Variant.materialize(effective) }
                   merged.set(model, { provider, model: value })
                   return [id, value]
                 }),

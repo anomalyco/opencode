@@ -188,6 +188,11 @@ export type ModelMediaInput = "assets" | "state" | "root"
 
 export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string>; temperature?: boolean }
 
+export type ModelReasoningControl =
+  | { type: "effort"; values?: Array<string> }
+  | { type: "toggle" }
+  | { type: "budget_tokens"; min?: number; max?: number }
+
 export type MoneyUSDPerMillionTokens = number
 
 export type GenerateTextResponse = { data: { text: string } }
@@ -2304,6 +2309,7 @@ export type ModelInfo = {
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
   capabilities: ModelCapabilities
+  reasoning?: Array<ModelReasoningControl>
   variants: Array<ModelVariant>
   time: { released: number }
   cost: Array<ModelCost>

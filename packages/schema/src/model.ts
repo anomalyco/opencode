@@ -110,6 +110,18 @@ export const Variant = Schema.Struct({
   settings: VariantSettings.pipe(optional),
 }).annotate({ identifier: "Model.Variant" })
 
+/** A reasoning control the model accepts. The default variants are spelled from these for the model's final package. */
+export const ReasoningControl = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("effort"), values: Schema.String.pipe(Schema.Array, optional) }),
+  Schema.Struct({ type: Schema.Literal("toggle") }),
+  Schema.Struct({
+    type: Schema.Literal("budget_tokens"),
+    min: Schema.Int.pipe(optional),
+    max: Schema.Int.pipe(optional),
+  }),
+]).annotate({ identifier: "Model.ReasoningControl" })
+export type ReasoningControl = typeof ReasoningControl.Type
+
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
@@ -123,6 +135,8 @@ export const Info = Schema.Struct({
   package: Provider.Package.pipe(optional),
   ...Overlays,
   capabilities: Capabilities,
+  /** Explicit `variants` overlay the ones spelled from these by id. */
+  reasoning: Schema.Array(ReasoningControl).pipe(optional),
   variants: Schema.Array(Variant),
   time: Schema.Struct({
     released: Schema.Finite,

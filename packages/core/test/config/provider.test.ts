@@ -882,7 +882,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("respells inherited variants when config moves a catalog model to another package", () =>
+  it.effect("spells inherited reasoning for the package config moves a catalog model to", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
       const models = yield* Model.Service
@@ -891,12 +891,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       yield* providers.transform((editor) => {
         editor.models.update(providerID, modelID, (model) => {
           model.package = "@opencode/ai/providers/amazon-bedrock"
-          model.variants = [
-            {
-              id: Model.VariantID.make("high"),
-              body: { additionalModelRequestFields: { output_config: { effort: "high" } } },
-            },
-          ]
+          model.reasoning = [{ type: "effort", values: ["high"] }]
         })
       })
       yield* addPlugin([

@@ -104,36 +104,17 @@ export const Plugin = define({
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const source = definition.models.get(id)
           const existing = models.get(providerID, id)
-          const hadVariants = (existing?.variants.length ?? 0) > 0
           const inherit = source?.inherit || !existing
-          overlay(
-            models,
-            models.provider.get(providerID)?.provider.package,
-            item,
-            providerID,
-            id,
-            config,
-            inherit && source?.base ? { base: source.base } : undefined,
-          )
-          // Inherited variants are spelled for the base model's package, so a package override needs fresh ones.
-          // A base without variants has no reasoning support to respell.
-          const repackaged =
-            source?.base !== undefined &&
-            source.base.variants.length > 0 &&
-            models.get(providerID, id)?.package !== source.base.package
+          overlay(models, item, providerID, id, config, inherit && source?.base ? { base: source.base } : undefined)
+          // A custom model gets the protocol's default efforts. Non-empty variants here came from an earlier transform.
           if (
+            !source?.base &&
+            !existing?.variants.length &&
             config.variants === undefined &&
-            config.capabilities?.reasoning === undefined &&
-            // Custom models start without variants, so non-empty variants here came from an earlier transform.
-            ((!source?.base && !hadVariants) || repackaged)
+            config.capabilities?.reasoning === undefined
           )
             models.update(providerID, id, (model) => {
-              model.variants = [
-                ...Variant.resolve({
-                  ...model,
-                  package: model.package ?? models.provider.get(providerID)?.provider.package,
-                }),
-              ]
+              model.reasoning ??= [{ type: "effort" }]
             })
         }
       }
@@ -160,7 +141,7 @@ export function integrate(providers: ProviderEditor, document: ConfigIntegration
     // An integration lists the models it routes: each starts again from the catalog and takes the provider's
     // package and URL. Its models are complete here, so later model transforms and config apply on top.
     for (const [id, config] of Object.entries(item.models ?? {})) {
-      overlay(providers.models, providers.get(providerID)?.provider.package, item, providerID, id, config, {
+      overlay(providers.models, item, providerID, id, config, {
         base: source?.models.get(config.modelID ?? id) ?? source?.models.get(id),
       })
     }
@@ -207,7 +188,6 @@ function overlayProvider(
 /** Applies one configured model, first resetting it to `inherit.base` when it starts again from the catalog. */
 function overlay(
   models: Pick<ModelEditor, "update">,
-  providerPackage: string | undefined,
   item: ConfigProvider.Info,
   providerID: string,
   id: string,
@@ -234,16 +214,13 @@ function overlay(
       model.capabilities = Model.mergeCapabilities(config.capabilities, model.capabilities)
     if (config.limit !== undefined) model.limit = { ...model.limit, ...config.limit }
   })
-  // Variants are spelled for the final package, which the update above normalizes from `aisdk:*`.
+  // Configured variants are added after the update above normalizes the package from `aisdk:*`.
   models.update(providerID, id, (model) => {
-    // Configured reasoning replaces the base variants; configured variants still overlay them below.
-    if (config.capabilities?.reasoning !== undefined)
-      model.variants = [
-        ...Variant.resolve(
-          { ...model, package: model.package ?? providerPackage },
-          Variant.supports(config.capabilities.reasoning),
-        ),
-      ]
+    // Configured reasoning replaces the base reasoning and variants; configured variants still overlay them below.
+    if (config.capabilities?.reasoning !== undefined) {
+      model.reasoning = Variant.supports(config.capabilities.reasoning)
+      model.variants = []
+    }
     if (config.variants !== undefined) {
       model.variants ??= []
       for (const variant of config.variants) {

@@ -444,15 +444,7 @@ function deriveModel(remote: RemoteModel, previous: Model.Info): Model.Info {
       ...previous.capabilities,
       input: remote.input_modalities.filter((modality) => modality === "text" || modality === "image"),
     },
-    variants: [
-      ...previous.variants.filter((variant) => typeof variant.settings?.reasoningEffort !== "string"),
-      ...(remote.supported_reasoning_levels ?? []).map(
-        ({ effort }) =>
-          previous.variants.find(
-            (variant) => variant.id === effort && variant.settings?.reasoningEffort === effort,
-          ) ?? { id: Model.VariantID.make(effort), settings: { reasoningEffort: effort } },
-      ),
-    ],
+    reasoning: [{ type: "effort", values: (remote.supported_reasoning_levels ?? []).map(({ effort }) => effort) }],
     limit: { context: remote.context_window, output: previous.limit.output },
   }
 }

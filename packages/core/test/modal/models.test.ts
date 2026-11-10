@@ -98,7 +98,7 @@ test("maps live Modal models onto catalog templates", async () => {
   }
 })
 
-test("keeps template cost and limits when the proxy omits them", async () => {
+test("keeps template cost, limits and reasoning when the proxy omits them", async () => {
   const server = Bun.serve({
     port: 0,
     fetch: () =>
@@ -117,12 +117,14 @@ test("keeps template cost and limits when the proxy omits them", async () => {
         },
       ],
       limit: { context: 1000, input: 500, output: 250 },
+      reasoning: [{ type: "effort", values: ["low", "high"] }],
     })
     const models = await run((http) => ModalModels.get(http, server.url.origin, "test-key", [base]))
     const model = models.get(Model.ID.make("sparse"))
     expect(model?.name).toBe("hf-base catalog")
     expect(model?.cost[0]).toMatchObject({ input: 5, output: 10, cache: { read: 1, write: 2 } })
     expect(model?.limit).toMatchObject({ context: 1000, input: 500, output: 250 })
+    expect(model?.reasoning).toEqual([{ type: "effort", values: ["low", "high"] }])
   } finally {
     await server.stop(true)
   }

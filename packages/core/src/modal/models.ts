@@ -115,6 +115,7 @@ function build(id: Model.ID, remote: RemoteModel, baseURL: string, previous?: Mo
       input: remote.input_modalities ?? previous?.capabilities.input ?? ["text"],
       output: remote.output_modalities ?? previous?.capabilities.output ?? ["text"],
     },
+    ...(remote.reasoning_options === undefined && previous?.reasoning ? { reasoning: previous.reasoning } : {}),
     variants: remote.reasoning_options === undefined ? (previous?.variants ?? []) : variants(remote),
     time: previous?.time ?? { released: 0 },
     cost: [

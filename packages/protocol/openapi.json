@@ -20651,6 +20651,12 @@
           "capabilities": {
             "$ref": "#/components/schemas/Model.Capabilities"
           },
+          "reasoning": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Model.ReasoningControl"
+            }
+          },
           "variants": {
             "type": "array",
             "items": {
@@ -20725,6 +20731,59 @@
       "Model.MediaInput": {
         "type": "string",
         "enum": ["assets", "state", "root"]
+      },
+      "Model.ReasoningControl": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["effort"]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["type"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["toggle"]
+              }
+            },
+            "required": ["type"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["budget_tokens"]
+              },
+              "min": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "max": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["type"],
+            "additionalProperties": false
+          }
+        ]
       },
       "Model.ReasoningField": {
         "anyOf": [

@@ -1,16 +1,13 @@
 export * as Variant from "./variant.js"
 
 import { ConfigProvider } from "@opencode/schema/config/provider"
-import { Model } from "./model.js"
+import { Model } from "@opencode/schema/model"
 import { Provider } from "./provider.js"
 
-export type Support =
-  | { readonly type: "effort"; readonly values?: readonly string[] }
-  | { readonly type: "toggle" }
-  | { readonly type: "budget_tokens"; readonly min?: number; readonly max?: number }
+export type Support = Model.ReasoningControl
 
 /** Reasoning controls in models.dev v2's shape, where `default` is the provider default rather than a variant. */
-export function supports(reasoning: ConfigProvider.Reasoning): readonly Support[] {
+export function supports(reasoning: ConfigProvider.Reasoning) {
   if (!reasoning.supported) return []
   return [
     ...(reasoning.toggle ? [{ type: "toggle" as const }] : []),
@@ -26,7 +23,31 @@ type Overlay = Omit<Variants[number], "id">
 
 type Protocol = (model: Model.Info, support: Support) => Variants
 
-export function resolve(model: Model.Info, supports: readonly Support[] = [{ type: "effort" }]): Variants {
+/**
+ * The model's variants: its reasoning controls spelled for its final package, overlaid by id with its explicit
+ * variants (plugins, then config), followed by explicit variants with new ids.
+ */
+export function materialize(model: Model.Info): Variants {
+  const spelled = resolve(model, model.reasoning ?? [])
+  return [
+    ...spelled.map((variant) => {
+      const own = model.variants.find((item) => item.id === variant.id)
+      if (!own) return variant
+      const settings = Provider.mergeOverlay(variant.settings, own.settings)
+      const headers = Provider.mergeHeaders(variant.headers, own.headers)
+      const body = Provider.mergeOverlay(variant.body, own.body)
+      return {
+        id: variant.id,
+        ...(settings === undefined ? {} : { settings }),
+        ...(headers === undefined ? {} : { headers }),
+        ...(body === undefined ? {} : { body }),
+      }
+    }),
+    ...model.variants.filter((variant) => !spelled.some((item) => item.id === variant.id)),
+  ]
+}
+
+export function resolve(model: Model.Info, supports: readonly Support[]): Variants {
   const protocol = model.package === undefined ? undefined : PROTOCOLS[model.package]
   if (!protocol) return []
   const toggle = supports.some((support) => support.type === "toggle") ? protocol(model, { type: "toggle" }) : []
@@ -247,7 +268,8 @@ const deepinfraChat: Protocol = (model, support) => {
 }
 
 const openaiCompatible: Protocol = (model, support) => {
-  if (model.providerID === "nvidia") return nvidiaChat(model, support)
+  // An alias of NVIDIA keeps NVIDIA's chat templates.
+  if ((model.canonical ?? model.providerID) === "nvidia") return nvidiaChat(model, support)
   return openaiChat(model, support)
 }
 

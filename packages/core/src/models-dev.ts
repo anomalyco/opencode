@@ -203,18 +203,13 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>)
       const baseCost = cost(source.model.cost)
       const id = Model.ID.make(source.model.id)
       const base = modelInfo(providerID, { packageName, baseURL }, id, source, { cost: baseCost })
-      const variants = Variant.resolve(
-        { ...base, package: source.route.package },
-        Variant.supports(source.model.capabilities.reasoning),
-      )
       return [
-        { ...base, variants },
+        base,
         ...entries(source.model.experimental?.modes, decodeMode).map(([mode, options]) =>
           modelInfo(providerID, { packageName, baseURL }, Model.ID.make(`${source.model.id}-${mode}`), source, {
             name: `${source.model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`,
             cost: modeCost(source.model, baseCost, mode, options),
             request: options,
-            variants,
           }),
         ),
       ]
@@ -417,7 +412,6 @@ function modelInfo(
     readonly name?: string
     readonly cost?: Model.Info["cost"]
     readonly request?: { readonly body?: Provider.Settings; readonly headers?: Readonly<Record<string, string>> }
-    readonly variants?: NonNullable<Model.Info["variants"]>
   } = {},
 ): Model.Info {
   const model = source.model
@@ -445,7 +439,8 @@ function modelInfo(
       output: modalities(model.modalities.output),
       temperature: model.capabilities.temperature,
     },
-    variants: [...(input.variants ?? [])],
+    reasoning: Variant.supports(model.capabilities.reasoning),
+    variants: [],
     time: { released: released(model.release_date) },
     cost: (input.cost ?? cost(model.cost)).map((item) => ({
       ...item,

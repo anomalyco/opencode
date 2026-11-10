@@ -93,6 +93,7 @@ const fixtureSnapshot = [
         package: undefined,
         settings: { provider: "acme" },
         capabilities: { tools: true, input: ["text"], output: ["text"], temperature: true },
+        reasoning: [],
         variants: [],
         time: { released: Date.parse("2026-01-01") },
         cost: zeroCost,
@@ -144,6 +145,7 @@ const fixture2Snapshot = [
         package: undefined,
         settings: { provider: "beta" },
         capabilities: { tools: false, input: ["text"], output: ["text"], temperature: false },
+        reasoning: [],
         variants: [],
         time: { released: Date.parse("2026-02-01") },
         cost: zeroCost,
@@ -659,7 +661,10 @@ describe("ModelsDev Service", () => {
         compatibility: { reasoningField: "vendor_reasoning" },
         capabilities: { tools: true, input: ["text"], output: ["text"], temperature: true },
       })
-      expect(acme?.models[0]?.variants.map((variant) => String(variant.id))).toEqual(["low", "high"])
+      expect(acme?.models[0]?.reasoning).toEqual([
+        { type: "effort", values: ["low", "high"] },
+        { type: "budget_tokens", min: 1024 },
+      ])
       expect(acme?.models[0]?.cost.map((item) => [item.tier?.size, item.input, item.output])).toEqual([
         [undefined, 1, 2],
         [200000, 3, 4],
