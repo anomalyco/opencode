@@ -18,12 +18,6 @@ use serde_json::{Value, json};
 
 use crate::args::LogLevel;
 
-/// The build channel; a build without one is `local`, like the TypeScript CLI (`packages/cli/src/version.ts`).
-pub const CHANNEL: &str = match option_env!("OPENCODE_CHANNEL") {
-    Some(channel) => channel,
-    None => "local",
-};
-
 /// The log file is compacted once it passes this size, keeping about `LOG_KEEP_BYTES`.
 pub const LOG_MAX_BYTES: u64 = 50 * 1024 * 1024;
 pub const LOG_KEEP_BYTES: u64 = 25 * 1024 * 1024;
@@ -55,14 +49,16 @@ impl Options {
     pub fn from_env(flag: Option<LogLevel>) -> Self {
         let var = |name: &str| std::env::var(name).ok();
         let run = run_id();
+        // TS embeds its channel at build time (`version.ts`); the Rust client reads it at run time (plan 6.6).
+        let channel = opencode_local::channel::Channels::from_env().channel;
         Self {
             level: min_level(flag, var("OPENCODE_LOG_LEVEL").as_deref()),
             dir: opencode_local::paths::Paths::from_env().ok().map(|paths| paths.log),
-            channel: CHANNEL.to_owned(),
             print: var("OPENCODE_PRINT_LOGS").as_deref() == Some("1"),
             endpoint: var("OTEL_EXPORTER_OTLP_ENDPOINT").filter(|value| !value.is_empty()),
             headers: var("OTEL_EXPORTER_OTLP_HEADERS").filter(|value| !value.is_empty()),
-            resource: resource(&crate::env::client(), crate::help::VERSION, CHANNEL, run, |name| var(name)),
+            resource: resource(&crate::env::client(), crate::help::VERSION, &channel, run, |name| var(name)),
+            channel,
         }
     }
 }
@@ -590,6 +586,14 @@ mod tests {
 
     fn at(millis: u64) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::from_millis(millis)
+    }
+
+    // The log follows the run-time channel the service and database use (plan 6.6), so a client without
+    // `OPENCODE_CHANNEL` shares `opencode.log` with a released TS client.
+    #[test]
+    fn the_log_uses_the_run_time_channel() {
+        let channel = opencode_local::channel::Channels::from_env().channel;
+        assert_eq!(Options::from_env(None).channel, channel);
     }
 
     #[test]
