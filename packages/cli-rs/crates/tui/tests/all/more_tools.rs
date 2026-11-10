@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use opencode_api::generated::SessionID;
-use opencode_local::cli_config::{Grouping, Info, Session};
+use opencode_local::cli_config::{Grouping, Info, Session, Verbosity};
 use opencode_tui::{Deps, Route};
 use opentui::prelude::Color;
 use serde_json::{Value, json};
@@ -77,7 +77,11 @@ fn open(width: u16, height: u16, messages: Vec<Value>) -> Tools {
     let log = fake.log();
     let info = Info {
         animations: Some(false),
-        session: Some(Session { grouping: Some(Grouping::None), ..Session::default() }),
+        session: Some(Session {
+            grouping: Some(Grouping::None),
+            verbosity: Some(Verbosity::Medium),
+            ..Session::default()
+        }),
         ..Info::default()
     };
     let deps =

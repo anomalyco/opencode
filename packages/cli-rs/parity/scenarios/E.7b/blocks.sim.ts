@@ -15,7 +15,7 @@ const patch = (index: number, id: string, lines: string[]) => ({
 
 export default defineSim({
   height: 60,
-  config: { session: { grouping: "none" } },
+  config: { session: { grouping: "none", verbosity: "medium" } },
   files: {
     "src/lexer.rs": "fn peek(&self) -> Option<char> {\n    self.chars.get(self.pos + 1)\n}\n",
     "src/old.rs": "pub fn old() {}\n",

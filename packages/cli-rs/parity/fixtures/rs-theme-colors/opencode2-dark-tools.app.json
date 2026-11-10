@@ -5,7 +5,8 @@
   "directory": "/tmp/opencode/packages/tui",
   "config": {
     "session": {
-      "grouping": "none"
+      "grouping": "none",
+      "verbosity": "medium"
     },
     "theme": {
       "name": "opencode2",
