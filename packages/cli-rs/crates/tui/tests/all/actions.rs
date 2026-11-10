@@ -314,6 +314,45 @@ fn undo_reverts_to_the_last_prompt_and_puts_it_back_in_the_prompt() {
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());
 }
 
+// `projectedPromptInput` and `appendToSessionPrompt` (`codec.ts:14-37`, `draft-stash.ts:37-47`): the undone prompt
+// comes back with its files and their mentions, after the composer's own parts, in normal mode.
+#[test]
+fn undo_puts_the_attachments_back_after_the_composer_parts() {
+    let mut messages = turns();
+    messages[2] = json!({
+        "id": "msg_03", "type": "user", "text": "Review @note.ts [Image 1]", "time": { "created": 1_772_539_260_000_u64 },
+        "files": [
+            {
+                "data": "", "mime": "text/plain", "name": "note.ts",
+                "source": { "type": "uri", "uri": "file:///project/note.ts" },
+                "mention": { "start": 7, "end": 15, "text": "@note.ts" },
+            },
+            {
+                "data": "iVBORw0KGgo=", "mime": "image/png", "source": { "type": "inline" },
+                "mention": { "start": 16, "end": 25, "text": "[Image 1]" },
+            },
+        ],
+    });
+    let kit = Kit::new(session("ses_a", json!({})), messages, vec![]);
+    kit.ready();
+    kit.app.paste("one\ntwo\nthree\nfour");
+    kit.wait_for("[Pasted ~4 lines]");
+    kit.leader("u");
+    kit.wait_writes(3);
+    let restored = "[Pasted ~4 lines] \n\nReview @note.ts [Image 1]";
+    let found = kit.app.wait_until(WAIT, || kit.prompt_text() == restored);
+    assert!(found, "{:?}", kit.prompt_text());
+    kit.clear();
+    kit.app.press("return");
+    let found = kit.app.wait_until(WAIT, || kit.writes().iter().any(|write| write.contains("/prompt")));
+    let writes = kit.writes();
+    assert!(found, "{writes:?}");
+    let body = writes.iter().find(|write| write.contains("/prompt")).unwrap();
+    assert!(body.contains(r#"one\ntwo\nthree\nfour \n\nReview @note.ts [Image 1]"#), "{body}");
+    assert!(body.contains(r#""uri":"file:///project/note.ts""#), "{body}");
+    assert!(body.contains("data:image/png;base64,iVBORw0KGgo="), "{body}");
+}
+
 #[test]
 fn undo_cancels_a_prompt_still_in_the_inbox() {
     let inbox = vec![json!({
