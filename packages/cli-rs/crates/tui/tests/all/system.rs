@@ -489,6 +489,19 @@ fn pair_matches_typescript() {
     assert_dialog(&app, "E.18b/pair-error", "Pair");
 }
 
+// Expected (carbon-dialogs-6): a click on a link inside the dialog opens it, as TS `Link` does.
+#[test]
+fn a_pair_link_opens_on_click() {
+    let app = TestApp::new(100, 40);
+    let tui = mount_with(&app, support::component_info(json!({})), pair_server(false)).tui;
+    pair::show(&tui);
+    let screen = wait_for(&app, "expire in");
+    let capture = opencode_tui::features::links::testing::capture();
+    let (x, y) = support::at(&screen, "http://localhost:4096").unwrap();
+    app.click(x + 2, y);
+    assert_eq!(*capture.0.opened.borrow(), ["http://localhost:4096/auth/connect/XK7Q2M"]);
+}
+
 #[test]
 fn pair_links_follow_the_server_urls() {
     let server = serde_json::from_value(json!({

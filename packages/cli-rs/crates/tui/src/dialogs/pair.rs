@@ -115,7 +115,11 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
     let theme = &cx.theme;
     let (width, height) = app.size();
     let horizontal = width >= 96;
-    let link = |url: &str| Text::new(app, vec![url.to_owned().fg(theme.text.base).link(url)]);
+    let link = |url: &str| {
+        let text = Text::new(app, vec![url.to_owned().fg(theme.text.base).link(url)]);
+        crate::features::links::open_on_click(app, &text, url.to_owned());
+        text
+    };
 
     let side = View::new(app).shrink(0.0).gap(1);
     if horizontal {
