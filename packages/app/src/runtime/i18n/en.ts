@@ -985,6 +985,12 @@ export const dict = {
   "settings.extensions.manageConfig": "Manage in opencode.json",
   "settings.extensions.addSkills": "How to add skills",
   "settings.extensions.plugins.loadFailed": "Could not load plugins",
+  "settings.extensions.sources.loadFailed": "Could not load extension sources",
+  "settings.extensions.console.temporary":
+    "Switches temporarily control MCP connections for the current project, not your Console preferences. Server configuration changes can reconnect them.",
+  "settings.extensions.console.replaced": "Replaces OpenCode Console",
+  "settings.extensions.console.connect": "Connect {{name}} in Console",
+  "settings.extensions.console.manage": "Manage {{name}} in Console",
   "project.settings.title": "Edit project",
   "project.settings.autoAccept.description": "Approve this project's permission requests without asking",
   "project.settings.autoAccept.default.on": "Use default (On)",
