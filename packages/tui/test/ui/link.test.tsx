@@ -46,6 +46,8 @@ test("plain clicks on any row of a wrapped Markdown link resolve the full URL", 
     await app.mockMouse.click(0, head)
     await app.mockMouse.click(x, head, 0, { modifiers: { ctrl: true } })
     await app.mockMouse.click(x, head, 0, { modifiers: { shift: true } })
+    await app.mockMouse.click(x, head, 0, { modifiers: { alt: true } })
+    await app.mockMouse.click(x, head, 0, { modifiers: { meta: true } as never })
     await app.mockMouse.click(x, head, 2)
     await app.mockMouse.drag(0, head, x + 2, head)
     await app.mockMouse.drag(0, 0, x + 2, head)
