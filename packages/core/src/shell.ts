@@ -49,6 +49,9 @@ export const DIRECTORY = "shell"
 const SPAN_COMMAND_LIMIT = 200
 const STOP_GRACE = Duration.seconds(3)
 const LOST = "Command was killed: the process daemon stopped"
+// Bounds the reads a result needs when the daemon did not report the line count, so stopping a call stays quick.
+const COUNT_NEWLINES_LIMIT = 16 * 1024 * 1024
+const LINE_START_SCAN_LIMIT = 1024 * 1024
 
 type Info = Shell.Info
 export type StopReason = "timeout" | "killed"
@@ -572,7 +575,10 @@ const daemonLayer = Layer.effect(
       const placed = place(location)
       const entry = { runs: placed.runs, recovered: Deferred.makeUnsafe<void>() }
       places.set(key, entry)
-      yield* placed.recover().pipe(Effect.ensuring(Deferred.succeed(entry.recovered, undefined)))
+      // Uninterruptible: the entry is shared, so a caller's interrupt must not leave it half recovered.
+      yield* placed
+        .recover()
+        .pipe(Effect.ensuring(Deferred.succeed(entry.recovered, undefined)), Effect.uninterruptible)
       return placed.runs
     })
 
@@ -758,12 +764,13 @@ const layer = () =>
       })
 
       // Only for a command whose exit report is missing (still running, or lost with the daemon); the daemon counts
-      // newlines otherwise.
+      // newlines otherwise. Gives up on large files, whose line numbers then go unreported, to keep a result quick.
       const countNewlines = (file: string, size: number) =>
         Effect.promise(
           () =>
-            new Promise<number>((resolve) => {
+            new Promise<number | undefined>((resolve) => {
               if (size === 0) return resolve(0)
+              if (size > COUNT_NEWLINES_LIMIT) return resolve(undefined)
               let count = 0
               const stream = createReadStream(file, { end: size - 1 })
               stream.on("data", (chunk: string | Buffer) => {
@@ -776,18 +783,21 @@ const layer = () =>
         )
 
       // Where the last two lines of a daemon command's output start, found by reading back from the end. Only needed
-      // to size a single cut-off line, which the spawner tracks as it writes.
+      // to size a single cut-off line, which the spawner tracks as it writes. A start further back than the scan
+      // limit is reported as unknown.
       const lineStartsOf = Effect.fnUntraced(function* (file: string, size: number) {
         const starts: number[] = []
         let end = size
-        while (end > 0 && starts.length < 2) {
-          const from = Math.max(0, end - 65536)
+        const floor = Math.max(0, size - LINE_START_SCAN_LIMIT)
+        while (end > floor && starts.length < 2) {
+          const from = Math.max(floor, end - 65536)
           const chunk = yield* readRange(file, from, end - from)
           for (let index = chunk.length - 1; index >= 0 && starts.length < 2; index--)
             if (chunk[index] === 10) starts.push(from + index + 1)
           end = from
         }
-        return [starts[1] ?? 0, starts[0] ?? 0] as [number, number]
+        const unknown = floor > 0 ? undefined : 0
+        return [starts[1] ?? unknown, starts[0] ?? unknown] as [number | undefined, number | undefined]
       })
 
       const result = Effect.fn("Shell.result")(function* (
@@ -828,7 +838,7 @@ const layer = () =>
             command.kind === "spawned"
               ? command.newlines
               : (command.outputLines ?? (yield* countNewlines(info.file, size)))
-          const total = newlines + (endsWithNewline ? 0 : 1)
+          const total = newlines === undefined ? undefined : newlines + (endsWithNewline ? 0 : 1)
           const suffix = `full output saved to ${info.file}]`
           // After a write error the daemon kept running the command, but its file stopped early.
           const stoppedEarly =
@@ -839,10 +849,15 @@ const layer = () =>
           if (partial && lines.length === 1) {
             const lineStarts = command.kind === "spawned" ? command.lineStarts : yield* lineStartsOf(info.file, size)
             const lineStart = endsWithNewline ? lineStarts[0] : lineStarts[1]
-            const lineSize = size - (endsWithNewline ? 1 : 0) - lineStart
+            const end = size - (endsWithNewline ? 1 : 0)
+            const lineSize =
+              lineStart === undefined
+                ? `over ${formatSize(Math.min(end, LINE_START_SCAN_LIMIT))}`
+                : formatSize(end - lineStart)
             const shownSize = Buffer.byteLength(lines[0])
+            const line = total === undefined ? "the last line" : `line ${total}`
             return {
-              output: `${lines[0]}\n\n[showing the last ${formatSize(shownSize)} of line ${total} (${formatSize(lineSize)}); ${suffix}${stoppedEarly}`,
+              output: `${lines[0]}\n\n[showing the last ${formatSize(shownSize)} of ${line} (${lineSize}); ${suffix}${stoppedEarly}`,
               truncated: true,
               ...killed,
             }
@@ -851,7 +866,10 @@ const layer = () =>
             // A window that starts mid-line drops that partial line so the line numbers stay exact.
             const kept = lines.slice(-Math.min(maxLines, lines.length - (partial ? 1 : 0)))
             return {
-              output: `${kept.join("\n")}\n\n[showing lines ${total - kept.length + 1}-${total} of ${total}; ${suffix}${stoppedEarly}`,
+              output:
+                total === undefined
+                  ? `${kept.join("\n")}\n\n[showing the last ${kept.length} lines; ${suffix}${stoppedEarly}`
+                  : `${kept.join("\n")}\n\n[showing lines ${total - kept.length + 1}-${total} of ${total}; ${suffix}${stoppedEarly}`,
               truncated: true,
               ...killed,
             }

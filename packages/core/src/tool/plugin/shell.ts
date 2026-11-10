@@ -139,20 +139,23 @@ const notify = Effect.fnUntraced(function* (
   const output = info.status === "completed" ? yield* Deferred.await(input.settled) : undefined
   const text = output ? (info.output ?? "") : info.status === "error" ? (info.error ?? "Command failed") : "Cancelled"
   const resume = input.resume?.()
-  yield* sessions.synthetic({
-    ...(info.notificationID ? { id: info.notificationID } : {}),
-    sessionID: input.sessionID,
-    description: input.command,
-    ...ShellResult.notification({
-      jobID: input.id,
-      shellID: input.shellID,
-      command: input.command,
-      state: info.status,
-      text,
-      output,
-    }),
-    ...(resume === false ? { resume } : {}),
-  })
+  // A session deleted while its command ran has no one left to tell.
+  yield* sessions
+    .synthetic({
+      ...(info.notificationID ? { id: info.notificationID } : {}),
+      sessionID: input.sessionID,
+      description: input.command,
+      ...ShellResult.notification({
+        jobID: input.id,
+        shellID: input.shellID,
+        command: input.command,
+        state: info.status,
+        text,
+        output,
+      }),
+      ...(resume === false ? { resume } : {}),
+    })
+    .pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
   if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
 })
 

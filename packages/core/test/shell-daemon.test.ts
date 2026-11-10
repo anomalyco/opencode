@@ -140,6 +140,35 @@ describe("Shell on the process daemon", () => {
       )
     }))
 
+  test("bounds what it reads to number lines the daemon has not counted yet", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          // Still running, so the daemon has not reported a line count, and the file is too big to count quickly.
+          const big = yield* shell.create({ shell: "/bin/sh", command: "big" })
+          env.daemon.output(1, `${"y".repeat(17 * 1024 * 1024)}\n${lines(10)}`)
+          expect((yield* shell.result(big, { wait: 0 })).capture?.output).toEndWith(
+            `line 10\n\n[showing the last 10 lines; full output saved to ${big.file}]`,
+          )
+
+          // A cut-off line that started too far back to look for.
+          const wide = yield* shell.create({ shell: "/bin/sh", command: "wide" })
+          env.daemon.output(2, `short\n${"x".repeat(2 * 1024 * 1024)}`)
+          expect((yield* shell.result(wide, { wait: 0 })).capture?.output).toEndWith(
+            `\n\n[showing the last 50 KB of line 2 (over 1024 KB); full output saved to ${wide.file}]`,
+          )
+
+          // The same, ending with a newline: the line's start is still too far back to know.
+          const ended = yield* shell.create({ shell: "/bin/sh", command: "ended" })
+          env.daemon.output(3, `short\n${"x".repeat(2 * 1024 * 1024)}\n`)
+          expect((yield* shell.result(ended, { wait: 0 })).capture?.output).toEndWith(
+            `\n\n[showing the last 50 KB of line 2 (over 1024 KB); full output saved to ${ended.file}]`,
+          )
+        }),
+      )
+    }))
+
   test("reports a command lost with the daemon as killed, with what it wrote", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
