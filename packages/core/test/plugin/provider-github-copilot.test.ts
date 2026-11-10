@@ -759,13 +759,14 @@ describe("GithubCopilotPlugin", () => {
   it.effect("offers account-enabled Auto tiers and routes again when the selected tier changes", () =>
     Effect.gen(function* () {
       const picks: unknown[] = []
-      const state = { listed: false, available: true }
+      const state = { listed: false, available: true, metadata: true }
       const api = HttpClient.make((request) =>
         Effect.sync(() => {
           if (request.url.endsWith("/copilot_internal/user"))
             return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
           if (request.url.endsWith("/meta")) {
             state.listed = true
+            if (!state.metadata) return HttpClientResponse.fromWeb(request, new Response(null, { status: 403 }))
             return HttpClientResponse.fromWeb(
               request,
               Response.json({
@@ -862,6 +863,14 @@ describe("GithubCopilotPlugin", () => {
       state.available = false
       const failed = yield* resolve("intelligence").pipe(Effect.exit)
       expect(String(failed)).toContain("could not select tier 'intelligence'")
+      expect(picks).toHaveLength(4)
+      state.metadata = false
+      state.listed = false
+      yield* connect({ apiEndpoint: "https://copilot-unavailable.test" })
+      yield* advance(() => state.listed)
+      yield* drain
+      const unverified = yield* resolve("efficiency").pipe(Effect.exit)
+      expect(String(unverified)).toContain("Could not verify Copilot Auto tier availability")
       expect(picks).toHaveLength(4)
     }),
   )

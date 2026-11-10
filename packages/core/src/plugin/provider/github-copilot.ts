@@ -257,7 +257,7 @@ export const GithubCopilotPlugin = define({
               "X-GitHub-Api-Version": apiVersion,
             }).pipe(Effect.timeout("5 seconds")),
           })
-          .pipe(Effect.orElseSucceed(() => []))
+          .pipe(Effect.orElseSucceed(() => undefined))
         return { connection, value: { baseURL: url, token: credential.refresh, models, tiers, connection } }
       }),
     })
@@ -388,7 +388,13 @@ export const GithubCopilotPlugin = define({
           if (evt.model.id !== CopilotModels.auto || evt.kind === "title") return
           const tier = evt.model.variant === "default" ? undefined : evt.model.variant
           if (tier && !discovered.current.tiers?.includes(tier))
-            return yield* Effect.die(new Error(`Copilot Auto tier '${tier}' is not enabled for this account`))
+            return yield* Effect.die(
+              new Error(
+                discovered.current.tiers
+                  ? `Copilot Auto tier '${tier}' is not enabled for this account`
+                  : "Could not verify Copilot Auto tier availability",
+              ),
+            )
           const now = yield* Clock.currentTimeMillis
           const cached = routes.get(evt.sessionID)
           const current =
