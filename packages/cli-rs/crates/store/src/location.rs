@@ -212,7 +212,7 @@ impl State {
     }
 
     /// `refreshLocation`: invalidates the catalog and reads it again where something read it.
-    fn refresh_catalog(&mut self, catalog: Catalog, location: &Location) -> Vec<Follow> {
+    pub(crate) fn refresh_catalog(&mut self, catalog: Catalog, location: &Location) -> Vec<Follow> {
         let active = self.has_catalog(catalog, location);
         self.syncs.invalidate(&catalog.key(location));
         follow_if(active, vec![catalog], location)
