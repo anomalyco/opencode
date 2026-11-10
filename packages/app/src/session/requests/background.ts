@@ -9,12 +9,11 @@ import { Option, Schema } from "effect"
 import { createMemo } from "solid-js"
 
 // `started` is when the work began running: the latest call's run time, the child session's creation, or the shell's
-// start. A subagent's `partID` names the call that still blocks the run.
+// start.
 type Subagent = {
   id: string
   type: "subagent"
-  sessionID: string | undefined
-  partID: string | undefined
+  sessionID: string
   label: string | undefined
   agent?: string
   started: number
@@ -62,18 +61,15 @@ export function createSessionBackground(input: {
       calls,
       blocking:
         assistant?.content.flatMap((part) => {
-          if (part.type !== "tool" || part.state.status !== "running") return []
-
-          if (part.name !== "shell" && part.name !== "subagent") return []
-          const shell = part.name === "shell"
+          if (part.type !== "tool" || part.state.status !== "running" || part.name !== "shell") return []
 
           return [
             {
-              type: shell ? ("shell" as const) : ("subagent" as const),
+              type: "shell" as const,
               partID: part.id,
-              id: text(shell ? part.state.metadata.shellID : part.state.metadata.sessionID),
-              label: text(shell ? part.state.input.command : part.state.input.description),
-              agent: shell ? undefined : text(part.state.input.agent),
+              id: text(part.state.metadata.shellID),
+              label: text(part.state.input.command),
+              agent: undefined,
               started: part.time.ran ?? part.time.created,
             },
           ]
@@ -83,8 +79,8 @@ export function createSessionBackground(input: {
 
   const blocking = createMemo(() => history().blocking)
 
-  // Like the TUI, a subagent runs exactly while its session, or any session below it, is running. A blocking call
-  // stands in only until its child session is known.
+  // Like the TUI, a subagent runs exactly while its session, or any session below it, is running. Subagents always run
+  // in the background, so every running descendant is background work.
   const subagents = createMemo(() => {
     const id = input.sessionID()
 
@@ -106,13 +102,8 @@ export function createSessionBackground(input: {
       return false
     }
 
-    // A call names its child once the child exists; until the call reports it, the child's title is its description.
-    const calls = current.blocking.flatMap((item) => (item.type === "subagent" ? [item] : []))
-
-    const child = (item: (typeof calls)[number], info: SessionInfo) =>
-      item.id ? info.id === item.id : !!item.label && info.parentID === id && info.title === item.label
-
-    const running = sessions.flatMap((info): Subagent[] => {
+    // The latest call for a child names it; its own session decides whether it still runs.
+    return sessions.flatMap((info): Subagent[] => {
       if (input.status(info.id) !== "running" || !descends(info.id)) return []
       const latest = current.calls.get(info.id)
 
@@ -121,36 +112,15 @@ export function createSessionBackground(input: {
           id: info.id,
           type: "subagent",
           sessionID: info.id,
-          partID: calls.find((item) => child(item, info))?.partID,
           label: latest?.label ?? info.title ?? info.id,
           agent: latest?.agent,
           started: latest?.started ?? info.time.created,
         },
       ]
     })
-
-    const pending = calls.flatMap((item): Subagent[] =>
-      sessions.some((info) => child(item, info))
-        ? []
-        : [
-            {
-              id: item.id ?? item.partID,
-              type: "subagent",
-              sessionID: item.id,
-              partID: item.partID,
-              label: item.label,
-              agent: item.agent,
-              started: item.started,
-            },
-          ],
-    )
-
-    // Work that blocks the run comes before work already in the background.
-    return [...pending, ...running.filter((task) => task.partID), ...running.filter((task) => !task.partID)]
   })
 
-  // Background work: running subagents whose call no longer blocks the run, and the session's live shells outside
-  // its blocking calls.
+  // Background work: every running subagent, and the session's live shells outside its blocking calls.
   const tasks = createMemo((): Task[] => {
     const id = input.sessionID()
 
@@ -170,10 +140,7 @@ export function createSessionBackground(input: {
       return [{ id: shell.id, type: "shell" as const, label: shell.command, started: shell.time.started }]
     })
 
-    return [
-      ...subagents().flatMap((task) => (task.partID ? [] : [{ ...task, label: task.label ?? task.id }])),
-      ...shells,
-    ]
+    return [...subagents().map((task) => ({ ...task, label: task.label ?? task.id })), ...shells]
   })
 
   return { blocking, subagents, tasks }
