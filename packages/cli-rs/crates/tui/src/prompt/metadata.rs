@@ -36,6 +36,8 @@ pub struct Catalog {
     /// The current VCS branch, for the footer.
     pub branch: Option<String>,
     pub preference: Preference,
+    /// `--model` (`args.model`).
+    pub startup: Option<Model>,
 }
 
 /// A model with its variant (`ModelSelection`).
@@ -95,7 +97,7 @@ impl Preferences {
 impl Catalog {
     /// The catalog of `location` once its agents and models are read (`promptDisplay` waits for
     /// both); the rest only label or refine the selection.
-    pub fn read(state: &State, location: &Location, preferences: &Preferences) -> Option<Self> {
+    pub fn read(state: &State, location: &Location, preferences: &Preferences, startup: Option<Model>) -> Option<Self> {
         let data = state.location(Some(location))?;
         Some(Self {
             agents: data.agent.clone()?,
@@ -105,6 +107,7 @@ impl Catalog {
             commands: data.command.iter().flatten().map(|command| command.name.clone()).collect(),
             branch: data.vcs.as_ref().and_then(|vcs| vcs.branch.current.clone()),
             preference: preferences.get(),
+            startup,
         })
     }
 
@@ -148,7 +151,7 @@ impl Catalog {
         self.info(&choice.provider_id, &choice.model_id).is_some()
     }
 
-    /// `newSessionModel`: the agent's model, then `fallbackModel` (configured, recent, first).
+    /// `newSessionModel`: the agent's model, then `fallbackModel` (`--model`, configured, recent, first).
     fn new_session_model(&self, agent: &AgentInfo) -> Option<Model> {
         let valid = |model: &Model| self.info(&model.provider_id, &model.model_id).is_some();
         agent
@@ -156,6 +159,7 @@ impl Catalog {
             .as_ref()
             .map(|model| Model::new(model.provider_id.as_str(), &model.id))
             .filter(valid)
+            .or_else(|| self.startup.clone().filter(valid))
             .or_else(|| {
                 self.configured.as_ref().map(|choice| Model::new(&choice.provider_id, &choice.model_id)).filter(valid)
             })
