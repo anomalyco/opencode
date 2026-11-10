@@ -62,14 +62,12 @@ function TabCloseMenuItems(props: TabCloseActions & { orientation?: "horizontal"
 }
 
 type SessionTabActions = TabCloseActions & {
-  /** Shows the optimistic title, or the one to restore when its save fails. */
-  onRememberTitle: (sessionID: string, title: string | undefined) => void
-  onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<void>
   onDelete: () => void
 }
 
+/** A session row: an open tab with its close actions, or a list row with its own menu that can start the inline rename. */
 export function TabNavItem(
-  props: (SessionTabActions | { menu: () => JSX.Element }) & {
+  props: (SessionTabActions | { menu: (rename: () => void) => JSX.Element }) & {
     ref?: Ref<HTMLDivElement>
     href: string
     server: ServerConnection.Key
@@ -115,6 +113,28 @@ export function TabNavItem(
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
 
   const exporter = createSessionExporter()
+
+  // Shows the optimistic title, or the one to restore when its save fails.
+  const rememberTitle = (sessionID: string, title: string | undefined) => {
+    const ctx = serverCtx()
+    const current = ctx?.data.session.get(sessionID) ?? (props.session?.id === sessionID ? props.session : undefined)
+
+    if (current) ctx?.data.session.remember({ ...current, title })
+  }
+
+  // A pointer resting on a row usually clicks it next, so its transcript loads during the dwell. Passing over loads nothing.
+  let intent: number | undefined
+
+  const hover = (hovered: boolean) => {
+    window.clearTimeout(intent)
+    const ctx = serverCtx()
+    const session = props.session
+
+    if (!hovered || !ctx || !session || props.active || ctx.sdk.connection.status() !== "connected") return
+    intent = window.setTimeout(() => void ctx.data.session.message.sync(session.id).catch(() => undefined), 100)
+  }
+
+  onCleanup(() => window.clearTimeout(intent))
 
   // The project icon stays put; status shows where the close button appears on hover.
   const status = () => {
@@ -275,10 +295,9 @@ export function TabNavItem(
       return
     }
 
-    if (effect.type === "session.remember") return actions?.onRememberTitle(effect.sessionID, effect.title)
+    if (effect.type === "session.remember") return rememberTitle(effect.sessionID, effect.title)
 
     if (effect.type === "save.start") {
-      if (!actions) return
       const attempt = effect.attempt
       const controller = new AbortController()
 
@@ -288,7 +307,15 @@ export function TabNavItem(
       )
 
       saves.set(attempt, { controller, timer })
-      void actions.onSaveTitle(effect.sessionID, effect.title, controller.signal).then(
+      const ctx = serverCtx()
+      void (
+        ctx
+          ? ctx.sdk.api.session.update(
+              { sessionID: effect.sessionID, title: effect.title },
+              { signal: controller.signal },
+            )
+          : Promise.reject(new Error(language.t("common.requestFailed")))
+      ).then(
         () => {
           clearSave(attempt)
           dispatchRename({ type: "save.succeeded", attempt, title: effect.title })
@@ -417,6 +444,8 @@ export function TabNavItem(
       data-status={status()}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}
+      onPointerEnter={() => hover(true)}
+      onPointerLeave={() => hover(false)}
       onMouseDown={(event) => {
         if (event.button !== MIDDLE_MOUSE_BUTTON) return
         event.preventDefault()
@@ -446,7 +475,7 @@ export function TabNavItem(
         }}
         onMouseDown={(event) => {
           // Navigate on mousedown to shave the press-release delay off tab switches.
-          if (event.button !== 0 || !actions) return
+          if (event.button !== 0) return
 
           if (editing()) return
 
@@ -456,8 +485,8 @@ export function TabNavItem(
         onClick={(event) => {
           event.preventDefault()
 
-          // Tabs switch on press. A list row waits for a click so beginning a drag doesn't open the session.
-          if (event.detail > 0 && actions) return
+          // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
+          if (event.detail > 0) return
 
           if (editing()) return
 
@@ -501,7 +530,6 @@ export function TabNavItem(
           }}
           contenteditable={editing() ? "plaintext-only" : undefined}
           onDblClick={(event) => {
-            if (!actions) return
             event.preventDefault()
             event.stopPropagation()
             startRename("pointer")
@@ -606,7 +634,9 @@ export function TabNavItem(
             armAfter(current.attempt, 1)
           }}
         >
-          {"menu" in props ? props.menu() : (
+          {"menu" in props ? (
+            props.menu(() => startRename("menu"))
+          ) : (
             <>
               <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
                 {language.t("common.rename")}
