@@ -52,6 +52,109 @@ describe("SessionExecution lifecycle", () => {
     expect(SessionExecution.terminal(interrupted, "user")).toEqual({ type: "interrupted", reason: "user" })
   })
 
+  it.effect("settles a run after another execution context deletes its session", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessions = yield* Session.Service
+      const store = yield* SessionStore.Service
+      const sessionID = Session.ID.make("ses_deleted_while_draining")
+      yield* seedSessions(database, [sessionID])
+
+      const running = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Deferred.succeed(running, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const run = yield* execution.resume(sessionID).pipe(Effect.forkIn(scope))
+      yield* Deferred.await(running)
+
+      // The outer Session service has no ownership of this execution, as in a second server.
+      yield* sessions.remove(sessionID)
+      yield* Deferred.succeed(release, undefined)
+
+      expect(yield* Fiber.await(run)).toEqual(Exit.void)
+      expect(yield* execution.isActive(sessionID)).toBe(false)
+      expect(yield* store.get(sessionID)).toBeUndefined()
+    }),
+  )
+
+  it.effect("settles a failed drain after another execution context deletes its session", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessions = yield* Session.Service
+      const store = yield* SessionStore.Service
+      const sessionID = Session.ID.make("ses_deleted_before_drain_failure")
+      yield* seedSessions(database, [sessionID])
+
+      const running = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(running, undefined)
+          yield* Deferred.await(release)
+          return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const run = yield* execution.resume(sessionID).pipe(Effect.forkIn(scope))
+      yield* Deferred.await(running)
+
+      yield* sessions.remove(sessionID)
+      yield* Deferred.succeed(release, undefined)
+
+      expect(yield* Fiber.await(run)).toEqual(Exit.void)
+      expect(yield* execution.isActive(sessionID)).toBe(false)
+      expect(yield* store.get(sessionID)).toBeUndefined()
+    }),
+  )
+
+  it.effect("ignores a wake for a session that has already been deleted", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessions = yield* Session.Service
+      const sessionID = Session.ID.make("ses_deleted_before_execution")
+      yield* seedSessions(database, [sessionID])
+      yield* sessions.remove(sessionID)
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.die("A deleted session must not drain"))
+      const execution = Context.get(context, SessionExecution.Service)
+
+      expect(yield* execution.resume(sessionID).pipe(Effect.exit)).toEqual(Exit.void)
+      expect(yield* execution.isActive(sessionID)).toBe(false)
+    }),
+  )
+
+  it.effect("preserves a drain failure while its session still exists", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_live_drain_failure")
+      yield* seedSessions(database, [sessionID])
+      const error = new AIError({
+        reason: new TransportError({ message: "Disconnected", transport: "http", operation: "request" }),
+      })
+      const failures: SessionEvent.Execution.Failed[] = []
+      yield* bus.project(SessionEvent.Execution.Failed, (event) => Effect.sync(() => void failures.push(event)))
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.fail(error))
+      const execution = Context.get(context, SessionExecution.Service)
+
+      expect(yield* execution.resume(sessionID).pipe(Effect.exit)).toEqual(Exit.fail(error))
+      expect(yield* execution.isActive(sessionID)).toBe(false)
+      expect(failures.map((event) => event.data.error)).toEqual([{ type: "provider.transport", message: "Disconnected" }])
+      expect((yield* claims(database))[sessionID]).toBe(false)
+    }),
+  )
+
   it.effect("the sweep only lists claimed top-level Sessions", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
