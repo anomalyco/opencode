@@ -106,11 +106,8 @@ export default function BrowserSettings() {
 
       return current && value ? `${current}\n${value}` : undefined
     },
-    (value, signal) => {
-      const [, source = "", profile = ""] = value.split("\n")
-
-      return client()?.browserExtensions({ source, profile }, { signal }) ?? Promise.resolve([])
-    },
+    (value, signal) =>
+      client()?.browserExtensions(readProfile(value.split("\n")[1]), { signal }) ?? Promise.resolve([]),
   )
 
   const message = createMemo(() => describe(lastOutcome(state())))
@@ -159,9 +156,9 @@ export default function BrowserSettings() {
   }
 
   const importSelected = () => {
-    const [source = "", profile = ""] = selected()?.split("\n") ?? []
+    const target = readProfile(selected())
 
-    if (source) start({ type: "import-browser", source, profile })
+    if (target.source) start({ type: "import-browser", ...target })
   }
 
   return (
@@ -314,8 +311,7 @@ export default function BrowserSettings() {
                 disabled={!client() || item.installed || running()}
                 busy={installing(item.id)}
                 onClick={() => {
-                  const [source = "", profile = ""] = selectedExtensions()?.split("\n") ?? []
-                  start({ type: "install-browser", source, profile, id: item.id })
+                  start({ type: "install-browser", ...readProfile(selectedExtensions()), id: item.id })
                 }}
               >
                 {item.installed ? ctx.t("settings.extensions.added") : ctx.t("settings.extensions.add")}
@@ -393,11 +389,14 @@ function ExtensionTitle(props: { name: string; icon?: string }) {
   )
 }
 
-/** One choice per browser profile; the profile's name shows only for a browser with several. */
+/**
+ * One choice per browser profile; the profile's name shows only for a browser with several. The value encodes both
+ * ids, since the select finds its options by value in a CSS selector.
+ */
 function profileOptions(sources: readonly ProfileSource[]) {
   return sources.flatMap((source) =>
     source.profiles.map((profile) => ({
-      value: `${source.id}\n${profile.id}`,
+      value: `${encodeURIComponent(source.id)}:${encodeURIComponent(profile.id)}`,
       label: source.profiles.length > 1 ? `${source.name} · ${profile.name}` : source.name,
     })),
   )
@@ -438,4 +437,11 @@ async function perform(client: Client, job: Job, signal: AbortSignal): Promise<O
 
       return { type: "cleared" }
   }
+}
+
+/** The source and profile ids of a `profileOptions` value. */
+function readProfile(value: string | undefined) {
+  const [source = "", profile = ""] = (value ?? "").split(":")
+
+  return { source: decodeURIComponent(source), profile: decodeURIComponent(profile) }
 }

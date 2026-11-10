@@ -39,7 +39,8 @@ export type ProfileSource = typeof ProfileSource.Type
  * - `imported`: `imported` cookies were written; `skipped` were expired or partitioned, `protected` were encrypted with a
  *   key only the source browser can use (Chrome and Edge app-bound encryption on Windows), `failed` did not decrypt.
  * - `failed`: nothing was read. `key`: the browser's key was not available, e.g. a denied Keychain prompt. `access`: the
- *   system denied access, e.g. Safari without Full Disk Access. `read`: the profile could not be read. `format`: the
+ *   system denied access, e.g. Safari without Full Disk Access. `locked`: the browser runs and holds its cookies open,
+ *   as Chromium does on Windows. `read`: the profile could not be read. `format`: the
  *   file is not a cookie export.
  */
 export const ImportResult = Schema.Union([
@@ -50,7 +51,10 @@ export const ImportResult = Schema.Union([
     protected: Count,
     failed: Count,
   }),
-  Schema.Struct({ type: Schema.Literal("failed"), reason: Schema.Literals(["key", "access", "read", "format"]) }),
+  Schema.Struct({
+    type: Schema.Literal("failed"),
+    reason: Schema.Literals(["key", "access", "locked", "read", "format"]),
+  }),
 ])
 
 export type ImportResult = typeof ImportResult.Type

@@ -10,10 +10,12 @@ import { decryptChromium, deriveCbcKey, readChromiumCookies, type ChromiumKey } 
 function gcm(key: Uint8Array, host: string, value: string, digest = true) {
   const nonce = randomBytes(12)
   const cipher = createCipheriv("aes-256-gcm", key, nonce)
+
   const plain = Buffer.concat([
     digest ? createHash("sha256").update(host).digest() : Buffer.alloc(0),
     Buffer.from(value),
   ])
+
   const body = Buffer.concat([cipher.update(plain), cipher.final()])
 
   return Buffer.concat([Buffer.from("v10"), nonce, body, cipher.getAuthTag()])

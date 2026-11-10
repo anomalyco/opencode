@@ -25,8 +25,13 @@ export type ReadFailure =
   | "key"
   /** The operating system denied access, e.g. Safari without Full Disk Access. */
   | "access"
+  /** The browser holds its cookie database open without sharing, as Chromium does on Windows while it runs. */
+  | "locked"
   /** The browser or profile is gone, or its database could not be read. */
   | "read"
+
+/** A read that found no cookies, and why. */
+export type SourceFailure = { readonly failure: ReadFailure }
 
 type Definition = {
   readonly id: string
@@ -141,24 +146,20 @@ export async function listSources(): Promise<Source[]> {
 }
 
 /** Reads a profile's cookies. `profile` must be an id `listSources` returned, so no path from a window is opened. */
-export async function readSource(id: string, profile: string): Promise<CookieRead | { failure: ReadFailure }> {
+export async function readSource(id: string, profile: string): Promise<CookieRead | SourceFailure> {
   const definition = definitions().find((item) => item.id === id)
   const target = definition ? (await profiles(definition)).find((item) => item.id === profile) : undefined
 
   if (!definition || !target) return { failure: "read" }
 
-  if (definition.engine === "firefox")
-    return readFirefoxCookies(target.directory).catch(() => ({ failure: "read" as const }))
+  if (definition.engine === "firefox") return readFirefoxCookies(target.directory).catch(readFailure)
 
-  if (definition.engine === "safari")
-    return readFile(target.directory).then(parseBinaryCookies, (error: NodeJS.ErrnoException) => ({
-      failure: error.code === "EPERM" || error.code === "EACCES" ? ("access" as const) : ("read" as const),
-    }))
+  if (definition.engine === "safari") return readFile(target.directory).then(parseBinaryCookies, readFailure)
   const key = await chromiumKey(definition).catch(() => undefined)
 
   if (!key) return { failure: "key" }
 
-  return readChromiumCookies(target.database, key).catch(() => ({ failure: "read" as const }))
+  return readChromiumCookies(target.database, key).catch(readFailure)
 }
 
 /** A Chromium profile's directory, for importing its extensions. */
@@ -167,6 +168,18 @@ export async function chromiumProfileDirectory(id: string, profile: string) {
   const target = definition ? (await profiles(definition)).find((item) => item.id === profile) : undefined
 
   return target?.directory
+}
+
+/**
+ * Why reading another browser's files failed. Chromium on Windows opens its cookie database without sharing while it runs,
+ * so nothing can copy it until the browser quits.
+ */
+function readFailure(error: NodeJS.ErrnoException): SourceFailure {
+  if (error.code === "EBUSY") return { failure: "locked" }
+
+  if (error.code === "EPERM" || error.code === "EACCES") return { failure: "access" }
+
+  return { failure: "read" }
 }
 
 type Profile = { id: string; name: string; directory: string; database: string }

@@ -97,6 +97,7 @@ export default {
     "The browser's key was not available. Allow access when your system asks, then try again.",
   "settings.import.failed.access":
     "Your system denied access. On macOS, give OpenCode Full Disk Access to import from Safari.",
+  "settings.import.failed.locked": "This browser keeps its cookies locked while it runs. Quit it, then import again.",
   "settings.import.failed.read": "The profile could not be read. Close the browser and try again.",
   "settings.import.failed.format": "This file is not a cookie export.",
   "settings.extensions.title": "Extensions",
