@@ -4,10 +4,10 @@ Dieser Fork ist opencode, das ohne Internet läuft. Er ist für den Einsatz in e
 gedacht: Modelle laufen auf einem eigenen Server (Ollama, LM Studio, vLLM, llama.cpp, …), und opencode baut keine
 Verbindung zu opencode.ai, GitHub, npm oder Cloud-Anbietern auf.
 
-Für die Bedienung selbst gilt die normale [README](../README.md) von opencode. Hier steht nur, was anders ist und was
+Für die Bedienung selbst gilt die normale [README](README.md) von opencode. Hier steht nur, was anders ist und was
 man für den Betrieb wissen muss.
 
-> Technische Details zu jeder Änderung (für Merges mit Upstream): [`FORK-CHANGES.md`](FORK-CHANGES.md)
+> Technische Details zu jeder Änderung (für Merges mit Upstream): [`FORK-CHANGES.md`](local-only/FORK-CHANGES.md)
 
 ---
 
@@ -26,7 +26,7 @@ Diese Punkte sind fest eingebaut und lassen sich nicht über die Config zurückd
 
 ## Was über die Config abgeschaltet wird
 
-Die Datei [`opencode.jsonc`](opencode.jsonc) ist eine fertige Vorlage. Sie gehört nach
+Die Datei [`opencode.jsonc`](local-only/opencode.jsonc) ist eine fertige Vorlage. Sie gehört nach
 `~/.config/opencode/opencode.jsonc` (Windows: `%USERPROFILE%\.config\opencode\opencode.jsonc`).
 
 Sie schaltet ab bzw. legt fest:
@@ -62,13 +62,13 @@ Hinweis für Denk-Modelle (z. B. Qwen3): Liefert das Modell nach dem Nachdenken 
 
 ### 2. Umgebungsvariablen setzen
 
-**macOS / Linux:** [`offline.env`](offline.env) einbinden, z. B. in `~/.zshrc`:
+**macOS / Linux:** [`offline.env`](local-only/offline.env) einbinden, z. B. in `~/.zshrc`:
 
 ```sh
 set -a; source /pfad/zu/local-only/offline.env; set +a
 ```
 
-**Windows:** [`opencode-offline.cmd`](opencode-offline.cmd) neben `opencode.exe` und `rg.exe` legen und opencode
+**Windows:** [`opencode-offline.cmd`](local-only/opencode-offline.cmd) neben `opencode.exe` und `rg.exe` legen und opencode
 darüber starten. Das Skript setzt dieselben Variablen und findet `rg.exe` im selben Ordner.
 
 ### 3. ripgrep bereitstellen
@@ -104,4 +104,4 @@ Verlässlich abschotten lässt sich das nur über das Netz (Firewall, Proxy bzw.
 
 Wenn eine neue opencode-Version übernommen wird, führt man danach im Repo-Root `local-only/check-fork.sh` aus.
 Das Skript meldet, ob eine der Fork-Änderungen beim Merge verloren gegangen ist, und listet Internet-Adressen im
-Code auf, die neu dazugekommen sein könnten. Das genaue Vorgehen steht in [`FORK-CHANGES.md`](FORK-CHANGES.md).
+Code auf, die neu dazugekommen sein könnten. Das genaue Vorgehen steht in [`FORK-CHANGES.md`](local-only/FORK-CHANGES.md).
