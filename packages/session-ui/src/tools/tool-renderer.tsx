@@ -2954,6 +2954,7 @@ ToolRegistry.register({
                               <Match when={true}>
                                 <DiffChanges
                                   appearance="standard"
+                                  markEmpty
                                   changes={{ additions: file().additions, deletions: file().deletions }}
                                 />
                               </Match>

@@ -36,7 +36,6 @@ export function TimelineSeparator(props: {
 
   return (
     <div
-      data-component="timeline-separator"
       class="flex w-full items-center gap-3 text-v2-text-text-faint"
       classList={{ "h-8": !activity(), "h-4": activity() }}
     >

@@ -485,15 +485,16 @@ export namespace Timeline {
       rows,
       detail,
       new Set(
-        messages.flatMap((message) =>
-          timelineNoticePlacement(detail, message, activity) === "separate" ||
-          (!activity &&
-            (message.type === "compaction" ||
-              message.type === "model-switched" ||
-              message.type === "location-switched"))
+        messages.flatMap((message) => {
+          if (activity) return timelineNoticePlacement(detail, message, activity) === "separate" ? [message.id] : []
+
+          return message.type === "compaction" ||
+            message.type === "model-switched" ||
+            message.type === "location-switched" ||
+            (message.type === "synthetic" && timelineNoticePlacement(detail, message) === "separate")
             ? [message.id]
-            : [],
-        ),
+            : []
+        }),
       ),
       activity,
     )

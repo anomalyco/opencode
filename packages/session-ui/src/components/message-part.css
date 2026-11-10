@@ -2042,6 +2042,7 @@
     --opencode-diffs-addition-bg: transparent;
     --opencode-diffs-addition-number-fg: var(--v2-text-text-faint);
     --opencode-diffs-addition-color: transparent;
+    --diffs-addition-color-override: transparent;
   }
 }
 

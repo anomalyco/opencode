@@ -50,7 +50,6 @@ const unsafeCSS = `
     --opencode-diffs-addition-number-fg,
     light-dark(var(--v2-green-900), var(--v2-green-400))
   );
-  --diffs-addition-color-override: var(--opencode-diffs-addition-color);
   --diffs-fg-number-deletion-override: light-dark(var(--v2-red-800), var(--v2-red-500));
   /* The app's code wrapping rules do not reach this shadow tree, and pretty is inherited from the page. */
   text-wrap-style: auto;

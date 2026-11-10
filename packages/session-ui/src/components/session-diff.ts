@@ -54,7 +54,7 @@ export function text(diff: ViewDiff, side: "deletions" | "additions") {
 }
 
 function fileDiffFromPatch(file: string, patch: string, context: number) {
-  const key = `${file}\0${patch}\0${context}`
+  const key = context === hunkContext ? `${file}\0${patch}` : `${file}\0${patch}\0${context}`
 
   return cachedFileDiff(`patch\0${key}`, () => {
     const complete = completePatch(patch)
