@@ -1000,7 +1000,7 @@ describe("empty input signatures agree with decoding", () => {
       execute: () => Effect.succeed("consumed"),
     })
     const runtime = CodeMode.make({ tools: { consume } })
-    const signature = "tools.consume(token: string): Promise<string>"
+    const signature = "tools.consume({\n  token: string,\n}): Promise<string>"
     expect(() => decodeInput(consume, {})).toThrow()
     expect(runtime.catalog[0]?.signature).toBe(signature)
     const result = await Effect.runPromise(runtime.execute('return search({ query: "tools.consume" })'))

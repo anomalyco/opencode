@@ -264,8 +264,9 @@ export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   }
 }
 
-/** A tool whose input is one required string field takes that string directly: `tools.search(query: string)`. */
+/** A freeform tool whose input is one required string field takes that string directly: `tools.patch(patchText: string)`. */
 export const stringParameter = <R>(tool: Tool<R>) => {
+  if (!tool.freeform) return undefined
   try {
     const document = inputDocument(tool)
     const fields = Object.entries(document?.schema.properties ?? {})

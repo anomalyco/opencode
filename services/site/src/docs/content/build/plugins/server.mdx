@@ -1030,7 +1030,7 @@ editor.add({
 
 If the selected model's API lists `regex` in models.dev, the model can write `OPS-42` directly. Otherwise Core omits **only** `freeform`: the model still has the `ticket` tool and calls it with `{"id":"OPS-42"}`. Missing or empty format lists mean no freeform support. The executor receives `{ id }` either way.
 
-Freeform only applies to direct tools. Inside Code Mode, any tool whose input is one required string field takes that string directly, as in `await tools.ticket("OPS-42")`. `await tools.ticket({ id: "OPS-42" })` also works.
+Inside Code Mode (`codemode: true`), a freeform tool takes its string directly, as in `await tools.ticket("OPS-42")`. `await tools.ticket({ id: "OPS-42" })` also works.
 
 Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
 changing their order; it does not rerun plugin setup.

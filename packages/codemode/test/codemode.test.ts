@@ -695,7 +695,7 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "users.lookup",
         description: "Look up a user",
-        signature: "tools.users.lookup(login: string): Promise<{\n  login: string,\n  id: number,\n}>",
+        signature: "tools.users.lookup({\n  login: string,\n}): Promise<{\n  login: string,\n  id: number,\n}>",
       },
     ])
 
@@ -711,7 +711,7 @@ describe("CodeMode schema flexibility", () => {
       execute: () => Effect.succeed("pong"),
     })
     const runtime = CodeMode.make({ tools: { net: { ping } } })
-    expect(runtime.catalog[0]?.signature).toBe("tools.net.ping(host: string): Promise<void>")
+    expect(runtime.catalog[0]?.signature).toBe("tools.net.ping({\n  host: string,\n}): Promise<void>")
 
     const result = await Effect.runPromise(runtime.execute(`return await tools.net.ping({ host: "example.test" })`))
     expect(result.ok).toBe(true)
@@ -768,7 +768,7 @@ describe("CodeMode public contract", () => {
       {
         path: "orders.lookup",
         description: "Look up an order by ID",
-        signature: "tools.orders.lookup(id: string): Promise<{\n  id: string,\n  status: string,\n}>",
+        signature: "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
       },
     ])
 
@@ -780,7 +780,7 @@ describe("CodeMode public contract", () => {
           {
             path: "tools.orders.lookup",
             description: "Look up an order by ID",
-            signature: "tools.orders.lookup(id: string): Promise<{\n  id: string,\n  status: string,\n}>",
+            signature: "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
           },
         ],
         remaining: 0,
@@ -789,20 +789,32 @@ describe("CodeMode public contract", () => {
     }
   })
 
-  test("a tool whose input is one required string takes that string directly", async () => {
+  test("a freeform tool takes its one string field directly and still accepts the object", async () => {
+    const input = Schema.Struct({ url: Schema.String.annotate({ description: "Page URL" }) })
     const fetchPage = Tool.make({
       description: "Fetch a page",
-      input: Schema.Struct({ url: Schema.String.annotate({ description: "Page URL" }) }),
+      input,
+      freeform: true,
       output: Schema.String,
       execute: ({ url }) => Effect.succeed(url),
     })
-    const runtime = CodeMode.make({ tools: { fetchPage } })
-    expect(runtime.catalog[0]?.signature).toBe("tools.fetchPage(/** Page URL */ url: string): Promise<string>")
+    const plain = Tool.make({
+      description: "Fetch a page",
+      input,
+      output: Schema.String,
+      execute: ({ url }) => Effect.succeed(url),
+    })
+    const runtime = CodeMode.make({ tools: { fetchPage, plain } })
+    expect(runtime.catalog.map((tool) => tool.signature)).toEqual([
+      "tools.fetchPage(/** Page URL */ url: string): Promise<string>",
+      "tools.plain({\n  /** Page URL */\n  url: string,\n}): Promise<string>",
+    ])
     expect(
       await Effect.runPromise(
         runtime.execute('return [await tools.fetchPage("a"), await tools.fetchPage({ url: "b" })]'),
       ),
-    ).toMatchObject({ ok: true, value: ["a", "b"], toolCalls: [{ name: "fetchPage" }, { name: "fetchPage" }] })
+    ).toMatchObject({ ok: true, value: ["a", "b"] })
+    expect(await Effect.runPromise(runtime.execute('return await tools.plain("a")'))).toMatchObject({ ok: false })
   })
 
   test("renders equivalent catalogs identically regardless of tool insertion order", () => {
@@ -838,7 +850,7 @@ describe("CodeMode public contract", () => {
       {
         path: "context7.resolve-library-id",
         description: "Resolve a library ID",
-        signature: 'tools.context7["resolve-library-id"](libraryName: string): Promise<string>',
+        signature: 'tools.context7["resolve-library-id"]({\n  libraryName: string,\n}): Promise<string>',
       },
     ])
 
@@ -850,7 +862,7 @@ describe("CodeMode public contract", () => {
           {
             path: 'tools.context7["resolve-library-id"]',
             description: "Resolve a library ID",
-            signature: 'tools.context7["resolve-library-id"](libraryName: string): Promise<string>',
+            signature: 'tools.context7["resolve-library-id"]({\n  libraryName: string,\n}): Promise<string>',
           },
         ],
         remaining: 0,
@@ -903,12 +915,12 @@ describe("CodeMode public contract", () => {
         {
           path: "tools.thread.uploadFile",
           description: "Upload one readable local file to the current Discord thread",
-          signature: "tools.thread.uploadFile(path: string): Promise<{\n  sent: boolean,\n}>",
+          signature: "tools.thread.uploadFile({\n  path: string,\n}): Promise<{\n  sent: boolean,\n}>",
         },
         {
           path: "tools.thread.generateImage",
           description: "Generate an image and upload it to the current Discord thread",
-          signature: "tools.thread.generateImage(prompt: string): Promise<{\n  sent: boolean,\n}>",
+          signature: "tools.thread.generateImage({\n  prompt: string,\n}): Promise<{\n  sent: boolean,\n}>",
         },
       ],
       remaining: 0,
@@ -996,7 +1008,7 @@ describe("CodeMode public contract", () => {
             {
               path: "tools.many.tool13",
               description: "Numbered tool 13",
-              signature: "tools.many.tool13(id: string): Promise<string>",
+              signature: "tools.many.tool13({\n  id: string,\n}): Promise<string>",
             },
           ],
           remaining: 0,
