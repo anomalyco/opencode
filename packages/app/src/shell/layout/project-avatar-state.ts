@@ -1,14 +1,16 @@
 import { createMemo, type Accessor } from "solid-js"
 import type { SessionInfo } from "@opencode/client/promise"
-import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
+import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
+import { needsUser } from "@/session/requests/auto-approve-machine"
 import { ServerConnection } from "@/runtime/server/registry"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 
-type ServerData = ReturnType<ReturnType<typeof useGlobal>["ensureServerCtx"]>["data"]
+type ServerData = ServerCtx["data"]
 
+// Without a server (no session in view) the session reads as idle and read.
 export function useSessionTabAvatarState(
-  server: Accessor<ServerConnection.Key>,
+  server: Accessor<ServerConnection.Key | undefined>,
   sessionId: Accessor<string>,
   root?: Accessor<boolean>,
   snapshot?: Accessor<SessionInfo | undefined>,
@@ -18,17 +20,16 @@ export function useSessionTabAvatarState(
   const connection = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === server()))
   const serverCtx = useServerCtx(connection)
 
-  const requests = createMemo(() => {
+  const needsAttention = createMemo(() => {
     const ctx = serverCtx()
 
-    if (!ctx) return { permission: false, form: false }
+    if (!ctx) return false
 
     const project = projectSettingsKey(ctx.sdk.scope, ctx.data.session.get(sessionId())?.projectID)
+    const requests = sessionRequests(ctx, sessionId(), !!root?.(), settings.permissions.autoApproves(project))
 
-    return sessionRequests(ctx.data, sessionId(), !!root?.(), settings.permissions.autoApproves(project))
+    return !!requests.permission || !!requests.form
   })
-
-  const needsAttention = createMemo(() => requests().permission || requests().form)
 
   const unread = createMemo(
     () => needsAttention() || (serverCtx()?.notification.session.unread(sessionId(), snapshot?.()) ?? false),
@@ -52,8 +53,11 @@ export function useSessionTabAvatarState(
   return { unread, loading, attention: needsAttention }
 }
 
-// Pending permission and form requests anywhere in the session (or its family, for roots).
-export function sessionRequests(data: ServerData, sessionId: string, root: boolean, autoApprove: boolean) {
+// The pending permission and form request that waits on the user anywhere in the session (or its family, for roots).
+// A permission counts by the same rule as the dock, so one auto-approve gave up on still marks the session.
+export function sessionRequests(ctx: ServerCtx, sessionId: string, root: boolean, autoApprove: boolean) {
+  const data = ctx.data
+
   const sessions = root
     ? [...new Set([sessionId, ...data.session.family(sessionId)])].flatMap((id) => {
         const info = data.session.get(id)
@@ -63,10 +67,14 @@ export function sessionRequests(data: ServerData, sessionId: string, root: boole
     : data.session.list()
 
   return {
-    permission: !autoApprove && !!sessionPermissionRequest(sessions, data.session.permission.list, sessionId),
-    form: !!sessionFormRequest(sessions, data.session.form.list, sessionId),
+    permission: sessionPermissionRequest(sessions, data.session.permission.list, sessionId, (item) =>
+      needsUser(ctx.autoApprove.state(item.id), autoApprove),
+    ),
+    form: sessionFormRequest(sessions, data.session.form.list, sessionId),
   }
 }
+
+export type SessionRequests = ReturnType<typeof sessionRequests>
 
 // Like the TUI, work waiting in the inbox counts as busy; parked synthetic context does not.
 export function sessionBusy(data: ServerData, sessionId: string) {

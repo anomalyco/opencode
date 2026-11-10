@@ -129,7 +129,7 @@ export function PluginSelectDialog<T>(props: { options: SelectOptions<T>; done: 
   })
 
   return (
-    <Dialog class="command-palette" size="large">
+    <Dialog class="command-palette command-palette-compact" size="large" fit>
       <div class="sr-only">
         <DialogTitle>{props.options.title}</DialogTitle>
       </div>
@@ -153,15 +153,15 @@ export function PluginSelectDialog<T>(props: { options: SelectOptions<T>; done: 
           onClose={() => props.done(undefined)}
         >
           {(row, attrs) => (
-            <button type="button" class="command-palette-row group" {...attrs}>
+            <button type="button" class="command-palette-row group" data-size="compact" {...attrs}>
               <div class="command-palette-row-main">
                 <div class="command-palette-row-text">
-                  <span class="command-palette-title palette-menu-title">
+                  <span class="command-palette-title palette-menu-title" dir="auto">
                     <SearchHighlight text={row().title} />
                   </span>
                   <Show when={row().description}>
                     {(description) => (
-                      <span class="command-palette-description">
+                      <span class="command-palette-description" dir="auto">
                         <SearchHighlight text={description()} />
                       </span>
                     )}

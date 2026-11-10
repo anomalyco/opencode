@@ -71,6 +71,12 @@ const envelope = (aggregateID: string, seq: number, version: number) => ({
   version: Event.Version.make(version),
 })
 
+const requireAggregateID = (type: string, aggregate: string, data: unknown) => {
+  const aggregateID = (data as Record<string, unknown>)[aggregate]
+  if (typeof aggregateID === "string") return Effect.succeed(aggregateID)
+  return Effect.die(new InvalidDurableEventError({ type, message: `Expected string aggregate field ${aggregate}` }))
+}
+
 // Every stored event decodes through here, so payloads written in older shapes are upgraded in one place.
 const decodeStoredData = (definition: Event.DurableDefinition, data: unknown) =>
   Schema.decodeUnknownSync(definition.data)(SessionLegacy.event(definition.type, data))
@@ -295,14 +301,7 @@ export function configured(options?: Options) {
           return Effect.gen(function* () {
             const durable = definition.durable
             if (!durable) return yield* Effect.void
-            const aggregateID = (event.data as Record<string, unknown>)[durable.aggregate]
-            if (typeof aggregateID !== "string")
-              return yield* Effect.die(
-                new InvalidDurableEventError({
-                  type: event.type,
-                  message: `Expected string aggregate field ${durable.aggregate}`,
-                }),
-              )
+            const aggregateID = yield* requireAggregateID(event.type, durable.aggregate, event.data)
             if (input && input.aggregateID !== aggregateID) {
               yield* Effect.die(
                 new InvalidDurableEventError({
@@ -508,8 +507,8 @@ export function configured(options?: Options) {
           })
         }
 
-        function publish<D extends Event.Definition>(definition: D, data: Event.Data<D>, options?: PublishOptions) {
-          return Effect.gen(function* () {
+        const makePayload = (definition: Event.Definition, data: unknown, options: PublishOptions | undefined) =>
+          Effect.gen(function* () {
             const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
             const location = options?.global
               ? undefined
@@ -517,53 +516,33 @@ export function configured(options?: Options) {
                 (serviceLocation
                   ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
                   : undefined))
-            return yield* publishEvent(
-              definition,
-              {
-                id: options?.id ?? Event.ID.create(),
-                created: yield* Clock.currentTimeMillis,
-                ...(options?.metadata ? { metadata: options.metadata } : {}),
-                type: definition.type,
-                ...(location ? { location } : {}),
-                data,
-              } as Event.Payload<D>,
-              options?.commit,
-            )
+            return {
+              id: options?.id ?? Event.ID.create(),
+              created: yield* Clock.currentTimeMillis,
+              ...(options?.metadata ? { metadata: options.metadata } : {}),
+              type: definition.type,
+              ...(location ? { location } : {}),
+              data,
+            } as Event.Payload
+          })
+
+        function publish<D extends Event.Definition>(definition: D, data: Event.Data<D>, options?: PublishOptions) {
+          return Effect.gen(function* () {
+            const event = (yield* makePayload(definition, data, options)) as Event.Payload<D>
+            return yield* publishEvent(definition, event, options?.commit)
           })
         }
 
         function publishAll<const I extends readonly [PublishInput, ...PublishInput[]]>(events: I) {
           return Effect.gen(function* () {
-            const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
             const payloads = yield* Effect.forEach(events, ([definition, data, options]) =>
               Effect.gen(function* () {
-                const aggregateID = (data as Record<string, unknown>)[definition.durable.aggregate]
-                if (typeof aggregateID !== "string") {
-                  return yield* Effect.die(
-                    new InvalidDurableEventError({
-                      type: definition.type,
-                      message: `Expected string aggregate field ${definition.durable.aggregate}`,
-                    }),
-                  )
-                }
-                const location = options?.global
-                  ? undefined
-                  : (options?.location ??
-                    (serviceLocation
-                      ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
-                      : undefined))
+                const aggregateID = yield* requireAggregateID(definition.type, definition.durable.aggregate, data)
                 return {
                   definition,
                   aggregateID,
                   commit: options?.commit,
-                  event: {
-                    id: options?.id ?? Event.ID.create(),
-                    created: yield* Clock.currentTimeMillis,
-                    ...(options?.metadata ? { metadata: options.metadata } : {}),
-                    type: definition.type,
-                    ...(location ? { location } : {}),
-                    data,
-                  } as Event.Payload,
+                  event: yield* makePayload(definition, data, options),
                 }
               }),
             )

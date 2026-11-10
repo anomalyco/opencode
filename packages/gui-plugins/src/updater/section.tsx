@@ -1,59 +1,57 @@
-import { createMemo, type JSX } from "solid-js"
-import { Button } from "@opencode/ui/button"
-import { Switch } from "@opencode/ui/switch"
+import { Show } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
-import { updaterAction } from "./action"
-import type { UpdaterState } from "@opencode/plugin/gui/updater"
 import type definition from "./index"
+import type en from "./i18n/en"
 
-export default function UpdatesSection(props: { state: () => UpdaterState | undefined; run: () => void }) {
+/** The one update action the row offers: its label, and whether it runs now. */
+export type UpdatesAction = { readonly label: keyof typeof en; readonly run?: string }
+
+export default function UpdatesSection(props: {
+  action: () => UpdatesAction
+  run: () => void
+  /** Web only: drop the saved copy of the app and load the server's build. */
+  reset?: () => void
+}) {
   const ctx = usePlugin<typeof definition>()
+  const ui = ctx.ui
   const releaseNotes = ctx.stores.releaseNotes
-  const action = createMemo(() => updaterAction(props.state()))
 
   return (
-    <div class="settings-section">
-      <h3 class="settings-section-title">{ctx.t("section.title")}</h3>
+    <ui.SettingsSection title={ctx.t("section.title")}>
+      <ui.SettingsRow
+        id="settings-release-notes"
+        title={ctx.t("releaseNotes.title")}
+        description={ctx.t("releaseNotes.description")}
+      >
+        <ui.Switch
+          label={ctx.t("releaseNotes.title")}
+          hideLabel
+          checked={releaseNotes.value.enabled}
+          onChange={(checked) =>
+            releaseNotes.update((draft) => {
+              draft.enabled = checked
+            })
+          }
+        />
+      </ui.SettingsRow>
 
-      <div data-component="settings-list">
-        <Row title={ctx.t("releaseNotes.title")} description={ctx.t("releaseNotes.description")}>
-          <div data-action="settings-release-notes">
-            <Switch
-              checked={releaseNotes.value.enabled}
-              onChange={(checked) =>
-                releaseNotes.update((draft) => {
-                  draft.enabled = checked
-                })
-              }
-            />
-          </div>
-        </Row>
+      <ui.SettingsRow id="settings-check-updates" title={ctx.t("check.title")} description={ctx.t("check.description")}>
+        <ui.Button disabled={!props.action().run} onClick={() => props.run()}>
+          {ctx.t(props.action().label)}
+        </ui.Button>
+      </ui.SettingsRow>
 
-        <Row title={ctx.t("check.title")} description={ctx.t("check.description")}>
-          <Button
-            data-action="settings-check-updates"
-            size="normal"
-            variant="neutral"
-            disabled={!action().run}
-            onClick={() => props.run()}
+      <Show when={props.reset}>
+        {(reset) => (
+          <ui.SettingsRow
+            id="settings-reload-from-server"
+            title={ctx.t("web.reset.title")}
+            description={ctx.t("web.reset.description")}
           >
-            {ctx.t(action().label)}
-          </Button>
-        </Row>
-      </div>
-    </div>
-  )
-}
-
-// The host's settings row markup; its stylesheet is loaded with the settings screen.
-function Row(props: { title: string; description: string; children: JSX.Element }) {
-  return (
-    <div data-component="settings-row">
-      <div data-slot="settings-row-copy">
-        <div data-slot="settings-row-title">{props.title}</div>
-        <div data-slot="settings-row-description">{props.description}</div>
-      </div>
-      <div data-slot="settings-row-control">{props.children}</div>
-    </div>
+            <ui.Button onClick={() => reset()()}>{ctx.t("web.reset.action")}</ui.Button>
+          </ui.SettingsRow>
+        )}
+      </Show>
+    </ui.SettingsSection>
   )
 }

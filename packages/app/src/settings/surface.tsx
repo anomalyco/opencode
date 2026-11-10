@@ -1,13 +1,25 @@
 import { useLocation, useNavigate } from "@solidjs/router"
-import { batch, createEffect, createMemo, on } from "solid-js"
-import { createStore } from "solid-js/store"
+import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useLayout, type LayoutRoute } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
-import { ServerConnection } from "@/runtime/server/registry"
+import { useServers } from "@/runtime/server/registry"
 import { useCommand } from "@/shell/commands/command"
 import { createSettingsPages } from "@/runtime/plugin/settings-pages"
 import { useSettingsServers } from "./servers/inventory"
+import {
+  canReturnToSearchOrigin,
+  createSettingsSearchState,
+  isSearchActive,
+  isSearchExpanded,
+  selectSearchHighlighted,
+  selectSearchQuery,
+  selectSearchScrollTop,
+  selectSearchSelected,
+  transitionSettingsSearch,
+  type SettingsSearchEvent,
+} from "./search-machine"
+import { startSettingsSearchReveal } from "./search-reveal"
 import {
   isPluginTab,
   isProjectTab,
@@ -38,6 +50,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
     const layout = useLayout()
     const command = useCommand()
     const servers = useSettingsServers()
+    const registry = useServers()
     const tabs = useTabs()
 
     const location = useLocation<{
@@ -76,30 +89,16 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
 
       return (
         list.find((item) => item.key === key) ??
-        list.find((item) => !!item.connection && ServerConnection.local(item.connection)) ??
+        list.find((item) => !!item.connection && registry.local(item.connection)) ??
         list[0]
       )
     })
 
-    const [search, setSearch] = createStore<{
-      query: string
-      origin: SettingsView | undefined
-      selected: string
-      highlighted: string
-      scrollTop: number
-      activation: number
-      expanded: boolean
-    }>({
-      query: "",
-      origin: undefined,
-      selected: "",
-      highlighted: "",
-      scrollTop: 0,
-      activation: 0,
-      expanded: true,
-    })
-
+    const [searchState, setSearchState] = createSignal(createSettingsSearchState())
     let focus: HTMLElement | undefined
+    let screen: HTMLElement | undefined
+    let stopReveal: (() => void) | undefined
+    let revealTimer: ReturnType<typeof setTimeout> | undefined
 
     const show = (view: SettingsView) => {
       const route = layout.route()
@@ -116,12 +115,74 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       })
     }
 
+    const back = () => {
+      const current = view()
+
+      if (current.type === "root") {
+        command.trigger("common.goBack")
+
+        return
+      }
+
+      show({ type: "root", tab: "projects", server: current.server })
+    }
+
+    const stop = () => {
+      clearTimeout(revealTimer)
+      revealTimer = undefined
+      stopReveal?.()
+      stopReveal = undefined
+    }
+
+    // Untracked, so the effect that syncs the view does not rerun for search changes or the reads effects make.
+    const dispatch = (event: SettingsSearchEvent): void =>
+      untrack(() =>
+        batch(() => {
+          const current = searchState()
+          const next = transitionSettingsSearch(current, event)
+
+          if (next.state !== current) setSearchState(next.state)
+          next.effects.forEach((effect) => {
+            if (effect.type === "navigate") return show(effect.view)
+
+            if (effect.type === "exit") return back()
+
+            if (effect.type === "reveal.cancel") return stop()
+
+            if (effect.type === "reveal.highlight") {
+              clearTimeout(revealTimer)
+              revealTimer = setTimeout(
+                () => dispatch({ type: "reveal.timed-out", activation: effect.activation }),
+                effect.timeoutMs,
+              )
+
+              return
+            }
+
+            stop()
+            // The timeout also settles a reveal whose screen is already gone.
+            revealTimer = setTimeout(
+              () => dispatch({ type: "reveal.timed-out", activation: effect.activation }),
+              effect.timeoutMs,
+            )
+
+            if (!screen) return
+            stopReveal = startSettingsSearchReveal(screen, effect.view, {
+              onHighlighted: () => dispatch({ type: "reveal.highlighted", activation: effect.activation }),
+              onCompleted: () => dispatch({ type: "reveal.completed", activation: effect.activation }),
+            })
+          })
+        }),
+      )
+
+    onCleanup(stop)
+
     createEffect(
       on(
         open,
         (value) => {
           if (value) return
-          setSearch({ query: "", origin: undefined, selected: "", highlighted: "", scrollTop: 0, expanded: true })
+          dispatch({ type: "settings.closed" })
 
           if (focus?.isConnected) focus.focus({ preventScroll: true })
           focus = undefined
@@ -139,37 +200,53 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       sourceServer,
       plugins,
       search: {
-        state: search,
+        query: () => selectSearchQuery(searchState()),
+        active: () => isSearchActive(searchState()),
+        expanded: () => isSearchExpanded(searchState()),
+        selected: () => selectSearchSelected(searchState()),
+        highlighted: () => selectSearchHighlighted(searchState()),
+        scrollTop: () => selectSearchScrollTop(searchState()),
+        canReturn: () => canReturnToSearchOrigin(searchState(), view()),
         input(query: string) {
-          if (!search.query.trim() && query.trim()) setSearch("origin", { ...view(), target: undefined })
-          setSearch({ query, highlighted: "", scrollTop: 0, expanded: true })
-
-          if (!query.trim()) setSearch({ selected: "", origin: undefined })
+          dispatch({ type: "input.changed", query, view: view() })
         },
         expand() {
-          setSearch("expanded", true)
+          dispatch({ type: "expanded" })
         },
         highlight(id: string) {
-          setSearch("highlighted", id)
+          dispatch({ type: "highlighted", id })
         },
         scroll(scrollTop: number) {
-          setSearch("scrollTop", scrollTop)
+          dispatch({ type: "scrolled", scrollTop })
         },
         open(destination: SettingsView, id: string) {
-          batch(() => {
-            show({ ...destination, searchActivation: search.activation + 1 })
-            setSearch({ selected: id, highlighted: id, expanded: false, activation: search.activation + 1 })
-          })
+          dispatch({ type: "result.opened", id, destination })
+        },
+        /** Opens a Command Palette pick without starting a sidebar search. */
+        reveal(destination: SettingsView) {
+          dispatch({ type: "palette.opened", destination })
         },
         clear() {
-          setSearch({ query: "", selected: "", highlighted: "", scrollTop: 0, origin: undefined, expanded: true })
+          dispatch({ type: "cleared" })
         },
         back() {
-          if (!search.query.trim() || !search.selected || !search.origin) return false
-          show(search.origin)
-          setSearch({ selected: "", expanded: true })
+          dispatch({ type: "back.requested", view: view() })
+        },
+        escape() {
+          dispatch({ type: "escape.pressed", view: view() })
+        },
+        /** Lets reveals run in the mounted screen, and stops them when it unmounts. */
+        attach(root: HTMLElement) {
+          screen = root
 
-          return true
+          return () => {
+            screen = undefined
+            dispatch({ type: "screen.unmounted" })
+          }
+        },
+        /** The mounted screen reports each view it shows, which starts or ends an activation's reveal. */
+        sync(current: SettingsView) {
+          dispatch({ type: "view.synced", view: current })
         },
       },
       open(tab: SettingsRootTab | SettingsPluginTab = "general") {
@@ -206,17 +283,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       subtab(subtab: SettingsView["subtab"]) {
         show({ ...view(), subtab, target: undefined })
       },
-      back() {
-        const current = view()
-
-        if (current.type === "root") {
-          command.trigger("common.goBack")
-
-          return
-        }
-
-        show({ type: "root", tab: "projects", server: current.server })
-      },
+      back,
       close() {
         if (open()) command.trigger("common.goBack")
       },

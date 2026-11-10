@@ -1,14 +1,12 @@
 import { expect, test } from "bun:test"
 import {
   absoluteTreePath,
-  activeTreeNavigation,
   nextSuggestionIndex,
   pickerFileSearchQuery,
   pickerMode,
   selectedTreePath,
   treeEntries,
   treePathWithin,
-  currentPickerSuggestions,
   createDirectorySearch,
   createPriorityTaskQueue,
   listPickerDirectory,
@@ -21,9 +19,14 @@ import {
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
 
-// The picker only reads `api.file.find` and `api.file.list`.
-const sdk = (file: { find?: (input: never) => Promise<unknown>; list?: (input: never) => Promise<unknown> }) =>
-  ({ api: { file } }) as unknown as Sdk
+type FileApi = {
+  find?: (input: never, options: never) => Promise<object>
+  list?: (input: never, options: never) => Promise<object>
+}
+
+// SAFETY: the picker only reads `api.file.find` and `api.file.list`, which every fake here provides.
+// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- a partial fake stands in for the generated SDK client
+const sdk = (file: FileApi) => ({ api: { file } }) as unknown as Sdk
 
 test("maps server directory entries into Pierre paths", () => {
   expect(
@@ -142,13 +145,6 @@ test.each([
   expect(actual).toBe(expected)
 })
 
-test("exposes autocomplete results only for their source query", () => {
-  const result = { query: "/repo/src", items: ["/repo/src/index.ts"] }
-  expect(currentPickerSuggestions(result, "/repo/src")).toEqual(result.items)
-  expect(currentPickerSuggestions(result, "/repo/test")).toEqual([])
-  expect(currentPickerSuggestions(result, "/repo/test", true)).toEqual(result.items)
-})
-
 test("resolves directory autocomplete from the browser root without changing location", async () => {
   const calls: unknown[] = []
   const location = { directory: "/repo", workspace: "workspace_1" }
@@ -261,7 +257,7 @@ test("keeps literal tilde directory names in server listing and search results",
   expect(await search("nested")).toEqual(["/repo/~/nested"])
 })
 
-test("discards stale typed results without changing the request location", async () => {
+test("discards aborted typed results without changing the request location", async () => {
   const location = { directory: "/repo" }
 
   const pending = Promise.withResolvers<{
@@ -288,7 +284,9 @@ test("discards stale typed results without changing the request location", async
     location: () => location,
   })
 
-  const stale = search("old")
+  const aborted = new AbortController()
+  const stale = search("old", { signal: aborted.signal })
+  aborted.abort()
   expect(await search("new")).toEqual(["/repo/new"])
   pending.resolve({ location, data: [{ path: "old/", type: "directory" }] })
   expect(await stale).toEqual([])
@@ -330,8 +328,8 @@ const projects = Array.from({ length: 60 }, (_, index) => ({ path: `project-${in
 const fallbacks: {
   name: string
   query: string
-  find: () => Promise<unknown>
-  list: () => Promise<unknown>
+  find: () => Promise<object>
+  list: () => Promise<object>
   expected: string[]
   listed: string[]
 }[] = [
@@ -452,11 +450,113 @@ test("limits background tasks and prioritizes newly requested work", async () =>
   expect(maximum).toBe(2)
 })
 
-test.each([
-  [3, 3, true],
-  [2, 3, false],
-])("a tree mutation from navigation %p applies during navigation %p: %p", (request, current, expected) => {
-  expect(activeTreeNavigation(request, current)).toBe(expected)
+test("clearing the queue frees slots held by tasks that never settle", async () => {
+  const queue = createPriorityTaskQueue<string>(3)
+  const signals: AbortSignal[] = []
+  const started: string[] = []
+
+  const hang = (name: string) => (signal: AbortSignal) => {
+    started.push(name)
+    signals.push(signal)
+
+    return new Promise<string>(() => {})
+  }
+
+  const hung = ["a", "b", "c"].map((name) => queue.schedule(name, "background", hang(name)))
+  const queued = queue.schedule("queued", "background", hang("queued"))
+  await Promise.resolve()
+  queue.clear()
+
+  expect(await Promise.all([...hung, queued])).toEqual([undefined, undefined, undefined, undefined])
+  expect(signals.map((signal) => signal.aborted)).toEqual([true, true, true])
+  expect(await queue.schedule("next", "user", async () => "next")).toBe("next")
+  expect(started).toEqual(["a", "b", "c"])
+})
+
+test("aborting one running task frees its slot for the next", async () => {
+  const queue = createPriorityTaskQueue<string>(1)
+  const aborted = Promise.withResolvers<void>()
+
+  const hung = queue.schedule("hung", "user", (signal) => {
+    signal.addEventListener("abort", () => aborted.resolve())
+
+    return new Promise<string>(() => {})
+  })
+
+  const next = queue.schedule("next", "background", async () => "next")
+  await Promise.resolve()
+  queue.abort("hung")
+
+  await aborted.promise
+  expect(await hung).toBeUndefined()
+  expect(await next).toBe("next")
+})
+
+test("a folder listing that failed once is read again by the next search", async () => {
+  const location = { directory: "/repo" }
+  const listed: unknown[] = []
+
+  const api = sdk({
+    find: async () => ({ location, data: [] }),
+    list: async (input: { path: string }) => {
+      listed.push(input.path)
+
+      if (listed.length === 1) throw new Error("server is starting")
+
+      return { location, data: [{ path: "components/", type: "directory" }] }
+    },
+  })
+
+  const search = createDirectorySearch({ sdk: api, home: () => "", base: () => "/repo", location: () => location })
+
+  expect(await search("comp")).toEqual([])
+  expect(await search("comp")).toEqual(["/repo/components"])
+  expect(listed).toEqual(["/repo", "/repo"])
+})
+
+test("a search passes its signal to the server search, and closing the picker aborts its folder reads", async () => {
+  const location = { directory: "/repo" }
+  const signals: Array<AbortSignal | undefined> = []
+  const listing = Promise.withResolvers<AbortSignal>()
+
+  const api = sdk({
+    find: async (_input: never, options: { signal?: AbortSignal }) => {
+      signals.push(options.signal)
+
+      return { location, data: [] }
+    },
+    list: (_input: never, options: { signal: AbortSignal }) => {
+      listing.resolve(options.signal)
+
+      return new Promise<object>(() => {})
+    },
+  })
+
+  const search = createDirectorySearch({ sdk: api, home: () => "", base: () => "/repo", location: () => location })
+  const controller = new AbortController()
+  const pending = search("comp", { signal: controller.signal })
+  const read = await listing.promise
+  expect(signals).toEqual([controller.signal])
+
+  search.dispose()
+  expect(read.aborted).toBe(true)
+  expect(await pending).toEqual([])
+})
+
+test("listing a folder passes the abort signal to the request", async () => {
+  const controller = new AbortController()
+  const signals: unknown[] = []
+
+  const api = sdk({
+    list: async (_input: never, options: { signal?: AbortSignal }) => {
+      signals.push(options.signal)
+
+      return { location: { directory: "/repo" }, data: [] }
+    },
+  })
+
+  await listPickerDirectory(api, { directory: "/repo" }, "/repo", controller.signal)
+  expect(signals).toEqual([controller.signal])
 })
 
 test("wraps autocomplete keyboard navigation", () => {

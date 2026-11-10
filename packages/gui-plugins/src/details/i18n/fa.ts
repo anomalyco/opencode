@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "هیچ افزونه‌ای پیکربندی نشده است",
   skills: "مهارت‌ها",
   "skills.empty": "هیچ مهارتی پیکربندی نشده است",
-  lsp: "LSP",
-  "lsp.empty": "هیچ سرور LSPای پیکربندی نشده است",
   failed: "ناموفق",
   retry: "تلاش دوباره",
   connecting: "در حال اتصال…",

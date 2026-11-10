@@ -210,11 +210,11 @@ export interface Interface {
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["prompt"]>
-  /** Generates text from current Session context without admitting input or mutating history. */
+  /** Generates text from current Session context without admitting input or mutating history. Its usage counts toward the Session's totals. */
   readonly generate: (input: {
     sessionID: SessionSchema.ID
     prompt: string
-  }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
+  }) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
     command: string
@@ -265,7 +265,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const app = yield* App.Metadata
+    const app = yield* App.Service
     const database = yield* Database.Service
     const db = database.db
     const bus = yield* Bus.Service
@@ -280,16 +280,7 @@ const layer = Layer.effect(
     const environments = yield* SessionEnvironment.Service
     const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.make()
-    // `experimental.media_blob` as the session's own location configures it, where its media is written.
-    const keepsMediaRefs = (session: SessionSchema.Info) =>
-      SessionBlob.enabled.pipe(
-        instances.provide(session),
-        Effect.catch((cause) =>
-          Effect.logWarning("could not resolve experimental.media_blob; serving media inline", { cause }).pipe(
-            Effect.as(false),
-          ),
-        ),
-      )
+    const mediaBlob = (session: SessionSchema.Info) => SessionBlob.enabledFor(instances, session)
     const isDurableSessionEvent = (item: Bus.LogItem): item is SessionEvent.DurableEvent =>
       Object.hasOwn(SessionEvent.Durable.cases, item.type)
 
@@ -378,12 +369,16 @@ const layer = Layer.effect(
         // The fork adopts the parent's newest instruction values rather than the
         // values in effect at the boundary; copied history may contain frozen
         // instruction-update text the initial baseline already reflects.
-        yield* bus.publish(SessionEvent.Forked, {
-          sessionID,
-          parentID: parent.id,
-          boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
-          ...inherited,
-        })
+        // The parent's location, not the caller's, decides whether the copy's media is stored as blobs.
+        const media = yield* mediaBlob(parent)
+        yield* bus
+          .publish(SessionEvent.Forked, {
+            sessionID,
+            parentID: parent.id,
+            boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
+            ...inherited,
+          })
+          .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),
@@ -397,6 +392,7 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         yield* execution.interrupt(sessionID)
         yield* execution.awaitIdle(sessionID)
+        yield* jobs.cancelSession(sessionID)
         yield* transport.close(sessionID)
         const children = yield* store.list({ parentID: sessionID })
         yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
@@ -437,13 +433,13 @@ const layer = Layer.effect(
       message: (input) => sessions.forSession(input.sessionID).message(input.messageID),
       messagesWithRefs: Effect.fn("Session.messagesWithRefs")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        if (!(yield* keepsMediaRefs(session))) return yield* store.messages(input)
+        if (!(yield* mediaBlob(session))) return yield* store.messages(input)
         return yield* store.messagesWithRefs(input)
       }),
       messageWithRefs: Effect.fn("Session.messageWithRefs")(function* (input) {
         const session = yield* result.get(input.sessionID).pipe(Effect.option)
         if (Option.isNone(session)) return undefined
-        if (!(yield* keepsMediaRefs(session.value))) return yield* result.message(input)
+        if (!(yield* mediaBlob(session.value))) return yield* result.message(input)
         const stored = yield* store.messageWithRefs(input.messageID)
         return stored?.sessionID === input.sessionID ? stored.message : undefined
       }),
@@ -465,7 +461,7 @@ const layer = Layer.effect(
       inbox: (sessionID) => sessions.forSession(sessionID).inbox(),
       inboxWithRefs: Effect.fn("Session.inboxWithRefs")(function* (sessionID) {
         const session = yield* result.get(sessionID)
-        if (!(yield* keepsMediaRefs(session))) return yield* result.inbox(sessionID)
+        if (!(yield* mediaBlob(session))) return yield* result.inbox(sessionID)
         return yield* SessionInbox.listWithRefs(db, sessionID)
       }),
       cancelInbox: (input) => sessions.forSession(input.sessionID).cancelInbox(input.inboxID),
@@ -489,6 +485,7 @@ const layer = Layer.effect(
           Effect.provideService(Instance.Service, instances),
           Effect.provideService(Database.Service, database),
           Effect.provideService(LLMClient.Service, llm),
+          Effect.provideService(Bus.Service, bus),
         )
       }),
       command: Effect.fn("Session.command")(function* (input) {

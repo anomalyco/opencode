@@ -2,7 +2,7 @@ import { Money } from "@opencode/schema/money"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
-import { AIError, HttpContext, LLM, Message, RateLimitError } from "@opencode/ai/effect"
+import { ai, AIError, HttpContext, Message, RateLimitError } from "@opencode/ai/effect"
 import { classifyProviderFailure } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { describe, expect } from "bun:test"
@@ -54,7 +54,7 @@ const addLegacyPlugin = Effect.fn(function* () {
 
 const addGithubCopilotPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* GithubCopilotPlugin.effect(host)
 })
 
@@ -265,8 +265,12 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  for (const source of ["http", "stream"] as const) {
-    it.effect(`stops retries for ChatGPT usage limits from ${source} failures`, () =>
+  for (const [source, code] of [
+    ["http", "subscription_sharing_usage_limit_exceeded"],
+    ["stream", "subscription_sharing_usage_limit_exceeded"],
+    ["http", "subscription_sharing_workplace_individual_usage_limit_exceeded"],
+  ] as const) {
+    it.effect(`stops retries for ${code} from ${source} failures`, () =>
       Effect.gen(function* () {
         const credentials = yield* Credential.Service
         yield* credentials.create({
@@ -284,10 +288,10 @@ describe("ChatGPTPlugin", () => {
         const hooks = yield* PluginHooks.Service
         const body =
           source === "http"
-            ? JSON.stringify({ error: { code: "subscription_sharing_usage_limit_exceeded" } })
+            ? JSON.stringify({ error: { code } })
             : JSON.stringify({
                 type: "response.failed",
-                response: { error: { code: "subscription_sharing_usage_limit_exceeded" } },
+                response: { error: { code } },
               })
         const cause = new AIError({
           reason: new RateLimitError({
@@ -1097,7 +1101,7 @@ describe("ChatGPTPlugin", () => {
         const model = required(yield* models.get(Provider.ID.openai, modelID))
         const body = (variant: string, messages: ReadonlyArray<Message>) =>
           resolver.resolveModel(model, Model.VariantID.make(variant)).pipe(
-            Effect.flatMap((resolved) => compileRequest(LLM.request({ model: resolved.model, messages }))),
+            Effect.flatMap((resolved) => compileRequest(ai.request({ model: resolved.model, messages }))),
             Effect.map((compiled) => compiled.body),
           )
         const switched = [

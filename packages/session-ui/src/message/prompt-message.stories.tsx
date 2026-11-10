@@ -14,19 +14,30 @@ export default {
 
 export const Pending = {
   render: () => {
-    const statuses = ["delivered", "starting", "steering", "stranded", "queued"] as const
+    const statuses = ["delivered", "starting", "steering", "stranded", "queued", "sending"] as const
 
     const [state, setState] = createStore<{
       status: (typeof statuses)[number]
       voice: boolean
       text: boolean
       grouped: boolean
+      fails: boolean
+      failures: number
     }>({
       status: "steering",
       voice: false,
       text: true,
       grouped: false,
+      fails: false,
+      failures: 0,
     })
+
+    // A failing host rejects, like a server error, and leaves the message as it was.
+    const attempt = async (apply: () => void) => {
+      if (!state.fails) return apply()
+      setState("failures", (count) => count + 1)
+      throw new Error("Request failed")
+    }
 
     const message = createMemo<SessionMessageUser>(() => ({
       id: "msg_pending_prompt_story",
@@ -46,16 +57,12 @@ export const Pending = {
     }))
 
     const actions = {
-      revert: async () => {},
-      fork: async () => {},
+      revert: () => attempt(() => {}),
+      fork: () => attempt(() => {}),
       pending: {
         status: () => (state.status === "delivered" ? undefined : state.status),
-        queue: async () => {
-          setState("status", "queued")
-        },
-        remove: async () => {
-          setState("status", "delivered")
-        },
+        queue: () => attempt(() => setState("status", "queued")),
+        remove: () => attempt(() => setState("status", "delivered")),
       },
     } satisfies SessionUserActions
 
@@ -102,6 +109,15 @@ export const Pending = {
             />{" "}
             Grouped prompts
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={state.fails}
+              onChange={(event) => setState("fails", event.currentTarget.checked)}
+            />{" "}
+            Actions fail
+          </label>
+          <output aria-label="Failed actions">{state.failures}</output>
         </div>
         <CurrentSessionProviders document={document()}>
           <Show when={state.grouped && state.text}>

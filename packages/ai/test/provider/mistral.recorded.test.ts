@@ -1,7 +1,7 @@
 import { configure } from "@opencode/ai/providers/mistral"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, SystemPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Message, SystemPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
@@ -38,10 +38,11 @@ describe("Mistral recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          LLM.request({
+          ai.request({
             model: configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).model("mistral-small-latest"),
             prompt: "Reply with exactly one word: hello",
-            generation: { maxTokens: 40, temperature: 0 },
+            maxTokens: 40,
+            temperature: 0,
           }),
         )
 
@@ -59,10 +60,11 @@ describe("Mistral recorded", () => {
     () =>
       Effect.gen(function* () {
         const model = configure({ apiKey, providerOptions: { reasoningEffort: "high" } }).model("mistral-small-latest")
-        const firstRequest = LLM.request({
+        const firstRequest = ai.request({
           model,
           prompt: "Calculate 17 multiplied by 23. Think briefly, then reply with only the integer.",
-          generation: { maxTokens: 512, temperature: 0 },
+          maxTokens: 512,
+          temperature: 0,
         })
         const first = yield* LLMClient.generate(firstRequest)
 
@@ -70,10 +72,12 @@ describe("Mistral recorded", () => {
         expect(first.reasoning.length).toBeGreaterThan(0)
         expect(first.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
 
-        const followUp = LLMRequest.update(firstRequest, {
+        const followUp = {
+          ...firstRequest,
           messages: [...firstRequest.messages, first.message, Message.user("Reply with exactly: Done.")],
-          generation: { maxTokens: 256, temperature: 0 },
-        })
+          maxTokens: 256,
+          temperature: 0,
+        }
         const replay = yield* compileRequest(followUp)
         expect(replay.body.messages).toContainEqual(
           expect.objectContaining({
@@ -95,7 +99,7 @@ describe("Mistral recorded", () => {
     () =>
       Effect.gen(function* () {
         const model = configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).model("mistral-small-latest")
-        const firstRequest = LLM.request({
+        const firstRequest = ai.request({
           model,
           system: [
             SystemPart.make("Call lookup_weather exactly once with Paris."),
@@ -104,7 +108,8 @@ describe("Mistral recorded", () => {
           prompt: "What is the weather?",
           tools: [weather],
           toolChoice: weather,
-          generation: { maxTokens: 160, temperature: 0 },
+          maxTokens: 160,
+          temperature: 0,
         })
         const first = yield* LLMClient.generate(firstRequest)
 
@@ -114,15 +119,17 @@ describe("Mistral recorded", () => {
 
         const call = first.toolCalls[0]
         if (!call) throw new Error("Mistral did not return a tool call")
-        const followUp = LLMRequest.update(firstRequest, {
+        const followUp = {
+          ...firstRequest,
           toolChoice: ToolChoice.make("none"),
           messages: [
             ...firstRequest.messages,
             first.message,
             Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
           ],
-          generation: { maxTokens: 160, temperature: 0 },
-        })
+          maxTokens: 160,
+          temperature: 0,
+        }
         const second = yield* LLMClient.generate(followUp)
 
         expect(second.finishReason.normalized).toBe("stop")
@@ -140,13 +147,14 @@ describe("Mistral hosted GLM recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          LLM.request({
+          ai.request({
             model: configure({ apiKey }).model("zai-glm-5-2"),
             system: "Call lookup_weather exactly once with Paris.",
             prompt: "What is the weather?",
             tools: [weather],
             toolChoice: weather,
-            generation: { maxTokens: 256, temperature: 0 },
+            maxTokens: 256,
+            temperature: 0,
           }),
         )
 

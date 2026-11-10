@@ -741,6 +741,7 @@ export const dict = {
   "dialog.server.menu.remove": "حذف",
   "home.workspaceTip": "نشست بعدی را در یک درخت‌کار جدید آغاز کنید تا تغییرات جدا بمانند",
   "session.tab.add": "افزودن زبانه",
+  "session.tab.closeOthers": "بستن برگه‌های دیگر",
   "session.queue.attachments.one": "به‌علاوهٔ {{count}} پیوست",
   "session.queue.attachments.other": "به‌علاوهٔ \u2068{{count}}\u2069 پیوست",
   "settings.backToSettings": "بازگشت به تنظیمات",

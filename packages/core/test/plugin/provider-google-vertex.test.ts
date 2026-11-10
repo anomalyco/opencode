@@ -5,6 +5,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { GoogleVertexPlugin } from "@opencode/core/plugin/provider/google-vertex"
 import { Provider } from "@opencode/core/provider"
+import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -12,34 +13,13 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* GoogleVertexPlugin.effect(host)
 })
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
   return value
-}
-
-function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
-      Object.entries(vars).forEach(([key, value]) => {
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-      })
-      return previous
-    }),
-    effect,
-    (previous) =>
-      Effect.sync(() =>
-        Object.entries(previous).forEach(([key, value]) => {
-          if (value === undefined) delete process.env[key]
-          else process.env[key] = value
-        }),
-      ),
-  )
 }
 
 describe("GoogleVertexPlugin", () => {

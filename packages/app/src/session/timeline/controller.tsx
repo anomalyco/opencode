@@ -2,8 +2,7 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { Button } from "@opencode/ui/button"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { Option, Predicate, Schema } from "effect"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -16,13 +15,27 @@ import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { useServerSDK } from "@/runtime/server/client"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "@/session/title"
-import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { showToast } from "@/shell/notifications/toast"
-import { usePlatform } from "@/runtime/platform/platform"
 import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
+import {
+  createSessionDeleteState,
+  selectSessionDeleteView,
+  SESSION_DELETE_TIMEOUT_MS,
+  transitionSessionDelete,
+  type SessionDeleteEffect,
+  type SessionDeleteEvent,
+} from "@/session/delete-machine"
+import { useSessionExporter } from "@/session/commands/export-session"
+import {
+  createSessionHeaderTitleState,
+  selectSessionHeaderTitleView,
+  SESSION_RENAME_TIMEOUT_MS,
+  transitionSessionHeaderTitle,
+  type SessionHeaderTitleEffect,
+  type SessionHeaderTitleEvent,
+} from "./header-actions-machine"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
-import { getSessionMessageHandoff } from "@/session/handoff"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
 const emptyMessages: SessionMessageInfo[] = []
@@ -56,7 +69,7 @@ export type TimelineSessionSource = {
   history: Pick<SessionModel["history"], "messages">
 }
 
-export function createTimelineController(input: { session: TimelineSessionSource }) {
+export function createTimelineController(input: { session: TimelineSessionSource; active: Accessor<boolean> }) {
   const navigate = useNavigate()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -66,25 +79,44 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const tabs = useTabs()
   const dialog = useDialog()
   const language = useLanguage()
-  const platform = usePlatform()
+  const exporter = useSessionExporter()
 
-  const visibleMessages = createMemo(() => {
-    const id = input.session.identity.sessionID()
+  // Pending inputs and the handoff hold with the history while the view is detached, so a hidden view never shows
+  // one against history it has not caught up with.
+  const pendingItems = createMemo<{ value: ReturnType<typeof data.session.pending.list> } | undefined>(
+    (previous) => {
+      if (previous && !input.active()) return previous
+      const id = input.session.identity.sessionID()
 
-    return visibleTimelineMessages(
+      return { value: id ? data.session.pending.list(id) : [] }
+    },
+    undefined,
+    { equals: (previous, next) => previous?.value === next?.value },
+  )
+
+  const pendingList = () => pendingItems()!.value
+
+  const handoffItem = createMemo<{ value: ReturnType<typeof server.ctx.handoff.get> } | undefined>(
+    (previous) => {
+      if (previous && !input.active()) return previous
+
+      return { value: server.ctx.handoff.get(input.session.identity.sessionID()) }
+    },
+    undefined,
+    { equals: (previous, next) => previous?.value === next?.value },
+  )
+
+  const visibleMessages = createMemo(() =>
+    visibleTimelineMessages(
       input.session.history.messages(),
-      id ? data.session.pending.list(id) : [],
+      pendingList(),
       input.session.data.info()?.revert?.messageID,
-    )
-  })
+    ),
+  )
 
   // A handoff projects after visibility: its prompt commits any staged revert, so the boundary does not hide it.
   const projectedMessages = createMemo(() =>
-    applyTimelineMessageHandoff(
-      visibleMessages(),
-      getSessionMessageHandoff(input.session.identity.sessionKey()),
-      input.session.data.info(),
-    ),
+    applyTimelineMessageHandoff(visibleMessages(), handoffItem()!.value, input.session.data.info()),
   )
 
   // Inputs that wait behind the active turn. A starting steer opens the next turn instead, so the turn before it
@@ -95,24 +127,20 @@ export function createTimelineController(input: { session: TimelineSessionSource
     if (!id) return new Set<string>()
 
     return new Set(
-      data.session.pending
-        .list(id)
-        .flatMap((item) =>
-          (item.type === "user" &&
-            item.delivery === "steer" &&
-            data.session.pending.status(id, item.id) !== "starting") ||
-          item.type === "synthetic"
-            ? [item.id]
-            : [],
-        ),
+      pendingList().flatMap((item) =>
+        (item.type === "user" &&
+          item.delivery === "steer" &&
+          data.session.pending.status(id, item.id) !== "starting") ||
+        item.type === "synthetic"
+          ? [item.id]
+          : [],
+      ),
     )
   })
 
-  const queuedCompactionIDs = createMemo(() => {
-    const id = input.session.identity.sessionID()
-
-    return (id ? data.session.pending.list(id) : []).flatMap((item) => (item.type === "compaction" ? [item.id] : []))
-  })
+  const queuedCompactionIDs = createMemo(() =>
+    pendingList().flatMap((item) => (item.type === "compaction" ? [item.id] : [])),
+  )
 
   const titleValue = createMemo(() => input.session.data.info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("session.tab.session"))
@@ -184,41 +212,80 @@ export function createTimelineController(input: { session: TimelineSessionSource
     turnDiffs: settings.general.showTurnDiffs,
   })
 
-  const [pending, setPending] = createStore({ rename: false })
-
   const errorMessage = (cause: unknown) =>
     Option.match(decodeErrorData(cause), {
       onSome: (error) => error.data.message,
       onNone: () => (cause instanceof Error ? cause.message : language.t("common.requestFailed")),
     })
 
-  const rename = async (title: string) => {
-    const id = input.session.identity.sessionID()
+  const editable = () => !!input.session.identity.sessionID() && !input.session.data.parentID() && input.active()
 
-    if (!id || pending.rename) return false
-    const next = title.trim()
+  const [titleState, setTitleState] = createSignal(
+    createSessionHeaderTitleState(untrack(input.session.identity.sessionKey)),
+  )
 
-    if (!next || next === (titleLabel() ?? "")) return true
-    setPending("rename", true)
+  let titleInput: HTMLInputElement | undefined
+  let titleTimer: ReturnType<typeof setTimeout> | undefined
+  let titleFrame = 0
 
-    const success = await serverSDK.api.session
-      .update({ sessionID: id, title: next })
-      .then(() => true)
-      .catch((error) => {
-        showToast({ title: language.t("common.requestFailed"), description: errorMessage(error) })
+  const dispatchTitle = (event: SessionHeaderTitleEvent) => {
+    const next = transitionSessionHeaderTitle(untrack(titleState), event)
 
-        return false
+    if (next.state !== untrack(titleState)) setTitleState(next.state)
+    next.effects.forEach(runTitle)
+  }
+
+  function runTitle(effect: SessionHeaderTitleEffect) {
+    if (effect.type === "focus.schedule") {
+      cancelAnimationFrame(titleFrame)
+      titleFrame = requestAnimationFrame(() => {
+        const state = untrack(titleState)
+
+        if (state.status !== "editing" || state.attempt !== effect.attempt) return
+        titleInput?.focus()
+        titleInput?.select()
       })
 
-    setPending("rename", false)
+      return
+    }
 
-    if (!success) return false
-    const current = data.session.get(id)
+    if (effect.type === "focus.cancel") return cancelAnimationFrame(titleFrame)
 
-    if (current) data.session.remember({ ...current, title: next })
+    if (effect.type === "rename.save") {
+      // The session list takes the new title whenever the server saved it, even once the editor has gone.
+      void Promise.try(() => serverSDK.api.session.update({ sessionID: effect.sessionID, title: effect.title })).then(
+        () => {
+          const current = data.session.get(effect.sessionID)
 
-    return true
+          if (current) data.session.remember({ ...current, title: effect.title })
+          dispatchTitle({ type: "rename.succeeded", attempt: effect.attempt })
+        },
+        (cause: unknown) => dispatchTitle({ type: "rename.failed", attempt: effect.attempt, cause }),
+      )
+
+      return
+    }
+
+    if (effect.type === "toast.rename-failed")
+      return showToast({
+        title: language.t("common.requestFailed"),
+        description: effect.cause === undefined ? undefined : errorMessage(effect.cause),
+      })
+
+    clearTimeout(titleTimer)
+    titleTimer = undefined
+
+    if (effect.type === "timer.cancel") return
+    titleTimer = setTimeout(
+      () => dispatchTitle({ type: "rename.timed-out", attempt: effect.attempt }),
+      SESSION_RENAME_TIMEOUT_MS,
+    )
   }
+
+  createEffect(() =>
+    dispatchTitle({ type: "target.synced", sessionKey: input.session.identity.sessionKey(), editable: editable() }),
+  )
+  onCleanup(() => dispatchTitle({ type: "disposed" }))
 
   const href = (id: string) => sessionHref(server.key, id)
 
@@ -232,50 +299,16 @@ export function createTimelineController(input: { session: TimelineSessionSource
     return tabs.newDraft({ server: server.key, directory: sdk().directory })
   }
 
-  const exportSession = async (id: string) => {
-    try {
-      const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
-      const filename = sessionExportFilename(data.info)
-
-      if (!(await saveSessionExport(filename, data, platform))) return
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename }),
-      })
-    } catch (error) {
-      showToast({
-        variant: "error",
-        title: language.t("toast.session.export.failed.title"),
-        description: error instanceof Error ? error.message : language.t("toast.session.export.failed.description"),
-      })
-    }
-  }
-
-  const remove = async (id: string) => {
+  // Where the view goes once the session is gone, read before the delete hides it from the list.
+  const deleteTarget = (id: string) => {
     const session = data.session.get(id)
 
-    if (!session) return false
+    if (!session) return
     const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
     const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-    const removed = sessionTreeIDs(data.session.list(), id)
 
-    const success = await data.session
-      .remove(id)
-      .then(() => true)
-      .catch((error) => {
-        showToast({ title: language.t("session.delete.failed.title"), description: errorMessage(error) })
-
-        return false
-      })
-
-    if (!success) return false
-    void navigateAfterRemoval(id, session.parentID, next?.id)
-    notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: removed })
-
-    return true
+    return { parentID: session.parentID, nextID: next?.id, removedIDs: sessionTreeIDs(data.session.list(), id) }
   }
 
   function DeleteDialog(props: { sessionID: string }) {
@@ -283,10 +316,57 @@ export function createTimelineController(input: { session: TimelineSessionSource
       () => sessionTitle(data.session.get(props.sessionID)?.title) ?? language.t("session.tab.session"),
     )
 
-    const confirm = async () => {
-      await remove(props.sessionID)
-      dialog.close()
+    const [deleteState, setDeleteState] = createSignal(createSessionDeleteState(props.sessionID))
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const dispatch = (event: SessionDeleteEvent) => {
+      const next = transitionSessionDelete(untrack(deleteState), event)
+
+      if (next.state !== untrack(deleteState)) setDeleteState(next.state)
+      next.effects.forEach(run)
     }
+
+    function run(effect: SessionDeleteEffect) {
+      if (effect.type === "delete.run") {
+        void Promise.try(() => data.session.remove(effect.sessionID)).then(
+          () => dispatch({ type: "delete.succeeded", attempt: effect.attempt, target: effect.target }),
+          (cause: unknown) => dispatch({ type: "delete.failed", attempt: effect.attempt, cause }),
+        )
+
+        return
+      }
+
+      if (effect.type === "dialog.close") return dialog.close()
+
+      if (effect.type === "session.removed") {
+        void navigateAfterRemoval(effect.sessionID, effect.target.parentID, effect.target.nextID)
+        notifySessionTabsRemoved({
+          server: server.key,
+          directory: sdk().directory,
+          sessionIDs: [...effect.target.removedIDs],
+        })
+
+        return
+      }
+
+      if (effect.type === "toast.delete-failed")
+        return showToast({
+          title: language.t("session.delete.failed.title"),
+          description: effect.cause === undefined ? undefined : errorMessage(effect.cause),
+        })
+
+      clearTimeout(timer)
+      timer = undefined
+
+      if (effect.type === "timer.cancel") return
+      timer = setTimeout(
+        () => dispatch({ type: "delete.timed-out", attempt: effect.attempt }),
+        SESSION_DELETE_TIMEOUT_MS,
+      )
+    }
+
+    onCleanup(() => dispatch({ type: "disposed" }))
+    const busy = () => selectSessionDeleteView(deleteState()).busy
 
     return (
       <Dialog fit>
@@ -297,10 +377,14 @@ export function createTimelineController(input: { session: TimelineSessionSource
           />
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
+          <Button variant="ghost" autofocus disabled={busy()} onClick={() => dispatch({ type: "cancel.requested" })}>
             {language.t("common.cancel")}
           </Button>
-          <Button variant="danger" onClick={confirm}>
+          <Button
+            variant="danger"
+            disabled={busy()}
+            onClick={() => dispatch({ type: "confirm.requested", target: deleteTarget(props.sessionID) })}
+          >
             {language.t("session.delete.button")}
           </Button>
         </DialogFooter>
@@ -336,12 +420,28 @@ export function createTimelineController(input: { session: TimelineSessionSource
       shellToolPartsExpanded,
       editToolPartsExpanded,
     },
-    pending: {
-      rename: () => pending.rename,
+    title: {
+      view: createMemo(() => selectSessionHeaderTitleView(titleState())),
+      setInput: (element: HTMLInputElement) => {
+        titleInput = element
+      },
+      toggleMenu: (open: boolean) => dispatchTitle({ type: "menu.toggled", open, editable: editable() }),
+      edit: () => dispatchTitle({ type: "edit.opened", editable: editable(), title: titleLabel() }),
+      chooseRename: () => dispatchTitle({ type: "rename.chosen" }),
+      menuClosed: () => dispatchTitle({ type: "menu.closed", editable: editable(), title: titleLabel() }),
+      change: (value: string) => dispatchTitle({ type: "draft.changed", value }),
+      cancel: () => dispatchTitle({ type: "edit.cancelled" }),
+      submit: () =>
+        dispatchTitle({
+          type: "edit.submitted",
+          sessionID: input.session.identity.sessionID(),
+          editable: editable(),
+          currentTitle: titleLabel(),
+        }),
     },
     action: {
-      rename,
-      export: exportSession,
+      export: (id: string) => exporter.export({ server: server.key, sessionID: id }),
+      exporting: (id: string) => exporter.exporting({ server: server.key, sessionID: id }),
       showDelete: (id: string) => dialog.show(() => <DeleteDialog sessionID={id} />),
       navigateParent: () => {
         const id = input.session.data.parentID()

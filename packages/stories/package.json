@@ -18,7 +18,7 @@
     "@types/node": "catalog:",
     "solid-js": "catalog:",
     "typescript": "catalog:",
-    "vite": "7.3.6",
+    "vite": "7.3.7",
     "vite-plugin-solid": "2.11.12"
   }
 }

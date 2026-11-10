@@ -103,6 +103,7 @@ export type RunAgent = {
   id: string
   name: string
   description?: string
+  color?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
 }

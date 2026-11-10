@@ -1,9 +1,8 @@
-import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { Keymap } from "../context/keymap"
-import { useNewDesigns } from "../config"
 import { useTheme } from "../context/theme"
 import type { UpdateState } from "../context/update-notification"
-import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
+import { DialogButtons, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
 
@@ -16,7 +15,6 @@ export function DialogUpdate(props: {
 }) {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
-  const newDesigns = useNewDesigns()
   const [error, setError] = createSignal<string>()
   const [active, setActive] = createSignal(0)
   const controller = new AbortController()
@@ -65,24 +63,19 @@ export function DialogUpdate(props: {
 
   createEffect(() => setActive(Math.max(0, buttons().length - 1)))
 
+  const move = (step: number) => {
+    const count = buttons().length
+    if (count) setActive((value) => (value + step + count) % count)
+  }
+
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      {
-        bind: "return",
-        title: "Confirm update action",
-        group: "Dialog",
-        run: () => void buttons()[newDesigns() ? buttons().length - 1 : active()]?.run(),
-      },
-      ...(newDesigns() ? [] : ["left", "right", "tab", "shift+tab"]).map((bind) => ({
-        bind,
-        title: bind === "left" || bind === "shift+tab" ? "Previous update action" : "Next update action",
-        group: "Dialog",
-        run: () => {
-          const count = buttons().length
-          if (count) setActive((value) => (value + 1) % count)
-        },
-      })),
+      { bind: "return", title: "Confirm update action", group: "Dialog", run: () => void buttons()[active()]?.run() },
+      { bind: "left", title: "Previous update action", group: "Dialog", run: () => move(-1) },
+      { bind: "shift+tab", title: "Previous update action", group: "Dialog", run: () => move(-1) },
+      { bind: "right", title: "Next update action", group: "Dialog", run: () => move(1) },
+      { bind: "tab", title: "Next update action", group: "Dialog", run: () => move(1) },
     ],
   }))
 
@@ -99,33 +92,13 @@ export function DialogUpdate(props: {
           }
         />
       }
-      footer={{
-        actions: {
-          primary: buttons().map((button, index) => ({
-            title: button.label.toLowerCase(),
-            key: index === buttons().length - 1 ? "enter" : undefined,
-            onTrigger: () => void button.run(),
-          })),
-        },
-      }}
-      legacyFooter={
+      buttons={
         <Show when={buttons().length > 0}>
-          <box flexDirection="row" justifyContent="flex-end">
-            <For each={buttons()}>
-              {(button, index) => (
-                <box
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={active() === index() ? theme.background.action.primary.focused : undefined}
-                  onMouseUp={() => void button.run()}
-                >
-                  <text fg={active() === index() ? theme.text.action.primary.focused : theme.text.muted}>
-                    {button.label}
-                  </text>
-                </box>
-              )}
-            </For>
-          </box>
+          <DialogButtons
+            buttons={buttons().map((button) => ({ label: button.label, run: () => void button.run() }))}
+            active={active()}
+            onActive={setActive}
+          />
         </Show>
       }
     >

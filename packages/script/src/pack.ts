@@ -42,7 +42,8 @@ export async function pack(
 
       if (!/\.tsx?$/.test(value)) return [key, value]
 
-      return [key, { import: options.source ? value : output(value), types: declaration(value) }]
+      // TypeScript takes the first condition it matches, so `types` goes first or it type-checks the `import` target.
+      return [key, { types: declaration(value), import: options.source ? value : output(value) }]
     }),
   )
   const imports = pkg.imports

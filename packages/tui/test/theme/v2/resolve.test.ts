@@ -337,6 +337,23 @@ test("surface overrides rewire references and reset action states from their bas
   expect(raised.text.action.primary.focused.toInts()).toEqual([85, 85, 85, 255])
 })
 
+test("dialog footer overrides layer on the dialog surface", () => {
+  const theme = resolveTheme(
+    override(light, {
+      "@dialog": {
+        text: { base: "#333333" },
+        "@footer": { text: { muted: "#666666" } },
+      },
+    }),
+  )
+  const footer = theme.surface("dialog.footer")
+  expect(footer.text.muted.toInts()).toEqual([102, 102, 102, 255])
+  expect(footer.text.base.toInts()).toEqual([51, 51, 51, 255])
+  expect(theme.surface("dialog").text.muted.toInts()).not.toEqual([102, 102, 102, 255])
+  const plain = resolveTheme(light)
+  expect(plain.surface("dialog.footer")).toBe(plain.surface("dialog"))
+})
+
 test("rejects missing and circular references", () => {
   expect(() => resolveTheme(override(light, { text: { base: "$missing" } }))).toThrow(
     'Theme reference "$missing" was not found',

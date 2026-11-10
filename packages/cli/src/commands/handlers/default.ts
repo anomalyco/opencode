@@ -102,6 +102,8 @@ export default Runtime.handler(Commands, (input) =>
       },
       server: {
         endpoint: server.endpoint,
+        // Managed and standalone servers run here; an explicit --server may be on another machine.
+        local: requestedServer === undefined,
         service: service
           ? {
               reconnect: (signal) => runServicePromise(service.reconnect(), { signal }),

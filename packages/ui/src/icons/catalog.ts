@@ -2,6 +2,14 @@ import { additionalIcons, additionalIconViewBox } from "./icon/additional-icons"
 
 // Consumers center the SVG viewport, so each icon must center its artwork within its viewBox.
 const icons = {
+  "outline-list-changelog": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M3 14.5V15H4V14.5H3.5H3ZM4 1.5V1H3V1.5H3.5H4ZM8.5 1.5V1H8V1.5H8.5ZM14.5 1.5H15V1H14.5V1.5ZM14.5 6.5V7H15V6.5H14.5ZM8.5 6.5H8V7H8.5V6.5ZM8.5 9.5V9H8V9.5H8.5ZM14.5 9.5H15V9H14.5V9.5ZM14.5 14.5V15H15V14.5H14.5ZM8.5 14.5H8V15H8.5V14.5ZM3.5 6H4V1.5H3.5H3V6H3.5ZM8.5 1.5V2H14.5V1.5V1H8.5V1.5ZM14.5 1.5H14V6.5H14.5H15V1.5H14.5ZM14.5 6.5V6H8.5V6.5V7H14.5V6.5ZM8.5 6.5H9V1.5H8.5H8V6.5H8.5ZM8.5 9.5V10H14.5V9.5V9H8.5V9.5ZM14.5 9.5H14V14.5H14.5H15V9.5H14.5ZM14.5 14.5V14H8.5V14.5V15H14.5V14.5ZM8.5 14.5H9V9.5H8.5H8V14.5H8.5ZM3.5 10V10.5C4.8807 10.5 6 9.38075 6 8H5.5H5C5 8.82845 4.32843 9.5 3.5 9.5V10ZM5.5 8H6C6 6.61925 4.8807 5.5 3.5 5.5V6V6.5C4.32843 6.5 5 7.17155 5 8H5.5ZM3.5 6V5.5C2.1193 5.5 1 6.61925 1 8H1.5H2C2 7.17155 2.67157 6.5 3.5 6.5V6ZM1.5 8H1C1 9.38075 2.1193 10.5 3.5 10.5V10V9.5C2.67157 9.5 2 8.82845 2 8H1.5ZM3.5 14.5H4V10H3.5H3V14.5H3.5Z" fill="currentColor"/>`,
+  },
+  "outline-pair": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M4.5 10V13.5H11.5V10" stroke="currentColor"/><path d="M3.5 4.5V2.5H5.5V4.5" stroke-linecap="square" stroke="currentColor"/><path d="M10.5 4.5V2.5H12.5V4.5" stroke-linecap="square" stroke="currentColor"/><path d="M9.5 4.5H13.5V10.5H9.5V4.5Z" stroke-linecap="square" stroke="currentColor"/><path d="M2.5 4.5H6.5V10.5H2.5V4.5Z" stroke-linecap="square" stroke="currentColor"/>`,
+  },
   lock: {
     viewBox: "0 0 16 16",
     body: `<rect x="3.5" y="7" width="9" height="7" rx="1" stroke="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1" stroke="currentColor" stroke-linecap="round"/>`,
@@ -69,6 +77,14 @@ const icons = {
   "magnifying-glass": {
     viewBox: "0 0 16 16",
     body: `<path d="M14 14L10.3454 10.3454M6.88889 11.7778C9.58889 11.7778 11.7778 9.58889 11.7778 6.88889C11.7778 4.18889 9.58889 2 6.88889 2C4.18889 2 2 4.18889 2 6.88889C2 9.58889 4.18889 11.7778 6.88889 11.7778Z" stroke="currentColor"/>`,
+  },
+  "outline-magnifier-minus": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M14 14L11 11M4.66667 7.33333H10M12.6667 7.33333C12.6667 10.2789 10.2789 12.6667 7.33333 12.6667C4.38781 12.6667 2 10.2789 2 7.33333C2 4.38781 4.38781 2 7.33333 2C10.2789 2 12.6667 4.38781 12.6667 7.33333Z" stroke-miterlimit="10" stroke-linecap="square" stroke="currentColor"/>`,
+  },
+  "outline-magnifier-plus": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M14 14L11 11M4.66667 7.33333H10M7.33333 4.66667V10M12.6667 7.33333C12.6667 10.2789 10.2789 12.6667 7.33333 12.6667C4.38781 12.6667 2 10.2789 2 7.33333C2 4.38781 4.38781 2 7.33333 2C10.2789 2 12.6667 4.38781 12.6667 7.33333Z" stroke-miterlimit="10" stroke-linecap="square" stroke="currentColor"/>`,
   },
   menu: {
     viewBox: "0 0 16 16",
@@ -150,6 +166,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M8.25 6.17773V1.17773M11.25 4.17773L8.25 1.17773L5.25 4.17773" stroke="currentColor"/><path d="M8.25 9.17773V14.1777M11.25 11.1777L8.25 14.1777L5.25 11.1777" stroke="currentColor"/><path d="M4.25 7.67773H12.25" stroke="currentColor"/>`,
   },
+  "outline-expand": {
+    viewBox: "0 0 24 24",
+    body: `<g transform="scale(1.2)" stroke="currentColor" stroke-width="1.25"><path d="M4.58301 10.4163V15.4163H9.58301M10.4163 4.58301H15.4163V9.58301" stroke="currentColor" stroke-linecap="square"/></g>`,
+  },
   filetree: {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 1.5V12.2484H6.75M2.5 4.74838H6.75" stroke="currentColor"/><rect x="8.5" y="3.2168" width="6" height="3" fill="none" stroke="currentColor"/><rect x="8.5" y="10.75" width="6" height="3" fill="none" stroke="currentColor"/>`,
@@ -177,6 +197,10 @@ const icons = {
   "code-slash": {
     viewBox: "0 0 16 16",
     body: `<path fill-rule="evenodd" clip-rule="evenodd" d="M10.0812 2.10803L6.55974 14.0809L5.92016 13.8928L9.44161 1.91992L10.0812 2.10803ZM4.13793 4.97275L1.44666 8.00045L4.13793 11.0281L3.63966 11.471L0.554688 8.00045L3.63966 4.52984L4.13793 4.97275ZM12.3617 4.52984L15.4467 8.00045L12.3617 11.471L11.8634 11.0281L14.5547 8.00045L11.8634 4.97275L12.3617 4.52984Z" fill="currentColor"/>`,
+  },
+  "outline-code-brackets": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M5 4L1 8L5 12M11 4L15 8L11 12M9 1L7 15" stroke="currentColor"/>`,
   },
   trash: {
     viewBox: "0 0 20 20",

@@ -20,6 +20,8 @@ import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { isoDay } from "../lib/format"
 import { jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
+import { providerIconId } from "../lib/provider-icon"
+import { dismissChartTooltipOnExit } from "../lib/chart-tooltip"
 import { methodologyItems } from "../lib/methodology"
 import { loadHomePage, type HomePageData } from "../lib/page-data"
 import { homeSummary } from "../lib/summaries"
@@ -461,6 +463,14 @@ function TopModelsChart(props: {
   const metric = createMemo(() => props.metric ?? "tokens")
 
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
+  dismissChartTooltipOnExit({
+    chart: () => chartRef,
+    open: () => activeIndex() !== undefined,
+    dismiss: () => {
+      setActiveIndex(undefined)
+      props.onActiveModelChange(undefined)
+    },
+  })
 
   return (
     <>
@@ -851,7 +861,8 @@ function isDenseColumnRange(range: UsageRange) {
 function scrollDenseChartToEnd(element: HTMLDivElement | undefined, range: UsageRange, count: number) {
   if (!element || count <= 0 || !isDenseColumnRange(range) || typeof window === "undefined") return
   window.requestAnimationFrame(() => {
-    element.scrollLeft = Number.MAX_SAFE_INTEGER
+    // WebKit ignores out-of-range values like Number.MAX_SAFE_INTEGER, so scroll to the real end.
+    element.scrollLeft = element.scrollWidth
   })
 }
 
@@ -955,7 +966,7 @@ function LeaderboardCard(props: {
   const i18n = useI18n()
   const language = useLanguage()
   const hasProvider = () => isKnownCatalogLab(props.entry.provider, props.catalogLabs)
-  const icon = () => (hasProvider() ? getProviderIconId(props.entry.author) : "synthetic")
+  const icon = () => (hasProvider() ? providerIconId(props.entry.author) : "synthetic")
   return (
     <a
       data-component="leader-card"
@@ -1004,14 +1015,6 @@ function LeaderboardCard(props: {
       </div>
     </a>
   )
-}
-
-function getProviderIconId(author: string) {
-  if (author === "MiniMax") return "minimax"
-  if (author === "Moonshot") return "moonshotai"
-  if (author === "Qwen") return "alibaba"
-  if (author === "Zhipu") return "zhipuai"
-  return author.toLowerCase()
 }
 
 function formatBillions(value: number) {
@@ -1109,6 +1112,14 @@ function MarketShare(props: {
   }
 
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
+  dismissChartTooltipOnExit({
+    chart: () => chartRef,
+    open: () => props.inspecting,
+    dismiss: () => {
+      props.onInspectingChange(false)
+      props.onActiveAuthorChange(undefined)
+    },
+  })
 
   return (
     <>
