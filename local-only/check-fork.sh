@@ -47,7 +47,7 @@ check "Test-Filter angepasst" packages/core/test/config/config.test.ts '!(entry 
 exists packages/core/test/config/builtin.test.ts
 
 echo "5. Offline-Konfiguration"
-for f in local-only/opencode.jsonc local-only/offline.env local-only/opencode-offline.cmd; do exists "$f"; done
+for f in local-only/README.md local-only/opencode.jsonc local-only/offline.env local-only/opencode-offline.cmd; do exists "$f"; done
 for flag in OPENCODE_DISABLE_AUTOUPDATE OPENCODE_DISABLE_FREE_MODELS OPENCODE_DISABLE_MODELS_FETCH OPENCODE_MODELS_URL; do
   if grep -rqF "$flag" packages/*/src 2>/dev/null; then echo "  OK      Flag $flag wird noch ausgewertet"
   else echo "  FEHLT   Flag $flag kommt in packages/*/src nicht mehr vor (umbenannt?)"; fail=1; fi
