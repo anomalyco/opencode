@@ -9,6 +9,7 @@ import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
+import { ShellEnv } from "./shell-env"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 
@@ -57,6 +58,12 @@ const probe = Effect.fn("BackgroundService.probe")(function* () {
 const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: BackgroundServiceMachine.ConnectMode) {
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
   const setup = yield* prepare(mode)
+  const running = yield* Effect.promise(() =>
+    setup.client.Service.discover({ file: setup.file, version: setup.version }).catch(() => undefined),
+  )
+
+  // A service started here inherits this process's environment, so it needs the user's shell PATH and variables.
+  if (!running) yield* ShellEnv.ready
 
   const run = (version = setup.version) =>
     setup.client.Service.ensure({
