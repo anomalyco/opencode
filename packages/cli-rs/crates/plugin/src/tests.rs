@@ -632,7 +632,10 @@ fn a_failed_external_plugin_keeps_the_built_in_it_would_replace() {
     let registry = Registry::define(vec![claiming("b", vec![Placement::append("home.footer")])], []);
     registry.activate(&dynamic(&host));
     let failing = Definition::fallible("b", |_| Err("ext setup failed".to_owned())).external("b.so", Rc::new(|| None));
-    assert_eq!(registry.load(&dynamic(&host), failing), Some(SetupFailed { error: "ext setup failed".into(), kept: false }));
+    assert_eq!(
+        registry.load(&dynamic(&host), failing),
+        Some(SetupFailed { error: "ext setup failed".into(), kept: false })
+    );
     let entries = registry.entries();
     assert_eq!((entries[0].source, entries[0].status.clone()), (Source::Builtin, Status::Active));
     assert_eq!(
