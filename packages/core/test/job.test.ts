@@ -545,6 +545,236 @@ describe("Job", () => {
     }),
   )
 
+  it.live("does not restore a consumed background row when its running work settles", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const latch = yield* Deferred.make<void>()
+      const job = yield* jobs.start({
+        id: "shell_consumed_before_settle",
+        type: "shell",
+        recovery: {
+          kind: "shell",
+          sessionID: SessionSchema.ID.make("ses_consumed_before_settle"),
+          shellID: "shell_consumed_before_settle",
+          command: "bun test",
+        },
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
+
+      const background = yield* jobs.background(job.id)
+      if (!background?.notificationID) return yield* Effect.die("background marker missing")
+      const waiting = yield* jobs.wait({ id: job.id }).pipe(Effect.forkChild({ startImmediately: true }))
+
+      yield* jobs.completeBackground(background.notificationID)
+      expect(yield* jobs.pendingBackground).toEqual([])
+      expect(yield* jobs.backgroundJobs).toEqual([])
+
+      yield* Deferred.succeed(latch, undefined)
+      expect(yield* Fiber.join(waiting)).toMatchObject({ info: { status: "completed", output: "done" } })
+      // Settling a consumed job must not re-insert the row its notification already cleared.
+      expect(yield* jobs.pendingBackground).toEqual([])
+      expect(yield* jobs.backgroundJobs).toEqual([])
+      expect(yield* jobs.get(job.id)).toBeUndefined()
+    }),
+  )
+
+  it.live("classifies a backgrounded subagent report and marks it settling", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const latch = yield* Deferred.make<void>()
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: SessionSchema.ID.make("ses_report_parent"),
+        childSessionID: SessionSchema.ID.make("ses_report_child"),
+        agent: "explore",
+        description: "Report work",
+      }
+      const job = yield* jobs.start({
+        id: recovery.childSessionID,
+        type: "subagent",
+        title: "Report work",
+        recovery,
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
+      const background = yield* jobs.background(job.id)
+      if (!background?.notificationID) return yield* Effect.die("background marker missing")
+
+      expect(yield* jobs.currentGeneration(job.id)).toMatchObject({ running: true })
+      expect(yield* jobs.prepareSubagentReport(job.id)).toEqual({
+        mode: "background",
+        notificationID: background.notificationID,
+        recovery,
+        startedAt: job.started_at,
+      })
+      expect(yield* jobs.currentGeneration(job.id)).toMatchObject({ running: false })
+      expect(yield* jobs.prepareSubagentReport(job.id)).toEqual({ mode: "none" })
+      expect(yield* jobs.currentGeneration("job_missing")).toBeUndefined()
+
+      yield* Deferred.succeed(latch, undefined)
+      yield* jobs.wait({ id: job.id })
+      expect(yield* jobs.pendingBackground).toMatchObject([
+        { notificationID: background.notificationID, status: "completed", output: "done" },
+      ])
+      yield* jobs.completeBackground(background.notificationID)
+    }),
+  )
+
+  it.live("refuses a late background handoff for settling foreground work and starts a fresh generation", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const latch = yield* Deferred.make<void>()
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: SessionSchema.ID.make("ses_settling_parent"),
+        childSessionID: SessionSchema.ID.make("ses_settling_child"),
+        agent: "explore",
+        description: "Settling work",
+      }
+      const job = yield* jobs.start({
+        id: recovery.childSessionID,
+        type: "subagent",
+        recovery,
+        run: Deferred.await(latch).pipe(Effect.as("old")),
+      })
+      const generation = (yield* jobs.currentGeneration(job.id))?.generation
+      if (generation === undefined) return yield* Effect.die("generation missing")
+      const oldWait = yield* jobs.wait({ id: job.id }).pipe(Effect.forkChild({ startImmediately: true }))
+
+      expect(yield* jobs.prepareSubagentReport(job.id)).toEqual({ mode: "foreground" })
+      expect(yield* jobs.currentGeneration(job.id)).toEqual({ generation, running: false })
+      expect(yield* jobs.background(job.id)).toBeUndefined()
+
+      const replacementLatch = yield* Deferred.make<string>()
+      yield* jobs.start({
+        id: job.id,
+        type: "subagent",
+        recovery,
+        run: Deferred.await(replacementLatch),
+      })
+      const current = yield* jobs.currentGeneration(job.id)
+      expect(current?.generation).not.toBe(generation)
+      expect(current?.running).toBe(true)
+
+      yield* Deferred.succeed(latch, undefined)
+      // The superseded generation still resolves its waiters instead of dropping the settlement.
+      expect(yield* Fiber.join(oldWait)).toMatchObject({
+        timedOut: false,
+        info: { status: "completed", output: "old" },
+      })
+      expect(yield* jobs.get(job.id)).toMatchObject({ status: "running" })
+
+      yield* Deferred.succeed(replacementLatch, "new")
+      expect((yield* jobs.wait({ id: job.id })).info).toMatchObject({ status: "completed", output: "new" })
+    }),
+  )
+
+  it.live("keeps settling work out of a session-wide background handoff", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const parent = SessionSchema.ID.make("ses_settling_all")
+      const latch = yield* Deferred.make<void>()
+      const first = yield* jobs.start({
+        id: "job_settling_all_first",
+        type: "test",
+        run: Deferred.await(latch).pipe(Effect.as("first")),
+      })
+      const second = yield* jobs.start({
+        id: "job_settling_all_second",
+        type: "test",
+        run: Deferred.await(latch).pipe(Effect.as("second")),
+      })
+      const scope = yield* Scope.Scope
+      const firstWait = yield* jobs
+        .block({ id: first.id, sessionID: parent })
+        .pipe(Effect.forkIn(scope, { startImmediately: true }))
+      const secondWait = yield* jobs
+        .block({ id: second.id, sessionID: parent })
+        .pipe(Effect.forkIn(scope, { startImmediately: true }))
+
+      expect(yield* jobs.prepareSubagentReport(first.id)).toEqual({ mode: "foreground" })
+      expect(yield* jobs.backgroundAll({ sessionID: parent })).toMatchObject([{ id: second.id }])
+      expect(yield* jobs.get(first.id)).toMatchObject({ status: "running" })
+      expect((yield* jobs.get(first.id))?.notificationID).toBeUndefined()
+
+      yield* Deferred.succeed(latch, undefined)
+      expect(yield* Fiber.join(firstWait)).toMatchObject({ type: "finished", info: { id: first.id } })
+      expect(yield* Fiber.join(secondWait)).toMatchObject({ type: "backgrounded", info: { id: second.id } })
+    }),
+  )
+
+  it.live("matches an external cancel to its busy period through the bound generation", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: SessionSchema.ID.make("ses_cancel_bound_parent"),
+        childSessionID: SessionSchema.ID.make("ses_cancel_bound_child"),
+        agent: "explore",
+        description: "Cancelled during the busy period",
+      }
+      const job = yield* jobs.start({
+        id: recovery.childSessionID,
+        type: "subagent",
+        recovery,
+        run: Effect.never,
+      })
+      const generation = (yield* jobs.currentGeneration(job.id))?.generation
+      if (generation === undefined) return yield* Effect.die("generation missing")
+
+      yield* jobs.cancel(job.id)
+      expect(yield* jobs.get(job.id)).toMatchObject({ status: "cancelled" })
+      // The cancel consumed the live entry; its matching generation still belongs to this busy period.
+      expect(yield* jobs.prepareSubagentReport(job.id, generation)).toEqual({ mode: "foreground" })
+      expect(yield* jobs.prepareSubagentReport(job.id, generation - 1)).toEqual({ mode: "none" })
+      expect(yield* jobs.prepareSubagentReport(job.id)).toEqual({ mode: "none" })
+    }),
+  )
+
+  it.live("writes subagent outbox rows with pure SQL upserts outside the live registry", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const db = (yield* Database.Service).db
+      const notificationID = SessionMessage.ID.create()
+      const recovery = {
+        kind: "subagent" as const,
+        parentSessionID: SessionSchema.ID.make("ses_outbox_parent"),
+        childSessionID: SessionSchema.ID.make("ses_outbox_child"),
+        agent: "explore",
+        description: "Outbox report",
+      }
+
+      yield* jobs.recordSubagentReport({
+        notificationID,
+        recovery,
+        status: "completed",
+        output: "report body",
+        startedAt: 1234,
+      })
+      expect(yield* jobs.get(recovery.childSessionID)).toBeUndefined()
+      expect(yield* jobs.pendingBackground).toMatchObject([
+        { id: recovery.childSessionID, notificationID, status: "completed", output: "report body", recovery },
+      ])
+
+      yield* jobs.recordSubagentReport({ notificationID, recovery, status: "error", error: "failed" })
+      const rows = yield* db.select().from(JobTable).all()
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({
+        notification_id: notificationID,
+        id: recovery.childSessionID,
+        session_id: recovery.parentSessionID,
+        child_session_id: recovery.childSessionID,
+        kind: "subagent",
+        status: "error",
+        output: null,
+        error: "failed",
+        time_created: 1234,
+      })
+
+      yield* jobs.deleteBackgroundRow(notificationID)
+      expect(yield* jobs.pendingBackground).toEqual([])
+    }),
+  )
+
   it.live("migrates legacy kv job.background/* markers into the job table", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
