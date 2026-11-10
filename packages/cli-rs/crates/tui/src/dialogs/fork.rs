@@ -58,7 +58,12 @@ fn fork(tui: &Tui, session: SessionID, message: Option<String>) {
     pending(tui);
     let prompt = message.as_deref().and_then(|message| {
         tui.data.read(|state| match state.message(&session, message) {
-            Some(SessionMessageInfo::User(user)) => Some(restored(&user.text)),
+            Some(SessionMessageInfo::User(user)) => Some(crate::routes::session::actions::projected(
+                &user.text,
+                user.files.as_deref(),
+                user.agents.as_deref(),
+                user.skills.as_deref(),
+            )),
             _ => None,
         })
     });
@@ -97,14 +102,6 @@ fn pending(tui: &Tui) {
         None,
         large(),
     );
-}
-
-/// A sent prompt as the composer holds it. Only the text comes back; attachments stay behind (E.2's prompt has no
-/// API to restore them yet).
-pub(crate) fn restored(text: &str) -> serde_json::Value {
-    let mut prompt = opencode_local::jsonl::empty_prompt();
-    prompt["text"] = serde_json::Value::String(text.to_owned());
-    prompt
 }
 
 fn large() -> DialogOptions {
