@@ -57,9 +57,11 @@ export class Model implements LanguageModelV3 {
     // Branches offer the chat's tools and system prompt so Claude reuses the chat's prompt cache.
     const offered = primary || branch ? tools : []
     const convert = ConvertClaudeStream.make(offered)
+    // Instruction updates ride along as conversation content, so keep them out of the utility system
+    // prompt too by building both the prompt and the system text from the same converted prompt.
+    const prompt = ConvertToClaudeMessage.liftInstructionUpdates(options.prompt)
     // Titles are standalone tasks, so OpenCode's system prompt replaces Claude Code's.
-    const system =
-      primary || branch ? ClaudeSystemPrompt.make(agent, instructions) : ClaudeSystemPrompt.utility(options.prompt)
+    const system = primary || branch ? ClaudeSystemPrompt.make(agent, instructions) : ClaudeSystemPrompt.utility(prompt)
     let cancelled = false
     let task: Promise<void>
     const stream = new ReadableStream({
@@ -76,7 +78,7 @@ export class Model implements LanguageModelV3 {
               maxOutputTokens: options.maxOutputTokens,
               connection: this.connection,
               system,
-              prompt: ConvertToClaudeMessage.liftInstructionUpdates(options.prompt),
+              prompt,
               tools: offered,
               emit: (message) => {
                 if (cancelled) return

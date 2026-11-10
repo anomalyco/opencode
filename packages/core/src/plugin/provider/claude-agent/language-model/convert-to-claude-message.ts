@@ -6,8 +6,9 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 export type ContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number]
 
 // A running Claude process won't take a new system message without restarting. OpenCode only adds
-// system messages after the first turn for instruction updates, so hand those over as user content and
-// leave the leading system prompt alone.
+// system messages after the first turn for instruction updates, so hand those over as user content,
+// tagged so Claude reads them as a reminder and not something the user typed. The leading system
+// prompt is left alone.
 export function liftInstructionUpdates(prompt: LanguageModelV3Prompt): LanguageModelV3Prompt {
   let started = false
   return prompt.map((message) => {
@@ -16,7 +17,8 @@ export function liftInstructionUpdates(prompt: LanguageModelV3Prompt): LanguageM
       return message
     }
     if (!started) return message
-    return { role: "user", content: [{ type: "text", text: message.content }] }
+    const text = `<system-reminder>\n${message.content}\n</system-reminder>`
+    return { role: "user", content: [{ type: "text", text }] }
   })
 }
 

@@ -97,7 +97,7 @@ describe("history reconciliation", () => {
     const text = CatchUp.content(lifted, decision.start)
       .filter((block) => block.type === "text")
       .map((block) => (block as { text: string }).text)
-    expect(text).toContain("The value is now B.")
+    expect(text.some((entry) => entry.includes("The value is now B."))).toBe(true)
   })
 
   test("ignores thinking, metadata and reordered user notes, but notices changed visible text", () => {
