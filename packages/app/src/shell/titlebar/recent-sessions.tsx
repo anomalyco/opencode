@@ -19,14 +19,13 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
-import { createSessionRenamer } from "@/session/commands/rename-session"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { showToast } from "@/shell/notifications/toast"
+import { setSidebarUnread } from "@/shell/sidebar-peek"
 import { useLayout } from "@/shell/state/layout"
 import { tabHref, useTabs } from "@/shell/tabs/tabs"
-import { RenameDialog } from "./project-session-row"
 import {
   addPin,
   dedupePins,
@@ -50,6 +49,7 @@ import {
 } from "./recent-sessions-model"
 import { notifySessionTabsRemoved } from "./session-events"
 import { TabNavItem } from "./tab-nav"
+import { createSessionRowNavigation, syncInactiveSession } from "./tab-strip"
 import { sessionTabTitle } from "./tab-title"
 
 const RecentSidebarState = Persistence.struct({
@@ -72,13 +72,14 @@ export function RecentSessions() {
   const dialog = useDialog()
   const queryClient = useQueryClient()
 
-  const rename = createSessionRenamer()
-
   const [state, setState, , ready] = persisted(Persist.global("sidebar.recent"), RecentSidebarState, { pins: [] })
 
   const [pages, setPages] = createStore<Record<string, RecentPageState>>({})
 
   const [hydration, setHydration] = createStore<Record<string, SessionInfo>>({})
+
+  // Whether each row shows its unread dot, keyed like the rows.
+  const [unread, setUnread] = createStore<Record<string, boolean>>({})
 
   const controllers = new Map<AbortController, string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -461,8 +462,11 @@ export function RecentSessions() {
 
   const endpoints = createMemo(() => recentSessionEndpoints(servers.list, servers.ownUrl()))
 
-  const openSessions = createMemo(() =>
-    new Set(tabs.store.flatMap((tab) => tab.type === "session" ? [recentSessionKey(tab.server, tab.sessionId)] : [])),
+  const openSessions = createMemo(
+    () =>
+      new Set(
+        tabs.store.flatMap((tab) => (tab.type === "session" ? [recentSessionKey(tab.server, tab.sessionId)] : [])),
+      ),
   )
 
   const partition = createMemo(() =>
@@ -478,6 +482,7 @@ export function RecentSessions() {
 
   const pinned = () => partition().pinned
   const recent = () => partition().recent
+  const rows = createMemo(() => [...pinned(), ...recent()])
 
   const firstPageLoading = createMemo(() => {
     if (!servers.hydrated()) return true
@@ -637,6 +642,29 @@ export function RecentSessions() {
     })
   }
 
+  // Rows take the side tabs' shortcuts, numbered and stepped through in the order shown.
+  const rowRefs = new Map<string, HTMLDivElement>()
+
+  const hints = createSessionRowNavigation({
+    keys: () => rows().map((item) => item.key),
+    current: () => rows().find(selected)?.key,
+    unread: (key) => !!unread[key],
+    navigate: (key, reveal) => {
+      const item = rows().find((entry) => entry.key === key)
+
+      if (!item) return
+      open(item)
+
+      if (reveal) rowRefs.get(key)?.scrollIntoView({ behavior: "instant", block: "nearest" })
+    },
+  })
+
+  // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the selected row never does.
+  createEffect(() => {
+    setSidebarUnread(rows().some((item) => !selected(item) && !!unread[item.key]))
+    onCleanup(() => setSidebarUnread(false))
+  })
+
   const requestFailed = (cause: unknown) =>
     showToast({
       title: language.t("common.requestFailed"),
@@ -706,9 +734,17 @@ export function RecentSessions() {
   }
 
   const row = (item: () => RecentSession, index?: () => number) => {
+    const position = () => rows().findIndex((entry) => entry.key === item().key)
+    const key = item().key
+
+    onCleanup(() => rowRefs.delete(key))
+
     const props = {
       item,
       selected: () => selected(item()),
+      shortcut: () => (position() >= 0 && position() < 9 ? position() + 1 : undefined),
+      ref: (element: HTMLDivElement) => rowRefs.set(key, element),
+      onUnreadChange: (value: boolean) => setUnread(item().key, value),
       pinned: index !== undefined,
       canMoveUp: () => index !== undefined && index() > 0,
       canMoveDown: () => index !== undefined && index() < pinned().length - 1,
@@ -717,16 +753,6 @@ export function RecentSessions() {
       onUnpin: () => removePinKey(item().key),
       onMoveUp: () => movePin(item().key, -1),
       onMoveDown: () => movePin(item().key, 1),
-      onRename: () => {
-        const current = item()
-
-        void dialog.show(() => (
-          <RenameDialog
-            title={sessionTabTitle(current.session.title, language.t("command.session.new"))}
-            onRename={(title) => rename(ServerConnection.Key.make(current.server), current.session, title)}
-          />
-        ))
-      },
       onArchive: () => archive(item()),
       onDelete: () => {
         const current = item()
@@ -744,7 +770,11 @@ export function RecentSessions() {
   }
 
   return (
-    <div data-slot="sidebar-recent" class="flex min-h-0 flex-1 flex-col [app-region:no-drag]">
+    <div
+      data-slot="sidebar-recent"
+      data-shortcut-hints={hints() ? "" : undefined}
+      class="flex min-h-0 flex-1 flex-col [app-region:no-drag]"
+    >
       <div
         ref={(element) => (viewport = element)}
         data-scrollable
@@ -843,6 +873,9 @@ function SectionHeader(props: { id: string; label: string }) {
 type RecentSessionTabProps = {
   item: () => RecentSession
   selected: () => boolean
+  shortcut: () => number | undefined
+  ref: (element: HTMLDivElement) => void
+  onUnreadChange: (unread: boolean) => void
   pinned: boolean
   canMoveUp: () => boolean
   canMoveDown: () => boolean
@@ -851,17 +884,16 @@ type RecentSessionTabProps = {
   onUnpin: () => void
   onMoveUp: () => void
   onMoveDown: () => void
-  onRename: () => void
   onArchive: () => void
   onDelete: () => void
 }
 
 function RecentSessionSlot(
-  props: RecentSessionTabProps & { ref?: (element: HTMLDivElement) => void; dragging?: boolean },
+  props: RecentSessionTabProps & { slotRef?: (element: HTMLDivElement) => void; dragging?: boolean },
 ) {
   return (
     <div
-      ref={props.ref}
+      ref={props.slotRef}
       data-titlebar-tab-slot
       data-orientation="vertical"
       data-active={props.selected()}
@@ -882,10 +914,12 @@ function PinnedSessionRow(props: RecentSessionTabProps & { index: () => number }
     },
   })
 
-  return <RecentSessionSlot {...props} ref={sortable.ref} dragging={sortable.isDragSource()} />
+  return <RecentSessionSlot {...props} slotRef={sortable.ref} dragging={sortable.isDragSource()} />
 }
 
+// Renders the session as the side tabs do, from the same status, with the Recent menu and no close actions.
 function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean }) {
+  const global = useGlobal()
   const language = useLanguage()
 
   const item = () => props.item()
@@ -898,7 +932,25 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
     () => item().session,
   )
 
-  const menu = () => (
+  // A busy session shows its progress indicator instead of the unread dot.
+  const unread = createMemo(() => status.unread() && !status.loading())
+
+  createEffect(() => props.onUnreadChange(unread()))
+
+  // A permission or form asked before this window connected only shows once loaded, as for an unselected side tab.
+  // Only running rows load it: an idle session cannot wait on either, and Recent lists far more sessions than tabs.
+  createEffect(() => {
+    const ctx = global.serverCtx(server())
+    const id = item().session.id
+
+    if (!ctx || props.selected() || !status.loading() || ctx.sdk.connection.status() !== "connected") return
+
+    const timer = window.setTimeout(() => syncInactiveSession(ctx, id), 300)
+
+    onCleanup(() => window.clearTimeout(timer))
+  })
+
+  const menu = (rename: () => void) => (
     <>
       <Show
         when={props.pinned}
@@ -913,7 +965,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
         </Menu.Item>
       </Show>
       <Menu.Separator />
-      <Menu.Item onSelect={props.onRename}>{language.t("common.rename")}</Menu.Item>
+      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>
       <Menu.Separator />
       <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
@@ -922,16 +974,18 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
 
   return (
     <TabNavItem
+      ref={props.ref}
       href={tabHref({ type: "session", server: server(), sessionId: item().session.id })}
       server={server()}
       session={item().session}
       preparing={false}
-      unread={false}
-      attention={false}
+      unread={unread()}
+      attention={status.attention()}
       loading={status.loading()}
+      shortcut={props.shortcut()}
       onNavigate={props.onOpen}
       active={props.selected()}
-      dragging={props.dragging}
+      dragging={!!props.dragging}
       orientation="vertical"
       menu={menu}
     />
