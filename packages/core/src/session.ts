@@ -210,7 +210,7 @@ export interface Interface {
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["prompt"]>
-  /** Generates text from current Session context without admitting input or mutating history. */
+  /** Generates text from current Session context without admitting input or mutating history. Its usage counts toward the Session's totals. */
   readonly generate: (input: {
     sessionID: SessionSchema.ID
     prompt: string
@@ -485,6 +485,7 @@ const layer = Layer.effect(
           Effect.provideService(Instance.Service, instances),
           Effect.provideService(Database.Service, database),
           Effect.provideService(LLMClient.Service, llm),
+          Effect.provideService(Bus.Service, bus),
         )
       }),
       command: Effect.fn("Session.command")(function* (input) {
