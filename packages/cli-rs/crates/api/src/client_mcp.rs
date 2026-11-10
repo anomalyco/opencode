@@ -135,9 +135,10 @@ impl Connector for Tungstenite {
         Box::pin(async move {
             let socket = ws::connect(&url, &headers).await.map_err(|error| error.to_string())?;
             let (mut sink, mut stream) = socket.split();
-            let (socket, mut remote) = pair();
-            let deliver = remote.deliver.clone();
-            tokio::spawn(async move {
+            let (socket, remote) = pair();
+            let (mut sent, deliver) = (remote.sent, remote.deliver);
+            let (written, writer) = oneshot::channel::<()>();
+            let reader = async move {
                 while let Some(message) = stream.next().await {
                     let incoming = match message {
                         Ok(ws::Message::Text(text)) => Incoming::Text(text.as_str().to_owned()),
@@ -154,9 +155,11 @@ impl Connector for Tungstenite {
                     }
                 }
                 let _ = deliver.send(Incoming::Closed).await;
-            });
+            };
+            tokio::spawn(ws::read_until_closed(reader, writer));
             tokio::spawn(async move {
-                while let Some(text) = remote.sent.recv().await {
+                let _written = written;
+                while let Some(text) = sent.recv().await {
                     if sink.send(ws::Message::text(text)).await.is_err() {
                         return;
                     }
@@ -165,8 +168,11 @@ impl Connector for Tungstenite {
                     code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
                     reason: "".into(),
                 };
-                let _ = sink.send(ws::Message::Close(Some(close))).await;
-                let _ = sink.close().await;
+                let closing = async {
+                    let _ = sink.send(ws::Message::Close(Some(close))).await;
+                    let _ = sink.close().await;
+                };
+                let _ = tokio::time::timeout(ws::CLOSE_GRACE, closing).await;
             });
             Ok(socket)
         })
@@ -649,5 +655,13 @@ mod tests {
         tokio::time::advance(Duration::from_millis(500)).await;
         settle().await;
         assert_eq!(opened.load(Ordering::SeqCst), 4);
+    }
+
+    #[tokio::test]
+    async fn tungstenite_lets_go_of_a_peer_that_never_answers_the_close() {
+        let (url, closed) = crate::ws::silent_peer().await;
+        let socket = Tungstenite.open(url, Vec::new()).await.unwrap();
+        drop(socket.outgoing);
+        closed.await.unwrap();
     }
 }
