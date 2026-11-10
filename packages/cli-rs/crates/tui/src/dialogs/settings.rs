@@ -628,6 +628,16 @@ fn apply(tui: &Tui, info: Info) {
     opencode_ui::motion::set_running(&tui.app, opencode_ui::motion::enabled(info.animations));
     let leader = tui.settings.config().leader_timeout;
     tui.keymap.set_leader_timeout(leader);
+    // Layers take the configured bindings again (`createLayer` reads `config.keybinds` reactively).
+    let keybinds = tui.settings.config().keybinds();
+    if keybinds != before.keybinds() {
+        tui.keymap.set_keybinds(opencode_ui::keymap::Keybinds::resolve(&keybinds, !cfg!(windows)).unwrap_or_else(
+            |error| {
+                log::warn!("invalid keybinds config: {error}");
+                opencode_ui::keymap::Keybinds::defaults()
+            },
+        ));
+    }
     crate::tabs::route_changed(tui);
     crate::frame::refresh(tui);
     let listeners: Vec<Listener> =

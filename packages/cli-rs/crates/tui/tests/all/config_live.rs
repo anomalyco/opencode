@@ -61,6 +61,22 @@ fn a_settings_write_reaches_the_tabs_and_the_leader_timeout_at_once() {
 }
 
 #[test]
+fn a_keybinds_write_rebinds_and_disables_commands_at_once() {
+    let app = TestApp::new(100, 30);
+    let tui = support::mount_empty(&app, Info::default(), None);
+    assert_eq!(tui.keymap.shortcut("session.list").as_deref(), Some("ctrl+x l"));
+    settings::update(&tui, set(&["keybinds", "session.list"], json!("f7")));
+    assert_eq!(tui.keymap.shortcut("session.list").as_deref(), Some("f7"));
+    app.press("f7");
+    assert!(tui.dialogs.is_open(), "f7 did not open the sessions:\n{}", app.text());
+    tui.dialogs.clear();
+    settings::update(&tui, set(&["keybinds", "session.list"], json!("none")));
+    assert_eq!(tui.keymap.shortcut("session.list"), None);
+    app.press("f7");
+    assert!(!tui.dialogs.is_open(), "f7 still opened the sessions");
+}
+
+#[test]
 fn an_outside_cli_json_edit_reloads() {
     let home = opencode_util::temp::tempdir().unwrap();
     let app = TestApp::new(100, 30);
