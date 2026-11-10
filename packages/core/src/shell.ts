@@ -39,6 +39,8 @@ type CreateInput = Shell.CreateInput & {
   shell?: string
 }
 
+const captureFailure = (message: string) => `(output capture failed: ${message}; the command's output was not recorded)`
+
 type Active = {
   // Immutable snapshot; lifecycle updates replace it via immer `produce`.
   info: Info
@@ -47,6 +49,8 @@ type Active = {
   newlines: number
   // Byte offsets where the last two lines start, so a truncation notice can size a cut-off line.
   lineStarts: [number, number]
+  // Set when the output file could not be opened or written, so callers report it instead of "(no output)".
+  captureError?: string
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
@@ -236,6 +240,16 @@ const layer = () =>
 
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const command = yield* require(id)
+        if (command.captureError) {
+          return {
+            // Report once, on the first page, so pollers that append each page do not repeat the notice.
+            output: (input?.cursor ?? 0) <= 0 ? captureFailure(command.captureError) : "",
+            // At least 1, so a poller that resumes from this cursor does not ask for the first page again.
+            cursor: Math.max(command.size, 1),
+            size: command.size,
+            truncated: false,
+          }
+        }
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
         if (cursor >= command.size) return { output: "", cursor: command.size, size: command.size, truncated: false }
@@ -262,6 +276,7 @@ const layer = () =>
           const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
           const maxBytes = limits?.max_bytes ?? ToolOutput.MAX_BYTES
           const command = yield* require(info.id)
+          if (command.captureError) return { output: captureFailure(command.captureError), truncated: false }
           const start = Math.max(0, command.size - maxBytes)
           // Read the byte before the window too, to tell whether the window starts on a line boundary.
           const before = Math.max(0, start - 1)
@@ -367,6 +382,9 @@ const layer = () =>
               commands.set(id, command)
 
               const stream = createWriteStream(file)
+              stream.on("error", (error) => {
+                command.captureError ??= error instanceof Error ? error.message : String(error)
+              })
               const outputDone = Latch.makeUnsafe()
               const pump = handle.all.pipe(
                 Stream.runForEach((chunk: Uint8Array) =>

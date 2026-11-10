@@ -1,4 +1,6 @@
 import { expect } from "bun:test"
+import path from "path"
+import { readdir, rm, writeFile } from "fs/promises"
 import { Deferred, Effect, Fiber, Layer, Queue, Scope, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
@@ -144,4 +146,54 @@ it.live("does not inherit host process.env when creating a shell in a workspace-
       OPENCODE_TERMINAL: "1",
     })
   }),
+)
+
+it.live("reports a capture failure instead of empty output when the output file cannot be written", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const data = path.join(tmp.path, "data")
+    yield* Effect.gen(function* () {
+      const shell = yield* Shell.Service
+      // Replace the project output dir with a regular file so opening "<dir>/<id>.out" fails for any user, root included.
+      const dir = path.join(data, "shell")
+      const projects = yield* Effect.promise(() => readdir(dir))
+      yield* Effect.promise(() =>
+        Promise.all(
+          projects.map(async (project) => {
+            await rm(path.join(dir, project), { recursive: true })
+            await writeFile(path.join(dir, project), "")
+          }),
+        ),
+      )
+      const info = yield* shell.create({ shell: "/bin/sh", command: "echo hello", timeout: 0 })
+      const { capture } = yield* shell.result(info)
+      expect(capture?.output).toContain("output capture failed")
+      expect(capture?.output).not.toBe("(no output)")
+      const first = yield* shell.output(info.id)
+      expect(first.output).toContain("output capture failed")
+      expect(first.cursor).toBeGreaterThan(0)
+      expect((yield* shell.output(info.id, { cursor: first.cursor })).output).toBe("")
+      expect((yield* shell.output(info.id, { cursor: 1 })).output).toBe("")
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(Shell.node, [
+          Location.node.replace(tempLocationLayer),
+          Global.node.replace(
+            Global.layerWith({
+              data,
+              cache: path.join(tmp.path, "cache"),
+              config: path.join(tmp.path, "config"),
+              state: path.join(tmp.path, "state"),
+              tmp: path.join(tmp.path, "tmp"),
+              bin: path.join(tmp.path, "cache", "bin"),
+              log: path.join(data, "log"),
+              repos: path.join(data, "repos"),
+            }),
+          ),
+          Config.node.replace(Config.testLayer()),
+          Environment.node.replace(hostEnvironmentLayer),
+        ]),
+      ),
+    )
+  }).pipe(Effect.scoped),
 )
