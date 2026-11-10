@@ -16,5 +16,6 @@ export const registry = {
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
+  copilot_auto: "Add GitHub Copilot's Auto model, which lets Copilot pick the model for each session.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

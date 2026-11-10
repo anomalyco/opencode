@@ -21,6 +21,7 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
+import { Flag } from "@opencode/core/flag"
 import { advance, drain } from "../lib/clock"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { testEffect } from "../lib/effect"
@@ -617,6 +618,118 @@ describe("GithubCopilotPlugin", () => {
         required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gemini-3.8-flash"))),
       )
       expect(resolved.route.id).toBe("openai-compatible-chat")
+    }),
+  )
+
+  it.effect("routes Auto through Copilot's router and keeps the pick until compaction", () =>
+    Effect.gen(function* () {
+      const picks: unknown[] = []
+      const state = { pick: "routed", available: true, listed: false }
+      const remote = (id: string, extra: Record<string, unknown> = {}) => ({
+        model_picker_enabled: false,
+        id,
+        name: id,
+        version: id,
+        supported_endpoints: ["/chat/completions"],
+        capabilities: {
+          family: id,
+          limits: { max_prompt_tokens: 128_000, max_output_tokens: 64_000 },
+          supports: { tool_calls: true },
+        },
+        ...extra,
+      })
+      const api = HttpClient.make((request) =>
+        Effect.gen(function* () {
+          if (request.url.endsWith("/copilot_internal/user"))
+            return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
+          if (request.url.endsWith("/models")) {
+            state.listed = true
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                data: [remote("routed"), remote("other"), remote("fallback", { is_chat_fallback: true })],
+              }),
+            )
+          }
+          expect(request.headers.authorization).toBe("Bearer token")
+          picks.push(
+            request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : null,
+          )
+          if (!state.available) return HttpClientResponse.fromWeb(request, new Response(null, { status: 503 }))
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              session_token: `token-${state.pick}`,
+              expires_at: 4_000_000_000,
+              selected_model: { id: state.pick },
+            }),
+          )
+        }),
+      )
+      yield* connect({ apiEndpoint: "https://copilot.test" })
+      const flags = yield* Flag.Service
+      yield* addPlugin().pipe(
+        Effect.provideService(HttpClient.HttpClient, api),
+        Effect.provideService(Flag.Service, { ...flags, enabled: (key) => Effect.succeed(key === "copilot_auto") }),
+      )
+      const models = yield* Model.Service
+      yield* advance(() => state.listed)
+      yield* drain
+      // Free plans hide every model from the picker; Auto is the one they can select.
+      expect(
+        (yield* models.available()).filter((model) => model.providerID === Provider.ID.githubCopilot).map((m) => m.id),
+      ).toEqual([Model.ID.make("auto")])
+
+      const hooks = yield* PluginHooks.Service
+      const ids = yield* sessions()
+      const resolve = (kind: SessionRequestKind, sessionID = ids.parent) =>
+        hooks
+          .trigger("session", "experimental.model.resolve", {
+            sessionID,
+            agent: Agent.ID.make("build"),
+            kind,
+            model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("auto") }),
+          })
+          .pipe(Effect.map((event) => event.target && String(event.target.id)))
+      const token = (model: string) =>
+        hooks
+          .trigger("session", "model.request", {
+            sessionID: ids.parent,
+            agent: Agent.ID.make("build"),
+            model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make(model) }),
+            kind: "primary",
+            headers: {},
+          })
+          .pipe(Effect.map((event) => event.headers["Copilot-Session-Token"]))
+
+      expect(yield* resolve("title")).toBeUndefined()
+      expect(picks).toEqual([])
+      expect(yield* resolve("primary")).toBe("routed")
+      expect(yield* resolve("primary")).toBe("routed")
+      expect(yield* resolve("generate")).toBe("routed")
+      expect(picks).toEqual([{ prompt: "" }])
+      expect(yield* token("routed")).toBe("token-routed")
+      // Copilot rejects the token for any model but the one it was issued for.
+      expect(yield* token("other")).toBeUndefined()
+
+      state.pick = "other"
+      yield* hooks.trigger("session", "compaction", {
+        sessionID: ids.parent,
+        agent: Agent.ID.make("compaction"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("routed") }),
+        system: [],
+        messages: [],
+        options: {},
+        tools: {},
+      })
+      expect(yield* token("routed")).toBe("token-routed")
+      expect(yield* resolve("compaction")).toBe("routed")
+      expect(yield* resolve("primary")).toBe("other")
+      expect(yield* token("other")).toBe("token-other")
+      expect(picks).toHaveLength(2)
+
+      state.available = false
+      expect(yield* resolve("primary", ids.child)).toBe("fallback")
     }),
   )
 

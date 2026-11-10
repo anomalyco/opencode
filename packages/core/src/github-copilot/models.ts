@@ -8,6 +8,7 @@ import { Provider } from "../provider.js"
 
 const RemoteModel = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
+  is_chat_fallback: Schema.optional(Schema.Boolean),
   id: Schema.String,
   name: Schema.String,
   version: Schema.String,
@@ -121,6 +122,15 @@ export function derive(baseURL: string, remote: Snapshot, existing: readonly Mod
   }
 
   return result
+}
+
+/** Copilot's Auto router. The router picks the model each session runs on; unrouted requests reach the chat fallback. */
+export const auto = Model.ID.make("auto")
+
+export function autoModel(baseURL: string, remote: Snapshot) {
+  const fallback = Array.from(remote.values()).find((model) => model.is_chat_fallback)
+  if (!fallback) return
+  return Model.Info.make({ ...build(auto, fallback, baseURL), name: "Auto", variants: [], enabled: true })
 }
 
 function usable(model: RemoteModel): model is UsableModel {
