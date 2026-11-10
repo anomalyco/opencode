@@ -11,6 +11,7 @@ import { ClientError } from "@opencode/client/promise"
 /** Log the reason, not a stack with a ticketed module URL or a snippet of a malformed listing. */
 export function webPluginError(cause: unknown, ticket?: string) {
   if (!(cause instanceof Error)) return "Unknown error"
+
   if (cause instanceof ClientError && cause.reason === "MalformedResponse") return cause.reason
   const message = `${cause.name}: ${cause.message}`
 

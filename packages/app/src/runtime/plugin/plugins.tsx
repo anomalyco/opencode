@@ -191,6 +191,7 @@ async function evaluate(plugin: GuiSource): Promise<LoadedPluginGui | undefined>
 async function importWebFactory(plugin: Extract<GuiSource, { ticket: string }>) {
   const url = new URL("/api/experimental/plugin/web-module", window.location.origin)
   url.search = new URLSearchParams({ id: plugin.id, revision: plugin.revision, ticket: plugin.ticket }).toString()
+
   const module: { default: PluginFactory } | undefined = await import(/* @vite-ignore */ url.href).catch(
     (cause: unknown) => {
       console.error(
@@ -199,6 +200,7 @@ async function importWebFactory(plugin: Extract<GuiSource, { ticket: string }>) 
         plugin.revision,
         webPluginError(cause, plugin.ticket),
       )
+
       return undefined
     },
   )
