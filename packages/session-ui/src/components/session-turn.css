@@ -320,20 +320,3 @@
     color: var(--v2-text-text-muted);
   }
 }
-
-/* Beside the status line, the offer to move work to the background reads as a quiet outlined control. */
-[data-component="timeline-status-lane"] [data-component="session-background-hint-row"] button {
-  height: 22px;
-  padding: 0 4px 0 6px;
-  gap: 6px;
-  /* An inset shadow rather than a border, so the line stays half a pixel on standard-density screens too. */
-  border: 0;
-  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
-  border-radius: 6px;
-  cursor: default;
-  font-family: var(--v2-font-family-sans);
-  font-size: 13px;
-  font-weight: 440;
-  line-height: var(--line-height-compact);
-  letter-spacing: -0.04px;
-}
