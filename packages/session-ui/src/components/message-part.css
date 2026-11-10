@@ -2171,24 +2171,31 @@
   --clamped-content-fade: var(--opencode-diffs-bg, var(--color-background-stronger));
 }
 
-/* In the Activity timeline anything nested under a row hangs from a line at the row's leading edge, 12px from its
-   content: a group's rows, a thought's text, search results, an error. */
+/* In the Activity timeline anything nested under a row hangs from a line 2px in from the row's leading edge, with the
+   content 14px in: a group's rows, a thought's text, search results, an error. */
 [data-activity-timeline]
   [data-component="collapsible"].tool-collapsible:not([data-rail="false"])
   > [data-slot="collapsible-content"] {
   position: relative;
   margin-inline-start: 0;
-  padding-inline-start: 12px;
+  padding-inline-start: 14px;
 
+  /* Its ends follow the first and last text, measured by nested-rail.ts. Half the border color at rest; the strip it
+     sits in closes the row, and brightens it while the pointer is over it. */
   &::before {
     content: "";
     display: block;
     position: absolute;
-    inset-inline-start: 0;
-    inset-block: 4px;
+    inset-inline-start: 2px;
+    inset-block-start: var(--rail-top, 4px);
+    inset-block-end: var(--rail-bottom, 4px);
     width: 1px;
-    background-color: var(--v2-border-border-base);
+    background-color: color-mix(in srgb, var(--v2-border-border-base) 50%, transparent);
     pointer-events: none;
+  }
+
+  &[data-rail-hover]::before {
+    background-color: var(--v2-border-border-base);
   }
 }
 
@@ -2272,3 +2279,4 @@
     }
   }
 }
+

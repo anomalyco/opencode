@@ -52,6 +52,7 @@ import type { TimelineDetail } from "./detail"
 import { timelineCategory, timelineDefaultOpen, timelineDiffOpen, timelineThinkingOpen } from "./policy"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { ActivityTimelineProvider } from "./activity-context"
+import { trackNestedRails } from "./nested-rail"
 import { Badge } from "@opencode/ui/badge"
 import { attached } from "../components/message-file"
 import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage, type PartRef } from "./projection"
@@ -627,6 +628,7 @@ export function createSessionTimelineRowRenderer(input: {
     <div
       ref={(el) => {
         if (props.grow) growIn(el, () => grown(props.row.userMessageID))
+        onCleanup(trackNestedRails(el))
       }}
       id={Predicate.isTagged(props.row, "UserMessage") ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}

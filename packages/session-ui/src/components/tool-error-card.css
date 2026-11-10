@@ -204,7 +204,7 @@
   }
 
   > [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-content"] {
-    padding-inline-start: 12px;
+    padding-inline-start: 14px;
 
     &::before {
       display: block;
