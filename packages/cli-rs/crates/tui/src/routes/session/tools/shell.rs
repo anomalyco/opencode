@@ -126,8 +126,13 @@ impl Shell {
             .as_ref()
             .and_then(|id| cx.state.shell(&ShellID(id.clone())).map(|shell| shell.location.directory.clone()))
             .or(cx.directory.map(str::to_owned));
+        let stopped = stopped(props);
         let call = Call {
-            output: if shell.is_some() { None } else { props.output.clone() },
+            output: match &stopped {
+                Some((output, _)) => Some(output.clone()),
+                None if shell.is_some() => None,
+                None => props.output.clone(),
+            },
             shell,
             command: props.input_str("command").map(str::to_owned),
             workdir: format_path(cx, props.input_str("workdir")),
@@ -135,7 +140,7 @@ impl Shell {
             background: status == Status::Completed
                 && props.metadata.get("status").and_then(serde_json::Value::as_str) == Some("running"),
             permission: props.permission,
-            error: props.error().map(str::to_owned),
+            error: stopped.map(|(_, notice)| notice).or_else(|| props.error().map(str::to_owned)),
             width: content_width(cx),
             directory,
         };
@@ -144,6 +149,19 @@ impl Shell {
         self.0.watch();
         self.0.paint();
     }
+}
+
+/// `stoppedShell`: a call the user stopped fails with its output followed by a notice, which its metadata names. Its
+/// output shows like a finished call's and only the notice as the error. A plugin that rewrote the error gets it shown
+/// as is.
+fn stopped(props: &Props<'_>) -> Option<(String, String)> {
+    if props.status() != Status::Error || props.metadata.get("interrupted") != Some(&serde_json::Value::Bool(true)) {
+        return None;
+    }
+    let notice =
+        props.metadata.get("notice").and_then(serde_json::Value::as_str).filter(|notice| !notice.is_empty())?;
+    let output = props.error()?.strip_suffix(notice)?;
+    Some((output.trim_end_matches('\n').to_owned(), notice.to_owned()))
 }
 
 impl Drop for Shell {
