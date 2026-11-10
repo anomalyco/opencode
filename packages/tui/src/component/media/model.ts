@@ -29,13 +29,8 @@ export const MEDIA_EXTENSIONS: Record<string, string> = {
 }
 
 const PLAYABLE = Object.values(MEDIA_EXTENSIONS).filter((mime) => mime.startsWith("video/"))
-const PLAYABLE_EXTENSION = new RegExp(
-  Object.keys(MEDIA_EXTENSIONS)
-    .filter((extension) => PLAYABLE.includes(MEDIA_EXTENSIONS[extension]!))
-    .map((extension) => `\\${extension}`)
-    .join("|"),
-  "i",
-)
+// The extensions of PLAYABLE, as diff previews and prompt attachment labels also match them.
+const PLAYABLE_EXTENSION = /\.(?:mp4|mov|m4v)/i
 
 export function mediaMime(name: string, flavor = path): string | undefined {
   return MEDIA_EXTENSIONS[flavor.extname(name).toLowerCase()]
@@ -127,7 +122,7 @@ export function collectSessionMedia(
         mime: mediaMime(file) ?? "image/png",
         uri: fileURL(file),
         name: pathFlavor(file).basename(file),
-        ...(location ? { location } : {}),
+        location,
       },
     ]
   })
@@ -268,5 +263,5 @@ function mediaSource(item: MediaItem) {
 
 function item(id: string, mime: string, uri: string, name?: string): MediaItem[] {
   const kind = mediaKind(mime, name)
-  return kind === "other" ? [] : [{ id, kind, mime, uri, ...(name ? { name } : {}) }]
+  return kind === "other" ? [] : [{ id, kind, mime, uri, name }]
 }

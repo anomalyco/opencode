@@ -46,7 +46,7 @@ export const context = createContext<{
     /** A part reports the screen row of the current match, so a pending seek can reach it. */
     located: (match: FindMatch, row: () => number | undefined) => void
   }
-  /** Every image and video in the loaded transcript, in order, while the rich media experiment is on. */
+  /** Every image and video in the loaded transcript, in order, while the `rich_media` flag is on. */
   media?: () => readonly MediaItem[]
 }>()
 

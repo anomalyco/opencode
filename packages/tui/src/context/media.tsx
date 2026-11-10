@@ -9,16 +9,14 @@ import { useRenderer } from "@opentui/solid"
 import { createContext, createEffect, createSignal, on, onCleanup, Show, useContext, type JSX } from "solid-js"
 import { createMediaFiles } from "../component/media/file"
 import type { MediaItem } from "../component/media/model"
+import { MediaPip } from "../component/media/pip"
+import { MediaViewer } from "../component/media/viewer"
 import { useRichMedia } from "../config"
 
 type MediaSound = Readonly<{ muted?: boolean; volume?: number; loop?: boolean }>
 export type MediaPlayback = Readonly<{ time?: number; playing?: boolean }> & MediaSound
 export type MediaViewerRequest = Readonly<{ items: readonly MediaItem[]; index: number } & MediaPlayback>
 export type MediaPipRequest = Readonly<{ item: MediaItem } & MediaPlayback>
-type MediaViews = Readonly<{
-  viewer?: (props: { request: MediaViewerRequest }) => JSX.Element
-  pip?: (props: { pip: MediaPipRequest }) => JSX.Element
-}>
 
 /** The PiP draws below the viewer, and both below dialogs (3000). */
 export const MEDIA_PIP_Z_INDEX = 2000
@@ -31,13 +29,6 @@ const POSTER_LIMIT = 4
 // A tile that drops out keeps its player this long: opening one and seeking it to the poster blocks for about 70 ms
 // on a 1080p clip, so a tile scrolled out and back would stall each time.
 const POSTER_GRACE_MS = 2_000
-
-let views: MediaViews = {}
-
-/** Sets the components `MediaHost` renders. */
-export function registerMediaViews(next: MediaViews) {
-  views = { ...views, ...next }
-}
 
 const MediaContext = createContext<ReturnType<typeof init>>()
 
@@ -288,16 +279,16 @@ function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>) {
   return a.size === b.size && [...a].every((key) => b.has(key))
 }
 
-/** Renders the registered viewer and PiP. Mount it once, inside the dialog provider and above the routes. */
+/** Renders the viewer and PiP. Mount it once, inside the dialog provider and above the routes. */
 export function MediaHost() {
   const media = useMedia()
   return (
     <>
       <Show when={media.pip()} keyed>
-        {(pip) => views.pip?.({ pip })}
+        {(pip) => <MediaPip pip={pip} />}
       </Show>
       <Show when={media.viewer()} keyed>
-        {(request) => views.viewer?.({ request })}
+        {(request) => <MediaViewer request={request} />}
       </Show>
     </>
   )

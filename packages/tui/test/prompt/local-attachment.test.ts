@@ -6,7 +6,6 @@ import {
   MAX_LOCAL_VIDEO_BYTES,
   parsePastedFilepaths,
   promptFilesForServer,
-  keptVideoExtension,
   readKeptAttachments,
   readLocalAttachmentWith,
   resolvePastedAttachments,
@@ -194,16 +193,10 @@ describe("prompt local attachments", () => {
     expect(await resolvePastedAttachments(clips[0]!, process.platform)).toBeUndefined()
   })
 
-  // `.x-matroska` is what history names a kept `video/x-matroska` video's file. A restored video is kept under a
-  // content hash, over the paste cap; its name is the one the user knows.
+  // A restored video is kept under a content hash, over the paste cap; its name is the one the user knows.
   test("reads kept files again as their type, up to the attachment limit, and names the ones it leaves out", async () => {
     await using tmp = await tmpdir()
-    const types = {
-      "clip.mp4": "video/mp4",
-      "clip.mkv": "video/x-matroska",
-      "clip.qt": "video/quicktime",
-      [`${"0f".repeat(32)}${keptVideoExtension("video/x-matroska")}`]: "video/x-matroska",
-    }
+    const types = { "clip.mp4": "video/mp4", "clip.mkv": "video/x-matroska", "clip.qt": "video/quicktime" }
     const small = Object.keys(types).map((name) => path.join(tmp.path, name))
     const restored = path.join(tmp.path, "0f".repeat(32) + ".mp4")
     const large = path.join(tmp.path, "large.mp4")

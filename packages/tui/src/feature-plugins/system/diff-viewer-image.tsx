@@ -1,14 +1,14 @@
 /** @jsxImportSource @opentui/solid */
 import type { LocationRef } from "@opencode/client"
-import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { MouseEvent } from "@opentui/core"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createMemo, createResource, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
-import { mediaMime, type MediaItem } from "../../component/media/model"
+import { mediaMime, pathFlavor, type MediaItem } from "../../component/media/model"
 import { MediaStrip } from "../../component/media/strip"
-import { isMediaClick } from "../../component/media/tile"
+import { createMediaClick } from "../../component/media/tile"
 import { useRichMedia } from "../../config"
 import { useMedia } from "../../context/media"
 import { useTuiTerminalEnvironment } from "../../context/runtime"
@@ -19,7 +19,7 @@ export function isDiffImageFile(file: string) {
   return /\.(png|jpe?g|webp|gif)$/i.test(file)
 }
 
-/** The kind of working-tree preview a changed file gets; videos only with the rich media experiment. */
+/** The kind of working-tree preview a changed file gets; videos only with the `rich_media` flag. */
 export function diffMediaKind(file: string, richMedia: boolean) {
   if (isDiffImageFile(file)) return "image" as const
   if (richMedia && /\.(mp4|mov|m4v)$/i.test(file)) return "video" as const
@@ -122,19 +122,19 @@ export function DiffViewerImage(props: {
 function DiffViewerVideo(props: { file: string; location: LocationRef | undefined; height: number }) {
   const theme = useTheme()
   const media = useMedia()
-  const renderer = useRenderer()
   const environment = useTuiTerminalEnvironment()
   const dimensions = useTerminalDimensions()
   const item = createMemo((): MediaItem | undefined => {
     const location = props.location
     if (!location) return
     // The server's paths follow its own OS, which need not be this machine's.
-    const windows = /^(?:[a-z]:[\\/]|\\\\)/i.test(location.directory)
-    const flavor = windows ? path.win32 : path.posix
+    const flavor = pathFlavor(location.directory)
     const file = flavor.join(location.directory, props.file)
-    const uri = pathToFileURL(file, { windows }).href
+    const uri = pathToFileURL(file, { windows: flavor === path.win32 }).href
     return { id: file, kind: "video", mime: mediaMime(file) ?? "video/mp4", uri, name: flavor.basename(file), location }
   })
+  const open = () => media.openViewer([item()!], 0)
+  const click = createMediaClick(open)
 
   return (
     <Show when={item()} fallback={<text fg={theme.text.feedback.error.base}>Could not load video</text>}>
@@ -148,11 +148,7 @@ function DiffViewerVideo(props: { file: string; location: LocationRef | undefine
               alignItems="center"
               justifyContent="center"
               backgroundColor={theme.background.raised.base}
-              onMouseUp={(event: MouseEvent) => {
-                if (!isMediaClick(renderer, event)) return
-                event.stopPropagation()
-                media.openViewer([current()], 0)
-              }}
+              {...click}
             >
               <text fg={theme.text.muted} wrapMode="none" truncate selectable={false}>
                 video · {current().name}
@@ -163,12 +159,7 @@ function DiffViewerVideo(props: { file: string; location: LocationRef | undefine
             </box>
           }
         >
-          <MediaStrip
-            items={[current()]}
-            width={dimensions().width - 2}
-            height={props.height}
-            onOpen={() => media.openViewer([current()], 0)}
-          />
+          <MediaStrip items={[current()]} width={dimensions().width - 2} height={props.height} onOpen={open} />
         </Show>
       )}
     </Show>

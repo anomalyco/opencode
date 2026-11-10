@@ -1,4 +1,4 @@
-import type { BoxRenderable, CliRenderer, MouseEvent, TimerHandle, VideoRenderable } from "@opentui/core"
+import type { BoxRenderable, MouseEvent, TimerHandle, VideoRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, createUniqueId, Match, onCleanup, Show, Switch } from "solid-js"
 import { useMedia } from "../../context/media"
@@ -70,11 +70,11 @@ export function MediaTile(props: { item: MediaItem; width: number; height: numbe
         <Match when={poster() && (active() || media.posterOpen(key))}>
           <TileVideo item={props.item} active={active()} />
         </Match>
-        <Match when={isPlayableVideo(props.item) && media.posterShown(key)}>
+        <Match when={poster() && media.posterShown(key)}>
           <TileLabel item={props.item} text={`▶ ${mediaName(props.item)}`} />
         </Match>
         {/* Further off screen, a video tile draws nothing. */}
-        <Match when={isPlayableVideo(props.item)}>{null}</Match>
+        <Match when={poster()}>{null}</Match>
       </Switch>
     </box>
   )
@@ -170,7 +170,7 @@ export function createMediaClick(run: () => void) {
     onMouseUp: (event: MouseEvent) => {
       const press = pressed
       pressed = false
-      if (!press || !isMediaClick(renderer, event)) return
+      if (!press || event.button !== 0 || event.isDragging || renderer.getSelection()?.getSelectedText()) return
       // The element that a drag started on gets its release wherever it ends.
       const element = event.currentTarget!
       if (event.x < element.x || event.x >= element.x + element.width) return
@@ -179,11 +179,6 @@ export function createMediaClick(run: () => void) {
       run()
     },
   }
-}
-
-/** Whether a release is a left click and not the end of a text selection, which must reach copy-on-select. */
-export function isMediaClick(renderer: CliRenderer, event: MouseEvent) {
-  return event.button === 0 && !event.isDragging && !renderer.getSelection()?.getSelectedText()
 }
 
 /** Where a paused tile shows its poster: 10% in, past the fade most clips open with, and at most 30 s. */
