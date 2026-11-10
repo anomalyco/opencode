@@ -110,7 +110,8 @@ describe("PersistentPty rename", () => {
   )
 })
 
-describe("PersistentPty pipe processes", () => {
+// Pipe mode is Unix-only: Windows daemons reject create_pipe, so OpenCode keeps spawning shell commands there.
+describe.skipIf(process.platform === "win32")("PersistentPty pipe processes", () => {
   const input = {
     program: "/bin/sh",
     args: ["-c", "echo hi"],
