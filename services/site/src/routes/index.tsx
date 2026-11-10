@@ -3,7 +3,6 @@ import "./index.css"
 import "~/component/site/hero-title.css"
 import { rollsByCharacter, titleCells } from "~/component/site/hero-title"
 import { Title, Meta } from "@solidjs/meta"
-import { createAsync } from "@solidjs/router"
 import {
   createEffect,
   createMemo,
@@ -63,6 +62,7 @@ import { useLanguage } from "~/context/language"
 import { homeContent, linkPhrases } from "~/lib/home-content"
 import { tag } from "~/lib/language"
 import { repoStats, type RepoStats } from "~/lib/github"
+import { pageData } from "~/lib/page-data"
 import { inlineKey } from "~/lib/direction"
 import { copyOnClick } from "~/lib/clipboard"
 import { spinReel } from "~/component/site/slot-stat"
@@ -86,7 +86,7 @@ export default function Home() {
   useHomeOrder()
   const [statsVisible, setStatsVisible] = createSignal(false)
   // Live repo numbers (lib/github.ts), streamed in under the config's numbers.
-  const repo = createAsync(() => repoStats())
+  const repo = pageData(() => repoStats())
 
   const heroVariant = () => siteSettings.hero
   // Console layout "block" is the whole section, so it sets the panel option and the name on the
@@ -232,7 +232,8 @@ export default function Home() {
           card width): here, ahead of the hero, as the carousel's own copy of these rules only arrives
           with the carousel, and the hero would otherwise resize once it has painted. */}
       <style>{carouselCss()}</style>
-      <Announcement />
+      {/* Production keeps the announcement off (Settings › Announcement), so only development renders it. */}
+      {import.meta.env.DEV && <Announcement />}
       <section
         data-component="hero"
         data-section="hero"
@@ -270,11 +271,9 @@ export default function Home() {
         </Show>
       </section>
 
-      {/* The carousel's frame until the carousel itself has streamed in (products.tsx). */}
-      <ProductCarouselSkeleton />
-      {/* Before first paint: where the carousel's cards start on the page, so on phones a card runs
-          down to the bottom of the small viewport (products.css) and never past it. Again on resize. */}
-      <script innerHTML={cardTopScript} />
+      {/* The carousel's frame until the carousel itself has streamed in (products.tsx), on the
+          development server: production renders the page in one piece (src/static/render.tsx). */}
+      {import.meta.env.DEV && <ProductCarouselSkeleton />}
 
       <Show when={siteSettings.logoWall !== "off"}>
         <Show when={siteSettings.logoLayout === "section"} fallback={logoWall()}>
@@ -304,6 +303,10 @@ export default function Home() {
           </Show>
         }
       />
+      {/* Before first paint: where the carousel's cards (or its skeleton's) start on the page, so on
+          phones a card runs down to the bottom of the small viewport (products.css) and never past
+          it. Again on resize. */}
+      <script innerHTML={cardTopScript} />
 
       <section
         data-component="block"

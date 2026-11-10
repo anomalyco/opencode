@@ -68,6 +68,7 @@ import {
   VideoSources,
 } from "./media"
 import { inlineKey } from "~/lib/direction"
+import { staticRender } from "~/lib/static-render"
 import { cardVideo } from "./card-video"
 
 export { installs, products, sdkSnippet, type ProductSlug } from "./product-data"
@@ -293,7 +294,7 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
       data-phone-content={siteSettings.phoneCardContent}
       aria-label={i18n.t("site.products.label")}
     >
-      <style>{carouselCss()}</style>
+      {/* The home page writes carouselCss() ahead of its hero, which the cards' width sizes too. */}
       {/* On the home page the cards' resting frames are the largest things above the fold: fetched with
           the page, so each card shows its frame at first paint instead of its tone. */}
       <Show when={!props.exclude}>
@@ -860,6 +861,8 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
             : language.route("/desktop#download")
       }
       data-component="site-button"
+      // The static pages' script points it at this computer's exact build (detectDesktopDownload).
+      data-desktop-download
     >
       <Show when={os()}>{(value) => <PlatformIcon platform={value()} />}</Show>
       {/* One text node with the OS inside, so its leading space survives the button's flex layout;
@@ -984,9 +987,10 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
               Download
               <Chevron />
             </button>
-            <Show when={open()}>
+            <Show when={open() || staticRender()}>
               <div
                 data-slot="menu"
+                hidden={!open()}
                 id={menuID}
                 role="menu"
                 aria-label={i18n.t("site.action.desktopDownloads")}
@@ -1017,9 +1021,10 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                 >
                   <Chevron />
                 </button>
-                <Show when={open()}>
+                <Show when={open() || staticRender()}>
                   <div
                     data-slot="menu"
+                    hidden={!open()}
                     id={menuID}
                     role="menu"
                     aria-label={i18n.t("site.action.desktopDownloads")}
@@ -1058,9 +1063,10 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
               >
                 <Chevron />
               </button>
-              <Show when={open()}>
+              <Show when={open() || staticRender()}>
                 <div
                   data-slot="menu"
+                  hidden={!open()}
                   id={menuID}
                   role="menu"
                   aria-label={i18n.t("site.action.mobileApps")}
@@ -1123,20 +1129,25 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
               ref={trigger}
               type="button"
               data-component="site-button"
+              aria-haspopup="menu"
               aria-expanded={open() ? "true" : "false"}
               aria-controls={menuID}
-              onClick={() => {
-                if (openSheet()) return
-                setOpen(!open())
-                const panel = menu?.querySelector<HTMLElement>('[data-slot="menu"]')
-                if (panel) placeMenu(panel)
-              }}
+              onClick={toggle}
             >
               {props.slug === "mobile" ? i18n.t("download.action.download") : i18n.t("download.action.install")}
               <Chevron />
             </button>
-            <Show when={open()}>
-              <div data-slot="menu" id={menuID}>
+            <Show when={open() || staticRender()}>
+              <div
+                data-slot="menu"
+                id={menuID}
+                role="menu"
+                aria-label={
+                  props.slug === "mobile" ? i18n.t("site.action.mobileApps") : i18n.t("site.action.installCommands")
+                }
+                hidden={!open()}
+                onKeyDown={moveFocus}
+              >
                 <Show
                   when={props.slug !== "mobile"}
                   fallback={
@@ -1145,6 +1156,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                         <a
                           href={store.href}
                           data-slot="store"
+                          role="menuitem"
                           {...betaLink(
                             store,
                             i18n.t("site.newTab", { label: i18n.t("site.action.storeBeta", { os: store.device }) }),
@@ -1161,6 +1173,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                       <button
                         type="button"
                         data-slot="install"
+                        role="menuitem"
                         data-copied={copied() === item.id ? "" : undefined}
                         data-funnel-copy="terminal"
                         data-funnel-method={item.id}
@@ -1185,9 +1198,12 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
           </div>
         </Match>
       </Switch>
-      <Show when={sheet() && sheetMenu()}>
+      {/* A static page has the menu, hidden, and this sheet in its markup, as SiteMenu does: the script
+          opens whichever fits the device (src/client/menus.ts). */}
+      <Show when={(sheet() || staticRender()) && sheetMenu()}>
         {(kind) => (
           <Sheet
+            id={`${menuID}-sheet`}
             name="product"
             label={
               kind() === "builds"

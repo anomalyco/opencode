@@ -66,18 +66,10 @@ console.log(
 // Each page's budget in kB, gzipped: what it was when last measured, plus a kB of room. Lower a
 // budget when a page gets lighter; a page without one fails until it has one.
 const budgets: Record<string, number> = {
-  "static pages": 10.4,
-  "[...404].tsx": 102.9,
-  "desktop.tsx": 126.4,
+  "static pages": 11.3,
+  "[...404].tsx": 104.3,
   "devices.tsx": 57.1,
   "font/index.tsx": 119,
-  "ide.tsx": 126.4,
-  "index.tsx": 113.6,
-  "mini.tsx": 126.4,
-  "mobile.tsx": 126.4,
-  "product/index.tsx": 111.2,
-  "sdk.tsx": 126.4,
-  "terminal.tsx": 126.4,
   "video-editor/index.tsx": 55.5,
 }
 type Chunk = { file: string; imports?: string[] }

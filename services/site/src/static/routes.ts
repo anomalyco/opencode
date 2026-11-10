@@ -6,6 +6,14 @@
  * Design mode and Settings need the app. perf/serve.ts serves a production build to try them.
  */
 export const staticPaths = [
+  "/",
+  "/product",
+  "/desktop",
+  "/terminal",
+  "/mobile",
+  "/sdk",
+  "/ide",
+  "/mini",
   "/legal",
   "/legal/privacy-policy",
   "/legal/terms-of-service",

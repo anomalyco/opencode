@@ -842,8 +842,9 @@
   }
 
   /* The hero and the skeleton paint together, the skeleton complete: the hero waits for the
-     skeleton's few hundred bytes, so the carousel's frame is there from the hero's first paint. */
-  [data-component="hero"]:not(:has(~ [data-component="products-skeleton"] ~ *)),
+     skeleton's few hundred bytes, so the carousel's frame is there from the hero's first paint. A
+     page rendered in one piece (production's, src/static/render.tsx) has the carousel instead. */
+  [data-component="hero"]:not(:has(~ [data-component="products-skeleton"] ~ *, ~ [data-component="products"])),
   [data-component="products-skeleton"]:not(:has(~ *)) {
     visibility: hidden;
   }
