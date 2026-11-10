@@ -92,7 +92,7 @@ export function newSessionLocation(page: Page) {
   return page.locator('[data-component="new-session"] [data-action="prompt-project"]')
 }
 
-// The new-session trigger that shows the draft's worktree, or Local, and opens the project's worktree step.
+// The new-session trigger that shows the draft's worktree or branch, and opens the project's worktree step.
 export function newSessionWorktree(page: Page) {
   return page.locator('[data-component="new-session"] [data-action="prompt-worktree"]')
 }

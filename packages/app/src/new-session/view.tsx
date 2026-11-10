@@ -117,17 +117,29 @@ export function NewSessionView(props: {
                   <Composer model={props.composer} />
                 </div>
                 <Show when={props.project.selected()}>
-                  {(project) => (
-                    <NewSessionLocation
-                      project={project()}
-                      workspace={props.workspace.bar.visible() ? props.workspace.selection.value() : "main"}
-                      root={props.workspace.project.root()}
-                      branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
-                      onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
-                      onClick={() => location()}
-                      onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
-                    />
-                  )}
+                  {(project) => {
+                    const workspace = () => (props.workspace.bar.visible() ? props.workspace.selection.value() : "main")
+
+                    const worktrees = () =>
+                      project().id && project().vcs === "git" ? () => location(project()) : undefined
+
+                    return (
+                      <NewSessionLocation
+                        project={project()}
+                        workspace={workspace()}
+                        root={props.workspace.project.root()}
+                        checkout={props.workspace.bar.branch()}
+                        branch={
+                          workspace() === "main" && worktrees() ? undefined : (
+                            <NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />
+                          )
+                        }
+                        onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
+                        onClick={() => location()}
+                        onWorktree={worktrees()}
+                      />
+                    )
+                  }}
                 </Show>
               </div>
               <Show when={props.project.empty()}>
@@ -280,6 +292,7 @@ function NewSessionLocation(props: {
   /** "main", "create", or a worktree directory. */
   workspace: string
   root: string
+  checkout?: string
   branch?: JSX.Element
   onboarding: boolean
   onClick: () => void
@@ -394,12 +407,20 @@ function NewSessionLocation(props: {
                     onClick={onWorktree()}
                   >
                     <Icon
-                      name={props.workspace === "create" ? "plus" : worktree() ? "outline-worktree" : "monitor"}
-                      size="small"
+                      name={
+                        props.workspace === "create"
+                          ? "plus"
+                          : worktree()
+                            ? "outline-worktree"
+                            : props.checkout
+                              ? "branch"
+                              : "monitor"
+                      }
+                      size={props.workspace === "main" && props.checkout ? "normal" : "small"}
                       class="shrink-0 text-v2-icon-icon-muted"
                     />
                     <span class="min-w-0 truncate">
-                      {worktree() ?? language.t("session.new.workspace.triggerLocal")}
+                      {worktree() ?? (props.checkout || language.t("session.new.workspace.triggerLocal"))}
                     </span>
                     <Show when={props.onboarding}>
                       <span
