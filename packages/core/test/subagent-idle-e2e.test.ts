@@ -713,6 +713,7 @@ describe("subagent idle reports end to end", () => {
         expect((yield* claims(h))[childID]).toBe(true)
 
         expect(Exit.isSuccess(yield* h.sessions.remove(h.parent.id).pipe(Effect.exit))).toBe(true)
+        yield* h.execution.awaitIdle(h.parent.id)
         yield* gate.release
         expect(yield* h.sessions.get(h.parent.id).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
         expect(yield* h.sessions.get(childID).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })

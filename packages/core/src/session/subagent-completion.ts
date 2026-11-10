@@ -2,31 +2,13 @@ export * as SubagentCompletion from "./subagent-completion.js"
 
 import { Effect } from "effect"
 import type { Job } from "../job.js"
+import type { SessionBackground } from "./background.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionSchema } from "./schema.js"
 
 export const NO_TEXT = "Subagent completed without a text response."
 
-export type RunningBackgroundItem =
-  | {
-      readonly kind: "shell"
-      readonly sessionID: SessionSchema.ID
-      readonly shellID: string
-      readonly command: string
-    }
-  | {
-      readonly kind: "image"
-      readonly sessionID: SessionSchema.ID
-      readonly path: string
-      readonly model: string
-    }
-  | {
-      readonly kind: "subagent"
-      readonly sessionID: SessionSchema.ID
-      readonly childSessionID: SessionSchema.ID
-      readonly agent: string
-      readonly description: string
-    }
+export type RunningBackgroundItem = SessionBackground.OutstandingItem
 
 /** A Session handle narrow enough for both Session.Service and SessionExecution to deliver a report. */
 export interface SyntheticSession<E = never> {

@@ -21,7 +21,6 @@ export type StartOptions = {
 export interface Interface {
   readonly outstanding: (sessionID: SessionSchema.ID) => Effect.Effect<readonly SessionBackground.OutstandingItem[]>
   readonly start: (recovery: Recovery, options?: StartOptions) => Effect.Effect<Job.Info>
-  readonly background: (recovery: Recovery) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SubagentJob") {}
@@ -82,7 +81,6 @@ const make = Effect.gen(function* () {
           }),
         })
         .pipe(Effect.setContext(context)),
-    background: (recovery) => jobs.background(recovery.childSessionID).pipe(Effect.asVoid),
   })
 })
 
