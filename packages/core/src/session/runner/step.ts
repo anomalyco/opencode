@@ -371,7 +371,7 @@ type Cancel = ReturnType<typeof makeCancel>
  * A tool call's `cancel`. `trigger` completes it, and reports whether the tool was awaiting it, so would stop on its
  * own; a tool that was not is interrupted instead.
  */
-const makeCancel = () => {
+export const makeCancel = () => {
   let listeners = 0
   let cancelled = false
   const gate = Deferred.makeUnsafe<void>()

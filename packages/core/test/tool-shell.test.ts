@@ -42,6 +42,7 @@ import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { SessionStep } from "@opencode/core/session/runner/step"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
 import { fakeDaemon } from "./fixture/persistent-pty-daemon"
@@ -2311,6 +2312,113 @@ describe("ShellTool stopped", () => {
         )
       }),
     { timeout: 15_000 },
+  )
+
+  // Starts a call whose daemon command is slow to be created, and returns once the daemon was asked for it.
+  const startSlowCall = (registry: Tool.Interface, id: string) =>
+    Effect.gen(function* () {
+      let release = () => {}
+      if (fake) fake.holdCreate.until = new Promise<void>((resolve) => (release = resolve))
+      // The step's own gate: a stop goes through `cancel` only if the tool is awaiting it.
+      const cancel = SessionStep.makeCancel()
+      const fiber = yield* executeTool(registry, {
+        ...call({ command: "sleep 60" }, id),
+        cancel: cancel.effect,
+      }).pipe(Effect.forkChild({ startImmediately: true }))
+      while (!fake?.ops.includes("create_pipe")) yield* Effect.promise(() => Bun.sleep(2))
+      return {
+        fiber,
+        stop: Effect.sync(() => cancel.trigger()),
+        release: Effect.sync(() => {
+          if (fake) fake.holdCreate.until = undefined
+          release()
+        }),
+      }
+    })
+
+  fakeDaemonIt.live("stops a command the user stopped while it was being created", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const jobs = yield* Job.Service
+          const shell = yield* Shell.Service
+          const call = yield* startSlowCall(registry, "call-slow-create")
+          // The tool already listens while its command is being created, so the step would not interrupt it.
+          expect(yield* call.stop).toBe(true)
+          yield* call.release
+          const result = yield* Fiber.join(call.fiber)
+          expect(result.error?.message).toContain("Command interrupted by the user")
+          const process = fake?.processes[0]
+          expect(fake?.requests).toContainEqual(
+            expect.objectContaining({ op: "signal", id: process?.id, signal: "SIGTERM" }),
+          )
+          expect(process?.lifecycle.status).toBe("exited")
+          expect(yield* shell.list()).toEqual([])
+          expect((yield* jobs.get(String(process?.pipe?.metadata.id)))?.status).not.toBe("running")
+        }),
+      )
+    }),
+  )
+
+  fakeDaemonIt.live("stops a command the user stopped after its Location reloaded", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const sessions = yield* Session.Service
+        const locations = yield* LocationServiceMap.Service
+        const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+        yield* sessions.create({ id: sessionID, title: "shell test", location, model: sessionModel })
+        yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const registry = yield* Tool.Service
+          const jobs = yield* Job.Service
+          const cancel = SessionStep.makeCancel()
+          const started = yield* Deferred.make<string>()
+          const fiber = yield* executeTool(registry, {
+            ...call({ command: "sleep 60" }, "call-reloaded"),
+            progress: (update) =>
+              typeof update.shellID === "string"
+                ? Deferred.succeed(started, update.shellID).pipe(Effect.asVoid)
+                : Effect.void,
+            cancel: cancel.effect,
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+          const shellID = yield* Deferred.await(started)
+          // The call still holds the old Location when a reload closes it.
+          yield* locations.invalidate(location)
+          expect(cancel.trigger()).toBe(true)
+          const result = yield* Fiber.join(fiber)
+          expect(result.error?.message).toContain(`Command interrupted by the user (shell ID: ${shellID})`)
+          expect(fake?.processes[0]?.lifecycle.status).toBe("exited")
+          expect((yield* jobs.get(shellID))?.status).not.toBe("running")
+        }).pipe(Effect.provide(locations.get(location)))
+        yield* locations.invalidate(location)
+      }),
+    ),
+  )
+
+  fakeDaemonIt.live("leaves a command running when a shutdown interrupts its call while it starts", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const jobs = yield* Job.Service
+          const call = yield* startSlowCall(registry, "call-shutdown-start")
+          const interrupting = yield* Fiber.interrupt(call.fiber).pipe(Effect.forkChild({ startImmediately: true }))
+          yield* call.release
+          yield* Fiber.join(interrupting)
+          const process = fake?.processes[0]
+          // Nothing stopped it: a restart takes it over through its recorded tool call.
+          expect(process?.lifecycle.status).toBe("running")
+          expect(process?.pipe?.metadata).toMatchObject({ toolCall: { callID: "call-shutdown-start" } })
+          expect(fake?.ops).not.toContain("signal")
+          const shellID = String(process?.pipe?.metadata.id)
+          expect((yield* jobs.get(shellID))?.status).toBe("running")
+          yield* jobs.cancel(shellID)
+        }),
+      )
+    }),
   )
 
   fakeDaemonIt.live("records which call waits on a daemon command, and keeps no timeout for a restart", () =>

@@ -16,7 +16,11 @@ export function temporaryDirectory() {
 
 export function listen(
   socketPath: string,
-  handle: (socket: net.Socket, request: Record<string, unknown>, token: string) => object | undefined,
+  handle: (
+    socket: net.Socket,
+    request: Record<string, unknown>,
+    token: string,
+  ) => object | undefined | Promise<object | undefined>,
 ) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
@@ -33,8 +37,10 @@ export function listen(
             const owning = envelope.request.op === "own"
             if (owning) owner = true
             const response = owning ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
-            if (response) socket.write(frame(response))
-            if (owner) return serve()
+            return Promise.resolve(response).then((response) => {
+              if (response) socket.write(frame(response))
+              if (owner) return serve()
+            })
           })
         void serve().catch(() => socket.destroy())
       })
@@ -132,6 +138,8 @@ export const fakeDaemon = Effect.fn(function* () {
   const failTerminate = new Set<string>()
   const trap = new Set<number>()
   const failCreate = { message: undefined as string | undefined }
+  // While set, `create_pipe` answers only once it resolves, like a daemon slow to start a command.
+  const holdCreate: { until?: Promise<void> } = {}
   const ops: string[] = []
   const requests: Record<string, unknown>[] = []
   let nextID = 1
@@ -187,10 +195,13 @@ export const fakeDaemon = Effect.fn(function* () {
       if (typeof request.cwd !== "string" || !path.isAbsolute(request.cwd))
         return { type: "error", message: "cwd must be absolute" }
       if (failCreate.message !== undefined) return { type: "error", message: failCreate.message }
-      const created = pipe(nextID++, request)
-      writeFileSync(String(request.output_path), "")
-      processes.push(created)
-      return { type: "created", process: created }
+      const create = () => {
+        const created = pipe(nextID++, request)
+        writeFileSync(String(request.output_path), "")
+        processes.push(created)
+        return { type: "created", process: created }
+      }
+      return holdCreate.until ? holdCreate.until.then(create) : create()
     }
     if (request.op === "control") return { type: "ok" }
     if (request.op === "prepare_handoff") return { type: "handoff", ticket: "next", expires_at: Date.now() + 60_000 }
@@ -245,6 +256,7 @@ export const fakeDaemon = Effect.fn(function* () {
   return {
     failTerminate,
     failCreate,
+    holdCreate,
     trap,
     ops,
     requests,
