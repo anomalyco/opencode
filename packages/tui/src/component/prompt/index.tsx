@@ -437,8 +437,8 @@ export function Prompt(props: PromptProps) {
           const kind = mediaKind(mime, file.name)
           const local = file.uri.startsWith("file:") && terminalEnvironment.localServer === true
           if (kind === "other" || !(file.uri.startsWith("data:") || file.path || local)) return []
-          const item = { id: `draft:${file.mention?.text ?? index}`, kind, mime, uri: file.uri }
-          return [{ ...item, ...(file.name ? { name: file.name } : {}), ...(file.path ? { path: file.path } : {}) }]
+          const id = `draft:${file.mention?.text ?? index}`
+          return [{ id, kind, mime, uri: file.uri, name: file.name, path: file.path }]
         }),
       ),
     [],

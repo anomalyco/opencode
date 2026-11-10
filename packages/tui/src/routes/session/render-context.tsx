@@ -36,7 +36,7 @@ export const context = createContext<{
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
-  /** Every image and video in the loaded transcript, in order, while the rich media experiment is on. */
+  /** Every image and video in the loaded transcript, in order, while the `rich_media` flag is on. */
   media?: () => readonly MediaItem[]
 }>()
 

@@ -11,7 +11,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { useNewDesigns } from "../../config"
 import { Keymap } from "../../context/keymap"
-import { MEDIA_VIEWER_Z_INDEX, registerMediaViews, useMedia, type MediaViewerRequest } from "../../context/media"
+import { MEDIA_VIEWER_Z_INDEX, useMedia, type MediaViewerRequest } from "../../context/media"
 import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
@@ -19,13 +19,10 @@ import { usePathActions } from "../../ui/working-directory-actions"
 import { Locale } from "../../util/locale"
 import path from "node:path"
 import { isPlayableVideo, mediaName, mediaPath, type MediaItem } from "./model"
-import { MediaPip } from "./pip"
 import { Control, createTransport, TransportControls } from "./seek-bar"
 import { createImageSource, createVideoFile } from "./source"
 import { createMediaClick, formatDuration, TileImage } from "./tile"
 import { actualZoom, fillZoom, initialView, layoutView, panBy, zoomAt, type Size, type ZoomView } from "./zoom"
-
-registerMediaViews({ viewer: MediaViewer, pip: MediaPip })
 
 const CARD_HEIGHT = 4
 const CARD_GAP = 2
@@ -70,7 +67,7 @@ const KEYS = [
 ]
 
 /** The fullscreen viewer over a gallery, shown while `useMedia().viewer()` holds a request. */
-function MediaViewer(props: { request: MediaViewerRequest }) {
+export function MediaViewer(props: { request: MediaViewerRequest }) {
   const media = useMedia()
   const dialog = useDialog()
   const keymap = Keymap.use()
@@ -310,9 +307,6 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
 
   createEffect(() => metadata() && media.noteDuration(current(), metadata()!.duration))
 
-  const size = () => facts() && `${facts()!.width}×${facts()!.height}`
-  const audible = () => !!metadata()?.hasAudio && !remote
-
   const filmstrip = () => items.length > 1 && dimensions().height >= 24
   // Cards share the width evenly, within bounds, and the window keeps the current item near its middle.
   const strip = createMemo(() => {
@@ -341,7 +335,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
     const rows = [
       ["Name", mediaName(item)],
       ["Type", item.mime || item.kind],
-      ["Resolution", size() || "…"],
+      ["Resolution", facts() ? `${facts()!.width}×${facts()!.height}` : "…"],
       item.kind === "video" && ["Duration", metadata() ? formatDuration(metadata()!.duration) : "…"],
       item.kind === "video" && ["Frame rate", metadata()?.fps ? `${+metadata()!.fps.toFixed(2)} fps` : "…"],
       item.kind === "video" && [
@@ -602,7 +596,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
           <box height={1} marginTop={roomy() ? 1 : 0} paddingLeft={2} paddingRight={2}>
             <Show when={transport().metadata()}>
               <TransportControls transport={transport()} gap={2} preview>
-                <Show when={audible()}>
+                <Show when={metadata()?.hasAudio && !remote}>
                   <Control on={!muted()} struck={muted()} run={toggleMute}>
                     ♪
                   </Control>

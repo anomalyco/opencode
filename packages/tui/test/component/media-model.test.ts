@@ -101,7 +101,7 @@ test.each([
   // Forms of a path.
   ["/srv/out/demo.mp4", ["/srv/out/demo.mp4"]],
   ["out/demo.mp4 ./here.MOV ../up.m4v bare.mp4", ["/work/out/demo.mp4", "/work/here.MOV", "/up.m4v", "/work/bare.mp4"]],
-  ["~/Videos/a.mp4", ["/home/me/Videos/a.mp4"]],
+  ["~/Videos/a.M4V", ["/home/me/Videos/a.M4V"]],
   ["file:///srv/my%20clip.mp4 file://localhost/srv/b.mp4", ["/srv/my clip.mp4", "/srv/b.mp4"]],
   // Delimiters and punctuation.
   ["Saved to out/demo.mp4.", ["/work/out/demo.mp4"]],

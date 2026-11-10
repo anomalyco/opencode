@@ -14,14 +14,12 @@ export function writeText(filePath: string, content: string) {
   return serialized(filePath, async () => {
     await mkdir(path.dirname(filePath), { recursive: true })
     const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`
-    await writeFile(temporary, content).catch(async (error) => {
-      await rm(temporary, { force: true }).catch(() => undefined)
-      throw error
-    })
-    await rename(temporary, filePath).catch(async (error) => {
-      await rm(temporary, { force: true }).catch(() => undefined)
-      throw error
-    })
+    await writeFile(temporary, content)
+      .then(() => rename(temporary, filePath))
+      .catch(async (error) => {
+        await rm(temporary, { force: true }).catch(() => undefined)
+        throw error
+      })
   })
 }
 
