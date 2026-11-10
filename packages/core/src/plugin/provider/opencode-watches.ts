@@ -240,12 +240,12 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       editor.namespace({
         name: namespace,
         description:
-          "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console. The session wakes on its own when they change.",
+          "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console. The session wakes on its own when they change. A pull request it opened wakes it as each check finishes, so don't wait on CI with `gh pr checks --watch`, `gh run watch` or `sleep`.",
       })
       editor.add({
         name: "watch",
         description:
-          "Wake this session when a Slack thread or a GitHub pull request, issue, commit or Actions run gets a reply or changes status, or one of the workspace's MCP servers sends an event `events` lists. Slack and GitHub writes through OpenCode Console, `gh pr create` and `git push` are already watched, so don't watch what you just made. Use it for anything else, such as `gh workflow run` or a link the user shared. People often answer a Slack post in the channel rather than its thread, so after each top-level post the channel's new top-level messages are watched for 15 minutes too. The session wakes with the update, so don't poll.",
+          "Wake this session when a Slack thread or a GitHub pull request, issue, commit or Actions run gets a reply or changes status, or one of the workspace's MCP servers sends an event `events` lists. Slack and GitHub writes through OpenCode Console, `gh pr create` and `git push` are already watched, a pull request's checks included, so don't watch what you just made. Use it for anything else, such as a deploy's Actions run, `gh workflow run` or a link the user shared. People often answer a Slack post in the channel rather than its thread, so after each top-level post the channel's new top-level messages are watched for 15 minutes too. The session wakes with the update, so don't poll.",
         input: Schema.Struct({
           target: Schema.optional(
             Schema.String.annotate({
@@ -269,7 +269,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
           ),
         }),
         output: Watch,
-        options: { namespace, codemode: true },
+        options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
           Effect.gen(function* () {
             // A link or shorthand, or one event type of a server with its arguments; never both.

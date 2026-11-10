@@ -249,3 +249,38 @@ export function defaultRootAttributes() {
       }),
   )
 }
+
+/**
+ * The settings attributes production renders on other elements, as `[element, attribute, value]`
+ * with the default settings (`null` for one it leaves off). The element is the attribute selectors
+ * with a value in the last compound of the rule's selector (`[data-component="products"]`), so a rule
+ * whose element has none is left out, as is one whose value reads the element or the address. They
+ * go in css-variants.json beside the root's.
+ */
+export function defaultScopedAttributes() {
+  // A rule that reads the element (or the address) depends on more than the settings.
+  const element = new Proxy({} as HTMLElement, {
+    get: () => {
+      throw new Error("reads the element")
+    },
+  })
+  const evaluate = (rule: (typeof preloadRules)[number]) => {
+    try {
+      const value = rule[2](siteSettingsDefaults, element, siteSettingsDefaults)
+      return [value === undefined ? null : String(value)]
+    } catch {
+      return []
+    }
+  }
+  return preloadRules
+    .filter((rule) => rule[0] !== "" && rule[1].startsWith("data-"))
+    .flatMap((rule) =>
+      evaluate(rule).flatMap((value) =>
+        rule[0].split(",").flatMap((selector) => {
+          const last = selector.trim().match(/(?:[^\s>+~[\]()]|\[[^\]]*\]|\([^)]*\))+$/)?.[0] ?? ""
+          const owner = last.match(/\[[\w-]+[~|^$*]?="[^"]*"\]/g)?.join("")
+          return owner ? [[owner, rule[1], value] as const] : []
+        }),
+      ),
+    )
+}

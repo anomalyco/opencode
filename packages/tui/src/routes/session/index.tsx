@@ -1402,8 +1402,9 @@ export function Session(props: {
       title: "Toggle subagent picker",
       id: "session.child.first",
       group: "Session",
-      run: () => {
-        if (composer.open || session()?.parentID) setComposer("open", false)
+      run: (tab?: string) => {
+        if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
+        else if (composer.open || session()?.parentID) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
         dialog.clear()
       },
@@ -2986,6 +2987,7 @@ function BlockTool(props: BlockToolProps) {
 const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
 function Shell(props: ToolProps) {
+  const stopped = createMemo(() => stoppedShell(props.part, props.metadata))
   return (
     <ShellDisplay
       part={props.part}
@@ -2994,9 +2996,20 @@ function Shell(props: ToolProps) {
       workdir={stringValue(props.input.workdir)}
       status={props.part.state.status}
       background={props.part.state.status === "completed" && props.metadata.status === "running"}
-      output={stringValue(props.metadata.shellID) ? undefined : props.output}
+      output={stopped()?.output ?? (stringValue(props.metadata.shellID) ? undefined : props.output)}
+      error={stopped()?.notice}
     />
   )
+}
+
+// A call the user stopped fails with its output followed by a notice, which its metadata names. Its output shows like
+// a finished call's and only the notice as the error. A plugin that rewrote the error gets it shown as is.
+function stoppedShell(part: SessionMessageAssistantTool, metadata: Record<string, unknown>) {
+  if (part.state.status !== "error" || metadata.interrupted !== true) return
+  const notice = stringValue(metadata.notice)
+  const message = part.state.error.message
+  if (!notice || !message.endsWith(notice)) return
+  return { output: message.slice(0, -notice.length).replace(/\n+$/, ""), notice }
 }
 
 function ShellDisplay(props: {

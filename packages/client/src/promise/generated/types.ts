@@ -186,7 +186,7 @@ export type ModelCacheFormat = "anthropic" | "alibaba"
 
 export type ModelMediaInput = "assets" | "state" | "root"
 
-export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string>; temperature?: boolean }
+export type ToolFreeformFormat = "text" | "regex" | "lark"
 
 export type MoneyUSDPerMillionTokens = number
 
@@ -713,6 +713,14 @@ export type ProviderCompatibility = {
   mediaInput?: ModelMediaInput
 }
 
+export type ModelCapabilities = {
+  tools: boolean
+  freeform?: Array<ToolFreeformFormat>
+  input: Array<string>
+  output: Array<string>
+  temperature?: boolean
+}
+
 export type ModelCost = {
   tier?: { type: "context"; size: number }
   input: MoneyUSDPerMillionTokens
@@ -983,6 +991,7 @@ export type UsageLimitsGo = { rolling: UsageLimitsMeter; weekly: UsageLimitsMete
 
 export type ConfigModelCapabilities = {
   tools?: boolean
+  freeform?: Array<ToolFreeformFormat>
   input?: Array<string>
   output?: Array<string>
   temperature?: boolean
@@ -1651,7 +1660,7 @@ export type SessionUsageRecorded = {
   type: "session.usage.recorded"
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
-  data: { sessionID: SessionID; source: "title" | "compaction"; cost: MoneyUSD; tokens: TokenUsageInfo }
+  data: { sessionID: SessionID; source: "title" | "compaction" | "generate"; cost: MoneyUSD; tokens: TokenUsageInfo }
 }
 
 export type LocationShutdown = {
@@ -2552,6 +2561,8 @@ export type ConfigEntry =
           schedules?: boolean
           artifacts?: boolean
           codemode_vm?: boolean
+          shell_timeout_background?: boolean
+          console_watches?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number

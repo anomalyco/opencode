@@ -789,6 +789,34 @@ describe("CodeMode public contract", () => {
     }
   })
 
+  test("a freeform tool takes its one string field directly and still accepts the object", async () => {
+    const input = Schema.Struct({ url: Schema.String.annotate({ description: "Page URL" }) })
+    const fetchPage = Tool.make({
+      description: "Fetch a page",
+      input,
+      freeform: true,
+      output: Schema.String,
+      execute: ({ url }) => Effect.succeed(url),
+    })
+    const plain = Tool.make({
+      description: "Fetch a page",
+      input,
+      output: Schema.String,
+      execute: ({ url }) => Effect.succeed(url),
+    })
+    const runtime = CodeMode.make({ tools: { fetchPage, plain } })
+    expect(runtime.catalog.map((tool) => tool.signature)).toEqual([
+      "tools.fetchPage(/** Page URL */ url: string): Promise<string>",
+      "tools.plain({\n  /** Page URL */\n  url: string,\n}): Promise<string>",
+    ])
+    expect(
+      await Effect.runPromise(
+        runtime.execute('return [await tools.fetchPage("a"), await tools.fetchPage({ url: "b" })]'),
+      ),
+    ).toMatchObject({ ok: true, value: ["a", "b"] })
+    expect(await Effect.runPromise(runtime.execute('return await tools.plain("a")'))).toMatchObject({ ok: false })
+  })
+
   test("renders equivalent catalogs identically regardless of tool insertion order", () => {
     const alpha = Tool.make({
       description: "Alpha tool",

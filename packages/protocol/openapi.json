@@ -3790,7 +3790,7 @@
             }
           }
         },
-        "description": "Generate transient text from the current session context without mutating session history.",
+        "description": "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
         "summary": "Generate text from session context",
         "requestBody": {
           "content": {
@@ -16666,6 +16666,12 @@
               "codemode_vm": {
                 "type": "boolean"
               },
+              "shell_timeout_background": {
+                "type": "boolean"
+              },
+              "console_watches": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },
@@ -16797,6 +16803,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
           },
           "input": {
             "type": "array",
@@ -20505,6 +20517,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
           },
           "input": {
             "type": "array",
@@ -25077,6 +25095,10 @@
         },
         "required": ["type", "uri", "mime"],
         "additionalProperties": false
+      },
+      "Tool.FreeformFormat": {
+        "type": "string",
+        "enum": ["text", "regex", "lark"]
       },
       "Tool.TextContent": {
         "type": "object",
@@ -30132,7 +30154,7 @@
               },
               "source": {
                 "type": "string",
-                "enum": ["title", "compaction"]
+                "enum": ["title", "compaction", "generate"]
               },
               "cost": {
                 "$ref": "#/components/schemas/Money.USD"

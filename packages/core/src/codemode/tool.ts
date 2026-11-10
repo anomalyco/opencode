@@ -92,6 +92,7 @@ export const create = (
     name: "execute",
     description,
     input: CodeMode.Input,
+    freeform: { type: "text" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
@@ -132,6 +133,8 @@ export const create = (
                     ...context,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
+                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
+                    cancel: undefined,
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
@@ -322,6 +325,7 @@ function inventoryTools(inventory: Inventory) {
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
+      freeform: registration.freeform !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })

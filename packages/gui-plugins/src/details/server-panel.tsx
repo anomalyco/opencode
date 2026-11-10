@@ -74,7 +74,7 @@ import {
 const services = [
   { type: "mcp", icon: "mcp", label: "mcp" },
   { type: "plugins", icon: "cube", label: "plugins" },
-  { type: "skills", icon: "graduation-cap", label: "skills" },
+  { type: "skills", icon: "post-skill", label: "skills" },
 ] as const satisfies readonly { type: Service; icon: string; label: string }[]
 
 type ServiceProps = {

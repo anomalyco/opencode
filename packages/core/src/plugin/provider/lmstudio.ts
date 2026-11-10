@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import { createLocalProviderPlugin } from "./local.js"
 
 const RemoteModel = Schema.Struct({
-  type: Schema.Literals(["llm", "embedding"]),
+  type: Schema.String,
   key: Schema.String,
   display_name: Schema.String,
   architecture: Schema.NullOr(Schema.String).pipe(Schema.optional),

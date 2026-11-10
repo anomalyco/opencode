@@ -344,7 +344,6 @@ export const dict = {
   "session.new.project.search": "البحث عن المشاريع",
   "session.new.project.add": "إضافة مشروع",
   "session.new.workspace.runIn": "تشغيل الجلسة في",
-  "session.new.workspace.triggerLocal": "محلي",
   "session.new.workspace.local": "المستودع المحلي",
   "session.new.git.none": "لا يوجد Git",
   "settings.tab.servers": "الخوادم",

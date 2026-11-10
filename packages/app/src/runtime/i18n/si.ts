@@ -339,7 +339,6 @@ export const dict = {
   "session.new.project.search": "ව්යාපෘති සොයන්න",
   "session.new.project.add": "ව්යාපෘතිය එකතු කරන්න",
   "session.new.workspace.runIn": "සැසිය ධාවනය කරන්න",
-  "session.new.workspace.triggerLocal": "දේශීය",
   "session.new.workspace.local": "දේශීය ගබඩාව",
   "session.new.git.none": "Git නැත",
   "session.header.open.finder": "Finder",

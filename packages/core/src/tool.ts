@@ -75,6 +75,8 @@ export interface Snapshot {
     readonly messageID: SessionMessage.ID
     readonly call: ToolCall
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
+    /** Completes when the user asks the call to stop; see `Tool.Context.cancel`. */
+    readonly cancel?: Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
@@ -307,6 +309,7 @@ const layer = Layer.effect(
                 messageID: input.messageID,
                 id: Tool.CallID.make(input.call.id),
                 progress: input.progress ?? (() => Effect.void),
+                cancel: input.cancel,
               }
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)

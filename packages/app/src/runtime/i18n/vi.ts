@@ -354,7 +354,6 @@ export const dict = {
   "session.new.project.search": "Tìm kiếm dự án",
   "session.new.project.add": "Thêm dự án",
   "session.new.workspace.runIn": "Chạy phiên trong",
-  "session.new.workspace.triggerLocal": "Cục bộ",
   "session.new.workspace.local": "Kho lưu trữ cục bộ",
   "session.new.git.none": "Không dùng Git",
   "session.header.open.finder": "Finder",

@@ -350,7 +350,6 @@ export const dict = {
   "session.new.project.search": "Projektek keresése",
   "session.new.project.add": "Projekt hozzáadása",
   "session.new.workspace.runIn": "Futtassa a munkamenetet",
-  "session.new.workspace.triggerLocal": "Helyi",
   "session.new.workspace.local": "Helyi adattár",
   "session.new.git.none": "Nincs Git",
   "session.header.open.finder": "Finder",

@@ -69,6 +69,13 @@ describe("LMStudioPlugin", () => {
                   loaded_instances: [],
                   max_context_length: 2048,
                 },
+                {
+                  type: "decision",
+                  key: "clef-flash",
+                  display_name: "Clef Flash",
+                  loaded_instances: [],
+                  max_context_length: 262_144,
+                },
               ],
             }),
         }),
@@ -106,6 +113,7 @@ describe("LMStudioPlugin", () => {
             limit: { context: 200_000, output: 32_000 },
           })
           expect(yield* modelState.get(providerID, Model.ID.make("nomic-embed"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("clef-flash"))).toBeUndefined()
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),

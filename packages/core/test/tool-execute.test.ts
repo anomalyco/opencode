@@ -44,6 +44,32 @@ const vmFlag = (codemode_vm: boolean): Flag.Interface => {
 const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll, flag = vmFlag(false)) =>
   CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, flag)
 
+test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
+  const input = Schema.Struct({ text: Schema.NonEmptyString })
+  const send = {
+    name: "send",
+    description: "Send text",
+    input,
+    output: Schema.String,
+    execute: ({ text }) => Effect.succeed({ output: text }),
+  } satisfies Info<typeof input, typeof Schema.String>
+  const tools = new Map<string, Info>([
+    ["echo", { ...send, name: "echo" }],
+    ["send", { ...send, freeform: { type: "text" } }],
+  ])
+  const codeMode = createCodeMode(tools)
+  expect(codeMode.freeform).toEqual({ type: "text" })
+  expect(CodeModeTool.catalog({ tools }).tools.map((tool) => "signature" in tool && tool.signature)).toEqual([
+    "tools.echo({\n  /** @minLength 1 */\n  text: string,\n}): Promise<string>",
+    "tools.send(/** @minLength 1 */ text: string): Promise<string>",
+  ])
+  const calls = await Effect.runPromise(
+    codeMode.execute({ code: 'return [await tools.send("first"), await tools.send({text: "second"})]' }, context),
+  )
+  expect(JSON.parse(calls.output.output)).toEqual(["first", "second"])
+  expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
+})
+
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [

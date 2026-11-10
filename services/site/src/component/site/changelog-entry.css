@@ -71,7 +71,8 @@
     }
   }
 
-  [data-slot="subhead"] {
+  /* Outranks the contents rail's margin for headings (on-this-page.css), which the shell brings to every page. */
+  [data-slot="subhead"][id] {
     scroll-margin-top: var(--content-top);
   }
 
@@ -398,8 +399,19 @@
       rotate: 0deg;
     }
 
-    > ul {
+    > ul,
+    > [data-slot="show-more"] {
       margin-top: 0.875rem;
+    }
+
+    /* A deferred list (NoteGroup) shows its link to the entry's page only if loading it takes a while. */
+    > [data-slot="show-more"] {
+      display: inline-block;
+      margin-inline-start: 0;
+    }
+
+    &[aria-busy] > [data-slot="show-more"] {
+      animation: changelog-loading 1s step-end;
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -930,6 +942,12 @@
     &[data-title="mono"] [data-slot="title"] {
       font-size: 1.1875rem;
     }
+  }
+}
+
+@keyframes changelog-loading {
+  from {
+    visibility: hidden;
   }
 }
 

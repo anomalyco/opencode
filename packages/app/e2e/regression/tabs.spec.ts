@@ -1546,14 +1546,45 @@ test("tab shortcuts cycle side-panel tabs when the side panel is focused with mu
 })
 
 test("⌘W past the side panel's last tab keeps the session tab", async ({ page }) => {
-  const sessions = await emptySidePanel(page)
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
   await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.resume()
 
   // From the composer ⌘W closes the session tab, so only a swallowed press above leaves Beta to land on.
   await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
   await page.keyboard.press("ControlOrMeta+w")
   await expectPath(page, sessionHref(sessions.beta.id))
   await expect(sessions.alphaTab).toHaveCount(0)
+})
+
+test("⌘W past the side panel's last tab closes the session tab once ⌘W has rested", async ({ page }) => {
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
+
+  // Each ⌘W within the rest is swallowed and restarts it, so the third lands 800ms after the panel closed.
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.runFor(400)
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.runFor(400)
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(sessions.alphaTab).toHaveCount(1)
+
+  await page.clock.runFor(600)
+  await page.clock.resume()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
+test("⌘⇧T brings back a side tab and opens the side panel it closed with", async ({ page }) => {
+  await emptySidePanel(page)
+  const panel = page.locator("#review-panel")
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(panel).toHaveAttribute("aria-hidden", "false")
+  await expect(panel.getByRole("tab", { selected: true })).toHaveCount(1)
 })
 
 test("⌘W past the side panel's last tab keeps the session tab when focus leaves the panel just after", async ({
@@ -1577,10 +1608,12 @@ test("⌘W past the side panel's last tab keeps the session tab when focus leave
     observer.observe(document, { subtree: true, attributes: true, attributeFilter: ["aria-hidden"] })
   })
 
-  const sessions = await emptySidePanel(page)
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
   const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
   await expect(composer).toBeFocused()
   await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.resume()
 
   // Only a swallowed press above leaves Beta for this one to land on.
   await composer.click()
@@ -1600,6 +1633,7 @@ test("⌘W closes the session tab again once the window loses focus after the si
 
 test("⌘W in the side panel closes its last New tab with the panel, and only then the session tab", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
+  await page.clock.install()
   const alpha = { id: "ses_side_new_alpha", title: "Side new alpha" }
   const beta = { id: "ses_side_new_beta", title: "Side new beta" }
   await openSession(page, { name: "SideCloseNewTab", sessions: [alpha, beta] })
@@ -1618,6 +1652,7 @@ test("⌘W in the side panel closes its last New tab with the panel, and only th
   await panel.getByRole("button", { name: /^Open file/ }).focus()
 
   // The New tab was the panel's last tab, so closing it closes the panel too, and focus goes back.
+  await holdClock(page)
   await page.keyboard.press("ControlOrMeta+w")
   await expect(newTab).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
@@ -1626,6 +1661,7 @@ test("⌘W in the side panel closes its last New tab with the panel, and only th
   // One press too many closes nothing rather than the session.
   await page.keyboard.press("ControlOrMeta+w")
   await expect(alphaTab).toHaveCount(1)
+  await page.clock.resume()
   await expectPath(page, sessionHref(alpha.id))
 
   // With no panel open, ⌘W from the composer closes the session tab.
@@ -1778,8 +1814,64 @@ test("⌘W in a focused Context tab closes it, then the panel, and keeps the ses
   await expectPath(page, sessionHref(alpha.id))
 })
 
+test("with the side panel open, ⌘W closes its tabs from anywhere, ⌥⌘W the session tab, and ⌘⇧T undoes them newest first", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/SideCloseAnywhere"
+  const alpha = { id: "ses_side_anywhere_alpha", title: "Side anywhere alpha" }
+  const beta = { id: "ses_side_anywhere_beta", title: "Side anywhere beta" }
+  await openSession(page, {
+    name: "SideCloseAnywhere",
+    sessions: [alpha, beta],
+    fileList: (path) => (path ? [] : ["README.md"].map((file) => fileNode(directory, file))),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { [alpha.id]: { review: true }, [beta.id]: { review: true } },
+      storage: reviewTabs(directory, alpha.id),
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const fileTab = panel.getByRole("tab", { name: "README.md", exact: true })
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  const sessionTab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  // ⌥⌘W closes Beta's session tab although its side panel holds a tab that ⌘W would close.
+  await sessionTab(beta.id).locator("a").click()
+  await expectPath(page, sessionHref(beta.id))
+  await expect(panel.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+Alt+w")
+  await expect(sessionTab(beta.id)).toHaveCount(0)
+  await expectPath(page, sessionHref(alpha.id))
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "README.md", exact: true }).click()
+  await expect(fileTab).toHaveAttribute("aria-selected", "true")
+
+  // From the composer, ⌘W closes the side tab, not the session tab.
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(fileTab).toHaveCount(0)
+  await expect(sessionTab(alpha.id)).toHaveCount(1)
+  await expectPath(page, sessionHref(alpha.id))
+
+  // The side tab closed after Beta, so it comes back first, then Beta.
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(fileTab).toHaveAttribute("aria-selected", "true")
+  await expect(sessionTab(beta.id)).toHaveCount(0)
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(sessionTab(beta.id)).toHaveCount(1)
+  await expectPath(page, sessionHref(beta.id))
+})
+
+// Stops the clock `page.clock.install()` set up, so the ⌘W guard's rest after the panel empties only moves when the
+// test moves it, however slow the runner.
+const holdClock = (page: Page) => page.evaluate(() => Date.now()).then((now) => page.clock.pauseAt(now + 1_000))
+
 // Closes Alpha's side tabs with ⌘W until the side panel empties and collapses, as an overshooting hand would.
-async function emptySidePanel(page: Page) {
+async function emptySidePanel(page: Page, beforeLastClose?: () => Promise<void>) {
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/SideCloseOvershoot"
   const alpha = { id: "ses_side_close_alpha", title: "Side close alpha" }
@@ -1806,6 +1898,7 @@ async function emptySidePanel(page: Page) {
   await page.keyboard.press("ControlOrMeta+w")
   await expect(fileTab).toHaveCount(0)
   await expect(reviewTab).toHaveAttribute("aria-selected", "true")
+  await beforeLastClose?.()
   await page.keyboard.press("ControlOrMeta+w")
   await expect(panel).toHaveAttribute("aria-hidden", "true")
 
