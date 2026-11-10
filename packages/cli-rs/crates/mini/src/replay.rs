@@ -30,6 +30,7 @@ use opentui::app::ProxyError;
 use opentui::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
+use tokio::sync::watch;
 
 use crate::scrollback::{Commit, EntryKind, Phase, Source, ToolState};
 
@@ -1512,23 +1513,33 @@ pub async fn hydration(client: &Client, session: &str, limit: u32) -> Result<Hyd
     Ok((messages?, active, inbox))
 }
 
-/// `connect`: subscribes, hydrates after `server.connected`, then forwards events, reconnecting after 250 ms
-/// when the stream drops. Runs until `proxy` closes.
-pub async fn connect(client: Client, session: String, limit: u32, proxy: AppProxy) {
+/// `connect`: subscribes, hydrates after `server.connected`, then forwards events. When the stream drops it finds
+/// the service again, which may have restarted on another port or password, and reconnects after 250 ms. Runs
+/// until `proxy` closes. `connected` is true from a hydration until the stream drops.
+pub async fn connect(client: Client, session: String, limit: u32, proxy: AppProxy, connected: watch::Sender<bool>) {
     loop {
-        let error = match stream(&client, &session, limit, &proxy).await {
+        let error = match stream(&client, &session, limit, &proxy, &connected).await {
             Ok(()) => return,
             Err(error) => error,
         };
+        connected.send_replace(false);
         if !post(&proxy, Incoming::Disconnected(error)).await {
             return;
         }
+        // The following transport leaves the event stream to this loop (`Follow::send`).
+        client.transport().reconnect().await;
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
 
 /// One connection. `Ok` means the app is gone.
-async fn stream(client: &Client, session: &str, limit: u32, proxy: &AppProxy) -> Result<(), String> {
+async fn stream(
+    client: &Client,
+    session: &str,
+    limit: u32,
+    proxy: &AppProxy,
+    connected: &watch::Sender<bool>,
+) -> Result<(), String> {
     let mut events = opencode_api::events::raw::<V2Event>(client);
     match events.next().await {
         Some(Ok(V2Event::ServerConnected(_))) => {}
@@ -1540,6 +1551,7 @@ async fn stream(client: &Client, session: &str, limit: u32, proxy: &AppProxy) ->
     if !post(proxy, Incoming::Hydrated { messages, active, inbox }).await {
         return Ok(());
     }
+    connected.send_replace(true);
     while let Some(event) = events.next().await {
         let event = match event {
             Ok(event) => event,
@@ -1588,10 +1600,19 @@ pub async fn default_model(client: &Client, directory: &str) -> Option<(String, 
     Some((data["providerID"].as_str()?.to_owned(), data["id"].as_str()?.to_owned()))
 }
 
-/// `experimental.session.wait`: returns once the session is idle.
-pub async fn wait(client: &Client, session: &str) -> Result<(), String> {
+/// `waitForSession`: `experimental.session.wait`, which returns once the session is idle. The long poll ends with
+/// a dropped connection, not with the session, so a transport error waits 250 ms and for the event stream to
+/// connect again, then asks again.
+pub async fn wait(client: &Client, session: &str, mut connected: watch::Receiver<bool>) -> Result<(), String> {
     let input = ExperimentalSessionWaitInput { session_id: SessionID(session.to_owned()) };
-    client.experimental_session_wait(&input).await.map_err(|error| error.tui_message())
+    loop {
+        match client.experimental_session_wait(&input).await {
+            Err(Error::Transport(error)) => log::info!("mini session wait retries: {error}"),
+            result => return result.map_err(|error| error.tui_message()),
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        connected.wait_for(|connected| *connected).await.map_err(|_| "Event stream closed".to_owned())?;
+    }
 }
 
 /// `session.interrupt`, for mini's two-press gesture (`resume: true`) and run's shutdown.
@@ -1623,6 +1644,71 @@ mod tests {
         assert_eq!(sent[0].path, "/api/session/ses_1/interrupt");
         assert_eq!(sent[0].query, [("resume".to_owned(), vec!["true".to_owned()])].into());
         assert_eq!(sent[0].body, None);
+    }
+
+    /// A transport that is always down and counts the times it is asked to find the server again.
+    #[derive(Default)]
+    struct Down(std::sync::atomic::AtomicUsize);
+
+    impl opencode_api::transport::Transport for Down {
+        fn send(
+            &self,
+            _: opencode_api::transport::Request,
+        ) -> futures_util::future::BoxFuture<'_, Result<opencode_api::transport::Response, String>> {
+            Box::pin(async { Err("connection refused".to_owned()) })
+        }
+
+        fn reconnect(&self) -> futures_util::future::BoxFuture<'_, bool> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async { false })
+        }
+    }
+
+    /// A dropped stream finds the service again before it subscribes once more (`stream-v2.transport.ts:1550-1561`),
+    /// so a managed service that restarted on another port or password is followed.
+    #[tokio::test]
+    async fn a_dropped_stream_finds_the_service_again() {
+        let down = Arc::new(Down::default());
+        let client = Client::with_transport("http://test", down.clone()).unwrap();
+        let app = opentui::testing::TestApp::new(10, 2);
+        let proxy = app.app().proxy();
+        let connected = watch::channel(false).0;
+        let _ = tokio::time::timeout(Duration::from_millis(600), connect(client, "ses_1".into(), 10, proxy, connected))
+            .await;
+        assert!(down.0.load(std::sync::atomic::Ordering::SeqCst) >= 2);
+    }
+
+    /// Fails its first request with a transport error, then answers from `Memory`.
+    struct Flaky(std::sync::atomic::AtomicBool, opencode_api::memory::Memory);
+
+    impl opencode_api::transport::Transport for Flaky {
+        fn send(
+            &self,
+            request: opencode_api::transport::Request,
+        ) -> futures_util::future::BoxFuture<'_, Result<opencode_api::transport::Response, String>> {
+            if !self.0.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                return Box::pin(async { Err("connection reset".to_owned()) });
+            }
+            self.1.send(request)
+        }
+    }
+
+    /// A session wait that loses its connection asks again once the stream is back, instead of ending the turn
+    /// (`waitForSession`).
+    #[tokio::test]
+    async fn a_session_wait_survives_a_dropped_connection() {
+        let memory = opencode_api::memory::Memory::new(vec![opencode_api::memory::Route::json(
+            "POST",
+            "/api/experimental/session/ses_1/wait",
+            204,
+            &Value::Null,
+        )]);
+        let flaky = Arc::new(Flaky(Default::default(), memory.clone()));
+        let client = Client::with_transport("http://test", flaky).unwrap();
+        let (connected, receiver) = watch::channel(true);
+        assert_eq!(wait(&client, "ses_1", receiver).await, Ok(()));
+        assert_eq!(memory.requests().len(), 1);
+        drop(connected);
     }
 
     fn texts(output: &Output) -> Vec<(EntryKind, String)> {
