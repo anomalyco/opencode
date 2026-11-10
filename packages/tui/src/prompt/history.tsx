@@ -3,10 +3,11 @@ import { mkdirSync, renameSync, statSync, utimesSync, writeFileSync } from "node
 import { readdir, rm, stat } from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 import { measureEditText, type WidthMethod } from "@opentui/core"
-import { onMount } from "solid-js"
+import { onMount, useContext } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import type { PromptInput } from "@opencode/schema"
 import type { Types } from "effect"
+import { ClientContext } from "../context/client"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
@@ -21,9 +22,10 @@ export type PastedText = {
   }
 }
 
-// `path` is the local file a pasted attachment was read from. `recalled` marks a `file:` uri without a path that history
-// or the stash read back, which may name a file on another server's machine. Both stay in the TUI.
-export type PromptFile = Types.DeepMutable<PromptInput.FileAttachment> & { path?: string; recalled?: boolean }
+// `path` is the local file a pasted attachment was read from. `server` is the origin of the server whose machine a
+// `file:` uri without a path or an `@` mention names a file on, recorded when history or the stash keeps it, and "" for
+// an entry written before that. Both stay in the TUI.
+export type PromptFile = Types.DeepMutable<PromptInput.FileAttachment> & { path?: string; server?: string }
 
 export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "agents" | "skills">> & {
   files?: PromptFile[]
@@ -71,18 +73,30 @@ export function promptMediaDirectory(state: string) {
   return path.join(state, "prompt-media")
 }
 
+/** The identity history and the stash record a server's files under: its URL's origin, or "" when it has none. */
+export function promptServer(url: string | undefined) {
+  return (url && URL.parse(url)?.origin) || ""
+}
+
 // History and the stash never keep a video's bytes. A video keeps its local file as a `file://` uri, and one without a
-// file gets one under `state` now, so an entry written right after a restore has it too. Sending reads it again.
-export function persistablePrompt(prompt: PromptInfo, state: string): PromptInfo {
+// file gets one under `state` now, so an entry written right after a restore has it too. Sending reads it again. A
+// server's own file keeps the server it came from, `server` unless it was recalled from another.
+export function persistablePrompt(prompt: PromptInfo, state: string, server: string): PromptInfo {
   return {
     ...prompt,
     files: prompt.files?.map((file) => {
+      if (isServerFile(file)) return { ...file, server: file.server ?? server }
       const video = /^data:(video\/[^;,]+);base64,/.exec(file.uri)
       const local =
         video && (file.path ?? writeVideo(promptMediaDirectory(state), file.uri.slice(video[0].length), video[1]!))
       return local ? { ...file, uri: pathToFileURL(local).href, path: local } : file
     }),
   }
+}
+
+// A `file:` uri without a local path or an `@` mention: a file the server read from its own machine.
+function isServerFile(file: PromptFile) {
+  return file.uri.startsWith("file:") && !file.path && !file.mention?.text.startsWith("@")
 }
 
 // Named for its content, written once. A video that cannot be written keeps its bytes rather than being dropped.
@@ -179,15 +193,11 @@ export function parsePromptInfo(value: unknown): PromptInfo | undefined {
   const input = value as Record<string, unknown>
   if (typeof input.text !== "string" || !Array.isArray(input.pasted)) return
   const prompt = input as PromptInfo
-  // Every TUI on this machine shares these files, whatever server it talks to. Only an `@` mention names a file the
-  // server finds again itself.
+  // Every TUI on this machine shares these files, whatever server it talks to, so a server's file keeps where it came
+  // from, unknown for an entry written before that was recorded.
   return {
     ...prompt,
-    files: prompt.files?.map((file) =>
-      file.uri.startsWith("file:") && !file.path && !file.mention?.text.startsWith("@")
-        ? { ...file, recalled: true }
-        : file,
-    ),
+    files: prompt.files?.map((file) => (isServerFile(file) ? { ...file, server: file.server ?? "" } : file)),
   }
 }
 
@@ -195,6 +205,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
   name: "PromptHistory",
   init: () => {
     const paths = useTuiPaths()
+    const client = useContext(ClientContext)
     const historyPath = path.join(paths.state, "prompt-history.jsonl")
     const loaded = Promise.withResolvers<void>()
     onMount(async () => {
@@ -226,7 +237,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       },
       /** Returns once the entry is written, and the kept videos it no longer names are pruned. */
       append(item: PromptInfo) {
-        const entry = structuredClone(persistablePrompt(unwrap(item), paths.state))
+        const entry = structuredClone(persistablePrompt(unwrap(item), paths.state, promptServer(client?.url)))
         if (isDuplicateEntry(store.history.at(-1), entry)) {
           setStore("index", 0)
           return Promise.resolve()

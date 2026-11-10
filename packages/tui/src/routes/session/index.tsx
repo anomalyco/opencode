@@ -252,6 +252,7 @@ export function Session(props: {
   const mediaSources = useMediaSources()
   const client = useClient()
   const gallery = createSessionGallery(visible, () => session()?.location, {
+    localServer: mediaSources.localServer,
     home: mediaSources.localServer ? paths.home : undefined,
     exists: (file, location) => serverFileExists(file, location, mediaSources),
     connected: () => client.connection.status() === "connected",

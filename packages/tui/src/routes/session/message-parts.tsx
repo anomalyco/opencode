@@ -208,12 +208,13 @@ export function TextPart(props: {
   )
 }
 
-// The gallery items `match` selects. A tile opens the viewer over the whole session's gallery at that item.
+// The gallery items `match` selects. A tile opens the viewer over the whole session's gallery at that item. Transcript
+// previews are on by default, but an explicit `session.image_preview: false` turns them off.
 export function SessionMedia(props: { match: (item: MediaItem) => boolean; paddingLeft?: number }) {
   const ctx = use()
   const media = useMedia()
   const gallery = () => ctx.media?.() ?? []
-  const items = createMemo(() => gallery().filter(props.match))
+  const items = createMemo(() => (ctx.config.session?.image_preview === false ? [] : gallery().filter(props.match)))
   const paddingLeft = () => props.paddingLeft ?? 3
 
   return (

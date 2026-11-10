@@ -34,6 +34,7 @@ import {
   emptyPrompt,
   keepPromptMedia,
   promptMediaDirectory,
+  promptServer,
   usePromptHistory,
   type PromptFile,
   type PromptInfo,
@@ -1374,8 +1375,9 @@ export function Prompt(props: PromptProps) {
     history.append(entry)
     // Files history or the stash kept as local paths are sent as the bytes read now, never as this machine's paths.
     const localServer = terminalEnvironment.localServer === true
-    const kept = entry.files?.some((file) => isKeptAttachment(file, localServer))
-      ? await readKeptAttachments(entry.files, localServer)
+    const server = promptServer(client.url)
+    const kept = entry.files?.some((file) => isKeptAttachment(file, localServer, server))
+      ? await readKeptAttachments(entry.files, localServer, server)
       : undefined
     if (kept?.unreadable.length)
       toast.show({
@@ -1777,7 +1779,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
             width="100%"
           >
-            <Show when={richMedia() && draftMedia().length > 0}>
+            <Show when={richMedia() && config.prompt?.image_preview !== false && draftMedia().length > 0}>
               <box
                 width="100%"
                 flexShrink={0}

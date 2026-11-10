@@ -51,7 +51,7 @@ const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const VIDEO_REMOVED =
-  "[This video was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, ask the user to attach it again.]"
+  "[This video was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 // Base64 characters, below Gemini's ~20 MB and Bedrock's ~25 MB inline request limits.
 const VIDEO_BYTES_MAX = 18 * 1024 * 1024 // 18 MiB
 const VIDEO_TOO_LARGE =
@@ -169,9 +169,9 @@ const unsupportedMedia = (
   capabilities: Model.Capabilities,
   target: Target | undefined,
 ) => {
-  const modality = mimeToModality(mime)
-  if (!modality) return
   const type = mime.toLowerCase()
+  const modality = mimeToModality(type)
+  if (!modality) return
   const protocol = target?.route.protocol
   const unsupported =
     !capabilities.input.some((item) => item.startsWith(modality)) ||

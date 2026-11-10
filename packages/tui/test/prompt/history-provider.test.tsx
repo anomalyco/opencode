@@ -4,6 +4,8 @@ import { expect, test } from "bun:test"
 import { mkdir, utimes } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { readKeptAttachments } from "../../src/component/prompt/local-attachment"
+import { ClientProvider } from "../../src/context/client"
 import { TuiPathsProvider } from "../../src/context/runtime"
 import {
   PromptHistoryProvider,
@@ -13,6 +15,8 @@ import {
 } from "../../src/prompt/history"
 import { PromptStashProvider, usePromptStash } from "../../src/prompt/stash"
 import { tmpdir } from "../fixture/fixture"
+import { createApi, createFetch } from "../fixture/tui-client"
+import { TestTuiContexts } from "../fixture/tui-environment"
 
 test("down rejects at the newest history item with an empty prompt", async () => {
   await using tmp = await tmpdir()
@@ -153,5 +157,50 @@ test.each(["history", "stash"] as const)(
     } finally {
       app.renderer.destroy()
     }
+  },
+)
+
+test.each(["history", "stash"] as const)(
+  "the %s records the server a restored file came from across a restart, and only for its own server",
+  async (kind) => {
+    await using tmp = await tmpdir()
+    const state = path.join(tmp.path, "state")
+    await mkdir(state, { recursive: true })
+    const provider = providers[kind]
+    const restored = { uri: "file:///home/devbox/shot.png", mention: { start: 0, end: 9, text: "[Image 1]" } }
+    const mount = async () => {
+      let entries: ReturnType<typeof provider.use> | undefined
+      function Consumer() {
+        entries = provider.use()
+        return <box />
+      }
+      const app = await testRender(() => (
+        <TestTuiContexts paths={{ cwd: tmp.path, home: tmp.path, state, worktree: tmp.path }}>
+          <ClientProvider api={createApi(createFetch().fetch)} url="https://devbox.example:4096/">
+            <provider.Provider>
+              <Consumer />
+            </provider.Provider>
+          </ClientProvider>
+        </TestTuiContexts>
+      ))
+      await entries!.loaded
+      return { app, entries: entries! }
+    }
+
+    const first = await mount()
+    try {
+      await first.entries.add({ text: "[Image 1]", files: [restored], agents: [], pasted: [] })
+    } finally {
+      first.app.renderer.destroy()
+    }
+    // Loading rewrites the file, and the entry still names the server it was written against.
+    const second = await mount()
+    second.app.renderer.destroy()
+    const [line] = (await Bun.file(path.join(state, provider.file)).text()).trim().split("\n")
+    const files = (kind === "history" ? JSON.parse(line!) : JSON.parse(line!).prompt).files
+    expect(files).toEqual([{ ...restored, server: "https://devbox.example:4096" }])
+
+    expect(await readKeptAttachments(files, false, "https://devbox.example:4096")).toEqual({ files, unreadable: [] })
+    expect((await readKeptAttachments(files, false, "https://other.example:4096")).unreadable).toEqual(["shot.png"])
   },
 )

@@ -25,7 +25,7 @@ import type {
 } from "@opencode/client/promise"
 import { Locale } from "../util/locale"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
-import { toolImageCommits, userImageCommits } from "./stream-v2.image"
+import { toolImageCommits, toolVideoCommits, userImageCommits, userVideoCommits } from "./stream-v2.image"
 import type {
   FooterSubagentDetail,
   FooterSubagentState,
@@ -127,6 +127,8 @@ export type SubagentTrackerInput = {
   sessionID: string
   thinking: boolean
   directory?: string
+  /** Caption videos, as the main transcript does under the `rich_media` flag. */
+  richMedia?: boolean
   signal: AbortSignal
   emit: () => void
 }
@@ -300,7 +302,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         phase: "start",
         messageID,
       })
-    for (const commit of userImageCommits(messageID, prompt.files))
+    for (const commit of [
+      ...userImageCommits(messageID, prompt.files),
+      ...(input.richMedia ? userVideoCommits(messageID, prompt.files) : []),
+    ])
       setFrame(child, sourceKey(messageID, commit.partID), commit)
     return true
   }
@@ -337,7 +342,11 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       partial ? `${frame}:final` : frame,
       toolCommit(part, messageID, toolFinalPhase(part), undefined, input.directory),
     )
-    for (const commit of toolImageCommits(part, messageID)) setFrame(child, sourceKey(messageID, commit.partID), commit)
+    for (const commit of [
+      ...toolImageCommits(part, messageID),
+      ...(input.richMedia ? toolVideoCommits(part, messageID) : []),
+    ])
+      setFrame(child, sourceKey(messageID, commit.partID), commit)
   }
 
   const rebuild = (child: ChildState, messages: SessionMessageInfo[]) => {

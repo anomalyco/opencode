@@ -1,3 +1,4 @@
+import { TextareaRenderable } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
@@ -201,13 +202,14 @@ test("/undo against a remote server sends the files the server read from its own
     { ...source("file:///home/devbox/src"), mime: "application/x-directory", name: "src" },
     { ...source("file:///home/devbox/src/a.ts?start=2&end=4"), mime: "text/plain", name: "a.ts" },
   ]
-  const sent = Promise.withResolvers<{ files?: { uri: string }[] }>()
+  const sent = [0, 1].map(() => Promise.withResolvers<{ files?: { uri: string }[] }>())
+  let prompts = 0
   await using app = await openSession({
     messages: [messages[0], { ...messages[1], files }],
     respond: {
       [PROMPT]: async (request) => {
         const body = await request.json()
-        sent.resolve(body)
+        sent[prompts++]?.resolve(body)
         return json({ data: { id: body.id, sessionID: session.id, type: "user", time: { created: 5 }, payload: body } })
       },
     },
@@ -216,8 +218,19 @@ test("/undo against a remote server sends the files the server read from its own
   await app.waitForFrame((frame) => shown(frame) === 2)
   app.mockInput.pressEnter()
 
-  expect((await sent.promise).files?.map((file) => file.uri)).toEqual(files.map((file) => file.source.uri))
+  expect((await sent[0]!.promise).files?.map((file) => file.uri)).toEqual(files.map((file) => file.source.uri))
   expect(app.calls.filter((call) => call.startsWith(MEDIA))).toEqual([])
+
+  // History keeps them as this server's files, so sending the prompt again from history sends them again.
+  const composer = () =>
+    app.renderer.currentFocusedRenderable instanceof TextareaRenderable
+      ? app.renderer.currentFocusedRenderable.plainText
+      : undefined
+  await app.waitForFrame(() => composer() === "")
+  app.mockInput.pressArrow("up")
+  await app.waitForFrame(() => composer() === "What is in [Image 1]")
+  app.mockInput.pressEnter()
+  expect((await sent[1]!.promise).files?.map((file) => file.uri)).toEqual(files.map((file) => file.source.uri))
 })
 
 // Starts an undo, leaves the session while its media read waits, then lets the read finish.

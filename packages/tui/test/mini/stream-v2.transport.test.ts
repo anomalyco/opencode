@@ -4216,6 +4216,64 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test.each([true, false])("captions a subagent's user and tool videos with richMedia=%s", async (richMedia) => {
+    const events = feed()
+    events.push(connected())
+    const ui = footer()
+    const clip = { data: "AAAA", mime: "video/mp4", source: { type: "inline" as const }, name: "clip.mov" }
+    const content: [ToolContent] = [
+      { type: "file", mime: "video/mp4", uri: "data:video/mp4;base64,AAAA", name: "screen.mp4" },
+    ]
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        streams: [events],
+        sessions: [{ id: "ses_child", parentID: "ses_1", time: { updated: 1 } }],
+        messages: {
+          ses_child: [
+            {
+              id: "msg_child_tool",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "test", id: "model" },
+              content: [canonicalToolPart("record", { status: "completed", input: {}, content }, "call_video")],
+              time: { created: 2 },
+            },
+            { id: "msg_child_video", type: "user", text: "", files: [image, clip], time: { created: 1 } },
+          ],
+        },
+      }),
+      sessionID: "ses_1",
+      thinking: false,
+      richMedia,
+      footer: ui.api,
+    })
+    // The child's image shows once its transcript is read, with any video captions it gets.
+    const commits = () =>
+      ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : [])).at(-1)?.details.ses_child
+        ?.commits ?? []
+    const hydrated = Promise.withResolvers<void>()
+    const event = ui.api.event
+    ui.api.event = (next) => {
+      event(next)
+      if (commits().some((commit) => commit.image)) hydrated.resolve()
+    }
+    transport.selectSubagent("ses_child")
+    await hydrated.promise
+    expect(
+      commits()
+        .filter((commit) => commit.video)
+        .map((commit) => [commit.kind, commit.text]),
+    ).toEqual(
+      richMedia
+        ? [
+            ["user", "▶ clip.mov · video"],
+            ["tool", "▶ screen.mp4 · video"],
+          ]
+        : [],
+    )
+    await transport.close()
+  })
+
   test("preserves a pre-hydration admission promoted during stale hydration", async () => {
     const events = feed()
     events.push(connected())

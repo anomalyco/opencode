@@ -547,6 +547,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     sessionID: input.sessionID,
     thinking: input.thinking,
     directory: input.location?.directory,
+    richMedia: input.richMedia,
     signal: controller.signal,
     emit: () => {
       if (state.closed || input.footer.isClosed) return

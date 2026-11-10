@@ -1,10 +1,11 @@
 import path from "path"
-import { onMount } from "solid-js"
+import { onMount, useContext } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
+import { ClientContext } from "../context/client"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
-import { parsePromptInfo, persistablePrompt, prunePromptMedia, type PromptInfo } from "./history"
+import { parsePromptInfo, persistablePrompt, promptServer, prunePromptMedia, type PromptInfo } from "./history"
 
 export type StashEntry = {
   prompt: PromptInfo
@@ -37,6 +38,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
   name: "PromptStash",
   init: () => {
     const paths = useTuiPaths()
+    const client = useContext(ClientContext)
     const stashPath = path.join(paths.state, "prompt-stash.jsonl")
     const loaded = Promise.withResolvers<void>()
     onMount(async () => {
@@ -59,7 +61,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
       /** Returns once the entry is written, and the kept videos it no longer names are pruned. */
       push(entry: Omit<StashEntry, "timestamp">) {
         const stash = structuredClone({
-          prompt: persistablePrompt(unwrap(entry.prompt), paths.state),
+          prompt: persistablePrompt(unwrap(entry.prompt), paths.state, promptServer(client?.url)),
           timestamp: Date.now(),
         })
         let trimmed = false

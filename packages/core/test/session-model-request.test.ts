@@ -16,6 +16,7 @@ describe("SessionModelRequest.unsupportedParts", () => {
           { type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: "logo.png" },
           { type: "media", media: Media.base64("JVBERg==", "application/pdf"), filename: "document.pdf" },
           { type: "media", media: Media.base64("AAAAGGZ0eXBtcDQy", "video/mp4"), filename: "clip.mp4" },
+          { type: "media", media: Media.base64("AAAAGGZ0eXBtcDQy", "VIDEO/MP4"), filename: "CLIP.MP4" },
         ]),
       ],
       capabilities(["text"]),
@@ -26,6 +27,7 @@ describe("SessionModelRequest.unsupportedParts", () => {
       Message.text('ERROR: Cannot read "logo.png" (this model does not support image input). Inform the user.'),
       Message.text('ERROR: Cannot read "document.pdf" (this model does not support pdf input). Inform the user.'),
       Message.text('ERROR: Cannot read "clip.mp4" (this model does not support video input). Inform the user.'),
+      Message.text('ERROR: Cannot read "CLIP.MP4" (this model does not support video input). Inform the user.'),
     ])
   })
 
@@ -331,8 +333,13 @@ describe("SessionModelRequest.boundVideos", () => {
         result: { type: "content", value: [{ type: "file", uri: "data:video/mp4;base64,AAAA", mime: "video/mp4" }] },
       }),
     )
+    // A tool's video may be retrieved again, as an image may.
     expect(boundVideos([tool, Message.user([video()])])[0]?.content[0]).toMatchObject({
-      result: { value: [{ type: "text", text: expect.stringContaining("video was removed") }] },
+      result: {
+        value: [
+          { type: "text", text: expect.stringContaining("retrieve it again with an available tool or ask the user") },
+        ],
+      },
     })
     const unchanged = [tool, Message.user([image])]
     expect(boundVideos(unchanged)).toBe(unchanged)

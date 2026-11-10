@@ -212,6 +212,7 @@ describe("prompt local attachments", () => {
     const result = await readKeptAttachments(
       [image, ...small.map((file) => kept(file)), kept(restored, "clip.mp4"), kept(large, "big clip.mp4"), kept(gone)],
       true,
+      "",
     )
     expect(result.files.map((file) => file.uri.split(",")[0])).toEqual([
       "data:image/png;base64",
@@ -223,7 +224,7 @@ describe("prompt local attachments", () => {
     expect(result.unreadable).toEqual(["big clip.mp4", "gone.mov"])
   })
 
-  test("never sends a remote server a file uri history or the stash recalled without a path", async () => {
+  test("never sends a remote server a file uri history or the stash recalled without a path from another server", async () => {
     await using tmp = await tmpdir()
     const clip = path.join(tmp.path, "clip.webm")
     await Bun.write(clip, new Uint8Array([1, 2, 3]))
@@ -232,14 +233,14 @@ describe("prompt local attachments", () => {
       name: "clip.webm",
       mention: { start: 0, end: 9, text: "[Video 1]" },
     }
-    const recalled = { ...restored, recalled: true }
+    const recalled = { ...restored, server: "https://devbox.example" }
 
     // A local server reads a recalled file itself; any server reads the file its own restore names.
-    expect(await readKeptAttachments([recalled, restored], true)).toEqual({
+    expect(await readKeptAttachments([recalled, restored], true, "")).toEqual({
       files: [recalled, restored],
       unreadable: [],
     })
-    expect(await readKeptAttachments([recalled, restored], false)).toEqual({
+    expect(await readKeptAttachments([recalled, restored], false, "https://other.example")).toEqual({
       files: [restored],
       unreadable: ["clip.webm"],
     })
@@ -247,7 +248,7 @@ describe("prompt local attachments", () => {
     // With its path, the file is sent as the bytes read here, to either server.
     const localized = { ...restored, path: clip }
     for (const localServer of [true, false])
-      expect((await readKeptAttachments([localized], localServer)).files).toEqual([
+      expect((await readKeptAttachments([localized], localServer, "")).files).toEqual([
         { ...localized, uri: "data:video/webm;base64,AQID" },
       ])
   })

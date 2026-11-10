@@ -13,6 +13,8 @@ export type MediaItem = Readonly<{
   name?: string
   /** An absolute path on this terminal's machine, such as a composer draft's file. Preferred when it exists. */
   path?: string
+  /** The `file://` URL of the file on the server's machine that a sent attachment's `uri` holds a copy of. */
+  source?: string
   /** The Location a `file://` uri lies in, so a remote server can still read it. */
   location?: LocationRef
 }>
@@ -64,12 +66,14 @@ export type MentionedFiles = Readonly<{
 /**
  * Every image and video in a session, in transcript order: user attachments, tool file content, the images of
  * finished image generation notices, and, given `mentioned`, the existing videos a finished reply's text names.
- * `location` is the session's, for files on the server.
+ * `location` is the session's, for files on the server. On a remote server, a generated image saved outside it, as in
+ * the server's temporary directory by default, is out of this terminal's reach and left out.
  */
 export function collectSessionMedia(
   messages: readonly SessionMessageInfo[],
   location?: LocationRef,
   mentioned?: MentionedFiles,
+  localServer = true,
 ): MediaItem[] {
   return messages.flatMap((message): MediaItem[] => {
     // Opted-in reads leave stored files as `media:` refs, a PromptAttachment variant the generated type omits.
@@ -81,6 +85,7 @@ export function collectSessionMedia(
           file.mime,
           "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`,
           file.name,
+          file.source?.type === "uri" && /^file:/i.test(file.source.uri) ? file.source.uri : undefined,
         ),
       )
     }
@@ -115,6 +120,7 @@ export function collectSessionMedia(
     // The metadata's path lacks the extension; the notice names the saved file, a POSIX or Windows server path.
     const file = /Saved image: (.+) \([^()\r\n]+\)\./.exec(message.text)?.[1]
     if (!file || !/^(?:\/|[a-z]:[\\/])/i.test(file)) return []
+    if (!localServer && (!location || locationPath(file, location.directory) === undefined)) return []
     return [
       {
         id: `${message.id}:generated`,
@@ -162,6 +168,15 @@ export function mentionedVideos(text: string, directory: string, home?: string) 
 /** The path module for a server's paths, which follow its own OS, judged from one of its absolute paths. */
 export function pathFlavor(directory: string) {
   return /^(?:[a-z]:[\\/]|\\\\)/i.test(directory) ? path.win32 : path.posix
+}
+
+/** The `/`-separated path of a server file inside `directory`. On a POSIX server, a backslash is part of a name. */
+export function locationPath(file: string, directory: string) {
+  const flavor = pathFlavor(directory)
+  const relative = flavor.relative(directory, file)
+  if (!relative || relative === ".." || relative.startsWith(`..${flavor.sep}`) || flavor.isAbsolute(relative))
+    return undefined
+  return relative.replaceAll(flavor.sep, "/")
 }
 
 // The paths a line's link targets, words and spans may be. A span with spaces may also hold several, as in `ffmpeg -i
@@ -241,27 +256,37 @@ export function viewerMedia(items: readonly MediaItem[], item?: MediaItem) {
 
 const KIND_NAMES = { image: "Image", video: "Video", other: "File" }
 
-/** The name to show for `item`: its file name without the path a pasted file carries as its name, or its kind. */
+/**
+ * The name to show for `item`: its file name without the path a pasted file carries as its name, or its kind. A
+ * backslash separates names only in a Windows path; elsewhere it is part of one.
+ */
 export function mediaName(item: Pick<MediaItem, "name" | "kind">) {
-  return item.name?.split(/[\\/]/).at(-1) || KIND_NAMES[item.kind]
+  return (item.name && pathFlavor(item.name).basename(item.name)) || KIND_NAMES[item.kind]
 }
 
-/** The file `item` shows: its path on this machine, or a `file:` URL's path on the session's server. */
-export function mediaPath(item: Pick<MediaItem, "path" | "uri">) {
+/**
+ * The file `item` shows: its path on this machine, or a `file:` URL's path on the session's server, in that server's
+ * flavor: a Windows server's drive or UNC path keeps its backslashes and host.
+ */
+export function mediaPath(item: Pick<MediaItem, "path" | "uri" | "source">) {
   if (item.path) return item.path
-  if (!/^file:/i.test(item.uri)) return undefined
-  const pathname = URL.parse(item.uri)?.pathname ?? item.uri
-  // A Windows server's path comes back from its URL as /C:/…
-  return (decode(pathname) ?? pathname).replace(/^\/(?=[a-z]:\/)/i, "")
+  const url = URL.parse(/^file:/i.test(item.uri) ? item.uri : (item.source ?? ""))
+  if (url?.protocol !== "file:") return undefined
+  const pathname = decode(url.pathname) ?? url.pathname
+  if (url.host) return `\\\\${url.host}${pathname.replaceAll("/", "\\")}`
+  if (/^\/[a-z]:\//i.test(pathname)) return pathname.slice(1).replaceAll("/", "\\")
+  return pathname
 }
 
-// A file: URL names a path on the session's server whatever Location or encoding it came with; other URIs, such as
-// media: refs and data: URIs, name their content.
+// A file: URL, or the source a copy was read from, names a path on the session's server whatever Location or encoding it
+// came with, and a Windows drive whatever its letter's case; other URIs, such as media: refs and data: URIs, name their
+// content.
 function mediaSource(item: MediaItem) {
-  return mediaPath({ uri: item.uri }) ?? item.uri
+  const file = mediaPath({ uri: item.uri, source: item.source })
+  return file?.replace(/^[a-z]:/, (drive) => drive.toUpperCase()) ?? item.uri
 }
 
-function item(id: string, mime: string, uri: string, name?: string): MediaItem[] {
+function item(id: string, mime: string, uri: string, name?: string, source?: string): MediaItem[] {
   const kind = mediaKind(mime, name)
-  return kind === "other" ? [] : [{ id, kind, mime, uri, name }]
+  return kind === "other" ? [] : [{ id, kind, mime, uri, name, ...(source && { source }) }]
 }
