@@ -8,21 +8,17 @@ function readTheme(): PillPresentation {
     "position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none;background:var(--v2-background-bg-base);color:var(--v2-text-text-base);font-family:var(--v2-font-family-sans);border:1px solid var(--v2-border-border-muted)"
   document.body.appendChild(probe)
   const text = getComputedStyle(probe)
+  const background = text.backgroundColor
+  const border = text.borderTopColor
+  const color = text.color
+  const font = getComputedStyle(document.body).fontFamily || text.fontFamily
 
   probe.style.color = "var(--v2-text-text-muted)"
-
-  const theme = {
-    label: "",
-    background: text.backgroundColor,
-    border: text.borderTopColor,
-    color: text.color,
-    muted: getComputedStyle(probe).color,
-    font: getComputedStyle(document.body).fontFamily || text.fontFamily,
-  }
+  const muted = getComputedStyle(probe).color
 
   probe.remove()
 
-  return theme
+  return { label: "", background, border, color, muted, font }
 }
 
 /**
