@@ -9,13 +9,36 @@ use super::parse::measure;
 
 /// Writes `text` to a temporary file, runs the editor on it, and reads it back: `None` when it came back empty.
 pub fn edit(command: &str, text: &str, cwd: &Path) -> Result<Option<String>, String> {
-    let stamp =
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis());
-    let file = std::env::temp_dir().join(format!("{stamp}.md"));
-    std::fs::write(&file, text).map_err(|error| error.to_string())?;
+    let file = create(text).map_err(|error| error.to_string())?;
     let result = run(command, &file, cwd);
     let _ = std::fs::remove_file(&file);
     result
+}
+
+/// `<millis>.md` in the temp directory as `editor.ts` names it, but created new and readable only by its owner,
+/// since `text` may be a pasted secret and the directory is shared. A taken name moves to the next millisecond.
+fn create(text: &str) -> std::io::Result<std::path::PathBuf> {
+    use std::io::Write;
+    let mut stamp =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis());
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    loop {
+        let file = std::env::temp_dir().join(format!("{stamp}.md"));
+        match options.open(&file) {
+            Ok(mut handle) => {
+                let written = handle.write_all(text.as_bytes());
+                if written.is_err() {
+                    let _ = std::fs::remove_file(&file);
+                }
+                return written.map(|()| file);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => stamp += 1,
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 fn run(command: &str, file: &Path, cwd: &Path) -> Result<Option<String>, String> {
@@ -173,5 +196,18 @@ mod tests {
         assert_eq!(normalize("a\nb\n"), "a\nb\n");
         assert_eq!(normalize("a\r\nb\r\n"), "a\r\nb\r\n");
         assert_eq!(normalize("plain"), "plain");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_editor_file_is_private_to_its_owner() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let script = dir.path().join("editor");
+        std::fs::write(&script, "#!/bin/sh\nmode=$(stat -c %a \"$1\")\necho \"$mode $(cat \"$1\")\" > \"$1\"\n")
+            .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let edited = edit(script.to_str().unwrap(), "secret", dir.path()).unwrap();
+        assert_eq!(edited.as_deref(), Some("600 secret\n"));
     }
 }
