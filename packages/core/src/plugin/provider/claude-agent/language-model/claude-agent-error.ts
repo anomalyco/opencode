@@ -1,7 +1,7 @@
 export * as ClaudeAgentError from "./claude-agent-error.js"
 
 import type { SDKAssistantMessageError, SDKMessage, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
-import { AIError, RateLimitError } from "@opencode/ai/effect"
+import { AIError, QuotaExceededError } from "@opencode/ai/effect"
 
 // Keep request-local diagnostics until the terminal result. A usage warning alone
 // is not a failed request, and Claude Code owns any retries before this result.
@@ -37,7 +37,7 @@ export function make() {
 
     if (limited)
       return new AIError({
-        reason: new RateLimitError({
+        reason: new QuotaExceededError({
           message: text,
           retryAfterMs:
             rejected?.resetsAt !== undefined

@@ -2,7 +2,11 @@ import { describe, expect, spyOn, test } from "bun:test"
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import type { SDKAssistantMessage, SDKMessage, SDKRateLimitEvent } from "@anthropic-ai/claude-agent-sdk"
 import { AIError } from "@opencode/ai/effect"
+import { ModelRetry } from "@opencode/core/model-retry"
 import { ConvertClaudeStream } from "@opencode/core/plugin/provider/claude-agent/language-model/convert-claude-stream"
+import { Effect, Fiber, Result } from "effect"
+import { TestClock } from "effect/testing"
+import { it } from "../../../../lib/effect"
 import { Recorder } from "../lib/recorder"
 
 function assistant() {
@@ -68,7 +72,7 @@ describe("terminal errors", () => {
       retryAfterMs: 0,
       message: "Weekly limit reached. Resets at 2026-10-23T23:59:58.000Z.",
     },
-  ])("$name is a typed rate limit", ({ assistantError, result, resetsAt, retryAfterMs, message }) => {
+  ])("$name is a typed quota error", ({ assistantError, result, resetsAt, retryAfterMs, message }) => {
     const now = spyOn(Date, "now").mockReturnValue(1792799999000)
     try {
       const convert = ConvertClaudeStream.make([])
@@ -92,13 +96,51 @@ describe("terminal errors", () => {
       } as const)
       expect(parts).toEqual([{ type: "error", error: expect.any(AIError) }])
       if (parts[0]?.type !== "error" || !(parts[0].error instanceof AIError)) throw new Error("Expected an AI error")
-      expect(parts[0].error.reason._tag).toBe("RateLimit")
+      expect(parts[0].error.reason._tag).toBe("QuotaExceeded")
       expect(parts[0].error.message).toBe(message)
       expect(parts[0].error.retryAfterMs).toBe(retryAfterMs)
     } finally {
       now.mockRestore()
     }
   })
+
+  it.effect("generation does not retry an exhausted Claude subscription", () =>
+    Effect.gen(function* () {
+      const convert = ConvertClaudeStream.make([])
+      convert({
+        type: "rate_limit_event",
+        uuid: crypto.randomUUID(),
+        session_id: crypto.randomUUID(),
+        rate_limit_info: {
+          status: "rejected",
+          rateLimitType: "five_hour",
+          resetsAt: Math.floor(Date.now() / 1000) + 18_000,
+        },
+      })
+      const [part] = convert({
+        ...Recorder.result("text"),
+        subtype: "success",
+        is_error: true,
+        api_error_status: 429,
+        result: "",
+      } as const)
+      const error = part?.type === "error" ? part.error : undefined
+      if (!(error instanceof AIError)) throw new Error("Expected a subscription error")
+      const results = yield* Effect.forEach([ModelRetry.retry, ModelRetry.retryOneShot], (retry) =>
+        Effect.gen(function* () {
+          let calls = 0
+          const attempt = Effect.suspend(() => (++calls === 1 ? Effect.fail(error) : Effect.succeed("retried")))
+          const run = yield* Effect.forkChild(retry(attempt).pipe(Effect.result), { startImmediately: true })
+          yield* TestClock.adjust("15 minutes")
+          return { result: yield* Fiber.join(run), calls }
+        }),
+      )
+      expect(results).toEqual([
+        { result: Result.fail(error), calls: 1 },
+        { result: Result.fail(error), calls: 1 },
+      ])
+    }),
+  )
 
   test("allowed windows and successful turns do not retain rejected limits", () => {
     const info = {
