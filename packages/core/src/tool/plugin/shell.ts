@@ -32,7 +32,7 @@ const OS =
       : process.platform === "linux"
         ? "Linux"
         : process.platform
-export const description = (shell?: string, autoBackground = false) =>
+const description = (shell?: string, autoBackground = false) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
@@ -61,16 +61,6 @@ export const Input = Schema.Struct({
   }),
 })
 
-export const input = (autoBackground = false) =>
-  autoBackground
-    ? Schema.Struct({
-        ...Input.fields,
-        timeout: Schema.optionalKey(NonNegativeInt).annotate({
-          description: `Foreground wait in milliseconds before moving to the background, without killing the command. Defaults to ${DEFAULT_TIMEOUT_MS}. Set to 0 to wait until it finishes. With background: true, timeout kills the command after this many milliseconds; no limit by default.`,
-        }),
-      })
-    : Input
-
 const StructuredOutput = Schema.Struct({
   exit: Schema.optionalKey(Schema.Number),
   signal: Schema.optionalKey(Schema.String),
@@ -87,7 +77,7 @@ const Output = Schema.Struct({
 
 type Output = typeof Output.Type
 
-export const resultMessages = (output: Output, timeout?: number) => {
+const resultMessages = (output: Output, timeout?: number) => {
   const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output, timeout)
   return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
 }
@@ -104,7 +94,7 @@ const toolResult = (output: Output, timeout?: number) => {
   }
 }
 
-export const backgroundResult = (shellID: string, file: string, timeout?: number) => ({
+const backgroundResult = (shellID: string, file: string, timeout?: number) => ({
   output: [
     `Command moved to the background (shell ID: ${shellID}).`,
     `Output is streaming to: ${file}`,
@@ -112,7 +102,7 @@ export const backgroundResult = (shellID: string, file: string, timeout?: number
       ? []
       : [
           "",
-          `The command did not finish within its ${timeout / 1_000}-second timeout and was moved to the background. Do not start another copy while it is running.`,
+          `The command did not finish within its timeout of ${timeout / 1_000} seconds and was moved to the background. Do not start another copy while it is running.`,
         ]),
   ].join("\n"),
   shellID,
@@ -204,7 +194,7 @@ export const Plugin = {
           name,
           options: { codemode: false },
           description: description(undefined, autoBackground),
-          input: input(autoBackground),
+          input: Input,
           output: Output,
           execute: (input, context) => {
             const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
