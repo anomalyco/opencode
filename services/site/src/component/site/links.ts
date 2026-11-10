@@ -45,7 +45,7 @@ export function siteLinks(t: Translate, route: (path: string) => string) {
       { label: t("legal.brand"), href: route("/brand") },
       { label: t("site.footer.legal"), href: route("/legal") },
     ],
-    status: { label: t("site.footer.status"), href: "https://status.opencode.ai" },
+    status: { label: t("site.footer.status"), href: "https://opencode.ai/status" },
     // Settings › Footer › columns: the open source project first, Anomaly's products last.
     columns: [
       {
