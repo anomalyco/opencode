@@ -63,7 +63,12 @@ describe("Video / Google Veo", () => {
         expect(JSON.stringify(response.video)).not.toContain("x-goog-api-key")
         expect(Media.from(response.video.source).headers).toBeUndefined()
         expect(response.providerMetadata).toEqual({
-          google: { operation, raiMediaFilteredCount: 1, raiMediaFilteredReasons: ["audio filtered"], metadata: undefined },
+          google: {
+            operation,
+            raiMediaFilteredCount: 1,
+            raiMediaFilteredReasons: ["audio filtered"],
+            metadata: undefined,
+          },
         })
         expect(yield* response.video.bytes()).toEqual(Uint8Array.from([9, 9, 9]))
       })
@@ -260,7 +265,8 @@ describe("Video / xAI", () => {
           resolution: "720p",
           audio: false,
           providerOptions: { reference_audios: [{ voice_id: "eve" }], future_option: true },
-          http: { headers: { "x-request": "yes" }, query: { trace: "1" } },
+          headers: { "x-request": "yes" },
+          http: { query: { trace: "1" } },
         })
         expect(generation.token).toEqual({ requestID: "req_1" })
         events.push(...(yield* generation.events({ poll: { interval: "1 second" } }).pipe(Stream.runCollect)))

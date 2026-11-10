@@ -1,0 +1,217 @@
+---
+title: "Warming"
+---
+
+Session warming sends periodic model requests to preserve provider-side prompt
+caches or other short-lived state while you pause between prompts. It is
+disabled by default.
+
+Enable warming in any [OpenCode configuration file](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+With this configuration, OpenCode warms a recently active session just before
+its prompt cache expires: at 90% of the model's
+[`cache.ttl`](/models#cache-lifetime), or every four minutes when the model
+has none. It continues until 30 minutes have passed since the latest
+non-warming request.
+
+## Options
+
+Use the object form to change the warming prompt, idle interval, or active
+window:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `prompt` | Keep-alive instruction | Appended as a transient user message for each warming request. The default asks the model to do no work, use no tools, and reply with `OK`. |
+| `interval` | `"auto"` | Idle time before the next warming request. `"auto"` uses 90% of the model's `cache.ttl`, or four minutes without one. |
+| `duration` | `"30 minutes"` | Warming window measured from the latest non-warming model request. |
+
+Omitted object fields keep their defaults. For example, this changes only the
+interval:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Automatic interval
+
+By default, `interval` is `"auto"`, which warms just before each model's
+prompt cache expires. OpenCode uses 90% of the model's
+[`cache.ttl`](/models#cache-lifetime) setting, so a `"5m"` cache is warmed
+every 4.5 minutes. Models without a `cache.ttl` are warmed every four minutes.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": { "duration": "2 hours" },
+  "providers": {
+    "anthropic": { "settings": { "cache": { "ttl": "1h" } } },
+  },
+}
+```
+
+A cache that lasts longer than `duration`, such as `"1h"` with the 30-minute
+default, is not warmed, since it outlives the warming window anyway. OpenCode
+logs this once per session. Raise `duration` to warm it.
+
+## Per provider and model
+
+Set `settings.cache.warming` on a provider or model to warm only its sessions,
+or to give them their own timing. It takes the same values as the top-level
+`warming`, except `prompt`, and overrides it. A model setting overrides the
+provider setting.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "anthropic": {
+      "settings": { "cache": { "ttl": "5m", "warming": true } },
+      "models": {
+        "claude-haiku-5-5": { "settings": { "cache": { "warming": false } } },
+      },
+    },
+  },
+}
+```
+
+Here Anthropic sessions are warmed every 4.5 minutes, except on Claude Haiku
+5.5, and other providers aren't warmed. Fields left out of the object form come
+from the top-level `warming`, then the defaults. An invalid setting logs a
+warning and falls back to the top-level `warming`.
+
+## Durations
+
+`interval` and `duration` accept duration strings. Both must resolve to finite
+values greater than zero, and `interval` must be shorter than `duration`;
+otherwise OpenCode skips warming and logs a warning.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Timing
+
+Warming starts after a non-warming model request in a top-level session.
+Subagent sessions are not warmed. Each interval counts from when the latest
+request or warming request was sent, not from when its response finished,
+because a provider's cache lifetime starts when the request reaches it. A
+warming request does not extend the active window.
+
+```text
+00:00  normal model request sent
+00:01  response finishes
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Any new non-warming model activity, including a compaction, resets both timers.
+An explicit interval as long as or longer than the duration is rejected with a
+warning, and an `"auto"` interval that long skips warming because the cache
+outlives the window.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+OpenCode never sends a warming request while a model request, including a
+compaction, is running. If one is still running when the interval comes due,
+warming waits for it to finish and then sends right away, as long as the cache
+from that request hasn't expired. If it has, warming stops until the next
+normal request.
+
+```text
+00:00  normal model request sent
+00:04  interval due; request still running
+00:04:30  response finishes; warming request
+00:08:30  warming request
+```
+
+## Requests
+
+A warming request uses the session's current model, agent, instructions, and
+conversation context. OpenCode appends the configured prompt transiently,
+makes one model call, and discards the response.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+The request does not admit input, add messages to history, or mutate durable
+session state. OpenCode does not dispatch local tool calls or continue a tool
+loop; the default prompt also tells the model not to use tools.
+
+## Failures
+
+Warming failures are logged without failing or changing the session. OpenCode
+waits until the next interval before trying again, while the original active
+window continues to count down.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+A warming request that misses the cache, reading less from it than it writes,
+stops warming for that session until its next non-warming request. Providers
+that don't report cache usage never count as a miss.
+
+```text
+00:04  warming request misses the cache; warming stops
+00:10  normal model request; warming resumes
+00:14  warming request
+```
+
+## Costs
+
+Warming requests are real provider requests. They can consume tokens, incur
+costs, count against rate limits, and fail like other model requests.
+
+- Shorter intervals increase request volume.
+- Longer durations allow more warming requests.
+- Enable warming only when its provider-side benefit is worth the added usage.
+
+For example, on a model without a `cache.ttl` the defaults allow up to seven
+warming attempts during one uninterrupted 30-minute window: at minutes 4, 8,
+12, 16, 20, 24, and 28.
+
+## Disabling
+
+Set `warming` to `false` to disable it explicitly. Omitting the field also
+leaves warming disabled.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

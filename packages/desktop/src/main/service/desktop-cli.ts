@@ -10,8 +10,12 @@ import { DesktopPaths } from "../paths"
 import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import { parseCliVersion, stageName } from "./cli-version"
+import { DesktopCliState } from "./desktop-cli-state"
 
 const execFileAsync = promisify(execFile)
+
+// The first `--version` after an update can take several seconds while antivirus scans the executable.
+const RUN_TIMEOUT_MS = 30_000
 
 export interface Resolved {
   readonly version: string
@@ -31,7 +35,8 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const path = yield* Path.Path
 
-    const resolve = yield* Effect.cached(
+    // A failed lookup (for example a stage copy that antivirus held open) runs again on the next use.
+    const resolve = yield* DesktopCliState.make(
       make().pipe(Effect.provide(yield* Effect.context<FileSystem.FileSystem | Path.Path>()), Effect.orDie),
     )
 
@@ -166,7 +171,9 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
 const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[]) {
   yield* Effect.logInfo("v2 CLI command started", { binary, args })
 
-  const result = yield* Effect.tryPromise(() => execFileAsync(binary, args, { windowsHide: true })).pipe(
+  const result = yield* Effect.tryPromise(() =>
+    execFileAsync(binary, args, { windowsHide: true, timeout: RUN_TIMEOUT_MS }),
+  ).pipe(
     Effect.tapError((error) => {
       const output = Option.getOrUndefined(Schema.decodeUnknownOption(ExecFailure)(error.cause))
 
@@ -186,26 +193,37 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
   return stdout
 })
 
-const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: string, home: string) {
-  yield* Effect.tryPromise({
-    try: () =>
-      new Promise<void>((resolve, reject) => {
-        const child = spawn("/bin/bash", ["-s", "--", "--binary", binary], {
-          env: { ...process.env, HOME: home },
-          stdio: ["pipe", "ignore", "pipe"],
-        })
+// The installer runs `opencode --version`, which can take several seconds on first run while Gatekeeper scans it.
+const INSTALL_TIMEOUT_MS = 60_000
 
-        let stderr = ""
-        child.stderr.on("data", (chunk) => (stderr += chunk))
-        child.on("error", reject)
-        child.on("close", (code) => {
-          if (code === 0) return resolve()
-          reject(new Error(stderr.trim() || `CLI installer exited with code ${code}`))
-        })
-        child.stdin.end(installer)
-      }),
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-  })
+const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: string, home: string) {
+  yield* Effect.callback<void, Error>((resume) => {
+    const child = spawn("/bin/bash", ["-s", "--", "--binary", binary], {
+      env: { ...process.env, HOME: home },
+      stdio: ["pipe", "ignore", "pipe"],
+    })
+
+    let stderr = ""
+    child.stderr.on("data", (chunk) => (stderr += chunk))
+    child.on("error", (error) => resume(Effect.fail(error)))
+    child.on("close", (code) => {
+      if (code === 0) return resume(Effect.void)
+      resume(Effect.fail(new Error(stderr.trim() || `CLI installer exited with code ${code}`)))
+    })
+    // bash can exit before it read the whole script; its `close` reports the failure.
+    child.stdin.on("error", () => {})
+    child.stdin.end(installer)
+
+    // A timeout or the app quitting leaves no installer writing into ~/.opencode behind.
+    return Effect.sync(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL")
+    })
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: INSTALL_TIMEOUT_MS,
+      orElse: () => Effect.fail(new Error("CLI installation timed out")),
+    }),
+  )
 })
 
 function executableName() {

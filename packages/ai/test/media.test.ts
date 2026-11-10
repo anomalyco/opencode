@@ -215,7 +215,8 @@ describe("Media", () => {
       const json = Schema.encodeSync(codec)(message)
       expect(json).not.toContain("null")
       const restored = Schema.decodeSync(codec)(json)
-      const parts = restored.content.filter((part) => part.type === "media")
+      expect(restored.role).toBe("user")
+      const parts = restored.role === "user" ? restored.content.filter((part) => part.type === "media") : []
       expect(parts).toHaveLength(2)
       expect(parts[0].media).toBeInstanceOf(Media.Asset)
       expect(parts[0].media.source).toEqual({ type: "base64", data: "AQID", mediaType: "image/png" })

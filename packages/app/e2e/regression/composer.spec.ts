@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, provider, sessionHref } from "../utils/app"
+import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, pageMessagesFrom, provider, sessionHref } from "../utils/app"
 import { mockWorkspace, openDraft, openSession } from "../utils/workspace"
 import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-server"
 
@@ -15,16 +15,22 @@ test("mention a session by title, send its stable token, and open its own tab", 
     sessions: [
       { id: "ses_mentions_source", title: "Review the plan" },
       { id: target, title: "Auth middleware" },
+      { id: "ses_0123456789authtokensabcdef", title: "Auth tokens" },
+      { id: "ses_0123456789authreviewabcdef", title: "Auth review" },
+      { id: "ses_0123456789authloggingabcde", title: "Auth logging" },
+      { id: "ses_0123456789authsessionsabcd", title: "Auth sessions" },
+      { id: "ses_0123456789authscopesabcdef", title: "Auth scopes" },
     ],
     seed: { tabs: ["ses_mentions_source"] },
     onPrompt: (input) => void prompts.push(input.body),
   })
 
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+
   await view.editor.fill("Compare with @Auth")
-  await page
-    .locator('[data-component="composer-suggestions"]')
-    .getByRole("button", { name: /Auth middleware/ })
-    .click()
+  await expect(suggestions.locator('[data-suggestion-id^="session:"]')).toHaveCount(5)
+  await view.editor.pressSequentially(" mid")
+  await suggestions.getByRole("button", { name: /Auth middleware/ }).click()
   await expect(view.editor.locator('[data-mention="session"]')).toHaveText("@Auth middleware")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
@@ -49,6 +55,14 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
       { id: "ses_mention_search_source", title: "Review the plan" },
       { id: "ses_0123456789homesessionabcde", title: "HOME" },
       { id: target, title: "OPENCODE CONSOLE" },
+      { id: "ses_0123456789backhomeabcdefgh", title: "Back home", created: T0 + 2 },
+      {
+        id: "ses_0123456789otherprojecthome",
+        title: "HOME elsewhere",
+        projectID: "proj_other",
+        directory: "C:/OpenCode/Other",
+        created: T0 + 3,
+      },
     ],
     seed: { tabs: ["ses_mention_search_source"] },
     onPrompt: (input) => void prompts.push(input.body),
@@ -57,9 +71,23 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
   const suggestions = page.locator('[data-component="composer-suggestions"]')
   const files = await holdRoute(page, (url) => url.pathname === "/api/fs/find")
 
+  // A bare @ offers only this project's sessions.
   await view.editor.pressSequentially("Compare with @")
   await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
   await expect(suggestions.getByRole("button", { name: /OPENCODE CONSOLE/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /HOME elsewhere/ })).toHaveCount(0)
+
+  // Typed matches rank this project first, then the exact title, a title start and a later word, ahead of recency.
+  await view.editor.pressSequentially("home")
+  await expect(suggestions.locator('[data-suggestion-id^="session:"]')).toContainText([
+    /HOME(?! elsewhere)/,
+    "Back home",
+    "HOME elsewhere",
+  ])
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
 
   await view.editor.pressSequentially("open")
   await files.arrived
@@ -79,12 +107,40 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
 
   // A space after a full title ends a typed mention, so the rest stays prose.
   await view.editor.pressSequentially("@home")
-  await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /^HOME SessionMentionSearch$/ })).toBeVisible()
   await view.editor.pressSequentially(" now")
   await expect(suggestions).toBeHidden()
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(2)
   expect(prompts[1]?.text).toBe("@home now")
+})
+
+test("closing the @ menu aborts its session search", async ({ page }) => {
+  const view = await openSession(page, {
+    name: "SessionMentionAbort",
+    findFiles: () => [],
+    sessions: [{ id: "ses_mention_abort_source", title: "Review the plan" }],
+    seed: { tabs: ["ses_mention_abort_source"] },
+  })
+
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+  const search = await holdRoute(page, /\/api\/session\?.*search=auth(&|$)/)
+
+  try {
+    await view.editor.pressSequentially("@auth")
+    const request = await search.arrived
+
+    const failed = page.waitForEvent("requestfailed", {
+      predicate: (candidate) => candidate === request,
+      timeout: 10_000,
+    })
+
+    await view.editor.press("Escape")
+    await expect(suggestions).toBeHidden()
+    expect((await failed).failure()?.errorText).toBe("net::ERR_ABORTED")
+  } finally {
+    search.release()
+  }
 })
 
 test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
@@ -653,8 +709,15 @@ test("an opened session in another Location names its model from a loaded catalo
       }),
     )
 
+    // A click before the catalog loads waits for it, and Escape gives up the wait, so the dialog cannot pop up later.
+    await control.click()
+    await expect(control).toHaveAttribute("aria-busy", "true")
+    await page.keyboard.press("Escape")
+    await expect(control).not.toHaveAttribute("aria-busy")
+
     // A click before the catalog loads opens the dialog once it does.
     await control.click()
+    await expect(control).toHaveAttribute("aria-busy", "true")
     held.release()
     await Promise.all(loaded)
     await expect(page.getByRole("dialog")).toBeVisible()
@@ -855,13 +918,126 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
         const viewport = element.closest('[data-component="composer-scroll"]')!
         const range = document.createRange()
         range.selectNodeContents(element)
-        const line = Array.from(range.getClientRects()).reduce((last, rect) => (rect.bottom > last.bottom ? rect : last))
+
+        const line = Array.from(range.getClientRects()).reduce((last, rect) =>
+          rect.bottom > last.bottom ? rect : last,
+        )
+
         const fade = parseFloat(getComputedStyle(viewport).getPropertyValue("--composer-fade-bottom"))
 
         return Math.max(0, Math.round(line.bottom - (viewport.getBoundingClientRect().bottom - fade)))
       }),
     )
     .toBe(0)
+})
+
+test("Enter that confirms an IME candidate never sends, even after Safari's early compositionend", async ({ page }) => {
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+  const view = await openSession(page, { name: "ComposerImeEnter", onPrompt: (input) => void prompts.push(input.body) })
+
+  const enter = (keyCode: number) =>
+    view.editor.evaluate(
+      (element, keyCode) =>
+        element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode, bubbles: true, cancelable: true })),
+      keyCode,
+    )
+
+  await view.editor.fill("にほん")
+  // Safari delivers the confirming Enter after compositionend, so isComposing is false and only keyCode marks it.
+  await enter(229)
+  await expect(view.editor).toHaveText("にほん")
+  await enter(13)
+  await expect.poll(() => prompts.map((body) => body.text)).toEqual(["にほん"])
+})
+
+test.describe("touch keyboard", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test("Return only adds a line, even over suggestions; the touch bar and Cmd+Return send", async ({ page }) => {
+    const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+
+    const view = await openSession(page, {
+      name: "ComposerTouchReturn",
+      onPrompt: (input) => void prompts.push(input.body),
+    })
+
+    const bar = page.locator('[data-slot="composer-touch-bar"]')
+
+    await expect(bar).toBeVisible()
+    await expect(page.locator('[data-action="composer-attach"]')).toHaveCount(0)
+    await expect(view.editor).toHaveAttribute("enterkeyhint", "enter")
+
+    await view.editor.fill("/model")
+    await expect(page.locator('[data-suggestion-id="model.choose"]')).toHaveAttribute("data-active", "")
+    await view.editor.press("Enter")
+    await expect(page.locator('[data-component="composer-suggestions"]')).toBeHidden()
+    await expect.poll(() => view.editor.innerText()).toMatch(/^\/model\n/)
+    await expect(page.getByRole("dialog", { name: "Select model", exact: true })).toBeHidden()
+
+    await view.editor.fill("first line")
+    await view.editor.press("Enter")
+    await view.editor.pressSequentially("second line")
+    await expect.poll(() => view.editor.innerText()).toBe("first line\nsecond line")
+    expect(prompts).toEqual([])
+
+    await bar.getByRole("button", { name: "Send", exact: true }).tap()
+    await expect.poll(() => prompts.map((body) => body.text)).toEqual(["first line\nsecond line"])
+    await expect(view.editor).toBeEmpty()
+
+    // A hardware keyboard, as on an iPad, still sends with Cmd+Return.
+    await view.editor.fill("from the iPad keyboard")
+    await view.editor.press("ControlOrMeta+Enter")
+    await expect
+      .poll(() => prompts.map((body) => body.text))
+      .toEqual(["first line\nsecond line", "from the iPad keyboard"])
+  })
+
+  test("the / and @ keys toggle their lists, and Backspace or typing in the editor closes them", async ({ page }) => {
+    const view = await openSession(page, { name: "ComposerTouchSlash" })
+    const suggestions = page.locator('[data-component="composer-suggestions"]')
+    const slash = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-commands"]')
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("/")
+    await slash.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toBeEmpty()
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await page.keyboard.press("Backspace")
+    await expect(suggestions).toBeHidden()
+
+    // With a draft, / opens the searchable menu instead. Backspace backs out of it and keeps the draft, from the editor
+    // as well: iOS keeps the keyboard there rather than moving it to the menu's search.
+    await view.editor.fill("keep me")
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await view.editor.press("Backspace")
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me")
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    // Focusing the editor programmatically leaves the caret wherever the browser puts it, so move it to the end first.
+    await expect(suggestions.getByRole("textbox", { name: "Commands", exact: true })).toBeFocused()
+    await view.editor.focus()
+    await page.keyboard.press("End")
+    await page.keyboard.type(" now")
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now")
+
+    // @ toggles the same way, taking back only the @ it typed.
+    const at = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-context"]')
+    await view.editor.pressSequentially(" ")
+    await at.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("keep me now @")
+    await at.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now ")
+  })
 })
 
 test("a key-up never moves the caret back after later navigation", async ({ page }) => {
@@ -999,6 +1175,33 @@ test("shows the dropzone and attaches a dropped file", async ({ page }) => {
     ])
   await expect(page.locator('[data-component="upload-progress"]')).toHaveCount(0)
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
+})
+
+test("an attachment pasted mid-sentence leaves the text and the caret where they were", async ({ page }) => {
+  const { editor } = await openDraft(page, {
+    name: "ComposerDraft",
+    provider: NO_PROVIDER,
+    onFileWrite: () => undefined,
+  })
+
+  await editor.click()
+  await page.keyboard.type("Hello world")
+  await editor.press("Home")
+
+  for (let count = 0; count < "Hello".length; count++) await editor.press("ArrowRight")
+
+  const text = await editor.evaluateHandle((element) => element.firstChild)
+
+  await editor.evaluate((element) => {
+    const data = new DataTransfer()
+    data.items.add(new File(["Attachment fixture"], "notes.txt", { type: "text/plain" }))
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("notes.txt")
+  // A rewrite of the editor would replace this node, even when it put the caret back in the same place.
+  expect(await editor.evaluate((element, node) => element.firstChild === node, text)).toBe(true)
+  await page.keyboard.type(",")
+  await expect(editor).toHaveText("Hello, world")
 })
 
 test("keeps one dropzone while a file drag crosses the composer, and none for a text drag", async ({ page }) => {
@@ -1168,11 +1371,74 @@ test("/reload reloads the server's configuration once and reports it", async ({ 
   await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
   await editor.press("Enter")
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeVisible()
+  // A second /reload while the first runs joins it: no second request and no second toast.
+  await expect(editor).toBeEmpty()
+  await editor.fill("/reload")
+  await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+  await expect(editor).toBeEmpty()
+  await expect(page.getByText("Reloading configuration…", { exact: true })).toHaveCount(1)
   reloaded.resolve()
   await expect(page.getByText("Configuration reloaded", { exact: true })).toBeVisible()
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeHidden()
   await expect(editor).toBeEmpty()
   expect(reloads).toBe(1)
+})
+
+test("/fork forks once while its request is pending, can retry a failure, and restores the prompt", async ({
+  page,
+}) => {
+  const source = { id: "ses_fork_source", title: "Fork source" }
+  const forks: string[] = []
+  const answers = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+
+  const { editor } = await openSession(page, {
+    name: "ComposerFork",
+    provider: NO_PROVIDER,
+    sessions: [source],
+    pageMessages: pageMessagesFrom({
+      [source.id]: [
+        { id: "msg_fork_first", type: "user", text: "First prompt", time: { created: T0 } },
+        { id: "msg_fork_second", type: "user", text: "Second prompt", time: { created: T0 + 1 } },
+      ],
+    }),
+    onFork: async ({ body }) => {
+      forks.push(String(body.before))
+      await answers[forks.length - 1]?.promise
+
+      if (forks.length === 1) return { status: 500, body: { message: "Fork failed" } }
+    },
+  })
+
+  await editor.fill("/fork")
+  await expect(page.locator('[data-suggestion-id="session.fork"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+
+  const dialog = page.getByRole("dialog", { name: "Fork from message", exact: true })
+  const search = dialog.getByRole("searchbox")
+  const newest = dialog.getByRole("option", { name: /Second prompt/ })
+  await expect(search).toBeFocused()
+
+  // Enter forks from the newest prompt; a second Enter while the fork runs sends nothing.
+  await search.press("Enter")
+  await expect(newest).toHaveAttribute("aria-busy", "true")
+  await expect(dialog.getByRole("option", { name: /First prompt/ })).toBeDisabled()
+  await search.press("Enter")
+  answers[0].resolve()
+
+  await expect(page.getByText("Request failed", { exact: true })).toBeVisible()
+  await expect(newest).toBeEnabled()
+  await expect(newest).not.toHaveAttribute("aria-busy")
+  expect(forks).toEqual(["msg_fork_second"])
+
+  await search.press("Enter")
+  await expect(newest).toHaveAttribute("aria-busy", "true")
+  answers[1].resolve()
+
+  await expectPath(page, sessionHref(`${source.id}_fork`))
+  await expect(dialog).toBeHidden()
+  await expect(editor).toHaveText("Second prompt")
+  expect(forks).toEqual(["msg_fork_second", "msg_fork_second"])
 })
 
 const followUp = "Add follow-up, / for commands, @ for context…"
@@ -1242,6 +1508,33 @@ for (const row of [
     await expect(scroll).toHaveText("Enter shell command… git status")
   })
 }
+
+test("a sent shell command returns the composer to prompt mode, and ! enters shell mode again", async ({ page }) => {
+  const { editor } = await openSession(page, {
+    name: "ShellSend",
+    sessions: [{ id: "ses_shell_send", title: "Shell send" }],
+  })
+
+  const scroll = page.locator('[data-component="composer-scroll"]')
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+  await editor.pressSequentially("git status")
+
+  const sent = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/ses_shell_send/shell"),
+  )
+
+  await editor.press("Enter")
+  expect((await sent).postDataJSON()).toMatchObject({ command: "git status" })
+  await expect(editor).toBeEmpty()
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await expect(page.getByRole("button", { name: /^Exit/ })).toHaveCount(0)
+
+  // The editor reads the draft's mode, so it agrees with the draft the send reset.
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+})
 
 test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
   const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })

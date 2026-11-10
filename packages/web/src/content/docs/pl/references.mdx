@@ -1,0 +1,157 @@
+---
+title: Referencje
+description: Dodawaj lokalne katalogi i repozytoria Git jako referencje projektu.
+---
+
+Referencje dają OpenCode dostęp do katalogów spoza bieżącego projektu. Dzięki nim podczas pracy możesz udostępnić dokumentację, współdzielone biblioteki, przykłady lub inne repozytorium.
+
+Referencje konfiguruje się według aliasu w `opencode.json` lub `opencode.jsonc`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## Katalogi lokalne
+
+Użyj `path`, aby wskazać lokalny katalog.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+Ścieżki mogą być:
+
+- Względne wobec pliku konfiguracyjnego, który definiuje referencję
+- Bezwzględne, np. `/home/user/docs`
+- Względne wobec katalogu domowego, np. `~/docs`
+
+Możesz też użyć skróconego zapisu w postaci ciągu znaków:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Repozytoria Git
+
+Użyj `repository`, aby wskazać repozytorium Git. OpenCode pobiera repozytorium do lokalnej pamięci podręcznej repozytoriów i udostępnia pobrany kod źródłowy jako katalog referencji.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository` przyjmuje adresy URL Git, odwołania w formacie host/ścieżka oraz skrót GitHub `owner/repo`. Opcjonalne pole `branch` wybiera gałąź lub ref. Bez `branch` OpenCode używa domyślnej gałęzi repozytorium.
+
+Skróconego zapisu w postaci ciągu znaków możesz użyć, gdy nie potrzebujesz gałęzi, opisu ani innych opcji:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Referencje Git są odświeżane asynchronicznie. Klonowanie lub aktualizacja nowo skonfigurowanego repozytorium może chwilę potrwać.
+:::
+
+---
+
+## Opisz zastosowanie
+
+Dodaj `description`, aby wyjaśnić, kiedy agent powinien korzystać z referencji.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode dołącza referencje z opisami do kontekstu agenta. Opisy powinny być krótkie i na tyle konkretne, aby odróżniały referencje o podobnej zawartości. Referencje bez opisów pozostają dostępne przez autouzupełnianie i bezpośrednie użycie, ale nie są przedstawiane agentom.
+
+---
+
+## Ukryj pozycje w autouzupełnianiu
+
+Ustaw `hidden` na `true`, aby pominąć referencję w autouzupełnianiu `@` w TUI.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` wpływa tylko na autouzupełnianie. Ukryta referencja z opisem nadal jest dołączana do kontekstu agenta.
+
+---
+
+## Korzystanie z referencji
+
+Skonfigurowane referencje pojawiają się w autouzupełnianiu `@` w TUI. Wpisz `@alias`, aby dołączyć katalog główny referencji, lub `@alias/`, aby wyszukać w nim pliki.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+Agenci otrzymują też w kontekście systemowym rozwiązane ścieżki i opisy skonfigurowanych referencji, które mają opisy, dzięki czemu mogą przejrzeć referencję, gdy jest istotna, bez ręcznego dołączania jej przez ciebie.
+
+OpenCode automatycznie dopuszcza katalogi referencji przez granicę uprawnień dla katalogów zewnętrznych. Zwykłe uprawnienia narzędzi nadal obowiązują: na przykład agent, który nie może edytować plików, nie uzyska dostępu do edycji tylko dlatego, że katalog jest skonfigurowany jako referencja.
+
+---
+
+## Pola konfiguracji
+
+| Pole          | Lokalne | Git | Opis                                                        |
+| ------------- | ------- | --- | ----------------------------------------------------------- |
+| `path`        | Tak     | Nie | Lokalny katalog referencji                                  |
+| `repository`  | Nie     | Tak | Adres URL Git, host/ścieżka lub wartość GitHub `owner/repo` |
+| `branch`      | Nie     | Tak | Opcjonalna gałąź Git lub ref                                |
+| `description` | Tak     | Tak | Wskazówka opisująca, kiedy używać referencji                |
+| `hidden`      | Tak     | Tak | Ukrywa referencję w autouzupełnianiu `@` w TUI              |
+
+Aliasy referencji nie mogą być puste ani zawierać `/`, białych znaków, grawisów ani przecinków.

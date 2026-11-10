@@ -15,9 +15,9 @@ describe("DigitalOcean", () => {
       headers: { "X-Test": "fixture" },
       body: { temperature: 0 },
     })
-    expect(model.route.defaults?.http).toMatchObject({
+    expect(model.options).toMatchObject({
       headers: { "X-Test": "fixture" },
-      body: { temperature: 0 },
+      http: { body: { temperature: 0 } },
     })
   })
 

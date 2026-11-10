@@ -7,11 +7,14 @@ Checkbox control for multi-select or agreement inputs.
 
 ### API
 - Uses Kobalte Checkbox props.
-- Optional: \`hideLabel\`, \`description\`, \`icon\`.
+- Optional: \`hideLabel\`, \`description\`, \`icon\` (standard only).
 - Children render as the label.
+- \`appearance\`: \`standard\` (default, legacy) or \`compact\`, the design system checkbox.
+- \`surface\`: \`base\` (default) or \`layer-1\` for the compact control.
 
 ### Theming/tokens
-- Uses \`data-component="checkbox"\` and related slots.
+- Standard uses \`data-component="checkbox"\` and related slots.
+- Compact uses \`data-slot="checkbox-v2"\` with \`--v2-background-bg-accent\`, \`--v2-border-border-strong\` and \`--v2-state-fg-danger\`.
 `
 
 export default {
@@ -44,3 +47,31 @@ export const CustomIcon = {
 }
 
 export const HiddenLabel = { render: () => <Checkbox hideLabel>Hidden label</Checkbox> }
+
+export const Compact = {
+  render: () => (
+    <div style={{ display: "grid", gap: "16px" }}>
+      <Checkbox appearance="compact" description="Suffix">
+        Default
+      </Checkbox>
+      <Checkbox appearance="compact" defaultChecked description="Suffix">
+        Checked
+      </Checkbox>
+      <Checkbox appearance="compact" indeterminate>
+        Indeterminate
+      </Checkbox>
+      <Checkbox appearance="compact" validationState="invalid">
+        Invalid
+      </Checkbox>
+      <Checkbox appearance="compact" disabled description="Suffix">
+        Disabled
+      </Checkbox>
+      <Checkbox appearance="compact" disabled defaultChecked>
+        Checked, disabled
+      </Checkbox>
+      <Checkbox appearance="compact" surface="layer-1">
+        Layer 1
+      </Checkbox>
+    </div>
+  ),
+}

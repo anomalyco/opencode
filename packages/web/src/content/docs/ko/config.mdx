@@ -65,7 +65,7 @@ Remote config는 가장 먼저 로드되어 기본 레이어 역할을 합니다
 
 예를 들어, 조직에서 기본 비활성화된 MCP 서버를 제공하는 경우:
 
-```json title="Remote config from .well-known/opencode"
+```json title=".well-known/opencode의 Remote config"
 {
   "mcp": {
     "jira": {
