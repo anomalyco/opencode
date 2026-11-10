@@ -161,6 +161,7 @@ impl State {
         self.loading.remove(id);
         self.pending.remove(id);
         self.permission.remove(id);
+        self.forms.remove(&id.0);
         let roots: Vec<SessionID> =
             self.family.iter().filter(|(_, family)| family.contains(id)).map(|(root, _)| root.clone()).collect();
         for root in &roots {
@@ -175,6 +176,7 @@ impl State {
         self.log.messages(id);
         self.log.pending(id);
         self.log.permissions(id);
+        self.log.forms(&id.0);
     }
 
     /// Drops heavy cached data of one session, keeping unacknowledged submissions
