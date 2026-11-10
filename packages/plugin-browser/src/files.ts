@@ -93,7 +93,8 @@ export function captureName(name: string) {
 }
 
 function failure(operation: "read" | "save", error: unknown) {
-  const detail = error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400)
+  // Drop a trailing half emoji (a lone UTF-16 high surrogate) left by the cut.
+  const detail = (error instanceof Error ? error.message : String(error)).slice(0, 400).replace(/[\ud800-\udbff]$/, "")
   const code =
     error instanceof Error && "code" in error && typeof error.code === "string" && !detail.startsWith(error.code)
       ? `${error.code}: `

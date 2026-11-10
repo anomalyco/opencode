@@ -39,7 +39,8 @@ export const invoke = (plan: Plan, input: unknown): Effect.Effect<unknown, unkno
         rendered === "" || rendered === "null"
           ? "no response body"
           : rendered.length > maxErrorBodyChars
-            ? `${rendered.slice(0, maxErrorBodyChars)}...`
+            ? // Drop a trailing half emoji (a lone UTF-16 high surrogate) left by the cut.
+              `${rendered.slice(0, maxErrorBodyChars).replace(/[\ud800-\udbff]$/, "")}...`
             : rendered
       return yield* Effect.fail(
         toolError(`${plan.operation.method} ${plan.operation.path} failed with HTTP ${response.status}: ${summary}`),

@@ -19,6 +19,7 @@ import { ShellParse } from "../shell/parse.js"
 import { ShellSelect } from "../shell/select.js"
 import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
+import { firstChars } from "@opencode/util/text"
 
 export const TIMEOUT_MS = 30_000
 const MAX_OUTPUT_BYTES = 32 * 1024
@@ -108,7 +109,7 @@ export function describe(condition: ScheduleSchema.Condition): string {
         .split("\n")
         .map((item) => item.trim())
         .find((item) => item.length > 0)
-      return line ? `code (${line.slice(0, 60)})` : "code"
+      return line ? `code (${firstChars(line, 60)})` : "code"
     }
   }
 }

@@ -2,6 +2,7 @@ export * as ToolNames from "./names.js"
 
 import { createHash } from "node:crypto"
 import type { LanguageModelV3FunctionTool } from "@ai-sdk/provider"
+import { firstChars } from "@opencode/util/text"
 
 export const PREFIX = "mcp__opencode__"
 
@@ -22,9 +23,9 @@ const DESCRIPTION_LIMIT = 2048
 
 export function description(tool: LanguageModelV3FunctionTool) {
   const text = tool.description ?? ""
-  if (tool.name !== "subagent" || text.length <= DESCRIPTION_LIMIT) return text.slice(0, DESCRIPTION_LIMIT)
+  if (tool.name !== "subagent" || text.length <= DESCRIPTION_LIMIT) return firstChars(text, DESCRIPTION_LIMIT)
   // The subagent list comes last in a long description, so move it first to keep it after the cut.
   const agents = text.indexOf("Available subagents:")
-  if (agents === -1) return text.slice(0, DESCRIPTION_LIMIT)
-  return (text.slice(agents) + "\n\n" + text.slice(0, agents)).slice(0, DESCRIPTION_LIMIT)
+  if (agents === -1) return firstChars(text, DESCRIPTION_LIMIT)
+  return firstChars(text.slice(agents) + "\n\n" + text.slice(0, agents), DESCRIPTION_LIMIT)
 }

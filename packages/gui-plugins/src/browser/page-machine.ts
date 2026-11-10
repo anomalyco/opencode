@@ -1,5 +1,6 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import { destinationOrigin } from "./policy"
+import { firstChars } from "@opencode/util/text"
 
 // The document a browser page shows, folded from Electron's navigation events. Electron-free so it stays
 // unit-testable under Bun.
@@ -206,7 +207,7 @@ export function documentTab(
   const tab = {
     id: history.id,
     url: state.url.slice(0, 16_384),
-    title: state.title.slice(0, 2_048),
+    title: firstChars(state.title, 2_048),
     loading,
     canGoBack: history.canGoBack,
     canGoForward: history.canGoForward,
@@ -240,7 +241,7 @@ function committed(state: Open, event: Extract<DocumentEvent, { type: "navigatio
       : // The server-network proxy answers an unreachable HTTP target with an empty 502. Other error statuses are
         // real documents from the user's server and stay visible.
         event.status === 502
-        ? { ...document, status: "failed", message: `${event.status} ${event.statusText}`.trim().slice(0, 2_048) }
+        ? { ...document, status: "failed", message: firstChars(`${event.status} ${event.statusText}`.trim(), 2_048) }
         : { ...document, status: "loaded", revealed: documentVisible(state) }
 
   return settle(state, next, [RESET, PUBLISH, DETAIL])
@@ -264,7 +265,7 @@ function failed(state: Open, event: Extract<DocumentEvent, { type: "navigation.f
     iconAttempt: state.iconAttempt,
     pending: undefined,
     busy: state.busy,
-    message: event.description.slice(0, 2_048),
+    message: firstChars(event.description, 2_048),
   }
 
   return settle(state, next, replaced ? [RESET, PUBLISH] : [PUBLISH])

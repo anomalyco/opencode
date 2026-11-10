@@ -6,6 +6,7 @@ import { Icon } from "@opencode/ui/icon"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { SessionErrorMessage } from "./session-error"
+import { firstChars } from "@opencode/util/text"
 
 export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
   const i18n = useI18n()
@@ -43,7 +44,7 @@ export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
       return i18n.t("ui.sessionTurn.retry.geminiHot")
     }
 
-    if (current.message.length > 80) return current.message.slice(0, 80) + "…"
+    if (current.message.length > 80) return firstChars(current.message, 80) + "…"
 
     return current.message
   })

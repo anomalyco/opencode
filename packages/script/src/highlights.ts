@@ -32,7 +32,9 @@ export function parse(notes: string) {
     const title = match && plain(match[1].replace(/:$/, ""))
     const body = match && plain(match[2].replace(/\s*\((?:\[[^\]]*\]\([^)]*\)(?:,\s*)?)+\)\s*$/, ""))
     if (!title || !body) {
-      problems.push(`Skipped a highlight without a bold title and description: ${bullet.slice(0, 80)}`)
+      problems.push(
+        `Skipped a highlight without a bold title and description: ${bullet.slice(0, 80).replace(/[\ud800-\udbff]$/, "")}`,
+      )
       return []
     }
     return [{ title: truncate(title, LIMIT.title), body: truncate(body, LIMIT.body) }]
@@ -53,7 +55,8 @@ function plain(value: string) {
 
 function truncate(value: string, limit: number) {
   if (value.length <= limit) return value
-  const cut = value.slice(0, limit - 1)
+  // Drop a trailing half emoji (a lone UTF-16 high surrogate) left by the cut.
+  const cut = value.slice(0, limit - 1).replace(/[\ud800-\udbff]$/, "")
   const space = cut.lastIndexOf(" ")
   return `${(space > limit / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
 }

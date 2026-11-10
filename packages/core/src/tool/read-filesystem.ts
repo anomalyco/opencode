@@ -10,6 +10,7 @@ import type { Files } from "../environment/index.js"
 import { FileSystem } from "../filesystem.js"
 import { Mime } from "../mime.js"
 import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema.js"
+import { firstChars } from "@opencode/util/text"
 
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
@@ -356,9 +357,7 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
 
 const clampLine = (line: string) => {
   if (line.length <= MAX_LINE_LENGTH) return line
-  const code = line.charCodeAt(MAX_LINE_LENGTH - 1)
-  const end = code >= 0xd800 && code <= 0xdbff ? MAX_LINE_LENGTH - 1 : MAX_LINE_LENGTH
-  return line.slice(0, end) + MAX_LINE_SUFFIX
+  return firstChars(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
 }
 
 // A trailing newline ends the last line instead of starting an empty one.

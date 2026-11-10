@@ -86,7 +86,9 @@ const providerMessage = (status: number, body: string | void) => {
   if (message) return message
   // Gateway and proxy HTML error pages are markup, not an explanation.
   if (!text || /^<(?:!doctype|html)/i.test(text)) return fallback
-  return `${fallback}: ${text.length > MAX_BODY_CHARS ? `${text.slice(0, MAX_BODY_CHARS)}…` : text}`
+  if (text.length <= MAX_BODY_CHARS) return `${fallback}: ${text}`
+  // Drop a trailing half emoji (a lone UTF-16 high surrogate) left by the cut.
+  return `${fallback}: ${text.slice(0, MAX_BODY_CHARS).replace(/[\ud800-\udbff]$/, "")}…`
 }
 
 const statusError = (response: HttpClientResponse.HttpClientResponse) =>

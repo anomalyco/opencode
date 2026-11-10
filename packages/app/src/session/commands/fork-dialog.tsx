@@ -13,6 +13,7 @@ import { createSessionForkController } from "@/session/fork"
 import "@/shell/commands/dialog.css"
 import "@/shell/palette-menu.css"
 import "@/shell/search-list.css"
+import { firstChars } from "@opencode/util/text"
 
 interface ForkableMessage {
   id: string
@@ -49,7 +50,7 @@ export const DialogFork: Component = () => {
 
       result.push({
         id: message.id,
-        text: message.text.replace(/\n/g, " ").slice(0, 200),
+        text: firstChars(message.text.replace(/\n/g, " "), 200),
         time: formatTime(new Date(message.time.created)),
       })
     }

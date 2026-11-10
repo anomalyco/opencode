@@ -29,6 +29,7 @@ import {
   type SshMainEffect,
   type SshMainEvent,
 } from "./main-machine"
+import { lastChars } from "@opencode/util/text"
 
 /** Runs the SSH machine's effects and reports their outcomes back to it; the machine alone decides what is current. */
 export const createSshController = Effect.fn("Ssh.controller")(function* (input: {
@@ -238,7 +239,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
 
       const stderr = yield* tunnel.stderr.pipe(
         Stream.decodeText(),
-        Stream.runForEach((text) => Ref.update(detail, (tail) => (tail + text).slice(-8192))),
+        Stream.runForEach((text) => Ref.update(detail, (tail) => lastChars(tail + text, 8192))),
         Effect.forkScoped,
       )
 

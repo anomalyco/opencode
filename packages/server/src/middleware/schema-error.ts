@@ -3,13 +3,14 @@ import { HttpServerResponse } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
 import { InvalidRequestError, UnknownError } from "@opencode/protocol/errors"
 import { SchemaErrorMiddleware } from "@opencode/protocol/middleware/schema-error"
+import { firstChars } from "@opencode/util/text"
 export { SchemaErrorMiddleware } from "@opencode/protocol/middleware/schema-error"
 
 const REASON_LIMIT = 1024
 
 function truncateReason(reason: string) {
   if (reason.length <= REASON_LIMIT) return reason
-  return reason.slice(0, REASON_LIMIT) + `... (${reason.length - REASON_LIMIT} more chars)`
+  return firstChars(reason, REASON_LIMIT) + `... (${reason.length - REASON_LIMIT} more chars)`
 }
 
 export const schemaErrorLayer = HttpApiMiddleware.layerSchemaErrorTransform(

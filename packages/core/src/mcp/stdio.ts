@@ -6,6 +6,7 @@ import { ChildProcess } from "effect/process"
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
+import { lastChars } from "@opencode/util/text"
 
 /** Mirrors StdioClientTransport: wait this long for a graceful exit after stdin closes. */
 const CLOSE_GRACE = Duration.seconds(2)
@@ -178,7 +179,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
       const drain = yield* Effect.forkScoped(
         handle.stderr.pipe(
           Stream.decodeText(),
-          Stream.tap((output) => Effect.sync(() => (stderr = (stderr + output).slice(-STDERR_TAIL)))),
+          Stream.tap((output) => Effect.sync(() => (stderr = lastChars(stderr + output, STDERR_TAIL)))),
           Stream.runForEach((output) =>
             output.trim() === ""
               ? Effect.void

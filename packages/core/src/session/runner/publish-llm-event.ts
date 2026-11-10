@@ -16,6 +16,7 @@ import { Money } from "@opencode/schema/money"
 import { contentFilterError } from "../to-session-error.js"
 import type { Tool } from "../../tool.js"
 import { stringify } from "../../tool/runtime.js"
+import { firstChars } from "@opencode/util/text"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
@@ -605,7 +606,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 }
 
 function inputExcerpt(value: string): InputExcerpt {
-  return { text: value.slice(0, INPUT_EXCERPT_LIMIT), length: value.length }
+  return { text: firstChars(value, INPUT_EXCERPT_LIMIT), length: value.length }
 }
 
 function inputFailure(input: InputExcerpt | undefined, reason: InputFailureReason) {

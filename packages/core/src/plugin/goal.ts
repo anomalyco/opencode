@@ -11,6 +11,7 @@ import CONTINUATION from "./goal/continuation.txt"
 import JUDGE from "./goal/judge.txt"
 import KICKOFF from "./goal/kickoff.txt"
 import REMINDER from "./goal/reminder.txt"
+import { firstChars } from "@opencode/util/text"
 
 export const MAX_OBJECTIVE = 4_000
 export const MAX_ROUNDS = 50
@@ -485,7 +486,7 @@ function render(template: string, values: Record<string, string>) {
 
 function truncate(text: string, length: number) {
   const line = text.replace(/\s+/g, " ")
-  return line.length > length ? `${line.slice(0, length - 1)}…` : line
+  return line.length > length ? `${firstChars(line, length - 1)}…` : line
 }
 
 function escape(text: string) {

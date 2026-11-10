@@ -49,6 +49,7 @@ import {
   type Policy,
 } from "./policy"
 import type { PaneElement } from "./ipc"
+import { firstChars } from "@opencode/util/text"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
@@ -545,7 +546,7 @@ export function createBrowserPage(
       type: "dialog.opened",
       url: event.url,
       dialogType: event.type,
-      message: event.message.slice(0, Browser.MAX_TEXT),
+      message: firstChars(event.message, Browser.MAX_TEXT),
       defaultPrompt: event.defaultPrompt ?? "",
     }),
   )
@@ -1530,9 +1531,7 @@ export function createBrowserPage(
 
         lines.push(
           `${"  ".repeat(level)}${ref ? `@${ref} ` : ""}[${role}] ${JSON.stringify(
-            String(node.name?.value ?? "")
-              .replace(/\s+/g, " ")
-              .slice(0, 300),
+            firstChars(String(node.name?.value ?? "").replace(/\s+/g, " "), 300),
           )} ${flags.join(" ")}${box ? ` box=${JSON.stringify(box)}` : ""}`,
         )
       }
@@ -1552,7 +1551,7 @@ export function createBrowserPage(
       action.type === "find" ? lines.filter((line) => line.toLowerCase().includes(action.text.toLowerCase())) : lines
     ).join("\n")
 
-    return { content: content.slice(0, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
+    return { content: firstChars(content, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
   }
 
   /** Moves the picker and runs its effects; resolves once they ran, so input waits for the picker to disarm. */
@@ -1736,7 +1735,7 @@ export function createBrowserPage(
       await call(
         element,
         `function() {
-          const clip = (value, max) => (value.length > max ? value.slice(0, max - 1) + "\u2026" : value)
+          const clip = (value, max) => (value.length > max ? value.slice(0, max - 1).replace(/[\\ud800-\\udbff]$/, "") + "\u2026" : value)
           const label = this.localName + (this.id ? "#" + this.id : "") + Array.from(this.classList, (name) => "." + name).join("")
           // One segment per document or shadow root, outermost first; " >>> " steps into a host's shadow root.
           const segments = []
@@ -1779,10 +1778,12 @@ export function createBrowserPage(
     const node = tree?.nodes.find((node) => node.backendDOMNodeId === element.backendID && !node.ignored)
     const role = String(node?.role?.value ?? "")
 
-    const name = String(node?.name?.value ?? "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 160)
+    const name = firstChars(
+      String(node?.name?.value ?? "")
+        .replace(/\s+/g, " ")
+        .trim(),
+      160,
+    )
 
     const labeled = role && !["generic", "none", "presentation"].includes(role) ? { role: role.slice(0, 128) } : {}
 
