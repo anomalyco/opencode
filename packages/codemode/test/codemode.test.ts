@@ -1096,6 +1096,31 @@ describe("CodeMode public contract", () => {
     }
   })
 
+  test("search indexes are shared only between runtimes with the same tool text", async () => {
+    const simple = (description: string) =>
+      Tool.make({
+        description,
+        input: Schema.Struct({}),
+        output: Schema.String,
+        execute: () => Effect.succeed("ok"),
+      })
+    const top = async (runtime: ReturnType<typeof CodeMode.make>, query: string) => {
+      const result = await Effect.runPromise(runtime.execute(`return search({ query: ${JSON.stringify(query)} })`))
+      expect(result.ok).toBe(true)
+      return result.ok ? (result.value as { items: Array<{ path: string }> }).items[0]?.path : undefined
+    }
+    // Same tools registered in a different order index identically.
+    const first = CodeMode.make({ tools: { mail: { send: simple("Send an email"), archive: simple("Archive a thread") } } })
+    const reordered = CodeMode.make({ tools: { mail: { archive: simple("Archive a thread"), send: simple("Send an email") } } })
+    // Same paths and count, different descriptions: must not reuse the other index.
+    const changed = CodeMode.make({ tools: { mail: { send: simple("Archive a thread"), archive: simple("Send an email") } } })
+
+    expect(await top(first, "email")).toBe("tools.mail.send")
+    expect(await top(reordered, "email")).toBe("tools.mail.send")
+    expect(await top(changed, "email")).toBe("tools.mail.archive")
+    expect(await top(first, "archive thread")).toBe("tools.mail.archive")
+  })
+
   test("search ranks by rare words, prefers short names and matches partial words", async () => {
     const simple = (description: string) =>
       Tool.make({

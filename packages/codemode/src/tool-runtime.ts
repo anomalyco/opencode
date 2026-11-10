@@ -280,15 +280,71 @@ type WordIndex = {
 
 // Built once per search index on the first query.
 const wordIndexes = new WeakMap<ReadonlyArray<SearchEntry>, WordIndex>()
+
+// Locations with the same tools (global MCP servers) share one word index, keyed by a hash of the indexed text. An
+// index lives while some search index uses it; once none does it can be collected and its key is removed. A hash
+// collision (about 1 in 37 trillion with 1,000 distinct catalogs alive) would only misrank results: they still come
+// from the caller's own tools, and the tool count in the key keeps positions in range.
+const shared =
+  typeof WeakRef === "undefined" || typeof FinalizationRegistry === "undefined"
+    ? undefined
+    : {
+        indexes: new Map<string, WeakRef<WordIndex>>(),
+        cleanup: new FinalizationRegistry<{ key: string; ref: WeakRef<WordIndex> }>(({ key, ref }) => {
+          // A newer index may have been stored under the same key since this one was dropped.
+          if (shared?.indexes.get(key) === ref) shared.indexes.delete(key)
+        }),
+      }
+
 const wordIndexFor = (index: ReadonlyArray<SearchEntry>): WordIndex => {
   const cached = wordIndexes.get(index)
   if (cached) return cached
+  const texts = index.map((entry) => entry.text())
+  const key = shared ? textKey(texts) : undefined
+  const reused = key === undefined ? undefined : shared?.indexes.get(key)?.deref()
+  if (reused) {
+    wordIndexes.set(index, reused)
+    return reused
+  }
+  const built = buildWordIndex(texts)
+  wordIndexes.set(index, built)
+  if (shared && key !== undefined) {
+    const ref = new WeakRef(built)
+    shared.indexes.set(key, ref)
+    shared.cleanup.register(built, { key, ref })
+  }
+  return built
+}
+
+/** Tool count plus two independent 32-bit FNV-1a hashes of every indexed field, in index order. */
+const textKey = (texts: ReadonlyArray<Readonly<Record<SearchField, ReadonlyArray<string>>>>) => {
+  let first = 0x811c9dc5
+  let second = 0x9e3779b9
+  const add = (text: string) => {
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i)
+      first = Math.imul(first ^ code, 0x01000193)
+      second = Math.imul(second ^ code, 0x5bd1e995)
+      second ^= second >>> 15
+    }
+    // Separators keep field boundaries distinct: ["ab", "c"] and ["a", "bc"] hash differently.
+    first = Math.imul(first ^ 0x1f, 0x01000193)
+    second = Math.imul(second ^ 0x1f, 0x5bd1e995)
+  }
+  for (const text of texts)
+    for (const field of searchFields) {
+      for (const part of text[field]) add(part)
+      add("\u0000")
+    }
+  return `${texts.length}:${(first >>> 0).toString(36)}:${(second >>> 0).toString(36)}`
+}
+
+const buildWordIndex = (texts: ReadonlyArray<Readonly<Record<SearchField, ReadonlyArray<string>>>>): WordIndex => {
   // Field texts are split once here and dropped afterwards; descriptions repeat across tools, so each text is split
   // once and shared while building.
   const cache = new Map<string, ReadonlyArray<string>>()
   const words = (texts: ReadonlyArray<string>) => texts.flatMap((text) => fieldWords(text, cache))
-  const fields = index.map((entry) => {
-    const text = entry.text()
+  const fields = texts.map((text) => {
     return {
       namespace: words(text.namespace),
       name: words(text.name),
@@ -298,7 +354,10 @@ const wordIndexFor = (index: ReadonlyArray<SearchEntry>): WordIndex => {
     }
   })
   const averageLength = Object.fromEntries(
-    searchFields.map((field) => [field, fields.reduce((sum, entry) => sum + entry[field].length, 0) / index.length || 1]),
+    searchFields.map((field) => [
+      field,
+      fields.reduce((sum, entry) => sum + entry[field].length, 0) / texts.length || 1,
+    ]),
   ) as Record<SearchField, number>
   const building = new Map<string, { positions: Array<number>; weights: Array<number> }>()
   const weights = new Map<string, number>()
@@ -306,7 +365,8 @@ const wordIndexFor = (index: ReadonlyArray<SearchEntry>): WordIndex => {
     weights.clear()
     for (const field of searchFields) {
       const weight =
-        fieldWeights[field] / (1 - lengthNormalization + (lengthNormalization * entry[field].length) / averageLength[field])
+        fieldWeights[field] /
+        (1 - lengthNormalization + (lengthNormalization * entry[field].length) / averageLength[field])
       for (const word of entry[field]) if (word) weights.set(word, (weights.get(word) ?? 0) + weight)
     }
     for (const [word, weight] of weights) {
@@ -322,9 +382,7 @@ const wordIndexFor = (index: ReadonlyArray<SearchEntry>): WordIndex => {
       { positions: Int32Array.from(posting.positions), weights: Float32Array.from(posting.weights) },
     ]),
   )
-  const built = { postings, documents: index.length, words: [...postings.keys()].sort() }
-  wordIndexes.set(index, built)
-  return built
+  return { postings, documents: texts.length, words: [...postings.keys()].sort() }
 }
 
 /** Indexed words that start with a 4+ letter query word that matched nothing itself: `docum` → `document`. */
@@ -338,7 +396,8 @@ const partialMatches = (words: WordIndex, term: string): Array<readonly [string,
     else high = middle
   }
   const matches: Array<readonly [string, number]> = []
-  for (let i = low; i < words.words.length && words.words[i]!.startsWith(term); i++) matches.push([words.words[i]!, prefixWeight])
+  for (let i = low; i < words.words.length && words.words[i]!.startsWith(term); i++)
+    matches.push([words.words[i]!, prefixWeight])
   return matches
 }
 
@@ -348,7 +407,8 @@ const rank = (
   index: ReadonlyArray<SearchEntry>,
 ): Array<SearchEntry> => {
   const terms = queryTerms(query)
-  if (terms.length === 0) return [...entries].sort((left, right) => compareText(left.description.path, right.description.path))
+  if (terms.length === 0)
+    return [...entries].sort((left, right) => compareText(left.description.path, right.description.path))
   const words = wordIndexFor(index)
   const allowed = entries === index ? undefined : new Set(entries.map((entry) => entry.position))
   const scores = new Map<number, number>()
@@ -370,7 +430,10 @@ const rank = (
     for (const [position, score] of best) scores.set(position, (scores.get(position) ?? 0) + score)
   }
   return [...scores]
-    .map(([position, score]) => ({ entry: index[position]!, score: score * (1 + brevityBoost / Math.max(1, index[position]!.nameLength)) }))
+    .map(([position, score]) => ({
+      entry: index[position]!,
+      score: score * (1 + brevityBoost / Math.max(1, index[position]!.nameLength)),
+    }))
     .sort(
       (left, right) =>
         right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
