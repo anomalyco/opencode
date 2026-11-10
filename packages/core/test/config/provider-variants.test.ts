@@ -15,6 +15,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { ModelsDevPlugin } from "@opencode/core/plugin/models-dev"
 import { Provider } from "@opencode/core/provider"
+import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
@@ -121,23 +122,42 @@ const request = Effect.fn(function* (
   if (!model) throw new Error(`Missing model ${providerID}/${modelID}`)
   const selected = yield* ModelResolver.withVariant(model, Model.VariantID.make(variant))
   const language = yield* ModelResolver.fromCatalogModel(selected, Credential.Key.make({ type: "key", key: "test" }))
-  const prepared = yield* compileRequest(ai.request({ model: language, prompt: "hi" }))
+  // Sessions ask for the model's output limit, which also bounds an Anthropic thinking budget on the wire.
+  const prepared = yield* compileRequest(
+    ai.request({ model: language, prompt: "hi", maxTokens: SessionModelRequest.outputLimit(selected.limit) }),
+  )
   return {
     package: selected.package,
     variants: model.variants.map((item) => item.id),
     variant: model.variants.find((item) => item.id === variant),
     headers: selected.headers,
-    wire: Struct.omit(prepared.body as Record<string, unknown>, [
-      "model",
-      "input",
-      "messages",
-      "contents",
-      "stream",
-      "store",
-      "stream_options",
-    ]),
+    wire: withoutLimits(
+      Struct.omit(prepared.body as Record<string, unknown>, [
+        "model",
+        "input",
+        "messages",
+        "contents",
+        "stream",
+        "store",
+        "stream_options",
+      ]),
+    ),
   }
 })
+
+const LIMIT_KEYS = new Set(["max_tokens", "max_completion_tokens", "max_output_tokens", "maxOutputTokens"])
+
+/** The wire body without output-limit fields or unset keys at any depth, dropping objects left empty. */
+function withoutLimits(body: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(body).flatMap(([key, value]) => {
+      if (LIMIT_KEYS.has(key) || value === undefined) return []
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return [[key, value]]
+      const nested = withoutLimits(value as Record<string, unknown>)
+      return Object.keys(nested).length === 0 && Object.keys(value).length > 0 ? [] : [[key, nested]]
+    }),
+  )
+}
 
 const interactionsHigh = {
   package: INTERACTIONS,
@@ -164,7 +184,7 @@ describe("catalog variants after config and plugin edits", () => {
         variants: ["high", "max"],
         variant: { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 31_999 } } },
         headers: undefined,
-        wire: { max_tokens: 32_000, thinking: { type: "enabled", budget_tokens: 16_000 } },
+        wire: { thinking: { type: "enabled", budget_tokens: 31_999 } },
       })
       expect(yield* request("azure", "gpt-5.5", "high")).toEqual({
         package: "@opencode/ai/providers/azure/responses",
@@ -372,7 +392,8 @@ describe("catalog variants after config and plugin edits", () => {
         variants: ["high", "max"],
         variant: { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 7999 } } },
         headers: undefined,
-        wire: { max_tokens: 32_000, thinking: { type: "enabled", budget_tokens: 7999 } },
+        // The session's 8,000 output limit already caps the wire budget at 4,000; only the variant was stale.
+        wire: { thinking: { type: "enabled", budget_tokens: 4000 } },
       })
     }),
   )
