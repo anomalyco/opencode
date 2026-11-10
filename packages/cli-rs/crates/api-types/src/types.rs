@@ -12535,6 +12535,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codemode_vm: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell_timeout_background: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
