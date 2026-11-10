@@ -344,6 +344,9 @@ const probe = Effect.fnUntraced(function* (db: DatabaseService, state: State | u
     if (unopened) return unopened
     if (state?.version === Version && state.layout) return state.layout
   }
+  // Reading sources uses `->>` (3.38+), which Bun's macOS floor already has; an older SQLite stays unsupported.
+  const json = yield* db.all(sql.raw(`SELECT '{}' ->> '$.a'`)).pipe(capability)
+  if (json) return json
   const compact = yield* creatable(db, "compact")
   if (!compact) return "compact" as const
   const text = yield* creatable(db, "text")
