@@ -106,11 +106,7 @@ export class ImageResponse extends Schema.Class<ImageResponse>("Image.Response")
   images: Schema.Array(Media.AssetSchema),
   usage: Schema.optional(MediaUsage),
   providerMetadata: Schema.optional(ProviderMetadata),
-}) {
-  get image() {
-    return this.images[0]
-  }
-}
+}) {}
 
 /** The `index`-th lower-fidelity preview of an image still generating; the `image` event supersedes it. */
 export const ImagePartialEvent = Schema.Struct({

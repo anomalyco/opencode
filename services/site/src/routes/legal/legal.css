@@ -1,3 +1,11 @@
+/* The print cover and colophon (legal-print.tsx), whose styles load for print only. */
+@media screen {
+  [data-component="legal-print-cover"],
+  [data-component="legal-print-colophon"] {
+    display: none;
+  }
+}
+
 [data-page="legal-document"] {
   /* "Legal | Privacy Policy" in the logo row, as on the product pages, and it stays there: a sticky
      band in the page colour (the sticky title's bar) covers the window from its top edge to just
@@ -647,8 +655,11 @@
   }
 }
 
-/* External links keep their arrow on the same line, just after the text. */
-:is([data-page="legal-document"], [data-page="legal-hub"]) a:has(> [data-slot="external"]) {
+/* External links keep their arrow on the same line, just after the text: in the page, not the nav, menus
+   and footer, which lay out their own. */
+:is([data-page="legal-document"], [data-page="legal-hub"])
+  :where([data-component="content"])
+  a:has(> [data-slot="external"]) {
   display: inline-flex;
   align-items: baseline;
   gap: 0.3em;

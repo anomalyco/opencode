@@ -71,7 +71,8 @@
     }
   }
 
-  [data-slot="subhead"] {
+  /* Outranks the contents rail's margin for headings (on-this-page.css), which the shell brings to every page. */
+  [data-slot="subhead"][id] {
     scroll-margin-top: var(--content-top);
   }
 

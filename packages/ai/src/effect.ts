@@ -1,4 +1,5 @@
 import { Decision } from "./decision.js"
+import { Embedding } from "./embedding.js"
 import { Image } from "./image.js"
 import { LLM } from "./llm.js"
 import { Speech } from "./speech.js"
@@ -16,6 +17,7 @@ export const ai = {
   canCompact: LLM.canCompact,
   image: Image,
   decision: Decision,
+  embedding: Embedding,
   /** Experimental: may change without compatibility guarantees. */
   experimental: {
     speech: Speech,
@@ -32,6 +34,8 @@ export { ProviderPackage } from "./provider-package.js"
 export type { LLMClientService } from "./route/client.js"
 export { DecisionClient } from "./decision-client.js"
 export { DecisionRoute } from "./route/decision.js"
+export { EmbeddingClient } from "./embedding-client.js"
+export { EmbeddingRoute } from "./route/embedding.js"
 export { Generation } from "./generation.js"
 export { ToolFailure, emptyInputJsonSchema, toDefinitions, tool } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
