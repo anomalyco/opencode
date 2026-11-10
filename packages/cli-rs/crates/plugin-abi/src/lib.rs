@@ -1575,12 +1575,7 @@ pub trait Host: Read {
     /// (TS `update((draft) => { draft.open = … })`). A host with storage sets them in the latest stored object under
     /// the storage lock, so fields another client wrote stay.
     fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
-        let mut object = match self.storage_get(key) {
-            Some(serde_json::Value::Object(object)) => object,
-            _ => serde_json::Map::new(),
-        };
-        object.extend(fields);
-        self.storage_set(key, serde_json::Value::Object(object));
+        storage_merge_whole(self, key, fields);
     }
     /// Runs the registered command `name` with `input`, the plugin's or the host's, palette or not.
     fn dispatch(&self, name: &str, input: Option<&str>);
@@ -1604,11 +1599,27 @@ pub trait Host: Read {
     fn declare_storage_key(&self, _key: &str) {}
 }
 
+/// [`Host::storage_merge`] by reading the stored object and setting it whole.
+fn storage_merge_whole<H: Host + ?Sized>(host: &H, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
+    let mut object = match host.storage_get(key) {
+        Some(serde_json::Value::Object(object)) => object,
+        _ => serde_json::Map::new(),
+    };
+    object.extend(fields);
+    host.storage_set(key, serde_json::Value::Object(object));
+}
+
 /// The host table, as the plugin calls it. It is valid until the host destroys the instance, so it is the plugin's
 /// own: a 1.4 plugin gets it only as the [`Read`] or [`Host`] of one callback.
 #[derive(Clone, Copy)]
 struct HostHandle {
     api: *const HostApi,
+}
+
+impl Default for HostHandle {
+    fn default() -> Self {
+        Self { api: std::ptr::null() }
+    }
 }
 
 impl HostHandle {
@@ -1773,12 +1784,7 @@ impl Host for HostHandle {
         let request = HostRequest::StorageMerge { key: key.to_owned(), fields: fields.clone() };
         if self.request(&request).is_err() {
             // A host older than the request sets the whole object, as plugins built before it do.
-            let mut object = match self.storage_get(key) {
-                Some(serde_json::Value::Object(object)) => object,
-                _ => serde_json::Map::new(),
-            };
-            object.extend(fields);
-            self.storage_set(key, serde_json::Value::Object(object));
+            storage_merge_whole(self, key, fields);
         }
     }
 
@@ -2102,6 +2108,7 @@ impl Setup<'_> {
 /// What a plugin registered, which the host keeps while the plugin is active; the plugin registers through a
 /// [`Setup`] it lends.
 #[doc(hidden)]
+#[derive(Default)]
 pub struct Registered {
     manifest: Manifest,
     options: Option<String>,
@@ -2223,18 +2230,7 @@ impl Registered {
             options,
             host,
             waker: host.waker(),
-            fences: Vec::new(),
-            slots: Vec::new(),
-            routes: Vec::new(),
-            views: Vec::new(),
-            commands: Vec::new(),
-            events: Vec::new(),
-            replies: Vec::new(),
-            mounts: Vec::new(),
-            route_mounts: Vec::new(),
-            wakes: Vec::new(),
-            fence_gone: Vec::new(),
-            disposers: Vec::new(),
+            ..Self::default()
         }
     }
 
@@ -2366,6 +2362,20 @@ macro_rules! export_plugin {
             unsafe { $crate::runtime::create($id, $setup, host, options, instance, out) }
         }
     };
+    // The `create` of `$setup`, for tests that wire a plugin through the byte shims (`loader::native::loopback`).
+    (@loopback $id:expr, $setup:expr) => {{
+        #[allow(unsafe_code)]
+        unsafe extern "C" fn create(
+            host: *const $crate::HostApi,
+            options: $crate::Bytes,
+            instance: *mut *mut ::std::ffi::c_void,
+            out: *mut $crate::Owned,
+        ) -> i32 {
+            // SAFETY: the loader passes what `PluginApi::create` documents.
+            unsafe { $crate::runtime::create($id, $setup, host, options, instance, out) }
+        }
+        create
+    }};
 }
 
 /// The shims [`export_plugin!`] wires into [`PluginApi`]. Each catches panics, so none unwinds into the host.

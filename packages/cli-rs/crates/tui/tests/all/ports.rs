@@ -5,7 +5,6 @@
 
 use crate::support::{self, DIRECTORY, Harness, Log, Reply, Seen, deref_harness};
 
-use std::ffi::c_void;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -524,25 +523,17 @@ fn picking(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn picking_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("probe", picking, host, options, instance, out) }
-}
-
 /// The select's cells as it opens, and the toast after a move down and enter.
 fn picked(loopback: bool) -> (Vec<opentui::testing::Cell>, String) {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let definition = match loopback {
         true => {
-            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), picking_create)
-                .unwrap()
-                .0
+            opencode_plugin::loader::native::loopback(
+                &opencode_tui::plugins::host::host(&h.tui),
+                abi::export_plugin!(@loopback "probe", picking),
+            )
+            .unwrap()
+            .0
         }
         false => abi::Plugin { id: "probe", setup: picking }.into(),
     };
