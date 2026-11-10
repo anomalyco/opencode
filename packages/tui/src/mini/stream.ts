@@ -6,6 +6,7 @@
 // defaults status updates to phase "running" if the caller didn't set a
 // phase -- a convenience so transport code doesn't have to repeat that.
 import type { FooterApi, FooterEvent, FooterPatch, FooterSubagentState, StreamCommit } from "./types"
+import { firstChars } from "@opencode/util/text"
 
 type Trace = {
   write(type: string, data?: unknown): void
@@ -42,7 +43,7 @@ function summarize(value: unknown): unknown {
     return {
       type: "string",
       length: value.length,
-      preview: `${value.slice(0, 160)}…`,
+      preview: `${firstChars(value, 160)}…`,
     }
   }
 

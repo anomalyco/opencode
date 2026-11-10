@@ -10,6 +10,7 @@ import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import PROMPT_SCHEDULE from "../../plugin/command/schedule.txt"
 import { Schedule } from "../../schedule.js"
+import { firstChars } from "@opencode/util/text"
 
 /** A schedule as the model reads it, with times in the schedule's own zone. */
 export const View = Schema.Struct({
@@ -181,7 +182,7 @@ function formatCondition(condition: Schedule.Condition): string {
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line.length > 0)
-      return `code ${JSON.stringify(first ? first.slice(0, 60) : "")}`
+      return `code ${JSON.stringify(first ? firstChars(first, 60) : "")}`
     }
   }
 }
@@ -203,7 +204,7 @@ function summary(view: View) {
       : view.if !== undefined
         ? `if ${formatCondition(view.if)}`
         : undefined
-  const prompt = view.prompt.length > 80 ? `${view.prompt.slice(0, 79)}…` : view.prompt
+  const prompt = view.prompt.length > 80 ? `${firstChars(view.prompt, 79)}…` : view.prompt
   return [
     `${view.id}${view.name ? ` "${view.name}"` : ""}: ${trigger} (${view.tz})`,
     gate,

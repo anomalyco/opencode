@@ -29,6 +29,7 @@ import { formatPath } from "../util/path-format"
 import { isRecord } from "../util/record"
 import { parseTodos, todoMarker } from "../util/todo"
 import type { RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
+import { firstChars } from "@opencode/util/text"
 
 export { canonicalToolName } from "../util/tool-display"
 
@@ -1292,7 +1293,7 @@ function structuredFallback(value: ToolDict): RunEntryBody | undefined {
     content:
       content.length <= STRUCTURED_FALLBACK_LENGTH
         ? content
-        : content.slice(0, STRUCTURED_FALLBACK_LENGTH - suffix.length) + suffix,
+        : firstChars(content, STRUCTURED_FALLBACK_LENGTH - suffix.length) + suffix,
     filetype: "json",
   }
 }

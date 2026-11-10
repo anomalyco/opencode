@@ -3,6 +3,7 @@ import { uuid } from "@opencode/util/uuid"
 import { Schema } from "effect"
 import type { ComposerNote } from "@opencode/plugin/gui"
 import type { PaneElement } from "./ipc"
+import { firstChars } from "@opencode/util/text"
 
 /** A comment on a picked element. The ref is absent once the page navigated. */
 export type ElementComment = {
@@ -84,7 +85,7 @@ function subject(input: ElementComment, ref?: string) {
   const details = [
     element.role ? `role ${element.role}` : undefined,
     element.name ? `accessible name ${JSON.stringify(element.name)}` : undefined,
-    element.text && element.text !== element.name ? `text ${JSON.stringify(element.text.slice(0, 80))}` : undefined,
+    element.text && element.text !== element.name ? `text ${JSON.stringify(firstChars(element.text, 80))}` : undefined,
     // A selector too long to keep is empty rather than cut into invalid syntax.
     element.selector
       ? `selector ${JSON.stringify(element.selector)}${element.selector.includes(" >>> ") ? ' (">>>" enters a shadow root)' : ""}`

@@ -1,4 +1,5 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
+import { firstChars } from "@opencode/util/text"
 
 export function protocolError(method: string, error: unknown) {
   const detail = message(error)
@@ -42,13 +43,13 @@ export function browserFailure(action: Browser.Action, error: unknown): Extract<
   return {
     type: "failure",
     code: network ? "navigation_failed" : "operation_failed",
-    message: `browser.${action.type} failed. ${hint ? `${hint} Details: ${detail.slice(0, 400)}` : detail}`.slice(
-      0,
+    message: firstChars(
+      `browser.${action.type} failed. ${hint ? `${hint} Details: ${firstChars(detail, 400)}` : detail}`,
       2_048,
     ),
   }
 }
 
 function message(error: unknown, limit = 400) {
-  return (error instanceof Error ? error.message : String(error)).slice(0, limit)
+  return firstChars(error instanceof Error ? error.message : String(error), limit)
 }

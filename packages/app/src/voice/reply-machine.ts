@@ -1,4 +1,5 @@
 import type { VoiceReply } from "./replies"
+import { firstChars } from "@opencode/util/text"
 
 /** Bounds one session's history read; a hung read would otherwise stop every later announcement. */
 export const FETCH_TIMEOUT = 15_000
@@ -187,9 +188,9 @@ export function transitionVoiceReply(state: VoiceReplyState, event: VoiceReplyEv
 
 /** One bounded append per reply keeps attribution with its content and stays below Live's 500-token append limit. */
 export function replyCommentary(reply: VoiceReply) {
-  const text = reply.text.replace(/```[\s\S]*?```/g, "[code in session]").slice(0, 800)
+  const text = firstChars(reply.text.replace(/```[\s\S]*?```/g, "[code in session]"), 800)
 
-  return `Result from session ${JSON.stringify(reply.title.slice(0, 100))}, request ${JSON.stringify(reply.instruction.slice(0, 100))}: ${text}`
+  return `Result from session ${JSON.stringify(firstChars(reply.title, 100))}, request ${JSON.stringify(firstChars(reply.instruction, 100))}: ${text}`
 }
 
 /** Starts the next step when none is running: announcements first, then reads, then retries. */

@@ -5,6 +5,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { getFilenameTruncated } from "@opencode/util/path"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { AttachmentCard } from "./attachment-card"
+import { firstChars } from "@opencode/util/text"
 
 /**
  * What a comment is about: lines of a file, a labelled subject such as an element picked in a page, or quoted text.
@@ -34,7 +35,8 @@ const QUOTE_PREVIEW_LENGTH = 200
 const QUOTE_TOOLTIP_LENGTH = 600
 
 export function quoteTooltip(quote: { text: string; comment?: string }) {
-  const text = quote.text.length > QUOTE_TOOLTIP_LENGTH ? `${quote.text.slice(0, QUOTE_TOOLTIP_LENGTH)}…` : quote.text
+  const text =
+    quote.text.length > QUOTE_TOOLTIP_LENGTH ? `${firstChars(quote.text, QUOTE_TOOLTIP_LENGTH)}…` : quote.text
 
   return quote.comment ? `${quote.comment}\n\n${text}` : text
 }
@@ -51,7 +53,7 @@ export function CommentCard(props: {
   const i18n = useI18n()
   let title: HTMLSpanElement | undefined
   const [truncated, setTruncated] = createSignal(false)
-  const quote = () => (props.target.type === "quote" ? props.target.text.slice(0, QUOTE_PREVIEW_LENGTH) : undefined)
+  const quote = () => (props.target.type === "quote" ? firstChars(props.target.text, QUOTE_PREVIEW_LENGTH) : undefined)
   const source = () => (props.target.type === "quote" ? props.target.source : undefined)
   const note = () => (props.target.type === "note" ? props.target : undefined)
 

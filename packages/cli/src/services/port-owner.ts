@@ -2,6 +2,7 @@ import { AppProcess } from "@opencode/util/process"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/process"
 import net from "node:net"
+import { firstChars } from "@opencode/util/text"
 
 export * as PortOwner from "./port-owner"
 
@@ -26,7 +27,7 @@ export const describe = Effect.fnUntraced(function* (port: number, hostname?: st
   if (pid === undefined) return undefined
   const command = (yield* run("ps", ["-o", "command=", "-p", pid])).replace(/\s+/g, " ")
   if (!command) return `PID ${pid}`
-  return `PID ${pid} (${command.length > 200 ? command.slice(0, 199) + "…" : command})`
+  return `PID ${pid} (${command.length > 200 ? firstChars(command, 199) + "…" : command})`
 })
 
 function listeners(output: string) {

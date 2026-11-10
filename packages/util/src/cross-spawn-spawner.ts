@@ -31,6 +31,7 @@ import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem, path } from "./effect/app-node-platform.js"
 import { Teardown } from "./teardown.js"
+import { firstChars } from "./text.js"
 
 /** Closing a child's scope escalates to SIGKILL after this, unless the command sets its own `forceKillAfter`. */
 export const RELEASE_FORCE_KILL_AFTER = "3 seconds"
@@ -418,7 +419,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
           groups.add(proc.pid!)
         }
         settle = Teardown.track(
-          `child ${proc.pid} running: ${[command.command, ...command.args].join(" ").slice(0, 200)}`,
+          `child ${proc.pid} running: ${firstChars([command.command, ...command.args].join(" "), 200)}`,
         )
         resume(Effect.succeed([proc, closed, exited, () => settle()]))
       })

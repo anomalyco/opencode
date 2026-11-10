@@ -6,6 +6,7 @@ import { useClipboard } from "../context/clipboard"
 import { useExit } from "../context/exit"
 import { useTuiApp } from "../context/runtime"
 import { describeOS, describeTerminal } from "../util/system"
+import { firstChars } from "@opencode/util/text"
 
 export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light" }) {
   const term = useTerminalDimensions()
@@ -249,10 +250,10 @@ function buildIssueURL(message: string, stack: string, version: string) {
   let hi = stack.length
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2)
-    setBody(stack.slice(0, mid) + marker)
+    setBody(firstChars(stack, mid) + marker)
     if (url.toString().length <= MAX_URL_LENGTH) lo = mid
     else hi = mid - 1
   }
-  setBody(stack.slice(0, lo) + marker)
+  setBody(firstChars(stack, lo) + marker)
   return url
 }

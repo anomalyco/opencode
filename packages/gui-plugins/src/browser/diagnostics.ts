@@ -13,6 +13,7 @@ import {
   type ChainEvent,
   type Hop,
 } from "./diagnostics-machine"
+import { firstChars } from "@opencode/util/text"
 
 const levels = ["debug", "info", "warning", "error"] as const
 
@@ -39,7 +40,7 @@ export function createDiagnostics(cdp: Cdp) {
       id: `${scope}:${++sequence}`,
       timestampMs,
       level,
-      text: text.slice(0, 2_000),
+      text: firstChars(text, 2_000),
       textTruncated: text.length > 2_000,
     }
 
@@ -274,7 +275,7 @@ export function createDiagnostics(cdp: Cdp) {
         if (!body) return { state: "unavailable", reason: "backendUnavailable" }
         const value = body.base64Encoded ? Buffer.from(body.body, "base64").toString("utf8") : body.body
 
-        return value.length ? { state: "text", text: value.slice(0, max), truncated: value.length > max } : { state: "empty" }
+        return value.length ? { state: "text", text: firstChars(value, max), truncated: value.length > max } : { state: "empty" }
       }
 
       const known = responseBody(hop, input.includeBody)

@@ -28,14 +28,14 @@ if (isDocs) {
     Base64.encode(
       // Convert to ASCII
       encodeURIComponent(
-        // Truncate to fit S3's max key size
-        title.substring(0, 700)
+        // Truncate to fit S3's max key size, dropping a trailing half emoji that encodeURIComponent rejects
+        title.substring(0, 700).replace(/[\ud800-\udbff]$/, "")
       )
     )
   );
 
   if (description) {
-    truncatedDesc = encodeURIComponent(description.substring(0, 400))
+    truncatedDesc = encodeURIComponent(description.substring(0, 400).replace(/[\ud800-\udbff]$/, ""))
   }
 
   ogImage = `${config.socialCard}/opencode-docs/${encodedTitle}.png?desc=${truncatedDesc}`;

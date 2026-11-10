@@ -1,4 +1,5 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
+import { firstChars } from "@opencode/util/text"
 
 // Responses keeps tool outputs in subsequent rounds. Only conversational text
 // belongs in its history preview, never reasoning, attachments or tool output.
@@ -10,6 +11,6 @@ export function messageExcerpts(messages: readonly SessionMessageInfo[]) {
         ? message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
         : message.text
 
-    return [{ id: message.id, role: message.type, text: text.slice(0, 400) }]
+    return [{ id: message.id, role: message.type, text: firstChars(text, 400) }]
   })
 }

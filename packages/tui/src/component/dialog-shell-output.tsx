@@ -10,6 +10,7 @@ import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { DialogFooter, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
+import { lastChars } from "@opencode/util/text"
 
 const PAGE_BYTES = 64 * 1024
 
@@ -61,7 +62,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
       setOutput((previous) => {
         const next = (previous ?? "") + page.data.output
         if (next.length > PAGE_BYTES) setOmitted(true)
-        return next.slice(-PAGE_BYTES)
+        return lastChars(next, PAGE_BYTES)
       })
       setError("")
       return cursor < page.data.size

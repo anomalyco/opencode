@@ -1,3 +1,5 @@
+import { lastChars } from "@opencode/util/text"
+
 // Same page size as the TUI shell output viewer; only this much recent output is retained and rendered.
 export const SHELL_OUTPUT_TAIL_BYTES = 64 * 1024
 
@@ -144,7 +146,7 @@ export function transitionShellFollower(state: ShellFollowerState, event: ShellF
   const page = event.page
   const advanced = page.cursor > state.cursor
   const cursor = Math.max(state.cursor, page.cursor)
-  const output = (state.output + page.output).slice(-SHELL_OUTPUT_TAIL_BYTES)
+  const output = lastChars(state.output + page.output, SHELL_OUTPUT_TAIL_BYTES)
   const emit = { type: "emit", output } as const
   const attempt = state.attempt + 1
 

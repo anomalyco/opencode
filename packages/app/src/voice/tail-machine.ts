@@ -1,3 +1,5 @@
+import { lastChars } from "@opencode/util/text"
+
 export const UTTERANCE_MERGE_WINDOW = 1_500
 
 export const MAX_UTTERANCES = 60
@@ -91,11 +93,13 @@ export function transitionTranscriptTail(state: TranscriptTailState, event: Tran
 
 /** The recent transcript both sides spoke, for Live's instructions. */
 export function transcriptLines(state: TranscriptTailState) {
-  return state.entries
-    .slice(-12)
-    .map((entry) => `${entry.role}: ${entry.text}`)
-    .join("\n")
-    .slice(-2000)
+  return lastChars(
+    state.entries
+      .slice(-12)
+      .map((entry) => `${entry.role}: ${entry.text}`)
+      .join("\n"),
+    2000,
+  )
 }
 
 export function capturedLines(state: TranscriptTailState, id: string) {

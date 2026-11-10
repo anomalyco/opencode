@@ -1,5 +1,6 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { Protocol } from "devtools-protocol"
+import { firstChars } from "@opencode/util/text"
 
 // One CDP request ID's hops. Chromium reuses a request ID across a redirect chain, and the network
 // service sends each hop's wire headers and status as ExtraInfo events that can arrive before or
@@ -427,7 +428,7 @@ function responseWire(hop: Hop, wire: WireResponse): Hop {
 function fail(hop: Hop, timestamp: number | undefined, failure: string): Hop {
   return {
     ...hop,
-    phase: { status: "failed", durationMs: elapsed(hop.phase, timestamp), failure: failure.slice(0, 2_048) },
+    phase: { status: "failed", durationMs: elapsed(hop.phase, timestamp), failure: firstChars(failure, 2_048) },
   }
 }
 
@@ -495,7 +496,7 @@ function trimHeaders(headers: Protocol.Network.Headers) {
       break
     }
 
-    const bounded = text.slice(0, Math.min(2_000, remaining))
+    const bounded = firstChars(text, Math.min(2_000, remaining))
     truncated ||= bounded.length < text.length || name.length < key.length
     kept.push([name, bounded])
     size += name.length + bounded.length

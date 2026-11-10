@@ -8,6 +8,7 @@ import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
 import { errorMessage } from "../../util/error"
+import { firstChars } from "@opencode/util/text"
 
 const handler = Effect.fn("cli.stats")(function* (input: Runtime.Input<typeof Commands.commands.stats>) {
   const days = Option.getOrUndefined(input.days)
@@ -286,7 +287,7 @@ function tableRow(label: string, second: string, third: string, fourth: string) 
 }
 
 function truncate(value: string, width: number) {
-  return value.length <= width ? value : value.slice(0, width - 1) + "…"
+  return value.length <= width ? value : firstChars(value, width - 1) + "…"
 }
 
 function formatNumber(value: number) {

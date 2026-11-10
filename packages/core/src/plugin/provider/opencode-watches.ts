@@ -9,6 +9,7 @@ import { Clock, Duration, Effect, Exit, Fiber, Option, Predicate, Schema, Scope,
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Socket } from "effect/socket"
 import { WebSocketConstructor } from "../../effect/websocket-constructor.js"
+import { firstChars } from "@opencode/util/text"
 
 /** The `GET /api/v2/config` response header Console sends while the workspace has event watches. */
 export const header = "x-opencode-event-watches"
@@ -344,7 +345,8 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
             // Each on one line, with what `watch` needs; a server's description is cut short.
             Effect.map((body) =>
               body.types.map((type) => {
-                const description = type.description?.replace(/\s+/g, " ").trim().slice(0, MAX_DESCRIPTION)
+                const description =
+                  type.description && firstChars(type.description.replace(/\s+/g, " ").trim(), MAX_DESCRIPTION)
                 return {
                   server: type.server,
                   name: type.name,

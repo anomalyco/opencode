@@ -22,7 +22,8 @@ export const safeText = (value: unknown) => {
   if (secretFindings(value).length > 0) return JSON.stringify(REDACTED)
   const text = JSON.stringify(value)
   if (!text) return typeof value
-  return text.length > 300 ? `${text.slice(0, 300)}...` : text
+  // Drop a trailing half emoji (a lone UTF-16 high surrogate) left by the cut.
+  return text.length > 300 ? `${text.slice(0, 300).replace(/[\ud800-\udbff]$/, "")}...` : text
 }
 
 export const jsonBody = (body: string) => Option.getOrUndefined(decodeJson(body))

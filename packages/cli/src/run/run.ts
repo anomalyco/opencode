@@ -12,6 +12,7 @@ import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
 import { Env } from "../env"
 import { errorMessage } from "../util/error"
+import { firstChars } from "@opencode/util/text"
 
 export type RunCommandInput = {
   server: ServerConnection.Resolved
@@ -117,7 +118,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
   if (!target) return
   const title =
     !target.resume && input.title !== undefined
-      ? input.title || prepared.message.slice(0, 50) + (prepared.message.length > 50 ? "..." : "")
+      ? input.title || firstChars(prepared.message, 50) + (prepared.message.length > 50 ? "..." : "")
       : undefined
   // Archive before the first prompt is admitted, so the run never reaches an inbox as working or finished.
   const archived = input.archived && (!target.resume || input.fork) ? true : undefined

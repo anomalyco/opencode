@@ -1,6 +1,7 @@
 import { Effect, PlatformError, Predicate, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { RemoteCli } from "./remote-cli"
+import { lastChars } from "@opencode/util/text"
 
 export class SshFailure extends Schema.TaggedError<SshFailure>()("SshFailure", {
   code: Schema.Literals([
@@ -210,14 +211,14 @@ export const runSsh = Effect.fn("Ssh.run")(function* (input: {
           Stream.decodeText(),
           Stream.runFold(
             () => "",
-            (tail, text) => (tail + text).slice(-1_048_576),
+            (tail, text) => lastChars(tail + text, 1_048_576),
           ),
         ),
         stderr: child.stderr.pipe(
           Stream.decodeText(),
           Stream.runFold(
             () => "",
-            (tail, text) => (tail + text).slice(-16_384),
+            (tail, text) => lastChars(tail + text, 16_384),
           ),
         ),
         code: child.exitCode,

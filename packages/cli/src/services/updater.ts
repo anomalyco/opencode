@@ -10,6 +10,7 @@ import { stripVTControlCharacters } from "node:util"
 import { RetainedImage } from "./retained-image"
 import { action, parseReleaseVersion, type Policy } from "./updater-action"
 import { errorMessage } from "../util/error"
+import { lastChars } from "@opencode/util/text"
 
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn", "vp", "brew", "winget"] as const
 
@@ -76,7 +77,7 @@ function conciseDetail(input: string) {
     .filter((line) => line.trim().length > 0)
   const tail = lines.slice(-12).join("\n")
   const clipped = tail.length > 2_000
-  const detail = clipped ? `…${tail.slice(-1_999)}` : tail
+  const detail = clipped ? `…${lastChars(tail, 1_999)}` : tail
   if (!detail) return
   if (lines.length <= 12 && !clipped) return detail
   return `${detail}\n\nOutput shortened to the last 12 lines.`

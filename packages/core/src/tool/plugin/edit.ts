@@ -18,6 +18,7 @@ import { FileAccess } from "../../file-access.js"
 import { FileWrite } from "../../file-write.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
+import { firstChars } from "@opencode/util/text"
 
 export const name = "edit"
 
@@ -235,7 +236,7 @@ const missHint = (source: string, oldString: string, newString: string) => {
       .slice(from, to)
       .map(
         (line, index) =>
-          `${from + index + 1}: ${line.length > hintLineLength ? `${line.slice(0, hintLineLength)}…` : line}`,
+          `${from + index + 1}: ${line.length > hintLineLength ? `${firstChars(line, hintLineLength)}…` : line}`,
       ),
   ].join("\n")
 }

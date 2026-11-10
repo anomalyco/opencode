@@ -13,6 +13,7 @@ import {
   type CliRendererExternalOutputEvent,
   type TreeSitterClient,
 } from "@opentui/core"
+import { firstChars } from "@opencode/util/text"
 
 const prefixes: Record<number, string> = {
   0x2192: "->",
@@ -252,5 +253,5 @@ export function monoShortcut(value: string, mono: boolean): string {
 export function monoTruncate(value: string, width: number, mono: boolean): string {
   if (!mono || value.length <= width) return value
   if (width <= 3) return ".".repeat(Math.max(0, width))
-  return value.slice(0, width - 3) + "..."
+  return firstChars(value, width - 3) + "..."
 }

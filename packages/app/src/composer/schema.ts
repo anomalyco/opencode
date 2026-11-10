@@ -5,6 +5,7 @@ import { Skill } from "@opencode/schema/skill"
 import { Session } from "@opencode/schema/session"
 import { Persistence } from "@/runtime/persistence/schema"
 import { FileSelection, SelectedLineRange } from "@/workspaces/files/types"
+import { firstChars } from "@opencode/util/text"
 
 const PartBase = {
   content: Schema.String,
@@ -268,7 +269,7 @@ function legacyBrowserNote(item: typeof LegacyBrowserComment.Type): NoteComment 
   const details = [
     element.role ? `role ${element.role}` : undefined,
     element.name ? `accessible name ${JSON.stringify(element.name)}` : undefined,
-    element.text && element.text !== element.name ? `text ${JSON.stringify(element.text.slice(0, 80))}` : undefined,
+    element.text && element.text !== element.name ? `text ${JSON.stringify(firstChars(element.text, 80))}` : undefined,
     element.selector
       ? `selector ${JSON.stringify(element.selector)}${element.selector.includes(" >>> ") ? ' (">>>" enters a shadow root)' : ""}`
       : undefined,

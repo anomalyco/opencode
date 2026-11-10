@@ -35,11 +35,12 @@ import {
   isFormAnswerField,
 } from "../../util/form"
 import type { FormAnswerField } from "../../util/form"
+import { firstChars } from "@opencode/util/text"
 
 export const FORM_MODE = "form"
 
 function truncate(label: string, max: number) {
-  return label.length > max ? label.slice(0, max - 1).trimEnd() + "…" : label
+  return label.length > max ? firstChars(label, max - 1).trimEnd() + "…" : label
 }
 
 type FormDraft = {

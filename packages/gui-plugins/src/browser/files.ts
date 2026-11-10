@@ -3,6 +3,7 @@ import { mkdir, readFile, stat, writeFile, rm } from "node:fs/promises"
 import { mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { firstChars, lastChars } from "@opencode/util/text"
 
 export type BrowserFiles = ReturnType<typeof createBrowserFiles>
 
@@ -37,7 +38,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
 
       const file = {
         id,
-        name: name.slice(0, 2_048),
+        name: firstChars(name, 2_048),
         mime,
         bytes: 0,
         state: "pending" as "pending" | "completed" | "failed",
@@ -46,10 +47,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
         // directory, so names never collide.
         path: path.join(
           target,
-          name
-            .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
-            .replace(/[. ]+$/, "")
-            .slice(-120) || "file",
+          lastChars(name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/, ""), 120) || "file",
         ),
         resources: [...new Set(resources)].sort(),
       }
