@@ -890,8 +890,8 @@ impl Registry {
     /// Adds external plugin `definition`, or replaces the one loaded from the same target, and activates it
     /// unless a `plugins` entry or the plugin manager disabled it. A replacement keeps its place, so slot
     /// order holds across a reload. A replacement of an active plugin starts before the active one stops: when its
-    /// setup fails, it is disposed and the active one keeps running (TS `context.tsx`). Any other setup that fails
-    /// leaves the plugin listed as failed and not active.
+    /// setup fails, it is disposed and the active one keeps running (TS `context.tsx`); for an active built-in of its ID
+    /// the target is listed as failed. Any other setup that fails leaves the plugin listed as failed and not active.
     pub fn load(&self, host: &Rc<dyn Host>, definition: Definition) -> Option<SetupFailed> {
         let target = definition.target()?.to_owned();
         self.set_unloaded(&target, None);
@@ -913,6 +913,26 @@ impl Registry {
             }
             return None;
         }
+        // Like TS (`context.tsx` restores the fallback), the replacement of an active built-in sets up before the
+        // built-in stops, and a setup that fails leaves the built-in running.
+        let builtin = self.with_target(&target, |_| ()).is_none().then(|| {
+            let plugins = self.plugins.borrow();
+            plugins
+                .iter()
+                .find(|plugin| plugin.source == Source::Builtin && plugin.definition.id == definition.id)
+                .and_then(|builtin| builtin.active.as_ref().map(|(order, _)| *order))
+        });
+        let started = match builtin.flatten() {
+            Some(order) if self.enabled(&target, &definition.id) => match self.setup(host, &definition, Some(order)) {
+                Ok(started) => Some(started),
+                Err(error) => {
+                    let kept = format!("{error} (previous version still active)");
+                    self.set_unloaded(&target, Some(Status::Failed(kept)));
+                    return Some(SetupFailed { error, kept: false });
+                }
+            },
+            _ => None,
+        };
         let previous = {
             let mut plugins = self.plugins.borrow_mut();
             match plugins.iter_mut().find(|plugin| plugin.definition.target() == Some(target.as_str())) {
@@ -921,17 +941,7 @@ impl Registry {
                     Some(plugin.active.take())
                 }
                 None => {
-                    // Like TS, the directives after the plugin's own entry (all of them, for a discovered
-                    // plugin) decide whether it starts enabled.
-                    let after =
-                        self.directives.iter().position(|directive| *directive == target).map_or(0, |index| index + 1);
-                    let enabled = self.directives[after..].iter().fold(true, |enabled, directive| {
-                        match directive.strip_prefix('-') {
-                            Some(selector) if matches(selector, &definition.id) => false,
-                            None if matches(directive, &definition.id) => true,
-                            _ => enabled,
-                        }
-                    });
+                    let enabled = self.enabled(&target, &definition.id);
                     // Like TS, an external plugin with a built-in's ID replaces it, in its place.
                     match plugins
                         .iter_mut()
@@ -942,7 +952,10 @@ impl Registry {
                             let original = std::mem::replace(&mut builtin.definition, definition);
                             builtin.shadowed = Some((original, builtin.enabled, builtin.failed.take()));
                             (builtin.source, builtin.enabled) = (Source::External, enabled);
-                            Some(builtin.active.take())
+                            Some(match started {
+                                Some(started) => builtin.active.replace(started),
+                                None => builtin.active.take(),
+                            })
                         }
                         None => {
                             plugins.push(Plugin::new(definition, Source::External, enabled));
@@ -958,6 +971,17 @@ impl Registry {
         let started = self.with_target(&target, |plugin| plugin.enabled.then(|| plugin.definition.id.clone()));
         let error = self.start(host, &started.flatten()?)?;
         Some(SetupFailed { error, kept: false })
+    }
+
+    /// Whether external plugin `id` from `target` starts enabled: like TS, the directives after the plugin's own entry
+    /// (all of them, for a discovered plugin) decide.
+    fn enabled(&self, target: &str, id: &str) -> bool {
+        let after = self.directives.iter().position(|directive| *directive == target).map_or(0, |index| index + 1);
+        self.directives[after..].iter().fold(true, |enabled, directive| match directive.strip_prefix('-') {
+            Some(selector) if matches(selector, id) => false,
+            None if matches(directive, id) => true,
+            _ => enabled,
+        })
     }
 
     /// Records that the build of `target` did not load, and returns whether an active plugin of it keeps running. An
