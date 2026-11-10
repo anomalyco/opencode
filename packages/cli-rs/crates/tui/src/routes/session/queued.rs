@@ -252,8 +252,16 @@ impl Inner {
         let Some(prompt) = self.prompt.upgrade() else {
             return;
         };
-        let Some(text) = tui.data.read(|state| {
-            users(state, &self.session).find(|user| user.id.as_str() == inbox).map(|user| user.payload.text.clone())
+        let Some(restored) = tui.data.read(|state| {
+            users(state, &self.session).find(|user| user.id.as_str() == inbox).map(|user| {
+                let payload = &user.payload;
+                super::actions::projected(
+                    &payload.text,
+                    payload.files.as_deref(),
+                    payload.agents.as_deref(),
+                    payload.skills.as_deref(),
+                )
+            })
         }) else {
             return;
         };
@@ -266,7 +274,7 @@ impl Inner {
             if !undone {
                 return;
             }
-            super::actions::append_prompt(tui, &session, &text);
+            super::actions::append_prompt(tui, &session, restored.clone());
             tui.dialogs.clear();
             if tui.route() == (crate::routes::Route::Session { id: session }) {
                 tui.app.focus(&prompt.textarea);

@@ -45,7 +45,12 @@ pub fn show(tui: &Tui, session: SessionID, message: String) {
 /// dialog closes at once.
 fn revert(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
     let restored = tui.data.read(|state| match state.message(session, message) {
-        Some(SessionMessageInfo::User(user)) => Some(user.text.clone()),
+        Some(SessionMessageInfo::User(user)) => Some(crate::routes::session::actions::projected(
+            &user.text,
+            user.files.as_deref(),
+            user.agents.as_deref(),
+            user.skills.as_deref(),
+        )),
         _ => None,
     });
     let client = tui.data.client().clone();
@@ -59,7 +64,7 @@ fn revert(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
         async move { client.session_revert_stage(&input).await },
         bind!(weak, |tui, _, result| {
             match (result, restored) {
-                (Ok(_), Some(text)) => crate::routes::session::actions::append_prompt(&tui, &session, &text),
+                (Ok(_), Some(prompt)) => crate::routes::session::actions::append_prompt(&tui, &session, prompt),
                 (Ok(_), None) => {}
                 (Err(error), _) => tui
                     .toasts
