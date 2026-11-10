@@ -1,7 +1,8 @@
 // Runs on the launcher thread. Creating a process blocks the thread that asks for it (on Windows, several
-// milliseconds each and sometimes over 100), so Windows callers hand launches to this thread. Only Windows:
-// elsewhere the in-process spawner also tracks process groups to stop at exit, which this thread does not.
-import { exec, type ChildProcess, type StdioOptions } from "node:child_process"
+// milliseconds each and sometimes over 100), so callers hand launches to this thread. Callers only do so on Windows:
+// elsewhere the in-process spawner also tracks process groups to stop at exit, which this thread does not, and
+// stopping a tree here uses taskkill.
+import { exec, type ChildProcess } from "node:child_process"
 import { accessSync, readlinkSync } from "node:fs"
 import path from "node:path"
 import type { Readable } from "node:stream"
@@ -49,7 +50,8 @@ export type Request =
   | { readonly type: "destroy"; readonly id: number; readonly fd: 1 | 2 }
 
 export interface Failure {
-  readonly method: "access" | "spawn"
+  /** What failed, as the in-process spawner names it: "access", "spawn" or "fromReadable(stdout)". */
+  readonly method: string
   readonly message: string
   readonly code?: string
   readonly syscall?: string
@@ -79,7 +81,12 @@ export type Reply =
   | { readonly type: "data"; readonly id: number; readonly fd: 1 | 2; readonly chunk: Uint8Array }
   | { readonly type: "end"; readonly id: number; readonly fd: 1 | 2; readonly error?: string }
   | { readonly type: "exit"; readonly id: number; readonly code: number | null; readonly signal: NodeJS.Signals | null }
-  | { readonly type: "close"; readonly id: number; readonly code: number | null; readonly signal: NodeJS.Signals | null }
+  | {
+      readonly type: "close"
+      readonly id: number
+      readonly code: number | null
+      readonly signal: NodeJS.Signals | null
+    }
   | { readonly type: "error"; readonly id: number; readonly error: Failure }
   | { readonly type: "killed"; readonly id: number; readonly error?: string }
 
@@ -92,7 +99,10 @@ const WINDOW = 1024 * 1024
 const port = parentPort!
 const post = (reply: Reply, transfer: ArrayBuffer[] = []) => port.postMessage(reply, transfer)
 const cancels = new Map<number, () => void>()
-const children = new Map<number, { child: ChildProcess; flows: Map<1 | 2, { stream: Readable; outstanding: number }> }>()
+const children = new Map<
+  number,
+  { child: ChildProcess; flows: Map<1 | 2, { stream: Readable; outstanding: number }> }
+>()
 
 // Same rule as the in-process collector: keep reading to the end, retain only the first `max` bytes.
 const collector = (max: number | undefined) => {
@@ -126,32 +136,25 @@ const executable = (file: string) => {
   }
 }
 
-const failure = (method: Failure["method"], error: NodeJS.ErrnoException): Failure => ({
-  method,
-  message: error.message,
-  code: error.code,
-  syscall: error.syscall,
-})
+const failure = (method: string, error: unknown): Failure => {
+  const cause: NodeJS.ErrnoException = error instanceof Error ? error : new Error(String(error))
+  return { method, message: cause.message, code: cause.code, syscall: cause.syscall }
+}
 
 const pipe = process.platform === "win32" ? "overlapped" : "pipe"
 
-function start(request: Launch, stdio: ReadonlyArray<"ignore" | typeof pipe>, detached: boolean) {
+function start(file: string, request: Launch, stdio: ReadonlyArray<"ignore" | typeof pipe>, detached: boolean) {
   try {
-    if (request.cwd !== undefined) accessSync(request.cwd)
-  } catch (error) {
-    return failure("access", error as NodeJS.ErrnoException)
-  }
-  try {
-    return launch(executable(request.file), [...request.args], {
-      cwd: request.cwd === undefined ? undefined : path.resolve(request.cwd),
+    return launch(file, [...request.args], {
+      cwd: request.cwd,
       env: request.env,
-      stdio: [...stdio] as StdioOptions,
+      stdio: [...stdio],
       detached,
       shell: request.shell,
       windowsHide: process.platform === "win32",
     })
   } catch (error) {
-    return failure("spawn", error as NodeJS.ErrnoException)
+    return failure("spawn", error)
   }
 }
 
@@ -159,28 +162,45 @@ const killTree = (child: ChildProcess, done: (error: Error | null) => void) =>
   exec(`taskkill /pid ${child.pid} /T /F`, { windowsHide: true }, done)
 
 function run(request: Run) {
-  const reply = (message: Exited | Failed, transfer: ArrayBuffer[] = []) => {
-    cancels.delete(request.id)
-    post(message, transfer)
-  }
-  const child = start(request, [request.stdin === "ignore" ? "ignore" : pipe, pipe, pipe], request.detached ?? false)
-  if ("method" in child) return reply({ type: "failed", id: request.id, error: child })
-
-  const out = collector(request.maxOutputBytes)
-  const err = request.combineOutput ? out : collector(request.maxErrorBytes)
+  const id = request.id
   let settled = false
   let exit: readonly [number | null, NodeJS.Signals | null] | undefined
   let deadline: ReturnType<typeof setTimeout> | undefined
-  const settle = (code: number | null, signal: NodeJS.Signals | null) => {
+  let giveUp: ReturnType<typeof setTimeout> | undefined
+  const reply = (message: Exited | Failed, transfer: ArrayBuffer[] = []) => {
     if (settled) return
     settled = true
     clearTimeout(deadline)
+    clearTimeout(giveUp)
+    cancels.delete(id)
+    post(message, transfer)
+  }
+  const fail = (method: string, error: unknown) => reply({ type: "failed", id, error: failure(method, error) })
+
+  // The caller did not check the directory or resolve the file, as the in-process spawner does before it launches.
+  try {
+    if (request.cwd !== undefined) accessSync(request.cwd)
+  } catch (error) {
+    return fail("access", error)
+  }
+  const child = start(
+    executable(request.file),
+    request,
+    [request.stdin === "ignore" ? "ignore" : pipe, pipe, pipe],
+    request.detached ?? false,
+  )
+  if ("method" in child) return reply({ type: "failed", id, error: child })
+
+  const out = collector(request.maxOutputBytes)
+  const err = request.combineOutput ? out : collector(request.maxErrorBytes)
+  const settle = (code: number | null, signal: NodeJS.Signals | null) => {
+    if (settled) return
     const stdout = out.done()
     const stderr = request.combineOutput ? { data: new Uint8Array(0), truncated: false } : err.done()
     reply(
       {
         type: "exited",
-        id: request.id,
+        id,
         code,
         signal,
         stdout: stdout.data,
@@ -191,14 +211,23 @@ function run(request: Run) {
       [stdout.data.buffer, stderr.data.buffer],
     )
   }
-
-  child.stdout?.on("data", out.push).on("error", () => {})
-  child.stderr?.on("data", err.push).on("error", () => {})
-  child.once("error", (error) => {
+  // A read failure fails the run, as it fails the in-process reader, and the child is stopped as its scope would be.
+  const unreadable = (name: string) => (error: Error) => {
     if (settled) return
-    settled = true
-    clearTimeout(deadline)
-    reply({ type: "failed", id: request.id, error: failure("spawn", error) })
+    fail(`fromReadable(${name})`, error)
+    killTree(child, () => {})
+  }
+
+  let spawned = false
+  child.once("spawn", () => {
+    spawned = true
+  })
+  child.stdout?.on("data", out.push).on("error", unreadable("stdout"))
+  child.stderr?.on("data", err.push).on("error", unreadable("stderr"))
+  // Only a child that never started fails the run. On Windows cross-spawn turns exit code 1 of a command it ran
+  // through cmd.exe into an ENOENT error; the in-process spawner ignores that and reports the exit from "close".
+  child.on("error", (error) => {
+    if (!spawned) fail("spawn", error)
   })
   child.once("exit", (code, signal) => {
     exit = [code, signal]
@@ -218,21 +247,26 @@ function run(request: Run) {
     child.stdin.end(request.stdin)
   }
 
-  cancels.set(request.id, () => {
+  cancels.set(id, () => {
     if (settled || child.pid === undefined) return
-    // The whole tree, as the in-process spawner does on Windows.
+    // The whole tree at once, as the in-process spawner stops a Windows child whatever its kill signal.
     killTree(child, (error) => {
       if (error) child.kill()
     })
     // The caller waits for this reply before it finishes interrupting; never leave it waiting on a child that
     // cannot be stopped.
-    setTimeout(() => settle(null, "SIGKILL"), 5000).unref()
+    giveUp = setTimeout(() => settle(null, "SIGKILL"), 5000)
   })
 }
-
 function spawn(request: Spawn) {
   const id = request.id
-  const child = start(request, ["ignore", request.stdout ? pipe : "ignore", request.stderr ? pipe : "ignore"], false)
+  // The spawner already checked the directory and resolved the file.
+  const child = start(
+    request.file,
+    request,
+    ["ignore", request.stdout ? pipe : "ignore", request.stderr ? pipe : "ignore"],
+    false,
+  )
   if ("method" in child) return post({ type: "error", id, error: child })
 
   const flows = new Map<1 | 2, { stream: Readable; outstanding: number }>()

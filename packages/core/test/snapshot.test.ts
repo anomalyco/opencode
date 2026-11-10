@@ -3,9 +3,11 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Effect, Fiber, Layer, Logger } from "effect"
+import { App } from "@opencode/core/app"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Git } from "@opencode/core/git"
 import { Global } from "@opencode/util/global"
+import { ProcessLauncher } from "@opencode/util/process-launcher"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Snapshot } from "@opencode/core/snapshot"
@@ -450,6 +452,49 @@ describe("Snapshot", () => {
       ),
     { timeout: 15_000 },
   )
+
+  // The process_launcher flag is on by default in a dev build and off in a release.
+  for (const [channel, expected] of [
+    ["dev", true],
+    ["latest", false],
+  ] as const) {
+    testEffect(Layer.empty).live(
+      `runs Git with the process launcher ${expected ? "on" : "off"} in a ${channel} build`,
+      () =>
+        withTempDir((tmp) =>
+          Effect.gen(function* () {
+            const project = path.join(tmp.path, "project")
+            yield* Effect.promise(async () => {
+              await fs.mkdir(project)
+              await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+              await initGit(project)
+            })
+            const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+            const seen: boolean[] = []
+            const instrumented = Git.Service.of({
+              ...git,
+              tree: {
+                ...git.tree,
+                capture: (input) =>
+                  Effect.gen(function* () {
+                    seen.push(yield* ProcessLauncher.Enabled)
+                    return yield* git.tree.capture(input)
+                  }),
+              },
+            })
+            const layer = AppNodeBuilder.build(Snapshot.node, [
+              Location.node.replace(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+              Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
+              Git.node.replace(Layer.succeed(Git.Service, instrumented)),
+              App.node.replace(App.configured({ channel })),
+            ])
+            const captured = yield* Snapshot.Service.use((snapshot) => snapshot.capture()).pipe(Effect.provide(layer))
+            expect(captured).toBeDefined()
+            expect(seen).toEqual([expected])
+          }),
+        ),
+    )
+  }
 })
 
 function snapshotLayer(data: string, directory: string) {

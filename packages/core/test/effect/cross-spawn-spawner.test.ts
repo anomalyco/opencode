@@ -285,6 +285,11 @@ describe("cross-spawn spawner", () => {
             [path.join(import.meta.dir, "../fixture/held-stdio.cjs"), mode, pidFile],
             { stdin: "ignore", forceKillAfter: 100 },
           )
+          expect(
+            Teardown.pending().some((item) =>
+              item.label.startsWith(`child ${handle.pid} running${offThread ? " on the launcher thread" : ""}:`),
+            ),
+          ).toBe(true)
           const [exit, stdout, stderr] = yield* Effect.all(
             [
               Effect.exit(handle.exitCode),
@@ -320,9 +325,18 @@ describe("cross-spawn spawner", () => {
             [decodeByteStream(finished.stdout), decodeByteStream(finished.stderr), finished.exitCode],
             { concurrency: "unbounded" },
           )
-          expect({ stdout, stderr, code }).toEqual({ stdout: "out", stderr: "err", code: ChildProcessSpawner.ExitCode(7) })
+          expect({ stdout, stderr, code }).toEqual({
+            stdout: "out",
+            stderr: "err",
+            code: ChildProcessSpawner.ExitCode(7),
+          })
 
           const running = yield* js("setInterval(() => {}, 10_000)", { stdin: "ignore" })
+          expect(
+            Teardown.pending().some((item) =>
+              item.label.startsWith(`child ${running.pid} running on the launcher thread:`),
+            ),
+          ).toBe(true)
           expect(yield* running.isRunning).toBe(true)
           yield* running.kill()
           expect(yield* running.isRunning).toBe(false)

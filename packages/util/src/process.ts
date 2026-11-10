@@ -1,4 +1,5 @@
-import { Context, Duration, Effect, Fiber, Layer, Redacted, Schema, Stream } from "effect"
+import path from "node:path"
+import { Context, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/process"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
@@ -139,46 +140,47 @@ export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, 
     },
   ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
 
-const unwrap = (value: string | Redacted.Redacted<string>) => (Redacted.isRedacted(value) ? Redacted.value(value) : value)
+// Input the launcher thread can be handed up front: nothing, an open pipe nobody writes to, or bytes to write and
+// close. A stream of input, or inherited stdin, needs the in-process spawner.
+const offThreadStdin = (
+  command: ChildProcess.StandardCommand,
+  input: RunOptions["stdin"],
+): Run["stdin"] | undefined => {
+  if (typeof input === "string") return new TextEncoder().encode(input)
+  // A view into a larger buffer would be cloned whole.
+  if (input instanceof Uint8Array) return input.byteLength === input.buffer.byteLength ? input : input.slice()
+  if (input !== undefined) return undefined
+  const stdin = command.options.stdin
+  if (stdin === undefined || stdin === "pipe") return "pipe"
+  return stdin === "ignore" ? "ignore" : undefined
+}
 
 /**
  * The launcher thread's request for a run it can do: one command whose input is known up front and whose output is
  * collected. Anything else (streams, sinks, extra descriptors, inherited stdio) needs the in-process spawner, and so
- * does a NUL character, which the spawner rejects without echoing a redacted value.
+ * does a NUL character, which the spawner rejects without echoing a redacted value. `killSignal` and
+ * `forceKillAfter` do not apply: on Windows a child is stopped by ending its whole process tree at once, here as in
+ * the spawner.
  */
 const offThreadRequest = (
-  command: ChildProcess.Command,
+  command: ChildProcess.StandardCommand,
   options?: RunOptions,
 ): Omit<Run, "id" | "type"> | undefined => {
-  if (process.platform !== "win32" || command._tag !== "StandardCommand") return undefined
+  if (process.platform !== "win32") return undefined
   const opts = command.options
   if (opts.additionalFds !== undefined) return undefined
   if (opts.stdout !== undefined && opts.stdout !== "pipe") return undefined
   if (opts.stderr !== undefined && opts.stderr !== "pipe") return undefined
-  const stdin =
-    typeof options?.stdin === "string"
-      ? new TextEncoder().encode(options.stdin)
-      : options?.stdin instanceof Uint8Array
-        ? // A view into a larger buffer would be cloned whole.
-          options.stdin.byteLength === options.stdin.buffer.byteLength
-          ? options.stdin
-          : options.stdin.slice()
-        : options?.stdin === undefined && (opts.stdin === undefined || opts.stdin === "pipe" || opts.stdin === "ignore")
-          ? (opts.stdin ?? "pipe")
-          : undefined
+  const stdin = offThreadStdin(command, options?.stdin)
   if (stdin === undefined) return undefined
-  // The launcher thread's own environment can be stale, so it always gets this thread's.
-  const env: Record<string, string | undefined> = opts.env === undefined || opts.extendEnv ? { ...process.env } : {}
-  for (const [key, value] of Object.entries(opts.env ?? {})) {
-    if (value === undefined) delete env[key]
-    else env[key] = unwrap(value)
-  }
-  const args = command.args.map(unwrap)
+  // A copy of this thread's environment: the launcher thread's own can be stale.
+  const env = { ...(CrossSpawnSpawner.environment(opts) ?? process.env) }
+  const args = command.args.map(CrossSpawnSpawner.unwrap)
   if ([command.command, ...args, ...Object.values(env)].some((value) => value?.includes("\0"))) return undefined
   return {
     file: command.command,
     args,
-    cwd: opts.cwd,
+    cwd: opts.cwd === undefined ? undefined : path.resolve(opts.cwd),
     env,
     shell: opts.shell,
     detached: opts.detached,
@@ -198,17 +200,17 @@ const layer = Layer.effect(
 
     const offThread = Effect.fnUntraced(function* (
       launcher: Worker,
-      command: ChildProcess.Command,
+      command: ChildProcess.StandardCommand,
       request: Omit<Run, "id" | "type">,
     ) {
       const description = describeCommand(command)
-      yield* Effect.logDebug("spawning process", { command: request.file, cwd: request.cwd })
+      yield* Effect.logDebug("spawning process", { command: request.file, args: command.args, cwd: request.cwd })
       const reply = yield* ProcessLauncher.run(launcher, request, description)
       if (reply.type === "failed") {
         return yield* new AppProcessError({
           command: description,
           cause: CrossSpawnSpawner.toPlatformError(
-            "spawn",
+            reply.error.method,
             Object.assign(new Error(reply.error.message), { code: reply.error.code, syscall: reply.error.syscall }),
             command,
           ),
@@ -306,10 +308,12 @@ const layer = Layer.effect(
     }
 
     const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {
-      const request = (yield* ProcessLauncher.Enabled) ? offThreadRequest(command, options) : undefined
-      const launcher = request ? yield* ProcessLauncher.thread() : undefined
-      if (request && launcher) {
-        return yield* supervise(describeCommand(command), offThread(launcher, command, request), options)
+      if (command._tag === "StandardCommand" && (yield* ProcessLauncher.Enabled)) {
+        const request = offThreadRequest(command, options)
+        const launcher = request ? yield* ProcessLauncher.thread : undefined
+        if (request && launcher) {
+          return yield* supervise(describeCommand(command), offThread(launcher, command, request), options)
+        }
       }
       if (options?.stdin === undefined) return yield* runCommand(command, options)
       if (command._tag !== "StandardCommand") {

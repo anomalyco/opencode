@@ -398,7 +398,7 @@ describe("AppProcess", () => {
   describe("launcher thread", () => {
     const run = (file: string, args: string[], maxOutputBytes?: number) =>
       Effect.gen(function* () {
-        const launcher = yield* ProcessLauncher.thread()
+        const launcher = yield* ProcessLauncher.thread
         expect(launcher).toBeDefined()
         return yield* ProcessLauncher.run(
           launcher!,
@@ -423,13 +423,31 @@ describe("AppProcess", () => {
       "reports a command that cannot start",
       Effect.gen(function* () {
         const reply = yield* run(path.join(tmpdir(), `opencode-missing-command-${randomUUID()}`), [])
-        expect(reply).toMatchObject({ error: { method: "spawn", code: "ENOENT" } })
+        // Windows runs a command it cannot resolve through cmd.exe, which starts and exits 1, as in-process.
+        expect(reply).toMatchObject(
+          process.platform === "win32"
+            ? { type: "exited", code: 1 }
+            : { type: "failed", error: { method: "spawn", code: "ENOENT" } },
+        )
+      }),
+    )
+
+    it.live(
+      "reports a working directory that does not exist",
+      Effect.gen(function* () {
+        const launcher = yield* ProcessLauncher.thread
+        const reply = yield* ProcessLauncher.run(
+          launcher!,
+          { file: NODE, args: [], cwd: MISSING_CWD, stdin: "ignore", combineOutput: false },
+          NODE,
+        )
+        expect(reply).toMatchObject({ type: "failed", error: { method: "access", code: "ENOENT" } })
       }),
     )
 
     const spawn = (script: string) =>
       Effect.gen(function* () {
-        const launcher = yield* ProcessLauncher.thread()
+        const launcher = yield* ProcessLauncher.thread
         expect(launcher).toBeDefined()
         const child = ProcessLauncher.spawn(launcher!, { file: NODE, args: ["-e", script], stdout: true, stderr: true })
         const closed = new Promise<readonly [number | null, NodeJS.Signals | null]>((resolve) =>
@@ -440,18 +458,30 @@ describe("AppProcess", () => {
     const text = (stream: NodeJS.ReadableStream | null) =>
       new Promise<string>((resolve) => {
         const chunks: Buffer[] = []
-        stream?.on("data", (chunk: Buffer) => chunks.push(chunk)).once("end", () => resolve(Buffer.concat(chunks).toString()))
+        stream
+          ?.on("data", (chunk: Buffer) => chunks.push(chunk))
+          .once("end", () => resolve(Buffer.concat(chunks).toString()))
       })
 
     it.live(
       "streams a spawned child's output and reports its exit",
       Effect.gen(function* () {
-        const { child, closed } = yield* spawn("process.stdout.write('out');process.stderr.write('err');process.exit(3)")
-        const [stdout, stderr, [code, signal]] = yield* Effect.promise(() =>
-          Promise.all([text(child.stdout), text(child.stderr), closed]),
+        const { child, closed } = yield* spawn(
+          "process.stdout.write('out');process.stderr.write('err');process.exit(3)",
+        )
+        // Like ChildProcess.kill, there is nothing left to signal once the child has exited.
+        const killedAfterExit = new Promise<boolean>((resolve) => child.once("exit", () => resolve(child.kill())))
+        const [stdout, stderr, [code, signal], killed] = yield* Effect.promise(() =>
+          Promise.all([text(child.stdout), text(child.stderr), closed, killedAfterExit]),
         )
         expect(child.pid).toBeGreaterThan(0)
-        expect({ stdout, stderr, code, signal }).toEqual({ stdout: "out", stderr: "err", code: 3, signal: null })
+        expect({ stdout, stderr, code, signal, killed }).toEqual({
+          stdout: "out",
+          stderr: "err",
+          code: 3,
+          signal: null,
+          killed: false,
+        })
       }),
     )
 
@@ -506,6 +536,17 @@ describe("AppProcess", () => {
           expect(result.command).toBe(`${NODE} -e ${script}`)
           expect(result.stdout.toString("utf8")).toBe("hello")
           expect(result.stderr.toString("utf8")).toBe("01234")
+        }),
+      )
+
+      it.live(
+        "run reports exit code 1 of a shell-run command off the calling thread, not a missing command",
+        Effect.gen(function* () {
+          const svc = yield* AppProcess.Service
+          const result = yield* svc
+            .run(ChildProcess.make("exit 1", [], { shell: true, stdin: "ignore" }))
+            .pipe(offThread)
+          expect(result.exitCode).toBe(1)
         }),
       )
 

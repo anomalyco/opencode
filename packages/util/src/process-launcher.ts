@@ -24,9 +24,11 @@ const ACK = 256 * 1024
 // One launcher thread per process. Its messages are routed to callers by request ID.
 type Message = Reply | { readonly type: "lost"; readonly id: number }
 const handlers = new Map<number, (message: Message) => void>()
+const stopped = new WeakSet<Worker>()
 let next = 0
 let active = 0
 let started: Promise<Worker | undefined> | undefined
+let warned = false
 
 // Ref'd only while a child is running, so an idle launcher never holds the process open.
 const retain = (worker: Worker) => {
@@ -36,13 +38,23 @@ const release = (worker: Worker) => {
   if (--active === 0) worker.unref()
 }
 
-async function start(url?: URL) {
+// A caller can still hold a launcher that has stopped; it gets the same answer as callers that were in flight.
+const post = (worker: Worker, request: Request) => {
+  if (!stopped.has(worker)) return worker.postMessage(request)
+  queueMicrotask(() => handlers.get(request.id)?.({ type: "lost", id: request.id }))
+}
+
+async function start() {
   const { Worker } = await import("node:worker_threads")
-  const worker = new Worker(url ?? new URL("./process-launcher-worker.js", import.meta.url))
+  const worker = new Worker(new URL("./process-launcher-worker.js", import.meta.url))
   const ready = await new Promise<boolean>((resolve) => {
-    worker.once("message", () => resolve(true))
-    worker.once("error", () => resolve(false))
-    worker.once("exit", () => resolve(false))
+    const settle = (value: boolean) => () => {
+      worker.off("message", up).off("error", down).off("exit", down)
+      resolve(value)
+    }
+    const up = settle(true)
+    const down = settle(false)
+    worker.once("message", up).once("error", down).once("exit", down)
   })
   if (!ready) {
     void worker.terminate()
@@ -50,6 +62,8 @@ async function start(url?: URL) {
   }
   // Children in flight fail the way a child that could not start does; later launches run in-process.
   const lost = () => {
+    if (stopped.has(worker)) return
+    stopped.add(worker)
     started = Promise.resolve(undefined)
     Array.from(handlers).forEach(([id, handler]) => handler({ type: "lost", id }))
   }
@@ -63,9 +77,15 @@ async function start(url?: URL) {
 
 /**
  * The launcher thread, started on first use. `undefined` where it cannot start (no worker threads, or a bundle
- * without the worker entry), and from then on once it has stopped.
+ * without the worker entry), and from then on once it has stopped; callers then create the process themselves.
  */
-export const thread = (url?: URL) => Effect.promise(() => (started ??= start(url).catch(() => undefined)))
+export const thread = Effect.promise(() => (started ??= start().catch(() => undefined))).pipe(
+  Effect.tap((worker) => {
+    if (worker || warned) return Effect.void
+    warned = true
+    return Effect.logWarning("process launcher thread unavailable, creating processes on the calling thread")
+  }),
+)
 
 /**
  * Run one command to completion on the launcher thread. Interrupting the effect stops the child's process tree and
@@ -92,15 +112,15 @@ export const run = (worker: Worker, request: Omit<Run, "id" | "type">, label: st
       resume(Effect.succeed(result))
     })
     retain(worker)
-    worker.postMessage({ ...request, type: "run", id } satisfies Request)
-    return Effect.callback<void>((stopped) => {
-      if (!handlers.has(id)) return stopped(Effect.void)
+    post(worker, { ...request, type: "run", id })
+    return Effect.callback<void>((done) => {
+      if (!handlers.has(id)) return done(Effect.void)
       handlers.set(id, (message) => {
         if (!reply(message)) return
         finish()
-        stopped(Effect.void)
+        done(Effect.void)
       })
-      worker.postMessage({ type: "cancel", id } satisfies Request)
+      post(worker, { type: "cancel", id })
     })
   })
 
@@ -121,6 +141,7 @@ export class RemoteChild extends EventEmitter {
   readonly #ended = { 1: false, 2: false }
   readonly #kills: Array<(error?: Error) => void> = []
   #retained = true
+  #exited = false
   #closed = false
 
   constructor(worker: Worker, request: Omit<Spawn, "id" | "type">) {
@@ -135,7 +156,8 @@ export class RemoteChild extends EventEmitter {
   }
 
   kill(signal?: NodeJS.Signals) {
-    if (this.#closed) return false
+    // Like ChildProcess.kill, false once the child has exited, even while its pipes are still open.
+    if (this.#exited || this.#closed) return false
     this.#post({ type: "kill", id: this.#id, signal })
     return true
   }
@@ -160,7 +182,7 @@ export class RemoteChild extends EventEmitter {
   }
 
   #post(request: Request) {
-    this.#worker.postMessage(request)
+    post(this.#worker, request)
   }
 
   #output(fd: 1 | 2) {
@@ -227,6 +249,7 @@ export class RemoteChild extends EventEmitter {
       case "end":
         return this.#end(message.fd, message.error)
       case "exit":
+        this.#exited = true
         return void this.emit("exit", message.code, message.signal)
       case "close":
         return this.#close(message.code, message.signal)
@@ -242,14 +265,17 @@ export class RemoteChild extends EventEmitter {
         if (this.pid === undefined) this.#close(null, null)
         return
       }
-      case "lost":
-        this.emit("error", new Error("The process launcher thread stopped"))
-        return this.#close(null, null)
+      case "lost": {
+        const error = new Error("The process launcher thread stopped")
+        this.emit("error", error)
+        // What was read is incomplete, and nothing can report how the child ends: fail its output and its exit.
+        this.#end(1, error.message)
+        this.#end(2, error.message)
+        return this.#close(null, "SIGKILL")
+      }
     }
   }
 }
 
 /** Start a child with no input on the launcher thread. */
-export const spawn = (worker: Worker, request: Omit<Spawn, "id" | "type">) =>
-  // The spawner reads only the members RemoteChild implements.
-  new RemoteChild(worker, request) as unknown as ChildProcess
+export const spawn = (worker: Worker, request: Omit<Spawn, "id" | "type">) => new RemoteChild(worker, request)
