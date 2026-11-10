@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use opencode_ui::motion::{clamp, coast, intensity_at, smootherstep};
 use opentui::prelude::Color;
 
 const RUN_DURATION: f64 = 2_800.0;
@@ -28,30 +29,6 @@ pub const GLOW_TAIL: usize = 12;
 const GLOW_OPACITY: f64 = 0.16;
 /// The pulse ticks at 20 fps while it animates.
 pub const FRAME: Duration = Duration::from_millis(50);
-
-fn clamp(value: f64) -> f64 {
-    value.clamp(0.0, 1.0)
-}
-
-fn smootherstep(value: f64) -> f64 {
-    value * value * value * (value * (value * 6.0 - 15.0) + 10.0)
-}
-
-fn intensity_at(index: f64, front: f64, head: f64, tail: f64) -> f64 {
-    let distance = front - index;
-    if distance < 0.0 { smootherstep(clamp(1.0 + distance / head)) } else { smootherstep(clamp(1.0 - distance / tail)) }
-}
-
-fn coast(value: f64) -> f64 {
-    let ramp = 0.2;
-    if value < ramp {
-        return value * value / (2.0 * ramp * (1.0 - ramp));
-    }
-    if value > 1.0 - ramp {
-        return 1.0 - (1.0 - value) * (1.0 - value) / (2.0 * ramp * (1.0 - ramp));
-    }
-    (value - ramp / 2.0) / (1.0 - ramp)
-}
 
 fn fade_out(progress: f64) -> f64 {
     1.0 - smootherstep(progress)
