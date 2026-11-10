@@ -14,14 +14,13 @@ export default {
 
 export const Pending = {
   render: () => {
-    const statuses = ["delivered", "starting", "steering", "stranded", "queued"] as const
+    const statuses = ["delivered", "starting", "steering", "stranded", "queued", "sending"] as const
 
     const [state, setState] = createStore<{
       status: (typeof statuses)[number]
       voice: boolean
       text: boolean
       grouped: boolean
-      changed: boolean
       fails: boolean
       failures: number
     }>({
@@ -29,7 +28,6 @@ export const Pending = {
       voice: false,
       text: true,
       grouped: false,
-      changed: false,
       fails: false,
       failures: 0,
     })
@@ -40,12 +38,6 @@ export const Pending = {
       setState("failures", (count) => count + 1)
       throw new Error("Request failed")
     }
-
-    // The prompt before this one; a waiting steer names only the agent and model it changes.
-    const previousSelection = () => ({
-      agent: "build",
-      model: state.changed ? { ...STORY_MODEL, variant: "precise" } : STORY_MODEL,
-    })
 
     const message = createMemo<SessionMessageUser>(() => ({
       id: "msg_pending_prompt_story",
@@ -120,14 +112,6 @@ export const Pending = {
           <label>
             <input
               type="checkbox"
-              checked={state.changed}
-              onChange={(event) => setState("changed", event.currentTarget.checked)}
-            />{" "}
-            Changes model
-          </label>
-          <label>
-            <input
-              type="checkbox"
               checked={state.fails}
               onChange={(event) => setState("fails", event.currentTarget.checked)}
             />{" "}
@@ -143,7 +127,6 @@ export const Pending = {
               text="Keep the earlier prompt in the same run."
               agent="build"
               model={STORY_MODEL}
-              previousSelection={previousSelection()}
               actions={actions}
               run={{ above: false, below: true }}
             />
@@ -154,7 +137,6 @@ export const Pending = {
             text={message().text}
             agent="build"
             model={STORY_MODEL}
-            previousSelection={previousSelection()}
             voice={state.voice}
             actions={actions}
             run={{ above: state.grouped && state.text, below: false }}

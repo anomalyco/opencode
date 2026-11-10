@@ -1,7 +1,7 @@
 export * as Credential from "./credential.js"
 
 import { asc, desc, eq, type SQL } from "drizzle-orm"
-import { Cause, Context, Effect, Fiber, Layer, Schema } from "effect"
+import { Cause, Clock, Context, Duration, Effect, Fiber, Layer, Schema } from "effect"
 import { Credential } from "@opencode/schema/credential"
 import { CredentialLegacy } from "@opencode/schema/credential-legacy"
 import { Integration } from "@opencode/schema/integration"
@@ -29,6 +29,10 @@ export type Value = Credential.Value
 
 export const Event = Credential.Event
 
+/** Whether an access token is due for a refresh. `expires` 0 means the issuer gave no lifetime. */
+export const expiring = (value: OAuth, now: number) =>
+  value.expires !== 0 && value.expires <= now + Duration.toMillis(Duration.minutes(5))
+
 export class Info extends Schema.Class<Info>("Credential.Info")({
   id: ID,
   integrationID: Integration.ID,
@@ -43,10 +47,19 @@ export interface Interface {
   readonly list: (integrationID: Integration.ID) => Effect.Effect<Info[]>
   /** Returns one stored credential by ID. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
-  /** Concurrent callers for the same credential share the running operation's result, including failures. */
-  readonly lock: (
+  /**
+   * Refreshes a stored OAuth credential and saves the result. Every process and Location sharing the database
+   * refreshes a credential one at a time, and concurrent callers share the running refresh, including its
+   * failure. The row is read again under the lock: if `stale` is false, another caller already refreshed it and
+   * that row is returned. If the row changes while `refresh` runs, the stored row wins. Resolves undefined when
+   * the credential is gone.
+   */
+  readonly refresh: (
     id: ID,
-    operation: Effect.Effect<OAuth | undefined, unknown>,
+    input: {
+      readonly stale: (current: OAuth, now: number) => boolean
+      readonly refresh: (current: OAuth) => Effect.Effect<OAuth, unknown>
+    },
   ) => Effect.Effect<OAuth | undefined, unknown>
   /**
    * Creates a credential for an integration and returns the new record. The new credential becomes the
@@ -126,21 +139,46 @@ const layer = Layer.effect(
           Effect.orDie,
         )
 
-    return Service.of({
-      lock: Effect.fn("Credential.lock")((id, operation) =>
-        Effect.uninterruptibleMask((restore) =>
+    const lock = (id: ID, operation: Effect.Effect<OAuth | undefined, unknown>) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const current = pending.get(id)
+          if (current) return yield* restore(Fiber.join(current))
+          // The global scope owns the operation, not the first Session or Location waiting for it.
+          // The file lock extends this to other processes sharing the database.
+          const fiber = yield* operation.pipe(
+            flock.withLock(`credential-refresh:${id}`),
+            Effect.ensuring(Effect.sync(() => pending.delete(id))),
+            Effect.forkIn(scope),
+          )
+          pending.set(id, fiber)
+          return yield* restore(Fiber.join(fiber))
+        }),
+      )
+
+    const service: Interface = Service.of({
+      refresh: Effect.fn("Credential.refresh")((id, input) =>
+        lock(
+          id,
           Effect.gen(function* () {
-            const current = pending.get(id)
-            if (current) return yield* restore(Fiber.join(current))
-            // The global scope owns the operation, not the first Session or Location waiting for it.
-            // The file lock extends this to other processes sharing the database.
-            const fiber = yield* operation.pipe(
-              flock.withLock(`credential-refresh:${id}`),
-              Effect.ensuring(Effect.sync(() => pending.delete(id))),
-              Effect.forkIn(scope),
-            )
-            pending.set(id, fiber)
-            return yield* restore(Fiber.join(fiber))
+            const current = yield* service.get(id)
+            if (current?.value.type !== "oauth") return undefined
+            if (!input.stale(current.value, yield* Clock.currentTimeMillis)) {
+              yield* Effect.logInfo("credential refresh skipped", { credentialID: id, reason: "already_refreshed" })
+              return current.value
+            }
+            const value = yield* input.refresh(current.value).pipe(Effect.timeout("30 seconds"))
+            const latest = yield* service.get(id)
+            if (latest?.value.type !== "oauth") return undefined
+            if (latest.value.access !== current.value.access || latest.value.refresh !== current.value.refresh) {
+              yield* Effect.logWarning("credential refresh discarded", {
+                credentialID: id,
+                reason: "changed_meanwhile",
+              })
+              return latest.value
+            }
+            yield* service.update(id, { value })
+            return value
           }),
         ),
       ),
@@ -191,7 +229,11 @@ const layer = Layer.effect(
           type: credential.value.type,
           active: activated,
         })
-        yield* bus.publish(Event.Updated, {}, { global: true })
+        yield* bus.publish(
+          Event.Updated,
+          { integrationID: credential.integrationID, credentialID: credential.id },
+          { global: true },
+        )
         if (activated)
           yield* bus.publish(
             Event.Switched,
@@ -249,7 +291,11 @@ const layer = Layer.effect(
           labelChanged: updates.label !== undefined && updates.label !== credential.label,
         })
         if (updates.label !== undefined && updates.label !== credential.label)
-          yield* bus.publish(Event.Updated, {}, { global: true })
+          yield* bus.publish(
+            Event.Updated,
+            { integrationID: credential.integrationID, credentialID: id },
+            { global: true },
+          )
       }),
       remove: Effect.fn("Credential.remove")(function* (id) {
         const removed = yield* db
@@ -283,7 +329,12 @@ const layer = Layer.effect(
           active: removed.switched,
           ...(removed.switched ? { replacementID: removed.credentialID } : {}),
         })
-        yield* bus.publish(Event.Updated, {}, { global: true })
+        if (removed.integrationID)
+          yield* bus.publish(
+            Event.Updated,
+            { integrationID: removed.integrationID, credentialID: id },
+            { global: true },
+          )
         if (removed.switched)
           yield* bus.publish(
             Event.Switched,
@@ -292,6 +343,7 @@ const layer = Layer.effect(
           )
       }),
     })
+    return service
   }),
 )
 

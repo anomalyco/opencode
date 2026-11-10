@@ -334,10 +334,11 @@ for (const [tabLayout, direction, label] of [
     await tabB.click({ button: "right" })
     await expect(menu.getByRole("menuitem")).toHaveText([
       "Rename",
+      "Export…",
       "Close tab",
       "Close other tabs",
       label,
-      "Delete session…",
+      "Delete…",
     ])
     await menu.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
     await expect(titles).toHaveText([b.title])
@@ -396,6 +397,36 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
   })
 }
 
+test("a tab whose overlapping renames both fail shows its saved title again", async ({ page }) => {
+  await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
+  await page.goto(sessionHref(a.id))
+  const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
+  const editor = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
+  await expect(title).toHaveText(a.title)
+  const released = Promise.withResolvers<void>()
+  const saves: string[] = []
+  await page.route(new RegExp(`/api/session/${a.id}(\\?|$)`), async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback()
+    saves.push(route.request().postDataJSON().title)
+    await released.promise
+    await route.fulfill({ status: 500, json: { message: "Rename failed" } })
+  })
+
+  for (const name of ["First name", "Second name"]) {
+    await title.dblclick()
+    await expect(editor).toBeFocused()
+    await editor.fill(name)
+    await editor.press("Enter")
+    await expect(title).toHaveText(name)
+  }
+
+  await expect.poll(() => saves).toEqual(["First name", "Second name"])
+  released.resolve()
+  // The rollback restores the title the server holds, never the first rename that was never saved.
+  await expect(title).toHaveText(a.title)
+  await expect(page.locator('[data-testid^="toast-v2-"]').filter({ hasText: "Request failed" })).toHaveCount(1)
+})
+
 for (const tabLayout of ["horizontal", "vertical"] as const) {
   test(`a ${tabLayout} tab deletes its session after confirmation`, async ({ page }) => {
     await mockWorkspace(page, { name: "Tabs", sessions: [a, b], seed: { settings: { appearance: { tabLayout } } } })
@@ -409,7 +440,7 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
     await expect(title).toHaveText(a.title)
 
     await title.click({ button: "right" })
-    await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
 
     const dialog = page.getByRole("dialog")
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
@@ -417,7 +448,7 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
     await expect(title).toHaveText(a.title)
 
     await title.click({ button: "right" })
-    await page.getByRole("menuitem", { name: "Delete session…", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
     await dialog.getByRole("button", { name: "Delete session", exact: true }).click()
     await remove
     await expect(title).toHaveCount(0)
@@ -624,6 +655,76 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
   await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
 })
 
+test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page }) => {
+  const time = { created: T0, updated: T0, idle: T0 + 1 }
+
+  await mockWorkspace(page, {
+    name: "FailedTabs",
+    sessions: [a, { ...b, outcome: "failed", time }, { ...c, outcome: "succeeded", time }],
+  })
+  await page.goto(sessionHref(a.id))
+  const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  await expect(tab(b.id).locator('[data-mark="failed"]')).toBeVisible()
+  await expect(tab(b.id).locator('[data-mark="unread"]')).toBeHidden()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(tab(c.id).locator('[data-mark="failed"]')).toBeHidden()
+
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as read", exact: true }).click()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
+    "Rename",
+    "Export…",
+    "Mark as unread",
+    "Close tab",
+    "Close other tabs",
+    "Close tabs to the right",
+    "Delete…",
+  ])
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(c.id))
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await page.mouse.move(0, 0)
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(tab(c.id).locator('[data-slot="tab-status"]')).toHaveCSS("opacity", "1")
+  await tab(a.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(a.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await tab(c.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(c.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await tab(a.id).locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(a.id))
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+})
+
+test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {
+  // Playwright emulates focus for each page, so model a background window explicitly.
+  await page.addInitScript(() => {
+    document.hasFocus = () => false
+  })
+  await mockWorkspace(page, {
+    name: "BackgroundUnread",
+    sessions: [a, { ...c, time: { created: T0, updated: T0, idle: T0, viewed: T0 } }],
+    seed: { storage: { "opencode.global.dat:notification.manual-unread": { sessions: [c.id] } } },
+  })
+  await page.goto(sessionHref(c.id))
+  await expectSessionTitle(page, c.title)
+  const tab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(c.id)}"])`)
+
+  await expect(tab.locator('[data-mark="unread"]')).toBeVisible()
+  await page.evaluate(() => {
+    document.hasFocus = Document.prototype.hasFocus.bind(document)
+    window.dispatchEvent(new Event("focus"))
+  })
+  await expect(tab.locator('[data-mark="unread"]')).toBeHidden()
+})
+
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
   const directory = "C:/OpenCode/Tabs"
@@ -808,6 +909,47 @@ for (const [screen, href] of [
   })
 }
 
+test("the collapsed sidebar peeks from a resting toggle, Escape cancels a pending peek, and a click docks it", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "Tabs",
+    sessions: [a],
+    seed: { settings: { appearance: { tabLayout: "vertical", sidebarOpen: false } } },
+  })
+  await page.goto(sessionHref(a.id))
+
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+
+  const toggle = page
+    .locator('[data-slot="collapsed-sidebar-toggle"]')
+    .getByRole("button", { name: "Toggle sidebar", exact: true })
+
+  await expect(sidebar).toHaveAttribute("data-state", "closed")
+  await expect(toggle).toBeVisible()
+  // See "tab preview opens cold": pause at a fixed offset from an explicit install time.
+  const start = Date.now()
+  await page.clock.install({ time: start })
+  await page.clock.pauseAt(start + 10_000)
+
+  // The toggle's 500ms dwell, cut short by Escape, never peeks.
+  await toggle.hover()
+  await page.keyboard.press("Escape")
+  await page.clock.runFor(600)
+  await expect(sidebar).not.toHaveAttribute("data-peek")
+
+  await page.mouse.move(600, 400)
+  await toggle.hover()
+  await page.clock.runFor(600)
+  await expect(sidebar).toHaveAttribute("data-peek", "")
+
+  // Docking from the peek hands the sidebar over, and the peek ends once the dock lands.
+  await toggle.click()
+  await page.clock.runFor(2000)
+  await expect(sidebar).toHaveAttribute("data-state", "open")
+  await expect(sidebar).not.toHaveAttribute("data-peek")
+})
+
 test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",
@@ -989,6 +1131,10 @@ test("a remote tab stays busy while a child session runs", async ({ page }) => {
 test("inactive tabs stay busy while work waits in their inbox, and pulse on a new prompt, as in the TUI", async ({
   page,
 }) => {
+  // An inactive tab reads its inbox after a delay. The mock's inbox never gains pushed items, so a prompt pushed
+  // before that read starts would be replaced by the older snapshot.
+  const inboxC = page.waitForResponse(new RegExp(`/api/session/${c.id}/inbox(\\?|$)`))
+
   const workspace = await openSession(page, {
     name: "TabInbox",
     sessions: [a, b, c],
@@ -1017,6 +1163,7 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   const progress = '[data-component="activity-ring"]'
 
   await expect(tab(b.id).locator(progress)).toBeVisible()
+  await inboxC
   await expect(tab(c.id).locator("[data-titlebar-tab-title]")).toHaveText(c.title)
   await expect(tab(c.id).locator(progress)).toBeHidden()
   await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
@@ -1399,11 +1546,77 @@ test("tab shortcuts cycle side-panel tabs when the side panel is focused with mu
 })
 
 test("⌘W past the side panel's last tab keeps the session tab", async ({ page }) => {
-  const sessions = await emptySidePanel(page)
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
   await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.resume()
 
   // From the composer ⌘W closes the session tab, so only a swallowed press above leaves Beta to land on.
   await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
+test("⌘W past the side panel's last tab closes the session tab once ⌘W has rested", async ({ page }) => {
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
+
+  // Each ⌘W within the rest is swallowed and restarts it, so the third lands 800ms after the panel closed.
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.runFor(400)
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.runFor(400)
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(sessions.alphaTab).toHaveCount(1)
+
+  await page.clock.runFor(600)
+  await page.clock.resume()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
+test("⌘⇧T brings back a side tab and opens the side panel it closed with", async ({ page }) => {
+  await emptySidePanel(page)
+  const panel = page.locator("#review-panel")
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(panel).toHaveAttribute("aria-hidden", "false")
+  await expect(panel.getByRole("tab", { selected: true })).toHaveCount(1)
+})
+
+test("⌘W past the side panel's last tab keeps the session tab when focus leaves the panel just after", async ({
+  page,
+}) => {
+  // Stands in for a panel that hands focus back after its close rather than during it.
+  await page.addInitScript(() => {
+    const observer = new MutationObserver((records) => {
+      const hidden = records.some(
+        (record) =>
+          record.target instanceof Element &&
+          record.target.id === "review-panel" &&
+          record.target.getAttribute("aria-hidden") === "true",
+      )
+
+      if (!hidden) return
+      observer.disconnect()
+      document.querySelector<HTMLElement>('[data-component="composer-editor"]')?.focus()
+    })
+
+    observer.observe(document, { subtree: true, attributes: true, attributeFilter: ["aria-hidden"] })
+  })
+
+  await page.clock.install()
+  const sessions = await emptySidePanel(page, () => holdClock(page))
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  await expect(composer).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+w")
+  await page.clock.resume()
+
+  // Only a swallowed press above leaves Beta for this one to land on.
+  await composer.click()
   await page.keyboard.press("ControlOrMeta+w")
   await expectPath(page, sessionHref(sessions.beta.id))
   await expect(sessions.alphaTab).toHaveCount(0)
@@ -1420,6 +1633,7 @@ test("⌘W closes the session tab again once the window loses focus after the si
 
 test("⌘W in the side panel closes its last New tab with the panel, and only then the session tab", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
+  await page.clock.install()
   const alpha = { id: "ses_side_new_alpha", title: "Side new alpha" }
   const beta = { id: "ses_side_new_beta", title: "Side new beta" }
   await openSession(page, { name: "SideCloseNewTab", sessions: [alpha, beta] })
@@ -1438,6 +1652,7 @@ test("⌘W in the side panel closes its last New tab with the panel, and only th
   await panel.getByRole("button", { name: /^Open file/ }).focus()
 
   // The New tab was the panel's last tab, so closing it closes the panel too, and focus goes back.
+  await holdClock(page)
   await page.keyboard.press("ControlOrMeta+w")
   await expect(newTab).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
@@ -1446,6 +1661,7 @@ test("⌘W in the side panel closes its last New tab with the panel, and only th
   // One press too many closes nothing rather than the session.
   await page.keyboard.press("ControlOrMeta+w")
   await expect(alphaTab).toHaveCount(1)
+  await page.clock.resume()
   await expectPath(page, sessionHref(alpha.id))
 
   // With no panel open, ⌘W from the composer closes the session tab.
@@ -1598,8 +1814,64 @@ test("⌘W in a focused Context tab closes it, then the panel, and keeps the ses
   await expectPath(page, sessionHref(alpha.id))
 })
 
+test("with the side panel open, ⌘W closes its tabs from anywhere, ⌥⌘W the session tab, and ⌘⇧T undoes them newest first", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/SideCloseAnywhere"
+  const alpha = { id: "ses_side_anywhere_alpha", title: "Side anywhere alpha" }
+  const beta = { id: "ses_side_anywhere_beta", title: "Side anywhere beta" }
+  await openSession(page, {
+    name: "SideCloseAnywhere",
+    sessions: [alpha, beta],
+    fileList: (path) => (path ? [] : ["README.md"].map((file) => fileNode(directory, file))),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { [alpha.id]: { review: true }, [beta.id]: { review: true } },
+      storage: reviewTabs(directory, alpha.id),
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const fileTab = panel.getByRole("tab", { name: "README.md", exact: true })
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  const sessionTab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  // ⌥⌘W closes Beta's session tab although its side panel holds a tab that ⌘W would close.
+  await sessionTab(beta.id).locator("a").click()
+  await expectPath(page, sessionHref(beta.id))
+  await expect(panel.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+Alt+w")
+  await expect(sessionTab(beta.id)).toHaveCount(0)
+  await expectPath(page, sessionHref(alpha.id))
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "README.md", exact: true }).click()
+  await expect(fileTab).toHaveAttribute("aria-selected", "true")
+
+  // From the composer, ⌘W closes the side tab, not the session tab.
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(fileTab).toHaveCount(0)
+  await expect(sessionTab(alpha.id)).toHaveCount(1)
+  await expectPath(page, sessionHref(alpha.id))
+
+  // The side tab closed after Beta, so it comes back first, then Beta.
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(fileTab).toHaveAttribute("aria-selected", "true")
+  await expect(sessionTab(beta.id)).toHaveCount(0)
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(sessionTab(beta.id)).toHaveCount(1)
+  await expectPath(page, sessionHref(beta.id))
+})
+
+// Stops the clock `page.clock.install()` set up, so the ⌘W guard's rest after the panel empties only moves when the
+// test moves it, however slow the runner.
+const holdClock = (page: Page) => page.evaluate(() => Date.now()).then((now) => page.clock.pauseAt(now + 1_000))
+
 // Closes Alpha's side tabs with ⌘W until the side panel empties and collapses, as an overshooting hand would.
-async function emptySidePanel(page: Page) {
+async function emptySidePanel(page: Page, beforeLastClose?: () => Promise<void>) {
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/SideCloseOvershoot"
   const alpha = { id: "ses_side_close_alpha", title: "Side close alpha" }
@@ -1626,6 +1898,7 @@ async function emptySidePanel(page: Page) {
   await page.keyboard.press("ControlOrMeta+w")
   await expect(fileTab).toHaveCount(0)
   await expect(reviewTab).toHaveAttribute("aria-selected", "true")
+  await beforeLastClose?.()
   await page.keyboard.press("ControlOrMeta+w")
   await expect(panel).toHaveAttribute("aria-hidden", "true")
 
@@ -1639,7 +1912,7 @@ test("opening a session from the inbox keeps the list's scroll position and rows
     id: `ses_inbox_${String(index).padStart(2, "0")}`,
     title: `Inbox session ${index}`,
     directory: index === 14 ? "C:/OpenCode/Inbox/worktrees/unopened" : "C:/OpenCode/Inbox",
-    time: { created: T0, updated: T0 + 100 - index, idle: T0 + index },
+    time: { created: T0, updated: T0 + 100 - index, idle: T0 + index, viewed: T0 + 100 },
   }))
 
   await mockWorkspace(page, {
@@ -1676,6 +1949,39 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   expect(await target.evaluate((element, before) => element === before, row)).toBe(true)
   expect(await list.evaluate((element) => element.scrollTop)).toBe(offset)
+})
+
+test("renaming an inbox card updates the same session on Home", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "RenameInbox",
+    sessions: [
+      { id: "ses_rename_inbox", title: "Original inbox title" },
+      { id: "ses_rename_kept", title: "Unchanged title" },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const home = page.locator('[data-component="home-session-row-container"][data-session-id="ses_rename_inbox"]')
+
+  await expect(home).toContainText("Original inbox title")
+  await inbox
+    .locator('[data-slot="sidebar-inbox-item"]')
+    .filter({ hasText: "Original inbox title" })
+    .click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+
+  await dialog.getByRole("textbox").fill("Renamed inbox title")
+  await dialog.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(dialog).toBeHidden()
+  await expect(
+    inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: "Renamed inbox title" }),
+  ).toHaveCount(1)
+  await expect(inbox.getByText("Original inbox title", { exact: true })).toHaveCount(0)
+  await expect(inbox.getByText("Unchanged title", { exact: true })).toBeVisible()
+  await expect(home).toContainText("Renamed inbox title")
 })
 
 test("the inbox Archived dialog searches only archived sessions and restores the selected session", async ({
@@ -1726,12 +2032,67 @@ test("the inbox Archived dialog searches only archived sessions and restores the
   await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
   await search.fill("First archived")
   await expect(dialog.getByRole("option")).toHaveCount(1)
-  await expect(dialog.getByRole("option", { name: /First archived session/ })).toHaveAttribute("aria-selected", "true")
+  const option = dialog.getByRole("option", { name: /First archived session/ })
+  await expect(option).toHaveAttribute("aria-selected", "true")
+
+  // A second Enter while the restore is in flight restores and opens the session once.
+  const restore = await holdRoute(page, /\/api\/session\/ses_archive_0(\?|$)/, { method: "PATCH" })
   await search.press("Enter")
+  await restore.arrived
+  await expect(option).toHaveAttribute("aria-busy", "true")
+  await expect(option.getByRole("img", { name: "Loading", exact: true })).toBeVisible()
+  await search.press("Enter")
+  await expect(dialog).toBeVisible()
+  restore.release()
   await expect(dialog).toHaveCount(0)
+  expect(restore.requests).toHaveLength(1)
   await expectPath(page, sessionHref("ses_archive_0"))
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   await expect(rows.filter({ hasText: "First archived session" })).toHaveAttribute("data-state", "active")
+})
+
+test("deleting from the inbox closes its dialog at once and a slow delete leaves the next dialog open", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "DeleteInbox",
+    sessions: [
+      { id: "ses_delete_kept", title: "Kept inbox session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_delete_target",
+        title: "Deleted inbox session",
+        time: { created: T0, updated: T0 + 1, idle: T0 + 1, viewed: T0 + 1 },
+      },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  const remove = await holdRoute(page, /\/api\/session\/ses_delete_target(\?|$)/, { method: "DELETE" })
+  await page.goto("/")
+
+  const rows = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+  await expect(rows).toHaveCount(2)
+  await rows.filter({ hasText: "Deleted inbox session" }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
+
+  const confirm = page.getByRole("dialog", { name: "Delete session" })
+  await confirm.getByRole("button", { name: "Delete session", exact: true }).click()
+  await remove.arrived
+  await expect(confirm).toHaveCount(0)
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText("Kept inbox session")
+
+  await page.getByRole("button", { name: "Search sessions", exact: true }).click()
+  const search = page.getByRole("dialog")
+  await expect(search.getByRole("combobox")).toBeFocused()
+
+  const removed = page.waitForResponse(
+    (response) => response.request().method() === "DELETE" && response.url().includes("/api/session/ses_delete_target"),
+  )
+
+  remove.release()
+  await removed
+  await expect(search.getByRole("combobox")).toBeFocused()
+  expect(remove.requests).toHaveLength(1)
 })
 
 test("opening a working session expands its shelf and still allows manual collapse", async ({ page }) => {
@@ -1774,13 +2135,21 @@ test("sessions opened from Home and Search get a temporary Current session row w
   await mockWorkspace(page, {
     name: "CurrentInbox",
     sessions: [
-      { id: "ses_current_home", title: "Older Home session", time: { created: T0, updated: T0, idle: T0 } },
-      { id: "ses_current_search", title: "Older Search session", time: { created: T0, updated: T0, idle: T0 } },
-      { id: "ses_current_recent", title: "Recent inbox session", time: { created: T0, updated: T0 + 2, idle: T0 + 2 } },
+      { id: "ses_current_home", title: "Older Home session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_current_search",
+        title: "Older Search session",
+        time: { created: T0, updated: T0, idle: T0, viewed: T0 },
+      },
+      {
+        id: "ses_current_recent",
+        title: "Recent inbox session",
+        time: { created: T0, updated: T0 + 2, idle: T0 + 2, viewed: T0 + 2 },
+      },
       ...Array.from({ length: 9 }, (_, index) => ({
         id: `ses_current_extra_${index}`,
         title: `Other recent session ${index}`,
-        time: { created: T0, updated: T0 + 3 + index, idle: T0 + 3 + index },
+        time: { created: T0, updated: T0 + 3 + index, idle: T0 + 3 + index, viewed: T0 + 3 + index },
       })),
     ],
     seed: {
@@ -1823,3 +2192,230 @@ test("sessions opened from Home and Search get a temporary Current session row w
   await expectPath(page, "/")
   await expect(rows).toHaveCount(10)
 })
+
+test("the inbox keeps every unread result separate from expandable Recent, including never-run sessions", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "InboxSections",
+    sessions: [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_unread_${index}`,
+        title: `Unread result ${index}`,
+        outcome: index === 0 ? "failed" : "succeeded",
+        time: { created: T0, updated: T0 + index, idle: T0 + index },
+      })),
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_read_${index}`,
+        title: index === 0 ? "Never-run session" : `Read session ${index}`,
+        time: { created: T0, updated: T0 + 100 - index, idle: index ? T0 + 100 - index : undefined, viewed: T0 + 200 },
+      })),
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const unread = inbox.getByRole("group", { name: "Unread", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(unread).toContainText(Array.from({ length: 12 }, (_, index) => `Unread result ${11 - index}`))
+  await expect(unread.filter({ hasText: "Unread result 0" })).toHaveAttribute("data-status", "failed")
+  await expect(recent).toContainText([
+    "Never-run session",
+    ...Array.from({ length: 9 }, (_, index) => `Read session ${index + 1}`),
+  ])
+  await expect(recent).toHaveCount(10)
+  await expect(inbox.locator('[data-slot="sidebar-inbox-item"][tabindex="0"]')).toHaveCount(1)
+
+  await unread.filter({ hasText: "Unread result 11" }).focus()
+  await page.keyboard.press("ArrowDown")
+  await expect(unread.filter({ hasText: "Unread result 10" })).toBeFocused()
+  await page.keyboard.press("End")
+  await expect(recent.filter({ hasText: "Read session 9" })).toBeFocused()
+  await page.keyboard.press("Home")
+  await expect(unread.filter({ hasText: "Unread result 11" })).toBeFocused()
+
+  await inbox.getByRole("button", { name: "Show more", exact: true }).click()
+  await expect(recent).toHaveCount(12)
+  await expect(recent.filter({ hasText: "Read session 11" })).toHaveCount(1)
+  await expect(unread).toHaveCount(12)
+  await page.reload()
+  await expect(recent).toHaveCount(12)
+  await inbox.getByRole("button", { name: "Show less", exact: true }).click()
+  await expect(recent).toHaveCount(10)
+  await expect(unread).toHaveCount(12)
+
+  const marked = page.getByText("Read session 1", { exact: true })
+
+  await recent.filter({ has: marked }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
+  await expect(unread.filter({ has: marked })).toHaveCount(1)
+  await expect(recent.filter({ has: marked })).toHaveCount(0)
+  await unread.filter({ has: marked }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Mark as read", exact: true }).click()
+  await expect(recent.filter({ has: marked })).toHaveCount(1)
+  await expect(unread.filter({ has: marked })).toHaveCount(0)
+})
+
+test("the inbox waits for initial requests and orders attention by waiting age rather than last update", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 10 * 60_000 })
+
+  const workspace = await mockWorkspace(page, {
+    name: "InboxWaiting",
+    sessions: [
+      {
+        id: "ses_waiting_old",
+        title: "Oldest waiting session",
+        time: { created: T0, updated: T0 + 60_000, busy: T0 },
+      },
+      {
+        id: "ses_waiting_new",
+        title: "Newer waiting session",
+        time: { created: T0, updated: T0 + 9 * 60_000, busy: T0 + 5 * 60_000 },
+      },
+      {
+        id: "ses_waiting_live",
+        title: "New live question",
+        time: { created: T0, updated: T0 + 2 * 60_000, busy: T0 + 60_000 },
+      },
+    ],
+    sessionStatus: {
+      ses_waiting_old: { type: "running" },
+      ses_waiting_new: { type: "running" },
+      ses_waiting_live: { type: "running" },
+    },
+    sessionPermissions: {
+      ses_waiting_old: [{ id: "perm_inbox_old", sessionID: "ses_waiting_old", action: "shell", resources: ["build"] }],
+      ses_waiting_new: [{ id: "perm_inbox_new", sessionID: "ses_waiting_new", action: "shell", resources: ["test"] }],
+    },
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+
+  const pending = await holdRoute(page, /\/api\/session\/ses_waiting_old\/permission(?:\?|$)/)
+  // Running sessions join Working only once this snapshot loads, which can be after the inbox shows; runs it reveals
+  // had already started, so they are not announced.
+  const running = await holdRoute(page, /\/api\/session\/active(?:\?|$)/)
+
+  await page.goto("/")
+  await Promise.all([pending.arrived, running.arrived])
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  await expect(inbox).toHaveAttribute("aria-busy", "true")
+  await expect(inbox.getByText("Sessions you work on will appear here", { exact: true })).toHaveCount(0)
+  const checked = page.waitForResponse(/\/api\/session\/ses_waiting_old\/permission(?:\?|$)/)
+  pending.release()
+  await checked
+  running.release()
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(needs).toContainText(["Oldest waiting session", "Newer waiting session"])
+  await expect(inbox).toHaveAttribute("aria-busy", "false")
+  await expect(inbox.getByRole("status")).toBeEmpty()
+  workspace.push([
+    {
+      id: "evt_inbox_question",
+      type: "form.created",
+      created: T0 + 8 * 60_000,
+      location: { directory: workspace.directory },
+      data: {
+        form: {
+          id: "form_inbox_question",
+          sessionID: "ses_waiting_live",
+          title: "Choose a library",
+          metadata: { kind: "question" },
+          fields: [{ key: "library", type: "string", title: "Library" }],
+        },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "form.created" }>,
+  ])
+  await expect(needs).toContainText(["Oldest waiting session", "Newer waiting session", "New live question"])
+  await expect(needs.filter({ hasText: "New live question" })).toContainText("2m")
+  await expect(inbox.getByRole("status")).toHaveText("New live question has a question.")
+  await expect(inbox.getByRole("status")).toHaveCount(1)
+})
+
+test("an inactive tab shows attention once auto-accept gives up on its permission", async ({ page }) => {
+  const reply = await mockGaveUpPermission(page, "horizontal")
+  await page.goto(sessionHref(a.id))
+  const tab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  const dot = tab.locator('[data-mark="attention"]')
+
+  // The first reply proves the client holds the request; auto-accept still owns it, so the tab only shows work.
+  await reply.arrived
+  await expect(tab.locator('[data-mark="busy"]')).toBeVisible()
+  await expect(dot).toBeHidden()
+
+  reply.release()
+  await expect(dot).toBeVisible()
+  await expect(tab.locator('[data-mark="busy"]')).toBeHidden()
+  expect(reply.attempts()).toBe(3)
+})
+
+test("the inbox moves a session to Needs attention once auto-accept gives up on its permission", async ({ page }) => {
+  const reply = await mockGaveUpPermission(page, "inbox")
+  await page.goto(sessionHref(a.id))
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const row = inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: b.title })
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  await reply.arrived
+  await expect(row).toHaveAttribute("data-status", "working")
+  await expect(needs).toHaveCount(0)
+
+  reply.release()
+  await expect(needs).toHaveCount(1)
+  await expect(needs).toContainText(b.title)
+  await expect(needs).toHaveAttribute("data-status", "approval")
+  expect(reply.attempts()).toBe(3)
+})
+
+// Auto-accept is on and every reply to session B's permission fails. The first reply waits for `release()`; then it
+// and both retries fail, and auto-accept gives up.
+async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox") {
+  const permissionID = "permission-gave-up"
+  const released = Promise.withResolvers<void>()
+  const arrived = Promise.withResolvers<void>()
+  const attempts = { count: 0 }
+
+  await mockWorkspace(page, {
+    name: "GaveUp",
+    sessions: [a, b],
+    sessionPermissions: {
+      [b.id]: [
+        { id: permissionID, sessionID: b.id, action: "shell", resources: ["git status"], metadata: {}, save: [] },
+      ],
+    },
+    seed: {
+      settings: { appearance: { tabLayout }, permissions: { autoApprove: true } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.route(new RegExp(`/api/session/${b.id}/permission/${permissionID}/reply(\\?|$)`), async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    attempts.count++
+    arrived.resolve()
+
+    if (attempts.count === 1) await released.promise
+    await route.fulfill({ status: 500, json: { message: "Reply failed" } })
+  })
+
+  return {
+    arrived: arrived.promise,
+    release: () => released.resolve(),
+    attempts: () => attempts.count,
+  }
+}

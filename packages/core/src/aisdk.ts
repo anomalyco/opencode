@@ -389,7 +389,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       prepare: (input) => Effect.succeed(input.body),
       execute: () => Effect.succeed({ frames: Stream.empty }),
     },
-    defaults: {
+    options: {
       headers: info.headers,
       http: projected.body === undefined ? undefined : { body: { ...projected.body } },
       providerOptions: projected.settings,
@@ -438,7 +438,6 @@ function providerOptionKey(packageName: string | undefined, providerID: Provider
   if (packageName === "@ai-sdk/amazon-bedrock") return "bedrock"
   if (packageName === "@ai-sdk/amazon-bedrock/mantle") return "openai"
   if (packageName === "@ai-sdk/azure") return "azure"
-  if (packageName === "@ai-sdk/github-copilot") return "copilot"
   if (packageName === "@jerome-benoit/sap-ai-provider-v2") return "sap-ai"
   if (packageName === "@ai-sdk/openai-compatible") return providerID.split(".")[0]
   if (packageName === "@openrouter/ai-sdk-provider") return "openrouter"
@@ -485,14 +484,14 @@ function callOptions(
   const flattened = ProviderShared.flattenToolRequest(request)
   return {
     prompt: prompt(flattened.request),
-    maxOutputTokens: request.generation?.maxTokens,
-    temperature: request.generation?.temperature,
-    stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
-    topP: request.generation?.topP,
-    topK: request.generation?.topK,
-    presencePenalty: request.generation?.presencePenalty,
-    frequencyPenalty: request.generation?.frequencyPenalty,
-    seed: request.generation?.seed,
+    maxOutputTokens: request.maxTokens,
+    temperature: request.temperature,
+    stopSequences: request.stop === undefined ? undefined : [...request.stop],
+    topP: request.topP,
+    topK: request.topK,
+    presencePenalty: request.presencePenalty,
+    frequencyPenalty: request.frequencyPenalty,
+    seed: request.seed,
     tools: flattened.tools.map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.headers,
@@ -934,7 +933,8 @@ function llmError(error: unknown, operation: "request" | "read") {
 const errorValue = (error: unknown) => (isRecord(error) ? error.value : undefined)
 
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
-// Bun network error list in handleFetchError; the messages are undici's fetch
+// Bun network error list in handleFetchError, plus the unreachable-host codes that list leaves out and
+// ModelRetry gives a longer budget; the messages are undici's fetch
 // TypeError and stream termination strings plus our header and chunk timeout errors.
 // Unrecognized shapes still retry via the UnknownProvider default; this match
 // only adds transport semantics (continuation eligibility, display).
@@ -943,6 +943,11 @@ const NETWORK_ERROR_CODES = new Set([
   "ECONNREFUSED",
   "ETIMEDOUT",
   "EPIPE",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "ENETDOWN",
   "ConnectionRefused",
   "ConnectionClosed",
   "FailedToOpenSocket",
@@ -989,6 +994,8 @@ function apiCallError(error: APICallError) {
     cause: error,
   })
   if (error.statusCode !== undefined || !error.isRetryable) return failure
+  // "Cannot connect to API" wraps the runtime's error; keep its code so retry and display can tell why.
+  const code = networkFailure(error.cause)?.code
   return new AIError({
     reason: new TransportError({
       message: failure.message,
@@ -998,6 +1005,7 @@ function apiCallError(error: APICallError) {
       transport: "http",
       operation: "request",
       url: error.url,
+      ...(code === undefined ? {} : { code }),
     }),
   })
 }

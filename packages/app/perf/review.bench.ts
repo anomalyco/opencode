@@ -4,17 +4,24 @@ import { bench, web } from "@hona/strobe"
 import { scalingDiffs, scalingRows } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { openReview, review } from "./fixtures/review"
+import { keepStartStorage, saveStartStorage } from "./fixtures/storage"
 import { mockTimelineSession, serveDiffs, timeline } from "./fixtures/timeline"
 
 export default bench({
   // 100 and 10,000 by default; `--params all` adds the rest of the curve.
   params: { files: { run: [100, 10_000], more: [1, 10, 1_000] } },
 
+  // Whether setup opens the pane: cases that start with it open share a launch.
+  setupKey: (ctx) => (ctx.case === "open review" ? "closed" : "open"),
+
   targets: {
     web: web({
+      expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      async prepare({ params, playwright, mock, url }) {
-        const page = cached(playwright.page, mock)
+      async prepare(ctx) {
+        const { params, url } = ctx
+        const page = cached(ctx)
+        await keepStartStorage(page)
         const session = await mockTimelineSession(page, { server: new URL(url).origin, historyTurns: 0 })
         // The app asks for the changes only when the pane opens.
         await serveDiffs(page, scalingDiffs(params.files))
@@ -25,11 +32,13 @@ export default bench({
     }),
   },
 
-  async setup({ case: name, page }) {
+  async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
 
-    if (name !== "open review") await openReview(page)
+    if (setupKey === "open") await openReview(page)
     await page.idle()
+    // A reload keeps the review open (the app saves its layout on pagehide), so every run starts from this storage.
+    await saveStartStorage(page)
   },
 
   cases: {
@@ -57,6 +66,22 @@ export default bench({
       async reset({ page, params }) {
         await page.press("ControlOrMeta+a")
         await page.press("Backspace", { until: review.tree(scalingRows(params.files)) })
+        await page.idle()
+      },
+    },
+
+    // Closing the side panel and opening it again, each flight until it lands: every frame of the edge panel's motion.
+    "close and reopen review": {
+      primary: "main.work",
+      metrics: ["run.duration", "frames.dropped.pct"],
+      async run({ page }) {
+        await page.click(review.toggle)
+        await page.idle()
+        await page.click(review.toggle, { until: review.file })
+        await page.idle()
+      },
+      async reset({ page }) {
+        await openReview(page)
         await page.idle()
       },
     },

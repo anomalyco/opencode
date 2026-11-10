@@ -10,6 +10,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
 import { CodeModeTool } from "./codemode/tool.js"
+import { Flag } from "./flag.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -87,6 +88,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
+    const flag = yield* Flag.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -138,6 +140,7 @@ const layer = Layer.effect(
         "gen_ai.tool.name": name,
         "gen_ai.tool.call.id": context.id,
         "session.id": context.sessionID,
+        "gen_ai.agent.name": context.agent,
       })
       const execution = yield* execute(tool, input, context).pipe(
         Effect.map((value) => ({ value })),
@@ -274,6 +277,7 @@ const layer = Layer.effect(
                 codeModeInventory,
                 (name, tool, input, context) => run(tool, name, input, context),
                 permission,
+                flag,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -354,6 +358,7 @@ const layer = Layer.effect(
               }
               return yield* run(tool, name, toolInput, context)
             }),
+          flag,
         )
       }),
     })
@@ -422,5 +427,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node, Permission.node],
+  deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
 })

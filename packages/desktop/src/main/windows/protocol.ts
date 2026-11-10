@@ -2,6 +2,13 @@ import { net, protocol } from "electron"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
+import {
+  createProtocolBurstState,
+  isProtocolBurstSettled,
+  transitionProtocolBurst,
+  type ProtocolBurstCommand,
+  type ProtocolBurstEvent,
+} from "./protocol-machine"
 import { rendererHost, rendererProtocol } from "./scheme"
 
 /** What a renderer protocol problem is about: the request, and the file or failure behind it. */
@@ -23,45 +30,71 @@ export function setProtocolReporter(reporter: ProtocolReport) {
   report = reporter
 }
 
-// Requests in flight and when the last one arrived. The entry module holds the main bundle back
-// until the renderer's initial burst of asset requests has been answered, because this handler
-// runs on the main thread and a 100 ms module evaluation would otherwise sit between the renderer
-// and its HTML.
-let inflight = 0
+// The entry module holds the main bundle back until the renderer's initial burst of asset requests
+// has been answered, because this handler runs on the main thread and a 100 ms module evaluation
+// would otherwise sit between the renderer and its HTML.
+const burst = { state: createProtocolBurstState() }
 
-let served = 0
+/** The burst's cap and quiet-window timers; the machine says when each starts and stops. */
+type BurstTimers = { cap?: ReturnType<typeof setTimeout>; quiet?: ReturnType<typeof setTimeout> }
 
-let lastRequest = 0
+const timers: BurstTimers = {}
+
+const dispatch = (event: ProtocolBurstEvent) => {
+  const next = transitionProtocolBurst(burst.state, event)
+  burst.state = next.state
+  next.commands.forEach(perform)
+}
+
+const perform = (command: ProtocolBurstCommand) => {
+  switch (command.type) {
+    case "start-cap-timer":
+      clearTimeout(timers.cap)
+      timers.cap = setTimeout(() => dispatch({ type: "cap.elapsed" }), command.delayMs)
+
+      return
+    case "start-quiet-timer":
+      clearTimeout(timers.quiet)
+      timers.quiet = setTimeout(() => dispatch({ type: "quiet.elapsed", attempt: command.attempt }), command.delayMs)
+
+      return
+    case "cancel-quiet-timer":
+      clearTimeout(timers.quiet)
+      timers.quiet = undefined
+
+      return
+    case "clear-timers":
+      clearTimeout(timers.cap)
+      clearTimeout(timers.quiet)
+      timers.cap = undefined
+      timers.quiet = undefined
+
+      return
+    case "resolve":
+      return command.replies.forEach((reply) => reply())
+  }
+}
 
 export function rendererAssetsServed(options: { quietMs: number; capMs: number }) {
-  const start = Date.now()
+  return new Promise<void>((reply) => dispatch({ type: "wait.requested", ...options, reply }))
+}
 
-  return new Promise<void>((resolve) => {
-    const check = () => {
-      const now = Date.now()
-
-      if (now - start >= options.capMs) return resolve()
-
-      if (served > 0 && inflight === 0 && now - lastRequest >= options.quietMs) return resolve()
-      setTimeout(check, 5)
-    }
-
-    check()
-  })
+/** The first window closed before the bundle loaded: the app quits, so nothing waits for its assets. */
+export function cancelRendererAssetsServed() {
+  dispatch({ type: "cancelled" })
 }
 
 export function registerRendererProtocol(rendererRoot: string) {
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
   protocol.handle(rendererProtocol, async (request) => {
-    inflight++
-    lastRequest = Date.now()
+    if (isProtocolBurstSettled(burst.state)) return serve(request, rendererRoot)
+    dispatch({ type: "request.started" })
 
     try {
       return await serve(request, rendererRoot)
     } finally {
-      inflight--
-      served++
+      dispatch({ type: "request.finished" })
     }
   })
 }

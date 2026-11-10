@@ -3,6 +3,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { decodeArguments, type ToolCall } from "./protocol"
 import { ReplyWatch } from "./replies"
+import type { HeardReply } from "./reply-machine"
 import { messageExcerpts } from "./messages"
 import { formatHandoff, headerLapse } from "./handoff"
 import { folder, matchModels, SessionSearch } from "./search"
@@ -33,9 +34,13 @@ export class VoiceTools {
       )
   }
 
-  answered(id: string) {
-    this.observed.get(id)?.forEach((messages, sessionID) => this.replies.heard(sessionID, messages))
+  /** Marks what the delegation read aloud as heard, and returns it. */
+  answered(id: string): HeardReply[] {
+    const observed = [...(this.observed.get(id) ?? [])]
     this.observed.delete(id)
+    observed.forEach(([sessionID, messages]) => this.replies.heard(sessionID, messages))
+
+    return observed.flatMap(([sessionID, messages]) => messages.map((messageID) => ({ sessionID, messageID })))
   }
 
   /** A delegation that ended without an answer read nothing aloud, so its replies are still announced. */
@@ -297,7 +302,10 @@ export class VoiceTools {
 
     if (call.name === "read_session" || call.name === "wait_for_session") {
       if (call.name === "wait_for_session") {
-        await api.experimental.session.wait({ sessionID }, { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) })
+        await api.experimental.session.wait(
+          { sessionID },
+          { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) },
+        )
       }
 
       const [session, messages] = await Promise.all([

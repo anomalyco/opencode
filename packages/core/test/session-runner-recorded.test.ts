@@ -61,9 +61,10 @@ const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
     auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture"),
-    generation: { maxTokens: 20, temperature: 0 },
+    maxTokens: 20,
+    temperature: 0,
   })
-  .model({ id: "gpt-4o-mini", compatibility: { supportsPromptCacheKey: true } })
+  .model({ id: "gpt-4o-mini", capabilities: { promptCacheKey: true } })
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () =>
     Effect.succeed(
@@ -262,13 +263,23 @@ describe("SessionRunnerLLM recorded", () => {
       )
       const attempt = turn.find((span) => span.name === "SessionStep.attempt")
       expect(Object.fromEntries(attempt?.attributes ?? [])).toMatchObject({
+        "gen_ai.agent.name": "build",
         "gen_ai.provider.name": "openai",
         "gen_ai.request.model": "gpt-4o-mini",
         "gen_ai.response.finish_reasons": ["stop"],
         "gen_ai.usage.input_tokens": 465,
         "gen_ai.usage.output_tokens": 2,
+        "opencode.usage.cost_usd": 0,
       })
       expect(attempt?.attributes.get("opencode.llm.first_output_ms")).toBeNumber()
+      // The provider stream has its own span under the attempt, so model time splits from tool time.
+      const stream = turn.find((span) => span.name === "LLM.stream")
+      expect(Option.getOrUndefined(stream!.parent)?.spanId).toBe(attempt!.spanId)
+      expect(Object.fromEntries(stream!.attributes)).toMatchObject({
+        "gen_ai.provider.name": "openai",
+        "gen_ai.request.model": "gpt-4o-mini",
+      })
+      expect(stream!.status._tag).toBe("Ended")
     }).pipe(Effect.withSpan("fixture.request")),
   )
 })

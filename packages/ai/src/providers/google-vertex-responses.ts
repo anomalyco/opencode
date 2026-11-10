@@ -1,14 +1,14 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenResponses } from "../protocols/open-responses.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("google-vertex")
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   GoogleVertexShared.OAuthOptions & {
     readonly baseURL?: string
     readonly location?: string
@@ -32,7 +32,7 @@ const route = Route.make({
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path(OpenResponses.PATH),
   transport: OpenResponses.httpTransport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export const routes = [route]

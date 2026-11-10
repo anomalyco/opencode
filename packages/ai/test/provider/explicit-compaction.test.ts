@@ -61,7 +61,7 @@ testEffect(
         headers.push(String(request.model.id))
         return { "x-deployment": "fixture", "x-override": "route" }
       },
-      defaults: {
+      options: {
         headers: { "x-default": "configured", "x-override": "configured" },
         providerOptions: { store: false },
         http: { body: { instructions: "default instructions" } },
@@ -293,7 +293,7 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
           include: ["reasoning.encrypted_content"],
           parallelToolCalls: false,
         },
-        generation: { maxTokens: 100 },
+        maxTokens: 100,
         tools: [{ name: "lookup", description: "Lookup", inputSchema: {} }],
         http: {
           body: {

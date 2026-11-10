@@ -2,6 +2,14 @@ import { additionalIcons, additionalIconViewBox } from "./icon/additional-icons"
 
 // Consumers center the SVG viewport, so each icon must center its artwork within its viewBox.
 const icons = {
+  "outline-list-changelog": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M3 14.5V15H4V14.5H3.5H3ZM4 1.5V1H3V1.5H3.5H4ZM8.5 1.5V1H8V1.5H8.5ZM14.5 1.5H15V1H14.5V1.5ZM14.5 6.5V7H15V6.5H14.5ZM8.5 6.5H8V7H8.5V6.5ZM8.5 9.5V9H8V9.5H8.5ZM14.5 9.5H15V9H14.5V9.5ZM14.5 14.5V15H15V14.5H14.5ZM8.5 14.5H8V15H8.5V14.5ZM3.5 6H4V1.5H3.5H3V6H3.5ZM8.5 1.5V2H14.5V1.5V1H8.5V1.5ZM14.5 1.5H14V6.5H14.5H15V1.5H14.5ZM14.5 6.5V6H8.5V6.5V7H14.5V6.5ZM8.5 6.5H9V1.5H8.5H8V6.5H8.5ZM8.5 9.5V10H14.5V9.5V9H8.5V9.5ZM14.5 9.5H14V14.5H14.5H15V9.5H14.5ZM14.5 14.5V14H8.5V14.5V15H14.5V14.5ZM8.5 14.5H9V9.5H8.5H8V14.5H8.5ZM3.5 10V10.5C4.8807 10.5 6 9.38075 6 8H5.5H5C5 8.82845 4.32843 9.5 3.5 9.5V10ZM5.5 8H6C6 6.61925 4.8807 5.5 3.5 5.5V6V6.5C4.32843 6.5 5 7.17155 5 8H5.5ZM3.5 6V5.5C2.1193 5.5 1 6.61925 1 8H1.5H2C2 7.17155 2.67157 6.5 3.5 6.5V6ZM1.5 8H1C1 9.38075 2.1193 10.5 3.5 10.5V10V9.5C2.67157 9.5 2 8.82845 2 8H1.5ZM3.5 14.5H4V10H3.5H3V14.5H3.5Z" fill="currentColor"/>`,
+  },
+  "outline-pair": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M4.5 10V13.5H11.5V10" stroke="currentColor"/><path d="M3.5 4.5V2.5H5.5V4.5" stroke-linecap="square" stroke="currentColor"/><path d="M10.5 4.5V2.5H12.5V4.5" stroke-linecap="square" stroke="currentColor"/><path d="M9.5 4.5H13.5V10.5H9.5V4.5Z" stroke-linecap="square" stroke="currentColor"/><path d="M2.5 4.5H6.5V10.5H2.5V4.5Z" stroke-linecap="square" stroke="currentColor"/>`,
+  },
   lock: {
     viewBox: "0 0 16 16",
     body: `<rect x="3.5" y="7" width="9" height="7" rx="1" stroke="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1" stroke="currentColor" stroke-linecap="round"/>`,

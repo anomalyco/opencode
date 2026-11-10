@@ -1,5 +1,5 @@
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createMemo, onCleanup } from "solid-js"
+import { createMemo } from "solid-js"
 import { commandPaletteOptions, useCommand } from "@/shell/commands/command"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -7,9 +7,9 @@ import { ServerConnection } from "@/runtime/server/registry"
 import {
   createCommandPaletteCommandEntry,
   createKnownServerSessions,
+  createPaletteHighlight,
   createServerSessionEntries,
   type CommandPaletteEntry,
-  type PaletteHighlight,
 } from "@/shell/commands/palette"
 import { CommandPaletteView, matchesCommandPaletteEntry } from "@/shell/commands/dialog"
 import { createSettingsPaletteEntries } from "@/settings/palette"
@@ -24,7 +24,7 @@ export function HomeCommandPalette(props: {
   const language = useLanguage()
   // A server that rejects our credentials lists no sessions; commands and settings still work.
   const server = () => global.serverCtx(ServerConnection.key(props.server))
-  const state: PaletteHighlight = { cleanup: undefined, committed: false }
+  const preview = createPaletteHighlight()
   const settings = createSettingsPaletteEntries()
 
   const commandEntries = createMemo(() => {
@@ -48,18 +48,9 @@ export function HomeCommandPalette(props: {
     recentCategory: () => language.t("palette.group.recentSessions"),
   })
 
-  const highlight = (item: CommandPaletteEntry | undefined) => {
-    state.cleanup?.()
-    state.cleanup = undefined
-
-    if (item?.type !== "command") return
-    state.cleanup = item.option?.onHighlight?.()
-  }
-
   const select = (item: CommandPaletteEntry | undefined) => {
     if (!item) return
-    state.committed = true
-    state.cleanup = undefined
+    preview.select(item)
     dialog.close()
 
     if (item.type === "command") {
@@ -83,17 +74,12 @@ export function HomeCommandPalette(props: {
     ]
   }
 
-  onCleanup(() => {
-    if (state.committed) return
-    state.cleanup?.()
-  })
-
   return (
     <CommandPaletteView
       placeholder={language.t("palette.search.placeholder.home")}
       items={items}
       sources={[sessions.search]}
-      highlight={highlight}
+      highlight={preview.highlight}
       select={select}
       close={() => dialog.close()}
     />

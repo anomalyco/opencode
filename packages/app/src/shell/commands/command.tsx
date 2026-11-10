@@ -1,6 +1,6 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount, untrack } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Predicate, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -10,6 +10,7 @@ import { useSettings } from "@/settings/model"
 import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { INITIAL_KEYBIND_SUSPEND_STATE, selectKeybindsSuspended, transitionKeybindSuspend } from "./suspend-machine"
 
 const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -386,10 +387,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const settings = useSettings()
     const language = useLanguage()
 
-    const [store, setStore] = createStore<{ registrations: CommandRegistration[]; suspendCount: number }>({
+    const [store, setStore] = createStore<{ registrations: CommandRegistration[] }>({
       registrations: [],
-      suspendCount: 0,
     })
+
+    const [suspendState, setSuspendState] = createSignal(INITIAL_KEYBIND_SUSPEND_STATE)
 
     const warnedDuplicates = new Set<string>()
 
@@ -479,7 +481,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       ]
     })
 
-    const suspended = () => store.suspendCount > 0
+    const suspended = () => selectKeybindsSuspended(suspendState())
 
     const palette = createMemo(() => {
       const config = settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
@@ -601,8 +603,17 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         return !!config && matchKeybind(parseKeybind(config), event)
       },
       show: showPalette,
+      /** Suspends command keybinds until the returned release runs. Each caller holds its own lease. */
+      suspend() {
+        const next = transitionKeybindSuspend(untrack(suspendState), { type: "suspend" })
+        setSuspendState(next)
+
+        return () =>
+          setSuspendState((current) => transitionKeybindSuspend(current, { type: "resume", hold: next.issued }))
+      },
+      /** One shared idempotent hold: `false` suspends keybinds and `true` releases only that hold. */
       keybinds(enabled: boolean) {
-        setStore("suspendCount", (count) => Math.max(0, count + (enabled ? -1 : 1)))
+        setSuspendState((current) => transitionKeybindSuspend(current, { type: "keybinds", enabled }))
       },
       suspended,
       get catalog() {

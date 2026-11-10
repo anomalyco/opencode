@@ -1,6 +1,12 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import { AIError, LLMEvent, type LanguageModelCompatibility, type LLMRequest } from "../schema/index.js"
+import {
+  AIError,
+  LLMEvent,
+  type LanguageModelCompatibility,
+  type LLMRequest,
+  type Capabilities,
+} from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -188,7 +194,7 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
   })
   return {
     ...body,
-    max_completion_tokens: options.maxCompletionTokens ?? options.maxTokens ?? request.generation?.maxTokens,
+    max_completion_tokens: options.maxCompletionTokens ?? options.maxTokens ?? request.maxTokens,
     reasoning_effort: undefined,
     reasoning:
       options.reasoningEffort === undefined
@@ -206,7 +212,7 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
     prompt_cache_retention: options.promptCacheRetention ?? body.prompt_cache_retention,
     parallel_tool_calls: options.parallelToolCalls,
     min_p: options.minP,
-    top_k: request.generation?.topK,
+    top_k: request.topK,
     repetition_penalty: options.repetitionPenalty,
     stop_token_ids: options.stopTokenIds,
     logprobs: options.logprobs,
@@ -325,8 +331,9 @@ const onHalt = Effect.fn("VeniceChat.onHalt")(function* (state: State) {
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",
-  supportsPromptCacheKey: true,
 } satisfies LanguageModelCompatibility
+
+export const capabilities = { promptCacheKey: true } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "venice-chat",

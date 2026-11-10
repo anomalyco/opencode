@@ -45,12 +45,6 @@ export namespace TimelineRow {
     userMessageID: string
   }> {}
 
-  export class NewMessages extends Data.TaggedClass("NewMessages")<{
-    userMessageID: string
-    partID: string
-    read: boolean
-  }> {}
-
   export class AssistantPart extends Data.TaggedClass("AssistantPart")<{
     userMessageID: string
     group: PartGroup
@@ -76,8 +70,12 @@ export namespace TimelineRow {
     resetAt?: number
   }> {}
 
+  /** The active turn waits to retry its step: `attempt` counts tries, `next` is when the next one starts. */
   export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string
+    attempt: number
+    message: string
+    next: number
   }> {}
 
   /** A compaction the server has admitted but not started. */
@@ -110,7 +108,6 @@ export namespace TimelineRow {
     | Shell
     | Notice
     | TurnDivider
-    | NewMessages
     | AssistantPart
     | Thinking
     | Error
@@ -125,7 +122,6 @@ export namespace TimelineRow {
     Shell: (row) => `shell:${row.messageID}`,
     Notice: (row) => `notice:${row.messageID}`,
     TurnDivider: (row) => `turn-divider:${row.userMessageID}`,
-    NewMessages: (row) => `new-messages:${row.partID}`,
     // Keyed by part identity alone: a page boundary can truncate the leading turn,
     // and its rows regroup under the real user message once older history loads.
     // The group key already carries the owning message and part IDs.
@@ -148,8 +144,6 @@ export namespace TimelineRow {
     Shell: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Shell") && other.messageID === row.messageID,
     Notice: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Notice") && other.messageID === row.messageID,
     TurnDivider: () => (other: TimelineRow) => Predicate.isTagged(other, "TurnDivider"),
-    NewMessages: (row) => (other: TimelineRow) =>
-      Predicate.isTagged(other, "NewMessages") && other.partID === row.partID && other.read === row.read,
     AssistantPart: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "AssistantPart") &&
       other.previousAssistantPart === row.previousAssistantPart &&
@@ -161,7 +155,11 @@ export namespace TimelineRow {
       other.text === row.text &&
       other.kind === row.kind &&
       other.resetAt === row.resetAt,
-    Retry: () => (other: TimelineRow) => Predicate.isTagged(other, "Retry"),
+    Retry: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "Retry") &&
+      other.attempt === row.attempt &&
+      other.message === row.message &&
+      other.next === row.next,
     CompactionQueued: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "CompactionQueued") && other.inboxID === row.inboxID,
     TurnDiff: (row) => (other: TimelineRow) =>
@@ -204,7 +202,6 @@ export type TimelineRowMap = {
   Shell: { userMessageID: string; messageID: string }
   Notice: { userMessageID: string; messageID: string }
   TurnDivider: { userMessageID: string }
-  NewMessages: { userMessageID: string; partID: string; read: boolean }
   AssistantPart: {
     userMessageID: string
     group: PartGroup
@@ -212,7 +209,7 @@ export type TimelineRowMap = {
     spacing?: "tool" | "content"
   }
   Thinking: { userMessageID: string; ref: PartRef }
-  Retry: { userMessageID: string }
+  Retry: { userMessageID: string; attempt: number; message: string; next: number }
   Error: {
     userMessageID: string
     text: string

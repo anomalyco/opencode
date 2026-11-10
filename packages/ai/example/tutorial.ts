@@ -28,7 +28,7 @@ const apiKey = Config.Redacted("OPENAI_API_KEY")
 // image generation.
 const openai = OpenAI.configure({
   apiKey,
-  generation: { maxTokens: 160 },
+  maxTokens: 160,
   providerOptions: {
     store: false,
   },
@@ -40,8 +40,8 @@ const model = openai.responses("gpt-4o-mini")
 //
 // Options can live on both the configured route/provider facade and the request:
 //
-//   - `generation`: common controls such as max tokens, temperature, topP/topK,
-//     penalties, seed, and stop sequences.
+//   - `maxTokens`, `temperature`, `topP`, `topK`, penalties, `seed` and `stop`:
+//     common controls set at the top level.
 //   - `promptCacheKey`: stable cache affinity for protocols that support it.
 //   - `providerOptions`: model-typed provider-native behavior. For example,
 //     OpenAI store behavior, Anthropic thinking, Gemini thinking config, or
@@ -54,7 +54,8 @@ const request = ai.request({
   model,
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
-  generation: { maxTokens: 80, temperature: 0.7 },
+  maxTokens: 80,
+  temperature: 0.7,
   promptCacheKey: "tutorial-joke",
 })
 
@@ -100,7 +101,8 @@ const streamWithTools = Effect.gen(function* () {
   const request = ai.request({
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
-    generation: { maxTokens: 80, temperature: 0 },
+    maxTokens: 80,
+    temperature: 0,
     tools,
   })
   const events = Array.from(yield* ai.stream(request).pipe(Stream.runCollect))
@@ -139,7 +141,8 @@ const generateStructuredObject = Effect.gen(function* () {
     system: "Return only structured weather data.",
     prompt: "Give me today's weather for San Francisco.",
     schema: WeatherReport,
-    generation: { maxTokens: 120, temperature: 0 },
+    maxTokens: 120,
+    temperature: 0,
   })
 
   console.log("\n== structured output ==")
@@ -238,7 +241,7 @@ const generateFake = Effect.gen(function* () {
 })
 
 // 8. Image generation uses the same facade and the same request/generate shape.
-// `response.image` is a `Media.Asset`: bytes decode lazily and are cached, and
+// `response.images[0]` is a `Media.Asset`: bytes decode lazily and are cached, and
 // `Media.write` persists them through the Effect `FileSystem`.
 const generateImage = Effect.gen(function* () {
   const response = yield* ai.image.generate({
@@ -250,10 +253,10 @@ const generateImage = Effect.gen(function* () {
   })
 
   console.log("\n== image ==")
-  console.log("media type:", response.image.mediaType)
-  console.log("bytes:", (yield* response.image.bytes()).byteLength)
+  console.log("media type:", response.images[0].mediaType)
+  console.log("bytes:", (yield* response.images[0].bytes()).byteLength)
   console.log("usage", Formatter.formatJson(response.usage, { space: 2 }))
-  yield* Media.write(response.image, "tutorial-image.jpg").pipe(Effect.provide(NodeFileSystem.layer))
+  yield* Media.write(response.images[0], "tutorial-image.jpg").pipe(Effect.provide(NodeFileSystem.layer))
 })
 
 // Provide every modality client and the HTTP request executor once with
