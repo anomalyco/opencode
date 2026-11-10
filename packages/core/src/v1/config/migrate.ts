@@ -81,6 +81,11 @@ export function migrateMcpTimeout(timeout: number) {
   return { startup: timeout, catalog: timeout, execution: timeout }
 }
 
+// A per-server object sets each phase on its own; a bare number still bounds all three.
+function migrateMcpServerTimeout(timeout: number | ConfigMCPV1.Timeout) {
+  return typeof timeout === "number" ? migrateMcpTimeout(timeout) : timeout
+}
+
 export function migrateMcp(info: ConfigMCPV1.Info) {
   const disabled = info.enabled === undefined ? undefined : !info.enabled
   if (info.type === "local")
@@ -91,7 +96,7 @@ export function migrateMcp(info: ConfigMCPV1.Info) {
       environment: info.environment,
       disabled,
       codemode: info.codemode,
-      timeout: info.timeout === undefined ? undefined : migrateMcpTimeout(info.timeout),
+      timeout: info.timeout === undefined ? undefined : migrateMcpServerTimeout(info.timeout),
     }
   return {
     type: info.type,
@@ -106,7 +111,7 @@ export function migrateMcp(info: ConfigMCPV1.Info) {
     },
     disabled,
     codemode: info.codemode,
-    timeout: info.timeout === undefined ? undefined : migrateMcpTimeout(info.timeout),
+    timeout: info.timeout === undefined ? undefined : migrateMcpServerTimeout(info.timeout),
   }
 }
 

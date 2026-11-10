@@ -1280,6 +1280,32 @@ describe("Config", () => {
     expect(migrateV1({}).update).toBeUndefined()
   })
 
+  test("keeps a per-server object timeout and does not broadcast it to execution", () => {
+    const server = migrateV1({
+      mcp: { slow: { type: "local", command: ["/bin/true"], timeout: { startup: 60000 } } },
+    }).mcp?.servers?.slow
+    // The object form sets only the phase the user named; execution keeps its default budget.
+    expect(server?.timeout).toEqual({ startup: 60000 })
+  })
+
+  test("still bounds every phase when a per-server timeout is a bare number", () => {
+    const server = migrateV1({
+      mcp: { slow: { type: "local", command: ["/bin/true"], timeout: 60000 } },
+    }).mcp?.servers?.slow
+    expect(server?.timeout).toEqual({ startup: 60000, catalog: 60000, execution: 60000 })
+  })
+
+  test("a per-server object timeout no longer drops the server", () => {
+    const servers = migrateV1({
+      mcp: {
+        a: { type: "local", command: ["/bin/true"], timeout: { startup: 60000, execution: 43200000 } },
+        b: { type: "remote", url: "https://example.com/mcp" },
+      },
+    }).mcp?.servers
+    expect(Object.keys(servers ?? {}).sort()).toEqual(["a", "b"])
+    expect(servers?.a?.timeout).toEqual({ startup: 60000, execution: 43200000 })
+  })
+
   test("normalizes the native auto update policy", () => {
     expect(ConfigNormalize.normalize({ update: "auto" })).toEqual({
       type: "normalized",
