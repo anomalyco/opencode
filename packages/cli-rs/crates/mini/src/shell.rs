@@ -485,7 +485,14 @@ impl Mini {
         let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
         let (connected, receiver) = tokio::sync::watch::channel(false);
         *self.connected.borrow_mut() = receiver;
-        let task = self.app.runtime().spawn(replay::connect(self.client.clone(), session.id, limit, proxy, connected));
+        let task = self.app.runtime().spawn(replay::connect(
+            self.client.clone(),
+            session.id,
+            session.directory,
+            limit,
+            proxy,
+            connected,
+        ));
         *self.stream.borrow_mut() = Some(task);
     }
 
@@ -767,7 +774,7 @@ impl Mini {
         writer.write_widget(&header, Flags { start_on_new_line: true, trailing_newline: false })
     }
 
-    fn incoming(self: &Rc<Self>, cx: &mut Cx<'_>, incoming: Incoming) {
+    fn incoming(self: &Rc<Self>, cx: &mut Cx<'_>, mut incoming: Incoming) {
         if self.state.borrow().closed {
             return;
         }
@@ -777,13 +784,22 @@ impl Mini {
             Incoming::Hydrated { .. } => true,
             Incoming::Disconnected(_) => false,
         };
+        // The requests apply before the events that followed the subscription, and before the status names the request
+        // shown.
+        if let Incoming::Hydrated { session, requests, .. } = &mut incoming
+            && self.transcript.borrow().as_ref().is_some_and(|transcript| &transcript.session_id == session)
+        {
+            self.footers.hydrated(std::mem::take(requests));
+        }
         let output = {
             let mut transcript = self.transcript.borrow_mut();
             let Some(transcript) = transcript.as_mut() else {
                 return;
             };
             match incoming {
-                Incoming::Hydrated { messages, active, inbox } => {
+                // A hydration of a session that was replaced meanwhile (`current(attempt)`).
+                Incoming::Hydrated { session, .. } if session != transcript.session_id => return,
+                Incoming::Hydrated { messages, active, inbox, .. } => {
                     let running = active.contains(&transcript.session_id);
                     self.trace("recv.hydrate", json!({ "messages": messages.len(), "active": running }));
                     let reconnect = !transcript.initial;
@@ -821,10 +837,6 @@ impl Mini {
         self.output(cx, output);
         if let Some((messages, active, inbox, reconnect)) = hydrated {
             self.queued(&inbox);
-            // The first hydration's requests were listed when the session opened.
-            if reconnect {
-                self.footers.hydrate();
-            }
             self.footers.subagent_hydrate(&messages, &active, reconnect);
         }
         if connected {
@@ -1674,13 +1686,20 @@ impl Mini {
         self.trace("replay.resize", json!({ "sessionID": session }));
         let client = self.client.clone();
         let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
+        let directory = self.session.borrow().as_ref().map(|session| session.directory.clone()).unwrap_or_default();
         let mini = self.clone();
-        self.app.spawn(async move { replay::hydration(&client, &session, limit).await }, move |cx, result| {
+        let read = session.clone();
+        let task = async move { replay::hydration(&client, &read, &directory, limit).await };
+        self.app.spawn(task, move |cx, result| {
+            // Another session opened meanwhile.
+            if mini.transcript.borrow().as_ref().is_none_or(|transcript| transcript.session_id != session) {
+                return;
+            }
             let output = match result {
-                Ok((messages, active, inbox)) => {
+                Ok((messages, active, inbox, requests)) => {
                     mini.reset_for_replay(cx);
                     mini.queued(&inbox);
-                    mini.footers.hydrate();
+                    mini.footers.hydrated(requests);
                     let output = mini.transcript.borrow_mut().as_mut().map(|transcript| {
                         transcript.inbox(&inbox);
                         transcript.replayed(&messages, active.contains(&transcript.session_id))
