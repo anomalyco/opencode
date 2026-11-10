@@ -644,12 +644,13 @@ pub fn project_name(project: Option<&Project>) -> Option<String> {
         .or_else(|| Some(basename(canonical).to_owned()))
 }
 
-/// `sessionTabs.status(id).attention`: `permission` while a family member waits on one. Forms
-/// (`question`) join once the store holds them (F.8).
+/// `sessionTabs.status(id).attention` as `sessionStatusGutter` marks it: `!` while a family member waits on a
+/// permission, else `?` while one waits on a form.
 pub fn attention(store: &Store, id: &SessionID) -> Option<char> {
-    let root = store.root(id);
-    let mut members = std::iter::once(&root).chain(store.family(&root));
-    members.any(|member| store.permissions(member).is_some_and(|list| !list.is_empty())).then_some('!')
+    crate::tabs::status(store, id, 0).attention.map(|attention| match attention {
+        crate::tabs::Attention::Permission => '!',
+        crate::tabs::Attention::Question => '?',
+    })
 }
 
 /// The session or a family member is running.
