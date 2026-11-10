@@ -600,7 +600,7 @@ export function SidebarCustomized(props: {
           onClick={props.onNewSession}
         />
       </div>
-      <div class="flex min-h-0 flex-1 flex-col">
+      <div class="flex min-h-0 flex-1 flex-col pt-1">
         {props.children({ sections: sections(), tabFooter, tabLabel })}
         <Show when={filterCount() > 0 && !visibleRows().some((row) => !row.active)}>
           <div class="px-2 py-2 text-12-regular text-v2-text-text-faint">
