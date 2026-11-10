@@ -54,18 +54,19 @@ const lightDialog = {
   },
 } satisfies ModeDefinition["@dialog"]
 
-// The light composer sits level with raised panels, a step lighter than the dark one, like opencode2's.
-// Transparent panels keep step 700 transparent, so those themes keep the composer on step 600.
+// Light composers sit on step 700, level with raised panels, like opencode2's.
 const lightComposer = {
   background: { raised: { high: "$hue.neutral.700" } },
 } satisfies ModeDefinition["@composer"]
 
 function lightOverrides(definition: ThemeDefinition, theme: Theme): ModeDefinition {
-  if (theme.backgroundPanel.a === 1)
-    return { hue: definition.hue, "@dialog": lightDialog, "@composer": lightComposer }
+  // Step 700 stays transparent when the V1 panel is, so those composers keep step 600.
+  const composer = theme.backgroundPanel.toInts()[3] > 0 ? { "@composer": lightComposer } : {}
+  if (theme.backgroundPanel.a === 1) return { hue: definition.hue, "@dialog": lightDialog, ...composer }
   return {
     hue: definition.hue,
     "@dialog": { ...lightDialog, background: { ...lightDialog.background, base: dialogBackground(theme) } },
+    ...composer,
   }
 }
 
