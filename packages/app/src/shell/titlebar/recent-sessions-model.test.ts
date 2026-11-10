@@ -3,13 +3,15 @@ import type { SessionInfo } from "@opencode/client/promise"
 import {
   addPin,
   dedupePins,
-  mergeFirstPage,
+  INITIAL_RECENT_PAGE_STATE,
+  RECENT_PAGE_TIMEOUT_MS,
   mergeRecentSessions,
   partitionRecentSessions,
   recentSessionKey,
   removePin,
   reorderPins,
   sortRecentSessions,
+  transitionRecentPage,
   splitRecentSessionKey,
   type RecentSession,
 } from "./recent-sessions-model"
@@ -67,24 +69,6 @@ test("reordering rejects a different visible set", () => {
   expect(reorderPins(["a", "b"], ["a", "b"], ["a", "c"])).toEqual(["a", "b"])
   expect(reorderPins(["a", "b"], ["a", "b"], ["a"])).toEqual(["a", "b"])
   expect(reorderPins(["a", "b"], ["a", "b"], ["a", "a"])).toEqual(["a", "b"])
-})
-
-test("a refreshed first page replaces the snapshot until older pages load", () => {
-  const first = [session("ses_a", 10), session("ses_b", 5)]
-  const refreshed = [session("ses_a", 20), session("ses_c", 30)]
-
-  expect(mergeFirstPage(first, refreshed, false)).toEqual(refreshed)
-})
-
-test("a refreshed first page merges once older pages are loaded, incoming rows winning", () => {
-  const existing = [session("ses_a", 10), session("ses_older_page", 1)]
-  const refreshed = [session("ses_a", 20), session("ses_c", 30)]
-
-  expect(mergeFirstPage(existing, refreshed, true)).toEqual([
-    session("ses_a", 20),
-    session("ses_older_page", 1),
-    session("ses_c", 30),
-  ])
 })
 
 test("merging prefers the live store and keeps root, unarchived sessions", () => {
@@ -147,4 +131,175 @@ test("pins resolve hydrated sessions and unresolved pins stay hidden", () => {
 
   expect(result.pinned).toEqual([hydrated, known])
   expect(result.recent).toEqual([])
+})
+
+
+const readyPage = (
+  sessions: readonly SessionInfo[],
+  options: { cursor?: string; exhausted?: boolean; olderLoaded?: boolean } = {},
+) => ({
+  status: "ready" as const,
+  sessions,
+  cursor: options.cursor,
+  exhausted: options.exhausted ?? options.cursor === undefined,
+  olderLoaded: options.olderLoaded ?? false,
+})
+
+test("the first page replaces the list and ends when it has no next cursor", () => {
+  const started = transitionRecentPage(INITIAL_RECENT_PAGE_STATE, { type: "load", kind: "first", attempt: 1 })
+  expect(started.state).toMatchObject({ status: "loading", kind: "first", attempt: 1, sessions: [] })
+  expect(started.effects).toEqual([
+    { type: "fetch", attempt: 1, cursor: undefined },
+    { type: "timer.start", attempt: 1, delayMs: RECENT_PAGE_TIMEOUT_MS },
+  ])
+
+  const page = [session("ses_a", 20), session("ses_b", 10)]
+  const ended = transitionRecentPage(started.state, { type: "succeeded", attempt: 1, sessions: page, next: undefined })
+  expect(ended.state).toMatchObject({ status: "ready", sessions: page, cursor: undefined, exhausted: true })
+  expect(ended.effects).toEqual([{ type: "timer.cancel" }])
+})
+
+test("a next page merges into the rows already held and keeps a cursor", () => {
+  const first = [session("ses_a", 20)]
+  const next = [session("ses_b", 10)]
+  const state = readyPage(first, { cursor: "cursor-2" })
+  const started = transitionRecentPage(state, { type: "load", kind: "next", attempt: 2 })
+
+  expect(started.effects[0]).toEqual({ type: "fetch", attempt: 2, cursor: "cursor-2" })
+
+  const page = transitionRecentPage(started.state, {
+    type: "succeeded",
+    attempt: 2,
+    sessions: next,
+    next: "cursor-3",
+  })
+
+  expect(page.state).toMatchObject({
+    status: "ready",
+    sessions: [first[0], next[0]],
+    cursor: "cursor-3",
+    exhausted: false,
+    olderLoaded: true,
+  })
+})
+
+test("an empty page ends pagination without dropping rows already shown", () => {
+  const state = readyPage([session("ses_a", 20)], { cursor: "cursor-2" })
+  const started = transitionRecentPage(state, { type: "load", kind: "next", attempt: 1 })
+  const page = transitionRecentPage(started.state, { type: "succeeded", attempt: 1, sessions: [], next: undefined })
+
+  expect(page.state).toMatchObject({
+    status: "ready",
+    sessions: [session("ses_a", 20)],
+    cursor: undefined,
+    exhausted: true,
+  })
+})
+
+test("a failed page keeps its cursor and retries from it", () => {
+  const state = readyPage([session("ses_a", 20)], { cursor: "cursor-2" })
+  const started = transitionRecentPage(state, { type: "load", kind: "next", attempt: 1 })
+  const failed = transitionRecentPage(started.state, { type: "failed", attempt: 1 })
+
+  expect(failed.state).toMatchObject({ status: "failed", cursor: "cursor-2", exhausted: false, sessions: [session("ses_a", 20)] })
+  expect(failed.effects).toEqual([{ type: "timer.cancel" }])
+
+  const retried = transitionRecentPage(failed.state, { type: "retry", attempt: 2 })
+  expect(retried.state).toMatchObject({ status: "loading", kind: "next", attempt: 2 })
+  expect(retried.effects[0]).toEqual({ type: "fetch", attempt: 2, cursor: "cursor-2" })
+})
+
+test("a failed reconnect refresh retries the first page rather than its advanced cursor", () => {
+  const state = readyPage([session("ses_a", 20)], { cursor: "cursor-old", olderLoaded: true })
+  const started = transitionRecentPage(state, { type: "load", kind: "refresh", attempt: 1 })
+  const failed = transitionRecentPage(started.state, { type: "failed", attempt: 1 })
+  const retried = transitionRecentPage(failed.state, { type: "retry", attempt: 2 })
+
+  expect(retried.state).toMatchObject({ status: "loading", kind: "refresh", attempt: 2 })
+  expect(retried.effects[0]).toEqual({ type: "fetch", attempt: 2, cursor: undefined })
+})
+
+test("a timeout fails a hanging page and keeps its cursor", () => {
+  const state = readyPage([session("ses_a", 20)], { cursor: "cursor-2" })
+  const started = transitionRecentPage(state, { type: "load", kind: "next", attempt: 7 })
+  const timedOut = transitionRecentPage(started.state, { type: "timed-out", attempt: 7 })
+
+  expect(timedOut.state).toMatchObject({ status: "failed", cursor: "cursor-2" })
+})
+
+test("a short final page from a reconnect replaces the snapshot and ends pagination", () => {
+  const state = readyPage([session("ses_first", 100), session("ses_older", 10)], {
+    cursor: "cursor-old",
+    olderLoaded: true,
+  })
+
+  const started = transitionRecentPage(state, { type: "load", kind: "refresh", attempt: 1 })
+
+  const page = transitionRecentPage(started.state, {
+    type: "succeeded",
+    attempt: 1,
+    sessions: [session("ses_first", 100)],
+    next: undefined,
+  })
+
+  expect(page.state).toMatchObject({
+    status: "ready",
+    sessions: [session("ses_first", 100)],
+    cursor: undefined,
+    exhausted: true,
+    olderLoaded: false,
+  })
+})
+
+test("a disconnected snapshot with a gap resets the list and its cursor", () => {
+  const state = readyPage([session("ses_old", 10)], { cursor: "cursor-old", olderLoaded: true })
+  const started = transitionRecentPage(state, { type: "load", kind: "refresh", attempt: 1 })
+  const incoming = [session("ses_new", 100), session("ses_later", 90)]
+
+  const page = transitionRecentPage(started.state, {
+    type: "succeeded",
+    attempt: 1,
+    sessions: incoming,
+    next: "cursor-new",
+  })
+
+  expect(page.state).toMatchObject({
+    status: "ready",
+    sessions: incoming,
+    cursor: "cursor-new",
+    exhausted: false,
+    olderLoaded: false,
+  })
+})
+
+test("a reconnect snapshot drops page-one ghosts and keeps older rows and the advanced cursor", () => {
+  const first = session("ses_first", 100)
+  const ghost = session("ses_ghost", 90)
+  const older = session("ses_older", 10)
+  const state = readyPage([first, ghost, older], { cursor: "cursor-old", olderLoaded: true })
+  const started = transitionRecentPage(state, { type: "load", kind: "refresh", attempt: 1 })
+
+  const page = transitionRecentPage(started.state, {
+    type: "succeeded",
+    attempt: 1,
+    sessions: [first, session("ses_newer", 80)],
+    next: "cursor-page-2",
+  })
+
+  expect(page.state.status).toBe("ready")
+  expect(page.state.sessions.map((session) => session.id).toSorted()).toEqual([
+    "ses_first",
+    "ses_newer",
+    "ses_older",
+  ])
+  expect(page.state.cursor).toBe("cursor-old")
+  expect(page.state.olderLoaded).toBe(true)
+})
+
+test("removing a server clears its page", () => {
+  const state = readyPage([session("ses_a", 20)], { cursor: "cursor-2" })
+  const removed = transitionRecentPage(state, { type: "removed" })
+
+  expect(removed.state).toEqual(INITIAL_RECENT_PAGE_STATE)
+  expect(removed.effects).toEqual([{ type: "timer.cancel" }])
 })

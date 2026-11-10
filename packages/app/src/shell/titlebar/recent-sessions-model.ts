@@ -2,6 +2,9 @@ import type { SessionInfo } from "@opencode/client/promise"
 
 const separator = "\u0000"
 
+/** Bounds a hanging server request; matches the Home session list's fetch deadline. */
+export const RECENT_PAGE_TIMEOUT_MS = 30_000
+
 export type RecentSession = {
   /** `${server}\u0000${sessionID}`, the same key the pin order stores. */
   key: string
@@ -73,26 +76,226 @@ export function sortRecentSessions(items: readonly RecentSession[]) {
   return [...items].sort(compareRecentSessions)
 }
 
+type RecentPageBase = {
+  readonly sessions: readonly SessionInfo[]
+  readonly cursor: string | undefined
+  readonly exhausted: boolean
+  readonly olderLoaded: boolean
+}
+
+/** One server's fetched pages. `loading.kind` decides how a response joins the rows already held. */
+export type RecentPageState =
+  | ({ readonly status: "idle" } & RecentPageBase)
+  | ({
+      readonly status: "loading"
+      readonly kind: "first" | "next" | "refresh"
+      readonly attempt: number
+    } & RecentPageBase)
+  | ({ readonly status: "ready" } & RecentPageBase)
+  | ({ readonly status: "failed"; readonly kind: "first" | "next" | "refresh" } & RecentPageBase)
+
+export type RecentPageEvent =
+  | { readonly type: "load"; readonly kind: "first" | "next" | "refresh"; readonly attempt: number }
+  | { readonly type: "retry"; readonly attempt: number }
+  | {
+      readonly type: "succeeded"
+      readonly attempt: number
+      readonly sessions: readonly SessionInfo[]
+      readonly next: string | undefined
+    }
+  | { readonly type: "failed"; readonly attempt: number }
+  | { readonly type: "timed-out"; readonly attempt: number }
+  | { readonly type: "removed" }
+
+export type RecentPageEffect =
+  | { readonly type: "fetch"; readonly attempt: number; readonly cursor: string | undefined }
+  | { readonly type: "timer.start"; readonly attempt: number; readonly delayMs: number }
+  | { readonly type: "timer.cancel" }
+
+export type RecentPageTransition = {
+  readonly state: RecentPageState
+  readonly effects: readonly RecentPageEffect[]
+}
+
+type LoadingRecentPageState = Extract<RecentPageState, { status: "loading" }>
+
+export const INITIAL_RECENT_PAGE_STATE: RecentPageState = {
+  status: "idle",
+  sessions: [],
+  cursor: undefined,
+  exhausted: false,
+  olderLoaded: false,
+}
+
+const NO_EFFECTS: readonly RecentPageEffect[] = []
+
+function unchanged(state: RecentPageState): RecentPageTransition {
+  return { state, effects: NO_EFFECTS }
+}
+
+function sessionTime(session: SessionInfo) {
+  return session.time.updated ?? session.time.created
+}
+
+function mergeSessions(current: readonly SessionInfo[], next: readonly SessionInfo[]) {
+  return [...new Map([...current, ...next].map((session) => [session.id, session] as const)).values()]
+}
+
+function startLoading(state: RecentPageState, kind: "first" | "next" | "refresh", attempt: number) {
+  const requestCursor = kind === "next" ? state.cursor : undefined
+  const cursor = kind === "first" ? undefined : state.cursor
+
+  return {
+    state: {
+      status: "loading",
+      kind,
+      attempt,
+      sessions: kind === "first" ? [] : state.sessions,
+      cursor,
+      exhausted: kind === "first" ? false : state.exhausted,
+      olderLoaded: kind === "first" ? false : state.olderLoaded,
+    } satisfies RecentPageState,
+    effects: [
+      { type: "fetch", attempt, cursor: requestCursor },
+      { type: "timer.start", attempt, delayMs: RECENT_PAGE_TIMEOUT_MS },
+    ] satisfies readonly RecentPageEffect[],
+  }
+}
+
+function finishLoading(
+  state: LoadingRecentPageState,
+  event: Extract<RecentPageEvent, { type: "succeeded" }>,
+): RecentPageTransition {
+  const incoming = [...event.sessions]
+  const next = event.next
+
+  if (state.kind === "next") {
+    return {
+      state: {
+        status: "ready",
+        sessions: mergeSessions(state.sessions, incoming),
+        cursor: next,
+        exhausted: incoming.length === 0 || !next,
+        olderLoaded: true,
+      },
+      effects: [{ type: "timer.cancel" }],
+    }
+  }
+
+  if (state.kind === "first" || !state.olderLoaded) {
+    return {
+      state: {
+        status: "ready",
+        sessions: incoming,
+        cursor: next,
+        exhausted: incoming.length === 0 || !next,
+        olderLoaded: false,
+      },
+      effects: [{ type: "timer.cancel" }],
+    }
+  }
+
+  // A reconnect snapshot with older pages loaded. A short final page replaces the list; an empty overlap means the
+  // snapshot starts fresh; otherwise rows in page one's window that the snapshot dropped are ghosts.
+  if (incoming.length === 0 || !next) {
+    return {
+      state: { status: "ready", sessions: incoming, cursor: undefined, exhausted: true, olderLoaded: false },
+      effects: [{ type: "timer.cancel" }],
+    }
+  }
+
+  const oldest = incoming.reduce((oldest, session) => Math.min(oldest, sessionTime(session)), Infinity)
+
+  if (oldest > state.sessions.reduce((newest, session) => Math.max(newest, sessionTime(session)), -Infinity)) {
+    return {
+      state: { status: "ready", sessions: incoming, cursor: next, exhausted: false, olderLoaded: false },
+      effects: [{ type: "timer.cancel" }],
+    }
+  }
+
+  const incomingIDs = new Set(incoming.map((session) => session.id))
+  const kept = state.sessions.filter((session) => sessionTime(session) < oldest || incomingIDs.has(session.id))
+
+  return {
+    state: {
+      status: "ready",
+      sessions: mergeSessions(kept, incoming),
+      cursor: state.cursor,
+      exhausted: state.exhausted,
+      olderLoaded: true,
+    },
+    effects: [{ type: "timer.cancel" }],
+  }
+}
+
+/** One server's page lifecycle. I/O lives in the driver; this only says what to fetch and what the rows become. */
+export function transitionRecentPage(
+  state: RecentPageState,
+  event: RecentPageEvent,
+): RecentPageTransition {
+  if (event.type === "removed") {
+    return { state: INITIAL_RECENT_PAGE_STATE, effects: [{ type: "timer.cancel" }] }
+  }
+
+  if (event.type === "load") {
+    if (event.kind === "next") {
+      if (state.status !== "ready" && state.status !== "failed") return unchanged(state)
+
+      if (state.cursor === undefined || state.exhausted) return unchanged(state)
+    }
+
+    return startLoading(state, event.kind, event.attempt)
+  }
+
+  if (event.type === "retry") {
+    if (state.status !== "failed") return unchanged(state)
+
+    return startLoading(state, state.kind, event.attempt)
+  }
+
+  if (state.status !== "loading" || state.attempt !== event.attempt) return unchanged(state)
+
+  if (event.type === "succeeded") return finishLoading(state, event)
+
+  if (event.type === "failed" || event.type === "timed-out") {
+    return {
+      state: {
+        status: "failed",
+        kind: state.kind,
+        sessions: state.sessions,
+        cursor: state.cursor,
+        exhausted: state.exhausted,
+        olderLoaded: state.olderLoaded,
+      },
+      effects: [{ type: "timer.cancel" }],
+    }
+  }
+
+  return unchanged(state)
+}
+
+export function recentPageLoaded(state: RecentPageState | undefined) {
+  return !!state && (state.status === "ready" || state.status === "failed")
+}
+
+export function recentPageLoading(state: RecentPageState | undefined) {
+  return state?.status === "loading"
+}
+
+export function recentPageFailed(state: RecentPageState | undefined) {
+  return state?.status === "failed"
+}
+
+export function recentPageHasMore(state: RecentPageState | undefined) {
+  return !!state && (state.status === "ready" || state.status === "failed") && !state.exhausted && !!state.cursor
+}
+
 function recent(server: string, sessions: readonly SessionInfo[]) {
   return sessions.flatMap((session): RecentSession[] => {
     if (session.parentID || session.time.archived !== undefined) return []
 
     return [{ key: recentSessionKey(server, session.id), server, session }]
   })
-}
-
-/**
- * A refreshed first page. Before older pages load it replaces the snapshot; afterwards it merges into them, and the
- * caller keeps the cursor it already advanced. Incoming rows win for the same session.
- */
-export function mergeFirstPage(
-  existing: readonly SessionInfo[],
-  incoming: readonly SessionInfo[],
-  olderLoaded: boolean,
-) {
-  if (!olderLoaded) return [...incoming]
-
-  return [...new Map([...existing, ...incoming].map((session) => [session.id, session] as const)).values()]
 }
 
 /** One server's sessions plus the live store, keeping root, unarchived sessions. Live entries win. */

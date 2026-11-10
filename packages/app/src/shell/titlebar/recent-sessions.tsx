@@ -4,6 +4,7 @@ import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Key } from "@solid-primitives/keyed"
+import { useQueryClient } from "@tanstack/solid-query"
 import { ActivityRing } from "@opencode/ui/activity-ring"
 import { Button } from "@opencode/ui/button"
 import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
@@ -13,7 +14,7 @@ import { Menu } from "@opencode/ui/menu"
 import { displayName } from "@opencode/ui/project-avatar"
 import { Schema } from "effect"
 import { createEffect, createMemo, createSignal, onCleanup, Show, startTransition } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { arrayMove } from "@/runtime/array-move"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -22,7 +23,6 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { createSessionRenamer } from "@/session/commands/rename-session"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
-import { sessionLabel } from "@/session/title"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
@@ -34,14 +34,21 @@ import { RenameDialog } from "./project-session-row"
 import {
   addPin,
   dedupePins,
-  mergeFirstPage,
+  INITIAL_RECENT_PAGE_STATE,
   mergeRecentSessions,
   partitionRecentSessions,
+  recentPageFailed,
+  recentPageHasMore,
+  recentPageLoaded,
   recentSessionKey,
   removePin,
   reorderPins,
   sortRecentSessions,
   splitRecentSessionKey,
+  transitionRecentPage,
+  type RecentPageEffect,
+  type RecentPageEvent,
+  type RecentPageState,
   type RecentSession,
 } from "./recent-sessions-model"
 import { notifySessionTabsRemoved } from "./session-events"
@@ -55,35 +62,9 @@ const RecentSidebarState = Persistence.struct({
   pins: Persistence.array(Schema.String),
 })
 
-type PageState = {
-  sessions: SessionInfo[]
-  cursor: string | undefined
-  loading: boolean
-  loaded: boolean
-  exhausted: boolean
-  failed: boolean
-  olderLoaded: boolean
-}
-
 type Connection = { conn: ServerConnection.Any; ctx: ServerCtx; server: ServerConnection.Key }
 
 type Hydration = { session: SessionInfo } | { missing: true }
-
-const emptyPage = (): PageState => ({
-  sessions: [],
-  cursor: undefined,
-  loading: false,
-  loaded: false,
-  exhausted: false,
-  failed: false,
-  olderLoaded: false,
-})
-
-function mergePage(current: SessionInfo[], next: SessionInfo[]) {
-  return [...new Map([...current, ...next].map((session) => [session.id, session] as const)).values()]
-}
-
-const page = (state: Record<string, PageState>, server: string) => state[server]
 
 /**
  * The experimental Recent sessions sidebar: pinned sessions first, then every server's newest root sessions in one
@@ -96,20 +77,24 @@ export function RecentSessions() {
   const layout = useLayout()
   const tabs = useTabs()
   const dialog = useDialog()
+  const queryClient = useQueryClient()
 
   const rename = createSessionRenamer()
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.recent"), RecentSidebarState, { pins: [] })
 
-  const [pages, setPages] = createStore<Record<string, PageState>>({})
+  const [pages, setPages] = createStore<Record<string, RecentPageState>>({})
 
   const [hydration, setHydration] = createStore<Record<string, Hydration>>({})
 
   const [clock, setClock] = createSignal(Date.now())
 
   const controllers = new Map<AbortController, string>()
+  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const hydrationControllers = new Map<string, AbortController>()
   const hydrating = new Set<string>()
-  const statuses = new Map<string, string>()
+  const statuses = new Map<string, { ctx: ServerCtx; status: string }>()
+  let attempt = 0
   let disposed = false
 
   const connections = createMemo(() =>
@@ -123,16 +108,36 @@ export function RecentSessions() {
 
   const ctxOf = (item: RecentSession) => global.serverCtx(ServerConnection.Key.make(item.server))
 
-  const abortServer = (server: string) => {
+  const isCurrent = (item: Connection) =>
+    connections().some((entry) => entry.server === item.server && entry.ctx === item.ctx)
+
+  const clearTimer = (server: string) => {
+    const timer = timers.get(server)
+
+    if (timer === undefined) return
+
+    clearTimeout(timer)
+    timers.delete(server)
+  }
+
+  const abortPages = (server: string) => {
     controllers.forEach((owner, controller) => {
       if (owner === server) controller.abort()
     })
   }
 
-  // A server that leaves the visible list owns no rows or hydration; its pins stay for when it returns.
-  const dropServer = (server: string) => {
-    abortServer(server)
-    setPages(produce((current) => void delete current[server]))
+  const abortHydration = (server?: string) => {
+    hydrationControllers.forEach((controller, key) => {
+      if (server && splitRecentSessionKey(key)?.server !== server) return
+
+      controller.abort()
+      hydrating.delete(key)
+
+      if (server) hydrationControllers.delete(key)
+    })
+  }
+
+  const clearHydration = (server: string) => {
     setHydration(
       produce((current) => {
         for (const key of Object.keys(current)) {
@@ -142,11 +147,128 @@ export function RecentSessions() {
     )
   }
 
+  function hydrate(item: Connection, key: string, sessionID: string) {
+    if (disposed || hydrating.has(key)) return
+
+    hydrating.add(key)
+
+    const controller = new AbortController()
+    hydrationControllers.set(key, controller)
+
+    void item.ctx.sdk.api.session
+      .get({ sessionID }, { signal: controller.signal })
+      .then(
+        (response) => {
+          if (controller.signal.aborted || disposed) return
+
+          if (!isCurrent(item)) return
+
+          setHydration(key, { session: response })
+        },
+        (cause) => {
+          if (controller.signal.aborted || disposed) return
+
+          if (!isCurrent(item)) return
+
+          if (!isSessionNotFoundError(cause)) return
+
+          setHydration(key, { missing: true })
+          removePinKey(key)
+        },
+      )
+      .finally(() => {
+        if (hydrationControllers.get(key) !== controller) return
+
+        hydrationControllers.delete(key)
+        hydrating.delete(key)
+      })
+  }
+
+  // A server that leaves the visible list owns no rows or hydration; its pins stay for when it returns.
+  const dropServer = (server: string) => {
+    abortPages(server)
+    abortHydration(server)
+    clearTimer(server)
+    setPages(produce((current) => void delete current[server]))
+    clearHydration(server)
+  }
+
+  function runEffect(item: Connection, effect: RecentPageEffect) {
+    if (effect.type === "timer.cancel") {
+      clearTimer(item.server)
+
+      return
+    }
+
+    if (effect.type === "timer.start") {
+      clearTimer(item.server)
+      timers.set(
+        item.server,
+        setTimeout(() => {
+          timers.delete(item.server)
+          dispatch(item, { type: "timed-out", attempt: effect.attempt })
+        }, effect.delayMs),
+      )
+
+      return
+    }
+
+    // A new fetch supersedes the previous page request for this server.
+    abortPages(item.server)
+
+    const controller = new AbortController()
+    controllers.set(controller, item.server)
+
+    void item.ctx.sdk.api.session
+      .list(
+        effect.cursor
+          ? { cursor: effect.cursor, limit: PAGE_LIMIT }
+          : { parentID: null, archived: false, order: "desc", limit: PAGE_LIMIT },
+        { signal: controller.signal },
+      )
+      .then(
+        (response) => {
+          if (controller.signal.aborted || disposed) return
+
+          if (!isCurrent(item)) return
+
+          dispatch(item, {
+            type: "succeeded",
+            attempt: effect.attempt,
+            sessions: response.data,
+            next: response.cursor.next ?? undefined,
+          })
+        },
+        () => {
+          if (controller.signal.aborted || disposed) return
+
+          if (!isCurrent(item)) return
+
+          dispatch(item, { type: "failed", attempt: effect.attempt })
+        },
+      )
+      .finally(() => controllers.delete(controller))
+  }
+
+  function dispatch(item: Connection, event: RecentPageEvent) {
+    const previous = pages[item.server] ?? INITIAL_RECENT_PAGE_STATE
+    const next = transitionRecentPage(previous, event)
+
+    if (next.state !== previous) setPages(item.server, reconcile(next.state))
+    next.effects.forEach((effect) => runEffect(item, effect))
+  }
+
+  function load(item: Connection, kind: "first" | "next" | "refresh") {
+    dispatch(item, { type: "load", kind, attempt: ++attempt })
+  }
+
   const ticker = setInterval(() => setClock(Date.now()), 60_000)
   onCleanup(() => {
     disposed = true
     clearInterval(ticker)
     controllers.forEach((_, controller) => controller.abort())
+    hydrationControllers.forEach((controller) => controller.abort())
+    timers.forEach((timer) => clearTimeout(timer))
   })
 
   // The store is local and long-lived; drop duplicates a previous version or a manual edit left behind.
@@ -158,98 +280,48 @@ export function RecentSessions() {
     if (normalized.length !== state.pins.length) setState("pins", normalized)
   })
 
-  const fetchPage = async (item: Connection, cursor: string | undefined) => {
-    if (disposed) return
-
-    if (!connections().some((entry) => entry.server === item.server)) return
-
-    setPages(item.server, (current) => ({
-      ...(current ?? emptyPage()),
-      loading: true,
-      failed: false,
-    }))
-
-    const controller = new AbortController()
-    controllers.set(controller, item.server)
-
-    try {
-      const response = cursor
-        ? await item.ctx.sdk.api.session.list({ cursor, limit: PAGE_LIMIT }, { signal: controller.signal })
-        : await item.ctx.sdk.api.session.list(
-            { parentID: null, archived: false, order: "desc", limit: PAGE_LIMIT },
-            { signal: controller.signal },
-          )
-
-      if (controller.signal.aborted || disposed) return
-
-      if (!connections().some((entry) => entry.server === item.server)) return
-
-      setPages(item.server, (current) => {
-        const olderLoaded = current?.olderLoaded ?? false
-
-        // Before older pages are loaded a refreshed snapshot replaces the list. Afterwards it only merges, and the
-        // cursor that already advanced past page one stays where it is.
-        const refreshed = !cursor && olderLoaded
-
-        return {
-          ...(current ?? emptyPage()),
-          sessions: cursor
-            ? mergePage(current?.sessions ?? [], response.data)
-            : mergeFirstPage(current?.sessions ?? [], response.data, olderLoaded),
-          cursor: refreshed ? current?.cursor : (response.cursor.next ?? undefined),
-          olderLoaded: olderLoaded || cursor !== undefined,
-          loading: false,
-          loaded: true,
-          failed: false,
-          exhausted: refreshed
-            ? (current?.exhausted ?? false)
-            : response.data.length === 0 || !response.cursor.next,
-        }
-      })
-    } catch {
-      if (controller.signal.aborted || disposed) return
-
-      if (!connections().some((entry) => entry.server === item.server)) return
-
-      // Keep the cursor and exhausted state so the next scroll retries this page instead of ending pagination.
-      setPages(item.server, (current) => ({
-        ...(current ?? emptyPage()),
-        loading: false,
-        loaded: true,
-        failed: true,
-      }))
-    } finally {
-      controllers.delete(controller)
-    }
-  }
-
-  // First pages follow connection state: load on the first connect, refresh the snapshot on every reconnect, and
-  // forget a server's pages when it leaves the visible list.
+  // First pages follow connection state: load on the first connect, refresh the snapshot on every reconnect or
+  // context replacement, and forget pages whose server no longer has a controller.
   createEffect(() => {
     const list = connections()
-    const visible = new Set<string>(servers.visible.map((conn) => ServerConnection.key(conn)))
+    const visible = new Set<string>(list.map((item) => item.server))
 
     list.forEach((item) => {
       const status = item.ctx.sdk.connection.status()
       const previous = statuses.get(item.server)
+      const replaced = !!previous && previous.ctx !== item.ctx
 
-      statuses.set(item.server, status)
+      statuses.set(item.server, { ctx: item.ctx, status })
+
+      // A replaced controller owns no old requests or pin snapshots, even before it reconnects.
+      if (replaced) {
+        abortPages(item.server)
+        abortHydration(item.server)
+        clearTimer(item.server)
+        clearHydration(item.server)
+      }
 
       if (status !== "connected") return
 
-      const current = page(pages, item.server)
+      const current = pages[item.server]
 
-      if (previous === undefined) {
-        if (!current) void fetchPage(item, undefined)
+      if (!current || current.status === "idle") {
+        load(item, "first")
 
         return
       }
 
-      if (previous === status) return
+      if (!replaced && previous?.status === status) return
 
-      // A reconnect starts from a fresh snapshot; drop the old first-page request so it cannot overwrite it.
-      abortServer(item.server)
-      void fetchPage(item, undefined)
+      // A reconnect or a new controller starts from a fresh snapshot and revalidates hydrated pins.
+      abortHydration(item.server)
+      clearHydration(item.server)
+      state.pins.forEach((key) => {
+        const parsed = splitRecentSessionKey(key)
+
+        if (parsed?.server === item.server) hydrate(item, key, parsed.sessionID)
+      })
+      load(item, "refresh")
     })
 
     for (const server of [...statuses.keys()]) {
@@ -263,7 +335,7 @@ export function RecentSessions() {
   const items = createMemo(() =>
     sortRecentSessions(
       connections().flatMap((item) => {
-        const fetched = page(pages, item.server)
+        const fetched = pages[item.server]
 
         return mergeRecentSessions(
           item.server,
@@ -318,19 +390,7 @@ export function RecentSessions() {
       // A live entry that is archived is hidden and keeps its pin; one pending removal is already gone.
       if (item.ctx.data.session.get(parsed.sessionID)) return
 
-      hydrating.add(key)
-      void item.ctx.sdk.api.session
-        .get({ sessionID: parsed.sessionID })
-        .then(
-          (response) => setHydration(key, { session: response }),
-          (cause) => {
-            if (!isSessionNotFoundError(cause)) return
-
-            setHydration(key, { missing: true })
-            removePinKey(key)
-          },
-        )
-        .finally(() => hydrating.delete(key))
+      hydrate(item, key, parsed.sessionID)
     })
   })
 
@@ -363,7 +423,16 @@ export function RecentSessions() {
           forget(item.server, event.data.sessionID)
         }),
       )
-      onCleanup(item.ctx.data.on("session.unarchived", (event) => update(event.data.sessionID, undefined)))
+      onCleanup(
+        item.ctx.data.on("session.unarchived", (event) => {
+          update(event.data.sessionID, undefined)
+
+          // Hydrated pins have no live record to leave the archived state behind.
+          if (!item.ctx.data.session.get(event.data.sessionID)) {
+            void item.ctx.data.session.sync(event.data.sessionID).catch(() => undefined)
+          }
+        }),
+      )
     })
   })
 
@@ -404,37 +473,33 @@ export function RecentSessions() {
     return connections().some((item) => {
       if (item.ctx.sdk.connection.status() !== "connected") return false
 
-      const value = page(pages, item.server)
+      const value = pages[item.server]
 
-      return !value?.loaded
+      return !recentPageLoaded(value)
     })
   })
 
   const loadingMore = createMemo(() =>
     connections().some((item) => {
-      const value = page(pages, item.server)
+      const value = pages[item.server]
 
-      return !!value && value.loading && value.loaded
+      return value?.status === "loading" && value.kind !== "first" && value.sessions.length > 0
     }),
   )
 
-  const failed = createMemo(() => connections().some((item) => page(pages, item.server)?.failed))
+  const failed = createMemo(() => connections().some((item) => recentPageFailed(pages[item.server])))
 
   const retryFailed = () => {
     connections().forEach((item) => {
-      const current = page(pages, item.server)
-
-      if (!current?.failed || current.loading) return
+      if (!recentPageFailed(pages[item.server])) return
 
       if (item.ctx.sdk.connection.status() !== "connected") return
 
-      void fetchPage(item, current.cursor)
+      dispatch(item, { type: "retry", attempt: ++attempt })
     })
   }
 
-  const empty = createMemo(
-    () => pinned().length === 0 && recent().length === 0 && !firstPageLoading(),
-  )
+  const empty = createMemo(() => pinned().length === 0 && recent().length === 0 && !firstPageLoading())
 
   // Every server with a cursor loads its next page together, and the merged list re-sorts. Newly loaded rows can
   // therefore appear above rows already shown: one merged recency order is kept rather than holding rows back until
@@ -442,26 +507,56 @@ export function RecentSessions() {
   // keeps its cursor so the next scroll retries it.
   const loadMore = () => {
     connections().forEach((item) => {
-      const current = page(pages, item.server)
+      const current = pages[item.server]
 
-      if (!current?.loaded || current.loading || current.exhausted) return
+      if (!current) return
 
       if (item.ctx.sdk.connection.status() !== "connected") return
 
-      if (current.failed) {
-        void fetchPage(item, current.cursor)
+      if (current.status === "failed") {
+        dispatch(item, { type: "retry", attempt: ++attempt })
 
         return
       }
 
-      if (current.cursor === undefined) return
+      if (!recentPageHasMore(current)) return
 
-      void fetchPage(item, current.cursor)
+      load(item, "next")
     })
   }
 
-  const reorderPinned = (nextVisible: readonly string[]) => {
-    const visible = pinned().map((item) => item.key)
+  let viewport: HTMLDivElement | undefined
+  let fillFrame: number | undefined
+
+  // A short list cannot scroll, so a scroll event never asks for the next page. Fill the viewport once per render
+  // until rows overflow it or every server with a cursor is exhausted.
+  createEffect(() => {
+    connections().forEach((item) => pages[item.server]?.status)
+    void items()
+
+    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+    fillFrame = requestAnimationFrame(() => {
+      fillFrame = undefined
+
+      if (disposed || !viewport || loadingMore()) return
+
+      if (viewport.scrollHeight > viewport.clientHeight) return
+
+      const more = connections().some((item) => {
+        const current = pages[item.server]
+
+        return current?.status === "ready" && recentPageHasMore(current)
+      })
+
+      if (more) loadMore()
+    })
+  })
+
+  onCleanup(() => {
+    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+  })
+
+  const reorderPinned = (nextVisible: readonly string[]) => {    const visible = pinned().map((item) => item.key)
     setState("pins", reorderPins(state.pins, visible, nextVisible))
   }
 
@@ -507,14 +602,18 @@ export function RecentSessions() {
 
     if (!ctx) return
 
-    const directory = ctx.projects.forSession(item.session)?.worktree ?? item.session.location.directory
+    const current = ctx.data.session.get(item.session.id) ?? item.session
+    const directory = ctx.projects.forSession(current)?.worktree ?? current.location.directory
 
-    void ctx.data.session.message.sync(item.session.id).catch((cause) => {
-      if (isSessionNotFoundError(cause)) removePinKey(item.key)
+    void ctx.data.session.message.sync(current.id).catch((cause) => {
+      if (!isSessionNotFoundError(cause)) return
+
+      removePinKey(item.key)
+      forget(item.server, current.id)
     })
     void startTransition(() => {
-      tabs.select(tabs.addSessionTab({ server: ServerConnection.Key.make(item.server), sessionId: item.session.id }))
-      ctx.data.session.remember(item.session)
+      tabs.select(tabs.addSessionTab({ server: ServerConnection.Key.make(item.server), sessionId: current.id }))
+      ctx.data.session.remember(current)
       ctx.projects.touch(directory)
     })
   }
@@ -524,6 +623,16 @@ export function RecentSessions() {
       title: language.t("common.requestFailed"),
       description: errorMessage(cause, language.t("common.requestFailed")),
     })
+
+  const invalidateSessionLists = (server: string) => {
+    const conn = global.servers.list().find((entry) => ServerConnection.key(entry) === server)
+
+    if (!conn) return
+
+    for (const queryKey of ["home-sessions", "inbox-sessions", "inbox-archived-sessions"]) {
+      void queryClient.invalidateQueries({ queryKey: [queryKey, conn], exact: true })
+    }
+  }
 
   const archive = (item: RecentSession) => {
     const ctx = ctxOf(item)
@@ -543,6 +652,7 @@ export function RecentSessions() {
         }
 
         forget(item.server, item.session.id)
+        invalidateSessionLists(item.server)
         notifySessionTabsRemoved({
           server: ServerConnection.Key.make(item.server),
           directory: item.session.location.directory,
@@ -586,32 +696,41 @@ export function RecentSessions() {
     return conn ? servers.tag(conn) : undefined
   }
 
-  const row = (item: RecentSession, index?: number) => {
+  const row = (item: () => RecentSession, index?: () => number) => {
     const props = {
       item,
-      selected: selected(item),
+      selected: () => selected(item()),
       pinned: index !== undefined,
-      serverTag: serverTag(item),
+      serverTag: () => serverTag(item()),
       now: clock,
-      canMoveUp: index !== undefined && index > 0,
-      canMoveDown: index !== undefined && index < pinned().length - 1,
-      onOpen: () => open(item),
-      onPin: () => setState("pins", (current) => addPin(current, item.key)),
-      onUnpin: () => removePinKey(item.key),
-      onMoveUp: () => movePin(item.key, -1),
-      onMoveDown: () => movePin(item.key, 1),
-      onRename: () =>
+      canMoveUp: () => index !== undefined && index() > 0,
+      canMoveDown: () => index !== undefined && index() < pinned().length - 1,
+      onOpen: () => open(item()),
+      onPin: () => setState("pins", (current) => addPin(current, item().key)),
+      onUnpin: () => removePinKey(item().key),
+      onMoveUp: () => movePin(item().key, -1),
+      onMoveDown: () => movePin(item().key, 1),
+      onRename: () => {
+        const current = item()
+
         void dialog.show(() => (
           <RenameDialog
-            title={sessionLabel(item.session)}
-            onRename={(title) => rename(ServerConnection.Key.make(item.server), item.session, title)}
+            title={sessionTabTitle(current.session.title, language.t("command.session.new"))}
+            onRename={(title) => rename(ServerConnection.Key.make(current.server), current.session, title)}
           />
-        )),
-      onArchive: () => archive(item),
-      onDelete: () =>
+        ))
+      },
+      onArchive: () => archive(item()),
+      onDelete: () => {
+        const current = item()
+
         void dialog.show(() => (
-          <DeleteSessionDialog title={sessionLabel(item.session)} onConfirm={() => remove(item)} />
-        )),
+          <DeleteSessionDialog
+            title={sessionTabTitle(current.session.title, language.t("command.session.new"))}
+            onConfirm={() => remove(current)}
+          />
+        ))
+      },
     }
 
     return index === undefined ? <RecentSessionRow {...props} /> : <PinnedSessionRow {...props} index={index} />
@@ -620,6 +739,7 @@ export function RecentSessions() {
   return (
     <div data-slot="sidebar-recent" class="flex min-h-0 flex-1 flex-col [app-region:no-drag]">
       <div
+        ref={(element) => (viewport = element)}
         data-scrollable
         class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1"
         onScroll={(event) => {
@@ -662,7 +782,7 @@ export function RecentSessions() {
                 }}
               >
                 <Key each={pinned()} by={(item) => item.key}>
-                  {(item, index) => row(item(), index())}
+                  {(item, index) => row(item, index)}
                 </Key>
               </DragDropProvider>
             </div>
@@ -671,24 +791,26 @@ export function RecentSessions() {
             <div role="group" aria-labelledby="sidebar-recent-list" class="flex shrink-0 flex-col gap-2 pb-2.5">
               <SectionHeader id="sidebar-recent-list" label={language.t("sidebar.recent.section.recent")} />
               <Key each={recent()} by={(item) => item.key}>
-                {(item) => row(item())}
+                {(item) => row(item)}
               </Key>
             </div>
           </Show>
           <Show when={empty()}>
-            <div class="flex items-center gap-2 px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
-              <span>{language.t("sidebar.recent.empty")}</span>
-              <Show when={failed()}>
-                <Button variant="ghost-muted" size="small" onClick={retryFailed}>
-                  {language.t("common.retry")}
-                </Button>
-              </Show>
+            <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
+              {language.t("sidebar.recent.empty")}
             </div>
           </Show>
         </Show>
         <Show when={loadingMore()}>
           <div class="flex justify-center p-2">
             <Loader role="img" aria-hidden="false" aria-label={language.t("common.loading")} />
+          </div>
+        </Show>
+        <Show when={failed() && !loadingMore()}>
+          <div class="flex justify-center p-2">
+            <Button variant="ghost-muted" size="small" onClick={retryFailed}>
+              {language.t("common.retry")}
+            </Button>
           </div>
         </Show>
       </div>
@@ -708,13 +830,13 @@ function SectionHeader(props: { id: string; label: string }) {
 }
 
 type RecentSessionRowProps = {
-  item: RecentSession
-  selected: boolean
+  item: () => RecentSession
+  selected: () => boolean
   pinned: boolean
-  serverTag: string | undefined
+  serverTag: () => string | undefined
   now: () => number
-  canMoveUp: boolean
-  canMoveDown: boolean
+  canMoveUp: () => boolean
+  canMoveDown: () => boolean
   onOpen: () => void
   onPin: () => void
   onUnpin: () => void
@@ -725,13 +847,13 @@ type RecentSessionRowProps = {
   onDelete: () => void
 }
 
-function PinnedSessionRow(props: RecentSessionRowProps & { index: number }) {
+function PinnedSessionRow(props: RecentSessionRowProps & { index: () => number }) {
   const sortable = useSortable({
     get id() {
-      return props.item.key
+      return props.item().key
     },
     get index() {
-      return props.index
+      return props.index()
     },
   })
 
@@ -747,21 +869,22 @@ function RecentSessionRow(props: RecentSessionRowProps) {
   const global = useGlobal()
   const dialog = useDialog()
 
-  const ctx = () => global.serverCtx(ServerConnection.Key.make(props.item.server))
-  const project = () => ctx()?.projects.forSession(props.item.session)
+  const item = () => props.item()
+  const ctx = () => global.serverCtx(ServerConnection.Key.make(item().server))
+  const project = () => ctx()?.projects.forSession(item().session)
 
   const status = useSessionTabAvatarState(
-    () => ServerConnection.Key.make(props.item.server),
-    () => props.item.session.id,
+    () => ServerConnection.Key.make(item().server),
+    () => item().session.id,
     () => true,
-    () => props.item.session,
+    () => item().session,
   )
 
-  const title = () => sessionTabTitle(props.item.session.title, language.t("session.tab.session"))
+  const title = () => sessionTabTitle(item().session.title, language.t("session.tab.session"))
 
   const age = () =>
     getRelativeTime(
-      new Date(props.item.session.time.updated ?? props.item.session.time.created).toISOString(),
+      new Date(item().session.time.updated ?? item().session.time.created).toISOString(),
       language.t,
       language.intl(),
       props.now(),
@@ -773,15 +896,15 @@ function RecentSessionRow(props: RecentSessionRowProps) {
         as="button"
         type="button"
         data-slot="sidebar-recent-item"
-        data-state={props.selected ? "active" : undefined}
-        aria-current={props.selected ? "page" : undefined}
+        data-state={props.selected() ? "active" : undefined}
+        aria-current={props.selected() ? "page" : undefined}
         class="group flex min-h-9 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         onClick={props.onOpen}
       >
         <span class="flex size-4 shrink-0 items-center justify-center">
           <SessionTabAvatarView
             project={project()}
-            directory={props.item.session.location.directory}
+            directory={item().session.location.directory}
             unread={false}
           />
         </span>
@@ -794,9 +917,9 @@ function RecentSessionRow(props: RecentSessionRowProps) {
           </span>
           <span class="flex min-w-0 items-center gap-1.5 overflow-hidden text-[12px] leading-4 text-v2-text-text-faint">
             <span dir="auto" class="min-w-0 truncate">
-              {displayName(project() ?? { worktree: props.item.session.location.directory })}
+              {displayName(project() ?? { worktree: item().session.location.directory })}
             </span>
-            <Show when={props.serverTag}>
+            <Show when={props.serverTag()}>
               {(tag) => (
                 <span class="max-w-24 shrink-0 truncate rounded-[3px] bg-v2-background-bg-layer-02 px-1 text-[11px] leading-4 text-v2-text-text-muted">
                   {tag()}
@@ -809,7 +932,7 @@ function RecentSessionRow(props: RecentSessionRowProps) {
           <Show when={status.loading()}>
             <ActivityRing width={14} height={14} class="shrink-0" />
           </Show>
-          <Show when={!status.loading() && status.unread() && !props.selected}>
+          <Show when={!status.loading() && status.unread() && !props.selected()}>
             <span class="size-1.5 rounded-full bg-v2-text-text-base" aria-hidden="true" />
           </Show>
           <span class="whitespace-nowrap">{age()}</span>
@@ -826,10 +949,10 @@ function RecentSessionRow(props: RecentSessionRowProps) {
             fallback={<Menu.Item onSelect={props.onPin}>{language.t("sidebar.recent.pin")}</Menu.Item>}
           >
             <Menu.Item onSelect={props.onUnpin}>{language.t("sidebar.recent.unpin")}</Menu.Item>
-            <Menu.Item disabled={!props.canMoveUp} onSelect={props.onMoveUp}>
+            <Menu.Item disabled={!props.canMoveUp()} onSelect={props.onMoveUp}>
               {language.t("sidebar.recent.moveUp")}
             </Menu.Item>
-            <Menu.Item disabled={!props.canMoveDown} onSelect={props.onMoveDown}>
+            <Menu.Item disabled={!props.canMoveDown()} onSelect={props.onMoveDown}>
               {language.t("sidebar.recent.moveDown")}
             </Menu.Item>
           </Show>

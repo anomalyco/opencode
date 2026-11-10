@@ -210,6 +210,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               if (
                 settings.appearance.tabLayout() === "vertical" &&
                 settings.general.sidebarOrganize() !== "list" &&
+                !recentSessions() &&
                 !mobile()
               )
                 return
