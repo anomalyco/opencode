@@ -127,6 +127,32 @@ export const SessionPartTable = sqliteTable(
   ],
 )
 
+/**
+ * Gives each indexed source a stable `session_search` rowid: a message's text, keyed by message ID, or a session's
+ * title, keyed by session ID. Source tables have text keys, whose implicit rowids VACUUM may renumber, so the
+ * contentless index never uses them. No foreign keys: a cascade would drop this row but leave its index entry.
+ */
+export const SessionSearchDocumentTable = sqliteTable(
+  "session_search_document",
+  {
+    id: integer().primaryKey(),
+    source_id: text().notNull(),
+    session_id: text().$type<SessionSchema.ID>().notNull(),
+  },
+  (table) => [
+    uniqueIndex("session_search_document_source_idx").on(table.source_id),
+    index("session_search_document_session_idx").on(table.session_id),
+  ],
+)
+
+/**
+ * Sources whose search entry may be stale, filled by triggers on the source tables so every writer, including
+ * binaries that predate the index, queues its changes. Holds IDs only; indexing rereads the source.
+ */
+export const SessionSearchDirtyTable = sqliteTable("session_search_dirty", {
+  source_id: text().primaryKey(),
+})
+
 export const SessionInboxTable = sqliteTable(
   "session_inbox",
   {

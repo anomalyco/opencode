@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4f6e16c6-f070-4545-b9d0-19fcb6e5210c",
-  "prevIds": ["0ac88673-a402-45a0-b931-e694d59ccefa"],
+  "id": "da16f7c0-2fc6-4f36-bd62-2be5a0189899",
+  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
   "ddl": [
     {
       "name": "account_state",
@@ -82,6 +82,14 @@
     },
     {
       "name": "session_part",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_search_dirty",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_search_document",
       "entityType": "tables"
     },
     {
@@ -1552,6 +1560,46 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
+      "name": "source_id",
+      "entityType": "columns",
+      "table": "session_search_dirty"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "session_search_document"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "source_id",
+      "entityType": "columns",
+      "table": "session_search_document"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "session_search_document"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
       "name": "id",
       "entityType": "columns",
       "table": "session_v2"
@@ -2319,6 +2367,20 @@
       "entityType": "pks"
     },
     {
+      "columns": ["source_id"],
+      "nameExplicit": false,
+      "name": "session_search_dirty_pk",
+      "table": "session_search_dirty",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "session_search_document_pk",
+      "table": "session_search_document",
+      "entityType": "pks"
+    },
+    {
       "columns": ["id"],
       "nameExplicit": false,
       "name": "session_v2_pk",
@@ -2633,6 +2695,34 @@
       "name": "session_part_session_message_idx",
       "entityType": "indexes",
       "table": "session_part"
+    },
+    {
+      "columns": [
+        {
+          "value": "source_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_search_document_source_idx",
+      "entityType": "indexes",
+      "table": "session_search_document"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_search_document_session_idx",
+      "entityType": "indexes",
+      "table": "session_search_document"
     },
     {
       "columns": [

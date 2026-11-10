@@ -248,6 +248,18 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_search_dirty\` (
+          \`source_id\` text PRIMARY KEY
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`session_search_document\` (
+          \`id\` integer PRIMARY KEY,
+          \`source_id\` text NOT NULL,
+          \`session_id\` text NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_v2\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
@@ -340,6 +352,12 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
       yield* tx.run(
         `CREATE INDEX \`session_part_session_message_idx\` ON \`session_part\` (\`session_id\`,\`message_id\`,\`ordinal\`);`,
+      )
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`session_search_document_source_idx\` ON \`session_search_document\` (\`source_id\`);`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`session_search_document_session_idx\` ON \`session_search_document\` (\`session_id\`);`,
       )
       yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
