@@ -6,6 +6,16 @@ import {
   type PluginFactory,
   type Entry,
 } from "@opencode/plugin/gui/host"
+import { ClientError } from "@opencode/client/promise"
+
+/** Log the reason, not a stack with a ticketed module URL or a snippet of a malformed listing. */
+export function webPluginError(cause: unknown, ticket?: string) {
+  if (!(cause instanceof Error)) return "Unknown error"
+  if (cause instanceof ClientError && cause.reason === "MalformedResponse") return cause.reason
+  const message = `${cause.name}: ${cause.message}`
+
+  return ticket ? message.replaceAll(ticket, "[redacted]") : message
+}
 
 // Plugin bundles share the host's module instances, so tokens, contexts and schemas they import are the same objects
 // the host checks against. In a window, the main SDK's name resolves to the window SDK.

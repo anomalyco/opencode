@@ -5,7 +5,7 @@ import type { OpenCodeClient } from "@opencode/client/promise"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { builtins } from "./builtins"
-import { pluginDefinition } from "./module"
+import { pluginDefinition, webPluginError } from "./module"
 import {
   createPluginGuiState,
   PLUGIN_GUI_INITIAL_TIMEOUT_MS,
@@ -160,7 +160,9 @@ export function PluginGuiLoader(props: {
           const reserved = listed.flatMap((plugin) => (pluginIdAvailable(plugin.id, builtins) ? [] : [plugin.id]))
           dispatch({ type: "pushed", guis: { plugins, reserved } })
         },
-        () => undefined,
+        (cause: unknown) => {
+          if (!controller.signal.aborted) console.error("[plugin] could not list web GUIs", webPluginError(cause))
+        },
       )
     }
 
@@ -174,13 +176,9 @@ export function PluginGuiLoader(props: {
 
 /** A failed module request leaves the previously published revision running until a fresh listing. */
 async function evaluate(plugin: GuiSource): Promise<LoadedPluginGui | undefined> {
-  const code = "code" in plugin ? plugin.code : await importWebFactory(plugin).catch(() => undefined)
+  const code = "code" in plugin ? plugin.code : await importWebFactory(plugin)
 
-  if (code === undefined) {
-    console.error("[plugin] could not import web GUI", plugin.id)
-
-    return undefined
-  }
+  if (code === undefined) return undefined
 
   return {
     id: plugin.id,
@@ -193,7 +191,17 @@ async function evaluate(plugin: GuiSource): Promise<LoadedPluginGui | undefined>
 async function importWebFactory(plugin: Extract<GuiSource, { ticket: string }>) {
   const url = new URL("/api/experimental/plugin/web-module", window.location.origin)
   url.search = new URLSearchParams({ id: plugin.id, revision: plugin.revision, ticket: plugin.ticket }).toString()
-  const module: { default: PluginFactory } = await import(/* @vite-ignore */ url.href)
+  const module: { default: PluginFactory } | undefined = await import(/* @vite-ignore */ url.href).catch(
+    (cause: unknown) => {
+      console.error(
+        "[plugin] could not import web GUI",
+        plugin.id,
+        plugin.revision,
+        webPluginError(cause, plugin.ticket),
+      )
+      return undefined
+    },
+  )
 
-  return module.default
+  return module?.default
 }
