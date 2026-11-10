@@ -204,8 +204,8 @@ export type SearchEntry = {
   readonly description: ToolDescription
   /** Position in the full search index, for scoring through the word index. */
   readonly position: number
-  /** Stemmed words per field; stop words are kept for field length and skipped when indexing. */
-  readonly fields: Readonly<Record<SearchField, ReadonlyArray<string>>>
+  /** The tool's searchable text by field, read when the word index is built. */
+  readonly text: () => Readonly<Record<SearchField, ReadonlyArray<string>>>
   /** Words in the tool's own name (the last path segment). */
   readonly nameLength: number
 }
@@ -272,7 +272,7 @@ const queryTerms = (query: string) => {
 
 /** For each word, the tools containing it and their field-weighted, length-normalized term frequency. */
 type WordIndex = {
-  readonly postings: ReadonlyMap<string, { readonly positions: Array<number>; readonly weights: Array<number> }>
+  readonly postings: ReadonlyMap<string, { readonly positions: Int32Array; readonly weights: Float32Array }>
   readonly documents: number
   /** Sorted indexed words, for partial-word matching. */
   readonly words: ReadonlyArray<string>
@@ -283,29 +283,45 @@ const wordIndexes = new WeakMap<ReadonlyArray<SearchEntry>, WordIndex>()
 const wordIndexFor = (index: ReadonlyArray<SearchEntry>): WordIndex => {
   const cached = wordIndexes.get(index)
   if (cached) return cached
+  // Field texts are split once here and dropped afterwards; descriptions repeat across tools, so each text is split
+  // once and shared while building.
+  const cache = new Map<string, ReadonlyArray<string>>()
+  const words = (texts: ReadonlyArray<string>) => texts.flatMap((text) => fieldWords(text, cache))
+  const fields = index.map((entry) => {
+    const text = entry.text()
+    return {
+      namespace: words(text.namespace),
+      name: words(text.name),
+      description: words(text.description),
+      parameters: words(text.parameters),
+      namespaceDescription: words(text.namespaceDescription),
+    }
+  })
   const averageLength = Object.fromEntries(
-    searchFields.map((field) => [
-      field,
-      index.reduce((sum, entry) => sum + entry.fields[field].length, 0) / index.length || 1,
-    ]),
+    searchFields.map((field) => [field, fields.reduce((sum, entry) => sum + entry[field].length, 0) / index.length || 1]),
   ) as Record<SearchField, number>
-  const postings = new Map<string, { positions: Array<number>; weights: Array<number> }>()
+  const building = new Map<string, { positions: Array<number>; weights: Array<number> }>()
   const weights = new Map<string, number>()
-  for (const entry of index) {
+  fields.forEach((entry, position) => {
     weights.clear()
     for (const field of searchFields) {
-      const words = entry.fields[field]
       const weight =
-        fieldWeights[field] / (1 - lengthNormalization + (lengthNormalization * words.length) / averageLength[field])
-      for (const word of words) if (word) weights.set(word, (weights.get(word) ?? 0) + weight)
+        fieldWeights[field] / (1 - lengthNormalization + (lengthNormalization * entry[field].length) / averageLength[field])
+      for (const word of entry[field]) if (word) weights.set(word, (weights.get(word) ?? 0) + weight)
     }
     for (const [word, weight] of weights) {
-      let posting = postings.get(word)
-      if (!posting) postings.set(word, (posting = { positions: [], weights: [] }))
-      posting.positions.push(entry.position)
+      let posting = building.get(word)
+      if (!posting) building.set(word, (posting = { positions: [], weights: [] }))
+      posting.positions.push(position)
       posting.weights.push(weight)
     }
-  }
+  })
+  const postings = new Map(
+    [...building].map(([word, posting]) => [
+      word,
+      { positions: Int32Array.from(posting.positions), weights: Float32Array.from(posting.weights) },
+    ]),
+  )
   const built = { postings, documents: index.length, words: [...postings.keys()].sort() }
   wordIndexes.set(index, built)
   return built
@@ -343,12 +359,13 @@ const rank = (
     for (const [word, factor] of matches) {
       const posting = words.postings.get(word)!
       const idf = Math.log(1 + (words.documents - posting.positions.length + 0.5) / (posting.positions.length + 0.5))
-      posting.positions.forEach((position, i) => {
-        if (allowed && !allowed.has(position)) return
+      for (let i = 0; i < posting.positions.length; i++) {
+        const position = posting.positions[i]!
+        if (allowed && !allowed.has(position)) continue
         const weight = posting.weights[i]!
         const score = (factor * idf * weight * (k1 + 1)) / (weight + k1)
         if (score > (best.get(position) ?? 0)) best.set(position, score)
-      })
+      }
     }
     for (const [position, score] of best) scores.set(position, (scores.get(position) ?? 0) + score)
   }
@@ -408,27 +425,20 @@ export const searchSignature = (() => {
   return `search(${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
-// Descriptions repeat across tools (an `account_id` parameter on thousands of endpoints); `cache` splits each text once.
-const toSearchEntry = <R>(
-  visible: VisibleTool<R>,
-  position: number,
-  cache: Map<string, ReadonlyArray<string>>,
-): SearchEntry => {
+const toSearchEntry = <R>(visible: VisibleTool<R>, position: number): SearchEntry => {
   const segments = visible.path.split(".")
-  const words = (text: string) => fieldWords(text, cache)
+  const name = segments.at(-1) ?? ""
   return {
     description: describeTool(visible),
     position,
-    fields: {
-      namespace: segments.slice(0, -1).flatMap(words),
-      name: words(segments.at(-1) ?? ""),
-      description: words(visible.tool.description),
-      parameters: inputProperties(visible.tool).flatMap((property) =>
-        words(property.name).concat(words(property.description ?? "")),
-      ),
-      namespaceDescription: visible.namespaces.flatMap((namespace) => words(namespace.description ?? "")),
-    },
-    nameLength: splitWords(segments.at(-1) ?? "").length,
+    text: () => ({
+      namespace: segments.slice(0, -1),
+      name: [name],
+      description: [visible.tool.description],
+      parameters: inputProperties(visible.tool).flatMap((property) => [property.name, property.description ?? ""]),
+      namespaceDescription: visible.namespaces.map((namespace) => namespace.description ?? ""),
+    }),
+    nameLength: splitWords(name).length,
   }
 }
 
@@ -444,11 +454,9 @@ export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
     get searchIndex() {
       // Executing known tools only needs the trie. Render discovery when it is actually read,
       // ordering after canonical-path collisions settle so instruction bytes stay deterministic.
-      if (searchIndex) return searchIndex
-      const words = new Map<string, ReadonlyArray<string>>()
-      return (searchIndex = flattenTools(root)
+      return (searchIndex ??= flattenTools(root)
         .sort((left, right) => compareText(left.path, right.path))
-        .map((visible, position) => toSearchEntry(visible, position, words)))
+        .map(toSearchEntry))
     },
   }
 }
