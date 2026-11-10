@@ -518,6 +518,20 @@ fn pair_links_skip_server_urls_with_non_ascii_hosts() {
     assert_eq!(value.localhost, None);
 }
 
+// Expected (bigboi-dialogs-7): closing the export options frees them with what their confirm holds.
+#[test]
+fn closing_export_frees_its_select_and_callbacks() {
+    let app = TestApp::new(80, 24);
+    let tui = support::mount_empty(&app, Info::default(), None);
+    let marker = Rc::new(());
+    let held = marker.clone();
+    opencode_tui::dialogs::export::options(&tui, false, Rc::new(move |_, _| drop(held.clone())));
+    wait_for(&app, "Export session");
+    tui.dialogs.clear();
+    app.render();
+    assert_eq!(Rc::strong_count(&marker), 1, "the closed export dialog kept its confirm");
+}
+
 #[test]
 fn integration_links_open_only_on_the_web() {
     let app = TestApp::new(80, 24);
