@@ -41,9 +41,10 @@ export default function press() {
   })
 }
 
-// The FAQ accordion's rows (faq.tsx), any number open: OpenCode open from the server. A row grows
-// open, only once one has been toggled (data-ready), so a row a link opens doesn't animate; a closed
-// one goes at once (faq.css) and is hidden="until-found" again, as the server writes it.
+// The boilerplate accordion's rows (routes/press/index.tsx, in the FAQ's look), any number open:
+// OpenCode open from the server. A row grows open, only once one has been toggled (data-ready), so a
+// row a link opens doesn't animate; a closed one goes at once (faq.css) and is hidden="until-found"
+// again, as the server writes it.
 function accordion(list: HTMLElement) {
   const set = (row: HTMLElement, open: boolean) => {
     const item = $('[data-slot="faq-item"]', row)

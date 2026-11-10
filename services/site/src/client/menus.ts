@@ -42,7 +42,7 @@ export function startMenus() {
   onCloseMenus(closeNav)
   on("opencode-nav-menu-open" as keyof DocumentEventMap, () => runMenuClosers(closeNav))
 
-  // One highlighted row per menu: keyboard focus follows the pointer into another row.
+  // One highlighted row per menu: keyboard focus follows the pointer into another row (as Site does).
   on("pointerover", (event) => {
     if (event.pointerType !== "mouse") return
     const row = target(event).closest<HTMLElement>(
@@ -52,7 +52,8 @@ export function startMenus() {
     if (!row || !popup?.contains(document.activeElement) || document.activeElement === row) return
     row.focus({ preventScroll: true })
   })
-  // A link chosen in a menu closes them all, after its own handlers have run.
+  // A link chosen in a menu closes them all, after its own handlers have run (menu-open.ts
+  // closeMenusOnLinks on the hydrated pages).
   on(
     "click",
     (event) => {

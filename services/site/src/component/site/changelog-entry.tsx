@@ -6,7 +6,7 @@ import { Dynamic } from "solid-js/web"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { inlineKey, isRtl } from "~/lib/direction"
+import { inlineKey } from "~/lib/direction"
 import {
   areaLabel,
   bodyBlocks,
@@ -17,10 +17,10 @@ import {
   type ChangelogView,
 } from "~/lib/changelog-notes"
 import { CarouselArrows } from "./carousel-arrows"
+import { carouselDrag, revealChosenFilter, timelineRail } from "./changelog-motion"
 import { Chevron, ExternalArrow, NewTab } from "./icons"
 import { Inline, ReleaseItem } from "./release"
 import { prefersReducedMotion } from "./media"
-import { useVisible } from "./visible"
 import {
   changelogCarousels,
   changelogFilters,
@@ -131,15 +131,7 @@ export function ChangelogToolbar(props: { view: ChangelogView }) {
   const toggle = (key: string) =>
     props.view.filter.includes(key) ? props.view.filter.filter((item) => item !== key) : [...props.view.filter, key]
   let nav!: HTMLElement
-  // On a phone the row scrolls sideways: bring the last chosen area into view (sideways only).
-  onMount(() => {
-    const chosen = [...nav.querySelectorAll<HTMLElement>('[aria-current="true"]')].at(-1)
-    if (!chosen) return
-    // Right to left the row starts at the right and scrolls to negative scrollLeft values.
-    nav.scrollLeft = isRtl(nav)
-      ? Math.min(0, chosen.getBoundingClientRect().left - nav.getBoundingClientRect().left - 24)
-      : Math.max(0, chosen.offsetLeft + chosen.offsetWidth - nav.clientWidth + 24)
-  })
+  onMount(() => revealChosenFilter(nav))
   return (
     <div
       data-component="changelog-toolbar"
@@ -238,65 +230,7 @@ export function ChangelogTimeline(props: {
   const language = useLanguage()
   let list!: HTMLOListElement
 
-  const visible = useVisible(() => list)
-  // Only while the timeline is near the screen.
-  createEffect(() => {
-    if (!visible()) return
-    const frame = { id: 0 }
-    const update = () => {
-      frame.id = 0
-      const line = window.innerHeight * 0.4
-      const items = [...list.querySelectorAll<HTMLElement>(":scope > li")]
-      // Every read before any write, so the writes never force a layout mid-loop.
-      // The sticky top line (each entry's scroll-margin-top is the same --content-top). The active
-      // entry is the one whose date is stuck there, or would be with sticky off: the last entry
-      // whose top has reached it, else the first.
-      const stickyTop = items[0] ? parseFloat(getComputedStyle(items[0]).scrollMarginTop) : 0
-      const rects = items.map((item) => ({
-        item: item.getBoundingClientRect(),
-        marker: item.querySelector('[data-slot="marker"]')!.getBoundingClientRect(),
-      }))
-      const active = Math.max(
-        0,
-        rects.findLastIndex((rect) => rect.item.top <= stickyTop + 0.5),
-      )
-      // Both marker styles are kept current, so switching the setting needs no scroll. --fill is
-      // how far the progress line runs down this entry's rail, from its marker's centre.
-      items.forEach((item, index) => {
-        const rect = rects[index]
-        const center = rect.marker.top + rect.marker.height / 2
-        item.toggleAttribute("data-active", index === active)
-        item.toggleAttribute("data-reached", center <= line)
-        item.style.setProperty("--fill", `${Math.max(0, Math.min(line - center, rect.item.bottom - center))}px`)
-        // Once this marker is passed, the line above it (up to the page top, clipped) is covered too.
-        item.style.setProperty("--fill-up", center <= line ? "100000px" : "0px")
-      })
-    }
-    const schedule = () => {
-      if (!frame.id) frame.id = requestAnimationFrame(update)
-    }
-    update()
-    window.addEventListener("scroll", schedule, { passive: true })
-    window.addEventListener("resize", schedule)
-    onCleanup(() => {
-      cancelAnimationFrame(frame.id)
-      window.removeEventListener("scroll", schedule)
-      window.removeEventListener("resize", schedule)
-    })
-  })
-
-  onMount(() => {
-    // A phone's stuck date row is held back by its title's height, so the two leave together.
-    const titles = new ResizeObserver((entries) =>
-      entries.forEach((entry) =>
-        entry.target.closest("li")?.style.setProperty("--title-h", `${entry.borderBoxSize[0].blockSize}px`),
-      ),
-    )
-    list
-      .querySelectorAll(':scope > li > [data-component="changelog-entry"] > [data-slot="title"]')
-      .forEach((title) => titles.observe(title))
-    onCleanup(() => titles.disconnect())
-  })
+  onMount(() => onCleanup(timelineRail(list)))
 
   return (
     <ol
@@ -369,7 +303,8 @@ function entryMedia(entry: ChangelogEntry): Slide[] | undefined {
  * Changelog carousel picks how it shows that: bars under it (each a 24px target), plus a count,
  * arrows, the next slide peeking in, or a bar that fills while the slides advance on their own
  * (paused on hover, focus and off screen; never with reduced motion). The arrow keys step through
- * the slides from the bars. Each slide is labelled with its text alternative.
+ * the slides from the bars. Each slide is labelled with its text alternative. The static pages drive
+ * the same markup from src/client/islands/changelog.ts: change both together.
  */
 function EntryCarousel(props: { slides: Slide[]; title: string }) {
   const i18n = useI18n()
@@ -391,105 +326,20 @@ function EntryCarousel(props: { slides: Slide[]; title: string }) {
   onMount(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting))
     observer.observe(figure)
-    // The click that ends a drag does nothing.
-    const click = (event: MouseEvent) => {
-      if (!gesture.clicked) return
-      gesture.clicked = false
-      event.preventDefault()
-      event.stopPropagation()
-    }
-    viewport.addEventListener("click", click, true)
+    const stop = carouselDrag(viewport, track, {
+      count,
+      index: current,
+      go: setIndex,
+      drag: (offset, on) => {
+        setDrag(offset)
+        setDragging(on)
+      },
+    })
     onCleanup(() => {
       observer.disconnect()
-      viewport.removeEventListener("click", click, true)
+      stop()
     })
   })
-
-  // Dragging: the track follows the pointer. A gesture only becomes a drag once it is mainly
-  // horizontal (touch keeps vertical scrolling through touch-action: pan-y); release past a fifth
-  // of the width, or with a flick, to change slide, otherwise it snaps back.
-  const gesture = {
-    id: -1,
-    x: 0,
-    y: 0,
-    offset: 0,
-    axis: undefined as "x" | "y" | undefined,
-    samples: [] as { x: number; t: number }[],
-    clicked: false,
-  }
-  // The distance from one slide to the next, and where the track is now, mid-animation included.
-  const step = () => {
-    const slides = track.children
-    return slides.length > 1
-      ? Math.abs((slides[1] as HTMLElement).offsetLeft - (slides[0] as HTMLElement).offsetLeft)
-      : 1
-  }
-  // Right to left, the next slide is to the left: -1 flips the sideways maths.
-  const sign = () => (isRtl(track) ? -1 : 1)
-  const position = () => new DOMMatrixReadOnly(getComputedStyle(track).transform).m41
-
-  const down = (event: PointerEvent) => {
-    if (count() < 2 || (event.pointerType === "mouse" && event.button !== 0)) return
-    if ((event.target as HTMLElement).closest("button")) return
-    gesture.id = event.pointerId
-    gesture.x = event.clientX
-    gesture.y = event.clientY
-    gesture.axis = undefined
-    gesture.samples = [{ x: event.clientX, t: event.timeStamp }]
-  }
-
-  const start = (event: PointerEvent) => {
-    gesture.axis = "x"
-    // Picks the track up where it is, so a drag can catch a slide that is still moving.
-    gesture.offset = position() + current() * step() * sign()
-    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
-    setDragging(true)
-  }
-
-  const move = (event: PointerEvent) => {
-    if (event.pointerId !== gesture.id) return
-    const dx = event.clientX - gesture.x
-    const dy = event.clientY - gesture.y
-    if (!gesture.axis) {
-      if (Math.hypot(dx, dy) < 6) return
-      // A mouse has no page to scroll by dragging, so any direction drags.
-      if (event.pointerType !== "mouse" && Math.abs(dy) >= Math.abs(dx)) {
-        gesture.axis = "y"
-        return
-      }
-      start(event)
-    }
-    if (gesture.axis !== "x") return
-    gesture.samples = [
-      ...gesture.samples.filter((sample) => event.timeStamp - sample.t < 100),
-      { x: event.clientX, t: event.timeStamp },
-    ]
-    const raw = gesture.offset + dx
-    // Rubber-banding past the first and last slide.
-    const edge = (current() === 0 && raw * sign() > 0) || (current() === count() - 1 && raw * sign() < 0)
-    setDrag(edge ? raw * 0.3 : raw)
-  }
-
-  const up = (event: PointerEvent) => {
-    if (event.pointerId !== gesture.id) return
-    gesture.id = -1
-    if (gesture.axis !== "x") return
-    // The speed over the last 100ms before release, so a pointer that stopped first doesn't flick.
-    const recent = [...gesture.samples, { x: event.clientX, t: event.timeStamp }].filter(
-      (sample) => event.timeStamp - sample.t < 100,
-    )
-    const first = recent[0]
-    const last = recent[recent.length - 1]
-    const velocity = last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0
-    // A flick moves on in the direction the pointer was going, if the drag went that way too.
-    const flick = event.type === "pointerup" && Math.abs(velocity) > 0.4 && Math.sign(velocity) === Math.sign(drag())
-    const far = Math.abs(drag()) > step() * 0.2
-    const direction = (flick ? -Math.sign(velocity) : far ? -Math.sign(drag()) : 0) * sign()
-    setIndex(Math.max(0, Math.min(count() - 1, current() + direction)))
-    setDrag(0)
-    setDragging(false)
-    gesture.clicked = Math.abs(event.clientX - gesture.x) > 6
-  }
 
   // Stops the product pages' arrow-key navigation too, which skips handled events.
   const keys = (event: KeyboardEvent) => {
@@ -518,15 +368,7 @@ function EntryCarousel(props: { slides: Slide[]; title: string }) {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeld(false)
       }}
     >
-      <div
-        ref={viewport}
-        data-slot="viewport"
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={up}
-        onDragStart={(event) => event.preventDefault()}
-      >
+      <div ref={viewport} data-slot="viewport">
         <div ref={track} data-slot="slides" style={{ "--index": String(current()), "--drag": `${drag()}px` }}>
           <For each={props.slides}>
             {(slide, position) => (
@@ -602,6 +444,7 @@ function EntryCarousel(props: { slides: Slide[]; title: string }) {
 /**
  * A muted loop that plays only while it is the slide showing and on screen; with reduced motion,
  * only its poster shows. A pause button stops it for good (WCAG 2.2.2), and play starts it again.
+ * Static pages: src/client/islands/changelog.ts.
  */
 function EntryVideo(props: { src: string; poster?: string; label: string; playing: boolean }) {
   const i18n = useI18n()
@@ -657,6 +500,7 @@ function EntryVideo(props: { src: string; poster?: string; label: string; playin
  * address bar and says "Link copied" for a moment (aria-live). It is a real link, so the keyboard
  * reaches it, and a modified or middle click still opens it. The site-wide rule (set on /press):
  * no "#" after headings. Swap for the shared heading helper in on-this-page.tsx once it has one.
+ * Static pages: src/client/islands/changelog.ts.
  */
 function CopyHeading(props: { href: string; hash: string; text: string }) {
   const i18n = useI18n()
@@ -710,7 +554,7 @@ function Refs(props: { refs: { prs: string[]; credits: string[] } }) {
   )
 }
 
-/** Copies a link to the clipboard and says so. */
+/** Copies a link to the clipboard and says so (static pages: src/client/islands/changelog.ts). */
 export function CopyLink(props: { href: string }) {
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)

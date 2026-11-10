@@ -5,7 +5,9 @@
 import { Funnel } from "~/lib/funnel"
 import { installConsoleStub } from "~/lib/console-stub"
 import type { SearchVia } from "~/component/site/search"
+import { markdownShortcut } from "~/component/site/markdown-key"
 import { revealHandedOff } from "~/component/site/search-reveal"
+import { startTooltips } from "~/component/site/tooltips"
 import { $, $$, on, site, target } from "./dom"
 import { startContents } from "./contents"
 import { startCopy } from "./copy"
@@ -13,7 +15,6 @@ import { startFrame } from "./footer"
 import { startIslands } from "./islands"
 import { closeMenus, startMenus } from "./menus"
 import { startTheme } from "./theme"
-import { startTooltips } from "./tooltip"
 
 // The page reports to the Console's funnel from its markup, as every page does (lib/funnel.ts).
 Funnel.start(() => import("~/lib/funnel-config").then((module) => module.funnelConfig()))
@@ -23,7 +24,8 @@ startMenus()
 startCopy()
 startContents()
 startFrame()
-startTooltips()
+const tip = $('[data-component="tooltip"]')
+if (tip) startTooltips(tip)
 startIslands()
 revealHandedOff()
 
@@ -77,30 +79,20 @@ on("click", (event) => {
   if (target(event).closest('[data-slot="logo"]')) markdown?.leave()
 })
 if (site.hasAttribute("data-markdown-boot")) void loadMarkdown().then((module) => module.toggle(true))
-let lastKey = { key: "", time: 0 }
+on(
+  "keydown",
+  markdownShortcut({
+    prefetch: prefetchMarkdown,
+    toggle: () => void loadMarkdown().then((module) => module.toggle()),
+    shown: () => site.hasAttribute("data-markdown"),
+  }),
+)
 
 // Number keys open the matching nav item and 0 the home page, unless the reader is typing or using a
-// shortcut; Escape closes what's open.
+// shortcut (as Site does from its nav data); Escape closes what's open.
 on("keydown", (event) => {
   if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
   if (target(event).closest("input, textarea, select, [contenteditable]")) return
-  const key = event.key.toLowerCase()
-  if (key === "m") prefetchMarkdown()
-  const quick = lastKey.key === "m" && event.timeStamp - lastKey.time < 600
-  lastKey = { key, time: event.timeStamp }
-  if (key === "d" && quick) {
-    lastKey = { key: "", time: 0 }
-    window.__ocFunnel?.push({
-      event: {
-        name: "ui.clicked",
-        action: "clicked",
-        target: `markdown-view:${site.hasAttribute("data-markdown") ? "off" : "on"}`,
-        properties: { via: "shortcut" },
-      },
-      at: performance.now(),
-    })
-    return void loadMarkdown().then((module) => module.toggle())
-  }
   const link =
     event.key === "0"
       ? $<HTMLAnchorElement>('[data-slot="logo"]')

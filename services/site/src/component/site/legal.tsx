@@ -51,7 +51,7 @@ const feedTitle = "OpenCode legal updates"
  * every legal document and the document's sections. Above the text: the dates, History, Save as
  * PDF and a plain-language summary. Settings › Legal history (or `?historyView=` for review links)
  * picks where History shows: inline above the text, or in place of it (tabs, a toggle, the Contents
- * rail), or in a side drawer.
+ * rail), or in a side drawer. The static pages drive the same markup from src/client/islands/legal.ts.
  */
 export function LegalDocument(props: { document: LegalDocumentContent }) {
   const i18n = useI18n()

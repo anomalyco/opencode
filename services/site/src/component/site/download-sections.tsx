@@ -73,7 +73,8 @@ function CopyRow(props: { item: Command; method: string; copies: string; state: 
 
 /**
  * Every row action takes the width of the widest one in `root`, whatever the language, so the
- * buttons line up. Measured after web fonts load; fallback font widths differ.
+ * buttons line up. Measured after web fonts load; fallback font widths differ. On a static page,
+ * src/client/islands/download-list.ts does this and CopyRow's copying.
  */
 function alignActions(root: HTMLElement) {
   void document.fonts.ready.then(() => {
