@@ -46,7 +46,10 @@ pub fn render(source: &str) -> Result<Layout, ParseError> {
 }
 
 pub fn render_with(source: &str, options: &Options) -> Result<Layout, ParseError> {
-    Ok(layout::layout(&parse::parse(source)?, options))
+    layout::layout(&parse::parse(source)?, options).ok_or_else(|| ParseError {
+        message: format!("LaTeX layout exceeds the {}-cell limit", layout::MAX_CELLS),
+        position: 0,
+    })
 }
 
 /// The source of each formula shown while streaming, by fence key, so its block can keep it.

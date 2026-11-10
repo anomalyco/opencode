@@ -246,3 +246,15 @@ fn removed_streaming_fences_leave_nothing_kept() {
     }
     assert!(shown.borrow().is_empty(), "{:?}", shown.borrow());
 }
+
+// Expected (r2 review, bigboi-ui-2 and carbon-ui-1): a short ragged matrix whose rectangle takes more cells than
+// the layout allows fails like oversized input (TS `layoutLatex` returns nothing on `RangeError`), so the fence shows
+// its source instead of allocating the grid on the UI thread.
+#[test]
+fn an_oversized_matrix_falls_back_to_the_source() {
+    let source = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "&".repeat(1500), "\\\\".repeat(1500));
+    assert!(source.len() < 10_000);
+    assert!(crate::render(&source).is_err());
+    let small = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "&".repeat(100), "\\\\".repeat(100));
+    assert!(crate::render(&small).is_ok());
+}
