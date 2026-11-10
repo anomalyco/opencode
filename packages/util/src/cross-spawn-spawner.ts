@@ -27,9 +27,11 @@ import {
 // ast-grep-ignore: no-star-import
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
+import type { Worker } from "node:worker_threads"
 import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem, path } from "./effect/app-node-platform.js"
+import { ProcessLauncher } from "./process-launcher.js"
 import { Teardown } from "./teardown.js"
 
 /** Closing a child's scope escalates to SIGKILL after this, unless the command sets its own `forceKillAfter`. */
@@ -48,8 +50,19 @@ const killGroups = () =>
     }
   })
 
-const unwrap = (value: string | Redacted.Redacted<string>): string =>
+export const unwrap = (value: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value
+
+/** The environment a command asks for; `undefined` leaves the child this process's own. */
+export const environment = (opts: ChildProcess.CommandOptions) => {
+  if (opts.env === undefined) return opts.extendEnv ? globalThis.process.env : undefined
+  const result: Record<string, string | undefined> = opts.extendEnv ? { ...globalThis.process.env } : {}
+  for (const [key, value] of Object.entries(opts.env)) {
+    if (value === undefined) delete result[key]
+    else result[key] = unwrap(value)
+  }
+  return result
+}
 
 // Node's own NUL check throws an error that includes the value, so NUL is rejected here to keep Redacted values
 // out of errors.
@@ -121,7 +134,7 @@ const flatten = (command: ChildProcess.Command) => {
   }
 }
 
-const toPlatformError = (
+export const toPlatformError = (
   method: string,
   err: NodeJS.ErrnoException,
   command: ChildProcess.Command,
@@ -149,12 +162,27 @@ export class KilledBySignal extends Error {
 }
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
-type Spawned = readonly [
-  process: NodeChildProcess.ChildProcess,
-  closed: ExitSignal,
-  exited: ExitSignal,
-  settle: () => void,
-]
+// What the spawner uses of a child, whether it was created here or on the launcher thread.
+interface Child {
+  readonly pid?: number
+  readonly stdin: NodeChildProcess.ChildProcess["stdin"]
+  readonly stdout: NodeChildProcess.ChildProcess["stdout"]
+  readonly stderr: NodeChildProcess.ChildProcess["stderr"]
+  readonly stdio: NodeChildProcess.ChildProcess["stdio"]
+  kill(signal?: NodeJS.Signals): boolean
+  ref(): void
+  unref(): void
+  on<Event extends keyof ChildEvents>(event: Event, listener: (...args: ChildEvents[Event]) => void): unknown
+}
+
+interface ChildEvents {
+  error: [err: NodeJS.ErrnoException]
+  exit: [code: number | null, signal: NodeJS.Signals | null]
+  close: [code: number | null, signal: NodeJS.Signals | null]
+  spawn: []
+}
+
+type Spawned = readonly [process: Child, closed: ExitSignal, exited: ExitSignal, settle: () => void]
 
 const makeCrossSpawnSpawner = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
@@ -165,16 +193,6 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     yield* fs.access(opts.cwd)
     return path.resolve(opts.cwd)
   })
-
-  const env = (opts: ChildProcess.CommandOptions) => {
-    if (opts.env === undefined) return opts.extendEnv ? globalThis.process.env : undefined
-    const result: Record<string, string | undefined> = opts.extendEnv ? { ...globalThis.process.env } : {}
-    for (const [key, value] of Object.entries(opts.env)) {
-      if (value === undefined) delete result[key]
-      else result[key] = unwrap(value)
-    }
-    return result
-  }
 
   const input = (x: ChildProcess.CommandInput | undefined): NodeChildProcess.IOType | undefined =>
     Stream.isStream(x) ? "pipe" : x
@@ -234,7 +252,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
 
   const setupFds = Effect.fnUntraced(function* (
     command: ChildProcess.StandardCommand,
-    proc: NodeChildProcess.ChildProcess,
+    proc: Child,
     extra: ReadonlyArray<{ fd: number; config: ChildProcess.AdditionalFdConfig }>,
   ) {
     if (extra.length === 0) {
@@ -314,11 +332,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     }
   })
 
-  const setupStdin = (
-    command: ChildProcess.StandardCommand,
-    proc: NodeChildProcess.ChildProcess,
-    cfg: ChildProcess.StdinConfig,
-  ) =>
+  const setupStdin = (command: ChildProcess.StandardCommand, proc: Child, cfg: ChildProcess.StdinConfig) =>
     Effect.suspend(() => {
       let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
       if (Predicate.isNotNull(proc.stdin)) {
@@ -336,7 +350,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
 
   const setupOutput = (
     command: ChildProcess.StandardCommand,
-    proc: NodeChildProcess.ChildProcess,
+    proc: Child,
     out: ChildProcess.StdoutConfig,
     err: ChildProcess.StderrConfig,
     stopOutput: Deferred.Deferred<void>,
@@ -382,11 +396,37 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     )
   }
 
-  const launchProcess = (command: ChildProcess.StandardCommand, file: string, opts: NodeChildProcess.SpawnOptions) =>
+  // The launcher thread takes a Windows child that has no input and plain piped or ignored output. Anything else
+  // (input, extra descriptors, inherited stdio, a detached group) is created here.
+  const offThread = (opts: NodeChildProcess.SpawnOptions) =>
+    globalThis.process.platform === "win32" &&
+    !opts.detached &&
+    Array.isArray(opts.stdio) &&
+    opts.stdio.length === 3 &&
+    opts.stdio[0] === "ignore" &&
+    opts.stdio.slice(1).every((stream) => stream === "overlapped" || stream === "ignore")
+
+  const launchProcess = (
+    command: ChildProcess.StandardCommand,
+    file: string,
+    opts: NodeChildProcess.SpawnOptions,
+    launcher: Worker | undefined,
+  ) =>
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(file, command.args.map(unwrap), opts)
+      const proc: Child = launcher
+        ? ProcessLauncher.spawn(launcher, {
+            file,
+            args: command.args.map(unwrap),
+            cwd: opts.cwd === undefined ? undefined : String(opts.cwd),
+            // The launcher thread's own environment can be stale, so it always gets this thread's.
+            env: { ...(opts.env ?? globalThis.process.env) },
+            shell: opts.shell,
+            stdout: Array.isArray(opts.stdio) && opts.stdio[1] !== "ignore",
+            stderr: Array.isArray(opts.stdio) && opts.stdio[2] !== "ignore",
+          })
+        : launch(file, command.args.map(unwrap), opts)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
@@ -418,7 +458,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
           groups.add(proc.pid!)
         }
         settle = Teardown.track(
-          `child ${proc.pid} running: ${[command.command, ...command.args].join(" ").slice(0, 200)}`,
+          `child ${proc.pid} running${launcher ? " on the launcher thread" : ""}: ${[command.command, ...command.args].join(" ").slice(0, 200)}`,
         )
         resume(Effect.succeed([proc, closed, exited, () => settle()]))
       })
@@ -432,7 +472,13 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     opts: NodeChildProcess.SpawnOptions,
   ) {
     yield* Effect.logDebug("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
-    const [proc, closed, exited, settle] = yield* launchProcess(command, yield* executable(command.command), opts)
+    const launcher = offThread(opts) && (yield* ProcessLauncher.Enabled) ? yield* ProcessLauncher.thread : undefined
+    const [proc, closed, exited, settle] = yield* launchProcess(
+      command,
+      yield* executable(command.command),
+      opts,
+      launcher,
+    )
     const stopOutput = yield* Deferred.make<void>()
     // Register before process release so the deadline remains active during termination.
     yield* Effect.forkScoped(
@@ -464,13 +510,13 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     drain()
   }
 
-  const killGroup = (
-    command: ChildProcess.StandardCommand,
-    proc: NodeChildProcess.ChildProcess,
-    signal: NodeJS.Signals,
-  ) => {
+  const killGroup = (command: ChildProcess.StandardCommand, proc: Child, signal: NodeJS.Signals) => {
     if (globalThis.process.platform === "win32") {
       return Effect.callback<void, PlatformError.PlatformError>((resume) => {
+        // A child on the launcher thread is stopped there, so stopping it does not create a process here either.
+        if (proc instanceof ProcessLauncher.RemoteChild) {
+          return proc.killTree((err) => resume(err ? Effect.fail(toPlatformError("kill", err, command)) : Effect.void))
+        }
         NodeChildProcess.exec(`taskkill /pid ${proc.pid} /T /F`, { windowsHide: true }, (err) => {
           if (err) return resume(Effect.fail(toPlatformError("kill", toError(err), command)))
           resume(Effect.void)
@@ -486,11 +532,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     })
   }
 
-  const killOne = (
-    command: ChildProcess.StandardCommand,
-    proc: NodeChildProcess.ChildProcess,
-    signal: NodeJS.Signals,
-  ) =>
+  const killOne = (command: ChildProcess.StandardCommand, proc: Child, signal: NodeJS.Signals) =>
     Effect.suspend(() => {
       if (proc.kill(signal)) return Effect.void
       return Effect.fail(toPlatformError("kill", new Error("Failed to kill child process"), command))
@@ -498,7 +540,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
 
   const stop = (
     command: ChildProcess.StandardCommand,
-    proc: NodeChildProcess.ChildProcess,
+    proc: Child,
     closed: ExitSignal,
     stopOutput: Deferred.Deferred<void>,
     opts: ChildProcess.KillOptions | undefined,
@@ -557,7 +599,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
           const [proc, closed, exited, stopOutput] = yield* Effect.acquireRelease(
             spawn(command, {
               cwd: dir,
-              env: env(command.options),
+              env: environment(command.options),
               stdio: stdios(sin, sout, serr, extra),
               detached: command.options.detached ?? process.platform !== "win32",
               shell: command.options.shell,

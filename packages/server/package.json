@@ -37,6 +37,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@hona/strobe": "catalog:",
     "@opencode/pty": "0.4.0",
     "@opencode/client": "workspace:*",
     "@opencode/plugin": "workspace:*",

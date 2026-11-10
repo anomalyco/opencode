@@ -10,11 +10,13 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { filesystem } from "@opencode/util/effect/app-node-platform"
 import { Database } from "@opencode/core/database/database"
+import { App } from "@opencode/core/app"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { Teardown } from "@opencode/util/teardown"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -163,6 +165,14 @@ const replacements = [
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
+)
+// A dev build, where every flag is on by default.
+const devIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    App.node.replace(App.configured({ channel: "dev" })),
+  ]),
 )
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
@@ -1759,6 +1769,36 @@ describe("ShellTool", () => {
       }),
     { timeout: 30_000 },
   )
+
+  // Only Windows creates a child on the launcher thread. The process_launcher flag decides: on by default in a dev
+  // build, off in this file's build, whose channel is unknown.
+  if (isWindows) {
+    for (const [build, test, where] of [
+      ["a dev build", devIt, " on the launcher thread"],
+      ["this file's build", it, ""],
+    ] as const) {
+      test.live(`creates the shell's child${where || " on the calling thread"} in ${build}`, () =>
+        withTempDir((tmp) => {
+          reset()
+          return withSession(tmp.path, () =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              yield* Effect.acquireUseRelease(
+                shell.create({ command: idleCommand, timeout: 0 }),
+                (info) =>
+                  Effect.sync(() =>
+                    expect(
+                      Teardown.pending().some((item) => item.label.startsWith(`child ${info.pid} running${where}:`)),
+                    ).toBe(true),
+                  ),
+                (info) => shell.remove(info.id),
+              )
+            }),
+          )
+        }),
+      )
+    }
+  }
 
   it.live("words the status as an exit code", () =>
     Effect.sync(() => {

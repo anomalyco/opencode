@@ -7,6 +7,7 @@ import { produce } from "immer"
 import { Shell } from "@opencode/schema/shell"
 import { AppProcess } from "@opencode/util/process"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import { ProcessLauncher } from "@opencode/util/process-launcher"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
@@ -20,6 +21,7 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionSchema } from "./session/schema.js"
 import { Config } from "./config.js"
+import { Flag } from "./flag.js"
 import { ToolOutput } from "./tool-output.js"
 import { ShellResult } from "./shell/result.js"
 
@@ -139,6 +141,7 @@ const layer = () =>
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
       const config = yield* Config.Service
+      const flags = yield* Flag.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const commands = new Map<Shell.ID, Active>()
@@ -338,6 +341,7 @@ const layer = () =>
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
         // end). `create` returns once `ready` resolves with the registered command.
         const ready = Deferred.makeUnsafe<Active, AppProcess.AppProcessError>()
+        const offThread = yield* flags.enabled("process_launcher")
         runFork(
           Effect.scoped(
             Effect.gen(function* () {
@@ -352,6 +356,7 @@ const layer = () =>
                   }),
                 )
                 .pipe(
+                  Effect.provideService(ProcessLauncher.Enabled, offThread),
                   Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
                 )
               const command: Active = {
@@ -541,6 +546,7 @@ export const node = makeLocationNode({
     PluginHooks.node,
     SessionEnvironment.node,
     Config.node,
+    Flag.node,
     cleanupNode,
   ],
 })

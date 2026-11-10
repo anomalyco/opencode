@@ -1,9 +1,13 @@
+import path from "node:path"
 import { Context, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/process"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
+import type { Worker } from "node:worker_threads"
 import { CrossSpawnSpawner } from "./cross-spawn-spawner.js"
 import { makeGlobalNode } from "./effect/app-node.js"
+import { ProcessLauncher } from "./process-launcher.js"
+import type { Run } from "./process-launcher-worker.js"
 
 export class AppProcessError extends Schema.TaggedError<AppProcessError>()("AppProcessError", {
   command: Schema.String,
@@ -136,10 +140,130 @@ export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, 
     },
   ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
 
+// Input the launcher thread can be handed up front: nothing, an open pipe nobody writes to, or bytes to write and
+// close. A stream of input, or inherited stdin, needs the in-process spawner.
+const offThreadStdin = (
+  command: ChildProcess.StandardCommand,
+  input: RunOptions["stdin"],
+): Run["stdin"] | undefined => {
+  if (typeof input === "string") return new TextEncoder().encode(input)
+  // A view into a larger buffer would be cloned whole.
+  if (input instanceof Uint8Array) return input.byteLength === input.buffer.byteLength ? input : input.slice()
+  if (input !== undefined) return undefined
+  const stdin = command.options.stdin
+  if (stdin === undefined || stdin === "pipe") return "pipe"
+  return stdin === "ignore" ? "ignore" : undefined
+}
+
+/**
+ * The launcher thread's request for a run it can do: one command whose input is known up front and whose output is
+ * collected. Anything else (streams, sinks, extra descriptors, inherited stdio) needs the in-process spawner, and so
+ * does a NUL character, which the spawner rejects without echoing a redacted value. `killSignal` and
+ * `forceKillAfter` do not apply: on Windows a child is stopped by ending its whole process tree at once, here as in
+ * the spawner.
+ */
+const offThreadRequest = (
+  command: ChildProcess.StandardCommand,
+  options?: RunOptions,
+): Omit<Run, "id" | "type"> | undefined => {
+  if (process.platform !== "win32") return undefined
+  const opts = command.options
+  if (opts.additionalFds !== undefined) return undefined
+  if (opts.stdout !== undefined && opts.stdout !== "pipe") return undefined
+  if (opts.stderr !== undefined && opts.stderr !== "pipe") return undefined
+  const stdin = offThreadStdin(command, options?.stdin)
+  if (stdin === undefined) return undefined
+  // A copy of this thread's environment: the launcher thread's own can be stale.
+  const env = { ...(CrossSpawnSpawner.environment(opts) ?? process.env) }
+  const args = command.args.map(CrossSpawnSpawner.unwrap)
+  if ([command.command, ...args, ...Object.values(env)].some((value) => value?.includes("\0"))) return undefined
+  return {
+    file: command.command,
+    args,
+    cwd: opts.cwd === undefined ? undefined : path.resolve(opts.cwd),
+    env,
+    shell: opts.shell,
+    detached: opts.detached,
+    stdin,
+    combineOutput: options?.combineOutput === true,
+    maxOutputBytes: options?.maxOutputBytes,
+    maxErrorBytes: options?.maxErrorBytes,
+  }
+}
+
+const buffer = (data: Uint8Array) => Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
+
+    const offThread = Effect.fnUntraced(function* (
+      launcher: Worker,
+      command: ChildProcess.StandardCommand,
+      request: Omit<Run, "id" | "type">,
+    ) {
+      const description = describeCommand(command)
+      yield* Effect.logDebug("spawning process", { command: request.file, args: command.args, cwd: request.cwd })
+      const reply = yield* ProcessLauncher.run(launcher, request, description)
+      if (reply.type === "failed") {
+        return yield* new AppProcessError({
+          command: description,
+          cause: CrossSpawnSpawner.toPlatformError(
+            reply.error.method,
+            Object.assign(new Error(reply.error.message), { code: reply.error.code, syscall: reply.error.syscall }),
+            command,
+          ),
+        })
+      }
+      if (reply.code === null) {
+        return yield* new AppProcessError({
+          command: description,
+          cause: CrossSpawnSpawner.toPlatformError(
+            "exitCode",
+            new CrossSpawnSpawner.KilledBySignal(reply.signal ?? "SIGKILL"),
+            command,
+          ),
+        })
+      }
+      if (request.combineOutput) {
+        return {
+          command: description,
+          exitCode: reply.code,
+          output: buffer(reply.stdout),
+          stdout: Buffer.alloc(0),
+          stderr: Buffer.alloc(0),
+          outputTruncated: reply.stdoutTruncated,
+          stdoutTruncated: false,
+          stderrTruncated: false,
+        } satisfies RunResult
+      }
+      return {
+        command: description,
+        exitCode: reply.code,
+        stdout: buffer(reply.stdout),
+        stderr: buffer(reply.stderr),
+        stdoutTruncated: reply.stdoutTruncated,
+        stderrTruncated: reply.stderrTruncated,
+      } satisfies RunResult
+    })
+
+    const supervise = <E>(description: string, collect: Effect.Effect<RunResult, E>, options?: RunOptions) => {
+      const timed = options?.timeout
+        ? Effect.timeoutOrElse(collect, {
+            duration: options.timeout,
+            orElse: () => Effect.fail(new AppProcessError({ command: description, cause: new Error("Timed out") })),
+          })
+        : collect
+      const aborted = options?.signal
+        ? timed.pipe(
+            Effect.raceFirst(
+              waitForAbort(options.signal).pipe(Effect.mapError((cause) => wrapError(description, cause))),
+            ),
+          )
+        : timed
+      return aborted.pipe(Effect.mapError((cause) => wrapError(description, cause)))
+    }
 
     const runCommand = (command: ChildProcess.Command, options?: RunOptions) => {
       const description = describeCommand(command)
@@ -180,23 +304,17 @@ const layer = Layer.effect(
           } satisfies RunResult
         }),
       )
-      const timed = options?.timeout
-        ? Effect.timeoutOrElse(collect, {
-            duration: options.timeout,
-            orElse: () => Effect.fail(new AppProcessError({ command: description, cause: new Error("Timed out") })),
-          })
-        : collect
-      const aborted = options?.signal
-        ? timed.pipe(
-            Effect.raceFirst(
-              waitForAbort(options.signal).pipe(Effect.mapError((cause) => wrapError(description, cause))),
-            ),
-          )
-        : timed
-      return aborted.pipe(Effect.mapError((cause) => wrapError(description, cause)))
+      return supervise(description, collect, options)
     }
 
     const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {
+      if (command._tag === "StandardCommand" && (yield* ProcessLauncher.Enabled)) {
+        const request = offThreadRequest(command, options)
+        const launcher = request ? yield* ProcessLauncher.thread : undefined
+        if (request && launcher) {
+          return yield* supervise(describeCommand(command), offThread(launcher, command, request), options)
+        }
+      }
       if (options?.stdin === undefined) return yield* runCommand(command, options)
       if (command._tag !== "StandardCommand") {
         return yield* new AppProcessError({
