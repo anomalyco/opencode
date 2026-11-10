@@ -102,19 +102,20 @@ impl Fragments {
         Update { previous: current.text }
     }
 
-    /// A live delta; `None` when a list already showed it.
-    pub fn delta(&mut self, fragment: &Fragment, delta: &str) -> Option<Update> {
+    /// A live delta: the length of the text before it, or `None` when a list already showed it. TS returns the
+    /// previous text; copying it here for every delta would copy the whole prefix each time.
+    pub fn delta(&mut self, fragment: &Fragment, delta: &str) -> Option<usize> {
         let state = self.0.entry(fragment.clone()).or_default();
         // Replay may start after an unseen prefix, so a covered chunk is consumed from anywhere in the projection.
-        if let Some(projected) = &state.projected
+        if let Some(projected) = &mut state.projected
             && let Some(at) = projected.find(delta)
         {
-            state.projected = Some(projected[at + delta.len()..].to_owned());
+            projected.drain(..at + delta.len());
             return None;
         }
-        let previous = state.text.clone();
+        let previous = state.text.len();
         state.text.push_str(delta);
-        Some(Update { previous })
+        Some(previous)
     }
 
     /// The final text of a fragment.
@@ -274,6 +275,16 @@ struct ToolTrack {
 
 fn part_key(message: &str, id: &str) -> String {
     format!("{message}\u{0}{id}")
+}
+
+/// Whether `commit` replaces the local row `last`: both stream the same part (`rememberLocal`).
+fn joins(last: &Commit, commit: &Commit) -> bool {
+    matches!(commit.kind, EntryKind::Assistant | EntryKind::Reasoning)
+        && last.kind == commit.kind
+        && last.source == commit.source
+        && last.message_id == commit.message_id
+        && last.part_id == commit.part_id
+        && last.tool == commit.tool
 }
 
 impl Transcript {
@@ -467,15 +478,7 @@ impl Transcript {
 
     /// Remembers rows this client printed itself, for a resize replay (`rememberLocal`).
     pub fn remember(&mut self, commit: &Commit) {
-        let joins = self.local.last().is_some_and(|last| {
-            matches!(commit.kind, EntryKind::Assistant | EntryKind::Reasoning)
-                && last.kind == commit.kind
-                && last.source == commit.source
-                && last.message_id == commit.message_id
-                && last.part_id == commit.part_id
-                && last.tool == commit.tool
-        });
-        if joins {
+        if self.local.last().is_some_and(|last| joins(last, commit)) {
             self.local.pop();
         }
         self.local.push(commit.clone());
@@ -490,15 +493,28 @@ impl Transcript {
         }
         for commit in commits {
             let whole = match (&commit.message_id, &commit.part_id, commit.kind) {
-                (Some(message), Some(part), EntryKind::Assistant | EntryKind::Reasoning) => self
-                    .fragments
-                    .value(&Fragment { message_id: message.clone(), part_id: part.clone() })
-                    .map(|text| match commit.kind {
-                        EntryKind::Reasoning if !text.is_empty() => format!("Thinking: {text}"),
-                        _ => text.to_owned(),
-                    }),
+                (Some(message), Some(part), EntryKind::Assistant | EntryKind::Reasoning) => {
+                    self.fragments.value(&Fragment { message_id: message.clone(), part_id: part.clone() })
+                }
                 _ => None,
             };
+            let prefix = if commit.kind == EntryKind::Reasoning && whole.is_some_and(|text| !text.is_empty()) {
+                "Thinking: "
+            } else {
+                ""
+            };
+            // The row this one replaces already holds the text before this delta: extend it in place rather than
+            // copying the whole text for every delta.
+            if let Some(text) = whole
+                && let Some(last) = self.local.last_mut().filter(|last| joins(last, commit))
+                && last.text.len() + commit.text.len() == prefix.len() + text.len()
+                && text.ends_with(commit.text.as_str())
+            {
+                let text = std::mem::take(&mut last.text) + &commit.text;
+                *last = Commit { text, ..commit.clone() };
+                continue;
+            }
+            let whole = whole.map(|text| format!("{prefix}{text}"));
             let commit = match whole {
                 Some(text) => Commit { text, ..commit.clone() },
                 None => commit.clone(),
@@ -908,12 +924,8 @@ impl Transcript {
                 let data = &delta.data;
                 let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
                 match self.fragments.delta(&fragment, &data.delta) {
-                    Some(update) if self.thinking => {
-                        let text = if update.previous.is_empty() {
-                            format!("Thinking: {}", data.delta)
-                        } else {
-                            data.delta.clone()
-                        };
+                    Some(previous) if self.thinking => {
+                        let text = if previous == 0 { format!("Thinking: {}", data.delta) } else { data.delta.clone() };
                         Output::commits(vec![reasoning_commit(&fragment, text)])
                     }
                     _ => Output::default(),
@@ -1807,6 +1819,33 @@ mod tests {
         assert!(!transcript.replaying());
     }
 
+    /// A streamed part is remembered as one local row holding its whole text, as each delta extends it.
+    #[test]
+    fn streamed_parts_are_remembered_whole() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], true);
+        let reasoning = |text: &str| {
+            event("session.reasoning.delta", json!({ "assistantMessageID": "msg_a", "ordinal": 0, "delta": text }))
+        };
+        for chunk in ["a", "b", "c"] {
+            transcript.event(&reasoning(chunk));
+            transcript.event(&delta("msg_a", chunk));
+            transcript.event(&delta("msg_a", chunk));
+        }
+        let rows: Vec<_> = transcript.local.iter().map(|row| (row.kind, row.text.as_str())).collect();
+        assert_eq!(
+            rows,
+            [
+                (EntryKind::Reasoning, "Thinking: a"),
+                (EntryKind::Assistant, "aa"),
+                (EntryKind::Reasoning, "Thinking: ab"),
+                (EntryKind::Assistant, "aabb"),
+                (EntryKind::Reasoning, "Thinking: abc"),
+                (EntryKind::Assistant, "aabbcc"),
+            ]
+        );
+    }
+
     #[test]
     fn live_tool_events_print_the_start_new_output_and_the_end_once() {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
@@ -1850,7 +1889,7 @@ mod tests {
         assert_eq!(fragments.project(&part, "abc", true).previous, "");
         assert_eq!(fragments.delta(&part, "b"), None);
         assert_eq!(fragments.delta(&part, "c"), None);
-        assert_eq!(fragments.delta(&part, "d").unwrap().previous, "abc");
+        assert_eq!(fragments.delta(&part, "d"), Some(3));
         assert_eq!(fragments.restore(&part, "ab"), Restore::Covered);
         assert_eq!(fragments.restore(&part, "abcdef"), Restore::Append("ef".into()));
         assert_eq!(fragments.restore(&part, "xyz"), Restore::Conflict);
