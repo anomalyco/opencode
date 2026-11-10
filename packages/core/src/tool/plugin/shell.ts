@@ -252,6 +252,11 @@ export const Plugin = {
 
               return yield* Deferred.await(settled)
             }).pipe(
+              // Shell spans, including the job that waits for a backgrounded command, name the call that started them.
+              Effect.annotateSpans({
+                "gen_ai.tool.call.id": context.id,
+                ...(input.background === true ? { "opencode.shell.background": true } : {}),
+              }),
               Effect.map((output) => toolResult(output, finalTimeout)),
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),

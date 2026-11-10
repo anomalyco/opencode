@@ -1,3 +1,4 @@
+import type { Cause } from "effect"
 import type { Interpreter } from "./interpreter.js"
 import { primitivePrototype } from "./intrinsics.js"
 import { GeneratorReturn, typeError } from "./model.js"
@@ -14,7 +15,20 @@ import {
   type Value,
 } from "./objects.js"
 import { isOpaque, typeofValue } from "./references.js"
-import { type Eval, Interruption, isEval } from "./runner.js"
+import type { Eval } from "./runner.js"
+
+/**
+ * Host work that was interrupted on its own. It settles its promise like a rejection, but program code cannot catch
+ * it: handlers, `catch`, and `finally` are skipped, an unobserved one is not reported, and one that reaches the
+ * program's body interrupts the execution.
+ */
+export class Interruption {
+  constructor(readonly cause: Cause.Cause<unknown>) {}
+}
+
+// Program values never have a `next` method of their own: an object's properties live in its property map.
+export const isEval = <A>(value: A | Eval<A>): value is Eval<A> =>
+  typeof value === "object" && value !== null && typeof (value as { readonly next?: unknown }).next === "function"
 
 /** IteratorClose: a consumer failure closes the iterator and wins over any close failure, except that a generator's
  * return() is a return completion, so a failing close wins over it, as after `break`. */

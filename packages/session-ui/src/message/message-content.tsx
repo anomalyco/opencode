@@ -1213,7 +1213,11 @@ export function AssistantTextContent(props: {
 
   function copyFooter() {
     return (
-      <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+      <div
+        data-slot="text-part-copy-wrapper"
+        data-interrupted={interrupted() ? "" : undefined}
+        data-copy-always-visible={data.copyAlwaysVisible ? "" : undefined}
+      >
         <MessageActionButton
           icon={copy.copied() ? "check" : "copy"}
           size="small"

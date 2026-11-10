@@ -107,6 +107,17 @@ html:has([data-site][data-theme="dark"]) {
     0 1px 1px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.3)),
     0 2px 4px -1px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.35)),
     0 6px 12px -4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+  /* Cards fanned out with no panel (the section menus' fan style, the press gallery's fan): like the
+     icons in a macOS Dock stack, each casts only a small, soft shadow close to itself, and a hairline
+     ring carries the edge, which matters most in the dark theme. Lifted while one drops. */
+  --fan-shadow:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1)),
+    0 1px 2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4)),
+    0 2px 5px -2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  --fan-shadow-lifted:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1)),
+    0 2px 4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4)),
+    0 4px 8px -4px light-dark(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.5));
   /* The brand greys: the logo ink at 20% / 70% on white (light) and 28% / 72% on #0b0b0b (dark). */
   --logo-inner: light-dark(#d2d2d2, #4b4b4b);
   --logo-open: light-dark(#626262, #aeaeae);
@@ -589,6 +600,17 @@ html:has([data-site][data-theme="dark"]) {
     padding-inline: var(--gutter) var(--edge);
     display: flex;
     flex-direction: column;
+  }
+
+  /* The page stays mounted under the Markdown view (markdown-view.tsx, whose styles load with it), so
+     its state survives a round trip. It's hidden while the view shows, and on a reload in the view
+     until the view has loaded (site.tsx). */
+  [data-component="content"] > [data-slot="page"] {
+    display: contents;
+  }
+
+  &:is([data-markdown], [data-markdown-boot]) [data-component="content"] > [data-slot="page"] {
+    display: none;
   }
 
   [data-component="site-button"] {
@@ -1372,7 +1394,7 @@ html:has([data-site][data-theme="dark"]) {
   }
 
   /* The label (Design mode can swap in longer wording) stays on one line beside the bars. */
-  [data-component="status"] [data-design-copy] {
+  [data-component="status"] [data-slot="status-label"] {
     white-space: nowrap;
   }
 
@@ -3388,11 +3410,22 @@ html:has([data-site][data-theme="dark"]) {
     font-size: var(--fs-ui);
     font-weight: 500;
     text-decoration: none;
-    transition: background-color 150ms ease;
+    /* Hidden once the bar has closed. iOS Safari keeps tinting its bottom toolbar from the blue
+       link it last pinned to the bottom edge for as long as the link is drawn, even unpinned and
+       clipped to nothing, so the toolbar would stay blue after the bar has gone. */
+    visibility: hidden;
+    transition:
+      background-color 150ms ease,
+      visibility 0s 300ms;
   }
 
   &[data-shown] {
     grid-template-rows: 1fr;
+
+    a {
+      visibility: visible;
+      transition: background-color 150ms ease;
+    }
 
     a > span {
       opacity: 1;
@@ -3404,6 +3437,10 @@ html:has([data-site][data-theme="dark"]) {
   @media (prefers-reduced-motion: reduce) {
     & {
       transition: none;
+    }
+
+    a {
+      transition: background-color 150ms ease;
     }
 
     /* Important, past the page-wide reduced-motion rule that zeroes every transition on small
@@ -3420,6 +3457,7 @@ html:has([data-site][data-theme="dark"]) {
    with the bottom's blue. */
 [data-site][data-letters-motion="instant"] [data-component="letters-bar"] {
   &,
+  a,
   a > span {
     transition: none;
   }

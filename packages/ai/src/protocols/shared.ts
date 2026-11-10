@@ -54,12 +54,36 @@ export const ReportedBilling = Schema.Struct({
   cost: billedAmount,
 })
 
-/** Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it. */
-export const reportedBilling = (usage: unknown) =>
-  Option.match(Schema.decodeUnknownOption(ReportedBilling)(usage), {
-    onNone: () => ({}),
-    onSome: (billing) => ({ cost: billing.cost }),
-  })
+/**
+ * GitHub Copilot reports its charge beside usage on the frame that carries it, as `copilot_usage.total_nano_aiu`:
+ * billionths of an AI credit, which costs $0.01.
+ */
+const CopilotBilling = Schema.Struct({
+  copilot_usage: Schema.Struct({ total_nano_aiu: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)) }),
+})
+const decodeCopilotBilling = Schema.decodeUnknownOption(CopilotBilling)
+
+/**
+ * Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it, or
+ * Copilot's billing from the frames that carry the usage.
+ */
+export const reportedBilling = (usage: unknown, ...frames: ReadonlyArray<unknown>) => {
+  const reported = Option.getOrUndefined(Schema.decodeUnknownOption(ReportedBilling)(usage))?.cost
+  if (reported !== undefined) return { cost: reported }
+  const nanoAiu = frames
+    .map((frame) => Option.getOrUndefined(decodeCopilotBilling(frame))?.copilot_usage.total_nano_aiu)
+    .find((value) => value !== undefined)
+  return nanoAiu === undefined ? {} : { cost: nanoAiu / 100_000_000_000 }
+}
+
+/**
+ * The filter that blocked a response, from maps keyed by filter name: Azure's `content_filter_results`
+ * (`{ hate: { filtered: true } }`) or GitHub Copilot's `copilot_annotations` (`{ TextCopyright: [...] }`).
+ */
+export const contentFilterCategory = (...sources: ReadonlyArray<unknown>) =>
+  sources
+    .flatMap((source) => (isRecord(source) ? Object.entries(source) : []))
+    .find(([, value]) => (isRecord(value) && "filtered" in value ? value.filtered === true : Boolean(value)))?.[0]
 
 /**
  * Accepts stream frames that carry no `type`, alongside the typed event schema. Gateways inject such frames as

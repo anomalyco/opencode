@@ -6,6 +6,7 @@ import { docs } from "./src/docs/vite"
 import { i18nSlices } from "./script/i18n-plugin"
 import { foldSettingsForProduction } from "./script/fold-settings"
 import { cssVariantsForProduction, devOnlyCss } from "./script/css-variants-plugin"
+import { stylesheetGroups } from "./script/stylesheet-groups"
 
 // Nitro's dev server drops any page the app renders with a 404 status and falls through to a bare
 // "Cannot GET". In development only, serve the not-found page's preview (/dev/404, which follows
@@ -56,6 +57,7 @@ export default defineConfig({
     notFoundInDev(),
     devOnlyCss(),
     cssVariantsForProduction(),
+    stylesheetGroups(),
     docs(),
     i18nSlices(),
   ],
@@ -106,6 +108,26 @@ export default defineConfig({
         // strobe builds with STROBE_SOURCEMAP=hidden: maps beside the scripts without a
         // sourceMappingURL comment, so the scripts stay byte for byte and profiles name source lines.
         sourcemap: process.env.STROBE_SOURCEMAP === "hidden" ? "hidden" : undefined,
+        rolldownOptions: {
+          output: {
+            // Rolldown gives the code that pages share one chunk per set of pages sharing it, which
+            // had the home page preload 29 files, most under 3 kB. Plain modules (not components,
+            // which may bring their stylesheet to every page that loads the chunk) of up to 4 kB
+            // that 12 or more of the bundle's entries (page routes and lazily loaded modules)
+            // import go in one chunk instead: fewer requests and a little less code on most pages.
+            // Each language's strings keep their own files (script/i18n-plugin.ts).
+            codeSplitting: {
+              groups: [
+                {
+                  name: "common",
+                  test: (id) => !/\.(tsx|jsx|css)(\?|$)/.test(id) && !id.startsWith("\0virtual:i18n"),
+                  minShareCount: 12,
+                  maxModuleSize: 4000,
+                },
+              ],
+            },
+          },
+        },
       },
     },
   },

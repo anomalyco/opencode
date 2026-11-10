@@ -3,6 +3,7 @@ import "./on-this-page.css"
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { Chevron } from "./icons"
 import { holdOpenMenu } from "./menu-hold"
+import { useVisible } from "./visible"
 
 type ContentsItem = {
   id: string
@@ -19,35 +20,50 @@ type ContentsItem = {
  * last section in view.
  */
 function useActiveSection(items: () => ContentsItem[]) {
-  const [active, setActive] = createSignal<string>()
-
   onMount(() => {
-    const track = () => {
-      const list = items()
-      const headings = list.flatMap((item) => {
-        const heading = document.getElementById(item.id)
-        return heading ? [{ id: item.id, top: heading.getBoundingClientRect().top }] : []
-      })
-      const passed = headings.filter((heading) => heading.top <= window.innerHeight / 3)
-      const bottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
-      const visible = headings.filter((heading) => heading.top >= 0 && heading.top < window.innerHeight)
-      const target = visible.find((heading) => `#${heading.id}` === decodeURIComponent(location.hash))
-      setActive(
-        bottom && (target ?? visible.at(-1)) ? (target ?? visible.at(-1))!.id : (passed.at(-1)?.id ?? list[0]?.id),
-      )
-    }
+    spy.items = items
     track()
-    window.addEventListener("scroll", track, { passive: true })
-    window.addEventListener("resize", track, { passive: true })
-    window.addEventListener("hashchange", track)
+    if (spy.users++ === 0) {
+      window.addEventListener("scroll", schedule, { passive: true })
+      window.addEventListener("resize", schedule, { passive: true })
+      window.addEventListener("hashchange", schedule)
+    }
     onCleanup(() => {
-      window.removeEventListener("scroll", track)
-      window.removeEventListener("resize", track)
-      window.removeEventListener("hashchange", track)
+      if (--spy.users) return
+      cancelAnimationFrame(spy.frame)
+      spy.frame = 0
+      window.removeEventListener("scroll", schedule)
+      window.removeEventListener("resize", schedule)
+      window.removeEventListener("hashchange", schedule)
     })
   })
-
   return [active, setActive] as const
+}
+
+// The aside's list and the phone menu show the page's same sections, so one spy, once a frame,
+// serves both.
+const [active, setActive] = createSignal<string>()
+const spy = { users: 0, frame: 0, items: (): ContentsItem[] => [] }
+
+function schedule() {
+  if (spy.frame) return
+  spy.frame = requestAnimationFrame(() => {
+    spy.frame = 0
+    track()
+  })
+}
+
+function track() {
+  const list = spy.items()
+  const headings = list.flatMap((item) => {
+    const heading = document.getElementById(item.id)
+    return heading ? [{ id: item.id, top: heading.getBoundingClientRect().top }] : []
+  })
+  const passed = headings.filter((heading) => heading.top <= window.innerHeight / 3)
+  const bottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+  const visible = headings.filter((heading) => heading.top >= 0 && heading.top < window.innerHeight)
+  const target = visible.find((heading) => `#${heading.id}` === decodeURIComponent(location.hash))
+  setActive(bottom && (target ?? visible.at(-1)) ? (target ?? visible.at(-1))!.id : (passed.at(-1)?.id ?? list[0]?.id))
 }
 
 /**
@@ -121,9 +137,21 @@ export function ContentsMenu(props: { items: ContentsItem[] }) {
       menu.open = false
       menu.querySelector("summary")?.focus()
     }
-    // Pinned (its top at its sticky offset, once the page has scrolled), the bar shows its lines
-    // (data-stuck, on-this-page.css). Measured on scroll, so it works where CSS scroll-state queries
-    // don't (WebKit).
+    document.addEventListener("pointerdown", outside)
+    document.addEventListener("keydown", escape)
+    onCleanup(() => {
+      document.removeEventListener("pointerdown", outside)
+      document.removeEventListener("keydown", escape)
+      document.documentElement.removeAttribute("data-menu-hold")
+    })
+  })
+
+  // Pinned (its top at its sticky offset, once the page has scrolled), the bar shows its lines
+  // (data-stuck, on-this-page.css). Measured on scroll, so it works where CSS scroll-state queries
+  // don't (WebKit), and only while the bar is near the screen: from 60rem up it is hidden.
+  const shown = useVisible(() => menu)
+  createEffect(() => {
+    if (!shown()) return
     let frame = 0
     const stuck = () => {
       cancelAnimationFrame(frame)
@@ -133,18 +161,13 @@ export function ContentsMenu(props: { items: ContentsItem[] }) {
         menu.toggleAttribute("data-stuck", window.scrollY > 0 && menu.getBoundingClientRect().top <= top + 0.5)
       })
     }
-    document.addEventListener("pointerdown", outside)
-    document.addEventListener("keydown", escape)
     window.addEventListener("scroll", stuck, { passive: true })
     window.addEventListener("resize", stuck)
     stuck()
     onCleanup(() => {
       cancelAnimationFrame(frame)
-      document.removeEventListener("pointerdown", outside)
-      document.removeEventListener("keydown", escape)
       window.removeEventListener("scroll", stuck)
       window.removeEventListener("resize", stuck)
-      document.documentElement.removeAttribute("data-menu-hold")
     })
   })
 

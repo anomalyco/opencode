@@ -1,6 +1,7 @@
 import { createSignal, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
 import { config } from "~/config"
 import { NewTab } from "./icons"
+import "./markdown-view.css"
 
 type Block =
   | { kind: "heading"; level: number; marker: string; text: string }

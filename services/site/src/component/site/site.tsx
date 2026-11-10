@@ -21,7 +21,7 @@ import {
   Suspense,
 } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
-import { interFaces, interLatin } from "./inter-fonts"
+import { interLatin } from "./inter-fonts"
 import { AgentIcon, Bracket, PersonIcon, ThemeCycle } from "./site-controls"
 import logoLight from "../../asset/brand/opencode-logo-light.svg"
 import logoDark from "../../asset/brand/opencode-logo-dark.svg"
@@ -34,6 +34,7 @@ import type { Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
 import { strip } from "~/lib/language"
 import { brandAssets } from "~/lib/media"
+import { installConsoleStub } from "~/lib/console-stub"
 import { status, type ServiceStatus } from "~/lib/status"
 import { useViewportCover } from "~/lib/viewport"
 import { loadMarkdownPages, markdownKey, markdownPagesLoaded } from "./use-markdown"
@@ -55,21 +56,18 @@ import {
   removeNavItem,
   sortableNav,
 } from "./nav-order"
-// The Markdown view's styles load with the page: they also hide the page while the view loads.
-import "./markdown-view.css"
 import { monoFontChoice, monoFontLatin } from "./mono-fonts"
 import { NavVersions } from "./nav-versions"
 import { closeAllMenus, closeMenusOnLinks, onCloseMenus, takeMenuNavigation } from "./menu-open"
 import { watchSurfaces } from "./surface"
 import { designCopy, designMode } from "./design-copy"
-import { bannerThemeColorScript, bannerTopColor, bannerVisible, SiteBanner } from "./site-banner"
-import { bannerDismissScript } from "./site-banner-script"
+import { bannerDismissScript, bannerThemeColorScript, bannerTopColor, bannerVisible } from "./site-banner-script"
 import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
-import { preloadVisibleLinks } from "./preload-visible"
+import { navMenusOnIntent } from "./nav-intent"
+import { preloadTouchedLinks } from "./preload-touched"
 import { adoptVoice, dropVoice } from "./voice/host"
-// The logo menu's other styles (Settings › Logo menu: list, cards) and the shared nav menus in the site's colours.
-import "./logo-fan.css"
+// The shared nav menus in the site's colours.
 import "./nav-menus.css"
 import { logoVariantSvgs } from "./logo-variants"
 import { AnomalyLogo, Logo, LogoIcon, Wordmark } from "./marks"
@@ -105,6 +103,12 @@ export {
 const SettingsPanel = import.meta.env.DEV ? lazy(() => import("./settings-panel")) : undefined
 const DesignMode = import.meta.env.DEV ? lazy(() => import("./design-mode")) : undefined
 const DevicePreview = import.meta.env.DEV ? lazy(() => import("./device-preview")) : undefined
+// The announcement's "banner" style, where it can open: production renders the default settings, so
+// while they keep it off the banner, its scripts and its CSS leave the build.
+const SiteBanner =
+  import.meta.env.DEV || (siteSettings.homeAnnouncement === "on" && siteSettings.announcementStyle === "banner")
+    ? lazy(() => import("./site-banner").then((module) => ({ default: module.SiteBanner })))
+    : undefined
 
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
@@ -235,8 +239,8 @@ export function Site(props: {
   const [logoMenu, setLogoMenu] = createSignal<{ owner: "sidebar" | "topbar"; x: number; y: number; origin?: number }>()
   const [menu, setMenu] = createSignal(false)
   const [sectionNav, setSectionNav] = createSignal(false)
-  // The shared nav menus (packages/nav-menus), once their code has loaded (onMount).
-  let navMenus: { close: () => void; stop: () => void } | undefined
+  // The shared nav menus (packages/nav-menus), started on mount.
+  let navMenus: ReturnType<typeof navMenusOnIntent> | undefined
   onCloseMenus(() => {
     setMenu(false)
     setSectionNav(false)
@@ -626,12 +630,15 @@ export function Site(props: {
   })
 
   onMount(() => {
-    // Hydration keeps the server's attributes (theme "system"), so the toggle would show the wrong
-    // option. Flip the signal away and back so every theme binding re-applies the saved value; the
-    // second set waits a microtask, or the batched updates cancel out and nothing re-renders.
+    // Hydration keeps the server's attributes (theme "system"), so for a saved light or dark theme
+    // the toggle would show the wrong option. Flip the signal away and back so every theme binding
+    // re-applies the saved value; the second set waits a microtask, or the batched updates cancel out
+    // and nothing re-renders.
     const saved = theme()
-    setTheme(saved === "system" ? "light" : "system")
-    queueMicrotask(() => setTheme(saved))
+    if (saved !== "system") {
+      setTheme("system")
+      queueMicrotask(() => setTheme(saved))
+    }
     loadSiteSettings()
     // The settings store now drives the same rules, so the pre-paint copy can go.
     document.getElementById("site-settings-preload")?.remove()
@@ -669,8 +676,8 @@ export function Site(props: {
     // The app's router only handles links marked with a `link` attribute (explicitLinks), so the
     // older console pages and proxied paths like /docs keep full page loads. Links between pages
     // of this site get the attribute as soon as a pointer, focus or click reaches them, so the
-    // router swaps the page in place and preloads it on intent: hover, focus or touch. Touch screens,
-    // which have no hover, also preload the pages their links lead to as the links come into view.
+    // router swaps the page in place and preloads it on intent: hover or focus, and on touch screens,
+    // which have no hover, a finger landing on the link.
     const markLink = (event: Event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]")
       if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("link") || anchor.target) return
@@ -679,17 +686,17 @@ export function Site(props: {
     }
     for (const type of ["pointerover", "focusin", "touchstart", "click"])
       document.addEventListener(type, markLink, true)
-    const stopPreloads = preloadVisibleLinks(
+    const stopPreloads = preloadTouchedLinks(
       (link) => link.hasAttribute("link") || clientPage(new URL(link.href).pathname),
       (path) => preloadRoute(path, { preloadData: false }),
     )
 
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
-    // window.opencode and its greeting for developers who open DevTools (Settings › Other › Console API).
+    // window.opencode and its hint for developers who open DevTools (Settings › Other › Console API).
     createEffect(() => {
       if (siteSettings.consoleApi === "off") return void delete (window as { opencode?: unknown }).opencode
       // Checked again when idle: saved settings load in a microtask after this first run.
-      idle(() => siteSettings.consoleApi === "on" && void import("~/lib/console-api").then((api) => api.install()))
+      idle(() => siteSettings.consoleApi === "on" && installConsoleStub())
     })
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
@@ -780,15 +787,10 @@ export function Site(props: {
     const stopMenuLinks = closeMenusOnLinks()
     // Settings › Logo menu › fan (the default) is the shared nav menus' logo menu (packages/nav-menus), as on the
     // docs, Data, the Console and the status page; the home, Brand and Press links stay in the visitor's language.
-    // Opening it closes the site's own menus. Its code (with the inlined brand files) loads after the page, so it stays
-    // out of every page's first JavaScript (script/check-client-bundle.ts).
-    let unmounted = false
-    void import("@opencode/nav-menus").then((module) => {
-      if (unmounted) return
-      const stop = module.installNavMenus({
-        link: (path) => (["/", "/brand", "/press"].includes(path) ? language.route(path) : path),
-      })
-      navMenus = { close: () => module.closeNavMenus(), stop }
+    // Opening it closes the site's own menus. Its code (with the inlined brand files) loads on first use (nav-intent.ts),
+    // so it stays out of every page's JavaScript until then.
+    navMenus = navMenusOnIntent({
+      link: (path) => (["/", "/brand", "/press"].includes(path) ? language.route(path) : path),
     })
     const closeSiteMenus = () => {
       setMenu(false)
@@ -798,7 +800,6 @@ export function Site(props: {
     document.addEventListener("opencode-nav-menu-open", closeSiteMenus)
 
     onCleanup(() => {
-      unmounted = true
       navMenus?.stop()
       navMenus = undefined
       document.removeEventListener("opencode-nav-menu-open", closeSiteMenus)
@@ -1291,10 +1292,6 @@ export function Site(props: {
           (siteSettings.spacer === "dither gradient" ? ditherGradientRule(siteSettings, "") : "")
         }
       />
-      {/* A plain style element, which hydration keeps: the meta <Style> is inserted again on
-          hydration, and the new faces then miss font-display: optional's window, so the page
-          swaps to the fallback font and reflows. */}
-      <style innerHTML={interFaces} />
       {/* Fetched with the page, so Inter is ready for the first paint instead of arriving inside
           font-display: optional's short wait and reflowing the text (CLS). Only the Latin file:
           most pages need nothing else. */}
@@ -1321,15 +1318,15 @@ export function Site(props: {
           theme first. The theme script also sets the theme-color and color-scheme tags. */}
       {import.meta.env.DEV && <script innerHTML={preloadSettings} />}
       {/* After the settings: closes the banner again before first paint if its message was dismissed. */}
-      <script innerHTML={bannerDismissScript} />
+      {SiteBanner && <script innerHTML={bannerDismissScript} />}
       <script innerHTML={themeScript(import.meta.env.DEV)} />
       {/* Card stills and product hero posters fade in as soon as their image loads, long before the
           page's code has loaded: load events reach a capturing listener on the document (added once,
           though the script runs again when a client navigation renders it). One already decoded when
           it first paints (preloaded, or cached) is marked data-instant and shows at once instead: a
-          check each frame, before paint, while the page loads. */}
+          check in the frame after the page gains elements, before paint, while the page loads. */}
       <script
-        innerHTML={`if(!document.posterLoads){document.posterLoads=1;document.addEventListener("load",(e)=>{const t=e.target;if(t instanceof HTMLImageElement&&t.hasAttribute("data-poster"))t.setAttribute("data-loaded","")},true);const scan=()=>{document.querySelectorAll("img[data-poster]:not([data-seen])").forEach((i)=>{i.setAttribute("data-seen","");if(i.complete&&i.naturalWidth){i.setAttribute("data-instant","");i.setAttribute("data-loaded","")}});if(document.readyState!=="complete")requestAnimationFrame(scan)};requestAnimationFrame(scan)}`}
+        innerHTML={`if(!document.posterLoads){document.posterLoads=1;document.addEventListener("load",(e)=>{const t=e.target;if(t instanceof HTMLImageElement&&t.hasAttribute("data-poster"))t.setAttribute("data-loaded","")},true);let f=0;const scan=()=>{f=0;document.querySelectorAll("img[data-poster]:not([data-seen])").forEach((i)=>{i.setAttribute("data-seen","");if(i.complete&&i.naturalWidth){i.setAttribute("data-instant","");i.setAttribute("data-loaded","")}})};const o=new MutationObserver(()=>{f||(f=requestAnimationFrame(scan))});o.observe(document,{childList:true,subtree:true});addEventListener("load",()=>o.disconnect(),{once:true})}`}
       />
       <script type="speculationrules" innerHTML={speculationRules} />
       <Show when={props.markdown?.href}>{(href) => <Link rel="alternate" type="text/markdown" href={href()} />}</Show>
@@ -1346,8 +1343,12 @@ export function Site(props: {
         {i18n.t("site.skipToContent")}
       </a>
       {/* The announcement's "banner" style, above everything on every page (site-banner.tsx). */}
-      <SiteBanner />
-      <script innerHTML={bannerThemeColorScript} />
+      {SiteBanner && (
+        <>
+          <SiteBanner />
+          <script innerHTML={bannerThemeColorScript} />
+        </>
+      )}
       {/* Hide the page before first paint when the Markdown view will replace it on mount. */}
       <script
         innerHTML={`(()=>{try{if(sessionStorage.getItem("${markdownKey}")==="1")document.currentScript.parentElement.dataset.markdownBoot=""}catch{}})()`}

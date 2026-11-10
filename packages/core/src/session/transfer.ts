@@ -49,7 +49,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const app = yield* App.Metadata
+    const app = yield* App.Service
     const bus = yield* Bus.Service
     const { db } = yield* Database.Service
     const instances = yield* Instance.Service
@@ -98,7 +98,7 @@ const layer = Layer.effect(
         const split = messages.map((message) => SessionBlob.split(message.data))
         const media =
           split.some((row) => row.moved) &&
-          (yield* SessionBlob.enabledFor(instances, app, {
+          (yield* SessionBlob.enabledFor(instances, {
             ...input.data.info,
             projectID: project.id,
             location: input.location,

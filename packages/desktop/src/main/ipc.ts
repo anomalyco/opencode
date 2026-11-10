@@ -58,9 +58,10 @@ export const registerIpcHandlers = Effect.gen(function* () {
 
   const wire = (win: BrowserWindow) => {
     win.webContents.on("before-input-event", (_event, input) => {
-      // Ctrl+R renames the session in the renderer, so the default menu's Reload must not take it.
+      // Ctrl+R renames the session and Ctrl+Shift+R toggles review in the renderer,
+      // so the default menu's Reload and Force Reload must not take them.
       win.webContents.setIgnoreMenuShortcuts(
-        input.control && !input.meta && !input.shift && !input.alt && input.key.toLowerCase() === "r",
+        input.control && !input.meta && !input.alt && input.key.toLowerCase() === "r",
       )
 
       if (input.type !== "keyDown" || input.key !== "Escape") return

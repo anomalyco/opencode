@@ -70,4 +70,13 @@ describe("revealed model pages", () => {
       expect(modelPagePath(catalog, "reflection", model)).toBe("/data/reflection/beam-1-0-501b-a23b")
     })
   })
+
+  test("sends the Crouton Alpha page to Muse Ember 1.0", () => {
+    const catalog = buildModelCatalog({
+      models: { "meta/muse-ember-1.0": { id: "meta/muse-ember-1.0", name: "Muse Ember" } },
+    })
+
+    expect(findModelCatalogEntry(catalog, "crouton-alpha", "unknown")?.id).toBe("meta/muse-ember-1.0")
+    expect(modelPagePath(catalog, "unknown", "crouton-alpha")).toBe("/data/meta/muse-ember-1-0")
+  })
 })

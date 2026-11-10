@@ -78,10 +78,14 @@ export default function Brand() {
     // While the page scrolls, rows passing under a resting pointer would light up one after another
     // (a flicker). The content ignores the pointer until scrolling has stopped for 150ms.
     const state: { idle?: ReturnType<typeof setTimeout> } = {}
+    // Written once per scroll, not per event: it restyles the whole page.
     const scrolling = () => {
-      document.documentElement.dataset.scrolling = ""
+      if (state.idle === undefined) document.documentElement.dataset.scrolling = ""
       clearTimeout(state.idle)
-      state.idle = setTimeout(() => delete document.documentElement.dataset.scrolling, 150)
+      state.idle = setTimeout(() => {
+        state.idle = undefined
+        delete document.documentElement.dataset.scrolling
+      }, 150)
     }
     window.addEventListener("scroll", scrolling, { passive: true })
     onCleanup(() => {
@@ -701,11 +705,7 @@ export default function Brand() {
             {content().hero.all.text}
             <DownloadIcon />
           </a>
-          <AgentRulesButton
-            label={content().hero.copy.text}
-            copied={content().hero.copy.copied}
-            source={rules}
-          />
+          <AgentRulesButton label={content().hero.copy.text} copied={content().hero.copy.copied} source={rules} />
         </div>
       </section>
 

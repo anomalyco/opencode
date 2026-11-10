@@ -42,6 +42,7 @@ import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
+import { Flag } from "../flag.js"
 import { Formatter } from "../formatter.js"
 import { Generate } from "../generate.js"
 import { Form } from "../form.js"
@@ -120,7 +121,7 @@ import { WellKnownPlugin } from "../wellknown/plugin.js"
 const services = [
   Agent.Service,
   // Activation clears the ambient context, so built-ins see the configured build channel only through this.
-  App.Metadata,
+  App.Service,
   FetchHttpClient.Fetch,
   Artifact.Service,
   AppProcess.Service,
@@ -134,6 +135,7 @@ const services = [
   FileAccess.Service,
   FileMutation.Service,
   FileWrite.Service,
+  Flag.Service,
   Formatter.Service,
   Generate.Service,
   LocationWatcherPolicy.Service,
@@ -193,6 +195,7 @@ export const requirements = LayerNode.group([
   FileAccess.node,
   FileMutation.node,
   FileWrite.node,
+  Flag.node,
   Formatter.node,
   Generate.node,
   LocationWatcherPolicy.node,

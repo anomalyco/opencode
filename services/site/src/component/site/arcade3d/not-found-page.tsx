@@ -13,11 +13,11 @@ import { ogImage } from "~/lib/og"
  * The not-found page: the real 404 route and its previews render this same tree, so the preview's
  * HTML (which the dev server serves for bad URLs) hydrates cleanly as the 404 route. Settings ›
  * 404 arcade › Mode picks the version (layers by default; settings.ts loads the saved mode after
- * hydration, so the server's layers markup always hydrates); `only3D` (the /dev/404-3d preview)
- * always shows the three.js one. Phones get the layers stack with its still light and the
- * hybrid's phone flow (arcade/phone.ts), which loads no WebGL there.
+ * hydration, so the server's layers markup always hydrates). Phones get the layers stack with its
+ * still light and the hybrid's phone flow (arcade/phone.ts), which loads no WebGL there. Each mode's
+ * setting comes first in its `when`, so production folds the modes it never shows out of the bundle.
  */
-export function NotFoundPage(props: { title: string; status: number; only3D?: boolean }) {
+export function NotFoundPage(props: { title: string; status: number }) {
   const [phone, setPhone] = createSignal(false)
   onMount(() => setPhone(isPhone()))
   return (
@@ -36,13 +36,13 @@ export function NotFoundPage(props: { title: string; status: number; only3D?: bo
       {/* Before anything is parsed, so the saved tone applies from the first paint. */}
       <script innerHTML={toneScript} />
       <Switch fallback={<Arcade404 mode="layers" />}>
-        <Match when={!phone() && (props.only3D || siteSettings.arcadeMode === "3D")}>
+        <Match when={siteSettings.arcadeMode === "3D" && !phone()}>
           <Arcade3D />
         </Match>
-        <Match when={!phone() && siteSettings.arcadeMode === "image"}>
+        <Match when={siteSettings.arcadeMode === "image" && !phone()}>
           <Arcade404 />
         </Match>
-        <Match when={!phone() && siteSettings.arcadeMode === "hybrid"}>
+        <Match when={siteSettings.arcadeMode === "hybrid" && !phone()}>
           <Arcade404 mode="hybrid" />
         </Match>
       </Switch>
