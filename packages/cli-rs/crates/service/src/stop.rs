@@ -1,9 +1,8 @@
 //! Stopping the service (F.9).
 //!
-//! Ports `stop` and `terminate` (`packages/client/src/effect/service.ts:129-197`) and
-//! `shutdownPersistentPty` (`packages/cli/src/services/server-connection.ts:78-85`). Only the
-//! explicit `service stop`, `restart`, and `set` commands stop a service; `ensure` never stops one
-//! it did not start (plan 6.6).
+//! Ports `stop` and `terminate` (`packages/client/src/effect/service.ts:129-197`). Only the explicit
+//! `service stop`, `restart`, and `set` commands stop a service; `ensure` never stops one it did not
+//! start (plan 6.6).
 
 use opencode_api::transport::Transport;
 use opencode_local::registration::{self, Registration};
@@ -12,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::handoff;
-use crate::probe::{Endpoint, REQUEST_TIMEOUT};
+use crate::probe::REQUEST_TIMEOUT;
 
 /// What happens to persistent terminals (`StopOptions.pty`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -74,15 +73,6 @@ pub async fn terminate(info: &Registration, file: &Path, poll: Poll) -> Result<(
         let _ = std::fs::remove_file(file);
     }
     Ok(())
-}
-
-/// Shuts down the persistent terminals of the service at `endpoint` before an explicit stop. The
-/// caller ignores the error, as TS does.
-pub async fn shutdown_persistent_pty(
-    transport: Arc<dyn Transport>,
-    endpoint: &Endpoint,
-) -> Result<(), opencode_api::error::Error> {
-    endpoint.client(transport)?.experimental_persistent_pty_shutdown().await
 }
 
 #[derive(Clone, Copy)]

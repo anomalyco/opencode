@@ -173,19 +173,19 @@ fn start_status_stop_and_restart() {
     assert_eq!(sandbox.log().matches("serve --service").count(), 1);
     assert_eq!(text(&sandbox.run(&["service", "status"], &[]).stdout), text(&start.stdout));
 
-    // Restart: the persistent terminals end, then SIGTERM, then a new service.
+    // Restart: SIGTERM, then a new service. No explicit terminal shutdown: the daemon stops with its owner.
     let restart = sandbox.run(&["service", "restart"], &[]);
     assert!(restart.status.success(), "{}", text(&restart.stderr));
     let second = sandbox.registration().unwrap();
     assert_ne!(pid(&second), pid(&first));
     assert_eq!(text(&restart.stdout), format!("{}\n", second["url"].as_str().unwrap()));
-    assert_eq!(sandbox.requests(pid(&first)), ["POST /api/experimental/persistent-pty/shutdown", "SIGTERM"]);
+    assert_eq!(sandbox.requests(pid(&first)), ["SIGTERM"]);
 
     let stop = sandbox.run(&["service", "stop"], &[]);
     assert!(stop.status.success(), "{}", text(&stop.stderr));
     assert_eq!(text(&stop.stdout), "");
     assert!(sandbox.registration().is_none());
-    assert_eq!(sandbox.requests(pid(&second)), ["POST /api/experimental/persistent-pty/shutdown", "SIGTERM"]);
+    assert_eq!(sandbox.requests(pid(&second)), ["SIGTERM"]);
     assert_eq!(text(&sandbox.run(&["service", "status"], &[]).stdout), "stopped\n");
 }
 

@@ -38,7 +38,7 @@ pub fn run(_context: &Context, args: &ServiceArgs) -> error::Result<()> {
             let found = block_on(local.discover())?;
             print(&(found.map_or("stopped".into(), |found| found.service.endpoint.url) + "\n"))
         }
-        ServiceCommand::Stop => block_on(local.stop(true))?,
+        ServiceCommand::Stop => block_on(local.stop())?,
         ServiceCommand::Get(get) => print(&(local.config().get(get.key.as_deref(), get.name.as_deref())? + "\n")),
         ServiceCommand::Set(set) => {
             let edit = Edit::set(&set.key, &set.value, set.env_value.as_deref())?;
@@ -98,18 +98,12 @@ impl Local {
         Ok(connect::reconnect(self.transport.clone(), &self.paths, &self.env).await?)
     }
 
-    /// `ServerConnection.shutdownPersistentPty` (when `terminals`), then `Service.stop`. The registration
-    /// stopped is the discovered service's, else one that is still starting, else the client channel's.
-    pub async fn stop(&self, terminals: bool) -> error::Result<()> {
+    /// `Service.stop`. The registration stopped is the discovered service's, else one that is still starting,
+    /// else the client channel's. No explicit daemon shutdown: stopping without a handoff drops the daemon's
+    /// owner, which stops it with its processes.
+    pub async fn stop(&self) -> error::Result<()> {
         let file = match discover::discover(self.transport.as_ref(), &self.paths, self.env.channel.as_deref()).await {
-            Ok(found) => {
-                if terminals {
-                    // An explicit stop ends the persistent terminals; only a restart through the TUI hands
-                    // them over. TS ignores a failure here.
-                    let _ = stop::shutdown_persistent_pty(self.transport.clone(), &found.service.endpoint).await;
-                }
-                found.file
-            }
+            Ok(found) => found.file,
             Err(missing) => missing.pending.unwrap_or_else(|| self.file()),
         };
         stop::stop(self.transport.clone(), &file, Pty::Clear, Poll::default()).await?;
@@ -117,7 +111,7 @@ impl Local {
     }
 
     async fn restart(&self) -> error::Result<String> {
-        self.stop(true).await?;
+        self.stop().await?;
         Ok(self.ensure().await?.service.endpoint.url)
     }
 
@@ -125,7 +119,7 @@ impl Local {
     /// does, then writes the file.
     pub fn edit(&self, edit: &Edit) -> error::Result<()> {
         if edit.stops_service() {
-            block_on(self.stop(false))??;
+            block_on(self.stop())??;
         }
         self.config().apply(edit)?;
         Ok(())
