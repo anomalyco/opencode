@@ -382,6 +382,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     )
   }
 
+  // Only readiness is interruptible; after it succeeds, acquisition must register process release atomically.
   const launchProcess = (command: ChildProcess.StandardCommand, file: string, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
@@ -425,7 +426,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       return Effect.sync(() => {
         proc.kill("SIGTERM")
       })
-    })
+    }).pipe(Effect.interruptible)
 
   const spawn = Effect.fnUntraced(function* (
     command: ChildProcess.StandardCommand,
@@ -594,8 +595,6 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
                   ),
                 ),
             ),
-            // A process may never signal readiness; let deadlines cancel the launch callback.
-            { interruptible: true },
           )
 
           const completion = Effect.raceFirst(

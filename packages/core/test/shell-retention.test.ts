@@ -24,11 +24,14 @@ it.effect("a shell timeout also bounds host process creation", () =>
     const proc = new childProcess.ChildProcess()
     const kill = spyOn(proc, "kill")
     const original = childProcess.spawn
+    const executable = "opencode-stalled-launch"
     // Keep the real host spawner, replacing only an OS launch that never signals readiness.
     const spawn = spyOn(childProcess, "spawn").mockImplementation(
       new Proxy(original, {
         apply(target, receiver, args) {
-          if (args[0] !== "opencode-stalled-launch") return Reflect.apply(target, receiver, args)
+          if (args[0] !== executable && (!Array.isArray(args[1]) || !args[1].join(" ").includes(executable)))
+            // oxlint-disable-next-line no-restricted-globals -- Forward every native spawn overload with its receiver and arguments.
+            return Reflect.apply(target, receiver, args)
           Deferred.doneUnsafe(entered, Exit.succeed(undefined))
           return proc
         },
@@ -43,7 +46,7 @@ it.effect("a shell timeout also bounds host process creation", () =>
     yield* Effect.gen(function* () {
       const shell = yield* Shell.Service
       const pending = yield* shell
-        .create({ shell: "opencode-stalled-launch", command: "fixture", timeout: 200 })
+        .create({ shell: executable, command: "fixture", timeout: 200 })
         .pipe(Effect.forkChild({ startImmediately: true }))
       yield* Deferred.await(entered)
       yield* TestClock.adjust("200 millis")
