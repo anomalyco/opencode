@@ -9,7 +9,7 @@ The site's heavy media (product videos, arcade sounds, 3D models and download zi
 - The build (`script/build.ts`) drops every `mediaFile` from the Worker's assets, so a local copy in `public/` never ships.
 - In development, `vite dev` proxies `/files` to `https://dev.opencode.ai`, so pages play the dev bucket's copies.
 - Images (`png`, `jpg`, `webp`, `avif`, `svg`), posters, fonts and the 3D decoders (`arcade3d/draco`, `arcade3d/basis`) stay in git and in the static assets.
-- Only the H.264 originals are served. The AV1 and HEVC copies `media-manifest.json` once described were never uploaded, so `videoSources()` offers the original alone.
+- `videoSources()` offers a video's AV1 and HEVC copies (`media/<base>.<width>.<codec>.<hash>.mp4`, listed in `src/component/site/media-manifest.json`) before the H.264 original. The manifest lists only copies that are in the bucket; a video without copies plays its original.
 
 | Folder | Files |
 | --- | --- |

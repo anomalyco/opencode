@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js"
 import { Bracket } from "~/component/site/site-controls"
+import type { DocsSet } from "../config"
 import { docsHref, type DocsNavGroup } from "../lib/navigation"
 
 /**
@@ -7,7 +8,7 @@ import { docsHref, type DocsNavGroup } from "../lib/navigation"
  * page). It scrolls on its own under the logo and lockup (site.css), fading at an edge while items
  * pass under it (client.ts sets data-fade-top and data-fade-bottom).
  */
-export function DocsNav(props: { section: string; groups: DocsNavGroup[]; currentSlug: string }) {
+export function DocsNav(props: { set: DocsSet; section: string; groups: DocsNavGroup[]; currentSlug: string }) {
   // A group named after its section ("API" in the API docs) needs no title under the lockup.
   const title = (group: DocsNavGroup) => (group.title === props.section ? undefined : group.title)
   return (
@@ -26,7 +27,10 @@ export function DocsNav(props: { section: string; groups: DocsNavGroup[]; curren
               <For each={group.items}>
                 {(item) => (
                   <li>
-                    <a href={docsHref(item.slug)} aria-current={item.slug === props.currentSlug ? "page" : undefined}>
+                    <a
+                      href={docsHref(item.slug, props.set)}
+                      aria-current={item.slug === props.currentSlug ? "page" : undefined}
+                    >
                       <Bracket />
                       <span data-slot="label">{item.title}</span>
                     </a>

@@ -442,6 +442,16 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             command.register("tabs", () => {
               const current = currentTab()
 
+              const closeCurrent = () => {
+                if (current === tabs.preview()) {
+                  tabs.closePreview()
+
+                  return
+                }
+
+                tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
+              }
+
               return [
                 {
                   ...newTabCommand,
@@ -456,15 +466,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   title: language.t("command.tab.close"),
                   keybind: "mod+w",
                   hidden: true,
-                  onSelect: () => {
-                    if (current === tabs.preview()) {
-                      tabs.closePreview()
-
-                      return
-                    }
-
-                    tabsStoreActions.closeTab(tabsStore.findIndex((tab) => current === tab))
-                  },
+                  onSelect: closeCurrent,
+                },
+                current && {
+                  id: "tab.closeSession",
+                  category: "tab",
+                  title: language.t("command.tab.closeSession"),
+                  keybind: "mod+alt+w",
+                  onSelect: closeCurrent,
                 },
                 {
                   id: "tab.reopenClosed",

@@ -2,7 +2,7 @@ import { createMiddleware } from "@solidjs/start/middleware"
 import { assets } from "#resource"
 import { config } from "~/config"
 import { securityHeaders, setSecurityHeaders } from "~/lib/security-headers"
-import { base } from "./config"
+import type { DocsSet } from "./config"
 import { docsSlugs } from "virtual:docs-pages"
 import { renderLlmsTxt } from "./lib/llms"
 import { docsHref, docsMarkdownHref } from "./lib/navigation"
@@ -27,7 +27,8 @@ export const docsMiddleware = createMiddleware({
     const route = docsRoute(url, event.request.headers.get("accept") ?? "", docsSlugs)
     if (!route) return
     setSecurityHeaders(event.response.headers)
-    if (route.type === "redirect") return new Response(null, { status: route.status, headers: { Location: route.location } })
+    if (route.type === "redirect")
+      return new Response(null, { status: route.status, headers: { Location: route.location } })
     if (route.type === "missing") return notFound()
     if (route.type === "file") {
       // Static assets in the Worker, so only the development server reaches these two.
@@ -43,11 +44,7 @@ export const docsMiddleware = createMiddleware({
       return notFound()
     }
 
-    const response = await asset(
-      route.markdown ? docsMarkdownHref(route.slug) : docsHref(route.slug),
-      url,
-      event.request,
-    )
+    const response = await asset(route.set, route.slug, route.markdown, url, event.request)
     if (!response.ok && response.status !== 304) return notFound()
     // Without a twin there is nothing to negotiate, so the API reference is served as the plain file.
     if (!route.twin) return response
@@ -59,23 +56,19 @@ export const docsMiddleware = createMiddleware({
 })
 
 /** A prerendered docs file from the Worker's assets, or rendered on request by the development server. */
-async function asset(href: string, url: URL, request: Request) {
+async function asset(set: DocsSet, slug: string, markdown: boolean, url: URL, request: Request) {
+  const href = markdown ? docsMarkdownHref(slug, set) : docsHref(slug, set)
   const binding = assets()
   // Assets drop the trailing slash (cloudflare.config.ts htmlHandling) and find the page's index.html.
   if (binding) return binding.fetch(new Request(new URL(href.replace(/(.)\/$/, "$1"), url), request))
   if (!import.meta.env.DEV) return notFound()
   const { renderDocsMarkdown, renderDocsPage } = await import("./render")
-  const slug =
-    href
-      .slice(base.length - 1)
-      .replace(/\.md$/, "")
-      .replace(/^\/|\/$/g, "") || "index"
-  const body = href.endsWith(".md")
-    ? await renderDocsMarkdown(slug)
-    : await renderDocsPage(slug, { stylesheet: "/src/docs/styles/docs.css", script: "/src/docs/client.ts" })
+  const body = markdown
+    ? await renderDocsMarkdown(set, slug)
+    : await renderDocsPage(set, slug, { stylesheet: "/src/docs/styles/docs.css", script: "/src/docs/client.ts" })
   if (body === undefined) return notFound()
   return new Response(body, {
-    headers: { "Content-Type": href.endsWith(".md") ? markdownType : "text/html; charset=utf-8" },
+    headers: { "Content-Type": markdown ? markdownType : "text/html; charset=utf-8" },
   })
 }
 

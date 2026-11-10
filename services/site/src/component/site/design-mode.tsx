@@ -180,7 +180,7 @@ export const copyVariants = {
     // "Normal" is also the page's own label now; it keeps its place so saved choices still match.
     options: ["All systems normal", "All good", "Online", "Normal", "Up", "Operational"],
   },
-  // Product page intros; the page's own text (product-data.ts) is the first option.
+  // Product page intros; the page's own text (product-details.ts) is the first option.
   "product.desktop.intro": {
     label: "Desktop intro",
     lines: 1,

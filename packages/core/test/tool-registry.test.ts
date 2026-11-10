@@ -10,11 +10,10 @@ import { State } from "@opencode/core/state"
 import { Tool } from "@opencode/core/tool"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
+import { codeModeListings, executeTool, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
-import { permissionLayer } from "./lib/permission"
 
 const imageStore = Layer.mock(Image.Service, {
   normalize: (resource, content) => {
@@ -39,8 +38,8 @@ const imageStore = Layer.mock(Image.Service, {
   },
 })
 const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [
+  ...toolNodeReplacements(),
   Image.node.replace(imageStore),
-  Permission.node.replace(permissionLayer()),
 ])
 const it = testEffect(registryLayer)
 const identity = {

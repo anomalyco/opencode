@@ -68,14 +68,12 @@ import {
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
-import { Image } from "@opencode/core/image"
 import { Global } from "@opencode/util/global"
 import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
-import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -86,6 +84,7 @@ import {
   registerToolPlugin,
   toolDefinitions,
   toolIdentity,
+  toolNodeReplacements,
   waitForTool,
 } from "./lib/tool"
 
@@ -620,10 +619,9 @@ const events = Layer.mock(Bus.Service, { subscribe: () => Stream.never })
 const outputData = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-mcp-output-"))
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node]), [
+    ...toolNodeReplacements(permissions),
     Mcp.node.replace(mcp),
-    Permission.node.replace(permissions),
     Bus.node.replace(events),
-    Image.node.replace(imagePassthrough),
     Global.node.replace(Global.layerWith({ data: outputData })),
   ]),
 )
@@ -2672,6 +2670,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
       Effect.provide(
         Layer.fresh(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+            ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 awaitStartup: () => Effect.void,
@@ -2683,8 +2682,6 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
                   } satisfies Mcp.ToolResult),
               }),
             ),
-            Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
-            Image.node.replace(imagePassthrough),
           ]),
         ),
       ),
@@ -2724,6 +2721,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+        ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             awaitStartup: () => Effect.void,
@@ -2734,8 +2732,6 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
               }),
           }),
         ),
-        Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
-        Image.node.replace(imagePassthrough),
       ]),
     ),
   )
@@ -2759,10 +2755,9 @@ const gatedServer = Effect.gen(function* () {
 // The real Mcp layer behind the tool registry; the bus never delivers, so only flush can register tools.
 const startupRegistry = (url: string) =>
   AppNodeBuilder.build(LayerNode.group([Mcp.node, Tool.node, McpTool.node]), [
+    ...toolNodeReplacements(permissions),
     Mcp.node.replace(resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, codemode: false }))),
-    Permission.node.replace(permissions),
     Bus.node.replace(events),
-    Image.node.replace(imagePassthrough),
     Global.node.replace(Global.layerWith({ data: outputData })),
   ])
 

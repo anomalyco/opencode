@@ -88,7 +88,7 @@ import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
-const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
+const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
   readonly count: number
   readonly started: Deferred.Deferred<void>
@@ -2380,6 +2380,75 @@ describe("SessionRunnerLLM", () => {
       [defaultSystem, replacementIdentity, "Initial context"],
       [defaultSystem, replacementIdentity, "Initial context"],
     ])
+  })
+
+  scenario("narrates only the Code Mode tools that change, through compaction and fork", function* (s) {
+    const registry = yield* Tool.Service
+    const register = (name: string, count: number, from = 0) =>
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        const tools = Object.fromEntries(
+          Array.from({ length: count }, (_, offset) => [
+            `${name}_${from + offset}`,
+            {
+              name: `${name}_${from + offset}`,
+              description: `${name} tool ${from + offset}`,
+              input: Schema.Struct({ id: Schema.String }),
+              output: Schema.String,
+              execute: () => Effect.succeed({ output: "ok" }),
+            } satisfies ToolInfo,
+          ]),
+        )
+        yield* transformTools(registry, tools, { namespace: name }).pipe(Scope.provide(scope))
+        return scope
+      })
+    const catalogOf = (request: LLMRequest | undefined) =>
+      request?.system.map((part) => part.text).find((text) => text.includes("# Code Mode")) ?? ""
+    const updates = (request: LLMRequest | undefined) =>
+      request ? systemTexts(request).filter((text) => text.startsWith("The Code Mode tool catalog has changed")) : []
+    const signature = (name: string, index: number) =>
+      `  - tools.${name}.${name}_${index}({\n  id: string,\n}): Promise<string> // ${name} tool ${index}`
+
+    yield* register("alpha", 12)
+    yield* s.runPrompt("First")
+    expect(catalogOf(s.requests.at(-1))).toContain(`- alpha (12 tools)\n${signature("alpha", 0)}`)
+
+    const beta = yield* register("beta", 1)
+    yield* s.runPrompt("Second")
+    expect(updates(s.requests.at(-1))).toEqual([
+      `The Code Mode tool catalog has changed.\n\nNew tools are available:\n- beta (1 tool)\n${signature("beta", 0)}`,
+    ])
+    // The next step rebuilds the same catalog and has nothing to say.
+    yield* s.runPrompt("Again")
+    expect(updates(s.requests.at(-1))).toHaveLength(1)
+
+    yield* Scope.close(beta, Exit.void)
+    yield* s.runPrompt("Third")
+    expect(updates(s.requests.at(-1)).at(-1)).toBe(
+      "The Code Mode tool catalog has changed.\n\nThe following tool namespaces are no longer available and must not be used: `beta`.",
+    )
+
+    yield* register("alpha", 1, 12)
+    yield* s.runPrompt("Fourth")
+    expect(updates(s.requests.at(-1)).at(-1)).toBe(
+      `The Code Mode tool catalog has changed.\n\nNew tools are available in addition to those previously listed:\n${signature("alpha", 12)}`,
+    )
+
+    // Compaction restates the current catalog as the new baseline and has no update to send.
+    yield* s.llm.push(TestLLM.text("## Objective\n- summary", "catalog-summary"))
+    yield* s.session.compact({ sessionID })
+    yield* s.resume
+    const latest = yield* s.runPrompt("Fifth")
+    expect(catalogOf(s.requests.at(-1))).toContain(signature("alpha", 12))
+    expect(catalogOf(s.requests.at(-1))).not.toContain("- beta")
+    expect(updates(s.requests.at(-1))).toEqual([])
+
+    // A fork starts from the same catalog and has nothing to narrate.
+    const forked = yield* s.session.fork({ sessionID, before: latest.id })
+    yield* s.session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
+    yield* s.session.resume(forked.id)
+    expect(catalogOf(s.requests.at(-1))).toContain(signature("alpha", 12))
+    expect(updates(s.requests.at(-1))).toEqual([])
   })
 
   scenario("moves the epoch at compaction and narrates later changes", function* (s) {

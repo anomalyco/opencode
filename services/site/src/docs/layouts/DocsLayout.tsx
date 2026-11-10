@@ -1,20 +1,16 @@
 import { For, Show, type JSX } from "solid-js"
 import { DocsLockup } from "~/component/site/docs-lockup"
 import { GitHubLink } from "~/component/site/github-link"
-import { Chevron, SearchIcon } from "~/component/site/icons"
+import { Chevron, NewTab, SearchIcon } from "~/component/site/icons"
 import { interFaces, interLatin } from "~/component/site/inter-fonts"
-import { siteLinks } from "~/component/site/links"
 import { LogoIcon } from "~/component/site/marks"
 import { Bracket } from "~/component/site/site-controls"
 import { monoFontFaces, monoFontLatin } from "~/component/site/mono-fonts"
-import { ContentsMenu, OnThisPage } from "~/component/site/on-this-page"
-import { MenuSheet, MenuToggle } from "~/component/site/phone-menu"
+import { OnThisPage } from "~/component/site/on-this-page"
 import { defaultRootAttributes, themeScript } from "~/component/site/preload-settings"
-import { navDefaults } from "~/component/site/settings"
-import { ExternalArrow, NewTab } from "~/component/site/icons"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
-import { base } from "../config"
+import { latestDocs, type DocsSet } from "../config"
 import { DocsFooter } from "../components/DocsFooter"
 import { DocsSearchDialog } from "../components/DocsSearchDialog"
 import { DocsNav } from "../components/DocsSidebar"
@@ -31,9 +27,8 @@ const themeMigration = `try{const o=localStorage.getItem("docs-theme");if(o){if(
 // Pages load as plain documents (no client router). The browser prerenders a docs link once the
 // pointer rests on it, and docs.css turns on cross-document view transitions, so a click shows the
 // next page at once, without a blank frame.
-const speculationRules = JSON.stringify({
-  prerender: [{ where: { href_matches: `${base}*` }, eagerness: "moderate" }],
-})
+const speculationRules = (set: DocsSet) =>
+  JSON.stringify({ prerender: [{ where: { href_matches: `${set.base}*` }, eagerness: "moderate" }] })
 
 /**
  * A docs page in the site's docs layout (site.css `[data-layout="docs"]`): the logo and the section
@@ -42,13 +37,14 @@ const speculationRules = JSON.stringify({
  * section menu and the Contents bar take over. Everything interactive works through client.ts.
  */
 export function DocsLayout(props: {
+  set: DocsSet
   title: string
   description?: string
   currentSlug: string
   headings: DocsHeading[]
   noindex?: boolean
   assets: DocsAssets
-  /** The page's source file under src/docs, for "Edit this page"; generated pages have none. */
+  /** The page's source file from the repository root, for "Edit this page"; generated pages have none. */
   source?: string
   /** The page's Markdown twin; generated pages have none. */
   markdown?: string
@@ -62,12 +58,10 @@ export function DocsLayout(props: {
   const next = at >= 0 ? pages[at + 1] : undefined
   const current = pages[at]
   const description = props.description ?? `${props.title} documentation for OpenCode.`
-  const canonical = new URL(docsHref(props.currentSlug), "https://opencode.ai").href
+  const canonical = new URL(docsHref(props.currentSlug, props.set), "https://opencode.ai").href
   const contents = props.headings
     .filter((heading) => heading.depth === 2 || heading.depth === 3)
     .map((heading) => ({ id: heading.slug, title: heading.text, level: heading.depth as 2 | 3 }))
-  const links = siteLinks(i18n.t, (path) => path)
-  const nav = navDefaults.flatMap((entry) => (entry.visible ? links.nav.filter((item) => item.id === entry.id) : []))
   const logo = () => (
     <a
       href="/"
@@ -95,9 +89,9 @@ export function DocsLayout(props: {
         <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfbfb" />
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0c0c0c" />
         <meta name="color-scheme" content="light dark" />
-        <script type="speculationrules" innerHTML={speculationRules} />
+        <script type="speculationrules" innerHTML={speculationRules(props.set)} />
         <link rel="canonical" href={canonical} />
-        <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+        <link rel="icon" type="image/svg+xml" href={`${latestDocs.base}favicon.svg`} />
         <Show when={props.markdown}>{(href) => <link rel="alternate" type="text/markdown" href={href()} />}</Show>
         <title>{`${props.title} | OpenCode`}</title>
         <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin="anonymous" />
@@ -106,7 +100,14 @@ export function DocsLayout(props: {
         <link rel="stylesheet" href={props.assets.stylesheet} />
       </head>
       <body>
-        <div data-site data-page="docs" data-layout="docs" data-theme="system" {...rootAttributes()}>
+        <div
+          data-site
+          data-page="docs"
+          data-layout="docs"
+          data-theme="system"
+          data-docs-base={props.set.base}
+          {...rootAttributes()}
+        >
           <script innerHTML={themeMigration + themeScript(false)} />
           <a href="#content" data-component="skip-link">
             {i18n.t("site.skipToContent")}
@@ -124,32 +125,7 @@ export function DocsLayout(props: {
               <SearchIcon />
             </button>
             <GitHubLink owner="topbar" />
-            <MenuToggle open={false} onToggle={() => undefined} />
           </header>
-          <MenuSheet open={false} onClose={() => undefined}>
-            <For each={nav}>
-              {(item, index) => (
-                <li data-nav-id={item.id}>
-                  <a
-                    href={item.href}
-                    target={"external" in item && item.external ? "_blank" : undefined}
-                    aria-current={item.id === "docs" ? "page" : undefined}
-                  >
-                    <span data-slot="index" aria-hidden="true">
-                      [<span data-slot="number">{index() + 1}</span>]
-                    </span>
-                    <span data-slot="label">{item.label}</span>
-                    <Show when={"arrow" in item && item.arrow}>
-                      <ExternalArrow />
-                    </Show>
-                    <Show when={"external" in item && item.external}>
-                      <NewTab />
-                    </Show>
-                  </a>
-                </li>
-              )}
-            </For>
-          </MenuSheet>
 
           <div data-slot="frame">
             <aside
@@ -170,10 +146,37 @@ export function DocsLayout(props: {
                   <Chevron />
                 </button>
                 <div data-slot="section-body" id="section-nav">
-                  <DocsNav section={section.title} groups={section.groups} currentSlug={props.currentSlug} />
+                  <DocsNav
+                    set={props.set}
+                    section={section.title}
+                    groups={section.groups}
+                    currentSlug={props.currentSlug}
+                  />
                 </div>
               </div>
             </aside>
+            {/* Mobile layout: the Contents rail folded into a bar stuck under the
+                section row from load. It names the section being read (client.ts swaps the label as you scroll)
+                and keeps "Contents" in its accessible name. Hidden beside the rail on wide screens. */}
+            <Show when={contents.length > 0}>
+              <details data-component="contents-menu" data-docs-contents>
+                <summary aria-label={`Contents: ${contents[0].title}`}>
+                  <span data-slot="label">
+                    <span data-slot="word">{contents[0].title}</span>
+                  </span>
+                  <Chevron />
+                </summary>
+                <ul>
+                  <For each={contents}>
+                    {(item) => (
+                      <li data-level={item.level === 3 ? "3" : undefined}>
+                        <a href={`#${item.id}`}>{item.title}</a>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </details>
+            </Show>
             <GitHubLink owner="corner" />
 
             <main data-component="content" id="content" tabindex={-1}>
@@ -185,24 +188,20 @@ export function DocsLayout(props: {
                   data-pagefind-meta={`title:${props.title}`}
                 >
                   <h1 data-pagefind-meta={`section:${section.title}`}>{props.title}</h1>
-                  {/* Phones: the Contents rail folded into a bar under the title (Pagefind skips it, build.ts). */}
-                  <Show when={contents.length > 0}>
-                    <ContentsMenu items={contents} />
-                  </Show>
                   {props.children}
                   <footer data-slot="article-footer" data-pagefind-ignore>
                     <Show when={previous || next}>
                       <nav aria-label="Pages" data-component="pagination">
                         <Show when={previous}>
                           {(page) => (
-                            <a href={docsHref(page().slug)} rel="prev">
+                            <a href={docsHref(page().slug, props.set)} rel="prev">
                               <small>Previous</small> {page().title}
                             </a>
                           )}
                         </Show>
                         <Show when={next}>
                           {(page) => (
-                            <a href={docsHref(page().slug)} rel="next">
+                            <a href={docsHref(page().slug, props.set)} rel="next">
                               <small>Next</small> {page().title}
                             </a>
                           )}
@@ -212,11 +211,7 @@ export function DocsLayout(props: {
                     <Show when={props.source}>
                       {(source) => (
                         <p data-component="edit-link">
-                          <a
-                            href={`${config.github.repoUrl}/blob/dev/services/site/src/docs/${source()}`}
-                            target="_blank"
-                            rel="noopener"
-                          >
+                          <a href={`${config.github.repoUrl}/blob/dev/${source()}`} target="_blank" rel="noopener">
                             Edit this page on GitHub
                             <NewTab />
                           </a>
@@ -258,7 +253,7 @@ export function DocsLayout(props: {
           </div>
 
           <DocsFooter markdown={props.markdown} />
-          <DocsSearchDialog />
+          <DocsSearchDialog set={props.set} />
         </div>
         <script type="module" src={props.assets.script} />
       </body>

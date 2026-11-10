@@ -366,7 +366,7 @@ describe("OpencodePlugin", () => {
               ])
               // The refresh and every Console fetch say which OpenCode is asking.
               expect(agents).toEqual(requests.map(() => "opencode/beta/1.2.3/test"))
-            }).pipe(Effect.provideService(App.Metadata, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
+            }).pipe(Effect.provideService(App.Service, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
           ({ server }) => Effect.promise(() => server.stop(true)),
         ),
     )
