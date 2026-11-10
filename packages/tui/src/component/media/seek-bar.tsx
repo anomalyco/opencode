@@ -130,7 +130,7 @@ export function Control(props: {
   return (
     <text
       id={props.id}
-      fg={props.on ? theme.text.action.primary.selected : action().state({ hovered: hovered() })}
+      fg={props.on ? theme.text.formfield.selected : action().state({ hovered: hovered() })}
       attributes={props.struck ? TextAttributes.STRIKETHROUGH : undefined}
       wrapMode="none"
       flexShrink={0}
@@ -146,7 +146,7 @@ export function Control(props: {
 
 /** Scrubbing and the hover preview seek at most this often, or less often when seeks are slow. */
 const SEEK_INTERVAL_MS = 120
-/** The hover preview seeks once the pointer has rested this long. */
+/** The hover preview opens, and then seeks, once the pointer has rested this long. */
 const PREVIEW_REST_MS = 80
 
 /**
@@ -157,6 +157,15 @@ function SeekBar(props: { transport: Transport; preview?: boolean; onWidth: (wid
   const theme = useTheme()
   const [width, setWidth] = createSignal(0)
   const [hover, setHover] = createSignal<number>()
+  // Opening the preview's player blocks for 50 ms or more, so it opens once the pointer rests, as a hovered tile plays.
+  const [rested, setRested] = createSignal(false)
+  const clock = useRenderer().clock
+  createEffect(() => {
+    if (!props.preview || hover() === undefined) return setRested(false)
+    if (rested()) return
+    const timer = clock.setTimeout(() => setRested(true), PREVIEW_REST_MS)
+    onCleanup(() => clock.clearTimeout(timer))
+  })
   const scrubbing = () => props.transport.scrubTime() !== undefined
   const duration = () => props.transport.metadata()?.duration ?? 0
   let bar: BoxRenderable | undefined
@@ -230,7 +239,9 @@ function SeekBar(props: { transport: Transport; preview?: boolean; onWidth: (wid
       <text wrapMode="none" selectable={false}>
         <Index each={runs()}>{(run) => <span style={{ fg: run().fg }}>{run().text}</span>}</Index>
       </text>
-      <Show when={props.preview && props.transport.player()?.source && duration() > 0 && hover() !== undefined}>
+      <Show
+        when={props.preview && props.transport.player()?.source && duration() > 0 && hover() !== undefined && rested()}
+      >
         <SeekPreview
           source={props.transport.player()!.source!}
           time={timeAt(hover()!)}
@@ -310,6 +321,8 @@ function SeekPreview(props: {
           height={height()}
           onReady={() => {
             seek.reset()
+            // The pointer rested before it opened, so it seeks at once.
+            if (!props.scrubbing) seek.flush(props.time)
             setReady(true)
           }}
           onError={() => setFailed(true)}

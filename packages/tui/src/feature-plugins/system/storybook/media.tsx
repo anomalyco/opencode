@@ -29,10 +29,8 @@ export function parseStoryMedia(value: string): MediaItem[] {
   })
 }
 
-// Without OPENCODE_STORY_MEDIA: the test fixtures, the website's clips in a repository checkout, and a WebM it can't play.
-const builtIn = ["tui/test/fixture/media", "console/app/src/asset/lander"].map((directory) =>
-  path.resolve(import.meta.dir, "../../../../..", directory),
-)
+// Without OPENCODE_STORY_MEDIA: the test fixtures in a repository checkout, and a WebM it can't play.
+const builtIn = path.resolve(import.meta.dir, "../../../../test/fixture/media")
 const webm: MediaItem = { id: "webm", kind: "video", mime: "video/webm", uri: "", name: "screen-recording.webm" }
 const widths = [44, 80, Infinity]
 
@@ -40,7 +38,7 @@ function MediaStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const media = useMedia()
   const theme = props.context.theme
-  const items = parseStoryMedia(process.env.OPENCODE_STORY_MEDIA || builtIn.join(path.delimiter)).concat(webm)
+  const items = parseStoryMedia(process.env.OPENCODE_STORY_MEDIA || builtIn).concat(webm)
   const video = items.find(isPlayableVideo)
   const [width, setWidth] = createSignal(0)
   const stripWidth = () => Math.min(widths[width()]!, dimensions().width - 4)

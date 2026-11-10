@@ -8,7 +8,7 @@ import {
 import { useRenderer } from "@opentui/solid"
 import { createContext, createEffect, createSignal, on, onCleanup, Show, useContext, type JSX } from "solid-js"
 import { createMediaFiles } from "../component/media/file"
-import type { MediaItem } from "../component/media/model"
+import { mediaPath, type MediaItem } from "../component/media/model"
 import { MediaPip } from "../component/media/pip"
 import { MediaViewer } from "../component/media/viewer"
 import { useRichMedia } from "../config"
@@ -122,8 +122,11 @@ function init(directory: string) {
     const tiles = [...tracked].map(([key, element]) => ({ key, ...measure(element, renderer, seen) }))
     const near = tiles.filter((tile) => tile.near)
     hidden = new Set(tiles.filter((tile) => tile.hidden).map((tile) => tile.key))
-    // Fully visible tiles rank first, then those showing more of themselves. Tiles under the viewer do not rank.
-    const ranked = viewer() ? [] : near.toSorted((a, b) => b.share - a.share).slice(0, POSTER_LIMIT)
+    // Fully visible tiles rank first, then those showing more of themselves. Tiles under the viewer do not rank. Each
+    // new player blocks its frame for about 100 ms on a 1080p clip, so one opens per frame, the best ranked first.
+    const best = viewer() ? [] : near.toSorted((a, b) => b.share - a.share).slice(0, POSTER_LIMIT)
+    const fresh = best.filter((tile) => !players.has(tile.key))
+    const ranked = best.filter((tile) => players.has(tile.key) || tile === fresh[0])
     const kept = [...players]
       .map(([key, since]) => [key, Math.min(since, now)] as const)
       .filter(
@@ -134,6 +137,10 @@ function init(directory: string) {
     players = new Map([...ranked.map((tile) => [tile.key, Infinity] as const), ...kept])
     setShown(new Set(near.map((tile) => tile.key)))
     setOpen(new Set(players.keys()))
+    if (fresh.length > 1) {
+      invalidate()
+      renderer.requestRender()
+    }
 
     for (const box of boxes) if (!seen.has(box)) watch(box, "off")
     for (const box of seen) if (!boxes.has(box)) watch(box, "on")
@@ -220,13 +227,14 @@ function init(directory: string) {
     /**
      * Whether the tile keeps a player open for its poster frame: one of the POSTER_LIMIT tiles showing the most of
      * themselves, or one of up to POSTER_LIMIT more that dropped out of those less than POSTER_GRACE_MS ago, so
-     * scrolling back and forth opens no player again. Under the viewer, tiles only keep the players they had.
+     * scrolling back and forth opens no player again. Tiles under the viewer rank no more, so they keep their players
+     * only as long. When several tiles rank at once, they get their players one per frame.
      */
     posterOpen: (key: string) => open().has(key),
     /** The duration of a video some player has opened, so a filmstrip card can show it without a decoder of its own. */
-    duration: (item: MediaItem) => durations().get(item.path ?? item.uri),
+    duration: (item: MediaItem) => durations().get(durationKey(item)),
     noteDuration(item: MediaItem, seconds: number) {
-      const key = item.path ?? item.uri
+      const key = durationKey(item)
       if (durations().get(key) !== seconds) setDurations((value) => new Map(value).set(key, seconds))
     },
     pip,
@@ -273,6 +281,11 @@ function measure(element: Renderable, screen: { width: number; height: number },
 function underHidden(element: Renderable) {
   for (let node: Renderable | null = element; node; node = node.parent) if (!node.visible) return true
   return false
+}
+
+// A file however its URL is encoded, or a hash of other URIs, so a data: URI of many megabytes is not kept as a key.
+function durationKey(item: MediaItem) {
+  return mediaPath(item) ?? Bun.hash(item.uri).toString(36)
 }
 
 function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>) {

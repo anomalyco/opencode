@@ -67,6 +67,22 @@ test("rich media sends Kitty frames through files, and turning it off closes eve
   expect(renderer.kittyImageTransport).toBe("raw")
 })
 
+test("a video's duration is known by its file, however its URL is encoded, or by its data", async () => {
+  await using host = await renderMedia(() => null)
+  const media = host.media()
+  const data = "data:video/mp4;base64,AAAA"
+  media.noteDuration(video("a", { path: undefined, uri: "file:///clips/a%20b.mp4" }), 4)
+  media.noteDuration(video("b", { path: undefined, uri: data }), 2)
+  // Each item, and the duration it shows.
+  const rows = [
+    [{ path: "/clips/a b.mp4" }, 4],
+    [{ path: undefined, uri: "file:///clips/a b.mp4" }, 4],
+    [{ path: undefined, uri: data }, 2],
+    [{ path: undefined, uri: "data:video/mp4;base64,BBBB" }, undefined],
+  ] as const
+  for (const [item, duration] of rows) expect(media.duration(video("c", item))).toBe(duration)
+})
+
 test("players go to the four tiles showing the most of themselves, and stay two seconds with tiles that drop out", async () => {
   const clock = new ManualClock()
   const boxes: BoxRenderable[] = []
@@ -88,13 +104,21 @@ test("players go to the four tiles showing the most of themselves, and stay two 
   const untrack = keys.map((key, index) => media.trackPoster(key, boxes[index]!))
   let opened = 0
   let open: string[] = []
-  const settle = async () => {
+  // Renders a frame and returns the players it opened.
+  const frame = async () => {
     await host.app.renderOnce()
     const next = keys.filter(media.posterOpen)
-    opened += next.filter((key) => !open.includes(key)).length
+    const added = next.filter((key) => !open.includes(key))
+    opened += added.length
     open = next
+    return added.join()
   }
-  await settle()
+  // Renders frames until one opens no player.
+  const settle = async () => {
+    while ((await frame()) !== "");
+  }
+  // Each player blocks its frame while it opens, so tiles that rank together get theirs one per frame, best first.
+  expect([await frame(), await frame(), await frame(), await frame(), await frame()]).toEqual(["0", "1", "2", "3", ""])
   // Tiles within half the box's height show before they scroll in.
   expect(keys.filter(media.posterShown).join()).toBe("0,1,2,3,4,5,6")
   expect(open.join()).toBe("0,1,2,3")
@@ -126,9 +150,18 @@ test("players go to the four tiles showing the most of themselves, and stay two 
   await settle()
   expect(open).toEqual([])
   media.closeViewer()
-  await settle()
-  expect(open.join()).toBe("1,2,3,4")
+  expect([await frame(), await frame(), await frame(), await frame(), await frame()]).toEqual(["1", "2", "3", "4", ""])
   expect(opened).toBe(9)
+
+  // Scrolled past them twice in a row, at most four tiles that dropped out keep their players, the latest ones.
+  scroll!.scrollTo(9)
+  await settle()
+  expect(open.join()).toBe("1,2,3,4,5,6,7,8")
+  clock.advance(500)
+  scroll!.scrollTo(15)
+  await settle()
+  expect(open).toHaveLength(8)
+  expect(open).toEqual(expect.arrayContaining(["5", "6", "7", "8", "9", "10", "11"]))
 
   // With no tile left, nothing follows the scroll box.
   untrack.forEach((stop) => stop())

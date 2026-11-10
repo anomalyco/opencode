@@ -2,6 +2,7 @@
 import {
   CliRenderEvents,
   ImageRenderable,
+  InputRenderable,
   TextRenderable,
   type Renderable,
   type TextareaRenderable,
@@ -11,6 +12,7 @@ import { expect, test } from "bun:test"
 import { createRoot, type JSX } from "solid-js"
 import type { MediaItem } from "../../src/component/media/model"
 import { createSeekThrottle } from "../../src/component/media/seek-bar"
+import { getOpenCodeTheme } from "../../src/theme"
 import {
   descendants,
   header,
@@ -84,6 +86,105 @@ test("fills the terminal under toasts, and a dialog over it takes its keys until
   await viewer.app.renderOnce()
   expect(viewer.find("media-viewer-keys")).toBeUndefined()
   expect(viewer.media().viewer()).toBeDefined()
+})
+
+test("the header takes the screen's text colours, and a toggle that is on the form field's selected colour", async () => {
+  // A theme whose dialog text and selected form field differ from the screen's text and selected action.
+  const opencode = getOpenCodeTheme()
+  const distinct = {
+    ...opencode,
+    base: {
+      ...opencode.base,
+      text: { ...opencode.base.text, formfield: { ...opencode.base.text.formfield, $selected: "#123456" } },
+      "@dialog": { ...opencode.base["@dialog"], text: { base: "#654321", muted: "#765432" } },
+    },
+  }
+  const clock = new ManualClock()
+  await using viewer = Object.assign(
+    await renderMedia(() => null, false, clock, { discover: async () => ({ distinct }) }),
+    { clock },
+  )
+  await viewer.until(() => viewer.themes().set("distinct"))
+  await openVideo(viewer)
+  await viewer.press("l")
+  const theme = viewer.theme()
+  const color = (text: string) =>
+    viewer.app
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .find((span) => span.text.trim() === text)!.fg
+  expect(theme.text.base.equals(theme.surface("dialog").text.base)).toBe(false)
+  expect(theme.text.formfield.selected.equals(theme.text.action.primary.selected)).toBe(false)
+  expect(color("clip.mp4").equals(theme.text.base)).toBe(true)
+  expect(color("2 of 2").equals(theme.text.muted)).toBe(true)
+  expect(color("↻").equals(theme.text.formfield.selected)).toBe(true)
+})
+
+test("a dialog over the viewer keeps the focus it takes and gets its keys, the comma too", async () => {
+  await using viewer = await renderViewer()
+  viewer.media().openViewer([image("a")], 0)
+  await viewer.until(() => showsHeader(viewer.frame(), "a.png", "1 of 1"))
+  let field: InputRenderable | undefined
+  viewer.dialog().replace(() => <input ref={(element: InputRenderable) => (field = element)} />)
+  await viewer.app.renderOnce()
+  field!.focus()
+  await viewer.app.mockInput.typeText("a,b")
+  expect(field!.focused).toBe(true)
+  expect(field!.value).toBe("a,b")
+  expect(viewer.media().viewer()).toBeDefined()
+})
+
+test("a short terminal scrolls the keys panel with the arrows and the wheel, and a taller one shows all of it", async () => {
+  await using viewer = await renderViewer()
+  viewer.app.resize(80, 14)
+  viewer.media().openViewer([image("a")], 0)
+  await viewer.until(() => showsHeader(viewer.frame(), "a.png", "1 of 1"))
+  await viewer.press("?")
+  expect(viewer.frame()).toContain("Playback")
+  expect(viewer.frame()).not.toContain("Copy path")
+  for (const _ of Array.from({ length: 20 })) await viewer.press("down")
+  expect(viewer.frame()).not.toContain("Loop")
+  expect(viewer.frame()).toContain("Copy path")
+  await viewer.press("up")
+  expect(viewer.frame()).toContain("Loop")
+  const panel = viewer.find("media-viewer-keys")!
+  for (const _ of Array.from({ length: 20 })) await viewer.app.mockMouse.scroll(panel.x + 4, panel.y + 4, "up")
+  await viewer.app.renderOnce()
+  expect(viewer.frame()).toContain("Playback")
+  await viewer.app.mockMouse.scroll(panel.x + 4, panel.y + 4, "down")
+  await viewer.app.renderOnce()
+  expect(viewer.frame()).not.toContain("Playback")
+
+  // Scrolled to the end, then resized to fit, the whole list shows from its top.
+  for (const _ of Array.from({ length: 20 })) await viewer.press("down")
+  viewer.app.resize(80, 30)
+  await viewer.app.renderOnce()
+  await viewer.app.renderOnce()
+  for (const text of ["Playback", "Navigate", "Copy path"]) expect(viewer.frame()).toContain(text)
+})
+
+test("the details stay inside the picture, shortening a long name and cutting rows off above the controls", async () => {
+  await using viewer = await renderViewer()
+  const name = `${"long-name-".repeat(9)}end.mp4`
+  viewer.media().openViewer([video("clip", { name })], 0)
+  await viewer.until(() => viewer.videos("media-viewer-stage")[0]?.playing === true && seekBar(viewer) !== undefined)
+  await viewer.press("i")
+  await viewer.until(() => viewer.frame().includes("Resolution  160×90"))
+  expect(viewer.frame()).toMatch(/Name {8}long-name-\S*…\S*-end\.mp4/)
+  for (const [width, height] of [
+    [80, 30],
+    [44, 14],
+  ] as const) {
+    viewer.app.resize(width, height)
+    await viewer.app.renderOnce()
+    await viewer.app.renderOnce()
+    const stage = viewer.find("media-viewer-stage")!
+    const info = viewer.find("media-viewer-info")!
+    expect(info.x).toBeGreaterThanOrEqual(stage.x)
+    expect(info.x + info.width).toBeLessThanOrEqual(stage.x + stage.width)
+    expect(info.y + info.height).toBeLessThanOrEqual(stage.y + stage.height)
+    expect(viewer.frame()).toMatch(/[▶⏸] {2}0:0\d {2}[━●]/)
+  }
 })
 
 test("zooms an image with keys and the wheel, pans it by dragging, resets, and closes from the header", async () => {
@@ -331,10 +432,18 @@ test("hovering the seek bar previews the resting pointer's frame silently, and a
   await viewer.press("0")
   const bar = seekBar(viewer)!
   const timeAt = (column: number) => (column / (bar.width - 1)) * 2
-  await viewer.app.mockMouse.moveTo(bar.x + 5, bar.y)
+  // Its player opens only once the pointer rests, each move starting the wait again, and seeks there at once.
+  for (const column of [3, 5]) {
+    await viewer.app.mockMouse.moveTo(bar.x + column, bar.y)
+    viewer.clock.advance(79)
+    await viewer.app.renderOnce()
+    expect(viewer.find("media-seek-preview")).toBeUndefined()
+  }
+  viewer.clock.advance(1)
   await viewer.until(() => seekPreview(viewer)?.ready === true)
   const preview = seekPreview(viewer)!
   expect(preview.audio).toBe(false)
+  expect(preview.currentTime).toBeCloseTo(timeAt(5), 1)
   let seeks = 0
   preview.onSeek = () => seeks++
 
@@ -391,6 +500,7 @@ test("a scrub pauses the video, moves the playhead with the pointer, seeks throt
   const end = bar.width - 1
   const timeAt = (column: number) => (column / end) * 2
   await viewer.app.mockMouse.moveTo(bar.x + 5, bar.y)
+  viewer.clock.advance(80)
   await viewer.until(() => seekPreview(viewer)?.ready === true)
   const preview = seekPreview(viewer)!
   let previewSeeks = 0

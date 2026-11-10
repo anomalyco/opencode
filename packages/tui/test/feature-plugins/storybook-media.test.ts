@@ -26,19 +26,23 @@ test("lists the media of files and directories once each, skipping missing paths
   expect(new Set(items.map((item) => item.id)).size).toBe(items.length)
 })
 
-test("the story lists the media in OPENCODE_STORY_MEDIA when it opens, not when the TUI loads", async () => {
+// The value of OPENCODE_STORY_MEDIA, the files in it, and the item count the story shows.
+test.each([
+  { value: "", files: [], items: "4 items" },
+  { value: "temporary", files: ["a.png", "b.mp4"], items: "3 items" },
+])("the story lists the media in OPENCODE_STORY_MEDIA=$value when it opens, not when the TUI loads", async (row) => {
   await using temporary = await tmpdir()
-  for (const name of ["a.png", "b.mp4"]) await Bun.write(path.join(temporary.path, name), "")
+  for (const name of row.files) await Bun.write(path.join(temporary.path, name), "")
   const previous = process.env.OPENCODE_STORY_MEDIA
-  process.env.OPENCODE_STORY_MEDIA = temporary.path
+  process.env.OPENCODE_STORY_MEDIA = row.value && temporary.path
   try {
     await using story = await renderMedia(() => {
       // Only what the story reads of the plugin context.
       const context = { theme: useTheme(), keymap: { layer: () => {} }, ui: { router: { navigate: () => {} } } }
       return mediaStory.render(context as unknown as Plugin.Context)
     })
-    // The two files and a WebM it can't play.
-    await story.until(() => story.frame().includes("storybook / media · 3 items"))
+    // The files, or without any the three test fixtures, and a WebM it can't play.
+    await story.until(() => story.frame().includes(`storybook / media · ${row.items}`))
   } finally {
     if (previous === undefined) delete process.env.OPENCODE_STORY_MEDIA
     else process.env.OPENCODE_STORY_MEDIA = previous
