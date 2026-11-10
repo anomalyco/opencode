@@ -242,6 +242,7 @@ function ComposerStory(props: {
               cancelEdit() {},
               editFirst: () => false,
               first() {},
+              steerFirst() {},
             }
           : undefined,
         onSubmit: () => {

@@ -106,6 +106,24 @@ describe("queue first shares the serialized reorder", () => {
   )
 })
 
+test("steer-first ignores an open edit and a disposed or empty queue", () => {
+  const editing = transitionQueue(createQueueState([one, two]), {
+    type: "edit.start",
+    id: one.id,
+    reverted: false,
+    draft: draft("my draft"),
+  }).state
+
+  const disposed = transitionQueue(createQueueState([one, two]), { type: "dispose" }).state
+
+  for (const state of [editing, disposed, createQueueState([])]) {
+    const result = transitionQueue(state, { type: "steer-first.requested" })
+
+    expect(result.state).toBe(state)
+    expect(result.effects).toEqual([])
+  }
+})
+
 describe("an edit always returns the draft it replaced", () => {
   test("when the server delivers the prompt being edited", () => {
     const result = replay(createQueueState([one, two]), [

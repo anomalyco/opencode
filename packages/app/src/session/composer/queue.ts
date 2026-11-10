@@ -472,6 +472,7 @@ export function createSessionQueue(input: {
     undoing: () => view().undoing,
     working: input.working,
     steer: (id: string) => dispatch({ type: "steer.requested", id }),
+    steerFirst: () => dispatch({ type: "steer-first.requested" }),
     remove: (id: string) => dispatch({ type: "remove.requested", id }),
     undo: (id: string) => dispatch({ type: "undo.requested", id, mode: input.draft.mode.current() }),
     edit,

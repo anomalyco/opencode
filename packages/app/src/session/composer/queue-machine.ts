@@ -143,6 +143,7 @@ export type QueueEvent =
   | { readonly type: "reorder.requested"; readonly inboxIDs: readonly string[]; readonly reverted: boolean }
   | { readonly type: "first.requested"; readonly id: string; readonly reverted: boolean }
   | { readonly type: "steer.requested"; readonly id: string }
+  | { readonly type: "steer-first.requested" }
   | { readonly type: "remove.requested"; readonly id: string }
   | { readonly type: "undo.requested"; readonly id: string; readonly mode: "normal" | "shell" }
   | { readonly type: "mutation.moved"; readonly attempt: number; readonly moved: Readonly<Record<string, string>> }
@@ -245,6 +246,14 @@ export function transitionQueue(state: QueueState, event: QueueEvent): QueueTran
   }
 
   if (event.type === "steer.requested") return request(state, { type: "steer", id: event.id })
+
+  if (event.type === "steer-first.requested") {
+    if (state.status !== "idle") return unchanged(state)
+
+    const first = selectQueueRows(state)[0]
+
+    return first && !first.pending ? request(state, { type: "steer", id: first.id }) : unchanged(state)
+  }
 
   if (event.type === "remove.requested") return request(state, { type: "remove", id: event.id })
 
