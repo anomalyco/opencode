@@ -484,6 +484,7 @@ describe("built-in web search providers", () => {
                 web: [
                   { url: "https://a.test", description: "A description", contents: { highlights: [] } },
                   { url: "https://b.test", title: "", page_age: "not a date" },
+                  { url: "https://c.test", page_age: "2026-07-25T02:00:00+02:00" },
                 ],
               },
               metadata: {},
@@ -500,6 +501,7 @@ describe("built-in web search providers", () => {
       expect((yield* websearch.query({ query: "q", providerID: WebSearch.ID.make("youcom") })).results).toEqual([
         { url: "https://a.test", content: "A description", time: {} },
         { url: "https://b.test", time: {} },
+        { url: "https://c.test", time: { published: Date.UTC(2026, 6, 25) } },
       ])
     }),
   )

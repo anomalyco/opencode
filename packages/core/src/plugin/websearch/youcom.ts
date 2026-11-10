@@ -59,8 +59,10 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
           return (
             result?.structuredContent.results.web?.map((item) => {
               const content = item.contents?.highlights?.join("\n\n") || item.description
-              // page_age is UTC without a zone designator, which Date.parse would read as local time.
-              const published = item.page_age ? Date.parse(`${item.page_age}Z`) : undefined
+              // page_age is normally UTC without a zone designator, which Date.parse would read as local time.
+              const published = item.page_age
+                ? Date.parse(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(item.page_age) ? item.page_age : `${item.page_age}Z`)
+                : undefined
               return {
                 url: item.url,
                 ...(item.title ? { title: item.title } : {}),
