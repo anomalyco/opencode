@@ -61,6 +61,11 @@ const applicationServiceNodes = [
   Database.node,
   KV.node,
   Bus.node,
+  // Before the jobs and sessions, so they are released after them: a shutdown's interrupted shell calls and jobs
+  // still reach the daemon to stop their commands, and a command being created never falls back to spawning.
+  PersistentPty.node,
+  // Daemon-run shell commands belong to the server, so a Location closing never takes them down.
+  Shell.daemonNode,
   EventLogger.node,
   httpClient,
   Job.node,
@@ -75,9 +80,6 @@ const applicationServiceNodes = [
   PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
-  PersistentPty.node,
-  // Daemon-run shell commands belong to the server, so a Location closing never takes them down.
-  Shell.daemonNode,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,

@@ -368,23 +368,25 @@ const daemonLayer = Layer.effect(
         yield* evict()
       })
 
-      // Graceful, like spawned commands: SIGTERM, then SIGKILL if it has not exited 3 s later. It runs on its own,
-      // so interrupting the caller (a timer being retimed, removed or torn down) never cancels a recorded stop.
+      // Graceful, like spawned commands: SIGTERM, then SIGKILL if it has not exited 3 s later. The stop is recorded
+      // and the SIGTERM sent before this returns, uninterruptibly, so neither interrupting the caller (a timer being
+      // retimed, removed or torn down) nor a server shutting down right after cancels it. The escalation runs on its
+      // own.
       const stop = (run: Run, reason: StopReason) =>
         Effect.gen(function* () {
           if (run.stopReason !== undefined || run.info.status !== "running") return
           run.stopReason = reason
           run.timeoutDeadline = undefined
+          yield* store(run)
+          yield* pty.signalPipe(run.process, "SIGTERM").pipe(Effect.ignore)
           run.stopping = yield* fork(
             Effect.gen(function* () {
-              yield* store(run)
-              yield* pty.signalPipe(run.process, "SIGTERM").pipe(Effect.ignore)
               const ended = yield* Deferred.await(run.done).pipe(Effect.timeoutOption(STOP_GRACE), Effect.exit)
               if (Exit.isSuccess(ended) && Option.isNone(ended.value))
                 yield* pty.signalPipe(run.process, "SIGKILL").pipe(Effect.ignore)
             }),
           )
-        })
+        }).pipe(Effect.uninterruptible)
 
       const arm = Effect.fnUntraced(function* (run: Run, duration: number) {
         run.timeoutFiber = yield* fork(

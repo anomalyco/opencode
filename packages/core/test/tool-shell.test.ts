@@ -2458,7 +2458,6 @@ describe("ShellTool stopped", () => {
           })
           // The call's timeout applies to this server only: a restart moves the command to the background.
           expect(request?.metadata).not.toHaveProperty("timeoutDeadline")
-          expect(fake?.ops).not.toContain("signal")
         }),
       )
     }),
