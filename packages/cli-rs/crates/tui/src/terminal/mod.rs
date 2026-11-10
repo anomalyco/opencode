@@ -115,6 +115,8 @@ impl Terminals {
         if let Some(listener) = listener {
             listener(tui);
         }
+        // The sidebar gives the right pane to a terminal that opens (`session-frame.tsx:93-117`).
+        tui.app.defer(bind!(tui.weak(), |tui, _| tui.sync_view()));
     }
 
     /// Whether the pane of `pty` should take focus when it mounts; clears the wish.
