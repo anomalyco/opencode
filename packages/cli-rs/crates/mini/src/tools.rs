@@ -894,6 +894,20 @@ mod tests {
         finished.tool_state = Some(ToolState::Completed);
         assert_eq!(body(&finished), None, "shell has no final line");
         assert_eq!(scroll(Phase::Final, &tool_frame(&finished, "")), "shell completed (exit 0) · 2.5s");
+
+        // A command moved to the background (#63024) prints the server's note and has no exit.
+        let note = "Command moved to the background (shell ID: sh_1).\nPID: 42\nOutput is streaming to: /out";
+        let backgrounded = part(
+            "shell",
+            json!({ "status": "completed", "input": { "command": "ls" },
+                "metadata": { "status": "running", "shellID": "sh_1", "pid": 42, "truncated": false },
+                "content": [{ "type": "text", "text": note }] }),
+        );
+        let output = commit(&backgrounded, "msg_a", Phase::Progress, Some(note), None, 0);
+        assert_eq!(text(body(&output)), format!("\n{note}"));
+        let mut finished = commit(&backgrounded, "msg_a", Phase::Final, None, None, 0);
+        finished.tool_state = Some(ToolState::Completed);
+        assert_eq!(scroll(Phase::Final, &tool_frame(&finished, "")), "shell completed · 2.5s");
     }
 
     #[test]
