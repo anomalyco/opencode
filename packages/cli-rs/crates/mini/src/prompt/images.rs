@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 
-use base64::Engine;
+use opencode_ui::prompt_input::attach::data_uri;
 use opentui::native::ImageFit;
 use opentui::prelude::*;
 use opentui::widget::ImageView;
@@ -90,15 +90,6 @@ impl Previews {
     }
 }
 
-/// The bytes of a `data:` URI.
-pub(crate) fn data_uri(uri: &str) -> Option<Vec<u8>> {
-    let (meta, payload) = uri.strip_prefix("data:")?.split_once(',')?;
-    if !meta.ends_with(";base64") {
-        return Some(payload.as_bytes().to_vec());
-    }
-    base64::engine::general_purpose::STANDARD.decode(payload.trim()).ok()
-}
-
 #[cfg(test)]
 mod tests {
     use opencode_ui::prompt_input::editor::Mention;
@@ -134,8 +125,5 @@ mod tests {
                 "data:image/png;base64,BB=="
             ]
         );
-        assert_eq!(data_uri("data:image/png;base64,AAE="), Some(vec![0, 1]));
-        assert_eq!(data_uri("data:text/plain,hi"), Some(b"hi".to_vec()));
-        assert_eq!(data_uri("file:///a.png"), None);
     }
 }

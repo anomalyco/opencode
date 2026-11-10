@@ -16,6 +16,7 @@ use opencode_util::{bail, err, error};
 use super::Context;
 use super::client::block_on;
 use super::service::Local;
+use super::stats::js_round;
 use crate::args::PairArgs;
 use crate::output::{Exit, print};
 use crate::prompt;
@@ -133,11 +134,6 @@ fn ssh_hint(endpoint: &str) -> Option<String> {
 
 fn is_loopback(hostname: &str) -> bool {
     hostname == "localhost" || hostname.ends_with(".localhost") || hostname.starts_with("127.") || hostname == "[::1]"
-}
-
-// `Math.round`: halves round up.
-fn js_round(value: f64) -> f64 {
-    (value + 0.5).floor()
 }
 
 /// `remoteConsent`: remote access is explained and accepted only the first time it is turned on. Returns

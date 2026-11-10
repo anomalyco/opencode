@@ -91,7 +91,7 @@ pub fn presentation(
             let agent = or(text(&input, "agent"), "general");
             Presentation {
                 icon: "#",
-                title: format!("{} Subagent", crate::confirm::titlecase(&agent)),
+                title: format!("{} Subagent", crate::tool_info::titlecase(&agent)),
                 lines: some(text(&input, "description"))
                     .map(|description| vec![format!("◉ {description}")])
                     .unwrap_or_default(),

@@ -89,6 +89,15 @@ pub fn resolve(text: &str, windows: bool) -> Option<Vec<Resolved>> {
     )
 }
 
+/// The bytes of a `data:` URI.
+pub fn data_uri(uri: &str) -> Option<Vec<u8>> {
+    let (meta, payload) = uri.strip_prefix("data:")?.split_once(',')?;
+    if !meta.ends_with(";base64") {
+        return Some(payload.as_bytes().to_vec());
+    }
+    base64::engine::general_purpose::STANDARD.decode(payload.trim()).ok()
+}
+
 /// `promptFilesForServer`: the files a submit sends. The captured bytes go either way, since a server may not
 /// reach the source file; a local server also gets the file's URL.
 pub fn files_for_server(entry: &Value, local: bool) -> Value {
@@ -456,6 +465,13 @@ mod tests {
         assert_eq!(label(&files, "data:image/png;base64,BB", Some("clipboard")), Ok("[Image 2]".into()));
         assert_eq!(label(&files, "data:application/pdf;base64,AA", None), Ok("[PDF 4]".into()));
         assert!(label(&files, "https://x", None).is_err());
+    }
+
+    #[test]
+    fn data_uris_decode_their_payload() {
+        assert_eq!(data_uri("data:image/png;base64,AAE="), Some(vec![0, 1]));
+        assert_eq!(data_uri("data:text/plain,hi"), Some(b"hi".to_vec()));
+        assert_eq!(data_uri("https://example.com/a.png"), None);
     }
 
     #[test]

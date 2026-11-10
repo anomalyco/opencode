@@ -18,5 +18,4 @@ pub mod selection;
 pub mod startup;
 pub mod system_commands;
 pub mod title;
-pub mod update;
 pub mod update_notification;

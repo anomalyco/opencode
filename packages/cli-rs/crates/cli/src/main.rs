@@ -12,7 +12,6 @@ mod parse;
 mod prompt;
 mod signals;
 mod telemetry;
-mod update;
 mod wizard;
 
 #[cfg(test)]

@@ -7,7 +7,7 @@ use std::rc::{Rc, Weak};
 use opencode_api::generated::{ModelInfo, SessionID};
 use opencode_store::SessionStatus;
 use opencode_ui::bind;
-use opencode_ui::confirm::titlecase;
+use opencode_ui::tool_info::titlecase;
 use opentui::prelude::*;
 use serde_json::{Map, Value};
 

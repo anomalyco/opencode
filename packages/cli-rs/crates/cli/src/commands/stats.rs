@@ -502,7 +502,7 @@ fn format_duration(value: f64) -> String {
 }
 
 // `Math.round`: halves round up.
-fn js_round(value: f64) -> f64 {
+pub(crate) fn js_round(value: f64) -> f64 {
     (value + 0.5).floor()
 }
 

@@ -71,7 +71,7 @@ impl Stash {
 
     /// `push({prompt})`, stamped now; the oldest entries past the limit go.
     pub fn push(&self, _app: &App, prompt: Value) {
-        let entry = jsonl::stash_entry(prompt, jsonl::now_ms());
+        let entry = jsonl::stash_entry(prompt, opencode_util::time::now_ms());
         {
             let mut entries = self.entries.borrow_mut();
             entries.push(entry.clone());

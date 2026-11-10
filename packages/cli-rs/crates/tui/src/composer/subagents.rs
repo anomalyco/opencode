@@ -244,8 +244,8 @@ fn entry(session: &SessionInfo, prefix: String, current: &SessionID, status: Ses
     let title = crate::dialogs::session_list::title(session);
     let found = AGENT.captures(&title);
     let agent = match (&session.agent, &found) {
-        (Some(agent), _) => opencode_ui::confirm::titlecase(&agent.0),
-        (None, Some(found)) => opencode_ui::confirm::titlecase(&found[1]),
+        (Some(agent), _) => opencode_ui::tool_info::titlecase(&agent.0),
+        (None, Some(found)) => opencode_ui::tool_info::titlecase(&found[1]),
         (None, None) => "Subagent".to_owned(),
     };
     let title = match &found {
