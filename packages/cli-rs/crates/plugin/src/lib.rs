@@ -1183,12 +1183,9 @@ impl Registry {
     /// last in activation order wins; a plugin keeps its place.
     pub fn code_blocks(&self, theme: &Theme) -> CodeBlockRenderers {
         let mut renderers = CodeBlockRenderers::default();
-        for (_, registration) in self.by_activation() {
-            for (language, render) in &registration.code_blocks {
-                let render = render.clone();
-                let theme = theme.clone();
-                renderers.register(language.clone(), Rc::new(move |block| render(block, &theme)));
-            }
+        for (language, render) in self.by_activation(|registration| &registration.code_blocks) {
+            let theme = theme.clone();
+            renderers.register(language, Rc::new(move |block| render(block, &theme)));
         }
         renderers
     }
@@ -1248,33 +1245,16 @@ impl Registry {
 
     /// Every active claim in activation order, and its renders.
     fn claims(&self) -> (Vec<Placement>, Vec<ClaimRender>) {
-        self.by_activation().into_iter().flat_map(|(_, registration)| registration.claims.clone()).unzip()
+        self.by_activation(|registration| &registration.claims).into_iter().unzip()
     }
 
-    fn by_activation(&self) -> Vec<(u64, RegistrationView)> {
+    /// The `part` of every active registration in activation order, cloned so no borrow outlives the call.
+    fn by_activation<T: Clone>(&self, part: impl Fn(&Registration) -> &Vec<T>) -> Vec<T> {
         let plugins = self.plugins.borrow();
-        let mut active: Vec<_> = plugins
-            .iter()
-            .filter_map(|plugin| {
-                let (order, registration) = plugin.active.as_ref()?;
-                Some((
-                    *order,
-                    RegistrationView {
-                        claims: registration.claims.clone(),
-                        code_blocks: registration.code_blocks.clone(),
-                    },
-                ))
-            })
-            .collect();
+        let mut active: Vec<_> = plugins.iter().filter_map(|plugin| plugin.active.as_ref()).collect();
         active.sort_by_key(|(order, _)| *order);
-        active
+        active.into_iter().flat_map(|(_, registration)| part(registration).clone()).collect()
     }
-}
-
-/// The parts of a registration the registry hands out, cloned so no borrow outlives the call.
-struct RegistrationView {
-    claims: Vec<(Placement, ClaimRender)>,
-    code_blocks: Vec<(String, CodeBlockRender)>,
 }
 
 /// A mounted plugin route. The route that shows it syncs it with each change batch.

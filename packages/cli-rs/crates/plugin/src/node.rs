@@ -432,14 +432,19 @@ impl<'a> Reader<'a> {
 
 impl abi::Read for Reader<'_> {
     fn theme_mode(&self) -> abi::ThemeMode {
-        match self.mode {
-            ThemeMode::Light => abi::ThemeMode::Light,
-            _ => abi::ThemeMode::Dark,
-        }
+        abi_mode(self.mode)
     }
 
     fn color(&self, token: &str) -> Option<abi::Rgba> {
         theme_color(self.theme, token)
+    }
+}
+
+/// [`abi::Read::theme_mode`] on both paths.
+pub fn abi_mode(mode: ThemeMode) -> abi::ThemeMode {
+    match mode {
+        ThemeMode::Light => abi::ThemeMode::Light,
+        _ => abi::ThemeMode::Dark,
     }
 }
 
