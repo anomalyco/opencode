@@ -132,6 +132,7 @@ pub fn run(input: Input) -> error::Result<()> {
         settle_after: RefCell::new(None),
         connected: RefCell::new(tokio::sync::watch::channel(false).1),
         resize: Cell::new(None),
+        resize_queued: Cell::new(false),
         height_pending: Cell::new(false),
         size: Cell::new(mini_size(&app)),
         exit_splash: Cell::new(false),
@@ -269,6 +270,8 @@ struct Mini {
     /// Whether the stream is connected, for a session wait that retries (`waitUntilConnected`).
     connected: RefCell<tokio::sync::watch::Receiver<bool>>,
     resize: Cell<Option<TimerId>>,
+    /// A resize came while a resize replay ran.
+    resize_queued: Cell<bool>,
     /// A footer height waits for the next frame.
     height_pending: Cell<bool>,
     size: Cell<(u16, u16)>,
@@ -1220,17 +1223,17 @@ impl Mini {
                 mini.queue.borrow_mut().first_admitted();
                 mini.admit_next();
                 match result {
-                    Ok(()) if command => {
+                    Ok(_) if command => {
                         mini.turn_summary(cx, started);
                         mini.finish(cx);
                     }
-                    Ok(()) => {
+                    Ok(skills) => {
                         mini.pending(&id, delivery, &sent);
                         let output = mini
                             .transcript
                             .borrow_mut()
                             .as_mut()
-                            .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files()))
+                            .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files(), &skills))
                             .unwrap_or_default();
                         mini.output(cx, output);
                         mini.settle(&session.id, started);
@@ -1332,7 +1335,7 @@ impl Mini {
             move |cx, result| {
                 mini.queue.borrow_mut().admission_done();
                 match result {
-                    Ok(()) => {
+                    Ok(skills) => {
                         // `session.command` answers without the inbox item; its event adds it.
                         if !command {
                             mini.pending(&id, delivery, &sent);
@@ -1341,7 +1344,7 @@ impl Mini {
                             .transcript
                             .borrow_mut()
                             .as_mut()
-                            .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files()))
+                            .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files(), &skills))
                             .unwrap_or_default();
                         mini.output(cx, output);
                     }
@@ -1698,7 +1701,12 @@ impl Mini {
             let Some(transcript) = transcript.as_mut() else {
                 return;
             };
-            if !self.input.replay || !transcript.connected || transcript.replaying() {
+            if !self.input.replay || !transcript.connected {
+                return;
+            }
+            // The last size wins: a resize during a replay replays once more after it (`queuedResizeReplay`).
+            if transcript.replaying() {
+                self.resize_queued.set(true);
                 return;
             }
             transcript.begin_replay();
@@ -1714,6 +1722,7 @@ impl Mini {
         self.app.spawn(task, move |cx, result| {
             // Another session opened meanwhile.
             if mini.transcript.borrow().as_ref().is_none_or(|transcript| transcript.session_id != session) {
+                mini.resize_queued.set(false);
                 return;
             }
             let output = match result {
@@ -1735,6 +1744,9 @@ impl Mini {
             };
             if let Some(output) = output {
                 mini.output(cx, output);
+            }
+            if mini.resize_queued.take() {
+                mini.replay_on_resize(cx);
             }
         });
     }

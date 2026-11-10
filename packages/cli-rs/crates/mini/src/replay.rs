@@ -18,8 +18,8 @@ use opencode_api::client::Client;
 use opencode_api::error::Error;
 use opencode_api::generated::{
     ExperimentalSessionWaitInput, LocationQueryInput, MessageListInput, MessageListInputOrder, ModelDefaultInput,
-    PromptFileAttachment, PromptFileSource, SessionID, SessionInboxInfo, SessionInboxItem, SessionInboxListInput,
-    SessionInboxUser, SessionInterruptInput, SessionMessageAssistant,
+    PromptFileAttachment, PromptFileSource, PromptSkillAttachment, SessionID, SessionInboxInfo, SessionInboxItem,
+    SessionInboxListInput, SessionInboxUser, SessionInterruptInput, SessionMessageAssistant,
     SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantTool, SessionMessageAssistantToolState,
     SessionMessageAssistantToolState as ToolPartState, SessionMessageAssistantToolTime, SessionMessageCompaction,
     SessionMessageInfo, SessionMessageShellExit, SessionMessageShellOutput, SessionMessageToolStateCompleted,
@@ -208,6 +208,7 @@ impl Output {
 struct Pending {
     text: String,
     files: Vec<PromptFileAttachment>,
+    skills: Vec<PromptSkillAttachment>,
 }
 
 /// The transcript of one session (the state of `createSessionTransport`).
@@ -394,7 +395,8 @@ impl Transcript {
             .iter()
             .map(|item| {
                 let files = item.payload.files.clone().unwrap_or_default();
-                (item.id.as_str().to_owned(), Pending { text: item.payload.text.clone(), files })
+                let skills = item.payload.skills.clone().unwrap_or_default();
+                (item.id.as_str().to_owned(), Pending { text: item.payload.text.clone(), files, skills })
             })
             .collect();
     }
@@ -453,6 +455,9 @@ impl Transcript {
     }
 
     fn restore(&mut self, commit: &Commit) -> Option<Commit> {
+        if let (Some(_), Some(message), Some(part)) = (&commit.image, &commit.message_id, &commit.part_id) {
+            return self.image_ids.insert(part_key(message, part)).then(|| commit.clone());
+        }
         if let (Some(message), Some(part), EntryKind::Assistant | EntryKind::Reasoning) =
             (&commit.message_id, &commit.part_id, commit.kind)
         {
@@ -531,17 +536,31 @@ impl Transcript {
         self.promoted.contains(message_id)
     }
 
-    pub fn admitted(&mut self, message_id: &str, text: &str, files: &[PromptFileAttachment]) -> Output {
+    pub fn admitted(
+        &mut self,
+        message_id: &str,
+        text: &str,
+        files: &[PromptFileAttachment],
+        skills: &[PromptSkillAttachment],
+    ) -> Output {
         if self.promoted.contains(message_id) {
-            return self.user(message_id, text, files, true);
+            return self.user(message_id, text, files, skills, true);
         }
         self.admitted.insert(message_id.to_owned());
-        self.pending.insert(message_id.to_owned(), Pending { text: text.to_owned(), files: files.to_vec() });
+        let pending = Pending { text: text.to_owned(), files: files.to_vec(), skills: skills.to_vec() };
+        self.pending.insert(message_id.to_owned(), pending);
         Output::default()
     }
 
-    /// `renderUser`: the prompt once, then its images once each.
-    fn user(&mut self, message_id: &str, text: &str, files: &[PromptFileAttachment], render: bool) -> Output {
+    /// `renderUser`: the skills it names while tools show, the prompt once, then its images once each.
+    fn user(
+        &mut self,
+        message_id: &str,
+        text: &str,
+        files: &[PromptFileAttachment],
+        skills: &[PromptSkillAttachment],
+        render: bool,
+    ) -> Output {
         let visible = !self.message_ids.insert(message_id.to_owned());
         let images: Vec<Commit> = user_image_commits(message_id, files)
             .into_iter()
@@ -553,6 +572,15 @@ impl Transcript {
             return Output::default();
         }
         let mut commits = Vec::new();
+        if !visible && self.tools {
+            let mut seen = HashSet::new();
+            commits.extend(
+                skills
+                    .iter()
+                    .filter(|skill| seen.insert(skill.id.as_str()))
+                    .map(|skill| skill_commit(message_id, skill.name.as_str(), skill.id.as_str())),
+            );
+        }
         if !visible && !text.trim().is_empty() {
             commits.push(Commit::new(EntryKind::User, Source::System, Phase::Start, text).message(message_id));
         }
@@ -698,7 +726,8 @@ impl Transcript {
                 }
                 self.pending.remove(id);
                 self.promoted.insert(id.to_owned());
-                self.user(id, &user.text, user.files.as_deref().unwrap_or_default(), render)
+                let skills = user.skills.as_deref().unwrap_or_default();
+                self.user(id, &user.text, user.files.as_deref().unwrap_or_default(), skills, render)
             }
             SessionMessageInfo::Compaction(compaction) => self.compaction(compaction, render),
             SessionMessageInfo::Assistant(assistant) => self.assistant(assistant, render),
@@ -711,7 +740,7 @@ impl Transcript {
                 if !render || !self.tools || !fresh {
                     return Output::default();
                 }
-                Output::commits(vec![skill_commit(id, skill.name.as_str())])
+                Output::commits(vec![skill_commit(id, skill.name.as_str(), id)])
             }
             SessionMessageInfo::Shell(shell) => {
                 let id = shell.shell_id.as_str();
@@ -879,7 +908,8 @@ impl Transcript {
                     return Output::default();
                 };
                 let files = item.payload.files.as_deref().unwrap_or_default();
-                let mut output = self.admitted(enqueued.data.inbox_id.as_str(), &item.payload.text, files);
+                let skills = item.payload.skills.as_deref().unwrap_or_default();
+                let mut output = self.admitted(enqueued.data.inbox_id.as_str(), &item.payload.text, files, skills);
                 output.footer.push(event.clone());
                 output
             }
@@ -889,7 +919,7 @@ impl Transcript {
                 self.admitted.remove(id);
                 self.promoted.insert(id.to_owned());
                 let mut output = match self.pending.remove(id) {
-                    Some(pending) => self.user(id, &pending.text, &pending.files, true),
+                    Some(pending) => self.user(id, &pending.text, &pending.files, &pending.skills, true),
                     None => Output::default(),
                 };
                 output.extend(Output::patch(true, "waiting for assistant"));
@@ -1019,7 +1049,7 @@ impl Transcript {
                 if !self.skill_messages.insert(message.clone()) || !self.tools {
                     return Output::default();
                 }
-                Output::commits(vec![skill_commit(&message, activated.data.name.as_str())])
+                Output::commits(vec![skill_commit(&message, activated.data.name.as_str(), &message)])
             }
             V2Event::SessionShellStarted(started) => {
                 let shell = &started.data.shell;
@@ -1380,10 +1410,11 @@ pub(crate) fn user_image_commits(message: &str, files: &[PromptFileAttachment]) 
         .collect()
 }
 
-fn skill_commit(message: &str, name: &str) -> Commit {
+/// `skillCommit`: `skill` is the skill's ID on a user message, else the message's.
+fn skill_commit(message: &str, name: &str, skill: &str) -> Commit {
     Commit::new(EntryKind::System, Source::System, Phase::Start, format!("→ Skill \"{name}\""))
         .message(message)
-        .part_id(format!("skill:{message}"))
+        .part_id(format!("skill:{skill}"))
 }
 
 /// `shellCommit`: a direct shell call draws `$ command` at its start and its merged output as progress.
@@ -1864,7 +1895,7 @@ mod tests {
     fn an_admitted_prompt_prints_when_delivered() {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
         transcript.hydrate(&[], false);
-        assert!(transcript.admitted("msg_p", "hi", &[]).commits.is_empty());
+        assert!(transcript.admitted("msg_p", "hi", &[], &[]).commits.is_empty());
         let output = transcript.event(&event("session.inbox.delivered", json!({ "inboxID": "msg_p" })));
         assert_eq!(texts(&output), [(EntryKind::User, "hi".into())]);
         assert_eq!(output.patch.unwrap().status.as_deref(), Some("waiting for assistant"));
@@ -1889,7 +1920,7 @@ mod tests {
         transcript.hydrate(&[], false);
         let error = |commit: Option<Commit>| commit.map(|commit| (commit.kind, commit.text, commit.message_id));
         transcript.begin_wait("msg_p");
-        transcript.admitted("msg_p", "hi", &[]);
+        transcript.admitted("msg_p", "hi", &[], &[]);
         transcript.event(&delivered);
         transcript.event(&failed());
         let listed = message(json!({ "id": "msg_p", "type": "user", "text": "hi" }));
@@ -1938,6 +1969,34 @@ mod tests {
             ]
         );
         assert!(!transcript.replaying());
+    }
+
+    /// A user message names its skills above its text while tools show, once per skill (`renderUser`).
+    #[test]
+    fn a_user_message_shows_its_skills_with_tools() {
+        let user = message(json!({ "id": "msg_u", "type": "user", "text": "tidy up",
+            "skills": [{ "id": "tidy", "name": "tidy" }, { "id": "tidy", "name": "tidy" }] }));
+        let mut shown = Transcript::new("ses_1", true, true, true, None);
+        assert_eq!(
+            texts(&shown.hydrate(std::slice::from_ref(&user), false)),
+            [(EntryKind::System, "→ Skill \"tidy\"".into()), (EntryKind::User, "tidy up".into())]
+        );
+        let mut hidden = Transcript::new("ses_1", true, false, true, None);
+        assert_eq!(texts(&hidden.hydrate(&[user], false)), [(EntryKind::User, "tidy up".into())]);
+    }
+
+    /// A resize replay restores a local image row even when its message was listed (`performResizeReplay`).
+    #[test]
+    fn a_resize_replay_restores_an_image_of_a_listed_message() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        let listed = [message(json!({ "id": "msg_a", "type": "assistant", "content": [] }))];
+        transcript.hydrate(&listed, true);
+        let mut image =
+            Commit::new(EntryKind::Tool, Source::Tool, Phase::Final, "shot").message("msg_a").part_id("prt_1:image:0");
+        image.image = Some("data:image/png;base64,AA".into());
+        transcript.remember(&image);
+        transcript.begin_replay();
+        assert_eq!(texts(&transcript.replayed(&listed, true)), [(EntryKind::Tool, "shot".into())]);
     }
 
     /// A compaction already running when the session is listed goes on to print the rest of its summary.

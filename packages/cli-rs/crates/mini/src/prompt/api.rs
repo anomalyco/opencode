@@ -6,10 +6,11 @@ use opencode_api::client::{Call, Client};
 use opencode_api::error::Error;
 use opencode_api::generated::{
     AgentID, AgentListInput, CommandListInput, FileFindInput, FileSystemEntryType, LocationQueryInput,
-    ReferenceListInput, SessionCommandInput, SessionCompactInput, SessionID, SessionInboxCancelInput,
-    SessionInboxDelivery, SessionInboxUpdateInput, SessionMessageID, SessionMessageInfo, SessionPromptInput,
-    SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
+    PromptSkillAttachment, ReferenceListInput, SessionCommandInput, SessionCompactInput, SessionID,
+    SessionInboxCancelInput, SessionInboxDelivery, SessionInboxUpdateInput, SessionMessageID, SessionMessageInfo,
+    SessionPromptInput, SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
 };
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::complete::{Agent, Catalog, Command, Reference};
@@ -132,8 +133,14 @@ pub async fn history(client: &Client, session: &str) -> Vec<RunPrompt> {
         .collect()
 }
 
-/// `admitPrompt`: `session.command` for a prompt that names a server command, else `session.prompt`.
-pub async fn admit(client: &Client, session: &str, prompt: &RunPrompt, delivery: Delivery) -> Result<(), String> {
+/// `admitPrompt`: `session.command` for a prompt that names a server command, else `session.prompt`. Returns the
+/// skills of the inbox item `session.prompt` answers with, which name them (`mergePending`).
+pub async fn admit(
+    client: &Client,
+    session: &str,
+    prompt: &RunPrompt,
+    delivery: Delivery,
+) -> Result<Vec<PromptSkillAttachment>, String> {
     let session_id = SessionID(session.to_owned());
     let mut body = Map::new();
     // The parts pass through as the prompt holds them, so the call keeps its route and takes this body.
@@ -160,9 +167,11 @@ pub async fn admit(client: &Client, session: &str, prompt: &RunPrompt, delivery:
     body.insert("delivery".into(), delivery.as_str().into());
     call.json(&Value::Object(body)).map_err(error)?;
     if prompt.command.is_some() {
-        return client.empty(call).await.map_err(error);
+        return client.empty(call).await.map(|()| Vec::new()).map_err(error);
     }
-    client.json::<Value>(call).await.map(drop).map_err(error)
+    let item = client.json::<Value>(call).await.map_err(error)?;
+    let skills = &item.get("data").unwrap_or(&item)["payload"]["skills"];
+    Ok(Vec::deserialize(skills).unwrap_or_default())
 }
 
 /// `runShellTurn`: `session.shell`, which answers once the command ran.
