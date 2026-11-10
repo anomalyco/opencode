@@ -5,6 +5,7 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
+import path from "path"
 import { Bom } from "@opencode/util/bom"
 import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
@@ -228,6 +229,19 @@ export const Plugin = {
                   Effect.gen(function* () {
                     const moveTarget = change.type === "update" ? change.moveTarget : undefined
                     const target = moveTarget ?? change.target
+                    // On a case-insensitive filesystem a move that only changes case (of the name or a directory)
+                    // names the same file, so writing the new path and removing the old one would delete it.
+                    // Rename it first, then write the content. The parent is created for case-sensitive filesystems.
+                    const caseRename =
+                      moveTarget !== undefined &&
+                      moveTarget.absolute.toLowerCase() === change.target.absolute.toLowerCase()
+                    if (caseRename)
+                      yield* environment.files.mkdir(path.dirname(moveTarget.absolute)).pipe(
+                        Effect.andThen(environment.files.move(change.target.absolute, moveTarget.absolute)),
+                        Effect.mapError((error) =>
+                          fail(`Failed to rename ${change.target.resource} to ${moveTarget.resource}`, error),
+                        ),
+                      )
                     if (change.type === "delete")
                       yield* environment.files
                         .remove(change.target.absolute)
@@ -236,7 +250,7 @@ export const Plugin = {
                       yield* environment.files
                         .write(target.absolute, new TextEncoder().encode(change.content))
                         .pipe(Effect.mapError((error) => fail(`Failed to write ${target.resource}`, error)))
-                    if (moveTarget)
+                    if (moveTarget && !caseRename)
                       yield* environment.files
                         .remove(change.target.absolute)
                         .pipe(
