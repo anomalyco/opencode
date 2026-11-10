@@ -1012,7 +1012,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       ])
 
       const model = required(yield* models.get(Provider.ID.make("google-ix"), Model.ID.make("gemini-4-argon")))
-      expect(model.variants).toEqual(interactions(["low", "medium", "high"]))
+      expect(model.variants).toEqual(interactions(["low", "high"]))
     }),
   )
 
@@ -1036,13 +1036,51 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       const variants = (id: string) =>
         models.get(Provider.ID.make("google"), Model.ID.make(id)).pipe(Effect.map((model) => required(model).variants))
-      expect(yield* variants("gemini-4-argon")).toEqual(interactions(["low", "medium", "high"]))
-      expect(yield* variants("gemini-4-flash")).toEqual(interactions(["low", "medium", "high"]))
+      expect(yield* variants("gemini-4-argon")).toEqual(interactions(["low", "high"]))
+      expect(yield* variants("gemini-4-flash")).toEqual(interactions(["low", "high"]))
       // Its own package still applies, so its variants stay as they were.
       expect((yield* variants("gemini-4-routed")).map((variant) => variant.settings)).toEqual([
         { thinkingConfig: { includeThoughts: true, thinkingLevel: "low" } },
         { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
       ])
+    }),
+  )
+
+  it.effect("keeps each model's reasoning levels when a package switch respells them", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("zai")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = "@opencode/ai/providers/openai-compatible"
+        })
+        const levels = { "glm-5": ["none", "thinking"], "glm-4.7": ["low", "high", "ultra"] }
+        for (const [id, ids] of Object.entries(levels))
+          editor.models.update(providerID, Model.ID.make(id), (model) => {
+            model.variants = ids.map((variant) => ({ id: Model.VariantID.make(variant), body: { level: variant } }))
+          })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({ providers: { zai: { package: "@opencode/ai/providers/anthropic" } } }),
+        }),
+      ])
+
+      const variants = (id: string) =>
+        models.get(providerID, Model.ID.make(id)).pipe(Effect.map((model) => required(model).variants))
+      expect(yield* variants("glm-5")).toEqual([
+        { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+        { id: Model.VariantID.make("thinking"), settings: { thinking: { type: "adaptive", display: "summarized" } } },
+      ])
+      // A level the new package can't spell is dropped rather than kept in the old spelling.
+      expect(yield* variants("glm-4.7")).toEqual(
+        ["low", "high"].map((effort) => ({
+          id: Model.VariantID.make(effort),
+          settings: { thinking: { type: "adaptive", display: "summarized" }, effort },
+        })),
+      )
     }),
   )
 
@@ -1073,10 +1111,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       ])
 
       const model = required(yield* models.get(Provider.ID.make("google-ix"), Model.ID.make("gemini-4-argon")))
-      const [low, medium, high] = interactions(["low", "medium", "high"])
+      const [low, high] = interactions(["low", "high"])
       expect(model.variants).toEqual([
         { ...low, settings: { thinkingLevel: "low", thinkingSummaries: "none" } },
-        medium,
         { ...high, headers: { "x-tier": "high" } },
       ])
     }),

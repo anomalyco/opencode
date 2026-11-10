@@ -158,7 +158,8 @@ export const Plugin = define({
             ((config.variants === undefined && !source?.base && !hadVariants) || repackaged)
           )
             models.update(providerID, id, (model) => {
-              model.variants = [...Variant.resolve({ ...model, package: model.package ?? providerPackage })]
+              const target = { ...model, package: model.package ?? providerPackage }
+              model.variants = source?.base ? respell(target, source.base.variants) : [...Variant.resolve(target)]
               // Configured variants overlay the respelled defaults.
               for (const variants of configured.get(key) ?? []) overlayVariants(model, variants)
             })
@@ -169,7 +170,7 @@ export const Plugin = define({
           // Leave models whose variants or package an earlier model transform replaced.
           if (!model || model.package !== undefined || !isDeepStrictEqual(model.variants, variants)) continue
           models.update(providerID, id, (model) => {
-            model.variants = [...Variant.resolve({ ...model, package: providerPackage })]
+            model.variants = respell({ ...model, package: providerPackage }, variants)
           })
         }
       }
@@ -297,6 +298,18 @@ function overlay(
     }
     if (config.disabled !== undefined) model.enabled = !config.disabled
   })
+}
+
+/**
+ * Spells the reasoning levels a model already offers for the package it now runs with. Models don't keep the
+ * catalog's reasoning support, so the current variant ids stand in for it; a level the package can't spell is dropped.
+ */
+function respell(model: Model.Info, previous: Model.Info["variants"]) {
+  const spelled = [
+    ...(previous.some((variant) => variant.id === "thinking") ? Variant.resolve(model, [{ type: "toggle" }]) : []),
+    ...Variant.resolve(model),
+  ]
+  return previous.flatMap((variant) => spelled.find((item) => item.id === variant.id) ?? [])
 }
 
 type ConfigVariants = NonNullable<NonNullable<ConfigProvider.Info["models"]>[string]["variants"]>
