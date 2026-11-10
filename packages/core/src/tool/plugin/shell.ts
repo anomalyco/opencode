@@ -205,7 +205,17 @@ const startJob = Effect.fnUntraced(function* (
 })
 
 /** The tool result of a call whose command moved to the background. */
-export const backgroundToolResult = (info: ShellSchema.Info) => toolResult(backgroundResult(info))
+export const backgroundToolResult = (info: ShellSchema.Info) => {
+  const result = toolResult(backgroundResult(info))
+  // Narrowed to what a backgrounded command reports, so it can be published as is.
+  const metadata = {
+    shellID: info.id,
+    status: "running" as const,
+    truncated: result.metadata.truncated,
+    ...(info.pid === undefined ? {} : { pid: info.pid }),
+  }
+  return { content: result.content, metadata }
+}
 
 /**
  * Watches a command taken over from a previous server as a background job of its session, and notifies the

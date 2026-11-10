@@ -253,12 +253,7 @@ export const layer = (options?: Options) =>
               assistantMessageID: call.assistantMessageID,
               id: call.part.id,
               content: result.content,
-              metadata: {
-                shellID: info.id,
-                status: "running",
-                truncated: false,
-                ...(info.pid === undefined ? {} : { pid: info.pid }),
-              },
+              metadata: result.metadata,
               executed: call.part.executed === true,
             })
             // Backgrounded but stopped before the call was settled: its job row was already reattached (and, for a

@@ -873,7 +873,9 @@ const layer = () =>
               ...killed,
             }
           }
-          return { output: `${page || "(no output)"}${stoppedEarly}`, truncated: false, ...killed }
+          // One blank line before the notice, whether or not the output ended with a newline.
+          const shown = stoppedEarly && page.endsWith("\n") ? page.slice(0, -1) : page
+          return { output: `${shown || "(no output)"}${stoppedEarly}`, truncated: false, ...killed }
         }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
         return { info, capture }
       })

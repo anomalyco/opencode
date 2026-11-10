@@ -126,7 +126,7 @@ describe("Shell on the process daemon", () => {
           expect(yield* shell.result(failed)).toMatchObject({
             info: { status: "exited", exit: 1 },
             capture: {
-              output: `kept\n\n\n[output file ${failed.file} stopped early: No space left on device]`,
+              output: `kept\n\n[output file ${failed.file} stopped early: No space left on device]`,
             },
           })
 
