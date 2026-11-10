@@ -827,6 +827,7 @@ describe("SessionRestart background recovery", () => {
   it.effect("resumes a background subagent and notifies its parent exactly once", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const parent = Session.ID.make("ses_subagent_recovery_parent")
       const child = Session.ID.make("ses_subagent_recovery_child")
@@ -875,10 +876,23 @@ describe("SessionRestart background recovery", () => {
       )
       const restart = Context.get(context, SessionRestart.Service)
       const execution = Context.get(context, SessionExecution.Service)
+      const notices: SessionEvent.Synthetic[] = []
+      yield* bus.project(SessionEvent.Synthetic, (event) =>
+        Effect.sync(() => {
+          if (event.data.metadata?.notice === "restart") notices.push(event)
+        }),
+      )
       yield* restart.resumeSuspendedSessions
       yield* Deferred.await(resumed)
       yield* Deferred.await(parentResumed)
       yield* execution.awaitIdle(parent)
+      // Only the parent learns its subagents resumed.
+      expect(Object.fromEntries(notices.map((event) => [event.data.sessionID, event.data.text]))).toEqual({
+        [child]:
+          "The server restarted while you were working. Continue from where you left off without repeating completed work.",
+        [parent]:
+          "The server restarted while you were working. Continue from where you left off without repeating completed work. Subagents have resumed automatically.",
+      })
 
       yield* restart.resumeSuspendedSessions
       expect(drained.toSorted()).toEqual([child, parent].toSorted())

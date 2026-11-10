@@ -16,6 +16,8 @@ import { SubagentCompletion } from "../subagent-completion.js"
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
 
+const SUBAGENTS_RESUMED = "Subagents have resumed automatically."
+
 const RESUME_EXHAUSTED = {
   type: "aborted",
   message: "Execution was interrupted repeatedly and will not be resumed automatically.",
@@ -75,7 +77,7 @@ export const layer = (options?: Options) =>
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
-      const prepareResume = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+      const prepareResume = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, subagentsResumed = false) {
         // Durable before the resume runs, so a crash inside the resumed turn is
         // counted by the next sweep and the budget cannot be dodged.
         const attempts = yield* store.countResume(sessionID)
@@ -92,7 +94,9 @@ export const layer = (options?: Options) =>
         }
         yield* bus.publish(SessionEvent.Synthetic, {
           sessionID,
-          text: CONTINUE_AFTER_SERVER_RESTART,
+          text: subagentsResumed
+            ? `${CONTINUE_AFTER_SERVER_RESTART} ${SUBAGENTS_RESUMED}`
+            : CONTINUE_AFTER_SERVER_RESTART,
           description: "Continuing after restart",
           metadata: { notice: "restart" },
         })
@@ -168,6 +172,7 @@ export const layer = (options?: Options) =>
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "subagent" }>,
         suspended: ReadonlySet<SessionSchema.ID>,
+        resumedParents: Set<SessionSchema.ID>,
       ) {
         const child = yield* store.get(recovery.childSessionID)
         if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
@@ -188,11 +193,15 @@ export const layer = (options?: Options) =>
           yield* notify(background)
           return
         }
-        if (yield* execution.isActive(recovery.childSessionID)) return
+        if (yield* execution.isActive(recovery.childSessionID)) {
+          resumedParents.add(recovery.parentSessionID)
+          return
+        }
         if (!(yield* prepareResume(recovery.childSessionID))) {
           yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
           return
         }
+        resumedParents.add(recovery.parentSessionID)
 
         yield* jobs.start({
           id: background.id,
@@ -231,6 +240,7 @@ export const layer = (options?: Options) =>
           const suspended = new Set(
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
+          const resumedParents = new Set<SessionSchema.ID>()
           yield* store.releaseChildClaims(children)
           yield* Effect.forEach(
             // Admit shell outcomes before a recovered child can start its first model request.
@@ -239,7 +249,7 @@ export const layer = (options?: Options) =>
               if ((yield* jobs.get(background.id))?.status === "running") return
               const recovery = background.recovery
               if (recovery.kind !== "subagent") return yield* recoverToolJob(background, recovery)
-              yield* recoverSubagent(background, recovery, suspended)
+              yield* recoverSubagent(background, recovery, suspended, resumedParents)
             }),
             { discard: true },
           )
@@ -251,7 +261,11 @@ export const layer = (options?: Options) =>
             (sessionID) =>
               execution
                 .resume(sessionID)
-                .pipe(Effect.ignore, Effect.forkIn(scope), Effect.when(prepareResume(sessionID))),
+                .pipe(
+                  Effect.ignore,
+                  Effect.forkIn(scope),
+                  Effect.when(prepareResume(sessionID, resumedParents.has(sessionID))),
+                ),
             { concurrency: "unbounded", discard: true },
           )
           // Async observers consult this set at delivery; later completions wake parents normally.
