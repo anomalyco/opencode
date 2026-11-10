@@ -124,6 +124,8 @@ struct Inner {
     layer: RefCell<Option<Disposer>>,
     /// The settings listener, until the transcript drops.
     settings: RefCell<Option<Disposer>>,
+    /// The transcript's laid-out width, the session pane's less its padding (`sessionWidth - 4`).
+    width: Cell<Option<u16>>,
 }
 
 impl Drop for Inner {
@@ -214,6 +216,7 @@ impl Transcript {
             boundary: Cell::new(None),
             layer: RefCell::default(),
             settings: RefCell::default(),
+            width: Cell::new(None),
         });
         inner.install(tui);
         Self(inner)
@@ -481,6 +484,22 @@ impl Inner {
                 inner.render(tui, |_| true);
             }
         })));
+        // The rows lay out in the session pane's width (`setSessionWidth`), and render again when it changes.
+        let weak = self.this.clone();
+        self.root.on_resize(bind!(weak, |inner, cx, rect| {
+            let Some(tui) = inner.tui.upgrade() else { return };
+            let width = rect.width as u16;
+            if inner.content_width(&tui) == width {
+                inner.width.set(Some(width));
+                return;
+            }
+            inner.width.set(Some(width));
+            cx.defer(bind!(inner.this.clone(), |inner, _| {
+                if let Some(tui) = inner.tui.upgrade() {
+                    inner.render(&tui, |_| true);
+                }
+            }));
+        }));
         // Keep the reader's row in place when rows mount above it.
         let weak = self.this.clone();
         self.scroll.content_view().on_resize(bind!(weak, |inner, cx, rect| {
@@ -652,7 +671,8 @@ impl Inner {
             .info
             .and_then(|info| info.revert.as_ref())
             .map(|revert| (revert.message_id.as_str(), revert.files.as_deref().unwrap_or_default()));
-        self.revert.update(tui, visible.session, revert, visible.all, keys.redo.clone());
+        let width = usize::from(self.content_width(tui));
+        self.revert.update(visible.session, revert, visible.all, keys.redo.clone(), width);
     }
 
     fn context<'a>(
@@ -692,11 +712,17 @@ impl Inner {
             verbose_tokens: view.turn_tokens == Some(TurnTokens::Verbose),
             mode: tui.theme.borrow().mode(),
             width: tui.app.size().0,
+            content: self.content_width(tui),
             session_agent: info.and_then(|info| info.agent.as_ref()).map(|agent| agent.as_str()),
             index,
             messages: visible.messages,
             legacy: self.legacy.get(),
         }
+    }
+
+    /// `contentWidth`: the laid-out width, else the terminal's beside the tab rail, less the padding.
+    fn content_width(&self, tui: &Tui) -> u16 {
+        self.width.get().unwrap_or_else(|| tui.app.size().0.saturating_sub(tui.frame.rail_width(tui)).saturating_sub(4))
     }
 
     /// `completeGroupBoundary`: a page boundary can cut the oldest group in half, so while the oldest row is a
@@ -1064,6 +1090,8 @@ pub struct Context<'a> {
     pub mode: ThemeMode,
     /// The terminal width.
     pub width: u16,
+    /// The session pane's width less its padding (`contentWidth`).
+    pub content: u16,
     pub session_agent: Option<&'a str>,
     /// The location's agents that are not hidden, and its models.
     pub agents: Vec<&'a AgentInfo>,
@@ -1076,9 +1104,9 @@ pub struct Context<'a> {
 }
 
 impl Context<'_> {
-    /// The session view's content width (`ctx.width`): the terminal less the route's padding.
+    /// The session view's content width (`ctx.width`): the session pane less the route's padding.
     pub fn content_width(&self) -> usize {
-        usize::from(self.width).saturating_sub(4)
+        usize::from(self.content)
     }
 
     pub fn message(&self, id: &str) -> Option<&SessionMessageInfo> {
