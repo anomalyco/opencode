@@ -541,6 +541,23 @@ export interface UI {
   readonly slot: (claim: SlotClaim) => () => void
 }
 
+export interface LinkOpen {
+  /** URL about to open in the browser. Replace it to open a different URL. */
+  url: string
+  /** Session on screen when the link was clicked. */
+  readonly sessionID?: string
+}
+
+export type LinkOpenHook = (event: LinkOpen) => void | Promise<void>
+
+export interface Link {
+  /**
+   * Runs before a clicked link opens. Hooks run in plugin order and observe earlier changes. Returns an unregister
+   * function; the hook is also removed when the plugin deactivates.
+   */
+  hook(name: "open", callback: LinkOpenHook): () => void
+}
+
 export interface Context {
   readonly options: Readonly<Record<string, any>>
   readonly location: LocationRef | undefined
@@ -555,6 +572,7 @@ export interface Context {
     registerCodeBlockRenderer(language: string, render: MarkdownCodeBlockRenderer): () => void
   }
   readonly keymap: Keymap
+  readonly link: Link
   readonly storage: Storage
   readonly ui: UI
 }
