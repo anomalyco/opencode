@@ -17,7 +17,8 @@ python3 /home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py
 bun run --cwd packages/cli-rs cargo build --bin opencode-rs
 ```
 
-The library is linked statically, so the binary needs no `libopentui` at run time; it does need libc++ and libc++abi.
+On Linux and macOS the library is linked statically with its own private libc++, so neither the build nor the binary
+needs `libopentui` or a system libc++.
 
 Changes to OpenTUI's Rust crates are pull requests into `packages/rust` of `anomalyco/opentui`. To move the client
 to another commit, run `abi-artifacts.py` for it, then change the `rev` and commit it with `Cargo.lock`.
