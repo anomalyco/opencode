@@ -1,165 +1,56 @@
-import { createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js"
+import { createMemo, createSignal, For, Show, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createLatest, usePlugin, type IpcClient } from "@opencode/plugin/gui"
+import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
+import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
-import { BrowserProfile, type ProfileExtension, type ProfileSource } from "./profile/ipc"
-import {
-  initialSettingsState,
-  lastOutcome,
-  runningJob,
-  transitionSettings,
-  type Job,
-  type Outcome,
-  type SettingsEffect,
-  type SettingsEvent,
-} from "./settings-machine"
-
-type Client = IpcClient<(typeof BrowserProfile)["spec"]>
+import { createProfileJobs, type JobMessage } from "./jobs"
+import type { ProfileExtension, ProfileSource } from "./profile/ipc"
 
 /**
- * Settings › Browser: whether links open in the pane, the profile's sign-ins and the extensions it runs. Every action
- * goes through the settings machine, so one job runs at a time and each ends in a message.
+ * Settings › Browser: whether links open in the pane, importing sign-ins, the extensions the profile runs, and its
+ * stored data. Every action goes through the jobs machine, so one runs at a time and each says how it ended beside
+ * the control that started it.
  */
 export default function BrowserSettings() {
   const ctx = usePlugin<typeof definition>()
   const ui = ctx.ui
   const desktop = ctx.desktop
   const preferences = ctx.stores.preferences
-  const live = ctx.use(BrowserProfile)
-  const [state, setState] = createSignal(initialSettingsState)
-  const [version, setVersion] = createSignal(0)
-  const [form, setForm] = createStore<{ source?: string; extensions?: string; store: string }>({ store: "" })
-  // Each running job's call and timer, by attempt.
-  const handles = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  // How each browser's import ended, by choice, kept while the page is open so every row keeps its own answer.
+  const [results, setResults] = createSignal<ReadonlyMap<string, JobMessage>>(new Map())
 
-  const client = () => {
-    const current = live()
+  const jobs = createProfileJobs({
+    finished(finished) {
+      const job = finished.job
+      const message = jobs.describe(finished)
 
-    return current.status === "active" ? current.value : undefined
-  }
-
-  // A new generation of main's Ipc, or a finished job, reads the profile again.
-  const key = () => {
-    const current = live()
-
-    return current.status === "active" ? `${current.generation}:${version()}` : undefined
-  }
-
-  const dispatch = (event: SettingsEvent) => {
-    const next = transitionSettings(untrack(state), event)
-    setState(next.state)
-    next.effects.forEach(run)
-  }
-
-  const run = (effect: SettingsEffect) => {
-    if (effect.type === "refresh") return void setVersion((value) => value + 1)
-
-    if (effect.type === "abort") {
-      const handle = handles.get(effect.attempt)
-      handles.delete(effect.attempt)
-      clearTimeout(handle?.timer)
-      handle?.controller.abort()
-
-      return
-    }
-
-    const attempt = effect.attempt
-    const current = client()
-
-    if (!current) return dispatch({ type: "failed", attempt })
-    const controller = new AbortController()
-    handles.set(attempt, {
-      controller,
-      timer: setTimeout(() => dispatch({ type: "timed-out", attempt }), effect.timeoutMs),
-    })
-    void perform(current, effect.job, AbortSignal.any([ctx.signal, controller.signal])).then(
-      (outcome) => dispatch({ type: "finished", attempt, outcome }),
-      () => dispatch({ type: "failed", attempt }),
-    )
-  }
-
-  onCleanup(() => dispatch({ type: "disposed" }))
-
-  const start = (job: Job) => dispatch({ type: "started", job })
-  const busy = (type: Job["type"]) => runningJob(state())?.type === type
-  const running = () => runningJob(state()) !== undefined
-
-  const installing = (id: string) => {
-    const job = runningJob(state())
-
-    return job?.type === "install-browser" && job.id === id
-  }
-
-  const sources = createLatest(key, (_value, signal) => client()?.sources({ signal }) ?? Promise.resolve([]))
-  const summary = createLatest(key, (_value, signal) => client()?.summary({ signal }) ?? Promise.resolve(undefined))
-  const extensions = () => client()?.state()?.extensions ?? []
-
-  const profiles = createMemo(() => profileOptions(sources.latest ?? []))
-  const chromium = createMemo(() => profileOptions((sources.latest ?? []).filter((item) => item.engine === "chromium")))
-  const selected = () => form.source ?? profiles()[0]?.value
-  const selectedExtensions = () => form.extensions ?? chromium()[0]?.value
-
-  const available = createLatest(
-    () => {
-      const current = key()
-      const value = selectedExtensions()
-
-      return current && value ? `${current}\n${value}` : undefined
+      if (job.type !== "import-browser" || !message) return
+      setResults((current) => new Map(current).set(resultKey(job.source, job.profile), message))
     },
-    (value, signal) =>
-      client()?.browserExtensions(readProfile(value.split("\n")[1]), { signal }) ?? Promise.resolve([]),
-  )
+  })
 
-  const message = createMemo(() => describe(lastOutcome(state())))
+  const choices = createMemo(() => profileChoices(jobs.sources()))
+  const blocked = () => !jobs.available() || jobs.running() !== undefined
 
-  function describe(outcome: Outcome | undefined) {
-    if (!outcome || outcome.type === "changed") return undefined
+  const importing = (choice: Choice) => {
+    const job = jobs.running()
 
-    if (outcome.type === "error") return { text: ctx.t("common.requestFailed"), error: true }
-
-    if (outcome.type === "cleared") return { text: ctx.t("settings.cleared"), error: false }
-
-    if (outcome.type === "installed") {
-      const result = outcome.result
-
-      if (result.type === "installed")
-        return { text: ctx.t("settings.extensions.done", { name: result.extension.name }), error: false }
-
-      if (result.reason === "load")
-        return { text: ctx.t("settings.extensions.failed.load", { message: result.message ?? "" }), error: true }
-
-      return { text: ctx.t(`settings.extensions.failed.${result.reason}`), error: true }
-    }
-
-    const result = outcome.result
-
-    if (result.type === "failed") return { text: ctx.t(`settings.import.failed.${result.reason}`), error: true }
-    const done = ctx.plural("settings.import.done", result.imported)
-
-    return {
-      text: result.protected ? `${done} ${ctx.plural("settings.import.protected", result.protected)}` : done,
-      error: result.imported === 0,
-    }
+    return job?.type === "import-browser" && job.source === choice.source.id && job.profile === choice.profile.id
   }
+
+  // The file import and the sign-out say how they ended in their own rows.
+  const fileMessage = () => (jobs.last()?.job.type === "import-file" ? jobs.describe(jobs.last()) : undefined)
+  const clearMessage = () => (jobs.last()?.job.type === "clear" ? jobs.describe(jobs.last()) : undefined)
 
   const pickFile = async () => {
     const [file] =
       (await desktop?.pick({ title: ctx.t("settings.import.file.pick"), extensions: ["txt", "json"] })) ?? []
 
-    if (file) start({ type: "import-file", path: file })
+    if (file) jobs.start({ type: "import-file", path: file })
   }
 
-  const pickFolder = async () => {
-    const [folder] = (await desktop?.pick({ title: ctx.t("settings.extensions.folder.pick"), directory: true })) ?? []
-
-    if (folder) start({ type: "install-folder", path: folder })
-  }
-
-  const importSelected = () => {
-    const target = readProfile(selected())
-
-    if (target.source) start({ type: "import-browser", ...target })
-  }
+  const addExtension = () =>
+    ctx.dialogs.open((dialog) => <AddExtension sources={jobs.sources()} close={() => dialog.close()} />)
 
   return (
     <ui.SettingsLayout title={ctx.t("settings.title")} description={ctx.t("settings.description")}>
@@ -173,163 +64,110 @@ export default function BrowserSettings() {
             label={ctx.t("settings.links.title")}
             hideLabel
             checked={preferences.value.links}
-            onChange={(links) => preferences.set({ links })}
+            onChange={(links) => preferences.set({ ...preferences.value, links })}
           />
         </ui.SettingsRow>
       </ui.SettingsSection>
-      <ui.SettingsSection
-        title={ctx.t("settings.signins.title")}
-        footer={
-          <Show when={message()}>
-            {(current) => (
-              <p
-                role={current().error ? "alert" : "status"}
-                classList={{ "text-text-danger-base": current().error, "text-v2-text-text-muted": !current().error }}
+      <ui.SettingsSection title={ctx.t("settings.import.title")} footer={<Note>{ctx.t("settings.import.note")}</Note>}>
+        <For each={choices()}>
+          {(choice, index) => (
+            <ui.SettingsRow
+              id={index() === 0 ? "settings-browser-import" : undefined}
+              title={
+                <Identity
+                  image={choice.source.icon}
+                  fallback="outline-globe"
+                  name={choice.source.name}
+                  detail={choice.source.profiles.length > 1 ? choice.profile.name : undefined}
+                  message={
+                    importing(choice) ? undefined : results().get(resultKey(choice.source.id, choice.profile.id))
+                  }
+                />
+              }
+            >
+              <ui.Button
+                size="small"
+                disabled={blocked()}
+                busy={importing(choice)}
+                onClick={() =>
+                  jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
+                }
               >
-                {current().text}
-              </p>
-            )}
-          </Show>
-        }
-      >
+                {ctx.t("settings.import.action")}
+              </ui.Button>
+            </ui.SettingsRow>
+          )}
+        </For>
+        <Show when={jobs.sourcesLoaded() && choices().length === 0}>
+          <ui.SettingsRow id="settings-browser-import" title={<Muted>{ctx.t("settings.import.none")}</Muted>} />
+        </Show>
         <ui.SettingsRow
-          id="settings-browser-cookies"
-          title={ctx.t("settings.cookies.title")}
-          description={
-            <Show when={summary.latest}>{(value) => ctx.plural("settings.cookies.count", value().cookies)}</Show>
+          title={
+            <Identity
+              fallback="file-document"
+              name={ctx.t("settings.import.file.title")}
+              detail={ctx.t("settings.import.file.description")}
+              message={fileMessage()}
+            />
           }
         >
           <ui.Button
             size="small"
-            variant="danger"
-            disabled={!client() || running() || !summary.latest?.cookies}
-            busy={busy("clear")}
-            onClick={() => start({ type: "clear" })}
-          >
-            {ctx.t("settings.cookies.clear")}
-          </ui.Button>
-        </ui.SettingsRow>
-        <ui.SettingsRow
-          id="settings-browser-import"
-          title={ctx.t("settings.import.browser.title")}
-          description={ctx.t("settings.import.browser.description")}
-        >
-          <div class="flex items-center gap-2">
-            <ui.Select
-              label={ctx.t("settings.import.browser.select")}
-              options={profiles()}
-              value={selected()}
-              placeholder={ctx.t("settings.import.browser.none")}
-              disabled={profiles().length === 0}
-              onChange={(source) => setForm("source", source)}
-            />
-            <ui.Button
-              size="small"
-              disabled={!client() || !selected() || running()}
-              busy={busy("import-browser")}
-              onClick={importSelected}
-            >
-              {ctx.t("settings.import.action")}
-            </ui.Button>
-          </div>
-        </ui.SettingsRow>
-        <ui.SettingsRow
-          id="settings-browser-import-file"
-          title={ctx.t("settings.import.file.title")}
-          description={ctx.t("settings.import.file.description")}
-        >
-          <ui.Button
-            size="small"
-            disabled={!client() || !desktop || running()}
-            busy={busy("import-file")}
+            disabled={blocked() || !desktop}
+            busy={jobs.running()?.type === "import-file"}
             onClick={() => void pickFile()}
           >
             {ctx.t("settings.import.file.action")}
           </ui.Button>
         </ui.SettingsRow>
       </ui.SettingsSection>
-      <ui.SettingsSection title={ctx.t("settings.extensions.title")}>
-        <ui.SettingsRow
-          id="settings-browser-extensions"
-          title={ctx.t("settings.extensions.title")}
-          description={ctx.t("settings.extensions.description")}
-        />
-        <For each={extensions()} fallback={<ui.SettingsRow title={ctx.t("settings.extensions.empty")} />}>
+      <ui.SettingsSection
+        title={ctx.t("settings.extensions.title")}
+        footer={<Note>{ctx.t("settings.extensions.note")}</Note>}
+      >
+        <For each={jobs.extensions()}>
           {(extension) => (
             <ExtensionRow
               extension={extension}
-              disabled={!client() || running()}
-              onEnable={(enabled) => start({ type: "enable", id: extension.id, enabled })}
-              onRemove={() => start({ type: "remove", id: extension.id })}
+              disabled={blocked()}
+              onEnable={(enabled) => jobs.start({ type: "enable", id: extension.id, enabled })}
+              onRemove={() => jobs.start({ type: "remove", id: extension.id })}
             />
           )}
         </For>
         <ui.SettingsRow
-          title={ctx.t("settings.extensions.store.title")}
-          description={ctx.t("settings.extensions.store.description")}
+          id="settings-browser-extensions"
+          title={ctx.t("settings.extensions.add.title")}
+          description={ctx.t("settings.extensions.add.description")}
         >
-          <div class="flex items-center gap-2">
-            <ui.TextInput
-              label={ctx.t("settings.extensions.store.title")}
-              placeholder={ctx.t("settings.extensions.store.placeholder")}
-              type="url"
-              value={form.store}
-              onInput={(value) => setForm("store", value)}
-              onSubmit={(url) => {
-                if (url.trim() && !running()) start({ type: "install-store", url: url.trim() })
-              }}
-              class="w-64"
-            />
-            <ui.Button
-              size="small"
-              disabled={!client() || !form.store.trim() || running()}
-              busy={busy("install-store")}
-              onClick={() => start({ type: "install-store", url: form.store.trim() })}
+          <ui.Button size="small" icon="plus" disabled={!jobs.available()} onClick={addExtension}>
+            {ctx.t("settings.extensions.add.action")}
+          </ui.Button>
+        </ui.SettingsRow>
+      </ui.SettingsSection>
+      <ui.SettingsSection title={ctx.t("settings.data.title")}>
+        <ui.SettingsRow
+          id="settings-browser-cookies"
+          title={ctx.t("settings.cookies.title")}
+          description={
+            <Show
+              when={clearMessage()}
+              fallback={
+                <Show when={jobs.summary()}>{(value) => ctx.plural("settings.cookies.count", value().cookies)}</Show>
+              }
             >
-              {ctx.t("settings.extensions.add")}
-            </ui.Button>
-          </div>
-        </ui.SettingsRow>
-        <ui.SettingsRow
-          title={ctx.t("settings.extensions.browser.title")}
-          description={ctx.t("settings.extensions.browser.description")}
-        >
-          <ui.Select
-            label={ctx.t("settings.import.browser.select")}
-            options={chromium()}
-            value={selectedExtensions()}
-            placeholder={ctx.t("settings.import.browser.none")}
-            disabled={chromium().length === 0}
-            onChange={(value) => setForm("extensions", value)}
-          />
-        </ui.SettingsRow>
-        <For each={available.latest ?? []}>
-          {(item) => (
-            <ui.SettingsRow title={<ExtensionTitle name={item.name} icon={item.icon} />} description={item.version}>
-              <ui.Button
-                size="small"
-                disabled={!client() || item.installed || running()}
-                busy={installing(item.id)}
-                onClick={() => {
-                  start({ type: "install-browser", ...readProfile(selectedExtensions()), id: item.id })
-                }}
-              >
-                {item.installed ? ctx.t("settings.extensions.added") : ctx.t("settings.extensions.add")}
-              </ui.Button>
-            </ui.SettingsRow>
-          )}
-        </For>
-        <ui.SettingsRow
-          title={ctx.t("settings.extensions.folder.title")}
-          description={ctx.t("settings.extensions.folder.description")}
+              {(message) => message().text}
+            </Show>
+          }
         >
           <ui.Button
             size="small"
-            disabled={!client() || !desktop || running()}
-            busy={busy("install-folder")}
-            onClick={() => void pickFolder()}
+            variant="danger"
+            disabled={blocked() || !jobs.summary()?.cookies}
+            busy={jobs.running()?.type === "clear"}
+            onClick={() => jobs.start({ type: "clear" })}
           >
-            {ctx.t("settings.extensions.folder.action")}
+            {ctx.t("settings.cookies.clear")}
           </ui.Button>
         </ui.SettingsRow>
       </ui.SettingsSection>
@@ -348,14 +186,25 @@ function ExtensionRow(props: {
 
   return (
     <ui.SettingsRow
-      title={<ExtensionTitle name={props.extension.name} icon={props.extension.icon} />}
-      description={
-        <Show when={props.extension.error} fallback={props.extension.version}>
-          {(error) => <span class="text-text-danger-base">{error()}</span>}
-        </Show>
+      title={
+        <Identity
+          image={props.extension.icon}
+          fallback="extensions"
+          name={props.extension.name}
+          detail={props.extension.version}
+          message={props.extension.error ? { text: props.extension.error, error: true } : undefined}
+        />
       }
     >
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-2">
+        <ui.Tooltip value={ctx.t("settings.extensions.remove", { name: props.extension.name })}>
+          <ui.IconButton
+            icon="outline-trash"
+            label={ctx.t("settings.extensions.remove", { name: props.extension.name })}
+            disabled={props.disabled}
+            onClick={props.onRemove}
+          />
+        </ui.Tooltip>
         <ui.Switch
           label={ctx.t("settings.extensions.enable", { name: props.extension.name })}
           hideLabel
@@ -363,85 +212,207 @@ function ExtensionRow(props: {
           disabled={props.disabled}
           onChange={props.onEnable}
         />
-        <ui.Tooltip value={ctx.t("settings.extensions.remove")}>
-          <ui.IconButton
-            icon="outline-trash"
-            label={ctx.t("settings.extensions.remove")}
-            disabled={props.disabled}
-            onClick={props.onRemove}
-          />
-        </ui.Tooltip>
       </div>
     </ui.SettingsRow>
   )
 }
 
-function ExtensionTitle(props: { name: string; icon?: string }) {
-  const ctx = usePlugin()
+/**
+ * The Add an extension dialog: a store link, the extensions another Chromium browser has, or an unpacked folder. It
+ * runs its own jobs, so it keeps working whichever page opened it, and stays open to add several.
+ */
+function AddExtension(props: { sources: readonly ProfileSource[]; close: () => void }) {
+  const ctx = usePlugin<typeof definition>()
+  const ui = ctx.ui
+  const desktop = ctx.desktop
+  const jobs = createProfileJobs()
+  const [form, setForm] = createStore<{ link: string; profile?: string }>({ link: "" })
+  const choices = createMemo(() => profileChoices(props.sources.filter((source) => source.engine === "chromium")))
+  const selected = createMemo(() => choices().find((choice) => choiceValue(choice) === form.profile) ?? choices()[0])
+  const blocked = () => !jobs.available() || jobs.running() !== undefined
+
+  // Read again after each job, so an extension just added shows as added.
+  const available = createLatest(
+    () => {
+      const choice = selected()
+      const key = jobs.key()
+
+      return choice && key ? `${key}\n${choiceValue(choice)}` : undefined
+    },
+    (_value, signal) => {
+      const choice = untrack(selected)
+
+      return choice ? jobs.browserExtensions(choice.source.id, choice.profile.id, signal) : Promise.resolve([])
+    },
+  )
+
+  const installing = (id: string) => {
+    const job = jobs.running()
+
+    return job?.type === "install-browser" && job.id === id
+  }
+
+  const addLink = () => {
+    const url = form.link.trim()
+
+    if (!url || blocked()) return
+    jobs.start({ type: "install-store", url })
+    setForm("link", "")
+  }
+
+  const pickFolder = async () => {
+    const [folder] = (await desktop?.pick({ title: ctx.t("settings.extensions.folder.pick"), directory: true })) ?? []
+
+    if (folder) jobs.start({ type: "install-folder", path: folder })
+  }
 
   return (
-    <span class="flex min-w-0 items-center gap-2">
-      <Show when={props.icon} fallback={<ctx.ui.Icon name="extensions" class="text-v2-icon-icon-muted" />}>
-        {(icon) => <img src={icon()} alt="" class="size-4 shrink-0" />}
-      </Show>
-      <span class="min-w-0 truncate">{props.name}</span>
+    <ui.Dialog
+      title={ctx.t("settings.extensions.add.title")}
+      description={ctx.t("settings.extensions.dialog.description")}
+      size={choices().length > 0 ? "normal" : "fit"}
+      footer={
+        <>
+          <ui.Button
+            variant="ghost"
+            disabled={blocked() || !desktop}
+            busy={jobs.running()?.type === "install-folder"}
+            onClick={() => void pickFolder()}
+          >
+            {ctx.t("settings.extensions.folder.action")}
+          </ui.Button>
+          <ui.Button variant="contrast" onClick={props.close}>
+            {ctx.t("settings.extensions.done")}
+          </ui.Button>
+        </>
+      }
+    >
+      <div class="flex flex-col gap-4 pb-1">
+        <div class="flex items-center gap-2">
+          <ui.TextInput
+            label={ctx.t("settings.extensions.store.label")}
+            placeholder={ctx.t("settings.extensions.store.placeholder")}
+            type="url"
+            size="large"
+            autofocus
+            value={form.link}
+            onInput={(link) => setForm("link", link)}
+            onSubmit={addLink}
+            class="min-w-0 flex-1"
+          />
+          <ui.Button
+            size="large"
+            disabled={blocked() || !form.link.trim()}
+            busy={jobs.running()?.type === "install-store"}
+            onClick={addLink}
+          >
+            {ctx.t("settings.extensions.add")}
+          </ui.Button>
+        </div>
+        <Show when={jobs.describe(jobs.last())}>
+          {(message) => (
+            <p
+              role={message().error ? "alert" : "status"}
+              class="text-[13px] leading-[var(--line-height-base)]"
+              classList={{ "text-v2-state-fg-danger": message().error, "text-v2-text-text-muted": !message().error }}
+            >
+              {message().text}
+            </p>
+          )}
+        </Show>
+        <Show when={selected()}>
+          {(choice) => (
+            <div class="flex flex-col gap-1">
+              <div class="flex h-7 items-center justify-between gap-2">
+                <span class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                  {ctx.t("settings.extensions.browser.title")}
+                </span>
+                <Show when={choices().length > 1}>
+                  <ui.Select
+                    label={ctx.t("settings.extensions.browser.select")}
+                    options={choices().map((item) => ({ value: choiceValue(item), label: choiceLabel(item) }))}
+                    value={choiceValue(choice())}
+                    onChange={(profile) => setForm("profile", profile)}
+                  />
+                </Show>
+              </div>
+              <For
+                each={available.latest ?? []}
+                fallback={
+                  <Show when={available.latest}>
+                    <Muted>{ctx.t("settings.extensions.browser.empty")}</Muted>
+                  </Show>
+                }
+              >
+                {(item) => (
+                  <div class="flex h-9 items-center gap-3">
+                    <Glyph image={item.icon} fallback="extensions" />
+                    <span class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                      {item.name}
+                    </span>
+                    <ui.Button
+                      size="small"
+                      variant={item.installed ? "ghost-muted" : "neutral"}
+                      disabled={blocked() || item.installed}
+                      busy={installing(item.id)}
+                      onClick={() =>
+                        jobs.start({
+                          type: "install-browser",
+                          source: choice().source.id,
+                          profile: choice().profile.id,
+                          id: item.id,
+                        })
+                      }
+                    >
+                      {item.installed ? ctx.t("settings.extensions.added") : ctx.t("settings.extensions.add")}
+                    </ui.Button>
+                  </div>
+                )}
+              </For>
+            </div>
+          )}
+        </Show>
+      </div>
+    </ui.Dialog>
+  )
+}
+
+/** A row's subject: its icon, its name, and under it a detail or what the last action on it did. */
+function Identity(props: { image?: string; fallback: IconName; name: string; detail?: string; message?: JobMessage }) {
+  return (
+    <span class="flex min-w-0 items-center gap-3">
+      <Glyph image={props.image} fallback={props.fallback} />
+      <span class="flex min-w-0 flex-col gap-1">
+        <span class="truncate">{props.name}</span>
+        <Show when={props.message} fallback={<Show when={props.detail}>{(detail) => <Muted>{detail()}</Muted>}</Show>}>
+          {(message) => (
+            <span
+              role={message().error ? "alert" : "status"}
+              class="text-[13px] font-[440] leading-[var(--line-height-base)]"
+              classList={{ "text-v2-state-fg-danger": message().error, "text-v2-text-text-muted": !message().error }}
+            >
+              {message().text}
+            </span>
+          )}
+        </Show>
+      </span>
     </span>
   )
 }
 
-/**
- * One choice per browser profile; the profile's name shows only for a browser with several. The value encodes both
- * ids, since the select finds its options by value in a CSS selector.
- */
-function profileOptions(sources: readonly ProfileSource[]) {
-  return sources.flatMap((source) =>
-    source.profiles.map((profile) => ({
-      value: `${encodeURIComponent(source.id)}:${encodeURIComponent(profile.id)}`,
-      label: source.profiles.length > 1 ? `${source.name} · ${profile.name}` : source.name,
-    })),
+function Muted(props: { children: JSX.Element }) {
+  return (
+    <span class="text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted">
+      {props.children}
+    </span>
   )
 }
 
-/** Runs one job against main and says how it ended. */
-async function perform(client: Client, job: Job, signal: AbortSignal): Promise<Outcome> {
-  switch (job.type) {
-    case "import-browser":
-      return {
-        type: "imported",
-        result: await client.importBrowser({ source: job.source, profile: job.profile }, { signal }),
-      }
-    case "import-file":
-      return { type: "imported", result: await client.importFile({ path: job.path }, { signal }) }
-    case "install-store":
-      return { type: "installed", result: await client.install({ kind: "store", url: job.url }, { signal }) }
-    case "install-folder":
-      return { type: "installed", result: await client.install({ kind: "folder", path: job.path }, { signal }) }
-    case "install-browser":
-      return {
-        type: "installed",
-        result: await client.install(
-          { kind: "browser", source: job.source, profile: job.profile, id: job.id },
-          { signal },
-        ),
-      }
-    case "remove":
-      await client.remove({ id: job.id }, { signal })
-
-      return { type: "changed" }
-    case "enable":
-      await client.enable({ id: job.id, enabled: job.enabled }, { signal })
-
-      return { type: "changed" }
-    case "clear":
-      await client.clear({ signal })
-
-      return { type: "cleared" }
-  }
+/** A line under a section's list, for what applies to every row in it. */
+function Note(props: { children: JSX.Element }) {
+  return <p class="text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-faint">{props.children}</p>
 }
 
-/** The source and profile ids of a `profileOptions` value. */
-function readProfile(value: string | undefined) {
-  const [source = "", profile = ""] = (value ?? "").split(":")
-
-  return { source: decodeURIComponent(source), profile: decodeURIComponent(profile) }
+function resultKey(source: string, profile: string) {
+  return `${source}\n${profile}`
 }

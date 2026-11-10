@@ -425,6 +425,8 @@ export function mountBrowserPane(input: PaneHost) {
           },
           set: (next: History) => setStore("history", reconcile(next)),
         },
+        // Already welcomed: the pane's offer to import sign-ins needs main's profile, which this fixture has none of.
+        preferences: { value: { links: true, welcomed: true }, set() {} },
       },
       system: {
         copy: async () => undefined,

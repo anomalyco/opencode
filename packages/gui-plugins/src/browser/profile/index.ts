@@ -18,7 +18,7 @@ import {
   unzip,
 } from "./extensions"
 import type { ImportResult, InstallResult, ProfileExtension } from "./ipc"
-import { chromiumProfileDirectory, listSources, profileExtensions, readSource } from "./sources"
+import { chromiumProfileDirectory, listSources, profileExtensions, readSource, windowsIcons } from "./sources"
 
 /** The partition every page of the desktop browser shares, on disk under the app's user data. */
 export const PARTITION = "persist:opencode-browser"
@@ -48,6 +48,8 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
   const errors = new Map<string, string>()
   const details = new Map<string, ProfileExtension>()
   const roots = new Map<number, () => readonly string[]>()
+  // Browser icons by application path, read once; undefined for an application without one.
+  const icons = new Map<string, string | undefined>()
 
   // Documents are guarded by the page; subresources (img, script, fetch) must not read file: URLs outside the roots
   // of the page that asked either. One listener serves every page, so each page registers its roots by id.
@@ -162,7 +164,26 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
     /** Extensions loaded now, whose pages may open in a tab. */
     extensionIDs: () => session.extensions.getAllExtensions().map((extension) => extension.id),
     extensions: () => stored.value.flatMap((record) => details.get(record.id) ?? []),
-    sources: listSources,
+    /** The browsers to import from, the one used last first, each with its application's icon. */
+    async sources() {
+      const listed = await listSources()
+
+      const missing = listed.flatMap((source) =>
+        source.application && !icons.has(source.application) ? [source.application] : [],
+      )
+
+      // Each application's icon is read once; an application without one is not asked again either.
+      const read = await applicationIcons(missing)
+      missing.forEach((file) => icons.set(file, read.get(file)))
+
+      return listed.map((source) => ({
+        id: source.id,
+        name: source.name,
+        engine: source.engine,
+        profiles: source.profiles,
+        icon: source.application ? icons.get(source.application) : undefined,
+      }))
+    },
     async importBrowser(source: string, profile: string): Promise<ImportResult> {
       const read = await readSource(source, profile)
 
@@ -325,6 +346,21 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
     },
   }
+}
+
+/** Applications' icons as the system shows them, by path; a file the system has no icon for is left out. */
+async function applicationIcons(files: readonly string[]) {
+  if (process.platform === "win32") return windowsIcons(files)
+
+  const read = await Promise.all(
+    files.map(async (file) => {
+      const image = await app.getFileIcon(file, { size: "normal" }).catch(() => undefined)
+
+      return image && !image.isEmpty() ? [[file, image.toDataURL()] as const] : []
+    }),
+  )
+
+  return new Map(read.flat())
 }
 
 function parseCrxSafely(data: Uint8Array) {

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { access, readdir, readFile } from "node:fs/promises"
+import { access, readdir, readFile, stat } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { Option, Schema } from "effect"
@@ -16,6 +16,8 @@ export type Source = {
   readonly id: string
   readonly name: string
   readonly engine: Engine
+  /** The installed application, whose file carries the browser's icon; undefined where none was found. */
+  readonly application: string | undefined
   readonly profiles: readonly { readonly id: string; readonly name: string }[]
 }
 
@@ -131,18 +133,83 @@ function firefox(id: string, name: string, root: string): Definition {
   return { id, name, engine: "firefox", root }
 }
 
-/** The browsers installed here that have at least one profile with cookies. */
+/**
+ * The browsers installed here that have at least one profile with cookies, the one used last first: its cookies changed
+ * most recently, so it is the browser the user is signed in with.
+ */
 export async function listSources(): Promise<Source[]> {
   const found = await Promise.all(
-    definitions().map(async (definition) => ({
-      id: definition.id,
-      name: definition.name,
-      engine: definition.engine,
-      profiles: (await profiles(definition)).map((profile) => ({ id: profile.id, name: profile.name })),
-    })),
+    definitions().map(async (definition) => {
+      const listed = (await profiles(definition)).toSorted((a, b) => b.used - a.used)
+
+      return {
+        id: definition.id,
+        name: definition.name,
+        engine: definition.engine,
+        application: await first(applications(definition.id)),
+        used: listed[0]?.used ?? 0,
+        profiles: listed.map((profile) => ({ id: profile.id, name: profile.name })),
+      }
+    }),
   )
 
-  return found.filter((source) => source.profiles.length > 0)
+  return found.filter((source) => source.profiles.length > 0).toSorted((a, b) => b.used - a.used)
+}
+
+/**
+ * Where a browser's application may be installed, for its icon: the executable on Windows, the bundle on macOS. Linux
+ * has no single file that carries the icon.
+ */
+function applications(id: string) {
+  const home = homedir()
+
+  if (process.platform === "win32") {
+    const local = process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local")
+    const programs = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"], local].flatMap((root) => root ?? [])
+    const installed = (...parts: string[]) => programs.map((root) => path.join(root, ...parts))
+
+    const known = new Map([
+      ["chrome", installed("Google", "Chrome", "Application", "chrome.exe")],
+      ["edge", installed("Microsoft", "Edge", "Application", "msedge.exe")],
+      ["helium", installed("imput", "Helium", "Application", "chrome.exe")],
+      ["brave", installed("BraveSoftware", "Brave-Browser", "Application", "brave.exe")],
+      ["vivaldi", installed("Vivaldi", "Application", "vivaldi.exe")],
+      ["opera", installed("Programs", "Opera", "opera.exe")],
+      ["chromium", installed("Chromium", "Application", "chrome.exe")],
+      ["firefox", installed("Mozilla Firefox", "firefox.exe")],
+      ["zen", installed("Zen Browser", "zen.exe")],
+      ["librewolf", installed("LibreWolf", "librewolf.exe")],
+      ["floorp", installed("Ablaze Floorp", "floorp.exe")],
+    ])
+
+    return known.get(id) ?? []
+  }
+
+  if (process.platform !== "darwin") return []
+
+  // Bundle names in /Applications; Zen shipped under both.
+  const bundles = new Map([
+    ["chrome", ["Google Chrome"]],
+    ["edge", ["Microsoft Edge"]],
+    ["helium", ["Helium"]],
+    ["arc", ["Arc"]],
+    ["brave", ["Brave Browser"]],
+    ["dia", ["Dia"]],
+    ["comet", ["Comet"]],
+    ["vivaldi", ["Vivaldi"]],
+    ["opera", ["Opera"]],
+    ["chromium", ["Chromium"]],
+    ["safari", ["Safari"]],
+    ["firefox", ["Firefox"]],
+    ["zen", ["Zen", "Zen Browser"]],
+    ["librewolf", ["LibreWolf"]],
+    ["floorp", ["Floorp"]],
+  ])
+
+  return (bundles.get(id) ?? []).flatMap((name) => [
+    path.join("/Applications", `${name}.app`),
+    path.join(home, "Applications", `${name}.app`),
+  ])
 }
 
 /** Reads a profile's cookies. `profile` must be an id `listSources` returned, so no path from a window is opened. */
@@ -182,9 +249,30 @@ function readFailure(error: NodeJS.ErrnoException): SourceFailure {
   return { failure: "read" }
 }
 
-type Profile = { id: string; name: string; directory: string; database: string }
+/** `used` is when the profile's cookies last changed, in milliseconds. */
+type Profile = { id: string; name: string; directory: string; database: string; used: number }
 
 async function profiles(definition: Definition): Promise<Profile[]> {
+  const located = await locate(definition)
+
+  return Promise.all(located.map(async (profile) => ({ ...profile, used: await modified(profile.database) })))
+}
+
+/** When a cookie database last changed: the newer of the file and its write-ahead log. */
+async function modified(database: string) {
+  const times = await Promise.all(
+    [database, `${database}-wal`].map((file) =>
+      stat(file).then(
+        (info) => info.mtimeMs,
+        () => 0,
+      ),
+    ),
+  )
+
+  return Math.max(...times)
+}
+
+async function locate(definition: Definition): Promise<Omit<Profile, "used">[]> {
   if (definition.engine === "safari") {
     const files = [
       path.join(
@@ -336,6 +424,35 @@ async function unprotect(blob: Uint8Array) {
   )
 
   return Buffer.from(output.trim(), "base64")
+}
+
+const decodeIcons = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.String)))
+
+/**
+ * The icons of Windows executables as PNG data URLs, by path, in one Windows PowerShell run. Electron's own
+ * `getFileIcon` answers with the generic program icon for a browser installed under the user's profile, where most
+ * Chromium browsers install. A file without an icon, or a failed run, leaves its path out.
+ */
+export async function windowsIcons(files: readonly string[]) {
+  if (files.length === 0) return new Map<string, string>()
+
+  const script =
+    "Add-Type -AssemblyName System.Drawing;$o=@{};" +
+    'foreach($p in ([Console]::In.ReadToEnd() -split "`n")){$p=$p.Trim();if(-not $p){continue};' +
+    "try{$m=New-Object IO.MemoryStream;" +
+    "[Drawing.Icon]::ExtractAssociatedIcon($p).ToBitmap().Save($m,[Drawing.Imaging.ImageFormat]::Png);" +
+    "$o[$p]=[Convert]::ToBase64String($m.ToArray())}catch{}};" +
+    "$o|ConvertTo-Json -Compress"
+
+  const output = await run(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    files.join("\n"),
+  ).catch(() => "")
+
+  const icons = Option.getOrUndefined(decodeIcons(output.trim())) ?? {}
+
+  return new Map(Object.entries(icons).map(([file, data]) => [file, `data:image/png;base64,${data}`]))
 }
 
 function run(command: string, args: readonly string[], input?: string) {

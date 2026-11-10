@@ -29,6 +29,8 @@ export const ProfileSource = Schema.Struct({
   id: text(64),
   name: Schema.String,
   engine: Schema.Literals(["chromium", "firefox", "safari"]),
+  /** The browser's own icon as a data URL, where its application was found. */
+  icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
   profiles: Schema.Array(Schema.Struct({ id: text(512), name: Schema.String })),
 })
 

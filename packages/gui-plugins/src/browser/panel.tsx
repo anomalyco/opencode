@@ -34,7 +34,10 @@ import {
   type AddressEvent,
 } from "./address-machine"
 import { commentNote, pageNote } from "./comment"
+import { Glyph } from "./choices"
 import { bare, highlight, type Visit } from "./history"
+import { SignInOffer } from "./import-prompt"
+import type definition from "./index"
 import type { Model } from "./model"
 import {
   capturesEscape,
@@ -66,7 +69,7 @@ export default function SessionBrowserPane(props: {
   screen: SessionScreen
   model: Model
 }) {
-  const plugin = usePlugin()
+  const plugin = usePlugin<typeof definition>()
   const keybinds = plugin.keybinds
   const desktop = plugin.desktop
   const embeds = plugin.embeds
@@ -79,6 +82,8 @@ export default function SessionBrowserPane(props: {
   const suspended = () => props.model.suspended(props.session)
   const command = (action: Browser.Action) => props.model.command(props.session, action)
   const profile = plugin.use(BrowserProfile)
+  // The pane offers to import sign-ins until the user imports or declines once.
+  const offering = () => !plugin.stores.preferences.value.welcomed
 
   const extensions = () => {
     const current = profile()
@@ -227,6 +232,13 @@ export default function SessionBrowserPane(props: {
   // Navigates the tab and keeps the address in the field until the page reports where it went. Ends editing here rather
   // than on blur: a click elsewhere, such as a recent page, may have blurred the field already.
   const go = (url: string) => dispatchAddress({ type: "navigated", url, epoch: epoch() })
+
+  // Loads the page again with the cookies an import brought, so a signed-out site opens signed in.
+  const reloadPage = () => {
+    const tab = state()
+
+    if (tab && address()) command({ type: "reload", tabID: tab.id })
+  }
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
   const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
@@ -668,25 +680,22 @@ export default function SessionBrowserPane(props: {
               icon={<Icon name="outline-browser-annotate" />}
             />
           </Tooltip>
-          <Menu gutter={4} modal={false} placement="bottom-end">
-            <Tooltip placement="top" value={plugin.t("extensions.menu")}>
-              <Menu.Trigger
-                as={IconButton}
-                variant="ghost-muted"
-                size="large"
-                data-action="browser-extensions"
-                icon={<Icon name="extensions" />}
-                aria-label={plugin.t("extensions.menu")}
-              />
-            </Tooltip>
-            <Menu.Portal>
-              <Menu.Content class="w-[220px]">
-                {/* Extensions load into the profile, where pages of a server on this computer browse. */}
-                <Show
-                  when={props.session.server.local}
-                  fallback={<Menu.Item disabled>{plugin.t("extensions.remote")}</Menu.Item>}
-                >
-                  <For each={extensions()} fallback={<Menu.Item disabled>{plugin.t("extensions.none")}</Menu.Item>}>
+          {/* Extensions load into the profile, where pages of a server on this computer browse. */}
+          <Show when={props.session.server.local && extensions().length > 0}>
+            <Menu gutter={4} modal={false} placement="bottom-end">
+              <Tooltip placement="top" value={plugin.t("extensions.menu")}>
+                <Menu.Trigger
+                  as={IconButton}
+                  variant="ghost-muted"
+                  size="large"
+                  data-action="browser-extensions"
+                  icon={<Icon name="extensions" />}
+                  aria-label={plugin.t("extensions.menu")}
+                />
+              </Tooltip>
+              <Menu.Portal>
+                <Menu.Content class="w-[220px]">
+                  <For each={extensions()}>
                     {(extension) => (
                       <Menu.Item
                         disabled={!extension.enabled || !(extension.popup ?? extension.options)}
@@ -696,25 +705,19 @@ export default function SessionBrowserPane(props: {
                           if (page) props.model.openURL(props.session, page)
                         }}
                       >
-                        <Show
-                          when={extension.icon}
-                          fallback={<Icon name="extensions" class="text-v2-icon-icon-muted" />}
-                        >
-                          {(icon) => <img src={icon()} alt="" class="size-4 shrink-0" />}
-                        </Show>
+                        <Glyph image={extension.icon} fallback="extensions" class="!size-4" />
                         <span class="min-w-0 truncate">{extension.name}</span>
                       </Menu.Item>
                     )}
                   </For>
-                </Show>
-                <Menu.Separator />
-                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>
-                  {plugin.t("extensions.manage")}
-                </Menu.Item>
-                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("signins.import")}</Menu.Item>
-              </Menu.Content>
-            </Menu.Portal>
-          </Menu>
+                  <Menu.Separator />
+                  <Menu.Item onSelect={() => plugin.layout.settings("browser")}>
+                    {plugin.t("extensions.manage")}
+                  </Menu.Item>
+                </Menu.Content>
+              </Menu.Portal>
+            </Menu>
+          </Show>
           <Menu gutter={4} modal={false} placement="bottom-end">
             <Tooltip placement="top" value={plugin.t("options")}>
               <Menu.Trigger
@@ -757,6 +760,9 @@ export default function SessionBrowserPane(props: {
                   {plugin.t("external.menu")}
                 </Menu.Item>
                 <Menu.Separator />
+                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("signins.menu")}</Menu.Item>
+                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("extensions.menu")}</Menu.Item>
+                <Menu.Separator />
                 <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
                   {plugin.t("history.clear")}
                 </Menu.Item>
@@ -774,6 +780,10 @@ export default function SessionBrowserPane(props: {
           {error()}
         </div>
       </Show>
+      {/* Above a page, where a signed-out site is the reason to import; the new tab page shows the offer as a card. */}
+      <Show when={offering() && !empty() && !suspended()}>
+        <SignInOffer variant="bar" imported={reloadPage} />
+      </Show>
       <embeds.View
         id={embed()}
         visible={shown()}
@@ -786,6 +796,9 @@ export default function SessionBrowserPane(props: {
         <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
         <Show when={empty() && !failed() && !suspended()}>
           <div dir="auto" class="size-full overflow-y-auto">
+            <Show when={offering()}>
+              <SignInOffer variant="card" imported={reloadPage} />
+            </Show>
             <Show
               when={recent().length > 0}
               fallback={

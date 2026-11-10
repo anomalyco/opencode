@@ -4,15 +4,19 @@ import { Schema } from "effect"
 import { History } from "./history"
 import en from "./i18n/en"
 
-/** The browser's preferences on this device. `links`: web links in a session open in the browser pane. */
-const Preferences = Schema.Struct({ links: Schema.Boolean })
+/**
+ * The browser's preferences on this device.
+ * - `links`: web links in a session open in the browser pane.
+ * - `welcomed`: the user imported sign-ins or declined the pane's offer, so the pane stops offering.
+ */
+const Preferences = Schema.Struct({ links: Schema.Boolean, welcomed: Schema.Boolean })
 
 export default Plugin.define({
   stores: {
     // Pages the browser showed, for the new tab page and the address field's suggestions. One list for every
     // session and server, kept on this device.
     history: Store.global(History, { visits: [] }),
-    preferences: Store.global(Preferences, { links: true }),
+    preferences: Store.global(Preferences, { links: true, welcomed: false }),
   },
   i18n: builtinCatalog({
     en,
