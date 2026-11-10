@@ -632,3 +632,83 @@ fn clicks_select_rows_and_the_backdrop_closes_the_dialog() {
     kit.app.click(0, 0);
     assert!(!kit.dialogs.is_open());
 }
+
+// Opens a select of `options` with a footer action, and returns its handle.
+fn open_select(kit: &Kit, options: Vec<SelectOption<usize>>) -> select::Select<usize> {
+    let handle = Rc::new(RefCell::new(None));
+    let slot = handle.clone();
+    kit.dialogs.replace(
+        move |cx| {
+            let mut props = SelectProps::new("Pick", options);
+            props.actions = vec![SelectAction::new("model.dialog.favorite", "favorite", |_| {})];
+            let (view, select) = select::select(cx, props);
+            *slot.borrow_mut() = Some(select);
+            view
+        },
+        None,
+        Default::default(),
+    );
+    kit.app.render();
+    handle.take().unwrap()
+}
+
+fn numbered(count: usize, title: impl Fn(usize) -> String) -> Vec<SelectOption<usize>> {
+    (0..count).map(|i| SelectOption::new(title(i), i)).collect()
+}
+
+// Expected (r2 review, bigboi-ui-3): in a 12-row terminal the list has no rows (TS `floor(12 / 2) - 6`), and
+// opening or resizing a picker there does not underflow its height.
+#[test]
+fn a_select_opens_and_resizes_in_a_twelve_row_terminal() {
+    let kit = kit(72, 12);
+    open_models(&kit);
+    kit.app.press("down");
+    kit.app.render();
+    let kit = self::kit(72, 30);
+    open_models(&kit);
+    kit.app.resize(72, 12);
+    kit.app.press("down");
+    kit.app.render();
+}
+
+// Expected (r2 review, carbon-ui-4): the list and its footer follow the terminal size, as TS
+// `useTerminalDimensions()` does, so a resized select draws as one opened at the new size.
+#[test]
+fn a_select_follows_a_terminal_resize() {
+    for ((width, height), (to_width, to_height)) in [((80, 50), (48, 22)), ((48, 22), (80, 50))] {
+        let fresh = self::kit(to_width, to_height);
+        open_select(&fresh, numbered(30, |i| format!("Item {i}")));
+        let expected = fresh.app.render().text();
+        let kit = self::kit(width, height);
+        open_select(&kit, numbered(30, |i| format!("Item {i}")));
+        kit.app.resize(to_width, to_height);
+        assert_eq!(kit.app.render().text(), expected);
+    }
+}
+
+// Expected (r2 review, carbon-ui-5): rows are as tall as the title they draw. A long title cut before its line
+// breaks takes one row, so a move keeps the next row in view; titles that do break keep the `…` while rows are below.
+#[test]
+fn multi_line_titles_scroll_by_the_rows_they_draw() {
+    let kit = kit(72, 30);
+    let select = open_select(
+        &kit,
+        numbered(
+            15,
+            |i| if i == 0 { format!("{}{}", "x".repeat(65), "\nmore".repeat(10)) } else { format!("Item {i}") },
+        ),
+    );
+    kit.app.press("down");
+    let screen = kit.app.render().text();
+    assert!(screen.contains("Item 1"), "{screen}");
+    assert_eq!(select.scroll_top(), 0.0);
+
+    let kit = self::kit(72, 30);
+    open_select(&kit, numbered(15, |i| format!("Item {i}\nsecond\nthird")));
+    for _ in 0..5 {
+        kit.app.press("down");
+        kit.app.render();
+    }
+    let screen = kit.app.render().text();
+    assert!(screen.contains('…'), "{screen}");
+}
