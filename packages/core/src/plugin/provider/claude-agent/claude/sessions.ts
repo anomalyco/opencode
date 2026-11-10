@@ -29,7 +29,6 @@ export interface Request {
   readonly sessionID?: string
   // Native OpenCode fork lineage, or the session supplying a compaction/generate snapshot.
   readonly sourceID?: string
-  readonly compaction?: boolean
   readonly model: string
   readonly effort?: Options["effort"]
   readonly maxOutputTokens?: number
@@ -363,8 +362,6 @@ export function registry() {
       if (!sourceID) return 0
       const source = entries.get(sourceID)
       const copy = Effect.gen(function* () {
-        // Compaction ends the old primary context. Generate only takes a read-only snapshot.
-        if (request.compaction && source) yield* stop(source)
         const record = source?.record ?? (yield* records.get(sourceID))
         return yield* branch(entry, request, record)
       })
