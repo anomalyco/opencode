@@ -314,6 +314,15 @@ fn the_helpers_follow_util_form() {
         (string(json!({ "maxLength": 2 })), text("abc"), Some("Must be at most 2 characters")),
         (string(json!({ "pattern": "^a+$" })), text("ab"), Some("Must match pattern: ^a+$")),
         (string(json!({ "pattern": "(" })), text("ab"), Some("Invalid pattern: (")),
+        // Expected (r2 review, bigboi-ui-7): patterns are JavaScript regular expressions, lookahead included.
+        (string(json!({ "pattern": "^(?!main$)[a-z]+$" })), text("next"), None),
+        (
+            string(json!({ "pattern": "^(?!main$)[a-z]+$" })),
+            text("main"),
+            Some("Must match pattern: ^(?!main$)[a-z]+$"),
+        ),
+        (string(json!({ "pattern": "^(\\w)\\1$" })), text("aa"), None),
+        (string(json!({ "pattern": "^\\d+$" })), text("١٢"), Some("Must match pattern: ^\\d+$")),
         (string(json!({ "format": "email" })), text("a@b"), Some("Expected an email address")),
         (string(json!({ "format": "email" })), text("a@b.dev"), None),
         (string(json!({ "format": "uri" })), text("not a url"), Some("Expected a URL")),
