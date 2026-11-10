@@ -1,4 +1,4 @@
-import { createEffect, createSignal, on, onCleanup } from "solid-js"
+import { createEffect, createSignal, on, onCleanup, type JSX } from "solid-js"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { adjacentTabKey } from "@/shell/titlebar/tab-order"
@@ -19,6 +19,7 @@ import type { SessionRevert } from "@/session/revert"
 import { usePluginClaims, usePluginScoped } from "@/runtime/plugin/commands"
 import type { Region } from "@/runtime/plugin/panels"
 import { sideTabShortcuts } from "@/runtime/plugin/closed-tabs"
+import { useTabs } from "@/shell/tabs/tabs"
 import {
   createCloseTabGuardState,
   createSessionCommandsState,
@@ -28,6 +29,7 @@ import {
   type CloseTabGuardEvent,
   type SessionCommandsEffect,
   type SessionCommandsEvent,
+  type SessionDialogKind,
 } from "@/session/commands/machine"
 
 // Shared by every dispatch: pointer, focus and key events arrive constantly while the guard is disarmed.
@@ -42,7 +44,6 @@ type SessionCommandSource = {
   data: Pick<SessionModel["data"], "info">
   history: Pick<SessionModel["history"], "visibleUserMessages">
   layout: SessionModel["layout"]
-  ownership: SessionModel["ownership"]
 }
 
 export type SessionCommandContext = {
@@ -66,6 +67,25 @@ const withCategory = (category: string) => {
   })
 }
 
+// Loads a dialog's chunk and returns its renderer.
+async function loadDialog(kind: SessionDialogKind): Promise<() => JSX.Element> {
+  if (kind === "fork") {
+    const { DialogFork } = await import("@/session/commands/fork-dialog")
+
+    return () => <DialogFork />
+  }
+
+  if (kind === "palette") {
+    const { DialogCommandPalette } = await import("@/shell/commands/dialog")
+
+    return () => <DialogCommandPalette />
+  }
+
+  const { DialogSelectMcp } = await import("@/providers/connect/mcp-dialog")
+
+  return () => <DialogSelectMcp />
+}
+
 export const useSessionCommands = (actions: SessionCommandContext) => {
   const command = useCommand()
   const dialog = useDialog()
@@ -80,12 +100,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const exporter = useSessionExporter()
   const pluginScoped = usePluginScoped()
   const pluginClaims = usePluginClaims()
-
-  const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
-    const owner = actions.session.ownership.capture()
-    const value = await load()
-    owner.run(() => show(value))
-  }
+  const tabs = useTabs()
 
   // The file the selected side tab shows; other tabs have no line selection.
   const activeFile = () => actions.region.selected()?.tab.file
@@ -100,18 +115,44 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const inSide = actions.region.focus
-  // ⌘T and ⌘W inside the side region open and close its tabs, unless the focused panel binds the key itself there.
+  // ⌘T inside the side region opens one of its tabs, unless the focused panel binds the key itself there.
   const sideKey = (event: KeyboardEvent) => inSide(event) && !pluginClaims(event)
+
+  // As in a browser, ⌘⇧T reopens whichever tab closed last, side or session.
+  const reopensSideTab = () => {
+    const side = actions.region.lastClosedTime()
+
+    if (side === undefined) return false
+    const session = tabs.lastClosedTime()
+
+    return session === undefined || side >= session
+  }
+
   // ⌘W on the side panel's last tab, or on a panel with nothing left to close, closes the panel and moves focus out of
   // it, where one press too many would close the session tab; the guard swallows that press.
   const [closeGuard, setCloseGuard] = createSignal(createCloseTabGuardState())
   let settleFrame: number | undefined
+  let quietTimer: ReturnType<typeof setTimeout> | undefined
 
   const dispatchCloseGuard = (event: CloseTabGuardEvent) => {
     const next = transitionCloseTabGuard(closeGuard(), event)
 
     if (next.state !== closeGuard()) setCloseGuard(next.state)
     next.effects.forEach((effect) => {
+      if (effect.type === "quiet.schedule" || effect.type === "quiet.cancel") {
+        clearTimeout(quietTimer)
+        quietTimer = undefined
+
+        if (effect.type === "quiet.cancel") return
+        const attempt = effect.attempt
+        quietTimer = setTimeout(() => {
+          quietTimer = undefined
+          dispatchCloseGuard({ type: "quiet.elapsed", attempt })
+        }, effect.timeoutMs)
+
+        return
+      }
+
       if (settleFrame !== undefined) cancelAnimationFrame(settleFrame)
       settleFrame = undefined
 
@@ -186,7 +227,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
   const [commandsState, setCommandsState] = createSignal(createSessionCommandsState())
-  let forkModule: typeof import("@/session/commands/fork-dialog") | undefined
+  // Renders each dialog once its chunk has loaded.
+  const dialogs: Partial<Record<SessionDialogKind, () => JSX.Element>> = {}
+  let dialogTimer: ReturnType<typeof setTimeout> | undefined
 
   const dispatchCommands = (event: SessionCommandsEvent) => {
     const next = transitionSessionCommands(commandsState(), event)
@@ -208,22 +251,33 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    if (effect.type === "fork.load") {
-      import("@/session/commands/fork-dialog").then(
-        (mod) => {
-          forkModule = mod
-          dispatchCommands({ type: "fork.loaded", attempt: effect.attempt })
+    if (effect.type === "dialog.load") {
+      const attempt = effect.attempt
+      const kind = effect.kind
+      clearTimeout(dialogTimer)
+      dialogTimer = setTimeout(() => dispatchCommands({ type: "dialog.timed-out", attempt }), effect.timeoutMs)
+      loadDialog(kind).then(
+        (render) => {
+          dialogs[kind] = render
+          dispatchCommands({ type: "dialog.loaded", attempt })
         },
-        (cause: unknown) => dispatchCommands({ type: "fork.load-failed", attempt: effect.attempt, cause }),
+        (cause: unknown) => dispatchCommands({ type: "dialog.load-failed", attempt, cause }),
       )
 
       return
     }
 
-    if (effect.type === "fork.show") {
-      const mod = forkModule
+    if (effect.type === "dialog.cancel") {
+      clearTimeout(dialogTimer)
+      dialogTimer = undefined
 
-      if (mod) dialog.show(() => <mod.DialogFork />)
+      return
+    }
+
+    if (effect.type === "dialog.show") {
+      const render = dialogs[effect.kind]
+
+      if (render) dialog.show(render)
 
       return
     }
@@ -233,12 +287,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   createEffect(
     on(
-      () => actions.session.identity.params.id,
-      (sessionID) => dispatchCommands({ type: "session.changed", sessionID }),
+      () => actions.session.identity.sessionKey(),
+      (sessionKey) => dispatchCommands({ type: "session.changed", sessionKey }),
       { defer: true },
     ),
   )
   onCleanup(() => dispatchCommands({ type: "disposed" }))
+
+  const openDialog = (kind: SessionDialogKind) =>
+    dispatchCommands({ type: "dialog.requested", kind, sessionKey: actions.session.identity.sessionKey() })
 
   const exportSession = () => {
     const sessionID = actions.session.identity.params.id
@@ -290,12 +347,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
   }
 
-  const openFile = () => {
-    void openDialog(
-      () => import("@/shell/commands/dialog"),
-      (x) => dialog.show(() => <x.DialogCommandPalette />),
-    )
-  }
+  const openFile = () => openDialog("palette")
 
   // In the pane holding focus; the region itself, or a key a native page handed over, means the selected tab's pane.
   const focusedPane = () => {
@@ -368,12 +420,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     addSelectionToContext(path, selectionFromLines(range))
   }
 
-  const chooseMcp = () => {
-    void openDialog(
-      () => import("@/providers/connect/mcp-dialog"),
-      (x) => dialog.show(() => <x.DialogSelectMcp />),
-    )
-  }
+  const chooseMcp = () => openDialog("mcp")
 
   const sessionProject = () => projectSettingsKey(serverSDK.scope, actions.session.data.info()?.projectID)
 
@@ -420,9 +467,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const fork = () => {
-    const sessionID = actions.session.identity.params.id
-
-    if (sessionID) dispatchCommands({ type: "fork.requested", sessionID })
+    if (actions.session.identity.params.id) openDialog("fork")
   }
 
   const sessionCmds = () => [
@@ -509,7 +554,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keybind: "mod+w",
         follows: "tab.close",
         hidden: !tab,
-        when: (event) => (side ? sideKey(event) : selectCloseTabSwallowed(closeGuard())),
+        // While the side region is open, ⌘W closes its tabs wherever focus is.
+        when: (event) => (side ? !pluginClaims(event) : selectCloseTabSwallowed(closeGuard())),
         onSelect: (source) => {
           if (!side) return
           closeTab()
@@ -530,13 +576,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           when: sideKey,
           onSelect: openSideTab,
         }),
-      // As in a browser: in the side panel, ⌘⇧T reopens a side tab rather than a session tab.
       fileCommand({
         id: "file.tab.reopen",
         title: "",
         keybind: settings.keybinds.get("tab.reopenClosed") ?? "mod+shift+t",
         hidden: true,
-        when: inSide,
+        when: (event) => reopensSideTab() && !pluginClaims(event),
         onSelect: () => actions.region.reopen(),
       }),
       cycle &&

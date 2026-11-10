@@ -55,7 +55,8 @@ Set HTTP metadata when uploading:
   `application/gzip`. Missing types default to `application/octet-stream`.
 - `Content-Disposition`: use `attachment; filename="..."` when a file should
   download rather than display inline.
-- `Cache-Control`: defaults to `public, max-age=3600` (one hour). Use
+- `Cache-Control`: defaults to `public, max-age=3600` (one hour), or a year
+  (`immutable`) under `site/`, whose files never change in place. Use
   `public, max-age=31536000, immutable` for versioned/content-addressed files,
   and a short TTL or `no-store` for mutable pointers such as `latest.json`.
 

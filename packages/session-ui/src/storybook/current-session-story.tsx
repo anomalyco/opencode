@@ -1,6 +1,6 @@
 import type { SessionDocument } from "../document"
 import { File } from "../components/file"
-import { DataProvider, type ReadMediaUrlFn } from "../context/data"
+import { DataProvider, type ReadMediaUrlFn, type TurnDiffSource } from "../context/data"
 import type { SessionUserActions } from "../message/current-message"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 import { SessionTimeline } from "../timeline/session-timeline"
@@ -13,6 +13,7 @@ export function CurrentSessionProviders(props: {
   document: SessionDocument
   backgroundCompaction?: boolean
   readMedia?: ReadMediaUrlFn
+  turnDiff?: TurnDiffSource
   children: JSX.Element
 }) {
   return (
@@ -29,7 +30,15 @@ export function CurrentSessionProviders(props: {
         ],
         provider: {
           all: new Map<string, { models: Record<string, { name: string }> }>([
-            ["anthropic", { models: { "claude-sonnet-4": { name: "Claude Sonnet 4" } } }],
+            [
+              "anthropic",
+              {
+                models: {
+                  "claude-sonnet-4": { name: "Claude Sonnet 4" },
+                  "claude-opus-5-5": { name: "Claude Opus 5.5" },
+                },
+              },
+            ],
             [
               "company-gateway",
               {
@@ -69,7 +78,7 @@ export function CurrentSessionProviders(props: {
         },
         session_diff: { [CURRENT_SESSION_ID]: props.document.diffs },
       }}
-      turnDiff={{ get: () => props.document.diffs, load: () => {} }}
+      turnDiff={props.turnDiff ?? { state: () => ({ status: "ready", diffs: props.document.diffs }), load: () => {} }}
     >
       <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
     </DataProvider>
@@ -85,6 +94,7 @@ export function CurrentSessionTimelineStory(props: {
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
   turnDiffs?: boolean
+  turnDiff?: TurnDiffSource
   backgroundCompaction?: boolean
   readMedia?: ReadMediaUrlFn
 }) {
@@ -98,7 +108,7 @@ export function CurrentSessionTimelineStory(props: {
       setActivity(`Opened ${file.name ?? file.mime}`)
     },
     revert: (input) => {
-      setActivity(`Rewound to ${input.messageID}`)
+      setActivity(`Reverted to ${input.messageID}`)
     },
     fork: (input) => {
       setActivity(`Forked from ${input.messageID}`)
@@ -129,6 +139,7 @@ export function CurrentSessionTimelineStory(props: {
                 document={document()}
                 backgroundCompaction={props.backgroundCompaction}
                 readMedia={props.readMedia}
+                turnDiff={props.turnDiff}
               >
                 <SessionTimeline
                   document={document()}

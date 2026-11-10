@@ -1,0 +1,890 @@
+{
+  "video": {
+    "/font/film/opencode-font-film-v3-1080p.mp4": [
+      [1920, "av1", "f4aac9d0", 8],
+      [1920, "hevc", "9a8fdd1e", 120]
+    ],
+    "/product-videos/card-hover/angled/desktop.mp4": [
+      [1080, "av1", "000848bb", 8, "hi"],
+      [720, "av1", "7a8ced27", 4],
+      [1080, "hevc", "531a9337", 120, "hi"],
+      [720, "hevc", "e0be8abe", 93]
+    ],
+    "/product-videos/card-hover/angled/mobile.mp4": [
+      [1080, "av1", "89dae645", 8, "hi"],
+      [720, "av1", "e3206614", 4],
+      [1080, "hevc", "5435e165", 120, "hi"],
+      [720, "hevc", "ed3aec1b", 93]
+    ],
+    "/product-videos/card-hover/angled/sdk.mp4": [
+      [1080, "av1", "55343564", 8, "hi"],
+      [720, "av1", "f06221b2", 4],
+      [1080, "hevc", "5416f020", 120, "hi"],
+      [720, "hevc", "3bff7eae", 93]
+    ],
+    "/product-videos/card-hover/angled/terminal.mp4": [
+      [1080, "av1", "6a2adb8e", 8, "hi"],
+      [720, "av1", "a45f7b74", 4],
+      [1080, "hevc", "5802fcd0", 120, "hi"],
+      [720, "hevc", "33b9daa2", 93]
+    ],
+    "/product-videos/card-loops/desktop.ja.mp4": [
+      [1064, "av1", "8d53f4c4", 8, "hi"],
+      [720, "av1", "03051f4d", 4],
+      [720, "hevc", "fcde1a61", 93]
+    ],
+    "/product-videos/card-loops/desktop.mp4": [
+      [1064, "av1", "f04e65f4", 8, "hi"],
+      [720, "av1", "76c67339", 4],
+      [1064, "hevc", "c6be66a2", 120, "hi"],
+      [720, "hevc", "0e1d1030", 93]
+    ],
+    "/product-videos/card-loops/mini.mp4": [
+      [1064, "av1", "39fbf89d", 8, "hi"],
+      [720, "av1", "52c28525", 4],
+      [1064, "hevc", "de5e01b6", 120, "hi"],
+      [720, "hevc", "2adfbc82", 93]
+    ],
+    "/product-videos/card-loops/mobile-orb-75.mp4": [
+      [720, "av1", "a8d0f5bc", 4],
+      [720, "hevc", "a82f1012", 93]
+    ],
+    "/product-videos/card-loops/sdk.mp4": [
+      [1064, "av1", "57dfbb5d", 8, "hi"],
+      [720, "av1", "72327b63", 4],
+      [1064, "hevc", "2eb9fa5f", 120, "hi"],
+      [720, "hevc", "bcf15f91", 93]
+    ],
+    "/product-videos/card-loops/terminal.mp4": [
+      [1064, "av1", "98000a3f", 8, "hi"],
+      [720, "av1", "adf275c5", 4],
+      [1064, "hevc", "cb91d991", 120, "hi"],
+      [720, "hevc", "e8322dc4", 93]
+    ],
+    "/product-videos/features/focused/desktop-1.mp4": [
+      [1200, "av1", "a4464782", 5, "hi"],
+      [800, "av1", "ff6b7fc8", 4],
+      [1200, "hevc", "50b4baf7", 93, "hi"],
+      [800, "hevc", "799d1bf0", 90]
+    ],
+    "/product-videos/features/focused/desktop-2.mp4": [
+      [1200, "av1", "e251cdbe", 5, "hi"],
+      [800, "av1", "89d05408", 4],
+      [1200, "hevc", "71d6859d", 93, "hi"],
+      [800, "hevc", "8bac7e6d", 90]
+    ],
+    "/product-videos/features/focused/desktop-3.mp4": [
+      [1200, "av1", "b919e8f6", 5, "hi"],
+      [800, "av1", "6b677bb1", 4],
+      [1200, "hevc", "c8952b21", 93, "hi"],
+      [800, "hevc", "728a37b0", 90]
+    ],
+    "/product-videos/features/focused/mobile-1.mp4": [
+      [1200, "av1", "8c6b59f1", 5, "hi"],
+      [800, "av1", "4890e570", 4],
+      [1200, "hevc", "e421e436", 93, "hi"],
+      [800, "hevc", "4efad18e", 90]
+    ],
+    "/product-videos/features/focused/mobile-2.mp4": [
+      [1200, "av1", "958b9f7e", 5, "hi"],
+      [800, "av1", "b6c90cc7", 4],
+      [1200, "hevc", "8f9ede87", 93, "hi"],
+      [800, "hevc", "31ef973e", 90]
+    ],
+    "/product-videos/features/focused/mobile-3.mp4": [
+      [1200, "av1", "24da9d95", 5, "hi"],
+      [800, "av1", "71117888", 4],
+      [1200, "hevc", "9d0a71a3", 93, "hi"],
+      [800, "hevc", "c51688d9", 90]
+    ],
+    "/product-videos/features/focused/sdk-1.mp4": [
+      [1200, "av1", "05f321e6", 5, "hi"],
+      [800, "av1", "e0de2928", 4],
+      [1200, "hevc", "8099f20c", 93, "hi"],
+      [800, "hevc", "732b34de", 90]
+    ],
+    "/product-videos/features/focused/sdk-2.mp4": [
+      [1200, "av1", "7ab84c55", 5, "hi"],
+      [800, "av1", "bc734ce4", 4],
+      [1200, "hevc", "6ca8a2ee", 93, "hi"],
+      [800, "hevc", "28ab05ce", 90]
+    ],
+    "/product-videos/features/focused/sdk-3.mp4": [
+      [1200, "av1", "dd8e2cb8", 5, "hi"],
+      [800, "av1", "0d363922", 4],
+      [1200, "hevc", "812d79d4", 93, "hi"],
+      [800, "hevc", "1c339153", 90]
+    ],
+    "/product-videos/features/focused/terminal-1.mp4": [
+      [1200, "av1", "f84ed97c", 5, "hi"],
+      [800, "av1", "8e73a023", 4],
+      [1200, "hevc", "789b0b0c", 93, "hi"],
+      [800, "hevc", "5ede6f33", 90]
+    ],
+    "/product-videos/features/focused/terminal-2.mp4": [
+      [1200, "av1", "34880af7", 5, "hi"],
+      [800, "av1", "39c336ab", 4],
+      [1200, "hevc", "cd7f01de", 93, "hi"],
+      [800, "hevc", "40a6b8c9", 90]
+    ],
+    "/product-videos/features/focused/terminal-3.mp4": [
+      [1200, "av1", "e1cf1a57", 5, "hi"],
+      [800, "av1", "934e672b", 4],
+      [1200, "hevc", "ddc881b8", 93, "hi"],
+      [800, "hevc", "1bfc3877", 90]
+    ],
+    "/product-videos/heroes/desktop-landscape-dark.mp4": [
+      [1280, "av1", "87488462", 5, "phone"],
+      [1920, "av1", "476dd57a", 8],
+      [1280, "hevc", "f9408e0f", 120, "phone"],
+      [1920, "hevc", "4a955f68", 150]
+    ],
+    "/product-videos/heroes/desktop-landscape-light.mp4": [
+      [1280, "av1", "166905a1", 5, "phone"],
+      [1920, "av1", "461fb508", 8],
+      [1280, "hevc", "27a6e47e", 120, "phone"],
+      [1920, "hevc", "d0bae749", 150]
+    ],
+    "/product-videos/heroes/mini-landscape-dark.mp4": [
+      [1280, "av1", "47ac0990", 5, "phone"],
+      [1280, "hevc", "a0d62021", 120, "phone"]
+    ],
+    "/product-videos/heroes/mini-landscape-light.mp4": [
+      [1280, "av1", "d1ec2aa0", 5, "phone"],
+      [1280, "hevc", "cf388476", 120, "phone"]
+    ],
+    "/product-videos/heroes/mobile-landscape-dark.mp4": [
+      [1280, "av1", "968f138e", 5, "phone"],
+      [1920, "av1", "2d4e37e8", 8],
+      [1280, "hevc", "dd010af3", 120, "phone"],
+      [1920, "hevc", "731d098b", 150]
+    ],
+    "/product-videos/heroes/mobile-landscape-light.mp4": [
+      [1280, "av1", "968f138e", 5, "phone"],
+      [1920, "av1", "2d4e37e8", 8],
+      [1280, "hevc", "dd010af3", 120, "phone"],
+      [1920, "hevc", "731d098b", 150]
+    ],
+    "/product-videos/heroes/sdk-landscape-dark.mp4": [
+      [1280, "av1", "034290df", 5, "phone"],
+      [1920, "av1", "29015746", 8],
+      [1280, "hevc", "05b60004", 120, "phone"],
+      [1920, "hevc", "d644d9f8", 150]
+    ],
+    "/product-videos/heroes/sdk-landscape-light.mp4": [
+      [1280, "av1", "e9956023", 5, "phone"],
+      [1920, "av1", "8bbc435d", 8],
+      [1280, "hevc", "39c3c112", 120, "phone"],
+      [1920, "hevc", "2b6ebcca", 150]
+    ],
+    "/product-videos/heroes/terminal-landscape-dark.mp4": [
+      [1280, "av1", "c5372903", 5, "phone"],
+      [1920, "av1", "2b371817", 8],
+      [1280, "hevc", "d717c7ac", 120, "phone"],
+      [1920, "hevc", "0f4dba50", 150]
+    ],
+    "/product-videos/heroes/terminal-landscape-light.mp4": [
+      [1280, "av1", "ea1f17d7", 5, "phone"],
+      [1920, "av1", "51bebb60", 8],
+      [1280, "hevc", "61386db5", 120, "phone"],
+      [1920, "hevc", "3e2fb1e7", 150]
+    ],
+    "/product-videos/more/mini-portrait.mp4": [[720, "av1", "1bdc53ec", 4]]
+  },
+  "image": {
+    "/press-media/thumbs/desktop-feature-1.jpg": {
+      "avif": [[800, "1822385b"]],
+      "webp": [[800, "b4829fec"]]
+    },
+    "/press-media/thumbs/desktop-feature-2.jpg": {
+      "avif": [[800, "731eef8e"]],
+      "webp": [[800, "5cf96a79"]]
+    },
+    "/press-media/thumbs/desktop-feature-3.jpg": {
+      "avif": [[800, "2e76651f"]],
+      "webp": [[800, "37d87433"]]
+    },
+    "/press-media/thumbs/desktop-frame-1.jpg": {
+      "avif": [[800, "18b89f29"]],
+      "webp": [[800, "d750f3e6"]]
+    },
+    "/press-media/thumbs/desktop-frame-2.jpg": {
+      "avif": [[800, "a4c5d7c1"]],
+      "webp": [[800, "46ad2177"]]
+    },
+    "/press-media/thumbs/desktop-frame-3.jpg": {
+      "avif": [[800, "720cd38b"]],
+      "webp": [[800, "a0fd6fd0"]]
+    },
+    "/press-media/thumbs/desktop-frame-4.jpg": {
+      "avif": [[800, "029f1327"]],
+      "webp": [[800, "896417d1"]]
+    },
+    "/press-media/thumbs/desktop-locked-landscape.jpg": {
+      "avif": [[800, "b632e04a"]],
+      "webp": [[800, "93ed9c5f"]]
+    },
+    "/press-media/thumbs/desktop-locked-portrait.jpg": {
+      "avif": [[640, "e4fecb0c"]],
+      "webp": [[640, "25988531"]]
+    },
+    "/press-media/thumbs/mobile-feature-1.jpg": {
+      "avif": [[800, "4ba209d7"]],
+      "webp": [[800, "722ec870"]]
+    },
+    "/press-media/thumbs/mobile-feature-2.jpg": {
+      "avif": [[800, "0c8b41a7"]],
+      "webp": [[800, "74980c6b"]]
+    },
+    "/press-media/thumbs/mobile-feature-3.jpg": {
+      "avif": [[800, "5949f189"]],
+      "webp": [[800, "68e05c93"]]
+    },
+    "/press-media/thumbs/mobile-frame-1.jpg": {
+      "avif": [[800, "5812a0cd"]],
+      "webp": [[800, "43e877de"]]
+    },
+    "/press-media/thumbs/mobile-frame-2.jpg": {
+      "avif": [[800, "c90d164c"]],
+      "webp": [[800, "3dec52ab"]]
+    },
+    "/press-media/thumbs/mobile-frame-3.jpg": {
+      "avif": [[800, "fd662f0f"]],
+      "webp": [[800, "08de705f"]]
+    },
+    "/press-media/thumbs/mobile-locked-landscape.jpg": {
+      "avif": [[800, "59c20c6d"]],
+      "webp": [[800, "9ed3402b"]]
+    },
+    "/press-media/thumbs/mobile-locked-portrait.jpg": {
+      "avif": [[640, "825260b2"]],
+      "webp": [[640, "bf300f5b"]]
+    },
+    "/press-media/thumbs/sdk-feature-1.jpg": {
+      "avif": [[800, "c525226a"]],
+      "webp": [[800, "b5075b3e"]]
+    },
+    "/press-media/thumbs/sdk-feature-2.jpg": {
+      "avif": [[800, "bf28dffa"]],
+      "webp": [[800, "50f24c6f"]]
+    },
+    "/press-media/thumbs/sdk-feature-3.jpg": {
+      "avif": [[800, "3b812098"]],
+      "webp": [[800, "1c2aae3d"]]
+    },
+    "/press-media/thumbs/sdk-frame-1.jpg": {
+      "avif": [[800, "f9436386"]],
+      "webp": [[800, "cd961edf"]]
+    },
+    "/press-media/thumbs/sdk-frame-2.jpg": {
+      "avif": [[800, "f13b6fbe"]],
+      "webp": [[800, "e9a86d7f"]]
+    },
+    "/press-media/thumbs/sdk-frame-3.jpg": {
+      "avif": [[800, "7893e3c1"]],
+      "webp": [[800, "91d3a2b0"]]
+    },
+    "/press-media/thumbs/sdk-frame-4.jpg": {
+      "avif": [[800, "7bcf0c8e"]],
+      "webp": [[800, "be993892"]]
+    },
+    "/press-media/thumbs/sdk-locked-landscape.jpg": {
+      "avif": [[800, "02006d7b"]],
+      "webp": [[800, "f0eee92a"]]
+    },
+    "/press-media/thumbs/sdk-locked-portrait.jpg": {
+      "avif": [[640, "f2a26e89"]],
+      "webp": [[640, "e105d997"]]
+    },
+    "/press-media/thumbs/terminal-feature-1.jpg": {
+      "avif": [[800, "10078433"]],
+      "webp": [[800, "2da9a82a"]]
+    },
+    "/press-media/thumbs/terminal-feature-2.jpg": {
+      "avif": [[800, "2f285f7a"]],
+      "webp": [[800, "34bc75ff"]]
+    },
+    "/press-media/thumbs/terminal-feature-3.jpg": {
+      "avif": [[800, "f72f9ef4"]],
+      "webp": [[800, "70bb71fa"]]
+    },
+    "/press-media/thumbs/terminal-frame-1.jpg": {
+      "avif": [[800, "77f46dd4"]],
+      "webp": [[800, "32e348f9"]]
+    },
+    "/press-media/thumbs/terminal-frame-2.jpg": {
+      "avif": [[800, "3c6f5097"]],
+      "webp": [[800, "66b18f4a"]]
+    },
+    "/press-media/thumbs/terminal-frame-3.jpg": {
+      "avif": [[800, "8b07a968"]],
+      "webp": [[800, "21e1dcbe"]]
+    },
+    "/press-media/thumbs/terminal-frame-4.jpg": {
+      "avif": [[800, "46b2ce7b"]],
+      "webp": [[800, "76c8b715"]]
+    },
+    "/press-media/thumbs/terminal-locked-landscape.jpg": {
+      "avif": [[800, "a46e995f"]],
+      "webp": [[800, "79de7aea"]]
+    },
+    "/press-media/thumbs/terminal-locked-portrait.jpg": {
+      "avif": [[640, "a01fb472"]],
+      "webp": [[640, "38a7dd42"]]
+    },
+    "/product-videos/card-hover/angled-continue/desktop.jpg": {
+      "webp": [[720, "fefff983"]]
+    },
+    "/product-videos/card-hover/angled-continue/mobile.jpg": {
+      "webp": [[720, "8fd6c9d5"]]
+    },
+    "/product-videos/card-hover/angled-continue/sdk.jpg": {
+      "webp": [[720, "98709f6c"]]
+    },
+    "/product-videos/card-hover/angled-continue/terminal.jpg": {
+      "webp": [[720, "123f65ef"]]
+    },
+    "/product-videos/card-hover/angled/desktop.jpg": {
+      "webp": [[720, "0169745e"]]
+    },
+    "/product-videos/card-hover/angled/mobile.jpg": {
+      "webp": [[720, "2ff0d4ea"]]
+    },
+    "/product-videos/card-hover/angled/sdk.jpg": {
+      "webp": [[720, "4ebb2866"]]
+    },
+    "/product-videos/card-hover/angled/terminal.jpg": {
+      "webp": [[720, "99fa03ab"]]
+    },
+    "/product-videos/card-hover/cinematic-continue/desktop.jpg": {
+      "webp": [[720, "4b5e77dc"]]
+    },
+    "/product-videos/card-hover/cinematic-continue/mobile.jpg": {
+      "webp": [[720, "900432c5"]]
+    },
+    "/product-videos/card-hover/cinematic-continue/sdk.jpg": {
+      "webp": [[720, "e1c311dc"]]
+    },
+    "/product-videos/card-hover/cinematic-continue/terminal.jpg": {
+      "webp": [[720, "a0a49d31"]]
+    },
+    "/product-videos/card-hover/cinematic/desktop.jpg": {
+      "webp": [[720, "cb57b827"]]
+    },
+    "/product-videos/card-hover/cinematic/mobile.jpg": {
+      "webp": [[720, "32102875"]]
+    },
+    "/product-videos/card-hover/cinematic/sdk.jpg": {
+      "webp": [[720, "08bab309"]]
+    },
+    "/product-videos/card-hover/cinematic/terminal.jpg": {
+      "webp": [[720, "2ac9fc82"]]
+    },
+    "/product-videos/card-loops/desktop.ja.webp": {
+      "webp": [
+        [720, "eff02b3a"],
+        [1064, "bad4700d"]
+      ]
+    },
+    "/product-videos/card-loops/desktop.webp": {
+      "avif": [
+        [720, "b78820e3"],
+        [1064, "d1a449ae"]
+      ],
+      "webp": [
+        [720, "b4178eb6"],
+        [1064, "548e0561"]
+      ]
+    },
+    "/product-videos/card-loops/mini.webp": {
+      "avif": [
+        [720, "3dd811b6"],
+        [1064, "2e8ee589"]
+      ],
+      "webp": [
+        [720, "41cc4a56"],
+        [1064, "e13963a7"]
+      ]
+    },
+    "/product-videos/card-loops/mobile-orb-0.webp": {
+      "avif": [
+        [720, "934b2435"],
+        [1064, "cc6924ad"]
+      ],
+      "webp": [
+        [720, "41e27deb"],
+        [1064, "f3777286"]
+      ]
+    },
+    "/product-videos/card-loops/mobile-orb-100.webp": {
+      "avif": [
+        [720, "02c6f821"],
+        [1064, "31bcb18e"]
+      ],
+      "webp": [
+        [720, "dc358d30"],
+        [1064, "88a85efe"]
+      ]
+    },
+    "/product-videos/card-loops/mobile-orb-25.webp": {
+      "avif": [
+        [720, "8d1e6f14"],
+        [1064, "76f94643"]
+      ],
+      "webp": [
+        [720, "624eef03"],
+        [1064, "44649c8b"]
+      ]
+    },
+    "/product-videos/card-loops/mobile-orb-50.webp": {
+      "avif": [
+        [720, "f0c9bb68"],
+        [1064, "fa499cf4"]
+      ],
+      "webp": [
+        [720, "b9dbddb2"],
+        [1064, "4520259d"]
+      ]
+    },
+    "/product-videos/card-loops/mobile-orb-75.webp": {
+      "avif": [
+        [720, "d9b2aad6"],
+        [1064, "4b6fb437"]
+      ],
+      "webp": [
+        [720, "b56c68a5"],
+        [1064, "85f6e18e"]
+      ]
+    },
+    "/product-videos/card-loops/mobile.webp": {
+      "avif": [
+        [720, "423f2009"],
+        [1064, "7e36a45a"]
+      ],
+      "webp": [
+        [720, "7cecef91"],
+        [1064, "ff68c026"]
+      ]
+    },
+    "/product-videos/card-loops/sdk.webp": {
+      "avif": [
+        [720, "7f7cf8ff"],
+        [1064, "2233e0e9"]
+      ],
+      "webp": [
+        [720, "9465f11e"],
+        [1064, "ca857f4c"]
+      ]
+    },
+    "/product-videos/card-loops/terminal.webp": {
+      "avif": [
+        [720, "3800cfa8"],
+        [1064, "a1d26253"]
+      ],
+      "webp": [
+        [720, "3e61828d"],
+        [1064, "3bf9d5e7"]
+      ]
+    },
+    "/product-videos/features/desktop-1.jpg": {
+      "avif": [
+        [800, "794e64f6"],
+        [1200, "b9b01b2b"]
+      ],
+      "webp": [
+        [800, "afcf1d7c"],
+        [1200, "bac651a9"]
+      ]
+    },
+    "/product-videos/features/desktop-2.jpg": {
+      "avif": [
+        [800, "ab1783ad"],
+        [1200, "6cf326ed"]
+      ],
+      "webp": [
+        [800, "16f0de99"],
+        [1200, "f153f2eb"]
+      ]
+    },
+    "/product-videos/features/desktop-3.jpg": {
+      "avif": [
+        [800, "79594e37"],
+        [1200, "81d5402c"]
+      ],
+      "webp": [
+        [800, "3a88f408"],
+        [1200, "46c96690"]
+      ]
+    },
+    "/product-videos/features/desktop-4.jpg": {
+      "avif": [
+        [800, "174028b2"],
+        [1200, "36e0bc34"]
+      ],
+      "webp": [
+        [800, "0d4d7459"],
+        [1200, "e6f175b7"]
+      ]
+    },
+    "/product-videos/features/focused/desktop-1.jpg": {
+      "avif": [
+        [800, "03e34000"],
+        [1200, "77f4ddd5"]
+      ],
+      "webp": [
+        [800, "f30e8cdf"],
+        [1200, "7a65c75a"]
+      ]
+    },
+    "/product-videos/features/focused/desktop-2.jpg": {
+      "avif": [
+        [800, "614bfbf1"],
+        [1200, "8baa8925"]
+      ],
+      "webp": [
+        [800, "1bb84f2d"],
+        [1200, "1865160b"]
+      ]
+    },
+    "/product-videos/features/focused/desktop-3.jpg": {
+      "avif": [
+        [800, "7af58928"],
+        [1200, "fb0941ec"]
+      ],
+      "webp": [
+        [800, "08da6df5"],
+        [1200, "a428e0d7"]
+      ]
+    },
+    "/product-videos/features/focused/mobile-1.jpg": {
+      "avif": [
+        [800, "73aa447a"],
+        [1200, "e5fc39cd"]
+      ],
+      "webp": [
+        [800, "d4f3bfc3"],
+        [1200, "2a86128b"]
+      ]
+    },
+    "/product-videos/features/focused/mobile-2.jpg": {
+      "avif": [
+        [800, "40015a82"],
+        [1200, "c6a7fdb9"]
+      ],
+      "webp": [
+        [800, "24c00674"],
+        [1200, "ea68f16b"]
+      ]
+    },
+    "/product-videos/features/focused/mobile-3.jpg": {
+      "avif": [
+        [800, "9a162d80"],
+        [1200, "80a059be"]
+      ],
+      "webp": [
+        [800, "33fa9e7a"],
+        [1200, "c817aa5f"]
+      ]
+    },
+    "/product-videos/features/focused/sdk-1.jpg": {
+      "avif": [
+        [800, "76e31edd"],
+        [1200, "7ba80699"]
+      ],
+      "webp": [
+        [800, "0dcfbabe"],
+        [1200, "849915b1"]
+      ]
+    },
+    "/product-videos/features/focused/sdk-2.jpg": {
+      "avif": [
+        [800, "052a4aa1"],
+        [1200, "06989778"]
+      ],
+      "webp": [
+        [800, "2e95a2a5"],
+        [1200, "a4c08e49"]
+      ]
+    },
+    "/product-videos/features/focused/sdk-3.jpg": {
+      "avif": [
+        [800, "2aec7d9b"],
+        [1200, "5f60734f"]
+      ],
+      "webp": [
+        [800, "9033e067"],
+        [1200, "48b2e788"]
+      ]
+    },
+    "/product-videos/features/focused/terminal-1.jpg": {
+      "avif": [
+        [800, "4a02fd74"],
+        [1200, "c8a272b8"]
+      ],
+      "webp": [
+        [800, "ffbbdcf7"],
+        [1200, "852aa051"]
+      ]
+    },
+    "/product-videos/features/focused/terminal-2.jpg": {
+      "avif": [
+        [800, "d9468eb3"],
+        [1200, "3edf82a2"]
+      ],
+      "webp": [
+        [800, "c0c19f3c"],
+        [1200, "de0812eb"]
+      ]
+    },
+    "/product-videos/features/focused/terminal-3.jpg": {
+      "avif": [
+        [800, "4df3e377"],
+        [1200, "e442b139"]
+      ],
+      "webp": [
+        [800, "1b641814"],
+        [1200, "5c34f726"]
+      ]
+    },
+    "/product-videos/features/mobile-1.jpg": {
+      "avif": [
+        [800, "68f81e70"],
+        [1200, "70d64bb7"]
+      ],
+      "webp": [
+        [800, "89ddf964"],
+        [1200, "d4bdd162"]
+      ]
+    },
+    "/product-videos/features/mobile-2.jpg": {
+      "avif": [
+        [800, "c86a33db"],
+        [1200, "24cc1be2"]
+      ],
+      "webp": [
+        [800, "8da63fb0"],
+        [1200, "17805de1"]
+      ]
+    },
+    "/product-videos/features/mobile-3.jpg": {
+      "avif": [
+        [800, "37df4dbe"],
+        [1200, "f3a942c5"]
+      ],
+      "webp": [
+        [800, "2912e7bc"],
+        [1200, "46532817"]
+      ]
+    },
+    "/product-videos/features/mobile-4.jpg": {
+      "avif": [
+        [800, "51059165"],
+        [1200, "8d7949c3"]
+      ],
+      "webp": [
+        [800, "527ab167"],
+        [1200, "c5bc996d"]
+      ]
+    },
+    "/product-videos/features/sdk-1.jpg": {
+      "avif": [
+        [800, "32f515f9"],
+        [1200, "9f205e4b"]
+      ],
+      "webp": [
+        [800, "ad35e402"],
+        [1200, "662ef595"]
+      ]
+    },
+    "/product-videos/features/sdk-2.jpg": {
+      "avif": [
+        [800, "6a47c79f"],
+        [1200, "42bb6226"]
+      ],
+      "webp": [
+        [800, "03a46008"],
+        [1200, "d56a5491"]
+      ]
+    },
+    "/product-videos/features/sdk-3.jpg": {
+      "avif": [
+        [800, "3304effc"],
+        [1200, "b2a3dec7"]
+      ],
+      "webp": [
+        [800, "394cb529"],
+        [1200, "a5a62685"]
+      ]
+    },
+    "/product-videos/features/terminal-1.jpg": {
+      "avif": [
+        [800, "55a63a74"],
+        [1200, "1291d24c"]
+      ],
+      "webp": [
+        [800, "3ca26323"],
+        [1200, "7ee710db"]
+      ]
+    },
+    "/product-videos/features/terminal-2.jpg": {
+      "avif": [
+        [800, "9eb6f0f8"],
+        [1200, "3aab5a07"]
+      ],
+      "webp": [
+        [800, "1adf652a"],
+        [1200, "07f69f29"]
+      ]
+    },
+    "/product-videos/features/terminal-3.jpg": {
+      "avif": [
+        [800, "0dbbe116"],
+        [1200, "f5ca2957"]
+      ],
+      "webp": [
+        [800, "2756a7d1"],
+        [1200, "2336e789"]
+      ]
+    },
+    "/product-videos/features/terminal-4.jpg": {
+      "avif": [
+        [800, "168c46c2"],
+        [1200, "49d87f47"]
+      ],
+      "webp": [
+        [800, "645c3081"],
+        [1200, "ce830aa0"]
+      ]
+    },
+    "/product-videos/heroes/browse-landscape-dark.webp": {
+      "avif": [
+        [1280, "431eacac"],
+        [1920, "d34997ae"]
+      ],
+      "webp": [
+        [1280, "573fc3b7"],
+        [1920, "d861eb55"]
+      ]
+    },
+    "/product-videos/heroes/browse-landscape-light.webp": {
+      "avif": [
+        [1280, "6ad5a4af"],
+        [1920, "2cb0c207"]
+      ],
+      "webp": [
+        [1280, "2e5a8cca"],
+        [1920, "83c6b047"]
+      ]
+    },
+    "/product-videos/heroes/desktop-landscape-dark.webp": {
+      "avif": [
+        [1280, "70657b3a"],
+        [1920, "23c0bd90"]
+      ],
+      "webp": [
+        [1280, "f817b89d"],
+        [1920, "32c633a2"]
+      ]
+    },
+    "/product-videos/heroes/desktop-landscape-light.webp": {
+      "avif": [
+        [1280, "9201de8e"],
+        [1920, "1332aaca"]
+      ],
+      "webp": [
+        [1280, "f074db99"],
+        [1920, "179e15d7"]
+      ]
+    },
+    "/product-videos/heroes/mini-landscape-dark.webp": {
+      "avif": [
+        [1280, "863b502e"],
+        [1920, "f6c7fc66"]
+      ],
+      "webp": [
+        [1280, "0f8445d6"],
+        [1920, "2092a26f"]
+      ]
+    },
+    "/product-videos/heroes/mini-landscape-light.webp": {
+      "avif": [
+        [1280, "37dd6e3f"],
+        [1920, "a854a4cf"]
+      ],
+      "webp": [
+        [1280, "7d3b853f"],
+        [1920, "99c6e921"]
+      ]
+    },
+    "/product-videos/heroes/mobile-landscape-dark.webp": {
+      "avif": [
+        [1280, "60e09fe8"],
+        [1920, "1d690423"]
+      ],
+      "webp": [
+        [1280, "5250098f"],
+        [1920, "8b5b468b"]
+      ]
+    },
+    "/product-videos/heroes/mobile-landscape-light.webp": {
+      "avif": [
+        [1280, "60e09fe8"],
+        [1920, "1d690423"]
+      ],
+      "webp": [
+        [1280, "5250098f"],
+        [1920, "8b5b468b"]
+      ]
+    },
+    "/product-videos/heroes/sdk-landscape-dark.webp": {
+      "avif": [
+        [1280, "29a88edf"],
+        [1920, "38a152b8"]
+      ],
+      "webp": [
+        [1280, "5fe8d132"],
+        [1920, "9ad858de"]
+      ]
+    },
+    "/product-videos/heroes/sdk-landscape-light.webp": {
+      "avif": [
+        [1280, "e6069fff"],
+        [1920, "73dcb06a"]
+      ],
+      "webp": [
+        [1280, "202546b7"],
+        [1920, "3da381ec"]
+      ]
+    },
+    "/product-videos/heroes/terminal-landscape-dark.webp": {
+      "avif": [
+        [1280, "02bfd299"],
+        [1920, "0fabde00"]
+      ],
+      "webp": [
+        [1280, "d52343a4"],
+        [1920, "86d1dc93"]
+      ]
+    },
+    "/product-videos/heroes/terminal-landscape-light.webp": {
+      "avif": [
+        [1280, "e550c54c"],
+        [1920, "2a5db6a5"]
+      ],
+      "webp": [
+        [1280, "3d513ced"],
+        [1920, "9ed1f329"]
+      ]
+    },
+    "/product-videos/more/mini-portrait.jpg": {
+      "avif": [
+        [720, "2f47a73d"],
+        [1064, "7aa6929e"]
+      ],
+      "webp": [
+        [720, "2fae49da"],
+        [1064, "8aa16ae2"]
+      ]
+    }
+  }
+}

@@ -28,7 +28,7 @@ describe("OpenRouter Images recorded", () => {
           resolution: "2K",
         })
 
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 2752, height: 1536 })
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 2752, height: 1536 })
       }),
     { timeout: 120_000 },
   )
@@ -44,7 +44,7 @@ describe("OpenRouter Images recorded", () => {
           resolution: "1K",
         })
 
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1360, height: 768 })
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1360, height: 768 })
       }),
     { timeout: 120_000 },
   )
@@ -68,8 +68,8 @@ describe("OpenRouter Images recorded", () => {
           providerOptions: { outputFormat: "jpeg", quality: "low", outputCompression: 10 },
         })
 
-        expect(response.image.mediaType).toBe("image/jpeg")
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1024, height: 1024 })
+        expect(response.images[0].mediaType).toBe("image/jpeg")
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1024, height: 1024 })
       }),
     { timeout: 120_000 },
   )

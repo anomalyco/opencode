@@ -391,12 +391,9 @@ The updater's actions branch on the state its main entry pushes and still answer
 <!-- source: src/updater/renderer.tsx#act -->
 
 ```tsx
-const act = (name: "check" | "install") => {
-  if (state()) return void import("./actions").then((module) => module[name](ctx, updater))
-
-  // Not loaded yet, or not active (failed, or not on this platform): nothing can check or install.
-  showToast({ title: ctx.t("common.requestFailed") })
-}
+// Main missing (not loaded yet, failed, or not on this platform) answers that nothing can check or install.
+const act = (name: "check" | "install") =>
+  dispatchWindow({ type: "action.requested", action: name, available: state() !== undefined })
 ```
 
 The pairing settings page waits for its main side only where it needs it. Pairing codes come from the local server's `ServerRef`, so they never wait for main; remote access and the display setting render only while main is active, so the page never offers a switch that cannot answer:

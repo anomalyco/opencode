@@ -320,6 +320,27 @@ export function createProviderDialogController(options: {
       return
     }
 
+    // Desktop opens the browser over IPC, which can hang; a launch that does not answer in time counts as failed, so
+    // the form shows the link to open by hand.
+    if (effect.type === "form.open.browser") {
+      const timeout = Promise.withResolvers<boolean>()
+      const timer = setTimeout(() => timeout.resolve(false), effect.timeoutMs)
+      void Promise.race([
+        Promise.try(() => {
+          if (platform.openBrowser) return platform.openBrowser(effect.url)
+          platform.openExternal(effect.url)
+
+          return true
+        }).catch(() => false),
+        timeout.promise,
+      ]).then((opened) => {
+        clearTimeout(timer)
+        result({ type: "form.browser.opened", attempt: effect.attempt, browser: effect.browser, opened })
+      })
+
+      return
+    }
+
     if (effect.type === "poll") {
       clearTimeout(pollTimer)
       pollTimer = undefined

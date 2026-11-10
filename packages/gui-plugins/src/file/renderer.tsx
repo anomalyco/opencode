@@ -9,7 +9,6 @@ import {
   Suspense,
   untrack,
   type ParentProps,
-  type Signal,
 } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
@@ -20,7 +19,6 @@ import {
   bindPlugin,
   LinkHandler,
   MenuItem,
-  Slot,
   Style,
   usePanel,
   type Files,
@@ -534,21 +532,6 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     import("./open-in-app").then((module) => ({ default: module.OpenInAppMenuItem })),
   )
 
-  // How many "Open in" buttons each screen's panel headers show; the tab strip shows its own only while none do.
-  const headers = new WeakMap<SessionScreen, Signal<number>>()
-
-  const headerButtons = (screen: SessionScreen) => {
-    const existing = headers.get(screen)
-
-    if (existing) return existing
-
-    const created = createSignal(0)
-
-    headers.set(screen, created)
-
-    return created
-  }
-
   if (desktop) {
     onCleanup(
       onIdle(() => {
@@ -566,37 +549,18 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         </FileProvider>
       ),
     })
-    ctx.add(Slot, {
-      at: "session.panel.end",
-      render: (input) => (
-        <Show when={headerButtons(input.screen)[0]() === 0}>
-          <FileProvider>
-            <Suspense>
-              <OpenInAppButton session={input.session} screen={input.screen} />
-            </Suspense>
-          </FileProvider>
-        </Show>
-      ),
-    })
   }
 
   ctx.provide(OpenInApp, {
-    Button: bindPlugin((props: OpenInAppProps) => {
-      const count = headerButtons(props.screen)
-
-      count[1]((value) => value + 1)
-      onCleanup(() => count[1]((value) => value - 1))
-
-      return (
-        <Show when={desktop}>
-          <FileProvider>
-            <Suspense>
-              <OpenInAppButton session={props.session} screen={props.screen} />
-            </Suspense>
-          </FileProvider>
-        </Show>
-      )
-    }),
+    Button: bindPlugin((props: OpenInAppProps) => (
+      <Show when={desktop}>
+        <FileProvider>
+          <Suspense>
+            <OpenInAppButton session={props.session} screen={props.screen} />
+          </Suspense>
+        </FileProvider>
+      </Show>
+    )),
   })
 
   // The review panel lists its changed files with the browser's tree; it renders under this plugin, on the

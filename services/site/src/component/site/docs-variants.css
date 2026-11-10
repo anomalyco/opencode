@@ -1,0 +1,4315 @@
+/* Docs content variants: five Design mode options per docs component (Settings › docsVariants,
+   settings.ts), shown side by side on /dev/docs-components and applied on every docs page. Option 1
+   is the style the docs have today, so it has no rules here. Each option is one block, keyed by the
+   site root's data-docs-variants ("callout-3" and so on) and scoped to docs pages, so a chosen option
+   can be kept and the rest deleted. Vocabulary (from /font, legal, changelog, press and brand):
+   hairline rules, OpenTUI Mono annotations in small uppercase with a little tracking, plates with a ruled
+   header, em dash and tree marks, crosshair grids, pipes on the left, ink (inverted) panels, neutral
+   greys only, square corners. */
+
+[data-page="docs"] {
+  --anno-size: var(--fs-micro, 12px);
+  --anno-track: 0.06em;
+}
+
+/* ───────────── Typography (h3–h6, lead, small, abbr) ─────────────
+   2 · v2's bold mono headings */
+
+[data-page="docs"][data-docs-variants~="typography-2"] [data-component="docs-article"] {
+  :is(h3, h4, h5, h6) {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    line-height: 1.5;
+    color: var(--text-strong);
+  }
+  h3 {
+    margin: 2.25rem 0 0.75rem;
+    font-size: var(--fs-large, 1.125rem);
+  }
+  h4 {
+    margin: 2rem 0 0.75rem;
+    font-size: var(--fs-body);
+  }
+  :is(h5, h6) {
+    margin: 1.5rem 0 0.5rem;
+    font-size: var(--fs-meta);
+  }
+  small {
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+  }
+  abbr {
+    text-decoration: underline dotted;
+    text-underline-offset: 0.2em;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="typography-3"] [data-component="docs-article"] {
+  h3 {
+    margin: 2.5rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid currentColor;
+    font-family: var(--font-mono);
+    font-size: var(--fs-title);
+    font-weight: 400;
+    color: var(--text-strong);
+  }
+  h4 {
+    margin: 1.5rem 0 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
+    font-weight: 400;
+  }
+  :is(h5, h6) {
+    margin: 1.25rem 0 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--anno-size);
+    font-weight: 400;
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+  small {
+    font-family: var(--font-mono);
+    font-size: var(--anno-size);
+    color: var(--text-weak);
+  }
+  abbr {
+    text-decoration: none;
+    border-bottom: 1px solid var(--border-strong);
+  }
+}
+
+/* Heading rhythm (David, 5 Nov 2026), on the 8/12/16/24 steps with more space above than below:
+   H2 32 above and 12 below, H3 24 and 8, H4 to H6 16 and 8. Margins collapse, so stacked headings
+   take the larger of the two gaps rather than their sum, and the text after a heading starts at the
+   heading's bottom margin. */
+[data-page="docs"][data-docs-variants~="typography-4"] [data-component="docs-article"] {
+  h2 {
+    margin: 2rem 0 0.75rem;
+  }
+  h3 {
+    margin: 1.5rem 0 0.5rem;
+  }
+  h4 {
+    margin: 1rem 0 0.5rem;
+  }
+  :is(h3, h4) {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    color: var(--text-strong);
+  }
+  h3 {
+    font-size: var(--fs-title);
+  }
+  h4 {
+    font-size: var(--fs-body);
+  }
+  :is(h5, h6) {
+    margin: 1rem 0 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--anno-size);
+    font-weight: 400;
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  small {
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="typography-5"] [data-component="docs-article"] {
+  :is(h3, h4, h5, h6) {
+    margin: 2rem 0 0.75rem;
+    font-family: var(--font-sans);
+    color: var(--text-strong);
+  }
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  h4 {
+    font-size: var(--fs-title);
+    font-weight: 500;
+  }
+  h5 {
+    font-size: var(--fs-body);
+    font-weight: 600;
+  }
+  h6 {
+    font-size: var(--fs-small);
+    font-weight: 600;
+    color: var(--text-weak);
+  }
+  [data-slot="lead"] {
+    font-size: var(--fs-lead);
+    color: var(--text-strong);
+  }
+  small {
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+  }
+}
+
+/* Option 6, the site scale (★ the default, 5 Nov 2026): the marketing site's tokens and the typography
+   review (local review notes), so docs read like the rest of the site. Levels only step down:
+   H1 the page title and H2 the section title (OpenTUI Mono, as on the home page), H3 and H4 in Inter by
+   weight, H5 and H6 as uppercase mono labels that never go below small text. The lead is one step
+   above the body; small is one step below. Phones get the larger values from the token block. */
+[data-page="docs"][data-docs-variants~="typography-6"] [data-component="docs-article"] {
+  :is(h1, h2, h3, h4, h5, h6) {
+    color: var(--text-strong);
+    scroll-margin-top: var(--content-top);
+    text-wrap: balance;
+  }
+
+  h1 {
+    margin: 0 0 1.25rem;
+    font: 400 var(--fs-h1) / 1.1 var(--font-mono);
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    margin: 3.5rem 0 1rem;
+    font: 400 var(--fs-title) / 1.3 var(--font-mono);
+    letter-spacing: 0;
+    -webkit-text-stroke: var(--title-stroke);
+  }
+
+  h3 {
+    margin: 2.25rem 0 0.75rem;
+    font: 600 var(--fs-read) / 1.4 var(--font-sans);
+  }
+
+  h4 {
+    margin: 1.75rem 0 0.5rem;
+    font: 500 var(--fs-read) / 1.4 var(--font-sans);
+  }
+
+  :is(h5, h6) {
+    margin: 1.5rem 0 0.5rem;
+    font: 400 var(--fs-small) / 1.4 var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  h6 {
+    color: var(--text-weak);
+  }
+
+  :is(header p, p[data-slot="lead"]) {
+    font-size: var(--fs-lead);
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+
+  small {
+    font-size: var(--fs-small);
+    line-height: 1.4;
+    color: var(--text-weak);
+  }
+
+  abbr {
+    text-decoration: underline dotted;
+    text-underline-offset: 0.2em;
+  }
+}
+
+/* ───────────── Lists (generic ul and ol) ─────────────
+   2 · v2's native bullets and numbers (1.5rem indent, 0.5rem between items) · 3 · square bullets,
+   [n] numbers · 4 · tree marks · 5 · middots and boxed numbers */
+
+[data-page="docs"]:is([data-docs-variants~="lists-3"], [data-docs-variants~="lists-4"], [data-docs-variants~="lists-5"])
+  [data-component="docs-article"] {
+  :is(ul, ol):not([data-component], [data-slot]) {
+    margin: 0 0 1rem;
+    padding: 0;
+    list-style: none;
+    counter-reset: item;
+
+    li {
+      position: relative;
+      margin-bottom: 0.375rem;
+      padding-inline-start: 1.75rem;
+      counter-increment: item;
+    }
+
+    :is(ul, ol) {
+      margin: 0.375rem 0 0;
+    }
+  }
+
+  ul[data-slot="tasks"] {
+    padding: 0;
+    list-style: none;
+
+    input {
+      accent-color: var(--text-strong);
+      margin-inline-end: 0.5rem;
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="lists-2"] [data-component="docs-article"] {
+  :is(ul, ol):not([data-component], [data-slot]) {
+    margin: 0 0 1.5rem;
+    padding-left: 1.5rem;
+
+    &:is(ul) {
+      list-style: disc;
+    }
+
+    &:is(ol) {
+      list-style: decimal;
+    }
+
+    li + li {
+      margin-top: 0.5rem;
+    }
+
+    li::marker {
+      color: var(--text-weak);
+    }
+
+    :is(ul, ol) {
+      margin: 0.5rem 0 0;
+    }
+  }
+
+  ul[data-slot="tasks"] {
+    padding: 0;
+    list-style: none;
+  }
+}
+
+/* The list item's first line height, computed on the item and inherited as a length, so a marker
+   with its own font (the mono [n]) still centres on the item's line, not its own. */
+@property --marker-line {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+/* Option 3, the chosen one (★ 5 Nov 2026). Every marker (squares, [n] numbers, task checkboxes, the
+   download dashes) sits in one 2.5rem marker column (wide enough for a clear gap after "[n]"), centred on the column's centreline and on the
+   first line's middle (Inter's cap height), so they all share one vertical axis and the text
+   starts at the same x. A nested list starts at its parent's text, a whole column in, and centres
+   its markers on its own column. Numbers are mono in the muted grey, like the nav's [1]. */
+[data-page="docs"][data-docs-variants~="lists-3"] [data-component="docs-article"] {
+  --marker-column: 2.5rem;
+
+  :is(:is(ul, ol):not([data-component], [data-slot]), ul[data-slot="tasks"], [data-component="downloads"]) > li {
+    --marker-line: 1lh;
+    position: relative;
+    padding-inline-start: var(--marker-column);
+  }
+
+  :is(ul:not([data-component], [data-slot]), [data-component="downloads"]) > li::before,
+  ol:not([data-component], [data-slot]) > li::before,
+  ul[data-slot="tasks"] > li > input {
+    position: absolute;
+    inset-inline-start: calc(var(--marker-column) / 2);
+    top: calc(var(--marker-line) / 2);
+    translate: calc(-50% * var(--x-dir, 1)) -50%;
+    margin: 0;
+  }
+
+  ul:not([data-component], [data-slot]) > li::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    background: var(--text-strong);
+  }
+
+  ol:not([data-component], [data-slot]) > li::before {
+    content: "[" counter(item) "]";
+    font: 400 var(--fs-meta) / 1 var(--font-mono);
+    color: var(--text-muted);
+  }
+
+  ul[data-slot="tasks"] {
+    margin: 0 0 1rem;
+
+    > li {
+      margin-bottom: 0.375rem;
+    }
+
+    /* A 16px square box with the strong border (3:1), filled with ink and a check in the page
+       colour when checked, in both themes. */
+    > li > input {
+      appearance: none;
+      display: grid;
+      place-content: center;
+      width: 16px;
+      height: 16px;
+      border: 1px solid var(--border-strong);
+      border-radius: 0;
+      background: var(--bg);
+
+      &:checked {
+        border-color: var(--text-strong);
+        background: var(--text-strong);
+
+        &::before {
+          content: "";
+          width: 5px;
+          height: 9px;
+          border: solid var(--bg);
+          border-width: 0 2px 2px 0;
+          rotate: 45deg;
+          translate: 0 -1px;
+        }
+      }
+    }
+  }
+
+  [data-component="downloads"] > li::before {
+    width: 0.75em;
+    height: 1px;
+    min-height: 1px;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="lists-4"] [data-component="docs-article"] {
+  ul:not([data-component], [data-slot]) > li::before {
+    content: "├─";
+    position: absolute;
+    left: 0;
+    font-family: var(--font-mono);
+    color: var(--text-weaker);
+  }
+  ul:not([data-component], [data-slot]) > li:last-child::before {
+    content: "└─";
+  }
+  ol:not([data-component], [data-slot]) > li::before {
+    content: counter(item) " ·";
+    position: absolute;
+    left: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="lists-5"] [data-component="docs-article"] {
+  ul:not([data-component], [data-slot]) > li::before {
+    content: "·";
+    position: absolute;
+    left: 0.375rem;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--text-strong);
+  }
+  ol:not([data-component], [data-slot]) > li::before {
+    content: counter(item);
+    position: absolute;
+    left: 0;
+    top: 0.2em;
+    width: 1.25rem;
+    border: 1px solid var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: var(--anno-size);
+    line-height: 1.25rem;
+    text-align: center;
+    color: var(--text-strong);
+  }
+}
+
+/* ───────────── Blockquote ─────────────
+   2 · v2's 2px muted rule and muted text · 3 · a large open quote · 4 · a plate with a ruled head
+   5 · a tinted panel with mono "> " marks */
+
+[data-page="docs"][data-docs-variants~="blockquote-2"] [data-component="docs-article"] blockquote {
+  margin: 0 0 1.5rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--text-muted);
+  font-weight: 500;
+  color: var(--text-weak);
+
+  p:last-child {
+    margin: 0;
+  }
+
+  code {
+    font-weight: 400;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="blockquote-3"] [data-component="docs-article"] blockquote {
+  position: relative;
+  margin: 0 0 1.25rem;
+  padding-left: 2rem;
+  font-size: var(--fs-lead);
+  line-height: 1.45;
+  color: var(--text-strong);
+
+  &::before {
+    content: "“";
+    position: absolute;
+    left: 0;
+    top: -0.1em;
+    font-family: var(--font-mono);
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--text-weaker);
+  }
+
+  p:last-child {
+    margin: 0;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="blockquote-4"] [data-component="docs-article"] blockquote {
+  margin: 0 0 1.25rem;
+  padding: 0 1rem 1rem;
+  border: 1px solid var(--border);
+
+  &::before {
+    content: "Quote";
+    display: block;
+    margin: 0 -1rem 1rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: var(--anno-size);
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+
+  p:last-child {
+    margin: 0;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="blockquote-5"] [data-component="docs-article"] blockquote {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-weak);
+  color: var(--text-strong);
+
+  p::before {
+    content: "> ";
+    font-family: var(--font-mono);
+    color: var(--text-weak);
+  }
+
+  p:last-child {
+    margin: 0;
+  }
+}
+
+/* ───────────── Callout (note, tip, caution, danger) ─────────────
+   From the docs' asides (v1 Starlight uses a left rule, v2 a bordered box with an uppercase title).
+   2 · 2px neutral rule, mono label · 3 · 3px coloured rule, tint, coloured label
+   4 · 1px rule, plain, sentence label · 5 · the v2 box, tip and warning tinted */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="callout-2"],
+    [data-docs-variants~="callout-3"],
+    [data-docs-variants~="callout-4"],
+    [data-docs-variants~="callout-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="callout"] {
+  /* Rule colour, and a darker (lighter in dark) ink that keeps 4.5:1 for the label. */
+  --callout-rule: var(--link);
+  --callout-ink: var(--link);
+  display: block;
+  margin: 0 0 1.5rem;
+  color: var(--text);
+
+  &[data-type="tip"] {
+    --callout-rule: var(--status-ok);
+    --callout-ink: light-dark(hsl(142, 70%, 26%), hsl(142, 60%, 62%));
+  }
+
+  &[data-type="caution"] {
+    --callout-rule: var(--status-degraded);
+    --callout-ink: light-dark(hsl(35, 95%, 28%), hsl(42, 90%, 62%));
+  }
+
+  &[data-type="danger"] {
+    --callout-rule: var(--status-outage);
+    --callout-ink: light-dark(hsl(0, 72%, 40%), hsl(0, 80%, 70%));
+  }
+
+  > strong {
+    display: block;
+    margin-bottom: 0.375rem;
+    color: var(--text-strong);
+  }
+
+  > div > :last-child {
+    margin-bottom: 0;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="callout-2"] [data-component="docs-article"] [data-component="callout"] {
+  padding: 0.125rem 0 0.125rem 1rem;
+  border-left: 2px solid var(--border-strong);
+
+  > strong {
+    font: 400 var(--anno-size) / 1.4 var(--font-mono);
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="callout-3"] [data-component="docs-article"] [data-component="callout"] {
+  padding: 1rem;
+  border-inline-start: 3px solid var(--callout-rule);
+  background: color-mix(in srgb, var(--callout-rule) 7%, transparent);
+
+  /* The text is body copy (Typography 4's body size, line height and colour), never the lead. */
+  > div {
+    font: 400 var(--fs-read) / 1.6 var(--font-sans);
+    color: var(--text);
+
+    > p:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  /* On the red tint the code header label steps one shade darker, to keep a margin over 4.5:1. */
+  &[data-type="danger"] {
+    --code-label: light-dark(#5e5e5e, #8f8f8f);
+  }
+
+  /* The label in the mono font's bold, a confident semibold at 12px (the label only, not bold text
+     inside the callout). */
+  > strong {
+    font: 700 var(--anno-size) / 1.4 var(--font-mono);
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+    color: var(--callout-ink);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="callout-4"] [data-component="docs-article"] [data-component="callout"] {
+  padding: 0 0 0 1rem;
+  border-left: 1px solid var(--callout-rule);
+
+  > strong {
+    display: inline;
+    margin: 0 0.375rem 0 0;
+    font-weight: 600;
+  }
+
+  > div {
+    display: inline;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="callout-5"] [data-component="docs-article"] [data-component="callout"] {
+  padding: 1rem;
+  border: 1px solid var(--border);
+
+  > strong {
+    margin-bottom: 0.5rem;
+    font: 500 var(--anno-size) / 1.4 var(--font-mono);
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+  }
+
+  &:is([data-type="tip"], [data-type="caution"], [data-type="danger"]) {
+    border-color: color-mix(in srgb, var(--callout-rule) 45%, var(--border));
+    background: color-mix(in srgb, var(--callout-rule) 7%, transparent);
+
+    strong {
+      color: var(--callout-ink);
+    }
+  }
+}
+
+/* ───────────── Tabs (code tabs and plan tabs) ─────────────
+   1 is the v2 code tabs (2px underline). 2 · Starlight's 2px track under the row, Inter labels
+   3 · v2 plan tabs, bold labels on a 1px rule · 4 · pills (Next.js, Vercel) · 5 · v2 compact, 12px mono,
+   1px underline */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="tabs-2"],
+    [data-docs-variants~="tabs-3"],
+    [data-docs-variants~="tabs-4"],
+    [data-docs-variants~="tabs-5"],
+    [data-docs-variants~="tabs-6"]
+  )
+  [data-component="docs-article"]
+  [data-component="plan-tabs"] {
+  margin: 0 0 1.5rem;
+
+  [role="tablist"] {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-sans);
+    font-size: var(--fs-ui);
+  }
+
+  [role="tab"] {
+    margin-bottom: -1px;
+    padding: 0.5rem 1rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+
+    &[aria-selected="true"] {
+      border-bottom-color: var(--text-strong);
+      color: var(--text-strong);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="tabs-2"] [data-component="docs-article"] {
+  [data-component="code-tabs"] {
+    border: 0;
+
+    [data-slot="code"] {
+      border: 1px solid var(--border);
+      border-top: 0;
+    }
+
+    /* The track is a shadow, so the scrolling row doesn't clip the selected tab's underline. */
+    [data-slot="tabs"] {
+      gap: 0;
+      padding: 0;
+      border-bottom: 0;
+      box-shadow: inset 0 -2px 0 var(--border);
+      font-family: var(--font-sans);
+      font-size: var(--fs-ui);
+      font-weight: 500;
+
+      button {
+        padding: 0.5rem 1.25rem;
+        margin-bottom: 0;
+      }
+    }
+  }
+
+  [data-component="plan-tabs"] {
+    [role="tablist"] {
+      border-bottom-width: 2px;
+      font-weight: 500;
+    }
+
+    [role="tab"] {
+      margin-bottom: -2px;
+      padding: 0.5rem 1.25rem;
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="tabs-3"] [data-component="docs-article"] {
+  [data-component="code-tabs"] [data-slot="tabs"] {
+    gap: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    font-size: var(--fs-ui);
+    font-weight: 600;
+
+    button {
+      padding: 0.5rem 1rem;
+    }
+  }
+
+  [data-component="plan-tabs"] [role="tab"] {
+    font-weight: 600;
+  }
+}
+
+/* Pills, as in the Next.js, Vercel and Anthropic docs. The selected tab gets the faint chip fill,
+   and the row stays on the block's surface. */
+[data-page="docs"][data-docs-variants~="tabs-4"] [data-component="docs-article"] {
+  :is([data-component="code-tabs"] [data-slot="tabs"], [data-component="plan-tabs"] [role="tablist"]) {
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  [data-component="plan-tabs"] [role="tablist"] {
+    padding-inline: 0;
+  }
+
+  :is([data-component="code-tabs"] [data-slot="tabs"] button, [data-component="plan-tabs"] [role="tab"]) {
+    margin: 0;
+    padding: 0.25rem 0.625rem;
+    border-bottom: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+
+    &[aria-selected="true"] {
+      background: var(--bg-weaker);
+      color: var(--text-strong);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="tabs-5"] [data-component="docs-article"] {
+  :is([data-component="code-tabs"] [data-slot="tabs"], [data-component="plan-tabs"] [role="tablist"]) {
+    gap: 0;
+    padding: 0;
+  }
+
+  :is([data-component="code-tabs"] [data-slot="tabs"] button, [data-component="plan-tabs"] [role="tab"]) {
+    padding: 0.5rem 0.875rem;
+    border-bottom-width: 1px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro, 12px);
+  }
+}
+
+/* With the Vercel square code tabs, plan tabs (which switch prose, not code) take the code tabs'
+   label: OpenTUI Mono, muted until selected, with the 2px ink underline and an inside focus ring. */
+[data-page="docs"][data-docs-variants~="tabs-6"] [data-component="docs-article"] [data-component="plan-tabs"] {
+  [role="tablist"] {
+    overflow-x: auto;
+    scrollbar-width: none;
+    font-family: var(--font-mono);
+  }
+
+  [role="tab"] {
+    flex-shrink: 0;
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &[aria-selected="true"] {
+      color: var(--text-strong);
+      -webkit-text-stroke: var(--title-stroke);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
+  }
+}
+
+/* ───────────── Code block (plain pre) ─────────────
+   From v2's pre (1px border, 0.875rem 1rem, 13px). 2 · v2 · 3 · v2 on a tinted surface
+   4 · rules above and below only · 5 · a 2px left rule, no box */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="code-2"],
+    [data-docs-variants~="code-3"],
+    [data-docs-variants~="code-4"],
+    [data-docs-variants~="code-5"]
+  )
+  [data-component="docs-article"]
+  pre:not([data-component]) {
+  margin: 0 0 1.5rem;
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  color: var(--text-strong);
+
+  code {
+    padding: 0;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="code-2"] [data-component="docs-article"] pre:not([data-component]) {
+  border: 1px solid var(--border);
+}
+
+[data-page="docs"][data-docs-variants~="code-3"] [data-component="docs-article"] pre:not([data-component]) {
+  border: 1px solid var(--border);
+  background: var(--bg-weak);
+}
+
+[data-page="docs"][data-docs-variants~="code-4"] [data-component="docs-article"] pre:not([data-component]) {
+  padding-inline: 0;
+  border-block: 1px solid var(--border);
+}
+
+[data-page="docs"][data-docs-variants~="code-5"] [data-component="docs-article"] pre:not([data-component]) {
+  padding: 0.25rem 0 0.25rem 1rem;
+  border-left: 2px solid var(--border-strong);
+}
+
+/* ───────────── Titled code (figure with a caption) ─────────────
+   From v2's astro-code-figure (bordered, a 12px muted caption row with a bottom rule).
+   2 · v2 · 3 · v2 with a OpenTUI Mono uppercase caption · 4 · the caption as a tab above the box
+   5 · v2 with a file mark before the name (Next.js, Vercel) */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="codeTitle-2"],
+    [data-docs-variants~="codeTitle-3"],
+    [data-docs-variants~="codeTitle-4"],
+    [data-docs-variants~="codeTitle-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="code-figure"] {
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--border);
+
+  figcaption {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: var(--anno-size);
+    line-height: 1.4;
+    color: var(--text-weak);
+  }
+
+  pre {
+    margin: 0;
+    padding: 0.875rem 1rem;
+    border: 0;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    line-height: 1.6;
+    color: var(--text-strong);
+  }
+
+  code {
+    padding: 0;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="codeTitle-3"] [data-component="docs-article"] [data-component="code-figure"] {
+  figcaption {
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="codeTitle-4"] [data-component="docs-article"] [data-component="code-figure"] {
+  border: 0;
+
+  figcaption {
+    display: inline-block;
+    margin-bottom: -1px;
+    padding: 0.375rem 0.875rem;
+    border: 1px solid var(--border);
+    border-bottom-color: var(--bg);
+    position: relative;
+    background: var(--bg);
+    color: var(--text-strong);
+  }
+
+  pre {
+    border: 1px solid var(--border);
+  }
+}
+
+/* A file mark before the name, as in the Next.js and Vercel docs, so a file reads apart from a
+   terminal (whose header has ">_"). */
+[data-page="docs"][data-docs-variants~="codeTitle-5"]
+  [data-component="docs-article"]
+  [data-component="code-figure"]
+  figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  &::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    background: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='black' stroke-width='1'%3E%3Cpath d='M2.5 1.5h4.5l2.5 2.5v6.5h-7z'/%3E%3Cpath d='M7 1.5v2.5h2.5'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+  }
+}
+
+/* ───────────── Line numbers and highlighted lines ─────────────
+   2 · v2's box, marked rows on the faint surface · 3 · a ruled number gutter (Supabase, Tailwind)
+   4 · v2's box, a 2px link-blue bar and tint on marked rows · 5 · rules above and below */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="codeLines-2"],
+    [data-docs-variants~="codeLines-3"],
+    [data-docs-variants~="codeLines-4"],
+    [data-docs-variants~="codeLines-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="code-lines"] {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  white-space: pre;
+  color: var(--text-strong);
+
+  code {
+    display: block;
+    padding: 0 1.25rem 0 0;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+
+    &::before {
+      content: attr(data-line);
+      display: inline-block;
+      width: 3rem;
+      padding-right: 1rem;
+      text-align: right;
+      color: var(--text-weaker);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="codeLines-2"] [data-component="docs-article"] [data-component="code-lines"] {
+  border: 1px solid var(--border);
+
+  code[data-mark] {
+    background: var(--bg-weak);
+  }
+}
+
+/* A ruled number gutter, as in the Supabase and Tailwind docs; a highlighted row is tinted across and
+   its number takes the link colour. */
+[data-page="docs"][data-docs-variants~="codeLines-3"] [data-component="docs-article"] [data-component="code-lines"] {
+  border: 1px solid var(--border);
+
+  code::before {
+    margin-right: 1rem;
+    padding-right: 0.75rem;
+    border-right: 1px solid var(--border);
+  }
+
+  code[data-mark] {
+    background: color-mix(in srgb, var(--link) 8%, transparent);
+
+    &::before {
+      color: var(--link);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="codeLines-4"] [data-component="docs-article"] [data-component="code-lines"] {
+  border: 1px solid var(--border);
+
+  code[data-mark] {
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+    box-shadow: inset 2px 0 0 var(--link);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="codeLines-5"] [data-component="docs-article"] [data-component="code-lines"] {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+
+  code::before {
+    margin-right: 1rem;
+    border-right: 1px solid var(--border);
+  }
+
+  code[data-mark]::before {
+    content: "› " attr(data-line);
+    color: var(--text-strong);
+  }
+
+  code[data-mark] {
+    font-weight: 700;
+  }
+}
+
+/* ───────────── Diff ─────────────
+   2 · bars and tints, removed lines struck through · 3 · a coloured +/- gutter (Tailwind, GitHub)
+   4 · bars and tints in v2's box · 5 · rules above and below, added lines bold */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="codeDiff-2"],
+    [data-docs-variants~="codeDiff-3"],
+    [data-docs-variants~="codeDiff-4"],
+    [data-docs-variants~="codeDiff-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="code-diff"] {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  white-space: pre;
+  color: var(--text-strong);
+
+  code {
+    display: block;
+    padding: 0 1.25rem;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+  }
+}
+
+/* Removed and added lines get the highlighted lines' left bar (codeLines-4, 2px inset) in red and
+   green, on soft tints of the same colours. Options 2 to 4 share it; 5 keeps its rules-only look. */
+[data-page="docs"]:is(
+    [data-docs-variants~="codeDiff-2"],
+    [data-docs-variants~="codeDiff-3"],
+    [data-docs-variants~="codeDiff-4"]
+  )
+  [data-component="docs-article"]
+  [data-component="code-diff"] {
+  --diff-del: light-dark(hsl(0, 75%, 48%), hsl(0, 85%, 62%));
+  --diff-add: light-dark(hsl(142, 70%, 34%), hsl(142, 65%, 50%));
+
+  [data-diff="-"] {
+    background: color-mix(in srgb, var(--diff-del) 10%, transparent);
+    box-shadow: inset 2px 0 0 var(--diff-del);
+  }
+
+  [data-diff="+"] {
+    background: color-mix(in srgb, var(--diff-add) 12%, transparent);
+    box-shadow: inset 2px 0 0 var(--diff-add);
+  }
+}
+
+[data-page="docs"]:is([data-docs-variants~="codeDiff-2"], [data-docs-variants~="codeDiff-4"])
+  [data-component="docs-article"]
+  [data-component="code-diff"] {
+  border: 1px solid var(--border);
+}
+
+/* The +/- signs in their own ruled gutter, coloured, as in the Tailwind and GitHub diffs. */
+[data-page="docs"][data-docs-variants~="codeDiff-3"] [data-component="docs-article"] [data-component="code-diff"] {
+  border: 1px solid var(--border);
+
+  code {
+    padding-left: 0;
+  }
+
+  [data-slot="sign"] {
+    display: inline-block;
+    width: 2rem;
+    margin-right: 0.75rem;
+    border-right: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-weaker);
+  }
+
+  [data-diff="-"] [data-slot="sign"] {
+    color: var(--diff-del);
+  }
+
+  [data-diff="+"] [data-slot="sign"] {
+    color: var(--diff-add);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="codeDiff-2"]
+  [data-component="docs-article"]
+  [data-component="code-diff"]
+  [data-diff="-"] {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--diff-del) 60%, transparent);
+}
+
+[data-page="docs"][data-docs-variants~="codeDiff-5"] [data-component="docs-article"] [data-component="code-diff"] {
+  border-top: 1px solid var(--text-strong);
+  border-bottom: 1px solid var(--text-strong);
+
+  [data-diff="+"] {
+    font-weight: 700;
+  }
+
+  [data-diff="-"] {
+    color: var(--text-muted);
+  }
+}
+
+/* ───────────── Terminal (the dark command block) ─────────────
+   1 is the OpenCode dark theme. 2 · v2's bordered pre, monochrome · 3 · dark with v2's caption row
+   4 · the code surface with a ">_ Terminal" header row (Vercel, Tailwind) · 5 · dark with v1's
+   Expressive Code terminal frame */
+
+[data-page="docs"]:is([data-docs-variants~="terminal-2"], [data-docs-variants~="terminal-4"])
+  [data-component="docs-article"]
+  [data-component="code-block"] {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-strong);
+
+  [data-token] {
+    color: inherit;
+  }
+
+  :is([data-token="prompt"], [data-token="output"]) {
+    color: var(--text-weak);
+  }
+}
+
+/* The code surface with a ">_ Terminal" header row, as in the Vercel and Tailwind docs: the label,
+   not a colour, says it's a shell. */
+[data-page="docs"][data-docs-variants~="terminal-4"] [data-component="docs-article"] [data-component="code-block"] {
+  padding-top: 0;
+
+  &::before {
+    content: ">_  Terminal";
+    display: block;
+    margin: 0 -1rem 0.875rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--anno-size);
+    line-height: 1.4;
+    white-space: pre;
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="terminal-3"] [data-component="docs-article"] [data-component="code-block"] {
+  padding: 0 1rem 0.875rem;
+
+  &::before {
+    content: "Terminal";
+    display: block;
+    margin: 0 -1rem 0.875rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid #2e2e2e;
+    font-size: var(--anno-size);
+    color: #a0a0a0;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="terminal-5"] [data-component="docs-article"] [data-component="code-block"] {
+  padding: 0 1rem 0.875rem;
+
+  /* Three window dots on a bar, as in v1's terminal frames. */
+  &::before {
+    content: "";
+    display: block;
+    height: 2rem;
+    margin: 0 -1rem 0.875rem;
+    border-bottom: 1px solid #2e2e2e;
+    background:
+      radial-gradient(circle, #555 3.5px, transparent 4px) 1rem center / 8px 8px no-repeat,
+      radial-gradient(circle, #555 3.5px, transparent 4px) 1.75rem center / 8px 8px no-repeat,
+      radial-gradient(circle, #555 3.5px, transparent 4px) 2.5rem center / 8px 8px no-repeat,
+      #161616;
+  }
+}
+
+/* ───────────── File tree ─────────────
+   v2 has none, so these put the tree in v2's code frames. 2 · v2's pre box · 3 · v2's figure with a
+   "Files" caption row · 4 · v2's tinted surface · 5 · v1's quiet list, a 2px left rule and no box */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="fileTree-2"],
+    [data-docs-variants~="fileTree-3"],
+    [data-docs-variants~="fileTree-4"],
+    [data-docs-variants~="fileTree-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="file-tree"] {
+  margin: 0 0 1.5rem;
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  line-height: 1.7;
+  color: var(--text-strong);
+}
+
+[data-page="docs"][data-docs-variants~="fileTree-2"] [data-component="docs-article"] [data-component="file-tree"] {
+  border: 1px solid var(--border);
+}
+
+[data-page="docs"][data-docs-variants~="fileTree-3"] [data-component="docs-article"] [data-component="file-tree"] {
+  padding-top: 0;
+  border: 1px solid var(--border);
+
+  &::before {
+    content: "Files";
+    display: block;
+    margin: 0 -1rem 0.875rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--anno-size);
+    line-height: 1.4;
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="fileTree-4"] [data-component="docs-article"] [data-component="file-tree"] {
+  border: 1px solid var(--border);
+  background: var(--bg-weak);
+}
+
+[data-page="docs"][data-docs-variants~="fileTree-5"] [data-component="docs-article"] [data-component="file-tree"] {
+  padding: 0.125rem 0 0.125rem 1rem;
+  border-left: 2px solid var(--border-strong);
+}
+
+/* ───────────── Steps ─────────────
+   2 · Starlight's bullets made square, with the guide line · 3 · the same with ink bullets
+   4 · v2's plain numbered list · 5 · large leading-zero numbers */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="steps-2"],
+    [data-docs-variants~="steps-3"],
+    [data-docs-variants~="steps-4"],
+    [data-docs-variants~="steps-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="steps"] {
+  margin: 0 0 1.5rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+
+  > li {
+    position: relative;
+    counter-increment: step;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+/* In every Steps option a code block in a step spans the step's text column, 12px under the text. */
+[data-page="docs"] [data-component="docs-article"] [data-component="steps"] > li {
+  > :is([data-component="code-frame"], [data-component="code-tabs"]) {
+    min-width: 0;
+    width: auto;
+    margin: 0.75rem 0 0;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+}
+
+[data-page="docs"]:is([data-docs-variants~="steps-2"], [data-docs-variants~="steps-3"])
+  [data-component="docs-article"]
+  [data-component="steps"]
+  > li {
+  padding-block: 0 1.25rem;
+  padding-inline: 2.75rem 0;
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+
+  &::before {
+    content: counter(step);
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid var(--border-strong);
+    background: var(--bg);
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    line-height: 1.625rem;
+    text-align: center;
+    color: var(--text-strong);
+  }
+
+  /* The guide line from one bullet to the next. */
+  &:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: calc(0.875rem - 0.5px);
+    top: 2.25rem;
+    bottom: 0.5rem;
+    width: 1px;
+    background: var(--border);
+  }
+
+  p {
+    padding-top: 0.125rem;
+  }
+}
+
+/* David's pick (5 Nov 2026): a step reads as one body paragraph, its opening sentence in the same
+   weight as the rest, never a heading. */
+[data-page="docs"][data-docs-variants~="steps-2"] [data-component="docs-article"] [data-component="steps"] > li p {
+  font: inherit;
+  color: inherit;
+
+  strong {
+    font-weight: inherit;
+    color: inherit;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="steps-3"]
+  [data-component="docs-article"]
+  [data-component="steps"]
+  > li::before {
+  border-color: var(--bg-strong);
+  background: var(--bg-strong);
+  color: var(--text-inverted);
+}
+
+[data-page="docs"][data-docs-variants~="steps-4"] [data-component="docs-article"] [data-component="steps"] {
+  padding-left: 1.5rem;
+  list-style: decimal;
+
+  > li + li {
+    margin-top: 0.5rem;
+  }
+
+  > li::marker {
+    color: var(--text-weak);
+  }
+}
+
+/* The number hangs in a 3.5rem gutter and everything in the step (text, code) spans the column after
+   it. (A two-column grid put a code block under the number, 110px wide.) */
+[data-page="docs"][data-docs-variants~="steps-5"] [data-component="docs-article"] [data-component="steps"] > li {
+  position: relative;
+  margin-bottom: 1.5rem;
+  padding-left: 3.5rem;
+
+  &::before {
+    position: absolute;
+    top: 0;
+    left: 0;
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--font-mono);
+    font-size: var(--fs-entry);
+    line-height: 1;
+    color: var(--text-weak);
+  }
+}
+
+/* ───────────── Cards ─────────────
+   From v2's Card and CardGroup (1px border, 1rem padding, 0.75rem gap, muted description, the
+   surface on hover). 2 · v2 · 3 · v2 with OpenTUI Mono titles · 4 · v1's link card, an arrow at the right
+   5 · one joined grid with shared rules */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="cards-2"],
+    [data-docs-variants~="cards-3"],
+    [data-docs-variants~="cards-4"],
+    [data-docs-variants~="cards-5"]
+  )
+  [data-component="docs-article"] {
+  [data-component="card-group"] {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.75rem;
+    margin: 0 0 1.5rem;
+
+    /* CardGroup cols={n} sets the column count; phones stack. */
+    &[style*="--card-columns"] {
+      grid-template-columns: repeat(var(--card-columns), minmax(0, 1fr));
+
+      @media (max-width: 40rem) {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    > [data-component="docs-card"] {
+      margin: 0;
+    }
+  }
+
+  /* A card on its own, outside a group, is spaced like any block. */
+  [data-component="docs-card"] {
+    display: block;
+    margin: 0 0 1.5rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    color: var(--text-strong);
+    text-decoration: none;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease;
+
+    strong {
+      display: block;
+      margin-bottom: 0.375rem;
+      font-weight: 600;
+    }
+
+    div {
+      color: var(--text-weak);
+      font-size: var(--fs-small);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--bg-weak);
+      }
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="cards-3"] [data-component="docs-article"] [data-component="docs-card"] strong {
+  font-family: var(--font-mono);
+  font-size: var(--anno-size);
+  letter-spacing: var(--anno-track);
+  text-transform: uppercase;
+  font-weight: 400;
+}
+
+[data-page="docs"][data-docs-variants~="cards-4"]
+  [data-component="docs-article"]
+  [data-component="card-group"]
+  [data-component="docs-card"] {
+  position: relative;
+  padding-right: 2.5rem;
+
+  &::after {
+    content: "→";
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    translate: 0 -50%;
+    color: var(--text-weak);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      border-color: var(--border-strong);
+      background: none;
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="cards-5"] [data-component="docs-article"] [data-component="card-group"] {
+  gap: 0;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+
+  [data-component="docs-card"] {
+    border-top: 0;
+    border-left: 0;
+  }
+}
+
+/* ───────────── Tables ─────────────
+   From v2's prose tables (13px, a rule under every row, no side padding on the left).
+   2 · v2 · 3 · v2 with a OpenTUI Mono uppercase head on a strong rule · 4 · v2 with zebra rows
+   5 · a full grid */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="tables-2"],
+    [data-docs-variants~="tables-3"],
+    [data-docs-variants~="tables-4"],
+    [data-docs-variants~="tables-5"]
+  )
+  [data-component="docs-article"]
+  table:not(:is([data-component="api-operation"], [data-component="cli-command"]) table) {
+  width: 100%;
+  margin: 0 0 1.5rem;
+  border-collapse: collapse;
+  font-size: var(--fs-meta);
+
+  :is(th, td) {
+    padding-block: 0.5rem;
+    padding-inline: 0 1rem;
+    border-bottom: 1px solid var(--border);
+    text-align: start;
+    vertical-align: top;
+  }
+
+  th {
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+
+  /* Keys and types stay on one line; a wide table scrolls in its wrapper. */
+  td code {
+    white-space: nowrap;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="tables-3"]
+  [data-component="docs-article"]
+  table:not(:is([data-component="api-operation"], [data-component="cli-command"]) table) {
+  th {
+    border-bottom-color: var(--text-strong);
+    font: 400 var(--anno-size) / 1.4 var(--font-mono);
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="tables-4"]
+  [data-component="docs-article"]
+  table:not(:is([data-component="api-operation"], [data-component="cli-command"]) table) {
+  :is(th, td) {
+    padding-inline: 0.75rem;
+    border-bottom: 0;
+  }
+
+  th {
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr:nth-child(even) {
+    background: var(--bg-weak);
+  }
+}
+
+/* David's pick (5 Nov 2026), with the head in the reference tables' label style (12px OpenTUI Mono,
+   uppercase, +0.04em, grey) on the code header tone, and 12px inside every cell. */
+[data-page="docs"][data-docs-variants~="tables-5"]
+  [data-component="docs-article"]
+  table:not(:is([data-component="api-operation"], [data-component="cli-command"]) table) {
+  :is(th, td) {
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+  }
+
+  th {
+    background: var(--code-head);
+    font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--ref-head);
+    -webkit-text-stroke: var(--title-stroke);
+  }
+}
+
+/* ───────────── Badges ─────────────
+   v2 has no badge, so 2 borrows its API method chip (a currentColor border, 11px bold uppercase).
+   3 · v1's Starlight badge, a soft tint · 4 · an ink chip · 5 · a mono label in brackets */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="badges-2"],
+    [data-docs-variants~="badges-3"],
+    [data-docs-variants~="badges-4"],
+    [data-docs-variants~="badges-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="badge"]:not([data-method]) {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  font-family: var(--font-mono);
+  font-size: var(--anno-size);
+  line-height: 1.3;
+  vertical-align: 0.1em;
+  color: var(--text-weak);
+}
+
+[data-page="docs"][data-docs-variants~="badges-2"]
+  [data-component="docs-article"]
+  [data-component="badge"]:not([data-method]) {
+  border: 1px solid currentColor;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+[data-page="docs"][data-docs-variants~="badges-3"]
+  [data-component="docs-article"]
+  [data-component="badge"]:not([data-method]) {
+  background: var(--bg-weaker);
+  font-family: var(--font-sans);
+  color: var(--text-strong);
+}
+
+[data-page="docs"][data-docs-variants~="badges-4"]
+  [data-component="docs-article"]
+  [data-component="badge"]:not([data-method]) {
+  background: var(--bg-strong);
+  color: var(--text-inverted);
+  letter-spacing: var(--anno-track);
+  text-transform: uppercase;
+}
+
+[data-page="docs"][data-docs-variants~="badges-5"]
+  [data-component="docs-article"]
+  [data-component="badge"]:not([data-method]) {
+  padding: 0;
+
+  &::before {
+    content: "[";
+  }
+
+  &::after {
+    content: "]";
+  }
+}
+
+/* ───────────── Details ─────────────
+   From v2's API operations (rows on a rule, "+" and "-" at the right, the surface on hover, the body
+   on a faint surface). 2 · v2 · 3 · v1's Starlight disclosure, a marker on the left and a ruled body
+   4 · v2's row in its own box · 5 · v2 with mono summaries */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="details-2"],
+    [data-docs-variants~="details-3"],
+    [data-docs-variants~="details-4"],
+    [data-docs-variants~="details-5"]
+  )
+  [data-component="docs-article"]
+  details:not([data-component]) {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+
+  &:first-of-type {
+    border-top: 1px solid var(--border);
+  }
+
+  &:last-of-type {
+    margin-bottom: 1.5rem;
+  }
+
+  summary {
+    position: relative;
+    display: block;
+    padding: 0.875rem 2.5rem 0.875rem 0.75rem;
+    list-style: none;
+    cursor: pointer;
+    color: var(--text-strong);
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &::after {
+      content: "+";
+      position: absolute;
+      right: 0.75rem;
+      font-family: var(--font-mono);
+      color: var(--text-weak);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--bg-weak);
+      }
+    }
+  }
+
+  &[open] summary::after {
+    content: "-";
+  }
+
+  > :not(summary) {
+    margin: 0;
+    padding: 1rem 0.75rem 1.25rem;
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-weak) 55%, transparent);
+  }
+}
+
+/* Option 2, the chosen one (5 Nov 2026): the site's FAQ plus and minus (site.css [data-component="faq"]):
+   two 12px by 1px bars, the vertical one collapsing into the minus with scale 200ms var(--ease-out),
+   set in by the row's side padding. An open item reads as one block: one tint, no line between the
+   question and the answer, and the space under the answer equals the space above it. */
+[data-page="docs"][data-docs-variants~="details-2"] [data-component="docs-article"] details:not([data-component]) {
+  &[open] {
+    background: color-mix(in srgb, var(--bg-weak) 55%, transparent);
+  }
+
+  summary {
+    --padding-top: 0.875rem;
+    padding-block: var(--padding-top) 0.875rem;
+    padding-inline: 1rem 3rem;
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      inset-inline-end: 1rem;
+      top: calc(var(--padding-top) + 0.5lh - 0.5px);
+      width: 12px;
+      height: 1px;
+      background: var(--text-weak);
+      transition: background-color 150ms ease;
+    }
+
+    &::after {
+      rotate: 90deg;
+      transition:
+        scale 200ms var(--ease-out),
+        background-color 150ms ease;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: none;
+
+        &::before,
+        &::after {
+          background: var(--text-strong);
+        }
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
+  }
+
+  &[open] summary::after {
+    content: "";
+    scale: 0 1;
+  }
+
+  > :not(summary) {
+    padding: 0 1rem 0.875rem;
+    border-top: 0;
+    background: none;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="details-3"] [data-component="docs-article"] details:not([data-component]) {
+  border: 0;
+
+  &:first-of-type {
+    border: 0;
+  }
+
+  summary {
+    padding: 0.375rem 0 0.375rem 1.25rem;
+
+    &::after {
+      content: "";
+      right: auto;
+      left: 0.125rem;
+      top: 0.95em;
+      width: 0;
+      height: 0;
+      border-block: 4px solid transparent;
+      border-left: 6px solid var(--text-weak);
+      transition: rotate 150ms ease;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: none;
+      }
+    }
+  }
+
+  &[open] summary::after {
+    content: "";
+    rotate: 90deg;
+  }
+
+  > :not(summary) {
+    margin: 0.25rem 0 0.75rem 0.25rem;
+    padding: 0 0 0 1rem;
+    border-top: 0;
+    border-left: 2px solid var(--border);
+    background: none;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="details-4"] [data-component="docs-article"] details:not([data-component]) {
+  border: 1px solid var(--border);
+
+  & + & {
+    margin-top: 0.5rem;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="details-5"]
+  [data-component="docs-article"]
+  details:not([data-component])
+  summary {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+
+/* ───────────── Images and video ─────────────
+   From v2's prose images (full width, natural height). 2 · v2 with a 12px muted caption below
+   3 · a 1px frame · 4 · in v2's code figure, the caption as a ruled row above · 5 · on a tinted mat */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="media-2"],
+    [data-docs-variants~="media-3"],
+    [data-docs-variants~="media-4"],
+    [data-docs-variants~="media-5"]
+  )
+  [data-component="docs-article"]
+  figure:not([data-component]) {
+  margin: 0 0 1.5rem;
+
+  :is(img, video) {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+  }
+
+  figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--fs-small);
+    line-height: 1.4;
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="media-3"]
+  [data-component="docs-article"]
+  figure:not([data-component])
+  :is(img, video) {
+  border: 1px solid var(--border);
+}
+
+[data-page="docs"][data-docs-variants~="media-4"] [data-component="docs-article"] figure:not([data-component]) {
+  display: flex;
+  flex-direction: column-reverse;
+  border: 1px solid var(--border);
+
+  figcaption {
+    margin: 0;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="media-5"] [data-component="docs-article"] figure:not([data-component]) {
+  padding: 1rem;
+  background: var(--bg-weak);
+
+  figcaption {
+    margin-top: 0.75rem;
+  }
+}
+
+/* ───────────── API reference ─────────────
+   2 · a bordered operation with v2's coloured method labels · 3 · an ink method chip on a strong rule
+   4 · a 2px left rule · 5 · see below */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="api-2"],
+    [data-docs-variants~="api-3"],
+    [data-docs-variants~="api-4"],
+    [data-docs-variants~="api-5"],
+    [data-docs-variants~="api-6"]
+  )
+  [data-component="docs-article"]
+  [data-component="api-operation"] {
+  margin: 0 0 1.5rem;
+
+  > p:first-child {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0;
+    font-family: var(--font-mono);
+
+    code {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--text-strong);
+    }
+  }
+
+  > p {
+    margin: 0.75rem 0;
+  }
+}
+
+[data-page="docs"]:is([data-docs-variants~="api-2"], [data-docs-variants~="api-6"])
+  [data-component="docs-article"]
+  [data-component="api-operation"] {
+  padding: 0 1rem 1rem;
+  border: 1px solid var(--border);
+
+  > p:first-child {
+    margin: 0 -1rem;
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* v2's method colours, darkened in light mode for 4.5:1. */
+  [data-component="badge"] {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: 700 0.6875rem / 1.2 var(--font-mono);
+    text-transform: uppercase;
+
+    &[data-method="get"] {
+      color: light-dark(hsl(217, 80%, 42%), #73a7ff);
+    }
+
+    &[data-method="post"] {
+      color: light-dark(hsl(147, 60%, 28%), #70c997);
+    }
+
+    &:is([data-method="put"], [data-method="patch"]) {
+      color: light-dark(hsl(35, 80%, 30%), #e0af68);
+    }
+
+    &[data-method="delete"] {
+      color: light-dark(hsl(0, 65%, 42%), #e67c7c);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="api-3"] [data-component="docs-article"] [data-component="api-operation"] {
+  > p:first-child [data-component="badge"] {
+    padding: 0.125rem 0.5rem;
+    border: 0;
+    background: var(--bg-strong);
+    color: var(--text-inverted);
+  }
+
+  > p:first-child {
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--text-strong);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="api-4"] [data-component="docs-article"] [data-component="api-operation"] {
+  padding-left: 1rem;
+  border-left: 2px solid var(--text-strong);
+}
+
+[data-page="docs"][data-docs-variants~="api-5"] [data-component="docs-article"] [data-component="api-operation"] {
+  > p:first-child {
+    padding: 0.75rem 1rem;
+    background: var(--bg-weak);
+  }
+}
+
+/* ───────────── Config reference ─────────────
+   From v2's schema properties (a two-column grid on row rules, the type muted). 2 · v2
+   3 · stacked rows, the description under the key · 4 · v2's rows in a box · 5 · a 2px left rule
+   per key */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="config-2"],
+    [data-docs-variants~="config-3"],
+    [data-docs-variants~="config-4"],
+    [data-docs-variants~="config-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="config-reference"] {
+  margin: 0 0 1.5rem;
+
+  dt {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    color: var(--text-strong);
+
+    [data-component="badge"] {
+      padding: 0;
+      border: 0;
+      background: none;
+      font-family: var(--font-mono);
+      font-size: var(--anno-size);
+      color: var(--text-weak);
+    }
+  }
+
+  dd {
+    margin: 0;
+    color: var(--text);
+  }
+}
+
+[data-page="docs"]:is([data-docs-variants~="config-2"], [data-docs-variants~="config-4"])
+  [data-component="docs-article"]
+  [data-component="config-reference"] {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) minmax(0, 2fr);
+  border-top: 1px solid var(--border);
+
+  :is(dt, dd) {
+    padding: 0.75rem 1rem 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="config-4"] [data-component="docs-article"] [data-component="config-reference"] {
+  border: 1px solid var(--border);
+  border-bottom: 0;
+
+  dt {
+    padding-left: 1rem;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="config-3"] [data-component="docs-article"] [data-component="config-reference"] {
+  border-top: 1px solid var(--border);
+
+  dt {
+    padding-top: 0.75rem;
+  }
+
+  dd {
+    padding: 0.25rem 0 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="config-5"] [data-component="docs-article"] [data-component="config-reference"] {
+  dt {
+    padding: 0.125rem 0 0 1rem;
+    border-left: 2px solid var(--border-strong);
+  }
+
+  dd {
+    margin-bottom: 1rem;
+    padding: 0.25rem 0 0.125rem 1rem;
+    border-left: 2px solid var(--border-strong);
+    color: var(--text-weak);
+  }
+}
+
+/* ───────────── CLI reference ─────────────
+   From v2's commands page (the usage in a pre, flags in a ruled table). 2 · v2's bordered usage
+   3 · the usage in v2's figure with a "Usage" caption · 4 · the usage in the dark terminal
+   5 · the usage as a "$" line, no box */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="cli-2"],
+    [data-docs-variants~="cli-3"],
+    [data-docs-variants~="cli-4"],
+    [data-docs-variants~="cli-5"],
+    [data-docs-variants~="cli-6"]
+  )
+  [data-component="docs-article"]
+  [data-component="cli-command"] {
+  margin: 0 0 1.5rem;
+
+  pre {
+    margin: 0 0 0.75rem;
+    padding: 0.875rem 1rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    color: var(--text-strong);
+
+    code {
+      padding: 0;
+      background: none;
+      color: inherit;
+      font-size: inherit;
+    }
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-meta);
+  }
+
+  :is(th, td) {
+    padding-block: 0.5rem;
+    padding-inline: 0 1rem;
+    border-bottom: 1px solid var(--border);
+    text-align: start;
+    vertical-align: top;
+  }
+
+  th {
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+
+  td code {
+    white-space: nowrap;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="cli-2"] [data-component="docs-article"] [data-component="cli-command"] pre {
+  border: 1px solid var(--border);
+}
+
+[data-page="docs"][data-docs-variants~="cli-3"] [data-component="docs-article"] [data-component="cli-command"] pre {
+  padding-top: 0;
+  border: 1px solid var(--border);
+
+  &::before {
+    content: "Usage";
+    display: block;
+    margin: 0 -1rem 0.875rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--anno-size);
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="cli-4"] [data-component="docs-article"] [data-component="cli-command"] pre {
+  background: #0a0a0a;
+  color: #eeeeee;
+}
+
+[data-page="docs"][data-docs-variants~="cli-5"] [data-component="docs-article"] [data-component="cli-command"] pre {
+  padding: 0;
+
+  &::before {
+    content: "$ ";
+    color: var(--text-weak);
+  }
+}
+
+/* ───────────── Prev / next ─────────────
+   v2 has none, so these follow v1's Starlight pagination (two boxes, a small label over the title,
+   next aligned right). 2 · v1's boxes · 3 · arrows on a rule, no boxes · 4 · OpenTUI Mono labels on a
+   rule · 5 · one compact line */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="pagination-2"],
+    [data-docs-variants~="pagination-3"],
+    [data-docs-variants~="pagination-4"],
+    [data-docs-variants~="pagination-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="pagination"] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 2rem 0 1.5rem;
+
+  a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--text-strong);
+    text-decoration: none;
+    font-size: var(--fs-title);
+  }
+
+  a[rel="next"] {
+    grid-column: 2;
+    text-align: end;
+  }
+
+  small {
+    font-size: var(--fs-small);
+    color: var(--text-weak);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="pagination-2"] [data-component="docs-article"] [data-component="pagination"] a {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  transition: border-color 150ms ease;
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      border-color: var(--border-strong);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="pagination-3"] [data-component="docs-article"] [data-component="pagination"] {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+
+  a[rel="prev"] small::before {
+    content: "← ";
+  }
+
+  a[rel="next"] small::after {
+    content: " →";
+  }
+}
+
+[data-page="docs"][data-docs-variants~="pagination-4"] [data-component="docs-article"] [data-component="pagination"] {
+  padding-top: 1rem;
+  border-top: 1px solid var(--text-strong);
+
+  a {
+    font-size: var(--fs-body);
+  }
+
+  small {
+    font-family: var(--font-mono);
+    font-size: var(--anno-size);
+    letter-spacing: var(--anno-track);
+    text-transform: uppercase;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="pagination-5"] [data-component="docs-article"] [data-component="pagination"] {
+  display: flex;
+  justify-content: space-between;
+
+  a {
+    display: inline;
+    font-size: var(--fs-body);
+  }
+
+  small {
+    display: none;
+  }
+
+  a[rel="prev"]::before {
+    content: "← ";
+    color: var(--text-weak);
+  }
+
+  a[rel="next"]::after {
+    content: " →";
+    color: var(--text-weak);
+  }
+}
+
+/* ───────────── Contents rail (option 1 is the pipe rail in on-this-page.css) ───────────── */
+
+[data-page="docs"][data-docs-variants~="contents-2"] [data-component="on-this-page"] ul {
+  counter-reset: contents;
+
+  a {
+    counter-increment: contents;
+
+    &::after {
+      content: counter(contents, decimal-leading-zero);
+      float: right;
+      color: var(--text-weaker);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="contents-3"] [data-component="on-this-page"] {
+  a::before {
+    content: "├─";
+    top: var(--rail-pad);
+    width: auto;
+    height: auto;
+    background: none !important;
+    color: var(--text-weaker);
+  }
+
+  li:last-child a::before {
+    content: "└─";
+  }
+
+  a {
+    padding-left: 2.5ch;
+  }
+
+  [data-slot="heading"] {
+    padding-left: 2.5ch;
+  }
+
+  a[aria-current="location"]::before {
+    color: var(--text-strong);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="contents-4"] [data-component="on-this-page"] {
+  a::before {
+    display: none;
+  }
+
+  /* As in v2's sidebar, the current item in the link colour. */
+  a[aria-current="location"] {
+    color: var(--link);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="contents-5"] [data-component="on-this-page"] {
+  a::before {
+    display: none;
+  }
+
+  a[aria-current="location"] {
+    background: var(--bg-weaker);
+  }
+
+  @media (hover: hover) {
+    a:hover:not([aria-current="location"]) {
+      background: var(--bg-weak);
+    }
+  }
+}
+
+/* ───────────── Breadcrumbs ─────────────
+   Neither docs has breadcrumbs, so these use v2's sidebar voice (muted links, the current page in
+   the foreground). 2 · 13px muted · 3 · OpenTUI Mono uppercase · 4 · underlined links · 5 · over a rule */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="breadcrumbs-2"],
+    [data-docs-variants~="breadcrumbs-3"],
+    [data-docs-variants~="breadcrumbs-4"],
+    [data-docs-variants~="breadcrumbs-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="breadcrumbs"] {
+  margin: 0 0 1rem;
+  font-size: var(--fs-meta);
+  color: var(--text-weaker);
+
+  a {
+    color: var(--text-weak);
+    text-decoration: none;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+  }
+
+  [aria-current] {
+    color: var(--text-strong);
+  }
+}
+
+[data-page="docs"][data-docs-variants~="breadcrumbs-3"] [data-component="docs-article"] [data-component="breadcrumbs"] {
+  font-family: var(--font-mono);
+  font-size: var(--anno-size);
+  letter-spacing: var(--anno-track);
+  text-transform: uppercase;
+}
+
+[data-page="docs"][data-docs-variants~="breadcrumbs-4"]
+  [data-component="docs-article"]
+  [data-component="breadcrumbs"]
+  a {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 0.25em;
+}
+
+[data-page="docs"][data-docs-variants~="breadcrumbs-5"] [data-component="docs-article"] [data-component="breadcrumbs"] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ───────────── Search box ───────────── */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="search-2"],
+    [data-docs-variants~="search-3"],
+    [data-docs-variants~="search-4"]
+  )
+  [data-component="docs-aside"]
+  [data-slot="search"] {
+  align-self: stretch;
+  justify-content: space-between;
+  min-width: 12rem;
+  height: 2.25rem;
+  padding: 0 0.5rem 0 0.75rem;
+}
+
+[data-page="docs"][data-docs-variants~="search-2"] [data-component="docs-aside"] [data-slot="search"] {
+  border: 1px solid var(--border-strong);
+}
+
+[data-page="docs"][data-docs-variants~="search-3"] [data-component="docs-aside"] [data-slot="search"] {
+  padding-left: 0;
+  border-bottom: 1px solid var(--text-strong);
+}
+
+/* David's pick (5 Nov 2026): the box's start edge on the Contents rail line, the label on the
+   rail's text column (the pipe gutter as inline padding), and the shortcut as a plain mono "⌘K"
+   (no brackets, 6 Nov), kept in that order in RTL by its dir="ltr". */
+[data-page="docs"][data-docs-variants~="search-4"] [data-component="docs-aside"] [data-slot="search"] {
+  margin-left: 0;
+  padding: 0 var(--rail-gutter);
+  background: var(--bg-weak);
+
+  kbd,
+  &:is(:hover, :active, [aria-expanded="true"]) kbd {
+    gap: 0;
+    margin-block: 0;
+    padding: 0;
+    background: none;
+    font-family: var(--font-mono);
+    color: var(--text-weak);
+
+    svg {
+      margin-inline: 1px;
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="search-5"] [data-component="docs-aside"] [data-slot="search"] {
+  flex-direction: row-reverse;
+
+  kbd {
+    background: none;
+    padding: 0;
+
+    &::before {
+      content: "[";
+    }
+
+    &::after {
+      content: "]";
+    }
+  }
+}
+
+/* ───────────── Switchers (language and version selects) ─────────────
+   2 · v2's search trigger (1px border, 2.25rem, muted, the border darkens on hover) · 3 · v1's
+   Starlight select, a globe and no border · 4 · an underline · 5 · a tinted field */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="switchers-2"],
+    [data-docs-variants~="switchers-3"],
+    [data-docs-variants~="switchers-4"],
+    [data-docs-variants~="switchers-5"]
+  )
+  :is([data-component="docs-article"], [data-slot="footer-controls"])
+  select {
+  appearance: none;
+  min-height: 2.25rem;
+  padding-block: 0;
+  padding-inline: 0.75rem 2rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23808080' stroke-width='1.5'%3E%3Cpath d='M4 6l4 4l4-4'/%3E%3C/svg%3E")
+    no-repeat var(--x-end, right) 0.5rem center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--text-weak);
+  cursor: pointer;
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      color: var(--text-strong);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="switchers-2"]
+  :is([data-component="docs-article"], [data-slot="footer-controls"])
+  select {
+  min-width: 9.5rem;
+  border: 1px solid var(--border);
+  transition: border-color 150ms ease;
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      border-color: var(--text-weak);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="switchers-3"] [data-component="docs-article"] select {
+  padding-left: 1.5rem;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none' stroke='%23808080' stroke-width='1.1'%3E%3Ccircle cx='7' cy='7' r='5.5'/%3E%3Cpath d='M1.5 7h11M7 1.5c1.6 1.6 2.3 3.4 2.3 5.5S8.6 10.9 7 12.5C5.4 10.9 4.7 9.1 4.7 7S5.4 3.1 7 1.5z'/%3E%3C/svg%3E")
+      no-repeat left center,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23808080' stroke-width='1.5'%3E%3Cpath d='M4 6l4 4l4-4'/%3E%3C/svg%3E")
+      no-repeat right 0.625rem center;
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui);
+}
+
+[data-page="docs"][data-docs-variants~="switchers-4"] [data-component="docs-article"] select {
+  padding-left: 0;
+  border-bottom: 1px solid var(--text-weak);
+  background-position: right 0.25rem center;
+}
+
+[data-page="docs"][data-docs-variants~="switchers-5"] [data-component="docs-article"] select {
+  background-color: var(--bg-weak);
+}
+
+/* ───────────── Edit on GitHub, last updated ─────────────
+   v2 has none, so these follow v1's Starlight page footer (a muted edit link, the date beside it).
+   2 · v1's row, link left and date right, over a rule · 3 · stacked · 4 · OpenTUI Mono uppercase
+   5 · right aligned with a pencil mark */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="editLink-2"],
+    [data-docs-variants~="editLink-3"],
+    [data-docs-variants~="editLink-4"],
+    [data-docs-variants~="editLink-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="edit-link"] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  margin: 2rem 0 1rem;
+  font-size: var(--fs-meta);
+  color: var(--text-weak);
+
+  a {
+    color: var(--text-weak);
+    text-decoration: none;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="editLink-2"] [data-component="docs-article"] [data-component="edit-link"] {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+[data-page="docs"][data-docs-variants~="editLink-3"] [data-component="docs-article"] [data-component="edit-link"] {
+  flex-direction: column;
+}
+
+[data-page="docs"][data-docs-variants~="editLink-4"] [data-component="docs-article"] [data-component="edit-link"] {
+  font-family: var(--font-mono);
+  font-size: var(--anno-size);
+  letter-spacing: var(--anno-track);
+  text-transform: uppercase;
+}
+
+[data-page="docs"][data-docs-variants~="editLink-5"] [data-component="docs-article"] [data-component="edit-link"] {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+
+  a::before {
+    content: "✎ ";
+  }
+}
+
+/* ───────────── Feedback ─────────────
+   No docs have one, so the buttons borrow v2's search trigger. 2 · v2's bordered buttons
+   3 · text links · 4 · a ruled block · 5 · OpenTUI Mono uppercase */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="feedback-2"],
+    [data-docs-variants~="feedback-3"],
+    [data-docs-variants~="feedback-4"],
+    [data-docs-variants~="feedback-5"]
+  )
+  [data-component="docs-article"]
+  [data-component="feedback"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+  font-size: var(--fs-meta);
+  color: var(--text-weak);
+
+  button {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--text-weak);
+    cursor: pointer;
+    transition:
+      color 150ms ease,
+      border-color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+  }
+}
+
+[data-page="docs"]:is([data-docs-variants~="feedback-2"], [data-docs-variants~="feedback-4"])
+  [data-component="docs-article"]
+  [data-component="feedback"]
+  button {
+  height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--border);
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      border-color: var(--text-weak);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="feedback-3"]
+  [data-component="docs-article"]
+  [data-component="feedback"]
+  button {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 0.25em;
+}
+
+[data-page="docs"][data-docs-variants~="feedback-4"] [data-component="docs-article"] [data-component="feedback"] {
+  padding: 1rem 0;
+  border-block: 1px solid var(--border);
+}
+
+[data-page="docs"][data-docs-variants~="feedback-5"] [data-component="docs-article"] [data-component="feedback"] {
+  font-family: var(--font-mono);
+  font-size: var(--anno-size);
+  letter-spacing: var(--anno-track);
+  text-transform: uppercase;
+}
+
+/* ───────────── Keys ─────────────
+   2 · v2's keys (the search trigger's, plain 12px in the text colour) · 3 · a 1px border
+   4 · the site's tinted chip (the docs search ⌘K) · 5 · a keycap with a heavier bottom edge */
+
+[data-page="docs"]:is(
+    [data-docs-variants~="kbd-2"],
+    [data-docs-variants~="kbd-3"],
+    [data-docs-variants~="kbd-4"],
+    [data-docs-variants~="kbd-5"]
+  )
+  [data-component="docs-article"]
+  kbd {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: var(--anno-size);
+  color: var(--text-strong);
+}
+
+[data-page="docs"]:is([data-docs-variants~="kbd-3"], [data-docs-variants~="kbd-4"], [data-docs-variants~="kbd-5"])
+  [data-component="docs-article"]
+  kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0.125rem 0.375rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+[data-page="docs"][data-docs-variants~="kbd-3"] [data-component="docs-article"] kbd {
+  border: 1px solid var(--border-strong);
+}
+
+[data-page="docs"][data-docs-variants~="kbd-4"] [data-component="docs-article"] kbd {
+  background: var(--bg-weaker);
+  color: var(--text-weak);
+}
+
+[data-page="docs"][data-docs-variants~="kbd-5"] [data-component="docs-article"] kbd {
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-bottom-color: var(--border-strong);
+}
+
+/* ───────────── Inline code ─────────────
+   2 · v2's 10% currentColor wash · 3 · mono only, no chip · 4 · a weaker chip · 5 · backticks */
+
+[data-page="docs"][data-docs-variants~="inlineCode-2"] [data-component="docs-article"] :not(pre) > code {
+  padding: 0.0625rem 0.4ch;
+  border: 0;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+[data-page="docs"][data-docs-variants~="inlineCode-3"] [data-component="docs-article"] :not(pre) > code {
+  padding: 0;
+  background: none;
+  font-size: 0.9375em;
+}
+
+[data-page="docs"][data-docs-variants~="inlineCode-4"] [data-component="docs-article"] :not(pre) > code {
+  background: var(--bg-weaker);
+}
+
+[data-page="docs"][data-docs-variants~="inlineCode-5"] [data-component="docs-article"] :not(pre) > code {
+  padding: 0;
+  background: none;
+
+  &::before,
+  &::after {
+    content: "`";
+    color: var(--text-weaker);
+  }
+}
+
+/* ───────────── Vercel square (option 6 of every code component) ─────────────
+   The one code surface David chose (5 Nov 2026), after Vercel's docs with square corners. Every
+   block type sits on it: a white body lifted off the off-white page (a step lighter than the page in
+   dark), a header row in the page's tone with the label (file mark and name, ">_ Terminal", Files,
+   Usage) and an always-visible Copy, a 1px border round the block and a divider under the header.
+   Like Vercel, the header is the darker of the two in both themes (#fafafa over #fff, #000 over
+   #0a0a0a there). The border is decorative (about 1.3:1); the marks that carry meaning (highlight
+   and diff bars, the selected tab) are 3:1 or more, and all text is 4.5:1 or more. */
+
+[data-page="docs"] {
+  --code-body: light-dark(#ffffff, #161616);
+  --code-head: light-dark(#f7f7f7, #111111);
+  --code-border: light-dark(#e0e0e0, #2e2e2e);
+  --code-text: light-dark(#141414, #f2f2f2);
+  --code-label: light-dark(#666666, #8f8f8f);
+  /* Reference table heads (Tables 5, API, CLI): the label style in ink with the titles' faux medium
+     (the site serves no 500 weight); 12px uppercase keeps them reading as labels. */
+  --ref-head: var(--text-strong);
+  --code-number: light-dark(#737373, #858585);
+  --code-mark: light-dark(#3b5cf6, #6b8fff);
+  --code-mark-tint: light-dark(#eff2fe, #1e2637);
+  --code-del: light-dark(#d61f1f, #f04c4c);
+  --code-add: light-dark(#1a9347, #2dd269);
+  --code-del-tint: light-dark(#fceded, #351e1e);
+  --code-add-tint: light-dark(#e8f4ed, #192d20);
+  /* The OpenCode syntax colours, darkened for 4.5:1 on white; dark keeps the theme's values. */
+  --token-command: light-dark(#a64b14, #fab283);
+  --token-flag: light-dark(#7a3fc4, #9d7cd8);
+  --token-string: light-dark(#2b7a3d, #7fd88f);
+  --token-operator: light-dark(#0f6e7a, #56b6c2);
+  --token-output: light-dark(#666666, #8f8f8f);
+}
+
+/* Outside option 6 the frame folds away and its header hides, so the older options look as before. */
+[data-page="docs"] [data-component="code-frame"] {
+  display: contents;
+
+  > [data-slot="code-head"] {
+    display: none;
+  }
+}
+
+:is(
+  [data-page="docs"] [data-slot="code-gallery"] [data-component="code-frame"],
+  [data-page="docs"][data-docs-variants~="code-6"] [data-component="code-frame"][data-variant="code"],
+  [data-page="docs"][data-docs-variants~="codeTitle-6"] [data-component="code-frame"][data-variant="codeTitle"],
+  [data-page="docs"][data-docs-variants~="codeLines-6"] [data-component="code-frame"][data-variant="codeLines"],
+  [data-page="docs"][data-docs-variants~="codeDiff-6"] [data-component="code-frame"][data-variant="codeDiff"],
+  [data-page="docs"][data-docs-variants~="terminal-6"] [data-component="code-frame"][data-variant="terminal"],
+  [data-page="docs"][data-docs-variants~="fileTree-6"] [data-component="code-frame"][data-variant="fileTree"],
+  [data-page="docs"][data-docs-variants~="fileTree-7"] [data-component="code-frame"][data-variant="fileTree"],
+  [data-page="docs"][data-docs-variants~="fileTree-8"] [data-component="code-frame"][data-variant="fileTree"],
+  [data-page="docs"][data-docs-variants~="fileTree-9"] [data-component="code-frame"][data-variant="fileTree"],
+  [data-page="docs"][data-docs-variants~="api-6"] [data-component="code-frame"][data-variant="api"],
+  [data-page="docs"][data-docs-variants~="api-7"] [data-component="code-frame"][data-variant="api"],
+  [data-page="docs"][data-docs-variants~="config-6"] [data-component="code-frame"][data-variant="config"],
+  [data-page="docs"][data-docs-variants~="cli-6"] [data-component="code-frame"][data-variant="cli"]
+) {
+  display: block;
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--code-border);
+  background: var(--code-body);
+  color: var(--code-text);
+
+  > [data-slot="code-head"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    height: 2.5rem;
+    padding-block: 0;
+    padding-inline: 1rem 0.375rem;
+    border-bottom: 1px solid var(--code-border);
+    background: var(--code-head);
+    font: 400 var(--fs-micro, 12px) / 1 var(--font-mono);
+    color: var(--code-label);
+  }
+
+  [data-slot="code-label"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* Header marks: 16px at a 1.5 stroke (the provisional icon rule), square joins like the site.
+     Files get their file-type icon instead (FileTypeIcon). */
+  &:is([data-kind="tree"], [data-kind="terminal"], [data-kind="usage"]) [data-slot="code-label"]::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    background: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='miter' stroke-linecap='square'%3E%3Cpath d='M3.75 1.75h5.5l3 3v9.5h-8.5z'/%3E%3Cpath d='M9.25 1.75v3h3'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+  }
+
+  &[data-kind="tree"] [data-slot="code-label"]::before {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='miter' stroke-linecap='square'%3E%3Cpath d='M1.75 3.25h4.5l1.5 1.75h6.5v7.75h-12.5z'/%3E%3C/svg%3E");
+  }
+
+  /* The terminal mark: a window with a prompt (recommended); the gallery also shows the prompt alone
+     and a window with a title bar (data-icon). */
+  &:is([data-kind="terminal"], [data-kind="usage"]) [data-slot="code-label"]::before {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='miter' stroke-linecap='square'%3E%3Cpath d='M1.75 2.75h12.5v10.5h-12.5z'/%3E%3Cpath d='M4.75 6l2 2l-2 2'/%3E%3Cpath d='M8.75 10.25h2.5'/%3E%3C/svg%3E");
+  }
+
+  &[data-icon="prompt"] [data-slot="code-label"]::before {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='miter' stroke-linecap='square'%3E%3Cpath d='M2.75 4l4 4l-4 4'/%3E%3Cpath d='M8.25 12.25h5'/%3E%3C/svg%3E");
+  }
+
+  &[data-icon="titlebar"] [data-slot="code-label"]::before {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='miter' stroke-linecap='square'%3E%3Cpath d='M1.75 2.75h12.5v10.5h-12.5z'/%3E%3Cpath d='M1.75 5.75h12.5'/%3E%3Cpath d='M4.75 8l1.75 1.5l-1.75 1.5'/%3E%3Cpath d='M8.25 11h2.5'/%3E%3C/svg%3E");
+  }
+
+  [data-slot="code-copy"] {
+    flex-shrink: 0;
+    height: 2.5rem;
+    margin-inline-end: -0.375rem;
+    padding: 0 0.75rem;
+  }
+
+  /* The body: whatever block the frame holds, on the code surface. */
+  :is(pre, figure, dl) {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--code-body);
+    color: var(--code-text);
+    box-shadow: none;
+  }
+
+  figure > figcaption {
+    display: none;
+  }
+
+  pre {
+    padding: 1rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    line-height: 1.6;
+    white-space: pre;
+
+    &::before {
+      display: none;
+    }
+
+    code {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font-size: inherit;
+    }
+  }
+
+  [data-token="command"] {
+    color: var(--token-command);
+  }
+
+  [data-token="flag"] {
+    color: var(--token-flag);
+  }
+
+  [data-token="string"] {
+    color: var(--token-string);
+  }
+
+  [data-token="operator"] {
+    color: var(--token-operator);
+  }
+
+  :is([data-token="output"], [data-token="prompt"]) {
+    color: var(--token-output);
+  }
+
+  /* Line numbers and highlights: a muted gutter, marked rows tinted with a 2px bar. */
+  [data-component="code-lines"] {
+    padding: 1rem 0;
+
+    code {
+      display: block;
+      padding-right: 1rem;
+      background: none;
+      box-shadow: none;
+
+      &::before {
+        content: attr(data-line);
+        display: inline-block;
+        width: 3rem;
+        padding-right: 1rem;
+        border: 0;
+        text-align: right;
+        color: var(--code-number);
+      }
+    }
+
+    code[data-mark] {
+      background: var(--code-mark-tint);
+      box-shadow: inset 2px 0 0 var(--code-mark);
+    }
+  }
+
+  /* Diffs: the +/- in a gutter in the bar colour, rows tinted with a 2px bar. */
+  [data-component="code-diff"] {
+    padding: 1rem 0;
+
+    code {
+      display: block;
+      padding: 0 1rem 0 0;
+      background: none;
+      box-shadow: none;
+      text-decoration: none;
+      font-weight: 400;
+    }
+
+    [data-slot="sign"] {
+      display: inline-block;
+      width: 2rem;
+      margin-right: 0.5rem;
+      border: 0;
+      text-align: center;
+      color: var(--code-number);
+    }
+
+    [data-diff="-"] {
+      background: var(--code-del-tint);
+      box-shadow: inset 2px 0 0 var(--code-del);
+
+      [data-slot="sign"] {
+        color: var(--code-del);
+      }
+    }
+
+    [data-diff="+"] {
+      background: var(--code-add-tint);
+      box-shadow: inset 2px 0 0 var(--code-add);
+
+      [data-slot="sign"] {
+        color: var(--code-add);
+      }
+    }
+  }
+
+  /* Highlights without the number gutter. */
+  [data-component="code-lines"][data-plain] code {
+    padding-left: 1rem;
+
+    &::before {
+      display: none;
+    }
+  }
+
+  /* Focus: lines outside it step back to the label grey (still 4.5:1). */
+  [data-component="code-lines"] code[data-dim] {
+    color: var(--code-label);
+  }
+
+  /* Folded lines (CodeCollapse). The visible and folded parts read as one block when open. */
+  [data-slot="code-collapse"] {
+    &[data-open] [data-slot="collapse-visible"] pre {
+      padding-bottom: 0;
+    }
+
+    [data-slot="collapse-folded"] pre {
+      padding-top: 0;
+    }
+  }
+
+  [data-slot="code-expand"] {
+    border: 0;
+    background: none;
+    font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+    color: var(--code-label);
+    cursor: pointer;
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--code-text);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+      box-shadow: inset 0 0 0 4px var(--code-body);
+    }
+  }
+
+  /* Fade: the last lines fade into the body under a small centred button (Vercel, Mintlify). */
+  [data-style="fade"] {
+    &:not([data-open]) [data-slot="collapse-visible"] {
+      position: relative;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0;
+        height: 4.5rem;
+        background: linear-gradient(transparent, var(--code-body) 85%);
+        pointer-events: none;
+      }
+    }
+
+    [data-slot="code-expand"] {
+      position: relative;
+      display: block;
+      margin: -1.75rem auto 0.875rem;
+      padding: 0.375rem 0.75rem;
+      border: 1px solid var(--code-border);
+      background: var(--code-body);
+    }
+
+    &[data-open] [data-slot="code-expand"] {
+      margin-top: 0.5rem;
+    }
+  }
+
+  /* Marker (the default): plain muted text in the gutter where the lines are, GitHub style, lined up
+     with the code's left edge. No border or fill; hover goes to ink with an underline. The padding
+     makes a 26px hit area and the focus ring sits tight inside it. */
+  [data-style="marker"] {
+    &:not([data-open]) [data-slot="collapse-visible"] pre {
+      padding-bottom: 0.25rem;
+    }
+
+    [data-slot="code-expand"] {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 0 0 0.5rem;
+      padding: 0.3125rem 0.5rem 0.3125rem 1rem;
+      text-underline-offset: 0.2em;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+
+      &:focus-visible {
+        text-decoration: underline;
+      }
+    }
+  }
+
+  /* Bar: a full-width row under the lines (the earlier version). */
+  [data-style="bar"] [data-slot="code-expand"] {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--code-border);
+    background: var(--code-head);
+    text-align: left;
+
+    &:focus-visible {
+      box-shadow: inset 0 0 0 4px var(--code-head);
+    }
+  }
+
+  /* The endpoint card spaces its own blocks. */
+  [data-slot="api-body"] > & {
+    margin: 0;
+  }
+
+  /* Reference blocks share one system: 16px inside on every side. */
+  [data-component="file-tree"] {
+    padding: 1rem;
+    line-height: 1.7;
+  }
+
+  /* Config reference: the keys as rows on the code surface, in the reference type scale. */
+  [data-component="config-reference"] {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) minmax(0, 2fr);
+    font-size: var(--fs-small);
+    line-height: 1.55;
+
+    :is(dt, dd) {
+      margin: 0;
+      padding: 0.75rem 1rem;
+      border-left: 0;
+    }
+
+    :is(dt, dd):not(:first-of-type) {
+      border-top: 1px solid var(--code-border);
+    }
+
+    dt {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+
+    dt > code {
+      padding: 0;
+      border: 0;
+      background: none;
+      font: 400 var(--fs-meta) / 1.5 var(--font-mono);
+      color: var(--code-text);
+    }
+
+    dd {
+      color: var(--text);
+    }
+
+    [data-component="badge"] {
+      padding: 0;
+      border: 0;
+      background: none;
+      font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--code-label);
+    }
+  }
+}
+
+/* Inside a callout or a step the block keeps its full style; only the outer margin goes. */
+[data-page="docs"] :is([data-component="callout"], [data-component="steps"]) [data-component="code-frame"]:last-child {
+  margin-bottom: 0;
+}
+
+/* Tabs over code (package managers and files) sit in the header row, Vercel style. */
+/* The code gallery (/dev/docs-components) always shows it. */
+:is(
+    [data-page="docs"][data-docs-variants~="tabs-6"] [data-component="docs-article"],
+    [data-page="docs"] [data-component="docs-article"] [data-slot="code-gallery"]
+  )
+  [data-component="code-tabs"] {
+  position: relative;
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--code-border);
+  background: var(--code-body);
+
+  [data-slot="tabs"] {
+    gap: 0;
+    height: 2.5rem;
+    padding-block: 0;
+    padding-inline: 0 6.5rem;
+    align-items: stretch;
+    border-bottom: 1px solid var(--code-border);
+    background: var(--code-head);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro, 12px);
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0 0.625rem;
+      margin-bottom: -1px;
+      border-bottom: 2px solid transparent;
+      color: var(--code-label);
+
+      /* The first tab starts at the block's edge, so its underline does too; its 1rem of padding
+         puts the label over the code's first column. */
+      &:first-child {
+        padding-inline-start: 1rem;
+      }
+
+      &[aria-selected="true"] {
+        color: var(--code-text);
+        border-bottom-color: var(--code-text);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+        box-shadow: inset 0 0 0 4px var(--code-head);
+      }
+    }
+  }
+
+  [data-slot="code"] {
+    padding: 1rem;
+    background: var(--code-body);
+
+    code {
+      color: var(--code-text);
+    }
+
+    [data-token="command"] {
+      color: var(--token-command);
+    }
+
+    [data-token="flag"] {
+      color: var(--token-flag);
+    }
+
+    [data-token="string"] {
+      color: var(--token-string);
+    }
+
+    [data-token="operator"] {
+      color: var(--token-operator);
+    }
+
+    :is([data-token="output"], [data-token="prompt"]) {
+      color: var(--token-output);
+    }
+  }
+
+  &[data-files] [data-slot="code"] code {
+    white-space: pre;
+  }
+
+  /* Copy moves into the header, on the right, always visible. */
+  [data-slot="copy"] {
+    position: absolute;
+    top: 0;
+    inset-inline-end: 0;
+    height: calc(2.5rem - 1px);
+    background: var(--code-head);
+    box-shadow: calc(-1.25rem * var(--x-dir, 1)) 0 1rem -0.5rem var(--code-head);
+    min-width: 0;
+    margin: 0;
+    padding: 0 0.75rem;
+    font: 400 var(--fs-micro, 12px) / 1 var(--font-mono);
+    color: var(--code-label);
+  }
+}
+
+/* Inline code: a quiet chip on the off-white page, a step off the text background. */
+:is(
+    [data-page="docs"][data-docs-variants~="inlineCode-6"] [data-component="docs-article"],
+    [data-page="docs"] [data-component="docs-article"] [data-slot="code-gallery"]
+  )
+  :is(p, li, td, th, dd, dt, h2, h3, h4, a, strong, em, small, span[data-slot])
+  > code {
+  padding: 0.1em 0.35em;
+  border: 1px solid light-dark(#e6e6e6, #262626);
+  border-radius: 0;
+  background: light-dark(#f2f2f2, #161616);
+  color: var(--text-strong);
+}
+
+/* Inline code never looks cut at a line break: every fragment of a wrapped chip repeats its padding
+   and edges. Above 40rem a chip stays on one line; on phones a chip longer than the column (an
+   image tag, a URL) would overflow the screen, so there chips wrap, anywhere if they must. */
+[data-page="docs"] [data-component="docs-article"] :is(p, li, dd, dt, h2, h3, h4, a, strong, em, small) > code {
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  overflow-wrap: anywhere;
+
+  @media (min-width: 40.0625rem) {
+    white-space: nowrap;
+  }
+}
+
+[data-page="docs"] [data-component="docs-article"] [data-slot="source"] > code {
+  white-space: normal;
+}
+
+/* Copy (CopyButton): text only. "Copy" turns to "Copied" for 1.5s, or "Failed". The three labels
+   share one right-aligned grid cell, so the button reserves the longest label's width and the
+   text's right edge stays at the header's right padding; nothing beside it moves. The button is
+   the header's full height (40px) for touch, and the focus ring sits inside it (2px link blue,
+   then a band of the header colour). */
+[data-page="docs"] :is([data-slot="code-copy"], [data-component="code-tabs"] [data-slot="copy"]) {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: none;
+  font: 400 var(--fs-micro, 12px) / 1 var(--font-mono);
+  color: var(--code-label);
+  cursor: pointer;
+  transition: color 150ms ease;
+
+  [data-slot="copy-labels"] {
+    display: grid;
+    justify-items: end;
+
+    > span {
+      grid-area: 1 / 1;
+      visibility: hidden;
+    }
+  }
+
+  &[data-state="idle"] [data-label="idle"],
+  &[data-state="copied"] [data-label="copied"],
+  &[data-state="failed"] [data-label="failed"] {
+    visibility: visible;
+  }
+
+  &[data-state="copied"] {
+    color: var(--code-text);
+  }
+
+  &[data-state="failed"] {
+    color: var(--code-del);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      color: var(--code-text);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 4px var(--code-head);
+  }
+}
+
+/* File-type icons (FileTypeIcon): the desktop app's icons at 16px, centred on the name, drawn
+   inline. Folders use currentColor, here the label grey. Where an icon has a _light variant, light
+   mode shows it and dark mode the default. [data-file-icons="mono"] turns every fill to currentColor
+   (the invisible bounding boxes keep fill: none). */
+[data-page="docs"] [data-slot="file-icon"] {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  vertical-align: -0.2em;
+  color: var(--code-label);
+
+  > span {
+    display: contents;
+  }
+
+  svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+
+  [data-scheme="dark"] svg {
+    display: none;
+  }
+}
+
+[data-page="docs"] [data-slot="tree-row"] [data-slot="file-icon"] {
+  margin-inline-end: 0.375rem;
+}
+
+/* A note after a name in a file tree ("loaded initially"), in the label grey. */
+[data-page="docs"] [data-slot="tree-note"] {
+  color: var(--code-label);
+}
+
+[data-site][data-theme="dark"] [data-slot="file-icon"] {
+  [data-scheme="dark"] svg {
+    display: block;
+  }
+
+  [data-scheme="light"] svg {
+    display: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-site][data-theme="system"] [data-slot="file-icon"] {
+    [data-scheme="dark"] svg {
+      display: block;
+    }
+
+    [data-scheme="light"] svg {
+      display: none;
+    }
+  }
+}
+
+[data-page="docs"] [data-file-icons="mono"] [data-slot="file-icon"] [fill]:not([fill="none"]) {
+  fill: currentColor;
+}
+
+/* ───────────── Reference blocks: one type and spacing system ─────────────
+   The API endpoint card (api-7), the CLI and config references and the file tree share it:
+   content in --fs-small (14px, 15 on phones), names and values in mono at --fs-meta (13/14) in ink,
+   types, table headers and frame labels in mono at --fs-micro (12) in the label grey; 16px inside
+   every block on all four sides, 16px between blocks, 12px above and below each table row. */
+
+/* Option 7, the endpoint card (★ the default, 5 Nov 2026), after Stripe, Vercel and Mintlify: the
+   method and path in the header row, then the description, a parameter table, the request and the
+   responses by status, all on the code surface. */
+:is(
+    [data-page="docs"][data-docs-variants~="api-7"] [data-component="docs-article"],
+    [data-page="docs"] [data-slot="code-gallery"]
+  )
+  [data-component="api-operation"] {
+  margin: 0 0 1.5rem;
+  padding: 0;
+  border: 1px solid var(--code-border);
+  background: var(--code-body);
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: 1.55;
+
+  > [data-slot="api-head"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.5rem;
+    margin: 0;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--code-border);
+    background: var(--code-head);
+    font: 400 var(--fs-meta) / 1.5 var(--font-mono);
+    color: var(--code-text);
+
+    code {
+      padding: 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      color: inherit;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  [data-component="badge"][data-method] {
+    padding: 0.125rem 0.375rem;
+    border: 1px solid currentColor;
+    background: none;
+    font: 500 var(--fs-micro, 12px) / 1.3 var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+
+    &[data-method="get"] {
+      color: light-dark(hsl(217, 80%, 42%), #73a7ff);
+    }
+
+    &[data-method="post"] {
+      color: light-dark(hsl(147, 60%, 28%), #70c997);
+    }
+
+    &[data-method="delete"] {
+      color: light-dark(hsl(0, 65%, 42%), #e67c7c);
+    }
+
+    &:is([data-method="put"], [data-method="patch"]) {
+      color: light-dark(hsl(35, 80%, 30%), #e0af68);
+    }
+  }
+
+  > [data-slot="api-body"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+
+    > * {
+      margin: 0;
+    }
+
+    > [data-component="code-tabs"] {
+      margin: 0;
+    }
+  }
+
+  [data-slot="api-table"] {
+    overflow-x: auto;
+
+    table {
+      min-width: 36rem;
+    }
+  }
+
+  [data-slot="ref-required"] {
+    font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+    color: var(--code-label);
+
+    &[data-required] {
+      color: var(--code-text);
+    }
+  }
+
+  [data-component="code-tabs"] [data-slot="code"] code {
+    white-space: pre;
+  }
+}
+
+/* Reference tables: the API parameters, CLI flags and the gallery's tables. */
+:is(
+    [data-page="docs"][data-docs-variants~="api-7"] [data-component="docs-article"] [data-component="api-operation"],
+    [data-page="docs"] [data-slot="code-gallery"] [data-component="api-operation"],
+    [data-page="docs"][data-docs-variants~="cli-6"] [data-component="docs-article"] [data-component="cli-command"],
+    [data-page="docs"] [data-slot="code-gallery"] [data-slot="gallery-table"],
+    [data-page="docs"][data-docs-variants~="tables-6"] [data-component="docs-article"]
+  )
+  table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+  line-height: 1.55;
+
+  th {
+    padding-block: 0 0.5rem;
+    padding-inline: 0 1rem;
+    border-bottom: 1px solid var(--code-border);
+    text-align: start;
+    font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--ref-head);
+    -webkit-text-stroke: var(--title-stroke);
+  }
+
+  td {
+    padding-block: 0.75rem;
+    padding-inline: 0 1rem;
+    border-bottom: 1px solid var(--code-border);
+    text-align: start;
+    vertical-align: baseline;
+    color: var(--text);
+  }
+
+  tr:last-child td {
+    border-bottom: 0;
+  }
+
+  :is(th, td):last-child {
+    padding-inline-end: 0;
+  }
+
+  td > code {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: 400 var(--fs-meta) / 1.5 var(--font-mono);
+    white-space: nowrap;
+    color: var(--code-text);
+  }
+
+  [data-slot="ref-type"] {
+    font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+    white-space: nowrap;
+    color: var(--code-label);
+  }
+}
+
+/* Inside a frame (the gallery's config table), the table gets the frame's 16px inset. */
+[data-page="docs"] [data-component="code-frame"] [data-slot="gallery-table"] {
+  padding: 1rem;
+}
+
+/* Selection reads cleanly across a block: the copy and expand controls (with their hidden "Copied"
+   and "Failed" labels) aren't selectable, so dragging over a header doesn't paint blocks. */
+[data-page="docs"]
+  :is([data-slot="code-copy"], [data-component="code-tabs"] [data-slot="copy"], [data-slot="code-expand"]) {
+  user-select: none;
+}
+
+/* ───────────── Consistency fixes on the chosen options (overnight, 5 Nov 2026) ─────────────
+   Where a chosen option broke David's own rules: a 24px hit area and an inside focus ring on the
+   feedback buttons (5), an inside ring on the edit link (4) and breadcrumb (3) links, padded so
+   the ring clears the text. */
+[data-page="docs"][data-docs-variants~="feedback-5"]
+  [data-component="docs-article"]
+  [data-component="feedback"]
+  button {
+  min-height: 1.5rem;
+  margin: -0.25rem -0.375rem;
+  padding: 0.25rem 0.375rem;
+
+  &:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+  }
+}
+
+:is(
+    [data-page="docs"][data-docs-variants~="editLink-4"] [data-component="docs-article"] [data-component="edit-link"],
+    [data-page="docs"][data-docs-variants~="breadcrumbs-3"]
+      [data-component="docs-article"]
+      [data-component="breadcrumbs"]
+  )
+  a {
+  display: inline-block;
+  margin: -0.25rem -0.375rem;
+  padding: 0.25rem 0.375rem;
+
+  &:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+  }
+}
+
+/* ───────────── Proposals for the components not yet reviewed (option 6, ★ Proposed) ─────────────
+   Built overnight on 5 Nov 2026 from David's rules: the code surface (white, lifted in dark) with a
+   1px border and square corners, the site type scale, 16px inside on every side, the 8/12/16/24
+   spacing steps, mono for code and labels, plain muted meta instead of chips, hover to ink, the
+   focus ring inside, and the research's patterns (Starlight and Deno cards and prev/next, the
+   reference table). Not defaults until he approves them. */
+
+/* Cards: square cards on the code surface, the title at the body size in Inter 500, the description
+   small and grey, an arrow that moves 2px on hover (Starlight's link card, Vercel's surface). */
+[data-page="docs"][data-docs-variants~="cards-6"] [data-component="docs-article"] [data-component="card-group"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+
+  [data-component="docs-card"] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 1rem;
+    border: 1px solid var(--code-border);
+    background: var(--code-body);
+    color: var(--text-strong);
+    text-decoration: none;
+    transition: border-color 150ms ease;
+
+    strong {
+      padding-right: 1.5rem;
+      font: 500 var(--fs-read) / 1.4 var(--font-sans);
+    }
+
+    div {
+      font-size: var(--fs-small);
+      line-height: 1.55;
+      color: var(--text-weak);
+    }
+
+    &::after {
+      content: "→";
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      font: 400 var(--fs-read) / 1.4 var(--font-mono);
+      color: var(--code-label);
+      transition:
+        translate 200ms var(--ease-out),
+        color 150ms ease;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        border-color: var(--text-weak);
+
+        &::after {
+          translate: 2px 0;
+          color: var(--text-strong);
+        }
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
+  }
+}
+
+/* Tables: the reference table (see Reference blocks above), the same as the API and CLI tables. */
+[data-page="docs"][data-docs-variants~="tables-6"] [data-component="docs-article"] [data-slot="scroll"] {
+  overflow-x: auto;
+}
+
+/* Badges: plain mono labels in the muted grey with a small square, no chip. */
+[data-page="docs"][data-docs-variants~="badges-6"]
+  [data-component="docs-article"]
+  [data-component="badge"]:not([data-method], dt > *) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 0.1em;
+  color: var(--text-weak);
+
+  &::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    background: currentColor;
+  }
+}
+
+/* Prev / next: two square boxes on the code surface (Starlight, Deno), the label in mono with an
+   arrow, the page title at the body size; stacked on phones. */
+[data-page="docs"][data-docs-variants~="pagination-6"] [data-component="docs-article"] [data-component="pagination"] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin: 2rem 0 1.5rem;
+
+  a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 1rem;
+    border: 1px solid var(--code-border);
+    background: var(--code-body);
+    color: var(--text-strong);
+    text-decoration: none;
+    font: 500 var(--fs-read) / 1.4 var(--font-sans);
+    transition: border-color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        border-color: var(--text-weak);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
+  }
+
+  a[rel="next"] {
+    grid-column: 2;
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  small {
+    font: 400 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--code-label);
+  }
+
+  a[rel="prev"] small::before {
+    content: "← ";
+  }
+
+  a[rel="next"] small::after {
+    content: " →";
+  }
+
+  @media (max-width: 30rem) {
+    grid-template-columns: minmax(0, 1fr);
+
+    a[rel="next"] {
+      grid-column: 1;
+    }
+  }
+}
+
+/* Contents rail: the pipe rail as it is, with "Contents" in the label style, hover to ink and the
+   focus ring inside the row. */
+[data-page="docs"][data-docs-variants~="contents-6"]
+  :is([data-component="on-this-page"], [data-component="contents-menu"]) {
+  [data-slot="heading"] {
+    font: 400 var(--fs-micro, 12px) / 20px var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  a {
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not([aria-current="location"]) {
+        color: var(--text-strong);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
+  }
+}
+
+/* Search: a square field on the code surface, its text starting at the Contents labels, the
+   shortcut as plain mono at the right. */
+[data-page="docs"][data-docs-variants~="search-6"] [data-component="docs-aside"] [data-slot="search"] {
+  align-self: stretch;
+  justify-content: space-between;
+  height: 2.25rem;
+  margin-left: 0;
+  padding: 0 0.75rem 0 calc(var(--rail-gutter) - 1px);
+  border: 1px solid var(--code-border);
+  background: var(--code-body);
+  color: var(--text-weak);
+  transition:
+    border-color 150ms ease,
+    color 150ms ease;
+
+  kbd {
+    margin: 0;
+    padding: 0;
+    background: none;
+    font: 400 var(--fs-micro, 12px) / 1 var(--font-mono);
+    color: var(--text-muted);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      border-color: var(--text-weak);
+      color: var(--text-strong);
+
+      kbd {
+        background: none;
+      }
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: -2px;
+  }
+}
+
+/* Keys: square keys on the code surface, mono at 12px. */
+[data-page="docs"][data-docs-variants~="kbd-6"] [data-component="docs-article"] kbd {
+  display: inline-block;
+  min-width: 1.5rem;
+  padding: 0 0.375rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: var(--code-body);
+  font: 400 var(--fs-micro, 12px) / 1.6 var(--font-mono);
+  text-align: center;
+  vertical-align: 0.1em;
+  color: var(--text-strong);
+}
+
+/* ───────────── Code and tables on a coloured surface (comparison, 5 Nov 2026) ─────────────
+   In a callout the fixed greys (#f7f7f7 header, #e0e0e0 borders) sit on the tint as grey patches.
+   A makes the header and borders translucent ink, so they take the surface's colour; B also makes
+   the body translucent, lifting it off the tint while it keeps the hue. Shown on
+   /dev/docs-components#blend; not a default until David picks one. */
+[data-page="docs"] :is([data-blend="a"], [data-blend="b"]) :is([data-component="callout"], [data-slot="blend-plain"]) {
+  --code-head: light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.3));
+  --code-border: light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.12));
+  --border: var(--code-border);
+
+  :is([data-component="code-frame"], [data-component="code-tabs"]) {
+    background: transparent;
+  }
+
+  [data-component="code-tabs"] [data-slot="copy"] {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  td {
+    background: var(--code-body);
+  }
+}
+
+[data-page="docs"] [data-blend="b"] :is([data-component="callout"], [data-slot="blend-plain"]) {
+  --code-body: light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.04));
+}
+
+/* C is the default (David, 5 Nov 2026): every code block and table inside a callout blends; code on
+   the plain page keeps the fixed greys. A, B and D stay in the comparison as old versions.
+   C and D keep the fixed greys and blend them with the surface: multiply in light (the grey takes the
+   tint's hue and only darkens it), screen in dark (it only lightens). The text never blends. C puts
+   the header fill and the borders on pseudo-element layers with mix-blend-mode, the label and Copy
+   above them. D draws the surface colour under the grey in one background stack with
+   background-blend-mode, so nothing depends on what is painted behind; its table borders are the same
+   multiply and screen worked out with relative colour. In both the code body stays solid, since a
+   multiplied white body is just the tint. */
+[data-site] {
+  --blend: multiply;
+}
+
+[data-site][data-theme="dark"] {
+  --blend: screen;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-site]:not([data-theme="light"]) {
+    --blend: screen;
+  }
+}
+
+[data-page="docs"]
+  :is(
+    [data-component="callout"]:not(:is([data-blend="fixed"], [data-blend="a"], [data-blend="b"], [data-blend="d"]) *),
+    [data-blend="c"] [data-slot="blend-plain"]
+  ) {
+  [data-component="code-frame"] {
+    position: relative;
+    border-color: transparent;
+    background: transparent;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border: 1px solid var(--code-border);
+      mix-blend-mode: var(--blend);
+      pointer-events: none;
+    }
+
+    > [data-slot="code-head"] {
+      position: relative;
+      border-bottom-color: transparent;
+      background: transparent;
+
+      &::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 -1px;
+        border-bottom: 1px solid var(--code-border);
+        background: var(--code-head);
+        mix-blend-mode: var(--blend);
+        pointer-events: none;
+      }
+
+      /* The label and Copy above the blended layer (not the copy status, which stays hidden). */
+      > :is([data-slot="code-label"], [data-slot="code-copy"]) {
+        position: relative;
+      }
+    }
+  }
+}
+
+/* Code tabs blend the same way: the border and the tab row's fill on blended layers, the tabs and
+   Copy above them, and Copy loses its solid header fill (the row behind it is the blend). */
+[data-page="docs"]
+  [data-component="callout"]:not(:is([data-blend="fixed"], [data-blend="a"], [data-blend="b"], [data-blend="d"]) *)
+  [data-component="code-tabs"] {
+  border-color: transparent;
+  background: transparent;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border: 1px solid var(--code-border);
+    mix-blend-mode: var(--blend);
+    pointer-events: none;
+  }
+
+  [data-slot="tabs"] {
+    position: relative;
+    border-bottom-color: transparent;
+    background: transparent;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 -1px;
+      border-bottom: 1px solid var(--code-border);
+      background: var(--code-head);
+      mix-blend-mode: var(--blend);
+      pointer-events: none;
+    }
+
+    > button {
+      position: relative;
+    }
+  }
+
+  [data-slot="copy"] {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+[data-page="docs"] [data-blend="d"] :is([data-component="callout"], [data-slot="blend-plain"]) {
+  --blend-surface: color-mix(in srgb, var(--callout-rule) 7%, var(--bg));
+  --blend-rule: light-dark(
+    rgb(from var(--blend-surface) calc(r * 224 / 255) calc(g * 224 / 255) calc(b * 224 / 255)),
+    rgb(from var(--blend-surface) calc(r + 46 - r * 46 / 255) calc(g + 46 - g * 46 / 255) calc(b + 46 - b * 46 / 255))
+  );
+
+  &[data-slot="blend-plain"] {
+    --callout-rule: var(--bg);
+  }
+
+  [data-component="code-frame"] {
+    border-color: transparent;
+    background:
+      linear-gradient(var(--code-border), var(--code-border)) border-box,
+      linear-gradient(var(--blend-surface), var(--blend-surface)) border-box;
+    background-blend-mode: var(--blend), normal;
+
+    > [data-slot="code-head"] {
+      border-bottom-color: transparent;
+      background:
+        linear-gradient(to top, var(--code-border) 1px, transparent 1px) border-box,
+        linear-gradient(var(--code-head), var(--code-head)) border-box,
+        linear-gradient(var(--blend-surface), var(--blend-surface)) border-box;
+      background-blend-mode: var(--blend), var(--blend), normal;
+    }
+  }
+}
+
+/* The table rules outweigh Tables 5's own cell borders and head fill. */
+[data-page="docs"][data-docs-variants]
+  [data-component="docs-article"]
+  :is(
+    [data-component="callout"]:not(:is([data-blend="fixed"], [data-blend="a"], [data-blend="b"], [data-blend="d"]) *),
+    [data-blend="c"] [data-slot="blend-plain"]
+  )
+  table
+  tr {
+  /* Table cells hold their text directly, so the blended head fill and rules sit over it;
+     multiplying by near-white (light) or screening with near-black (dark) leaves the text as it was.
+     The body cells are solid, on the code body colour, like a code block's body. */
+  :is(th, td) {
+    position: relative;
+    border-color: transparent;
+    background: transparent;
+
+    /* Each cell draws its left and top rule (the last column and the last row also their right and
+       bottom), over the cells painted before it, so no shared rule is multiplied twice. */
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -1px 0 0 -1px;
+      border: 0 solid var(--code-border);
+      border-width: 1px 0 0 1px;
+      mix-blend-mode: var(--blend);
+      pointer-events: none;
+    }
+
+    &:last-child::before {
+      right: -1px;
+      border-right-width: 1px;
+    }
+  }
+
+  td {
+    background: var(--code-body);
+  }
+
+  tbody > &:last-child > td::before {
+    bottom: -1px;
+    border-bottom-width: 1px;
+  }
+
+  th::before {
+    background: var(--code-head);
+  }
+
+  :is(th, td) > * {
+    position: relative;
+  }
+}
+
+[data-page="docs"][data-docs-variants]
+  [data-component="docs-article"]
+  [data-blend="d"]
+  :is([data-component="callout"], [data-slot="blend-plain"])
+  table
+  tr {
+  :is(th, td) {
+    border-color: var(--blend-rule);
+  }
+
+  th {
+    background:
+      linear-gradient(var(--code-head), var(--code-head)), linear-gradient(var(--blend-surface), var(--blend-surface));
+    background-blend-mode: var(--blend), normal;
+  }
+}
+
+/* ───────────── Code gallery and reference captions (/dev/docs-components, /dev/docs) ───────────── */
+[data-page="docs"] [data-component="docs-article"] {
+  /* The code gallery: every block type in Vercel square, one per row. Each caption sits 12px above
+     its block and 40px below the one before, so it groups with its own block. */
+  [data-slot="code-gallery"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  [data-slot="gallery-item"] {
+    margin: 0;
+    min-width: 0;
+
+    > figcaption {
+      margin: 0 0 0.75rem;
+      color: var(--text-weak);
+      font-size: var(--fs-small);
+
+      b {
+        color: var(--text-strong);
+        font: 500 var(--fs-micro, 12px) / 1.4 var(--font-mono);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+    }
+
+    [data-component="code-frame"] + [data-component="code-frame"] {
+      margin-top: -0.75rem;
+    }
+
+    [data-component="code-frame"]:last-child,
+    [data-component="code-tabs"]:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  [data-slot="gallery-steps"] {
+    margin: 0;
+    padding-left: 1.5rem;
+    list-style: decimal;
+
+    > li + li {
+      margin-top: 1rem;
+    }
+
+    p {
+      margin: 0 0 0.75rem;
+    }
+  }
+
+  /* The reference page's component names, as captions: 40px above, 12px to the sample. */
+  h3[data-slot="reference-name"] {
+    margin: 2.5rem 0 0.75rem;
+  }
+}
+
+/* A gallery item ends at its block, so the 40px before the next caption is all gap (the figure
+   margin from Images and video, and the blocks' own bottom margins, would add to it). */
+[data-page="docs"][data-docs-variants] [data-component="docs-article"] figure[data-slot="gallery-item"] {
+  margin: 0;
+
+  > figcaption {
+    margin-top: 0;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+}
+
+/* Keys in a table cell stay on one line ("Ctrl X N"). */
+[data-page="docs"] [data-component="docs-article"] td:has(> kbd) {
+  white-space: nowrap;
+}
+
+/* ───────────── No flat greys inside callouts (David, 5 Nov 2026) ─────────────
+   Every grey layer inside a callout takes the callout's hue, multiplied with it in light and
+   screened in dark (--blend), and text is never blended. Code blocks and tables use mix-blend-mode
+   layers (C above), and their bodies stay solid on --code-body. Inline chips (code, keys) wrap
+   across lines, so they blend inside their own background stack instead (background-blend-mode,
+   the grey over the callout's surface colour). Thin grey lines (chip and box edges, list dashes, a
+   nested quote's rule) are the same multiply or screen, worked out with relative colour. */
+[data-page="docs"][data-docs-variants~="callout-3"] [data-component="docs-article"] [data-component="callout"] {
+  --callout-surface: color-mix(in srgb, var(--callout-rule) 7%, var(--bg));
+  --surface-layer: linear-gradient(var(--callout-surface), var(--callout-surface));
+  --surface-chip-edge: light-dark(
+    rgb(from var(--callout-surface) calc(r * 218 / 255) calc(g * 218 / 255) calc(b * 218 / 255)),
+    rgb(from var(--callout-surface) calc(r + 38 - r * 38 / 255) calc(g + 38 - g * 38 / 255) calc(b + 38 - b * 38 / 255))
+  );
+  --surface-box-edge: light-dark(
+    rgb(from var(--callout-surface) calc(r * 199 / 255) calc(g * 199 / 255) calc(b * 199 / 255)),
+    rgb(from var(--callout-surface) calc(r + 71 - r * 71 / 255) calc(g + 71 - g * 71 / 255) calc(b + 71 - b * 71 / 255))
+  );
+  --surface-line: light-dark(
+    rgb(from var(--callout-surface) calc(r * 184 / 255) calc(g * 184 / 255) calc(b * 184 / 255)),
+    rgb(from var(--callout-surface) calc(r + 82 - r * 82 / 255) calc(g + 82 - g * 82 / 255) calc(b + 82 - b * 82 / 255))
+  );
+  --surface-rule: light-dark(
+    rgb(from var(--callout-surface) calc(r * 115 / 255) calc(g * 115 / 255) calc(b * 115 / 255)),
+    rgb(
+      from var(--callout-surface) calc(r + 125 - r * 125 / 255) calc(g + 125 - g * 125 / 255)
+        calc(b + 125 - b * 125 / 255)
+    )
+  );
+
+  :not(pre) > code:not([data-component="code-frame"] *) {
+    padding: 0.1em 0.35em;
+    border: 1px solid var(--surface-chip-edge);
+    background: linear-gradient(light-dark(#f2f2f2, #161616), light-dark(#f2f2f2, #161616)), var(--surface-layer);
+    background-blend-mode: var(--blend), normal;
+    color: var(--text-strong);
+  }
+
+  kbd {
+    background: linear-gradient(var(--bg-weaker), var(--bg-weaker)), var(--surface-layer);
+    background-blend-mode: var(--blend), normal;
+  }
+
+  ul[data-slot="tasks"] > li > input:not(:checked) {
+    border-color: var(--surface-box-edge);
+    background: transparent;
+  }
+
+  [data-component="downloads"] > li::before {
+    background: var(--surface-line);
+  }
+
+  blockquote {
+    border-left-color: var(--surface-rule);
+  }
+}
+
+/* ───────────── File tree, minimal options (5 Nov 2026, not chosen yet) ─────────────
+   7 · indent only: no box, no header, no connectors or icons, 2ch per level, folders in ink and
+   files muted · 8 · the code surface with a 1px guide per level instead of box-drawing marks, tight
+   lines · 9 · a plain code block (the surface and border, no header) indented two spaces per level.
+   The paths stay plain text: the dropped prefix and icons aren't selected or copied. */
+[data-page="docs"]:is(
+    [data-docs-variants~="fileTree-7"],
+    [data-docs-variants~="fileTree-8"],
+    [data-docs-variants~="fileTree-9"]
+  )
+  [data-component="docs-article"]
+  [data-component="code-frame"][data-variant="fileTree"] {
+  > [data-slot="code-head"] {
+    display: none;
+  }
+
+  [data-component="file-tree"] {
+    padding: 1rem;
+    font-size: var(--fs-meta);
+    line-height: 1.6;
+  }
+
+  :is([data-slot="tree-prefix"], [data-slot="file-icon"]) {
+    display: none;
+  }
+
+  [data-slot="tree-row"] {
+    display: block;
+    padding-inline-start: calc(var(--depth) * 2ch);
+    color: var(--code-label);
+
+    &[data-directory] {
+      color: var(--code-text);
+    }
+  }
+}
+
+[data-page="docs"][data-docs-variants~="fileTree-7"]
+  [data-component="docs-article"]
+  [data-component="code-frame"][data-variant="fileTree"] {
+  border: 0;
+  background: none;
+
+  &::before {
+    content: none;
+  }
+
+  [data-component="file-tree"] {
+    padding: 0;
+    background: none;
+  }
+}
+
+[data-page="docs"][data-docs-variants~="fileTree-8"]
+  [data-component="docs-article"]
+  [data-component="code-frame"][data-variant="fileTree"] {
+  [data-component="file-tree"] {
+    line-height: 1.5;
+  }
+
+  /* One guide per level, half a character into each indent step. */
+  [data-slot="tree-row"] {
+    padding-inline-start: calc(var(--depth) * 2ch + 0.5ch);
+    background: repeating-linear-gradient(to right, var(--code-border) 0 1px, transparent 1px 2ch) 0.5ch 0 /
+      calc(var(--depth) * 2ch) 100% no-repeat;
+  }
+}
+
+/* File tree 6 (and the code gallery's tree): no icons in the body, so each name starts one space
+   after its connector; the "Files" header keeps its icon, folders keep their trailing "/". */
+:is(
+    [data-page="docs"][data-docs-variants~="fileTree-6"] [data-component="code-frame"][data-variant="fileTree"],
+    [data-page="docs"] [data-slot="code-gallery"] [data-component="code-frame"][data-kind="tree"]
+  )
+  [data-component="file-tree"]
+  [data-slot="file-icon"] {
+  display: none;
+}

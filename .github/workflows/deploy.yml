@@ -12,13 +12,15 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   deploy:
     if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production' || github.ref_name == 'beta')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
@@ -28,23 +30,64 @@ jobs:
         with:
           node-version: "24"
 
-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+      # beta has no branch, environment or AWS role. Running it again needs a role trusting environment `beta` and
+      # opencode/beta/CLOUDFLARE_API_TOKEN and opencode/beta/PLANETSCALE_SERVICE_TOKEN.
+      - name: Configure AWS credentials
         if: github.ref_name != 'beta'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-${{ github.ref_name }}
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
+
+      - name: Read deploy secrets
+        if: github.ref_name != 'beta'
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: |
+            CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
+            PLANETSCALE_SERVICE_TOKEN,opencode/${{ github.ref_name }}/PLANETSCALE_SERVICE_TOKEN
+          parse-json-secrets: false
 
       - run: bun sst deploy --stage=${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
-          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
-          STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          PLANETSCALE_SERVICE_TOKEN_NAME: ${{ vars.PLANETSCALE_SERVICE_TOKEN_NAME }}
+          # Only the beta stage's web app uploads sourcemaps; packages/app skips the upload without a token.
+          SENTRY_AUTH_TOKEN: ${{ github.ref_name == 'beta' && secrets.SENTRY_AUTH_TOKEN || '' }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
           SENTRY_RELEASE: web@${{ github.sha }}
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: web@${{ github.sha }}
+
+  # The SST stack owns opncd.ai until this push removes its Share Worker, so this job runs after the
+  # SST deploy to take the hostname without a custom-domain conflict.
+  share:
+    needs: deploy
+    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-${{ github.ref_name }}
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Read deploy secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
+          parse-json-secrets: false
+
+      - run: bun run deploy:${{ github.ref_name }}
+        working-directory: services/share

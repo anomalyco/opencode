@@ -24,7 +24,7 @@ export const dict = {
   "session.location.choose": "Choose directory",
   "session.location.worktree": "Choose worktree",
   "session.location.worktreesFailed": "Failed to load worktrees",
-  "session.rewind.toast.title": "Rewound",
+  "session.rewind.toast.title": "Reverted",
   "session.rewind.toast.undo": "Undo",
   "session.location.moving": "Moving session…",
   "session.location.moveFailed": "Failed to move session",
@@ -80,6 +80,7 @@ export const dict = {
   "command.file.open": "Open file",
   "command.tab.close": "Close tab",
   "command.tab.reopenClosed": "Reopen closed tab",
+  "command.tab.closeSession": "Close session tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
   "command.input.focus": "Focus input",
@@ -249,6 +250,7 @@ export const dict = {
   "provider.connect.form.open": "Open link",
   "provider.connect.form.openAgain": "Open link again",
   "provider.connect.form.finished": "I finished",
+  "provider.connect.form.browserFailed": "We couldn't open your browser. Open the link below, then select I finished.",
   "provider.connect.form.selectOne": "Select at least one option",
   "provider.connect.form.minItems": "Select at least {{count}}",
   "provider.connect.form.maxItems": "Select at most {{count}}",
@@ -391,6 +393,7 @@ export const dict = {
   "dialog.mcp.signIn.paste.label": "Redirect URL",
   "dialog.mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
   "dialog.mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
+  "dialog.mcp.signIn.syncFailed": "Signed in, but couldn't refresh {{name}}: {{error}}",
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
   "dialog.fork.search.empty": "No messages found",
@@ -491,6 +494,7 @@ export const dict = {
   "toast.permissions.autoaccept.off.description": "Permission requests will require approval",
 
   "toast.file.loadFailed.title": "Failed to load file",
+  "toast.language.loadFailed.title": "Failed to load {{language}}",
   "toast.file.listFailed.title": "Failed to list files",
 
   "toast.context.noLineSelection.title": "No line selection",
@@ -697,6 +701,7 @@ export const dict = {
   "session.new.project.trigger.tooltip": "Choose project",
   "session.new.worktree.creating": "Creating worktree",
   "session.new.starting": "Starting session",
+  "session.new.timedOut": "The server took too long to respond. Send again to retry.",
   "session.new.workspace.runIn": "Run session in",
   "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
@@ -944,6 +949,7 @@ export const dict = {
   "settings.extensions.availableAll": "Available to all projects",
   "settings.extensions.manageConfig": "Manage in opencode.json",
   "settings.extensions.addSkills": "How to add skills",
+  "settings.extensions.plugins.loadFailed": "Could not load plugins",
   "project.settings.title": "Edit project",
   "project.settings.autoAccept.description": "Approve this project's permission requests without asking",
   "project.settings.autoAccept.default.on": "Use default (On)",
@@ -1204,6 +1210,9 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Access files outside the project directory",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Detect repeated tool calls with identical input",
+
+  "session.markRead": "Mark as read",
+  "session.markUnread": "Mark as unread",
 
   "session.delete.failed.title": "Failed to delete session",
   "session.delete.title": "Delete session",

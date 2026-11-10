@@ -39,7 +39,13 @@ export type LayoutIntentEvent =
   | { readonly type: "navigation.taken"; readonly attempt: number }
   | { readonly type: "route.synced"; readonly route: LayoutRoute }
   | { readonly type: "navigation.expired"; readonly attempt: number }
-  | { readonly type: "pane.targeted"; readonly session: string; readonly pane: SessionPane; readonly plugin?: string }
+  | {
+      readonly type: "pane.targeted"
+      readonly session: string
+      readonly pane: SessionPane
+      readonly plugin?: string
+      readonly index?: number
+    }
   | { readonly type: "pane.consumed"; readonly session: string; readonly attempt: number }
   | { readonly type: "pane.expired"; readonly session: string; readonly attempt: number }
   | { readonly type: "sessions.pruned"; readonly keys: readonly string[] }
@@ -143,7 +149,10 @@ export function transitionLayoutIntent(state: LayoutIntentState, event: LayoutIn
         state: {
           ...state,
           nextAttempt: attempt + 1,
-          paneTargets: { ...state.paneTargets, [event.session]: { attempt, pane: event.pane, plugin: event.plugin } },
+          paneTargets: {
+            ...state.paneTargets,
+            [event.session]: { attempt, pane: event.pane, plugin: event.plugin, index: event.index },
+          },
         },
         effects: [{ type: "pane-timer.start", session: event.session, attempt, timeoutMs: PANE_TARGET_TTL_MS }],
       }

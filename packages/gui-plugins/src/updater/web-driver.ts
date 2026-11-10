@@ -1,4 +1,4 @@
-import { initialWebUpdate, transitionWebUpdate } from "./web-machine"
+import { CHECK_TIMEOUT_MS, initialWebUpdate, transitionWebUpdate } from "./web-machine"
 import type { WebUpdateEffect, WebUpdateEvent, WebUpdateState, WebWorker } from "./web-machine"
 
 /** How often an open, visible window asks the server for a newer build. */
@@ -10,7 +10,12 @@ const RESET_CHANNEL = "opencode.updater.reset"
 /** How long `applying` waits for the new worker to take over before reloading anyway. */
 const APPLY_TIMEOUT_MS = 10_000
 
-type Current = { state: WebUpdateState; registration?: ServiceWorkerRegistration; disposed: boolean }
+type Current = {
+  state: WebUpdateState
+  registration?: ServiceWorkerRegistration
+  /** The deadlines of the check in flight and of the takeover. */
+  timers: { check?: ReturnType<typeof setTimeout>; apply?: ReturnType<typeof setTimeout> }
+}
 
 export type WebUpdateReport =
   | { readonly result: "up-to-date" }
@@ -36,7 +41,7 @@ export function startWebUpdater(options: WebUpdaterOptions) {
   // The app's windows share one saved copy, so a reset in one tells the others to reload.
   const channel = container && "BroadcastChannel" in window ? new BroadcastChannel(RESET_CHANNEL) : undefined
 
-  const current: Current = { state: initialWebUpdate, disposed: false }
+  const current: Current = { state: initialWebUpdate, timers: {} }
 
   const queue: WebUpdateEvent[] = []
 
@@ -44,7 +49,6 @@ export function startWebUpdater(options: WebUpdaterOptions) {
 
   // An event dispatched while another applies (a listener that fires synchronously) waits its turn.
   const dispatch = (event: WebUpdateEvent) => {
-    if (current.disposed) return
     queue.push(event)
 
     if (queue.length > 1) return
@@ -58,7 +62,9 @@ export function startWebUpdater(options: WebUpdaterOptions) {
 
     if (step.state !== current.state) {
       current.state = step.state
-      options.changed(step.state)
+
+      // The window that owns the signal is going away.
+      if (step.state.status !== "disposed") options.changed(step.state)
     }
 
     step.effects.forEach(perform)
@@ -80,17 +86,22 @@ export function startWebUpdater(options: WebUpdaterOptions) {
     if (effect.type === "update") {
       const attempt = effect.attempt
 
-      return void registration.update().then(
-        () => dispatch({ type: "check.settled", attempt, worker: newest(registration) }),
-        // The browser rejects with a TypeError or DOMException, both Errors.
-        (error: Error) => dispatch({ type: "check.failed", attempt, message: error.message }),
-      )
+      const timer = setTimeout(() => dispatch({ type: "check.timeout", attempt }), CHECK_TIMEOUT_MS)
+      current.timers.check = timer
+
+      return void registration
+        .update()
+        .then(
+          () => dispatch({ type: "check.settled", attempt, worker: newest(registration) }),
+          // The browser rejects with a TypeError or DOMException, both Errors.
+          (error: Error) => dispatch({ type: "check.failed", attempt, message: error.message }),
+        )
+        .finally(() => clearTimeout(timer))
     }
 
     // Workbox's generated worker skips waiting when it receives this message.
     registration.waiting?.postMessage({ type: "SKIP_WAITING" })
-    const timer = setTimeout(() => dispatch({ type: "apply.timeout" }), APPLY_TIMEOUT_MS)
-    cleanup.push(() => clearTimeout(timer))
+    current.timers.apply = setTimeout(() => dispatch({ type: "apply.timeout" }), APPLY_TIMEOUT_MS)
   }
 
   const check = (manual: boolean) => dispatch({ type: "check.requested", manual, at: Date.now() })
@@ -119,7 +130,7 @@ export function startWebUpdater(options: WebUpdaterOptions) {
     })
 
     void container.ready.then((registration) => {
-      if (current.disposed) return
+      if (current.state.status === "disposed") return
 
       current.registration = registration
       listen(registration, "updatefound", () => {
@@ -158,7 +169,9 @@ export function startWebUpdater(options: WebUpdaterOptions) {
     /** Drops the saved copy of the app and loads the server's current build. */
     reset: () => dispatch({ type: "reset.requested" }),
     dispose: () => {
-      current.disposed = true
+      dispatch({ type: "disposed" })
+      clearTimeout(current.timers.check)
+      clearTimeout(current.timers.apply)
       cleanup.splice(0).forEach((run) => run())
     },
   }

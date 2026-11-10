@@ -1,27 +1,22 @@
-import { createRoot, createSignal, getOwner, runWithOwner, untrack, type Owner } from "solid-js"
+import { createSignal, getOwner, runWithOwner, untrack } from "solid-js"
 import { unwrap } from "solid-js/store"
 import { Predicate, Schema } from "effect"
 import {
   ClientError,
   isPtyFeatureUnsupportedError,
+  isPtyNotFoundError,
   isServiceUnavailableError,
-  type PersistentPtyInfo,
 } from "@opencode/client"
-import {
-  createKeyed,
-  type Layout,
-  type Persisted,
-  type ServerRef,
-  type SessionRef,
-  type Storage,
-  type Toasts,
-} from "@opencode/plugin/gui"
+import type { Layout, Persisted, ServerRef, SessionRef, Storage, Toasts } from "@opencode/plugin/gui"
+import { createDispatch } from "./dispatch"
 import { defaultTitle, titleNumber } from "./title"
 import {
   initialState,
   serverAvailable,
   sessionConnection,
+  sessionCreating,
   sessionView,
+  TERMINAL_REQUEST_TIMEOUT_MS,
   transition,
   viewItems,
   viewTabs,
@@ -50,6 +45,9 @@ export type TerminalSession = ReturnType<TerminalModel["load"]>
 const PANELS = "#terminal-panel, #review-panel"
 
 const OVERLAYS = '[role="dialog"], [role="menu"]'
+
+// How often a new terminal checks whether the server finished creating its session.
+const SESSION_POLL_MS = 250
 
 const importGhostty = () => import("ghostty-web").then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
 
@@ -89,64 +87,216 @@ export function createTerminalModel(input: {
 
   const serverState = (id: string) => machine.servers[id] ?? initialState
 
-  /** Resolves once the requests the event started have answered and their answers were dispatched. */
-  const dispatch = (server: ServerRef, event: Event): Promise<void> => {
-    if (lifetime.signal.aborted) return Promise.resolve()
-    // Reads from reactive computations, such as `load`, must not subscribe them to every state change.
-    const previous = untrack(() => unwrap(machine.servers[server.id])) ?? initialState
-    const next = transition(previous, event)
+  // The live ref and driver loop of each server, and the requests in flight by attempt.
+  const servers = new Map<string, { ref: ServerRef; dispatch: (event: Event) => void }>()
+  const requests = new Map<string, Map<number, AbortController>>()
+  // The new-terminal requests a session's create answers, and the focus request it resolves.
 
-    if (next.state !== previous) setMachine((draft) => void (draft.servers[server.id] = next.state))
+  const creates = new Map<
+    string,
+    { request: number; done: { promise: Promise<string | undefined>; resolve: (id: string | undefined) => void } }
+  >()
 
-    return Promise.all(next.commands.map((command) => run(server, command))).then(() => undefined)
+  const dispatch = (server: ServerRef, event: Event) => {
+    if (lifetime.signal.aborted) return
+    const existing = servers.get(server.id)
+
+    if (existing) {
+      existing.ref = server
+      existing.dispatch(event)
+
+      return
+    }
+
+    const created = {
+      ref: server,
+      dispatch: createDispatch<State, Event, Command>({
+        // Reads from reactive computations, such as `load`, must not subscribe them to every state change.
+        read: () => untrack(() => unwrap(machine.servers[server.id])) ?? initialState,
+        write: (state) => setMachine((draft) => void (draft.servers[server.id] = state)),
+        transition: (state, next) => {
+          const result = transition(state, next)
+
+          return { state: result.state, effects: result.commands }
+        },
+        run: (command) => run(created.ref, command),
+      }),
+    }
+
+    servers.set(server.id, created)
+    created.dispatch(event)
   }
 
-  const run = (server: ServerRef, command: Command): Promise<void> => {
+  /**
+   * Runs one attempt's request under the request budget. A request the machine stopped waiting for answers nothing; one
+   * that runs out of time fails, even when the server never ends it.
+   */
+  const request = <A>(
+    server: ServerRef,
+    attempt: number,
+    call: (signal: AbortSignal) => Promise<A>,
+    settle: { ok: (value: A) => Event; failed: (error: Error) => Event },
+  ) => {
+    const controller = new AbortController()
+    const signal = AbortSignal.any([controller.signal, lifetime.signal])
+    const timedOut = new Error(input.t("request.timedOut"))
+    const timer = setTimeout(() => controller.abort(timedOut), TERMINAL_REQUEST_TIMEOUT_MS)
+    const inflight = requests.get(server.id) ?? new Map<number, AbortController>()
+
+    const ended = new Promise<never>((_, reject) =>
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+    )
+
+    requests.set(server.id, inflight)
+    inflight.set(attempt, controller)
+
+    return Promise.race([call(signal), ended])
+      .then(
+        (value) => dispatch(server, settle.ok(value)),
+        (cause: unknown) => {
+          if (signal.aborted && signal.reason !== timedOut) return
+          dispatch(server, settle.failed(cause instanceof Error ? cause : new Error(String(cause))))
+        },
+      )
+      .finally(() => {
+        clearTimeout(timer)
+        inflight.delete(attempt)
+      })
+  }
+
+  const run = (server: ServerRef, command: Command): Promise<void> | void => {
     if (command.type === "check-capability")
-      return server.client.server.info().then(
+      return request(server, command.attempt, (signal) => server.client.server.info({ signal }), {
         // Servers that predate the field omit it; they still offer terminals.
-        (info) =>
-          dispatch(server, {
-            type: "capability.checked",
-            attempt: command.attempt,
-            supported: info.capabilities?.persistentPty !== false,
-          }),
-        (error) => {
+        ok: (info) => ({
+          type: "capability.checked",
+          attempt: command.attempt,
+          supported: info.capabilities?.persistentPty !== false,
+        }),
+        failed: (error) => {
           console.error("Failed to read server terminal support", error)
 
-          return dispatch(server, {
-            type: "capability.failed",
-            attempt: command.attempt,
-            error: error instanceof Error ? error.message : String(error),
-          })
+          return { type: "capability.failed", attempt: command.attempt, error: error.message }
         },
-      )
+      })
 
     if (command.type === "load-list")
-      return server.client.experimental.persistentPty.list({ sessionID: command.sessionID }).then(
-        (items) =>
-          dispatch(server, { type: "list.loaded", sessionID: command.sessionID, attempt: command.attempt, items }),
-        (error) => {
-          if (isServiceUnavailableError(error))
-            return dispatch(server, {
-              type: "list.unavailable",
-              sessionID: command.sessionID,
-              attempt: command.attempt,
-            })
-          console.error("Failed to list terminals", error)
+      return request(
+        server,
+        command.attempt,
+        (signal) => server.client.experimental.persistentPty.list({ sessionID: command.sessionID }, { signal }),
+        {
+          ok: (items) => ({ type: "list.loaded", sessionID: command.sessionID, attempt: command.attempt, items }),
+          failed: (error) => {
+            if (isServiceUnavailableError(error))
+              return { type: "list.unavailable", sessionID: command.sessionID, attempt: command.attempt }
+            console.error("Failed to list terminals", error)
 
-          return dispatch(server, {
-            type: "list.failed",
-            sessionID: command.sessionID,
-            attempt: command.attempt,
-            error: error instanceof Error ? error.message : String(error),
-          })
+            return { type: "list.failed", sessionID: command.sessionID, attempt: command.attempt, error: error.message }
+          },
         },
       )
+
+    if (command.type === "create-terminal")
+      return request(server, command.attempt, (signal) => createTerminal(server, command, signal), {
+        ok: (terminal) => ({
+          type: "create.succeeded",
+          sessionID: command.sessionID,
+          attempt: command.attempt,
+          terminal,
+        }),
+        failed: (error) => ({
+          type: "create.failed",
+          sessionID: command.sessionID,
+          attempt: command.attempt,
+          kind: outdated(error) ? "unsupported" : "failed",
+          error: error.message,
+        }),
+      })
+
+    if (command.type === "close-terminal")
+      return request(
+        server,
+        command.attempt,
+        (signal) => server.client.experimental.persistentPty.remove({ ptyID: command.ptyID }, { signal }),
+        {
+          ok: () => ({
+            type: "close.succeeded",
+            sessionID: command.sessionID,
+            ptyID: command.ptyID,
+            attempt: command.attempt,
+          }),
+          // A terminal that already exited is closed.
+          failed: (error) =>
+            isPtyNotFoundError(error)
+              ? {
+                  type: "close.succeeded",
+                  sessionID: command.sessionID,
+                  ptyID: command.ptyID,
+                  attempt: command.attempt,
+                }
+              : {
+                  type: "close.failed",
+                  sessionID: command.sessionID,
+                  ptyID: command.ptyID,
+                  attempt: command.attempt,
+                  error: error.message,
+                },
+        },
+      )
+
+    if (command.type === "rename-terminal")
+      return request(
+        server,
+        command.attempt,
+        (signal) =>
+          server.client.experimental.persistentPty.update({ ptyID: command.ptyID, title: command.title }, { signal }),
+        {
+          ok: (terminal) => ({
+            type: "rename.succeeded",
+            sessionID: command.sessionID,
+            ptyID: command.ptyID,
+            attempt: command.attempt,
+            terminal,
+          }),
+          failed: (error) => ({
+            type: "rename.failed",
+            sessionID: command.sessionID,
+            ptyID: command.ptyID,
+            attempt: command.attempt,
+            kind: isPtyFeatureUnsupportedError(error) ? "unsupported" : "failed",
+            error: error.message,
+          }),
+        },
+      )
+
+    if (command.type === "abort") {
+      command.attempts.forEach((attempt) => requests.get(server.id)?.get(attempt)?.abort())
+
+      return
+    }
+
+    if (command.type === "settle-create") return settleCreate(server, command)
+
+    if (command.type === "toast-close-failed") {
+      input.toast.show({ variant: "error", title: input.t("close.failed"), description: command.error })
+
+      return
+    }
+
+    if (command.type === "toast-rename-failed") {
+      input.toast.show(
+        command.kind === "unsupported"
+          ? { variant: "error", title: input.t("rename.unsupported") }
+          : { variant: "error", title: input.t("rename.failed"), description: command.error },
+      )
+
+      return
+    }
 
     const session = sessions.get(`${server.id}\n${command.sessionID}`)
 
-    if (!session) return Promise.resolve()
+    if (!session) return
     dropLegacy(session)
     // The strip shows only stored tabs, so terminals another client created join it at the end.
     const stored = new Set(input.layout.stored(session))
@@ -154,8 +304,103 @@ export function createTerminalModel(input: {
     command.items.forEach((info) => {
       if (!stored.has(info.id)) input.layout.open(input.tab(info.id), session, { tab: "append" })
     })
+  }
 
-    return Promise.resolve()
+  const createTerminal = async (
+    server: ServerRef,
+    command: Extract<Command, { type: "create-terminal" }>,
+    signal: AbortSignal,
+  ) => {
+    const target = sessions.get(`${server.id}\n${command.sessionID}`)
+
+    if (!target) throw new Error(input.t("create.failed"))
+    await settled(target, signal)
+
+    // The next default title counts the terminals the server already has.
+    const known =
+      command.known ??
+      (await server.client.experimental.persistentPty.list({ sessionID: target.id }, { signal }).catch(() => []))
+
+    const used = new Set(known.flatMap((info) => titleNumber(info.title) ?? []))
+    const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find((n) => !used.has(n)) ?? 1
+
+    return server.client.experimental.persistentPty.create(
+      {
+        sessionID: target.id,
+        args: [],
+        // A session that moved keeps its object; the server's record has the directory it runs in now.
+        cwd: server.data.session.get(target.id)?.location.directory ?? target.location?.directory,
+        title: defaultTitle(number),
+        env: {},
+      },
+      { signal },
+    )
+  }
+
+  /**
+   * Resolves once the server has created the session: on its `session.created` event, or once `pending` clears. No
+   * signal tracks `pending`, so it is checked again on an interval.
+   */
+  const settled = (session: SessionRef, signal: AbortSignal) => {
+    if (!session.pending) return Promise.resolve()
+
+    return new Promise<void>((resolve, reject) => {
+      const end = () => {
+        clearInterval(poll)
+        stop()
+        signal.removeEventListener("abort", abort)
+      }
+
+      const done = () => {
+        end()
+        resolve()
+      }
+
+      const abort = () => {
+        end()
+        reject(signal.reason)
+      }
+
+      const stop = runWithOwner(owner, () =>
+        session.server.data.on("session.created", (event) => {
+          if (event.data.sessionID === session.id) done()
+        }),
+      )!
+
+      const poll = setInterval(() => {
+        if (!session.pending) done()
+      }, SESSION_POLL_MS)
+
+      signal.addEventListener("abort", abort, { once: true })
+    })
+  }
+
+  const settleCreate = (server: ServerRef, command: Extract<Command, { type: "settle-create" }>) => {
+    const key = `${server.id}\n${command.sessionID}`
+    const waiting = creates.get(key)
+    creates.delete(key)
+
+    if (command.outcome.ok) {
+      const id = command.outcome.terminal.id
+      const target = sessions.get(key)
+
+      if (target) selection(target).set({ id })
+
+      if (waiting) dispatchFocus({ type: "pending.resolved", request: waiting.request, id })
+      waiting?.done.resolve(id)
+
+      return
+    }
+
+    if (waiting) dispatchFocus({ type: "pending.failed", request: waiting.request })
+
+    if (command.outcome.kind === "unsupported")
+      input.toast.show({ variant: "error", title: input.t("create.unsupported") })
+
+    if (command.outcome.kind === "failed")
+      input.toast.show({ variant: "error", title: input.t("create.failed"), description: command.outcome.error })
+
+    waiting?.done.resolve(undefined)
   }
 
   const available = (server: ServerRef) => {
@@ -176,30 +421,26 @@ export function createTerminalModel(input: {
     // server, so they belong to the model.
     const stops = runWithOwner(owner, () => [
       // The event stream opens with server.connected, so this runs for the first connection and every reconnect.
-      data.on("server.connected", () => void dispatch(server, { type: "server.connected" })),
-      data.on(
-        "persistent-pty.added",
-        (event) => void dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
+      data.on("server.connected", () => dispatch(server, { type: "server.connected" })),
+      data.on("persistent-pty.added", (event) =>
+        dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
       ),
-      data.on(
-        "persistent-pty.removed",
-        (event) => void dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
+      data.on("persistent-pty.removed", (event) =>
+        dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
       ),
-      data.on(
-        "persistent-pty.updated",
-        (event) =>
-          void dispatch(server, {
-            type: "terminal.updated",
-            sessionID: event.data.sessionID,
-            terminal: event.data.terminal,
-          }),
+      data.on("persistent-pty.updated", (event) =>
+        dispatch(server, {
+          type: "terminal.updated",
+          sessionID: event.data.sessionID,
+          terminal: event.data.terminal,
+        }),
       ),
     ])!
 
     watched.set(server.id, { data, stop: () => stops.forEach((stop) => stop()) })
     // Checks now rather than waiting for the stream: it may have connected already, and an answer a previous
     // instance was waiting for never arrives here.
-    void dispatch(server, { type: "server.connected" })
+    dispatch(server, { type: "server.connected" })
   }
 
   const selection = (session: SessionRef) => {
@@ -289,104 +530,33 @@ export function createTerminalModel(input: {
       select(id: string) {
         selection(session()).set({ id })
       },
-      /** Creates a terminal and selects it; resolves its id, or undefined when the server refuses. */
-      async new() {
+      /** A new terminal is being created; another request joins it. */
+      creating: () => sessionCreating(serverState(initial.server.id), initial.id),
+      /**
+       * Creates a terminal and selects it; resolves its id, or undefined when the server refuses. A request while one
+       * is being created joins it and resolves the same id.
+       */
+      new() {
         const target = session()
         const request = dispatchFocus({ type: "request.pending", session: key, overlay: overlay() }).request
+        const done = creates.get(key)?.done ?? Promise.withResolvers<string | undefined>()
 
-        await settled(target, owner)
+        // The create can answer before dispatch returns, so its waiter is registered first.
+        creates.set(key, { request, done })
+        dispatch(target.server, { type: "create.requested", sessionID: target.id })
 
-        // The next default title counts the terminals the server already has.
-        const known =
-          view().type === "ready"
-            ? all()
-            : await target.server.client.experimental.persistentPty.list({ sessionID: target.id }).catch(() => all())
-
-        const used = new Set(known.flatMap((info) => titleNumber(info.title) ?? []))
-        const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find((n) => !used.has(n)) ?? 1
-
-        const info = await target.server.client.experimental.persistentPty
-          .create({
-            sessionID: target.id,
-            args: [],
-            // A session that moved keeps its object; the server's record has the directory it runs in now.
-            cwd: target.server.data.session.get(target.id)?.location.directory ?? target.location?.directory,
-            title: defaultTitle(number),
-            env: {},
-          })
-          .catch((error) => {
-            dispatchFocus({ type: "pending.failed", request })
-
-            // A server without the persistent terminal routes answers with a status its API never declares for them.
-            const outdated =
-              error instanceof ClientError &&
-              error.reason === "UnexpectedStatus" &&
-              Predicate.hasProperty(error.cause, "status") &&
-              (error.cause.status === 404 || error.cause.status === 405)
-
-            input.toast.show(
-              outdated
-                ? { variant: "error", title: input.t("create.unsupported") }
-                : {
-                    variant: "error",
-                    title: input.t("create.failed"),
-                    description: error instanceof Error ? error.message : String(error),
-                  },
-            )
-
-            return undefined
-          })
-
-        if (!info) return undefined
-
-        void dispatch(target.server, { type: "terminal.created", sessionID: target.id, terminal: info })
-        await dispatch(target.server, { type: "session.refresh", sessionID: target.id })
-        selection(target).set({ id: info.id })
-        dispatchFocus({ type: "pending.resolved", request, id: info.id })
-
-        return info.id
+        return done.promise
       },
       /** Removes the terminal on the server; its tab leaves once the server lists it no longer. */
-      async close(id: string) {
-        const target = session()
-
-        await target.server.client.experimental.persistentPty
-          .remove({ ptyID: id })
-          .then(() => dispatch(target.server, { type: "session.refresh", sessionID: target.id }))
-          .catch((error) => console.error("Failed to close terminal", error))
+      close(id: string) {
+        dispatch(session().server, { type: "close.requested", sessionID: initial.id, ptyID: id })
       },
       /**
        * Sets the terminal's title on the server; `null` clears it, so the shell's or the default title shows again.
-       * The current title, or clearing a terminal never renamed, sends nothing.
+       * The title already shown, or clearing a terminal never renamed, sends nothing.
        */
-      async rename(id: string, title: string | null) {
-        const target = session()
-        const previous = get(id)
-
-        if (!previous || title === previous.title || (title === null && previous.userTitle === null)) return
-
-        const replace = (terminal: PersistentPtyInfo) =>
-          void dispatch(target.server, { type: "terminal.replaced", sessionID: target.id, terminal })
-
-        // Only a new title is known before the server answers; a cleared one shows whatever the server falls back to.
-        if (title !== null) replace({ ...previous, title, userTitle: title })
-
-        await target.server.client.experimental.persistentPty
-          .update({ ptyID: id, title })
-          .then(replace)
-          .catch((error) => {
-            // A newer title from the server stays.
-            if (title !== null && get(id)?.userTitle === title) replace(previous)
-            input.toast.show(
-              isPtyFeatureUnsupportedError(error)
-                ? { variant: "error", title: input.t("rename.unsupported") }
-                : {
-                    variant: "error",
-                    title: input.t("rename.failed"),
-                    description: error instanceof Error ? error.message : String(error),
-                  },
-            )
-          })
+      rename(id: string, title: string | null) {
+        dispatch(session().server, { type: "rename.requested", sessionID: initial.id, ptyID: id, title })
       },
       requestFocus(id: string) {
         dispatchFocus({ type: "request.target", session: key, id, overlay: overlay() })
@@ -411,7 +581,7 @@ export function createTerminalModel(input: {
     load(session: SessionRef) {
       sessions.set(session.key, session)
       watch(session.server)
-      void dispatch(session.server, { type: "session.loaded", sessionID: session.id })
+      dispatch(session.server, { type: "session.loaded", sessionID: session.id })
 
       const existing = handles.get(session.key)
 
@@ -450,9 +620,11 @@ export function createTerminalModel(input: {
 
       const server = removed[0]?.server
 
-      if (server) void dispatch(server, { type: "sessions.removed", sessionIDs: removed.map((session) => session.id) })
+      if (server) dispatch(server, { type: "sessions.removed", sessionIDs: removed.map((session) => session.id) })
     },
     dispose() {
+      // Ends the changes in flight first, so a pending new-terminal request resolves and gives up its focus request.
+      servers.forEach((entry) => dispatch(entry.ref, { type: "instance.stopped" }))
       lifetime.abort()
       watched.forEach((entry) => entry.stop())
       watched.clear()
@@ -478,21 +650,12 @@ function inOverlay(node: EventTarget | null) {
   return node instanceof Element && node.closest(OVERLAYS) !== null
 }
 
-/** Resolves once the server has created the session. */
-function settled(session: SessionRef, owner: Owner | null) {
-  if (!session.pending) return Promise.resolve()
-
-  return new Promise<void>((resolve) =>
-    createRoot(
-      (dispose) =>
-        createKeyed(
-          () => !session.pending,
-          () => {
-            dispose()
-            resolve()
-          },
-        ),
-      owner,
-    ),
+/** A server without the persistent terminal routes answers with a status its API never declares for them. */
+function outdated(error: Error) {
+  return (
+    error instanceof ClientError &&
+    error.reason === "UnexpectedStatus" &&
+    Predicate.hasProperty(error.cause, "status") &&
+    (error.cause.status === 404 || error.cause.status === 405)
   )
 }

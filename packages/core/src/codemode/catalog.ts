@@ -6,6 +6,7 @@ export type Tool = {
   readonly type: "tool"
   readonly name: string
   readonly description: string
+  /** Read only for the tools the catalog shows. */
   readonly signature: string
   readonly pinned?: boolean
 }
@@ -25,17 +26,19 @@ const Listing = Schema.Struct({
   path: Schema.String,
   line: Schema.String,
 })
+export type Listing = typeof Listing.Type
 
 const NamespaceSummary = Schema.Struct({
   name: Schema.String,
   description: Schema.optionalKey(Schema.String),
-  count: Schema.Number,
+  /** Every tool's path, so an update can tell a new tool from one that was not shown. */
+  tools: Schema.Array(Schema.String),
   entries: Schema.Array(Listing),
 })
+export type NamespaceSummary = typeof NamespaceSummary.Type
 
 export const Summary = Schema.Struct({
   total: Schema.Number,
-  shown: Schema.Number,
   namespaces: Schema.Array(NamespaceSummary),
 })
 export type Summary = typeof Summary.Type
@@ -48,8 +51,8 @@ const DESCRIPTION_LIMIT = 120
 const CHARACTERS_PER_TOKEN = 4
 const INLINE_BUDGET = 2_000
 
-// Keep every namespace visible, then select full listings one per namespace per round,
-// considering shorter listings first until the inline budget is exhausted.
+// Keep every namespace visible, then select full listings one per namespace per round, in path order, until the
+// inline budget is exhausted. The selection depends only on the tools, and only selected signatures are rendered.
 export function summarize(inventory: Inventory, options: Options = {}): Summary {
   const budget = options.budget ?? INLINE_BUDGET
   const flattened = flatten(inventory.tools)
@@ -61,32 +64,17 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
     })
     .map(([name, namespaceEntries]) => {
       const description = flattened.namespaces.get(name)?.description
-      const listings = namespaceEntries
-        .map((entry) => {
-          const firstLine = entry.description.split("\n", 1)[0]?.trim() ?? ""
-          const description =
-            firstLine.length > DESCRIPTION_LIMIT ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..." : firstLine
-          const suffix = description.length === 0 ? "" : ` // ${description}`
-          return { path: entry.path, line: `  - ${entry.signature}${suffix}` }
-        })
-        .toSorted((left, right) => {
-          if (left.path < right.path) return -1
-          if (left.path > right.path) return 1
-          return 0
-        })
-      const ranked = rankListings(listings)
-      const pinned = new Set(
-        namespaceEntries
-          .filter((entry) => entry.pinned)
-          .map((entry) => listings.find((listing) => listing.path === entry.path))
-          .filter((listing) => listing !== undefined),
-      )
+      const sorted = namespaceEntries.toSorted((left, right) => {
+        if (left.path < right.path) return -1
+        if (left.path > right.path) return 1
+        return 0
+      })
       return {
         name,
         ...(description === undefined ? {} : { description }),
-        listings,
-        selectionOrder: ranked.filter((candidate) => !pinned.has(candidate.listing)),
-        selectedListings: pinned,
+        tools: sorted.map((entry) => entry.path),
+        selectionOrder: sorted.filter((entry) => !entry.tool.pinned),
+        selectedListings: sorted.filter((entry) => entry.tool.pinned).map(listing),
         selectionIndex: 0,
       }
     })
@@ -102,54 +90,64 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
           namespaceLine({
             name: namespace.name,
             ...(namespace.description === undefined ? {} : { description: namespace.description }),
-            count: namespace.listings.length,
+            tools: namespace.tools,
             entries: [],
           }),
         ),
       0,
     ) -
     namespaces
-      .flatMap((namespace) => namespace.listings.filter((listing) => namespace.selectedListings.has(listing)))
+      .flatMap((namespace) => namespace.selectedListings)
       .reduce((total, listing) => total + cost(listing.line), 0)
   while (active.size > 0) {
     for (const namespace of active) {
-      const candidate = namespace.selectionOrder[namespace.selectionIndex]
-      if (!candidate || candidate.cost > remaining) {
+      const entry = namespace.selectionOrder[namespace.selectionIndex]
+      const candidate = entry && listing(entry)
+      if (!candidate || cost(candidate.line) > remaining) {
         active.delete(namespace)
         continue
       }
-      namespace.selectedListings.add(candidate.listing)
+      namespace.selectedListings.push(candidate)
       namespace.selectionIndex += 1
-      remaining -= candidate.cost
+      remaining -= cost(candidate.line)
       if (namespace.selectionIndex === namespace.selectionOrder.length) active.delete(namespace)
     }
   }
 
-  const namespaceSummaries = namespaces.map((namespace) => ({
-    name: namespace.name,
-    ...(namespace.description === undefined ? {} : { description: namespace.description }),
-    count: namespace.listings.length,
-    entries: namespace.listings.filter((listing) => namespace.selectedListings.has(listing)),
-  }))
   return {
     total: flattened.tools.length,
-    shown: namespaceSummaries.reduce((total, namespace) => total + namespace.entries.length, 0),
-    namespaces: namespaceSummaries,
+    namespaces: namespaces.map((namespace) => ({
+      name: namespace.name,
+      ...(namespace.description === undefined ? {} : { description: namespace.description }),
+      tools: namespace.tools,
+      entries: namespace.selectedListings,
+    })),
   }
 }
 
+/** Looks up any tool's listing as the catalog would show it. */
+export function lookup(inventory: Inventory) {
+  const tools = new Map(flatten(inventory.tools).tools.map((entry) => [entry.path, entry]))
+  return (path: string) => {
+    const entry = tools.get(path)
+    return entry === undefined ? undefined : listing(entry)
+  }
+}
+
+function listing(entry: { readonly path: string; readonly tool: Tool }) {
+  const firstLine = entry.tool.description.split("\n", 1)[0]?.trim() ?? ""
+  const description =
+    firstLine.length > DESCRIPTION_LIMIT ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..." : firstLine
+  const suffix = description.length === 0 ? "" : ` // ${description}`
+  return { path: entry.path, line: `  - ${entry.tool.signature}${suffix}` }
+}
+
 function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<string> = []) {
-  const tools: Array<Omit<Tool, "name"> & { readonly path: string }> = []
+  const tools: Array<{ readonly path: string; readonly tool: Tool }> = []
   const namespaces = new Map<string, Namespace>()
   for (const entry of entries) {
     if (entry.type === "tool") {
-      tools.push({
-        type: "tool",
-        path: [...path, entry.name].join("."),
-        description: entry.description,
-        signature: entry.signature,
-        ...(entry.pinned === undefined ? {} : { pinned: entry.pinned }),
-      })
+      tools.push({ path: [...path, entry.name].join("."), tool: entry })
       continue
     }
     const next = [...path, entry.name]
@@ -161,28 +159,13 @@ function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<s
   return { tools, namespaces }
 }
 
-export function namespaceLine(namespace: typeof NamespaceSummary.Type) {
-  const count = namespace.count === 1 ? "1 tool" : `${namespace.count} tools`
+export function namespaceLine(namespace: NamespaceSummary, shown = namespace.entries.length) {
+  const count = namespace.tools.length === 1 ? "1 tool" : `${namespace.tools.length} tools`
   const label =
-    namespace.entries.length === namespace.count
-      ? count
-      : namespace.entries.length === 0
-        ? `${count}, none shown`
-        : `${count}, ${namespace.entries.length} shown`
+    shown === namespace.tools.length ? count : shown === 0 ? `${count}, none shown` : `${count}, ${shown} shown`
   return `- ${namespace.name} (${label})${namespace.description === undefined ? "" : ` // ${namespace.description}`}`
 }
 
-function rankListings(listings: ReadonlyArray<typeof Listing.Type>) {
-  return listings
-    .map((listing) => ({ listing, cost: cost(listing.line) }))
-    .toSorted((left, right) => {
-      if (left.cost !== right.cost) return left.cost - right.cost
-      if (left.listing.path < right.listing.path) return -1
-      if (left.listing.path > right.listing.path) return 1
-      return 0
-    })
-}
-
-function cost(text: string) {
+export function cost(text: string) {
   return Math.round(text.length / CHARACTERS_PER_TOKEN)
 }
