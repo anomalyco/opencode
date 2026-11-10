@@ -3,8 +3,8 @@ import { inlineKey } from "~/lib/direction"
 import { $, $$, reducedMotion, t, target } from "../dom"
 
 /**
- * The changelog and a release's page on a static page (changelog-entry.tsx, from the section that
- * holds the timeline): the filter row scrolled to the last chosen area and the timeline's rail
+ * The changelog, a release's page and a product page's latest releases on a static page
+ * (changelog-entry.tsx, from the section that holds the timeline): the filter row scrolled to the last chosen area and the timeline's rail
  * (changelog-motion.ts), each entry's media, and the heading and Copy link buttons.
  */
 export default function changelog(root: HTMLElement) {

@@ -185,6 +185,11 @@
         opacity: 1;
         outline-offset: 2px;
       }
+
+      /* A static page renders it for everyone. */
+      @media not (prefers-reduced-motion: reduce) {
+        display: none;
+      }
     }
   }
 

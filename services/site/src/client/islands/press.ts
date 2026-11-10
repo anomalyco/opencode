@@ -1,5 +1,6 @@
 import { copied, copyUrl } from "../copy"
 import { $, $$, on, target } from "../dom"
+import { setFaq } from "../faq"
 
 /**
  * The Press page (routes/press/index.tsx): the boilerplate accordion, the copy buttons (each
@@ -41,48 +42,19 @@ export default function press() {
   })
 }
 
-// The boilerplate accordion's rows (routes/press/index.tsx, in the FAQ's look), any number open:
-// OpenCode open from the server. A row grows open, only once one has been toggled (data-ready), so a
-// row a link opens doesn't animate; a closed one goes at once (faq.css) and is hidden="until-found"
-// again, as the server writes it.
+// The boilerplate accordion (faq.tsx, opened and closed by src/client/faq.ts), OpenCode's row open
+// from the server. A row grows open only once one has been toggled (data-ready), so a row a link
+// opens doesn't animate.
 function accordion(list: HTMLElement) {
-  const set = (row: HTMLElement, open: boolean) => {
-    const item = $('[data-slot="faq-item"]', row)
-    const button = $('[data-slot="faq-question"]', row)
-    const answer = $('[data-slot="faq-answer"]', row)
-    if (!item || !button || !answer || (button.getAttribute("aria-expanded") === "true") === open) return
-    button.setAttribute("aria-expanded", String(open))
-    for (const element of [item, button, answer]) {
-      element.toggleAttribute("data-expanded", open)
-      element.toggleAttribute("data-closed", !open)
-    }
-    if (!open) return answer.setAttribute("hidden", "until-found")
-    answer.removeAttribute("hidden")
-    answer.style.setProperty("--kb-collapsible-content-height", `${answer.scrollHeight}px`)
-  }
-  list.addEventListener("click", (event) => {
-    const button = target(event).closest<HTMLElement>('[data-slot="faq-question"]')
-    const row = button?.closest("li")
-    if (!button || !row) return
-    list.toggleAttribute("data-ready", true)
-    set(row, button.getAttribute("aria-expanded") !== "true")
-  })
-  list.addEventListener(
-    "beforematch",
-    (event) => {
-      const row = (event.target as HTMLElement).closest("li")
-      if (!row) return
-      list.toggleAttribute("data-ready", true)
-      set(row, true)
-    },
-    true,
-  )
+  for (const type of ["click", "beforematch"])
+    list.addEventListener(type, () => list.toggleAttribute("data-ready", true), true)
   // A link to a closed row (#boilerplate-…, or anything inside one) opens it.
   const reveal = () => {
     const found = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null
     const row = found?.closest<HTMLElement>('[data-slot="boilerplate-accordion"] > li')
-    if (!row) return
-    set(row, true)
+    const item = row && $('[data-slot="faq-item"]', row)
+    if (!item) return
+    setFaq(item, true)
     requestAnimationFrame(() => found?.scrollIntoView())
   }
   reveal()

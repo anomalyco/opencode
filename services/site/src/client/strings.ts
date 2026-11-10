@@ -23,4 +23,7 @@ export const clientStrings = [
   "changelog.share.copied",
   "site.action.copied",
   "site.action.copiedCommand",
+  "site.action.copiedThisCommand",
+  "site.action.copy",
+  "site.download.thisComputer",
 ] as const satisfies readonly Key[]

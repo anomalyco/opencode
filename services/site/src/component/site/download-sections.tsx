@@ -191,11 +191,14 @@ function DesktopList(props: { os: OS; build?: DownloadPlatform; state: ReturnTyp
                 : undefined
             }
             data-current={build.id === props.build ? "" : undefined}
+            // For the static pages' script, which marks this computer's build (download-list.ts).
+            data-build={build.id}
           >
             <PlatformIcon platform={build.platform} />
             <span data-slot="name">
               {build.label}
-              {/* Only the one build the browser could pin down (detectDesktopBuild), never two. */}
+              {/* Only the one build the browser could pin down (detectDesktopBuild), never two; on a
+                  static page, src/client/islands/download-list.ts marks it. */}
               <Show when={build.id === props.build}>
                 <span data-slot="detail">{i18n.t("site.download.thisComputer")}</span>
               </Show>
@@ -400,7 +403,12 @@ export function ExtensionDownload(props: {
             }
           </For>
         </p>
-        <Show when={props.commands ?? (props.command ? [{ method: props.command.split(" ")[0], command: props.command }] : undefined)}>
+        <Show
+          when={
+            props.commands ??
+            (props.command ? [{ method: props.command.split(" ")[0], command: props.command }] : undefined)
+          }
+        >
           {(commands) => (
             <ul data-component="download-list">
               <For each={commands()}>

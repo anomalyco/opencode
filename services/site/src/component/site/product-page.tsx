@@ -55,7 +55,8 @@ export function ProductPage(props: { slug: PageSlug }) {
   }
 
   // The left and right arrow keys step through the products, unless focus is somewhere that
-  // uses them itself (fields, tabs, the carousel, open menus).
+  // uses them itself (fields, tabs, the carousel, open menus). On a static page,
+  // src/client/entry.ts.
   onMount(() => {
     const step = (event: KeyboardEvent) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return

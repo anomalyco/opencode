@@ -1,16 +1,19 @@
 import type { JSX } from "solid-js"
-import { render } from "solid-js/web"
+import { createRoot } from "solid-js"
+import { insert, render } from "solid-js/web"
 import { I18nContext } from "~/context/i18n-context"
 import { loadSlice, translated, translator } from "~/i18n"
 import { parseLocale } from "~/lib/language"
 
 // The site's own Solid components that the static pages show only once someone asks for them (the
-// search palette, the Markdown view, the orb, the footer's wordmark, the legal cover), rendered into
-// the page in the browser: nothing of theirs is in the HTML for them to hydrate. Loaded on intent
-// with the component that needs it, so the page's own script carries no framework.
+// search palette, the Markdown view, the orb, the footer's wordmark, the legal cover, the products'
+// arrows) or that keep changing once shown (the logo row), rendered into the page in the browser:
+// nothing of theirs is hydrated. Loaded on intent with the component that needs it, so the page's own
+// script carries no framework.
 
 const locale = parseLocale(document.documentElement.dataset.locale) ?? "en"
 const i18n = { t: translator(locale), translated: (key: Parameters<typeof translated>[1]) => translated(locale, key) }
+const localized = (view: () => JSX.Element) => () => <I18nContext.Provider value={i18n}>{view()}</I18nContext.Provider>
 
 /**
  * Renders `view` at the end of `host` with the page language's strings (the shell's, loaded first).
@@ -19,5 +22,22 @@ const i18n = { t: translator(locale), translated: (key: Parameters<typeof transl
 export async function mount(view: () => JSX.Element, host: Element, replace = false) {
   await loadSlice("shell", locale).catch(() => undefined)
   if (replace) host.textContent = ""
-  return render(() => <I18nContext.Provider value={i18n}>{view()}</I18nContext.Provider>, host)
+  return render(localized(view), host)
+}
+
+/**
+ * Renders `view` in place of `element` (the server's copy of the same component), in the same task.
+ * The server's copy leaves first, so a component that measures itself as it mounts lays the page
+ * out once, without both.
+ */
+export async function swap(view: () => JSX.Element, element: Element) {
+  await loadSlice("shell", locale).catch(() => undefined)
+  const marker = document.createComment("")
+  element.replaceWith(marker)
+  const dispose = createRoot((dispose) => {
+    insert(marker.parentNode!, localized(view), marker)
+    return dispose
+  })
+  marker.remove()
+  return dispose
 }

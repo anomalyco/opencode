@@ -1,6 +1,6 @@
 import "./logo-wall.css"
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from "solid-js"
-import { inView, revealMotion, washRootMargin, washStartTime, washThreshold } from "./reveal"
+import { onEntrance, revealMotion } from "./reveal"
 import type { logoAnimations, logoLayouts, SiteSettings } from "./settings"
 import { useVisible } from "./visible"
 
@@ -120,21 +120,9 @@ export function LogoWall(props: {
 
   onMount(() => {
     setMounted(true)
-    let first = true
-    const entrance = new IntersectionObserver(
-      (entries) => {
-        const initial = first
-        first = false
-        if (!entries.some(inView)) return
-        setStart(washStartTime(initial))
-        entrance.disconnect()
-      },
-      { threshold: washThreshold, rootMargin: washRootMargin },
-    )
-    if (row && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setArmed(true)
-      entrance.observe(row)
-    }
+    const entrance =
+      row && !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? onEntrance(row, setStart) : undefined
+    setArmed(!!entrance)
     // Whole cards across the row's container: the probe is one card wide, its margin one gutter.
     const measure = () => {
       if (!row?.parentElement || !probe) return
@@ -150,7 +138,7 @@ export function LogoWall(props: {
     if (row?.parentElement) resize.observe(row.parentElement)
     measure()
     onCleanup(() => {
-      entrance.disconnect()
+      entrance?.()
       resize.disconnect()
     })
   })
