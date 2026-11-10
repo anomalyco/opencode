@@ -86,6 +86,11 @@ pub fn animating(strip: &Custom<Strip>) -> bool {
     strip.with(|strip| strip.pulses.borrow().values().any(Pulse::live))
 }
 
+/// Drops the pulses while the strip is hidden, as its tabs unmount.
+pub fn forget(strip: &Custom<Strip>) {
+    strip.with(|strip| strip.pulses.borrow_mut().clear());
+}
+
 /// Turns the pulses' motion on or off (`TabPulse`'s `enabled`).
 pub fn set_animations(strip: &Custom<Strip>, enabled: bool) {
     strip.with(|strip| strip.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.set_enabled(enabled)));
@@ -383,6 +388,8 @@ impl Component for Strip {
             slots.push((x, tab_width, session.to_owned()));
             x += tab_width;
         }
+        // A tab's `TabPulse` unmounts with it: drop the pulses of tabs no longer painted.
+        pulses.retain(|session, _| slots.iter().any(|(_, _, painted)| painted == session));
         if pulses.values().any(Pulse::live) {
             crate::frame::wake(&tui);
         }

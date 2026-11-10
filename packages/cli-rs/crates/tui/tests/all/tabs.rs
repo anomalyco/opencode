@@ -144,6 +144,32 @@ fn clear_closes_the_tab_and_goes_home() {
     assert!(screen.lines().next().unwrap().contains("Fix the parser"), "{screen}");
 }
 
+// `TabPulse` unmounts with its tab: closing a busy tab leaves no pulse that keeps the frame ticking.
+#[test]
+fn a_closed_busy_tab_stops_the_pulse_ticks() {
+    let h = mount(100, json!({}));
+    h.open("ses_b");
+    h.wait_for("Write the docs");
+    let event = json!({
+        "id": "evt_1", "created": 10_000, "type": "session.execution.started",
+        "durable": { "aggregateID": "ses_a", "seq": 1, "version": 1 },
+        "data": { "sessionID": "ses_a" },
+    });
+    h.tui.data.apply(&[serde_json::from_value(event).unwrap()]);
+    h.app.render();
+    h.app.advance(std::time::Duration::from_millis(200));
+    assert!(h.app.needs_frame(), "a busy tab pulses");
+    opencode_tui::tabs::close(&h.tui, Some("ses_a"));
+    h.wait_tabs(&["ses_b"], Some("ses_b"));
+    for _ in 0..3 {
+        h.app.render();
+        h.app.advance(std::time::Duration::from_millis(200));
+    }
+    h.app.render();
+    h.app.advance(std::time::Duration::from_millis(200));
+    assert!(!h.app.needs_frame(), "a closed tab still ticks");
+}
+
 #[test]
 fn a_split_panel_shows_beside_the_session_and_resizes() {
     let h = mount(140, json!({ "animations": false, "session": { "sidebar": "hide" } }));

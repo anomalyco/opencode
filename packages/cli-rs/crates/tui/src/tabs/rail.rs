@@ -85,6 +85,11 @@ pub fn animating(rail: &Custom<Rail>) -> bool {
     rail.with(|rail| rail.pulses.borrow().values().any(Pulse::live))
 }
 
+/// Drops the pulses while the rail is hidden, as its tabs unmount.
+pub fn forget(rail: &Custom<Rail>) {
+    rail.with(|rail| rail.pulses.borrow_mut().clear());
+}
+
 /// Turns the pulses' motion on or off (`TabPulse`'s `enabled`).
 pub fn set_animations(rail: &Custom<Rail>, enabled: bool) {
     rail.with(|rail| rail.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.set_enabled(enabled)));
@@ -494,6 +499,13 @@ impl Component for Rail {
                 Style::new().fg(if fades { fade(detail_color, pulse_bg, character, length, 0.0) } else { detail_color })
             });
         }
+        // A tab's `TabPulse`s unmount with it, the edge below with the last tab, and all of them in compact mode.
+        let last = items.last().map(|item| item.tab.session_id.as_str());
+        pulses.retain(|(session, slot), _| {
+            !compact
+                && items.iter().any(|item| item.tab.session_id == *session)
+                && (!matches!(slot, 2 | 3) || last == Some(session.as_str()))
+        });
         if pulses.values().any(Pulse::live) {
             crate::frame::wake(&tui);
         }
