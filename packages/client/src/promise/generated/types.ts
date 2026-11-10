@@ -1651,7 +1651,7 @@ export type SessionUsageRecorded = {
   type: "session.usage.recorded"
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
-  data: { sessionID: SessionID; source: "title" | "compaction"; cost: MoneyUSD; tokens: TokenUsageInfo }
+  data: { sessionID: SessionID; source: "title" | "compaction" | "generate"; cost: MoneyUSD; tokens: TokenUsageInfo }
 }
 
 export type LocationShutdown = {
