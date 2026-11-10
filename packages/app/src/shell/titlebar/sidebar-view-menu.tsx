@@ -1,4 +1,5 @@
 import { For, Show, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
@@ -37,8 +38,15 @@ export function SidebarViewMenu(props: {
   const options = (kind: SidebarFilterKind) => filterOptions(kind, props, language.t)
   const active = () => filterCount(props.state)
 
+  // Kobalte closes a submenu only when focus leaves it, and hovering a sibling trigger keeps focus in the parent
+  // menu, so without this every submenu hovered stays open on top of the next.
+  const [menu, setMenu] = createStore<{ sub: string | undefined }>({ sub: undefined })
+
+  const toggleSub = (key: string, open: boolean) =>
+    setMenu("sub", (current) => (open ? key : current === key ? undefined : current))
+
   return (
-    <Menu gutter={4} modal={false} placement="bottom-end">
+    <Menu gutter={4} modal={false} placement="bottom-end" onOpenChange={(open) => !open && setMenu("sub", undefined)}>
       <Menu.Trigger
         as={IconButton}
         variant="ghost-muted"
@@ -60,7 +68,13 @@ export function SidebarViewMenu(props: {
       />
       <Menu.Portal>
         <Menu.Content class="min-w-[200px]">
-          <Menu.Sub gutter={4} overflowPadding={16} overlap>
+          <Menu.Sub
+            gutter={4}
+            overflowPadding={16}
+            overlap
+            open={menu.sub === "grouping"}
+            onOpenChange={(open) => toggleSub("grouping", open)}
+          >
             <SubTrigger label={language.t("sidebar.view.grouping")}>
               {language.t(`sidebar.view.grouping.${props.state.grouping}`)}
             </SubTrigger>
@@ -83,7 +97,13 @@ export function SidebarViewMenu(props: {
               </Menu.SubContent>
             </Menu.Portal>
           </Menu.Sub>
-          <Menu.Sub gutter={4} overflowPadding={16} overlap>
+          <Menu.Sub
+            gutter={4}
+            overflowPadding={16}
+            overlap
+            open={menu.sub === "ordering"}
+            onOpenChange={(open) => toggleSub("ordering", open)}
+          >
             <SubTrigger label={language.t("sidebar.view.ordering")}>
               {language.t(`sidebar.view.ordering.${props.state.ordering}`)}
             </SubTrigger>
@@ -110,7 +130,13 @@ export function SidebarViewMenu(props: {
               </Menu.SubContent>
             </Menu.Portal>
           </Menu.Sub>
-          <Menu.Sub gutter={4} overflowPadding={16} overlap>
+          <Menu.Sub
+            gutter={4}
+            overflowPadding={16}
+            overlap
+            open={menu.sub === "show"}
+            onOpenChange={(open) => toggleSub("show", open)}
+          >
             <SubTrigger label={language.t("sidebar.view.show")} />
             <Menu.Portal>
               <Menu.SubContent class="w-max min-w-[172px]">
@@ -129,7 +155,13 @@ export function SidebarViewMenu(props: {
             <Menu.GroupLabel>{language.t("sidebar.view.filters")}</Menu.GroupLabel>
             <For each={FILTER_KINDS}>
               {(kind) => (
-                <Menu.Sub gutter={4} overflowPadding={16} overlap>
+                <Menu.Sub
+                  gutter={4}
+                  overflowPadding={16}
+                  overlap
+                  open={menu.sub === `filter:${kind}`}
+                  onOpenChange={(open) => toggleSub(`filter:${kind}`, open)}
+                >
                   <SubTrigger label={language.t(`sidebar.view.filter.${kind}`)}>
                     <Show when={props.state.filters[kind].length > 0}>{props.state.filters[kind].length}</Show>
                   </SubTrigger>

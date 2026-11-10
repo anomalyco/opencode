@@ -446,6 +446,20 @@ test("customized vertical sidebar merges a project across servers and narrows it
   const menu = page.getByRole("menu")
 
   await page.getByRole("button", { name: "View options" }).click()
+
+  // Moving between submenu triggers swaps the open submenu instead of stacking them.
+  for (const [name, item] of [
+    [/^Grouping/, "Server → Project"],
+    [/^Ordering/, "Attention"],
+  ] as const) {
+    const box = await menu.getByRole("menuitem", { name }).boundingBox()
+
+    if (!box) throw new Error(`no ${name} trigger`)
+    await page.mouse.move(box.x + 40, box.y + box.height / 2, { steps: 12 })
+    await expect(menu.last()).toContainText(item)
+  }
+
+  await expect(menu).toHaveCount(2)
   await menu.getByRole("menuitem", { name: /^Grouping/ }).click()
   await page.getByRole("menuitemradio", { name: "Server → Project" }).click()
   await page.keyboard.press("Escape")
