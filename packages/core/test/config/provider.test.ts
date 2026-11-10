@@ -967,6 +967,121 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  const seedGoogle = Effect.fn(function* () {
+    const providers = yield* Provider.Service
+    yield* providers.transform((editor) => {
+      editor.update(Provider.ID.make("google"), (provider) => {
+        provider.package = "@opencode/ai/providers/google"
+      })
+      for (const id of ["gemini-4-argon", "gemini-4-flash", "gemini-4-routed"])
+        editor.models.update(Provider.ID.make("google"), Model.ID.make(id), (model) => {
+          model.variants = ["low", "high"].map((effort) => ({
+            id: Model.VariantID.make(effort),
+            settings: { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } },
+          }))
+        })
+      editor.models.update(Provider.ID.make("google"), Model.ID.make("gemini-4-routed"), (model) => {
+        model.package = "@opencode/ai/providers/google"
+      })
+    })
+  })
+
+  const interactions = (efforts: string[]) =>
+    efforts.map((effort) => ({
+      id: Model.VariantID.make(effort),
+      settings: { thinkingLevel: effort, thinkingSummaries: "auto" },
+    }))
+
+  it.effect("respells inherited variants when a canonical alias switches the provider package", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      yield* seedGoogle()
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              "google-ix": {
+                canonical: "google",
+                package: "@opencode/ai/providers/google/interactions",
+                models: { "gemini-4-argon": {} },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const model = required(yield* models.get(Provider.ID.make("google-ix"), Model.ID.make("gemini-4-argon")))
+      expect(model.variants).toEqual(interactions(["low", "medium", "high"]))
+    }),
+  )
+
+  it.effect("respells listed and unlisted models when a provider switches its own package", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      yield* seedGoogle()
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              google: {
+                package: "@opencode/ai/providers/google/interactions",
+                models: { "gemini-4-argon": {} },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const variants = (id: string) =>
+        models.get(Provider.ID.make("google"), Model.ID.make(id)).pipe(Effect.map((model) => required(model).variants))
+      expect(yield* variants("gemini-4-argon")).toEqual(interactions(["low", "medium", "high"]))
+      expect(yield* variants("gemini-4-flash")).toEqual(interactions(["low", "medium", "high"]))
+      // Its own package still applies, so its variants stay as they were.
+      expect((yield* variants("gemini-4-routed")).map((variant) => variant.settings)).toEqual([
+        { thinkingConfig: { includeThoughts: true, thinkingLevel: "low" } },
+        { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+      ])
+    }),
+  )
+
+  it.effect("overlays configured variants on the variants respelled for a package switch", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      yield* seedGoogle()
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              "google-ix": {
+                canonical: "google",
+                package: "@opencode/ai/providers/google/interactions",
+                models: {
+                  "gemini-4-argon": {
+                    variants: [
+                      { id: "high", headers: { "x-tier": "high" } },
+                      { id: "low", settings: { thinkingSummaries: "none" } },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const model = required(yield* models.get(Provider.ID.make("google-ix"), Model.ID.make("gemini-4-argon")))
+      const [low, medium, high] = interactions(["low", "medium", "high"])
+      expect(model.variants).toEqual([
+        { ...low, settings: { thinkingLevel: "low", thinkingSummaries: "none" } },
+        medium,
+        { ...high, headers: { "x-tier": "high" } },
+      ])
+    }),
+  )
+
   it.effect("builds configured reasoning variants after provider and model package normalization", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service
@@ -1335,7 +1450,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
           Model.VariantID.make("slow"),
         ])
         expect(model.variants?.[0]?.headers).toEqual({ first: "first", shared: "last", last: "last" })
-        expect(model.variants?.[0]?.settings).toEqual({ effort: "high" })
+        // The catalog's Anthropic spelling doesn't follow the model to a package with no reasoning variants.
+        expect(model.variants?.[0]?.settings).toBeUndefined()
         expect(model.variants?.[1]?.headers).toEqual({ slow: "slow" })
       }),
     ),
