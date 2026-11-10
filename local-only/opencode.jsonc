@@ -2,6 +2,10 @@
 // Ablage: ~/.config/opencode/opencode.jsonc (global) oder <projekt>/opencode.jsonc.
 // Bewusst ohne "$schema": Editoren würden das Schema sonst von opencode.ai laden.
 {
+  // Standardmodell fest vorgeben ("<provider>/<modell-id>", wie `opencode models` es auflistet).
+  // Sonst wählt opencode evtl. ein Katalogmodell von Ollama/LM Studio, auch wenn dort kein Server läuft (ECONNREFUSED).
+  "model": "firma/modell-id",
+
   // Kein Update-Check gegen opencode.ai / formulae.brew.sh (packages/cli/src/services/updater.ts)
   "update": "disable",
 
@@ -17,6 +21,10 @@
   // Tool-Rechte: letzte passende Regel gewinnt (packages/core/src/permission.ts)
   "permissions": [
     { "action": "webfetch", "resource": "*", "effect": "deny" },
+    // Optional: webfetch ins Internet freigeben, mit Rückfrage vor jedem Abruf (zusätzlich die tool.use-Freigabe
+    // unter "policies" einkommentieren und für den Dienst HTTPS_PROXY/NO_PROXY setzen).
+    // Die Rückfrage ist die eigentliche Schutzschicht: das Modell kann Text in Pfad oder Parameter der URL packen.
+    // { "action": "webfetch", "resource": "*", "effect": "ask" },
     // Nur Loopback erlauben (z. B. lokale Doku-Server)
     { "action": "webfetch", "resource": "http://localhost*", "effect": "allow" },
     { "action": "webfetch", "resource": "http://127.0.0.1*", "effect": "allow" },
@@ -32,8 +40,11 @@
     { "action": "integration.use", "resource": "*", "effect": "deny" },
     { "action": "websearch.use", "resource": "*", "effect": "deny" },
     { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+    // Optional: webfetch wieder zulassen (gehört zur "ask"-Regel unter "permissions"; Websuche bleibt gesperrt)
+    // { "action": "tool.use", "resource": "webfetch:*", "effect": "allow" },
 
-    // Lokale LLM-Server freigeben (nur die tatsächlich genutzten behalten)
+    // Lokale LLM-Server freigeben (nur die tatsächlich genutzten behalten!). Ein freigegebener Provider zeigt
+    // Modelle aus dem gebündelten Katalog auch dann an, wenn sein Server nicht läuft.
     { "action": "provider.use", "resource": "ollama", "effect": "allow" },
     { "action": "integration.connect", "resource": "ollama", "effect": "allow" },
     { "action": "integration.use", "resource": "ollama", "effect": "allow" },
