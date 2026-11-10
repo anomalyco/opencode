@@ -12,6 +12,10 @@ sources) and the P-COMP fixtures are equal. These inputs are outside that corpus
 - **User macros and the `maxSourceLength`, `maxExpand`, and `maxDepth` options** of `parseLatex` are not ported.
   The plugin never passes them. The default limits (100 000 characters, 256 levels) are kept, counted in `char`
   instead of UTF-16 units.
+- **Formulas whose layout takes more than 2²⁰ cells**, such as a ragged matrix of a thousand columns and rows.
+  TS allocates the rectangle and shows the formula, or the source when the allocation throws a `RangeError`. Rust
+  stops at `layout::MAX_CELLS` cells in all intermediate blocks and shows the source, so a formula cannot exhaust
+  memory on the UI thread.
 - **The mouse wheel over a formula.** TS stops Shift-wheel and horizontal wheel events at the formula, even when it
   cannot scroll further. opentui-rust's `ScrollBox` passes a wheel step it cannot use to the transcript.
   Unshifted vertical wheel steps reach the transcript in both.
