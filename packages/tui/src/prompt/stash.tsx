@@ -1,10 +1,11 @@
 import path from "path"
-import { onMount } from "solid-js"
+import { onMount, useContext } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
+import { ClientContext } from "../context/client"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
-import { parsePromptInfo, type PromptInfo } from "./history"
+import { parsePromptInfo, persistablePrompt, promptServer, prunePromptMedia, type PromptInfo } from "./history"
 
 export type StashEntry = {
   prompt: PromptInfo
@@ -37,22 +38,32 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
   name: "PromptStash",
   init: () => {
     const paths = useTuiPaths()
+    const client = useContext(ClientContext)
     const stashPath = path.join(paths.state, "prompt-stash.jsonl")
+    const loaded = Promise.withResolvers<void>()
     onMount(async () => {
       const lines = parsePromptStash(await readText(stashPath).catch(() => ""))
       setStore("entries", lines)
       if (lines.length > 0)
-        writeText(stashPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+        await writeText(stashPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+      await prunePromptMedia(paths.state)
+      loaded.resolve()
     })
 
     const [store, setStore] = createStore({ entries: [] as StashEntry[] })
 
     return {
+      /** Settles once the entries are read and the kept videos none of them name are pruned. */
+      loaded: loaded.promise,
       list() {
         return store.entries
       },
+      /** Returns once the entry is written, and the kept videos it no longer names are pruned. */
       push(entry: Omit<StashEntry, "timestamp">) {
-        const stash = structuredClone(unwrap({ ...entry, timestamp: Date.now() }))
+        const stash = structuredClone({
+          prompt: persistablePrompt(unwrap(entry.prompt), paths.state, promptServer(client?.url)),
+          timestamp: Date.now(),
+        })
         let trimmed = false
         setStore(
           produce((draft) => {
@@ -64,11 +75,11 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
           }),
         )
 
-        if (trimmed) {
-          writeText(stashPath, store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
-          return
-        }
-        appendText(stashPath, JSON.stringify(stash) + "\n").catch(() => {})
+        if (trimmed)
+          return writeText(stashPath, store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n")
+            .then(() => prunePromptMedia(paths.state))
+            .catch(() => {})
+        return appendText(stashPath, JSON.stringify(stash) + "\n").catch(() => {})
       },
       pop() {
         if (store.entries.length === 0) return undefined

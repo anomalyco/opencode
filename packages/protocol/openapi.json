@@ -16669,6 +16669,9 @@
               "console_watches": {
                 "type": "boolean"
               },
+              "rich_media": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },

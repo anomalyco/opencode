@@ -30,6 +30,17 @@ export const DocumentBlock = Schema.Struct({
 })
 export type DocumentBlock = Schema.Schema.Type<typeof DocumentBlock>
 
+export const VideoFormat = Schema.Literals(["mkv", "mov", "mp4", "webm", "flv", "mpeg", "mpg", "wmv", "three_gp"])
+export type VideoFormat = Schema.Schema.Type<typeof VideoFormat>
+
+export const VideoBlock = Schema.Struct({
+  video: Schema.Struct({
+    format: VideoFormat,
+    source: Schema.Struct({ bytes: Schema.String }),
+  }),
+})
+export type VideoBlock = Schema.Schema.Type<typeof VideoBlock>
+
 const IMAGE_FORMATS = {
   "image/png": "png",
   "image/jpeg": "jpeg",
@@ -49,6 +60,19 @@ const DOCUMENT_FORMATS = {
   "text/plain": "txt",
   "text/markdown": "md",
 } as const satisfies Record<string, DocumentFormat>
+
+const VIDEO_FORMATS = {
+  "video/x-matroska": "mkv",
+  "video/quicktime": "mov",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+  "video/x-flv": "flv",
+  "video/mpeg": "mpeg",
+  "video/mpg": "mpg",
+  "video/wmv": "wmv",
+  "video/x-ms-wmv": "wmv",
+  "video/3gpp": "three_gp",
+} as const satisfies Record<string, VideoFormat>
 
 const documentBlock = (name: string, format: DocumentFormat, bytes: string): DocumentBlock => ({
   document: {
@@ -87,7 +111,7 @@ const mediaBase64 = Effect.fnUntraced(function* (part: MediaPart) {
   return Base64.encode(bytes)
 })
 
-// Route by MIME. Known image/document formats lower into a typed block; anything
+// Route by MIME. Known image/video/document formats lower into a typed block; anything
 // else fails with a clear error instead of silently degrading to a malformed
 // document block. Image MIME types not in `IMAGE_FORMATS` (e.g. `image/svg+xml`)
 // get an image-specific error so the caller knows it's a format-support issue,
@@ -98,9 +122,13 @@ export const lower = Effect.fnUntraced(function* (part: MediaPart, documentNames
   if (imageFormat) {
     return [{ image: { format: imageFormat, source: { bytes: yield* mediaBase64(part) } } } satisfies ImageBlock]
   }
-  if (mime.startsWith("image/"))
+  const videoFormat = VIDEO_FORMATS[mime as keyof typeof VIDEO_FORMATS]
+  if (videoFormat) {
+    return [{ video: { format: videoFormat, source: { bytes: yield* mediaBase64(part) } } } satisfies VideoBlock]
+  }
+  if (mime.startsWith("image/") || mime.startsWith("video/"))
     return yield* ProviderShared.invalidRequest(
-      `Bedrock Converse does not support image media type ${part.media.mediaType}`,
+      `Bedrock Converse does not support ${mime.split("/")[0]} media type ${part.media.mediaType}`,
     )
   const documentFormat = DOCUMENT_FORMATS[mime as keyof typeof DOCUMENT_FORMATS]
   if (documentFormat) {

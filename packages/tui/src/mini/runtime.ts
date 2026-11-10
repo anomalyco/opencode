@@ -11,6 +11,7 @@
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { LocationRef } from "@opencode/client/promise"
 import type { Config } from "../config"
+import { flagEnabled } from "../config/flag"
 import { newSessionLocation } from "../config/new-session-location"
 import { errorMessage } from "../util/error"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
@@ -800,6 +801,12 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         sessionID: state.sessionID,
         thinking: thinking(),
         tools: configState.current.tools === "show",
+        richMedia: flagEnabled({
+          key: "rich_media",
+          experimental: (await tuiConfigTask).experimental,
+          channel: input.host.channel,
+          overrides: process.env.OPENCODE_FLAGS,
+        }),
         replay: input.replay,
         replayLimit: input.replayLimit,
         footer,

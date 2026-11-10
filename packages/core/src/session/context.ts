@@ -7,6 +7,7 @@ import { Agent } from "../agent.js"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { Database } from "../database/database.js"
+import { Flag } from "../flag.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
@@ -31,6 +32,8 @@ export interface Selection {
   readonly agent: Agent.Selection & { readonly info: Agent.Info }
   readonly instructions: Instructions.List
   readonly tools: Tool.Snapshot
+  /** Whether attached videos reach the model, from the `rich_media` flag. */
+  readonly video: boolean
 }
 
 export interface Loaded {
@@ -40,6 +43,8 @@ export interface Loaded {
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
   readonly tools: Tool.Snapshot
+  /** Whether attached videos reach the model, from the `rich_media` flag. */
+  readonly video: boolean
 }
 
 /**
@@ -79,6 +84,7 @@ const layer = Layer.effect(
     const builtins = yield* InstructionBuiltIns.Service
     const model = yield* Model.Service
     const db = (yield* Database.Service).db
+    const flags = yield* Flag.Service
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
     const location = yield* Location.Service
@@ -153,6 +159,7 @@ const layer = Layer.effect(
           references: referenceInstructions.load(),
           mcp: mcpInstructions.load(permissions),
           entries: entries.load(sessionID),
+          video: flags.enabled("rich_media"),
         },
         { concurrency: "unbounded" },
       )
@@ -172,6 +179,7 @@ const layer = Layer.effect(
           loaded.entries,
         ]),
         tools: loaded.tools,
+        video: loaded.video,
       }
     })
 
@@ -190,6 +198,7 @@ const layer = Layer.effect(
         initial: history.initial,
         messages: history.entries.map((entry) => entry.message),
         tools: selection.tools,
+        video: selection.video,
       }
     })
 
@@ -219,6 +228,7 @@ export const node = makeLocationNode({
     Agent.node,
     Model.node,
     Database.node,
+    Flag.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
     InstructionEntry.node,

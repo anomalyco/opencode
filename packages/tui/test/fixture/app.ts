@@ -14,6 +14,8 @@ export async function createAppFixture(
     state?: string
     config?: Config.Info
     args?: TuiInput["args"]
+    // The server runs on this machine, so `file://` uris name files the terminal can read.
+    localServer?: boolean
     fetch?: FetchHandler
     // A renderer whose owner already set up its terminal, such as the simulation renderer.
     setup?: TestRendererSetup
@@ -39,7 +41,7 @@ export async function createAppFixture(
   const task = Effect.runPromise(
     run({
       app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
+      server: { endpoint: { url: server.url.toString() }, local: input.localServer },
       config: {
         get: async () => config,
         update: async (mutate) => {

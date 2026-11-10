@@ -46,6 +46,8 @@ function ToastSurface(props: {
   return (
     <box
       position="absolute"
+      // Above the media viewer (2500) and below dialogs (3000).
+      zIndex={2600}
       top={1}
       right={2}
       maxWidth={Math.min(60, dimensions().width - 6)}

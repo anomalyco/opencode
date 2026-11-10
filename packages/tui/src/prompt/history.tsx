@@ -1,12 +1,17 @@
 import path from "path"
+import { mkdirSync, renameSync, statSync, utimesSync, writeFileSync } from "node:fs"
+import { readdir, rm, stat } from "node:fs/promises"
+import { pathToFileURL } from "node:url"
 import { measureEditText, type WidthMethod } from "@opentui/core"
-import { onMount } from "solid-js"
+import { onMount, useContext } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import type { PromptInput } from "@opencode/schema"
 import type { Types } from "effect"
+import { ClientContext } from "../context/client"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
+import { keptVideoExtension } from "../component/prompt/local-attachment"
 
 export type PastedText = {
   text: string
@@ -17,8 +22,10 @@ export type PastedText = {
   }
 }
 
-// `path` is the local file a pasted attachment was read from. It stays in the TUI.
-export type PromptFile = Types.DeepMutable<PromptInput.FileAttachment> & { path?: string }
+// `path` is the local file a pasted attachment was read from. `server` is the origin of the server whose machine a
+// `file:` uri without a path or an `@` mention names a file on, recorded when history or the stash keeps it, and "" for
+// an entry written before that. Both stay in the TUI.
+export type PromptFile = Types.DeepMutable<PromptInput.FileAttachment> & { path?: string; server?: string }
 
 export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "agents" | "skills">> & {
   files?: PromptFile[]
@@ -61,6 +68,104 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
   }
 }
 
+/** Where history and the stash keep the videos they were given as bytes. */
+export function promptMediaDirectory(state: string) {
+  return path.join(state, "prompt-media")
+}
+
+/** The identity history and the stash record a server's files under: its URL's origin, or "" when it has none. */
+export function promptServer(url: string | undefined) {
+  return (url && URL.parse(url)?.origin) || ""
+}
+
+// History and the stash never keep a video's bytes. A video keeps its local file as a `file://` uri, and one without a
+// file gets one under `state` now, so an entry written right after a restore has it too. Sending reads it again. A
+// server's own file keeps the server it came from, `server` unless it was recalled from another.
+export function persistablePrompt(prompt: PromptInfo, state: string, server: string): PromptInfo {
+  return {
+    ...prompt,
+    files: prompt.files?.map((file) => {
+      if (isServerFile(file)) return { ...file, server: file.server ?? server }
+      const video = /^data:(video\/[^;,]+);base64,/.exec(file.uri)
+      const local =
+        video && (file.path ?? writeVideo(promptMediaDirectory(state), file.uri.slice(video[0].length), video[1]!))
+      return local ? { ...file, uri: pathToFileURL(local).href, path: local } : file
+    }),
+  }
+}
+
+// A `file:` uri without a local path or an `@` mention: a file the server read from its own machine.
+function isServerFile(file: PromptFile) {
+  return file.uri.startsWith("file:") && !file.path && !file.mention?.text.startsWith("@")
+}
+
+// Named for its content, written once. A video that cannot be written keeps its bytes rather than being dropped.
+function writeVideo(directory: string, base64: string, mime: string) {
+  const bytes = Buffer.from(base64, "base64")
+  const file = path.join(directory, Bun.SHA256.hash(bytes, "hex") + keptVideoExtension(mime))
+  const temporary = `${file}.${crypto.randomUUID()}.tmp`
+  try {
+    if (statSync(file, { throwIfNoEntry: false })?.isFile()) {
+      touch(file)
+      return file
+    }
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(temporary, bytes)
+    renameSync(temporary, file)
+    return file
+  } catch {
+    void rm(temporary, { force: true }).catch(() => {})
+    return undefined
+  }
+}
+
+/**
+ * Restarts the grace window of each kept video `prompt` names, for a prompt put back in the composer: the stash entry
+ * it came from may have been the last to name them.
+ */
+export function keepPromptMedia(prompt: PromptInfo, state: string) {
+  prompt.files?.forEach((file) => {
+    if (file.path && path.dirname(file.path) === promptMediaDirectory(state)) touch(file.path)
+  })
+}
+
+// Long enough for a draft in another window to reach history or the stash. Reusing a kept video restarts it.
+const PROMPT_MEDIA_GRACE_MS = 24 * 60 * 60 * 1000
+
+function touch(file: string) {
+  const now = new Date()
+  try {
+    utimesSync(file, now, now)
+  } catch {}
+}
+
+/**
+ * Deletes the kept videos that no history or stash entry names. A file is named for its content, so its name in either
+ * file's text is a reference. A file written within the grace window may belong to another window's draft and stays,
+ * and nothing is deleted when either file cannot be read.
+ */
+export async function prunePromptMedia(state: string) {
+  const directory = promptMediaDirectory(state)
+  const names = await readdir(directory).catch(() => [])
+  if (names.length === 0) return
+  const [history, stash] = await Promise.all(
+    ["prompt-history.jsonl", "prompt-stash.jsonl"].map((name) =>
+      readText(path.join(state, name)).catch((error) => (error?.code === "ENOENT" ? "" : undefined)),
+    ),
+  )
+  if (history === undefined || stash === undefined) return
+  await Promise.all(
+    names
+      .filter((name) => !history.includes(name) && !stash.includes(name))
+      .map(async (name) => {
+        const file = path.join(directory, name)
+        const info = await stat(file).catch(() => undefined)
+        if (!info?.isFile() || Date.now() - info.mtimeMs < PROMPT_MEDIA_GRACE_MS) return
+        await rm(file, { force: true }).catch(() => {})
+      }),
+  )
+}
+
 export const MAX_HISTORY_ENTRIES = 50
 
 export function parsePromptHistory(text: string) {
@@ -87,26 +192,38 @@ export function parsePromptInfo(value: unknown): PromptInfo | undefined {
   if (!value || typeof value !== "object") return
   const input = value as Record<string, unknown>
   if (typeof input.text !== "string" || !Array.isArray(input.pasted)) return
-  return input as PromptInfo
+  const prompt = input as PromptInfo
+  // Every TUI on this machine shares these files, whatever server it talks to, so a server's file keeps where it came
+  // from, unknown for an entry written before that was recorded.
+  return {
+    ...prompt,
+    files: prompt.files?.map((file) => (isServerFile(file) ? { ...file, server: file.server ?? "" } : file)),
+  }
 }
 
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
     const paths = useTuiPaths()
+    const client = useContext(ClientContext)
     const historyPath = path.join(paths.state, "prompt-history.jsonl")
+    const loaded = Promise.withResolvers<void>()
     onMount(async () => {
       const lines = parsePromptHistory(await readText(historyPath).catch(() => ""))
       setStore("history", lines)
 
       // Rewrite valid retained entries to self-heal corruption and enforce the limit.
       if (lines.length > 0)
-        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+        await writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+      await prunePromptMedia(paths.state)
+      loaded.resolve()
     })
 
     const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
 
     return {
+      /** Settles once the entries are read and the kept videos none of them name are pruned. */
+      loaded: loaded.promise,
       move(direction: 1 | -1, input: string) {
         if (!store.history.length) return undefined
         const current = store.history.at(store.index)
@@ -118,11 +235,12 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         if (next === 0) return emptyPrompt()
         return store.history.at(next)
       },
+      /** Returns once the entry is written, and the kept videos it no longer names are pruned. */
       append(item: PromptInfo) {
-        const entry = structuredClone(unwrap(item))
+        const entry = structuredClone(persistablePrompt(unwrap(item), paths.state, promptServer(client?.url)))
         if (isDuplicateEntry(store.history.at(-1), entry)) {
           setStore("index", 0)
-          return
+          return Promise.resolve()
         }
         let trimmed = false
         setStore(
@@ -136,11 +254,11 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
           }),
         )
 
-        if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
-          return
-        }
-        appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        if (trimmed)
+          return writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n")
+            .then(() => prunePromptMedia(paths.state))
+            .catch(() => {})
+        return appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
       },
     }
   },

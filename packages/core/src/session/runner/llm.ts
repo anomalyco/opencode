@@ -148,6 +148,7 @@ const layer = Layer.effect(
                         model,
                         initial: history.initial,
                         messages: history.messages,
+                        video: selected.video,
                       },
                     })
                   }).pipe(
@@ -260,6 +261,7 @@ const layer = Layer.effect(
           tools: loaded.tools,
           initial: loaded.initial,
           messages: loaded.messages,
+          video: loaded.video,
         })
         const prepared = yield* context.request
           .primary({

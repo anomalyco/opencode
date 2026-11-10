@@ -2,7 +2,8 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
+import { resolve, ConfigProvider, Info, useConfig, useRichMedia, type Interface } from "../src/config"
+import { TuiAppProvider } from "../src/context/runtime"
 import { settings } from "../src/component/dialog-config"
 import { TuiKeybind } from "../src/config/keybind"
 import { CommandMap, Definitions } from "../src/config/v1/keybind"
@@ -293,6 +294,32 @@ test("uses ctrl+z for input undo when terminal suspend is unavailable", () => {
 test("keeps turn token usage inside developer tools", () => {
   expect(settings.find((setting) => setting.path.join(".") === "debug.devtools")?.title).toBe("Developer tools")
   expect(settings.some((setting) => setting.path.join(".") === "debug.turn_tokens")).toBe(false)
+})
+
+test.each([
+  ["local", {}, true],
+  ["latest", {}, false],
+  ["latest", { experimental: { rich_media: true } }, true],
+] as const)("rich media in a %s build with config %j is %p", async (channel, info, expected) => {
+  const service: Interface = { get: async () => info, update: async () => info }
+  let richMedia: (() => boolean) | undefined
+  function Consumer() {
+    richMedia = useRichMedia()
+    return <text>media</text>
+  }
+
+  const app = await testRender(() => (
+    <TuiAppProvider value={{ name: "test", version: "test", channel }}>
+      <ConfigProvider config={resolve(info, { terminalSuspend: true })} service={service}>
+        <Consumer />
+      </ConfigProvider>
+    </TuiAppProvider>
+  ))
+  try {
+    expect(richMedia?.()).toBe(expected)
+  } finally {
+    app.renderer.destroy()
+  }
 })
 
 test("provides config and its host interface", async () => {

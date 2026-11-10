@@ -58,6 +58,7 @@ const BedrockToolResultContentItem = Schema.Union([
   Schema.Struct({ json: Schema.Unknown }),
   BedrockMedia.ImageBlock,
   BedrockMedia.DocumentBlock,
+  BedrockMedia.VideoBlock,
 ])
 
 const BedrockToolResultBlock = Schema.Struct({
@@ -85,6 +86,7 @@ const BedrockUserBlock = Schema.Union([
   BedrockTextBlock,
   BedrockMedia.ImageBlock,
   BedrockMedia.DocumentBlock,
+  BedrockMedia.VideoBlock,
   BedrockToolResultBlock,
   BedrockCache.CachePointBlock,
 ])

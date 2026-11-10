@@ -30,7 +30,16 @@ import { useExit } from "../../context/exit"
 import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
 import { parseSlashHead } from "../../prompt/parse"
 import { createStore, produce, unwrap } from "solid-js/store"
-import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
+import {
+  emptyPrompt,
+  keepPromptMedia,
+  promptMediaDirectory,
+  promptServer,
+  usePromptHistory,
+  type PromptFile,
+  type PromptInfo,
+  type PromptPartRef,
+} from "../../prompt/history"
 import { registerComposer, saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
@@ -48,9 +57,19 @@ import { useConnected } from "../use-connected"
 import { useToast } from "../../ui/toast"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
-import { useConfig, useCursorStyle } from "../../config"
+import { useConfig, useCursorStyle, useRichMedia } from "../../config"
 import { usePromptMove } from "./move"
-import { promptFilesForServer, resolvePastedAttachments } from "./local-attachment"
+import {
+  oversizedPastedVideo,
+  isKeptAttachment,
+  promptFilesForServer,
+  readKeptAttachments,
+  videoFilePath,
+  resolvePastedAttachments,
+} from "./local-attachment"
+import { useMedia } from "../../context/media"
+import { mediaKind, mediaMime, type MediaItem } from "../media/model"
+import { keepMediaItems, MediaStrip } from "../media/strip"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { useArgs } from "../../context/args"
@@ -207,6 +226,8 @@ export function Prompt(props: PromptProps) {
   const currentLocation = useLocation()
   const args = useArgs()
   const config = useConfig().data
+  const richMedia = useRichMedia()
+  const media = useMedia()
   const cursorStyle = useCursorStyle()
   const dialog = useDialog()
   const toast = useToast()
@@ -406,6 +427,25 @@ export function Prompt(props: PromptProps) {
     dialog.replace(() => <DialogImagePreview images={images} initial={initial} />)
   }
 
+  // Draft images and videos. Keeping the items that show the same file keeps their tiles as the prompt changes. A
+  // `file://` uri names a file this terminal can read only when the server runs on this machine.
+  const draftMedia = createMemo<readonly MediaItem[]>(
+    (previous) =>
+      keepMediaItems(
+        previous,
+        (deduplicatePromptImages(store.prompt.files) ?? []).flatMap((file, index) => {
+          const mime = /^data:([^;,]+)/.exec(file.uri)?.[1] ?? mediaMime(file.path ?? file.uri) ?? ""
+          const kind = mediaKind(mime, file.name)
+          const local = file.uri.startsWith("file:") && terminalEnvironment.localServer === true
+          if (kind === "other" || !(file.uri.startsWith("data:") || file.path || local)) return []
+          const id = `draft:${file.mention?.text ?? index}`
+          return [{ id, kind, mime, uri: file.uri, name: file.name, path: file.path }]
+        }),
+      ),
+    [],
+  )
+  const [previewWidth, setPreviewWidth] = createSignal(dimensions().width - 6)
+
   createEffect(
     on(
       () => props.sessionID,
@@ -492,11 +532,15 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "View image attachments",
+        title: richMedia() ? "View media attachments" : "View image attachments",
         name: "prompt.images.view",
         category: "Prompt",
-        enabled: imageAttachments().length > 0,
-        run: () => openImagePreview(0),
+        enabled: richMedia() ? draftMedia().length > 0 : imageAttachments().length > 0,
+        run: () => {
+          if (!richMedia()) return openImagePreview(0)
+          dialog.clear()
+          media.openViewer(draftMedia(), 0)
+        },
       },
       {
         title: "Interrupt session",
@@ -739,7 +783,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.visible === false || disabled() || dialog.stack.length > 0) {
+    if (props.visible === false || disabled() || dialog.stack.length > 0 || media.viewer() !== undefined) {
       if (input.focused) input.blur()
       input.focusable = false
       return
@@ -805,6 +849,25 @@ export function Prompt(props: PromptProps) {
         })
       }
     })
+    localizeVideos(prompt)
+    keepPromptMedia(prompt, paths.state)
+  }
+
+  // A local server's unmentioned `file://` video, such as one an undo restored, gets its path at once, so history and the
+  // stash keep the file and sending reads it again and notices when it is gone. An `@` mention keeps the server's read,
+  // as an `@` image does.
+  function localizeVideos(prompt: PromptInfo) {
+    if (terminalEnvironment.localServer !== true) return
+    const local = (file: PromptFile) =>
+      file.path || file.mention?.text.startsWith("@") ? undefined : videoFilePath(file.uri)
+    if (!prompt.files?.some(local)) return
+    // A new array, so the entry the prompt came from is left as it was.
+    setStore("prompt", "files", (files) =>
+      files?.map((file) => {
+        const value = local(file)
+        return value ? { ...file, path: value } : file
+      }),
+    )
   }
 
   function syncExtmarksWithPromptParts() {
@@ -1310,6 +1373,17 @@ export function Prompt(props: PromptProps) {
       return true
     }
     history.append(entry)
+    // Files history or the stash kept as local paths are sent as the bytes read now, never as this machine's paths.
+    const localServer = terminalEnvironment.localServer === true
+    const server = promptServer(client.url)
+    const kept = entry.files?.some((file) => isKeptAttachment(file, localServer, server))
+      ? await readKeptAttachments(entry.files, localServer, server)
+      : undefined
+    if (kept?.unreadable.length)
+      toast.show({
+        message: `Could not read ${kept.unreadable.join(", ")} again, so the prompt was sent without ${kept.unreadable.length === 1 ? "it" : "them"}`,
+        variant: "warning",
+      })
     if (currentMode === "shell") {
       move.startSubmit()
       const send = () => client.api.session.shell({ sessionID: target, command: inputText })
@@ -1326,7 +1400,7 @@ export function Prompt(props: PromptProps) {
           sessionID: target,
           name: slashHead.name,
           text: slashHead.arguments,
-          files: promptFilesForServer(entry.files, terminalEnvironment.localServer === true),
+          files: promptFilesForServer(kept?.files ?? entry.files, localServer, promptMediaDirectory(paths.state)),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
@@ -1367,7 +1441,7 @@ export function Prompt(props: PromptProps) {
         .prompt({
           sessionID: target,
           text: inputText,
-          files: promptFilesForServer(entry.files, terminalEnvironment.localServer === true),
+          files: promptFilesForServer(kept?.files ?? entry.files, localServer, promptMediaDirectory(paths.state)),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
@@ -1447,8 +1521,15 @@ export function Prompt(props: PromptProps) {
   async function pasteInputText(text: string, changed: () => boolean) {
     const normalizedText = stripAnsiSequences(text).replace(/\r\n?/g, "\n")
     const pastedContent = normalizedText.trim()
-    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
+    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform, richMedia())
+    const oversized =
+      !attachments && richMedia() ? await oversizedPastedVideo(pastedContent, terminalEnvironment.platform) : undefined
     if (changed()) return
+    if (oversized)
+      toast.show({
+        message: `${path.basename(oversized)} is over the attachment size limit, so its path was pasted as text`,
+        variant: "warning",
+      })
     if (attachments) {
       attachments.forEach((attachment) => {
         if (attachment.type === "text") {
@@ -1698,7 +1779,24 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
             width="100%"
           >
-            <Show when={config.prompt?.image_preview && visibleImageAttachments().length > 0}>
+            <Show when={richMedia() && config.prompt?.image_preview !== false && draftMedia().length > 0}>
+              <box
+                width="100%"
+                flexShrink={0}
+                paddingBottom={1}
+                onSizeChange={function (this: BoxRenderable) {
+                  setPreviewWidth(this.width)
+                }}
+              >
+                <MediaStrip
+                  items={draftMedia()}
+                  width={previewWidth()}
+                  height={imagePreviewHeight()}
+                  onOpen={(index) => media.openViewer(draftMedia(), index)}
+                />
+              </box>
+            </Show>
+            <Show when={!richMedia() && config.prompt?.image_preview && visibleImageAttachments().length > 0}>
               <box
                 width="100%"
                 height={imagePreviewHeight() + 1}

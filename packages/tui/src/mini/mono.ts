@@ -43,6 +43,7 @@ const markdown: Record<number, string> = {
   0x2026: "...",
   0x2191: "up",
   0x2193: "down",
+  0x25b6: ">",
 }
 
 const asciiBorder: BorderCharacters = {
@@ -188,7 +189,7 @@ function monoChunks(value: StyledText["chunks"]): StyledText["chunks"] {
   return value.map((chunk) => ({ ...chunk, text: monoText(chunk.text) }))
 }
 
-function monoText(value: string): string {
+export function monoText(value: string): string {
   return value.replace(/[^\t\n\x20-\x7e]/gu, (char) => markdown[char.codePointAt(0)!] ?? "?")
 }
 

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import type { JSX } from "solid-js"
+import { createSignal, type JSX } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { addDefaultParsers, type TextRenderable } from "@opentui/core"
+import { addDefaultParsers, TextRenderable } from "@opentui/core"
 import parsers from "../../../src/parsers-config"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { ConfigProvider } from "../../../src/config"
@@ -12,6 +12,7 @@ import { createTimelineAnchors, groupID, type AnchorTarget } from "../../../src/
 import { context } from "../../../src/routes/session/render-context"
 import type { SessionEntry, SessionGroup } from "../../../src/routes/session/grouping/session"
 import { emptyThemeSource } from "../../fixture/fixture"
+import { descendants } from "../../fixture/media"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -202,8 +203,9 @@ test("expanded instructions stay adjacent to their summary and each other", asyn
   }
 })
 
+// With rich media, its media strip stays the same strip as its tools change.
 test("a low activity group with nothing finished stays collapsed behind a status", async () => {
-  const config = createTuiResolvedConfig({ animations: false })
+  const config = createTuiResolvedConfig({ animations: false, experimental: { rich_media: true } })
   const shell = (id: string) => ({
     type: "tool" as const,
     id,
@@ -211,14 +213,14 @@ test("a low activity group with nothing finished stays collapsed behind a status
     time: { created: 0 },
     state: { status: "running" as const, input: {}, metadata: {} },
   })
-  const message: SessionMessageAssistant = {
+  const [message, setMessage] = createSignal<SessionMessageAssistant>({
     id: "a",
     type: "assistant",
     agent: "build",
     model: { providerID: "fixture", id: "fixture" },
     time: { created: 0 },
     content: [shell("one"), shell("two")],
-  }
+  })
   const app = await mount({
     row: {
       type: "group",
@@ -236,21 +238,32 @@ test("a low activity group with nothing finished stays collapsed behind a status
     config,
     expanded: () => false,
     setExpanded: () => {},
-    message: () => message,
+    message: () => message(),
     entry: (entry) => <text>{entry.type === "part" ? `Shell ${entry.ref.partID}` : ""}</text>,
   })
+  const strip = () =>
+    descendants(app.renderer.root).find(
+      (node): node is TextRenderable => node instanceof TextRenderable && node.plainText.startsWith("Image"),
+    )
   try {
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("Running command…"))
     expect(app.captureCharFrame()).not.toContain("Shell one")
     expect(app.captureCharFrame()).not.toContain("Shell two")
+    const shown = strip()
+    expect(shown?.plainText).toBe("Image previews a/one,a/two")
+    setMessage((value) => ({ ...value, content: [shell("one")] }))
+    await app.renderOnce()
+    expect(strip()).toBe(shown)
+    expect(shown?.plainText).toBe("Image previews a/one")
   } finally {
     app.renderer.destroy()
   }
 })
 
-test("failed low activity uses a disclosure icon and keeps details expandable", async () => {
-  const config = createTuiResolvedConfig({ animations: false })
+// A collapsed summary shows its tools' media with rich media; expanded, each tool shows its own.
+test.each([false, true])("failed low activity has a disclosure icon and expandable details %p", async (rich) => {
+  const config = createTuiResolvedConfig({ animations: false, experimental: { rich_media: rich } })
   const anchors = createTimelineAnchors()
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const message: SessionMessageAssistant = {
@@ -291,10 +304,12 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
     await app.waitForFrame((frame) => frame.includes("1 command"))
     expect(app.captureCharFrame()).toContain("+ 1 command")
     expect(app.captureCharFrame()).not.toContain("command failed")
+    expect(app.captureCharFrame().includes("Image previews a/failed-shell")).toBe(rich)
     await app.mockMouse.click(4, anchors.get({ type: "group", groupID: groupID(row, 0)! })?.node.y ?? -1)
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("− 1 command")
     expect(app.captureCharFrame()).toContain("command failed")
+    expect(app.captureCharFrame()).not.toContain("Image previews")
   } finally {
     app.renderer.destroy()
   }
@@ -338,7 +353,14 @@ function mount(input: {
                 <SessionGroupView
                   row={input.row}
                   message={input.message}
-                  images={() => <text>Image previews</text>}
+                  images={(tools) => (
+                    <text>
+                      Image previews{" "}
+                      {tools()
+                        .map((tool) => `${tool.messageID}/${tool.part.id}`)
+                        .join(",")}
+                    </text>
+                  )}
                   entry={input.entry}
                 />
               </box>

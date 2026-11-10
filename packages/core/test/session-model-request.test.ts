@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
-import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { ai, type LanguageModel, Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
+import { AmazonBedrock, Cohere } from "@opencode/ai/providers"
+import { compileRequest } from "@opencode/ai/testing"
+import { Effect } from "effect"
+import { boundImages, boundVideos, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
@@ -12,6 +15,8 @@ describe("SessionModelRequest.unsupportedParts", () => {
           Message.text("Describe these files"),
           { type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: "logo.png" },
           { type: "media", media: Media.base64("JVBERg==", "application/pdf"), filename: "document.pdf" },
+          { type: "media", media: Media.base64("AAAAGGZ0eXBtcDQy", "video/mp4"), filename: "clip.mp4" },
+          { type: "media", media: Media.base64("AAAAGGZ0eXBtcDQy", "VIDEO/MP4"), filename: "CLIP.MP4" },
         ]),
       ],
       capabilities(["text"]),
@@ -21,6 +26,8 @@ describe("SessionModelRequest.unsupportedParts", () => {
       Message.text("Describe these files"),
       Message.text('ERROR: Cannot read "logo.png" (this model does not support image input). Inform the user.'),
       Message.text('ERROR: Cannot read "document.pdf" (this model does not support pdf input). Inform the user.'),
+      Message.text('ERROR: Cannot read "clip.mp4" (this model does not support video input). Inform the user.'),
+      Message.text('ERROR: Cannot read "CLIP.MP4" (this model does not support video input). Inform the user.'),
     ])
   })
 
@@ -82,7 +89,8 @@ describe("SessionModelRequest.unsupportedParts", () => {
         }),
       ),
     ]
-    const result = unsupportedParts(messages, capabilities(["text", "image"]), "xai")
+    const xai = { provider: "xai", route: { protocol: "xai-responses" } }
+    const result = unsupportedParts(messages, capabilities(["text", "image"]), xai)
 
     expect(result[0]?.content).toEqual([
       ...user,
@@ -101,7 +109,56 @@ describe("SessionModelRequest.unsupportedParts", () => {
         ],
       },
     })
-    expect(unsupportedParts(messages, capabilities(["text", "image"]), "openai")).toEqual(messages)
+    const openai = { provider: "openai", route: { protocol: "openai-responses" } }
+    expect(unsupportedParts(messages, capabilities(["text", "image"]), openai)).toEqual(messages)
+  })
+
+  describe("degrades video the model's protocol cannot send", () => {
+    const watching = capabilities(["text", "image", "video"])
+    const send = (model: LanguageModel, mime: string) =>
+      Effect.runPromise(
+        compileRequest(
+          ai.request({
+            model,
+            messages: unsupportedParts(
+              [Message.user([{ type: "media", media: Media.base64("AAAAGGZ0eXBtcDQy", mime), filename: "clip" }])],
+              watching,
+              model,
+            ),
+          }),
+        ),
+      ).then((prepared) => JSON.stringify(prepared.body))
+    const cohere = Cohere.configure({ apiKey: "fixture" }).model("command-a-03-2025")
+    const bedrock = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "fixture" }).model(
+      "amazon.nova-pro-v1:0",
+    )
+
+    test("Cohere Chat gets the unsupported video text", async () => {
+      expect(await send(cohere, "video/mp4")).toContain(
+        'Cannot read \\"clip\\" (this model does not support video input)',
+      )
+    })
+
+    test("Bedrock Converse keeps the video types it lowers and degrades the rest", async () => {
+      const lowered = [
+        "video/x-matroska",
+        "video/quicktime",
+        "video/mp4",
+        "video/webm",
+        "video/x-flv",
+        "video/mpeg",
+        "video/mpg",
+        "video/wmv",
+        "video/x-ms-wmv",
+        "video/3gpp",
+      ]
+      for (const mime of lowered) expect(await send(bedrock, mime)).toContain('"video":{')
+      for (const mime of ["video/x-msvideo", "video/ogg", "video/x-m4v"]) {
+        const body = await send(bedrock, mime)
+        expect(body).not.toContain('"video":{')
+        expect(body).toContain(`this model does not support ${mime} input`)
+      }
+    })
   })
 
   test("preserves supported media", () => {
@@ -244,5 +301,49 @@ describe("SessionModelRequest.boundImages", () => {
         value: [{ type: "text" }, { type: "file", name: "second.png" }],
       },
     })
+  })
+})
+
+describe("SessionModelRequest.boundVideos", () => {
+  const video = (size = 16) => ({ type: "media" as const, media: Media.base64("a".repeat(size), "video/mp4") })
+  const image = { type: "media" as const, media: Media.base64("aGVsbG8=", "image/png") }
+  const removed = Message.text(expect.stringContaining("video was removed"))
+  const tooLarge = Message.text(expect.stringContaining("shorter or smaller clip"))
+  const cap = 18 * 1024 * 1024
+
+  // Each word is a message: v is a video, c one at the inline cap, V one over it, i an image, r and t replacements.
+  const parts = { v: video(), c: video(cap), V: video(cap + 4), i: image, r: removed, t: tooLarge }
+  const request = (words: string) =>
+    words.split(" ").map((word) => [...word].map((key) => parts[key as keyof typeof parts]))
+  test.each([
+    ["keeps a lone video at the inline cap", "ci", "ci"],
+    ["replaces a lone video over the inline cap", "V", "t"],
+    ["keeps only the newest video", "vi vv", "ri rv"],
+    ["replaces an old video and a newest over the cap", "v V", "r t"],
+  ])("%s", (_, input, output) => {
+    const result = boundVideos(request(input).map((content) => Message.user(content)))
+    expect<readonly unknown[]>(result.map((message) => message.content)).toEqual(request(output))
+  })
+
+  test("counts tool result videos, returns unchanged requests, and leaves the image budget alone", () => {
+    const tool = Message.tool(
+      ToolResultPart.make({
+        id: "call_1",
+        name: "read",
+        result: { type: "content", value: [{ type: "file", uri: "data:video/mp4;base64,AAAA", mime: "video/mp4" }] },
+      }),
+    )
+    // A tool's video may be retrieved again, as an image may.
+    expect(boundVideos([tool, Message.user([video()])])[0]?.content[0]).toMatchObject({
+      result: {
+        value: [
+          { type: "text", text: expect.stringContaining("retrieve it again with an available tool or ask the user") },
+        ],
+      },
+    })
+    const unchanged = [tool, Message.user([image])]
+    expect(boundVideos(unchanged)).toBe(unchanged)
+    const large = [Message.user([video(13 * 1024 * 1024)]), Message.user([video(13 * 1024 * 1024)])]
+    expect(boundImages(large)).toBe(large)
   })
 })

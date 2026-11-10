@@ -22,6 +22,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
 import { EventTable } from "@opencode/core/event/sql"
+import { Flag } from "@opencode/core/flag"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Instance } from "@opencode/core/instance/service"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -98,7 +99,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () =>
     Effect.succeed(
       SessionRunnerModel.resolved(model, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        capabilities: { tools: true, input: ["text", "image", "video"], output: ["text"] },
         cost: [
           {
             input: Money.USDPerMillionTokens.make(1),
@@ -167,6 +168,7 @@ const it = testEffect(
     ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
+      Flag.node.replace(Flag.testLayer([], { overrides: "rich_media" })),
       llmClient.replace(client),
       SessionRunnerModel.node.replace(models),
       InstructionBuiltIns.node.replace(builtins),
@@ -438,6 +440,34 @@ it.effect(
       expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
     }),
   { timeout: 15_000 },
+)
+
+it.effect("sends attached videos while the rich_media flag is on", () =>
+  Effect.gen(function* () {
+    requests.length = 0
+    instruction = "Initial context"
+    const { db, bus, instructions, session, instances } = yield* setup
+    yield* InstructionState.prepare(db, bus, instructions, sessionID)
+    const inboxID = SessionMessage.ID.create()
+    const clip = { data: "AAAA", mime: "video/mp4", source: { type: "inline" as const }, name: "clip.mp4" }
+    yield* bus.publish(SessionEvent.InboxEnqueued, {
+      sessionID,
+      inboxID,
+      item: { type: "user", payload: { text: "Watch this", files: [clip] }, delivery: "steer" },
+    })
+    yield* bus.publish(SessionEvent.InboxDelivered, { sessionID, inboxID })
+
+    yield* SessionGenerate.generate({ session, prompt: "Describe it" }).pipe(
+      Effect.provideService(Instance.Service, instances),
+    )
+
+    const media = requests[0]?.messages.flatMap((message) =>
+      message.role === "user"
+        ? message.content.flatMap((content) => (content.type === "media" ? [content.filename] : []))
+        : [],
+    )
+    expect(media).toEqual(["clip.mp4"])
+  }),
 )
 
 it.effect("regenerates a failed partial answer without mutating Session history", () =>

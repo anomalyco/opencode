@@ -150,6 +150,8 @@ const TRANSCRIPT_LEVELS = [0, OUTPUTS_CLIPPED, OUTPUTS_REMOVED, USER_ONLY, OMITT
 const TRANSCRIPT_CLIP = 2_000
 const IMAGE_TOKEN_ESTIMATE = 1_500
 const PDF_TOKEN_ESTIMATE = 2_000
+// Gemini spends about 300 tokens per second of video, and a 1 Mbit/s clip is about 167 KB of base64 per second.
+const VIDEO_BASE64_PER_TOKEN = 500
 /**
  * Tokens before the ceiling at which a background summary starts. Writing one takes 30–60 s, and in that time the
  * conversation grows by a few thousand tokens at the median but by 25k or more one time in twenty, when large file
@@ -586,7 +588,7 @@ export const layer = Layer.effect(
         if (ai.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
-            const retained = recentUserMessages(history, context.model, keep)
+            const retained = recentUserMessages(history, context.model, keep, context.video)
             const response = yield* llm.compact(request, { ...prepared.options, mechanism: "trigger" })
             return yield* toResult([...retained, Message.assistant(response.checkpoint)], response.usage)
           })
@@ -1005,6 +1007,7 @@ const transcript = (context: SessionContext.Loaded, messages: ReadonlyArray<Sess
     tools: context.tools,
     initial: context.initial,
     messages,
+    video: context.video,
   })
 
 /**
@@ -1112,14 +1115,17 @@ const clip = (value: string) => {
 /** The newest whole, real user messages within `keep` tokens: no synthetic guidance, no half of an attachment. */
 export const recentUserMessages = (
   messages: ReadonlyArray<SessionMessage.Info>,
-  model: Pick<SessionContext.Loaded["model"], "ref" | "capabilities">,
+  model: Pick<SessionContext.Loaded["model"], "model" | "ref" | "capabilities">,
   keep: number,
+  video: boolean,
 ) => {
   const users = messages
     .filter((message) => message.type === "user")
     .map((message) => ({ ...message, skills: undefined }))
-  const sendable = SessionModelRequest.boundImages(
-    SessionModelRequest.unsupportedParts(toLLMMessages(users, model.ref), model.capabilities),
+  const sendable = SessionModelRequest.boundVideos(
+    SessionModelRequest.boundImages(
+      SessionModelRequest.unsupportedParts(toLLMMessages(users, model.ref, { video }), model.capabilities, model.model),
+    ),
   )
   return sendable.slice(oldestToDrop(sendable, estimateMessage, keep))
 }
@@ -1136,8 +1142,10 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
   // TODO: Pass compaction history the runner has already shaped. This and `recentUserMessages` repeat the
   // runner's unsupported-media and image-budget passes; here the image budget only sees images since the anchor,
   // so image-heavy sessions can estimate high.
-  const sent = SessionModelRequest.boundImages(
-    SessionModelRequest.unsupportedParts(base.messages, context.model.capabilities),
+  const sent = SessionModelRequest.boundVideos(
+    SessionModelRequest.boundImages(
+      SessionModelRequest.unsupportedParts(base.messages, context.model.capabilities, context.model.model),
+    ),
   )
   // The anchor's usage covers its own output, but not its local tool results, which the provider never saw.
   const unmeasured = sent.filter((message) => message.role !== "assistant" || message.id !== anchor?.id)
@@ -1254,21 +1262,24 @@ const estimatePart = (part: ContentPart): number => {
   if (part.type === "compaction") return Token.estimate(part.text ?? "")
   if (part.type === "effort") return 0
   if (part.type === "text" || part.type === "reasoning") return Token.estimate(part.text)
-  if (part.type === "media") return estimateMedia(part.media.mediaType)
+  if (part.type === "media") return estimateMedia(part.media.mediaType, SessionModelRequest.mediaBytes(part.media))
   if (part.type === "tool-call") return Token.estimate(part.name + (JSON.stringify(part.input) ?? ""))
 
   if (part.result.type === "content")
     return part.result.value.reduce(
-      (sum, content) => sum + (content.type === "text" ? Token.estimate(content.text) : estimateMedia(content.mime)),
+      (sum, content) =>
+        sum +
+        (content.type === "text" ? Token.estimate(content.text) : estimateMedia(content.mime, content.uri.length)),
       0,
     )
   const value = part.result.value
   return Token.estimate(typeof value === "string" ? value : (JSON.stringify(value) ?? ""))
 }
 
-const estimateMedia = (mime: string) => {
+const estimateMedia = (mime: string, base64Length: number) => {
   const type = mime.toLowerCase()
   if (type.startsWith("image/")) return IMAGE_TOKEN_ESTIMATE
   if (type === "application/pdf") return PDF_TOKEN_ESTIMATE
+  if (type.startsWith("video/")) return Math.max(IMAGE_TOKEN_ESTIMATE, Math.ceil(base64Length / VIDEO_BASE64_PER_TOKEN))
   return 0
 }

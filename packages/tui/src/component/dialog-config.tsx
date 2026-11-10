@@ -1,5 +1,5 @@
 import { createMemo, createSignal } from "solid-js"
-import { useConfig, useNewDesigns } from "../config"
+import { useConfig, useNewDesigns, useRichMedia } from "../config"
 import { useThemes } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { DialogSelect, DialogSelectChoice } from "../ui/dialog-select"
@@ -13,6 +13,8 @@ type Setting = {
   /** Shown below the list while the setting is selected, under the "new-designs" experiment. */
   description: string
   default: unknown
+  /** The default under the `rich_media` flag, when it differs. */
+  richMediaDefault?: unknown
   values?: readonly unknown[]
   labels?: readonly string[]
   step?: number
@@ -127,6 +129,7 @@ export const settings: Setting[] = [
     path: ["session", "image_preview"],
     description: "Whether images are shown in the chat",
     default: false,
+    richMediaDefault: true,
     values: [false, true],
     labels: ["off", "on"],
     keywords: ["attachments", "images", "tool output"],
@@ -292,6 +295,7 @@ export const settings: Setting[] = [
     path: ["prompt", "image_preview"],
     description: "Whether attached images are previewed in the prompt",
     default: false,
+    richMediaDefault: true,
     values: [false, true],
     labels: ["off", "on"],
     keywords: ["attachments", "clipboard", "images", "prompt"],
@@ -388,6 +392,7 @@ export function settingID(setting: Setting) {
 export function DialogConfig(props: { current?: string }) {
   const config = useConfig()
   const newDesigns = useNewDesigns()
+  const richMedia = useRichMedia()
   const dialog = useDialog()
   const toast = useToast()
   const themes = useThemes()
@@ -404,7 +409,7 @@ export function DialogConfig(props: { current?: string }) {
       return (result as Record<string, unknown>)[key]
     }, config.data)
     if (setting.path.join(".") === "theme.name") return current ?? themes.selected
-    return current ?? setting.default
+    return current ?? (richMedia() && "richMediaDefault" in setting ? setting.richMediaDefault : setting.default)
   }
   const values = (setting: Setting) =>
     setting.path.join(".") === "theme.name"

@@ -534,23 +534,26 @@ Earlier work
       name: "IMG_3480.JPG",
     })
 
-    const messages = toLLMMessages(
-      [
-        SessionMessage.User.make({
-          id: id("user-local-image-path"),
-          type: "user",
-          text: "Inspect this image",
-          files: [image],
-          time: { created },
-        }),
-      ],
-      model,
-    )
-
-    expect(messages[0]?.content).toEqual([
+    const history = [
+      SessionMessage.User.make({
+        id: id("user-local-image-path"),
+        type: "user",
+        text: "Inspect this image",
+        files: [image, FileAttachment.make({ data, mime: "video/mp4", source: { type: "inline" }, name: "clip.mp4" })],
+        time: { created },
+      }),
+    ]
+    const imageContent = [
       { type: "text", text: "Inspect this image" },
       { type: "text", text: `Attached file: ${location}` },
       { type: "media", media: Media.base64(data, "image/png"), filename: "IMG_3480.JPG" },
+    ] as const
+
+    // Videos reach the model only with the rich_media flag.
+    expect(toLLMMessages(history, model)[0]?.content).toEqual(imageContent)
+    expect(toLLMMessages(history, model, { video: true })[0]?.content).toEqual([
+      ...imageContent,
+      { type: "media", media: Media.base64(data, "video/mp4"), filename: "clip.mp4" },
     ])
   })
 
@@ -914,7 +917,7 @@ Earlier work
         }),
       ],
       opencode,
-      "anthropic",
+      { providerMetadataKey: "anthropic" },
     )
 
     expect(messages[0]?.content).toEqual([

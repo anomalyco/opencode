@@ -50,6 +50,12 @@ const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
+const VIDEO_REMOVED =
+  "[This video was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
+// Base64 characters, below Gemini's ~20 MB and Bedrock's ~25 MB inline request limits.
+const VIDEO_BYTES_MAX = 18 * 1024 * 1024 // 18 MiB
+const VIDEO_TOO_LARGE =
+  "[This video was removed to reduce the request size because it is too large to send to the model. Do not make claims about its contents. Ask the user to attach a shorter or smaller clip.]"
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
 // No reply needs more, however much the model allows.
@@ -108,6 +114,7 @@ export const baseTranscript = (input: {
   readonly tools: Tool.Snapshot
   readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
+  readonly video: boolean
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
   return {
@@ -123,7 +130,7 @@ export const baseTranscript = (input: {
         metadata: { experimental: { instructions: input.initial } },
       },
     ].filter((part) => part.text.length > 0),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    messages: toLLMMessages(input.messages, input.model.ref, { providerMetadataKey, video: input.video }),
   }
 }
 
@@ -136,27 +143,51 @@ const mimeToModality = (mime: string) => {
 
 // xAI rejects any other image type (e.g. GIF) with invalid_image, and the stored image would fail every later turn.
 const XAI_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"])
+// The catalog can claim video for a model whose protocol cannot send it, and the newest video stays in the history,
+// so a video these protocols reject would fail every later turn. Bedrock lowers only the types in `VIDEO_FORMATS`
+// in packages/ai/src/protocols/utils/bedrock-media.ts.
+const NO_VIDEO_PROTOCOLS = new Set(["mistral-chat", "cohere-chat"])
+const BEDROCK_VIDEO_MIMES = new Set([
+  "video/x-matroska",
+  "video/quicktime",
+  "video/mp4",
+  "video/webm",
+  "video/x-flv",
+  "video/mpeg",
+  "video/mpg",
+  "video/wmv",
+  "video/x-ms-wmv",
+  "video/3gpp",
+])
+
+/** The model a request goes to, for media its provider or protocol rejects whatever the catalog says. */
+type Target = { readonly provider: string; readonly route: { readonly protocol: string } }
 
 const unsupportedMedia = (
   mime: string,
   name: string | undefined,
   capabilities: Model.Capabilities,
-  provider: string | undefined,
+  target: Target | undefined,
 ) => {
-  const modality = mimeToModality(mime)
+  const type = mime.toLowerCase()
+  const modality = mimeToModality(type)
   if (!modality) return
-  const unsupported = !capabilities.input.some((item) => item.startsWith(modality))
-    ? modality
-    : provider === "xai" && modality === "image" && !XAI_IMAGE_MIMES.has(mime.toLowerCase())
-      ? mime
-      : undefined
+  const protocol = target?.route.protocol
+  const unsupported =
+    !capabilities.input.some((item) => item.startsWith(modality)) ||
+    (modality === "video" && NO_VIDEO_PROTOCOLS.has(protocol ?? ""))
+      ? modality
+      : (modality === "image" && target?.provider === "xai" && !XAI_IMAGE_MIMES.has(type)) ||
+          (modality === "video" && protocol === "bedrock-converse" && !BEDROCK_VIDEO_MIMES.has(type))
+        ? mime
+        : undefined
   if (!unsupported) return
   return `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${unsupported} input). Inform the user.`
 }
 
 // The inline budget counts base64 characters, which are ASCII, so a string's length is its size without scanning it.
 // Remote and provider-referenced media carry no local payload and never count toward the inline budget.
-const mediaBytes = (media: Media.Asset) => {
+export const mediaBytes = (media: Media.Asset) => {
   if (media.source.type === "base64") return media.source.data.length
   if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
   return 0
@@ -207,23 +238,24 @@ const replaceMedia = (
 const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
   next.every((part, index) => part === previous[index])
 
-export const unsupportedParts = (
-  messages: LLMRequest["messages"],
-  capabilities: Model.Capabilities,
-  provider?: string,
-) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
+export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities, target?: Target) =>
+  replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, target))
 
-export const boundImages = (messages: LLMRequest["messages"]) => {
-  const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
-  const sizes = messages.flatMap((message) =>
+const mediaSizes = (messages: LLMRequest["messages"], prefix: string) =>
+  messages.flatMap((message) =>
     message.content.flatMap((part) => {
-      if (part.type === "media") return isImage(part.media.mediaType) ? [mediaBytes(part.media)] : []
+      if (part.type === "media")
+        return part.media.mediaType.toLowerCase().startsWith(prefix) ? [mediaBytes(part.media)] : []
       if (part.type !== "tool-result" || part.result.type !== "content") return []
       return part.result.value.flatMap((item: Content) =>
-        item.type === "file" && isImage(item.mime) ? [item.uri.length] : [],
+        item.type === "file" && item.mime.toLowerCase().startsWith(prefix) ? [item.uri.length] : [],
       )
     }),
   )
+
+export const boundImages = (messages: LLMRequest["messages"]) => {
+  const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
+  const sizes = mediaSizes(messages, "image/")
   // Replay the images in order, dropping the oldest down to the target whenever the kept payload passes the trigger.
   // A new image then moves the cut only every (trigger - target) bytes instead of on every request, so the replaced
   // prefix, and with it the provider's prompt cache, stays the same between cuts.
@@ -240,6 +272,19 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
   return replaceMedia(messages, (media) => {
     if (!isImage(media.mime)) return
     return index++ < cut ? IMAGE_REMOVED : undefined
+  })
+}
+
+// Keeps only the newest video, and only if it fits: Bedrock accepts one video per request, and a rejected request
+// would repeat on every later step.
+export const boundVideos = (messages: LLMRequest["messages"]) => {
+  const sizes = mediaSizes(messages, "video/")
+  if (sizes.length === 0 || (sizes.length === 1 && sizes[0]! <= VIDEO_BYTES_MAX)) return messages
+  let index = 0
+  return replaceMedia(messages, (media) => {
+    if (!media.mime.toLowerCase().startsWith("video/")) return
+    if (++index < sizes.length) return VIDEO_REMOVED
+    return media.bytes() > VIDEO_BYTES_MAX ? VIDEO_TOO_LARGE : undefined
   })
 }
 
@@ -327,7 +372,7 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
+        messages: boundVideos(boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model))),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         ...generation,

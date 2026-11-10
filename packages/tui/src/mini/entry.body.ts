@@ -1,5 +1,5 @@
 import { toolEntryBody } from "./tool"
-import { monoPrefix, monoToolText } from "./mono"
+import { monoPrefix, monoText, monoToolText } from "./mono"
 import type { RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
 export type EntryFlags = {
@@ -196,8 +196,8 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
   const raw = cleanRunText(commit.text)
   const mono = options?.mono === true
 
-  if (commit.image) {
-    const caption = raw.trim() || "Image"
+  if (commit.image || commit.video) {
+    const caption = commit.video && mono ? monoText(raw.trim()) : raw.trim() || "Image"
     return commit.kind === "user" ? userBody(caption, mono) : textBody(monoToolText(caption, mono))
   }
 

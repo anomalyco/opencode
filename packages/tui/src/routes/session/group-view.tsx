@@ -14,11 +14,15 @@ import { InlineToolRow, reasoningContent, toolDisplay } from "./message-parts"
 import { use } from "./render-context"
 import { resolvePart } from "./rows"
 import { generateThinkingSyntax } from "./thinking-syntax"
+import { useRichMedia } from "../../config"
+
+export type ToolRef = { messageID: string; part: SessionMessageAssistantTool }
 
 type Renderers = {
   message: (messageID: string) => SessionMessageInfo | undefined
   entry: (entry: SessionEntry, images?: boolean) => JSX.Element
-  images: (parts: readonly SessionMessageAssistantTool[]) => JSX.Element
+  // An accessor, so a strip already shown takes new tools without being built again.
+  images: (tools: () => readonly ToolRef[]) => JSX.Element
 }
 
 type GroupProps = Renderers & {
@@ -82,16 +86,7 @@ function GroupContent(props: GroupProps) {
           return [{ message, part }]
         }),
   )
-  const tools = createMemo(() =>
-    props.node.kind !== "exploration"
-      ? []
-      : refs().flatMap((ref) => {
-          const message = props.message(ref.messageID)
-          if (message?.type !== "assistant") return []
-          const part = resolvePart(message, ref.partID)
-          return part?.type === "tool" ? [part] : []
-        }),
-  )
+  const tools = createMemo(() => (props.node.kind !== "exploration" ? [] : toolRefs(refs(), props.message)))
   const latest = createMemo((previous: string | null) => {
     const item = thoughts().at(-1)
     if (!item) return previous
@@ -111,10 +106,10 @@ function GroupContent(props: GroupProps) {
   const completed = () =>
     props.node.kind === "reasoning"
       ? props.completed
-      : props.completed || (tools().length > 0 && tools().every((part) => part.time.completed !== undefined))
+      : props.completed || (tools().length > 0 && tools().every((tool) => tool.part.time.completed !== undefined))
   const label = createMemo(() => {
-    const counts = tools().reduce<Record<string, number>>((result, part) => {
-      const tool = toolDisplay(part.name)
+    const counts = tools().reduce<Record<string, number>>((result, item) => {
+      const tool = toolDisplay(item.part.name)
       const name =
         tool === "grep" || tool === "glob" || tool === "websearch" ? "search" : tool === "webfetch" ? "fetch" : tool
       result[name] = (result[name] ?? 0) + 1
@@ -155,7 +150,7 @@ function GroupContent(props: GroupProps) {
               </InlineToolRow>
             </Show>
             <Show when={expanded() && tools().length > 0}>{children("tool")}</Show>
-            <Show when={!props.imagesOutside}>{props.images(tools())}</Show>
+            <Show when={!props.imagesOutside}>{props.images(tools)}</Show>
           </Show>
         }
       >
@@ -205,6 +200,17 @@ function ActivityGroup(props: GroupProps) {
   const [hover, setHover] = createSignal(false)
   const entries = createMemo(() => descendants(props.node))
   const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending, props.completed))
+  const richMedia = useRichMedia()
+  // A collapsed summary shows its tools' media; once expanded, each tool shows its own. The same parts keep the tiles.
+  const tools = createMemo(
+    () =>
+      toolRefs(
+        entries().flatMap((entry) => (entry.type === "part" && !isPending(entry, props.pending) ? [entry.ref] : [])),
+        props.message,
+      ),
+    [],
+    { equals: (a, b) => a.length === b.length && a.every((tool, index) => tool.part === b[index]?.part) },
+  )
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
       <Show when={summary().label}>
@@ -224,6 +230,9 @@ function ActivityGroup(props: GroupProps) {
           <box flexDirection="column" gap={1} marginTop={1}>
             <Children {...props} nodes={props.node.children} mode="normal" />
           </box>
+        </Show>
+        <Show when={richMedia() && !disclosure.expanded() && !props.imagesOutside && tools().length > 0}>
+          {props.images(tools)}
         </Show>
       </Show>
       <PendingEntries {...props} entries={entries()} />
@@ -281,6 +290,15 @@ function useDisclosure(props: GroupProps) {
       if (key) ctx.setGroupExpanded(key, !expanded(), anchor)
     },
   }
+}
+
+function toolRefs(refs: readonly PartRef[], message: Renderers["message"]) {
+  return refs.flatMap((ref): ToolRef[] => {
+    const item = message(ref.messageID)
+    if (item?.type !== "assistant") return []
+    const part = resolvePart(item, ref.partID)
+    return part?.type === "tool" ? [{ messageID: ref.messageID, part }] : []
+  })
 }
 
 function descendants(node: Extract<SessionNode, { type: "group" }>) {

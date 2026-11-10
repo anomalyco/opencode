@@ -3,7 +3,7 @@ import { deduplicateVisibleImages } from "../prompt/attachment"
 import { toolDisplayContent } from "../util/tool-display"
 import type { StreamCommit } from "./types"
 
-export type ImageCommit = StreamCommit & { image: string; messageID: string; partID: string }
+export type ImageCommit = StreamCommit & { messageID: string; partID: string }
 
 export function userImageCommits(messageID: string, files: SessionMessageUser["files"]): ImageCommit[] {
   return deduplicateVisibleImages(files ?? [])
@@ -35,4 +35,22 @@ export function toolImageCommits(part: SessionMessageAssistantTool, messageID: s
       messageID,
       partID: `prt_${part.id}:image:${index}`,
     }))
+}
+
+// Scrollback rows are static, so a video gets a one-line caption instead of a player.
+export function userVideoCommits(messageID: string, files: SessionMessageUser["files"]): ImageCommit[] {
+  return (files ?? [])
+    .filter((file) => file.mime.startsWith("video/"))
+    .map((file, index) => videoCommit("user", messageID, `video:${index}`, file.name ?? file.mention?.text))
+}
+
+export function toolVideoCommits(part: SessionMessageAssistantTool, messageID: string): ImageCommit[] {
+  return toolDisplayContent(part.state)
+    .flatMap((content) => (content.type === "file" && content.mime.startsWith("video/") ? [content] : []))
+    .map((content, index) => videoCommit("tool", messageID, `prt_${part.id}:video:${index}`, content.name ?? undefined))
+}
+
+function videoCommit(kind: "user" | "tool", messageID: string, partID: string, name: string | undefined): ImageCommit {
+  const text = name ? `▶ ${name} · video` : "▶ video"
+  return { kind, source: kind === "user" ? "system" : "tool", text, video: true, phase: "final", messageID, partID }
 }

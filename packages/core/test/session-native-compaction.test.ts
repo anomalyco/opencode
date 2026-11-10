@@ -205,6 +205,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
         ],
         execute: () => Effect.die("Compaction must never dispatch tools"),
       },
+      video: false,
     }
   })
   // Opens the compaction's message as the runner does when it delivers `/compact`.
@@ -418,8 +419,13 @@ test("retained user budget counts attachments and drops whole oldest messages", 
     ...user("x".repeat(63_000 * 4)),
     files: [{ mime: "image/png", data: "aGVsbG8=", source: { type: "inline" as const } }],
   }
-  expect(SessionCompaction.recentUserMessages([user("old"), newest], model, 64_000)).toEqual([])
+  expect(SessionCompaction.recentUserMessages([user("old"), newest], model, 64_000, false)).toEqual([])
   expect(
-    SessionCompaction.recentUserMessages([user("x".repeat(63_000 * 4)), { ...newest, text: "new" }], model, 64_000),
+    SessionCompaction.recentUserMessages(
+      [user("x".repeat(63_000 * 4)), { ...newest, text: "new" }],
+      model,
+      64_000,
+      false,
+    ),
   ).toHaveLength(1)
 })

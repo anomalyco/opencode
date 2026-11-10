@@ -1,5 +1,7 @@
 import { describe, expect } from "bun:test"
-import { ToolDefinition } from "@opencode/ai/effect"
+import { Media, Message, ToolDefinition } from "@opencode/ai/effect"
+import { Mistral } from "@opencode/ai/providers"
+import { compileRequest } from "@opencode/ai/testing"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
@@ -236,5 +238,28 @@ describe("SessionModelRequest HTTP hooks", () => {
         "receive:primary:created",
       ])
     }),
+  )
+})
+
+describe("SessionModelRequest media", () => {
+  it.effect("degrades a video the model's protocol cannot send, so the request still compiles", () =>
+    Effect.gen(function* () {
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const prepared = yield* requests.primary({
+        session,
+        agent: Agent.ID.make("build"),
+        // The catalog claims video, but Mistral Chat has no video content block.
+        model: SessionRunnerModel.resolved(Mistral.configure({ apiKey: "fixture" }).model("mistral-large-latest"), {
+          capabilities: { tools: true, input: ["text", "video"], output: ["text"] },
+          cost: [],
+          limit: model.limit,
+        }),
+        system: [],
+        messages: [Message.user([{ type: "media", media: Media.base64("AAAA", "video/mp4"), filename: "clip.mp4" }])],
+      })
+
+      const body = JSON.stringify((yield* compileRequest(prepared.request)).body)
+      expect(body).toContain('Cannot read \\"clip.mp4\\" (this model does not support video input)')
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 })
