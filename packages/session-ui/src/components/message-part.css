@@ -2090,9 +2090,74 @@
 
     [data-component="clamped-content"] {
       grid-area: 1 / 1;
-      /* The top padding and four lines of output. */
-      --clamped-content-height: calc(12px + 4 * var(--line-height-base));
+      /* The 12px top padding and four 20px lines of output, as a plain length the clamp can read back. */
+      --clamped-content-height: 92px;
       --clamped-content-fade: var(--bash-section-background);
+    }
+  }
+}
+
+/* The output's toggle sits at the end of the command line, so neither block's text is a click target. */
+[data-component="shell-tool"][data-activity-timeline] [data-slot="bash-command"] {
+  /* Above the command, which shares its grid cell and comes later, so paints over it. Its inset matches the file
+     header's toggle. */
+  [data-slot="bash-toggle"] {
+    position: relative;
+    z-index: 1;
+    grid-area: 1 / 1;
+    justify-self: end;
+    align-self: center;
+    margin-inline-end: 8px;
+  }
+
+  [data-slot="bash-toggle-button"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: default;
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-text-text-accent);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+  }
+
+  &:has([data-slot="bash-toggle"]) [data-slot="bash-pre"] {
+    padding-inline-end: 40px;
+  }
+}
+
+/* A file's change counts follow its name, showing only the side that changed; its change bars are quieter; and its
+   toggle sits as far from the right edge as the file icon does from the left, since the icon's arrows are drawn narrow
+   inside their box. */
+[data-activity-timeline] [data-component="accordion"][data-scope="apply-patch"] [data-slot="accordion-item"] {
+  --opencode-diffs-bar-opacity: 0.5;
+
+  [data-slot="apply-patch-file-name-container"] {
+    flex-grow: 0;
+  }
+
+  [data-component="diff-changes"] {
+    flex-shrink: 0;
+  }
+
+  [data-component="diff-changes"] [data-empty] {
+    display: none;
+  }
+
+  [data-slot="apply-patch-trigger-actions"] > :last-child {
+    margin-inline-end: -4px;
+  }
+
+  /* Half the usual hover overlay, so the header only hints that it toggles. */
+  @media (hover: hover) {
+    [data-slot="accordion-header"] [data-slot="accordion-trigger"]:hover:not([data-disabled]) {
+      background-color: color-mix(in srgb, var(--v2-overlay-simple-overlay-hover) 50%, transparent);
     }
   }
 }
@@ -2119,7 +2184,7 @@
 }
 
 /* A goal the user set reads as their message, opening with a /goal tag centered on the first line. The tag sits as far
-   from the bubble's leading edge as from its top: the top padding plus the space the 18px tag leaves in that line. The
+   from the bubble's leading edge as from its top: the top padding plus the space the 16px tag leaves in that line. The
    gap is a registered length, so it resolves against the bubble's line and the smaller tag inherits that value. */
 @property --goal-tag-gap {
   syntax: "<length>";
@@ -2128,7 +2193,7 @@
 }
 
 [data-component="user-message"][data-goal] [data-slot="user-message-text"] {
-  --goal-tag-gap: calc((1lh - 18px) / 2);
+  --goal-tag-gap: calc((1lh - 16px) / 2);
   padding-inline-start: calc(8px + var(--goal-tag-gap));
 
   [data-slot="user-message-goal-badge"] {
@@ -2164,6 +2229,10 @@
   /* A compact row sets its title's weight from a more specific rule, so this one names the trigger too. */
   [data-component="collapsible"] > [data-slot="collapsible-trigger"] [data-slot="basic-tool-tool-title"] {
     font-weight: 440;
+  }
+
+  [data-slot="context-tool-group-match-count"] {
+    flex-shrink: 0;
   }
 
   /* A thought's subtitle is how long it took, which the label keeps muted. */

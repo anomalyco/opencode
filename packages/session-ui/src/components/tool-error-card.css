@@ -178,7 +178,7 @@
 }
 
 /* In the Activity timeline a failed call reads like the other rows: the tool muted, its subject bright, then a Failed
-   tag. Opening it shows the error in full, in the body text color. */
+   tag. Opening it shows the error in full. */
 [data-activity-timeline] [data-component="card"][data-kind="tool-error-card"] {
   [data-slot="basic-tool-tool-title"] {
     font-weight: 440;
@@ -193,12 +193,13 @@
     flex-shrink: 0;
   }
 
+  /* As tall as the other rows, so opening it never moves its heading within the row's slot. */
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+    height: 28px;
+  }
+
   /* Without the warning icon, the error lines up under the tool's name. */
   [data-slot="tool-error-card-content"] {
     padding-left: 0;
-  }
-
-  [data-slot="tool-error-card-content"] [data-slot="card-description"] {
-    color: var(--v2-text-text-base);
   }
 }

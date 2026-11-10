@@ -191,7 +191,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         </Show>
                       }
                     >
-                      <Badge data-slot="tool-error-card-failed" appearance="standard" variant="danger">
+                      <Badge data-slot="tool-error-card-failed" variant="danger">
                         {i18n.t("ui.toolErrorCard.failed")}
                       </Badge>
                     </Show>
@@ -204,7 +204,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
         </Collapsible.Trigger>
         <Collapsible.Content>
           <div data-slot="tool-error-card-content">
-            <Show when={open()}>
+            <Show when={open() && !activity()}>
               <div data-slot="tool-error-card-copy">{copyButton()}</div>
             </Show>
             <Show when={state.clipped && split.subtitle}>

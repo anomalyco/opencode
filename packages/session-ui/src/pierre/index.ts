@@ -124,6 +124,8 @@ const unsafeCSS = `
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
 [data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
   width: 2px;
+  /* A page can quiet the change bars, as the Activity timeline does. */
+  opacity: var(--opencode-diffs-bar-opacity, 1);
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before {

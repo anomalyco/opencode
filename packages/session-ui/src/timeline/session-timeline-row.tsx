@@ -772,7 +772,7 @@ export function createSessionTimelineRowRenderer(input: {
               <div data-component="user-message" data-goal="">
                 <div data-slot="user-message-body">
                   <div data-slot="user-message-text" dir="auto">
-                    <Badge data-slot="user-message-goal-badge" appearance="standard" dir="ltr">
+                    <Badge data-slot="user-message-goal-badge" dir="ltr">
                       /goal
                     </Badge>
                     <bdi>{objective()}</bdi>

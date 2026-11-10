@@ -987,7 +987,7 @@ export function CurrentContextToolGroup(props: {
                                         fallback={
                                           <Show when={props.activity ? trigger().count : undefined}>
                                             {(count) => (
-                                              <Badge data-slot="context-tool-group-matches" appearance="standard">
+                                              <Badge data-slot="context-tool-group-match-count">
                                                 {i18n.plural("ui.messagePart.context.matchCount", count())}
                                               </Badge>
                                             )}
@@ -2043,9 +2043,11 @@ function ConsoleOutput(props: {
   command?: string
   output: string
   /** Cuts the output to a few lines until it is expanded, as the Activity timeline shows a shell. */
-  clamp?: { expanded: boolean; onExpand: () => void; tail: boolean }
+  clamp?: { expanded: boolean; onToggle: () => void; tail: boolean }
 }) {
   const i18n = useI18n()
+  const [overflow, setOverflow] = createSignal(false)
+  const toggleLabel = () => i18n.t(props.clamp?.expanded ? "ui.common.showLess" : "ui.common.showMore")
 
   const pre = (output: string) => (
     <pre data-slot="bash-pre">
@@ -2073,9 +2075,25 @@ function ConsoleOutput(props: {
         <Show when={props.command}>
           {(command) => (
             <div data-slot="bash-command">
-              {/* The Activity timeline offers copy on the output only. */}
-              <Show when={!props.clamp}>
-                <ConsoleCopy text={command()} label={i18n.t("ui.message.copy")} />
+              {/* The Activity timeline offers copy on the output only, and puts the output's toggle here instead. */}
+              <Show when={props.clamp} fallback={<ConsoleCopy text={command()} label={i18n.t("ui.message.copy")} />}>
+                {(clamp) => (
+                  <Show when={overflow() || clamp().expanded}>
+                    <div data-slot="bash-toggle">
+                      <Tooltip value={toggleLabel()} placement="top">
+                        <button
+                          type="button"
+                          data-slot="bash-toggle-button"
+                          aria-label={toggleLabel()}
+                          aria-expanded={clamp().expanded}
+                          onClick={() => clamp().onToggle()}
+                        >
+                          <Icon name="chevron-grabber-vertical" size="small" />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  </Show>
+                )}
               </Show>
               <pre data-slot="bash-pre">
                 <code>{command()}</code>
@@ -2089,7 +2107,7 @@ function ConsoleOutput(props: {
               <ConsoleCopy text={output()} label={i18n.t("ui.message.copyOutput")} />
               <Show when={props.clamp} fallback={pre(output())}>
                 {(clamp) => (
-                  <ClampedContent expanded={clamp().expanded} onExpand={clamp().onExpand} tail={clamp().tail}>
+                  <ClampedContent expanded={clamp().expanded} tail={clamp().tail} onOverflowChange={setOverflow}>
                     {pre(output())}
                   </ClampedContent>
                 )}
@@ -2103,20 +2121,19 @@ function ConsoleOutput(props: {
 }
 
 /**
- * Content cut to a few lines, as the Activity timeline shows shell output and diffs. A click on the cut content shows
- * all of it. `tail` keeps the newest lines in view, as running output grows at the bottom.
+ * Content cut to a few lines, as the Activity timeline shows shell output and diffs. Its owner offers the control that
+ * shows the rest, so the text stays selectable. `tail` keeps the newest lines in view, as running output grows.
  */
 function ClampedContent(props: {
   expanded: boolean
-  onExpand: () => void
   tail?: boolean
   /** The height to cut at, measured from the rendered content, in place of the fixed one. */
   height?: (content: HTMLElement) => number | undefined
+  /** Whether the content is longer than the cut, so the owner knows to offer its toggle. */
+  onOverflowChange?: (overflow: boolean) => void
   children: JSX.Element
 }) {
-  const i18n = useI18n()
   const [overflow, setOverflow] = createSignal(false)
-  const clamped = () => !props.expanded && overflow()
   let frame: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
 
@@ -2125,7 +2142,9 @@ function ClampedContent(props: {
     const height = props.height?.(content)
 
     frame.style.setProperty("--clamped-content-height", height ? `${height}px` : null)
-    setOverflow(content.offsetHeight > frame.clientHeight + 1)
+    // Measured against the cut height, so an expanded frame still knows whether it has more than the cut shows.
+    const limit = Number.parseFloat(getComputedStyle(frame).getPropertyValue("--clamped-content-height")) || 96
+    setOverflow(content.offsetHeight > limit + 1)
 
     // Shifting the content rather than scrolling it keeps the fade over the frame's edge.
     const shift = props.tail && !props.expanded ? Math.min(0, frame.clientHeight - content.offsetHeight) : 0
@@ -2143,30 +2162,15 @@ function ClampedContent(props: {
   })
 
   createEffect(on(() => props.expanded, measure, { defer: true }))
-
-  const expand = () => {
-    // Selecting text in the cut lines is not a request to see the rest.
-    if (!clamped() || window.getSelection()?.toString()) return
-    props.onExpand()
-  }
+  createEffect(on(overflow, (value) => props.onOverflowChange?.(value)))
 
   return (
     <div
       ref={frame}
       data-component="clamped-content"
       data-clamped={props.expanded ? undefined : ""}
-      data-overflow={clamped() ? "" : undefined}
+      data-overflow={!props.expanded && overflow() ? "" : undefined}
       data-tail={props.tail ? "" : undefined}
-      role={clamped() ? "button" : undefined}
-      tabIndex={clamped() ? 0 : undefined}
-      aria-expanded={clamped() ? false : undefined}
-      aria-label={clamped() ? i18n.t("ui.common.showMore") : undefined}
-      onClick={expand}
-      onKeyDown={(event) => {
-        if (!clamped() || (event.key !== "Enter" && event.key !== " ")) return
-        event.preventDefault()
-        props.onExpand()
-      }}
     >
       <div ref={content}>{props.children}</div>
     </div>
@@ -2601,9 +2605,11 @@ ToolRegistry.register({
             activity()
               ? {
                   expanded: props.open ?? expanded(),
-                  onExpand: () => {
-                    setExpanded(true)
-                    props.onOpenChange?.(true)
+                  onToggle: () => {
+                    const next = !(props.open ?? expanded())
+
+                    setExpanded(next)
+                    props.onOpenChange?.(next)
                   },
                   tail: props.status === "running",
                 }
@@ -2899,6 +2905,8 @@ ToolRegistry.register({
                           fileDiff={view.fileDiff}
                           hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
                           onRendered={props.onContentRendered}
+                          // A diff in the Activity timeline is read, not acted on line by line, so lines stay still.
+                          {...(activity() ? { lineHoverHighlight: "disabled" as const } : {})}
                         />
                       </div>
                     )}
@@ -2921,6 +2929,12 @@ ToolRegistry.register({
                             </Show>
                             <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
                           </div>
+                          <Show when={activity() && file().type === "update"}>
+                            <DiffChanges
+                              appearance="standard"
+                              changes={{ additions: file().additions, deletions: file().deletions }}
+                            />
+                          </Show>
                         </div>
                         <div data-slot="apply-patch-trigger-actions">
                           <Switch>
@@ -2934,7 +2948,7 @@ ToolRegistry.register({
                                 {i18n.t("ui.patch.action.deleted")}
                               </span>
                             </Match>
-                            <Match when={true}>
+                            <Match when={!activity()}>
                               <DiffChanges
                                 appearance="standard"
                                 changes={{ additions: file().additions, deletions: file().deletions }}
@@ -2947,11 +2961,7 @@ ToolRegistry.register({
                     }
                   >
                     <Show when={preview()} fallback={<Show when={disclosure.mounted()}>{views()}</Show>}>
-                      <ClampedContent
-                        expanded={disclosure.open()}
-                        onExpand={() => disclosure.setOpen(true)}
-                        height={diffPreviewHeight}
-                      >
+                      <ClampedContent expanded={disclosure.open()} height={diffPreviewHeight}>
                         {views()}
                       </ClampedContent>
                     </Show>

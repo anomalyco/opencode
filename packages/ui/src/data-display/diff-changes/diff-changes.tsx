@@ -27,8 +27,8 @@ export function DiffChanges(props: {
         data-appearance={props.appearance ?? "compact"}
         classList={{ [props.class ?? ""]: true }}
       >
-        <span data-slot="diff-changes-additions">{`+${additions()}`}</span>
-        <span data-slot="diff-changes-deletions">{`-${deletions()}`}</span>
+        <span data-slot="diff-changes-additions" data-empty={additions() ? undefined : ""}>{`+${additions()}`}</span>
+        <span data-slot="diff-changes-deletions" data-empty={deletions() ? undefined : ""}>{`-${deletions()}`}</span>
       </div>
     </Show>
   )
