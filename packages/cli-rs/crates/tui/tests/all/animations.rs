@@ -65,7 +65,12 @@ fn routes() -> Vec<MemoryRoute> {
 }
 
 fn mount(layout: &str, animations: bool) -> support::Harness {
-    let config = json!({ "animations": animations, "tabs": { "layout": layout }, "session": { "sidebar": "hide" } });
+    // Medium verbosity draws the tool rows; low, the default, folds them into one summary.
+    let config = json!({
+        "animations": animations,
+        "tabs": { "layout": layout },
+        "session": { "sidebar": "hide", "verbosity": "medium" },
+    });
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         events: true,

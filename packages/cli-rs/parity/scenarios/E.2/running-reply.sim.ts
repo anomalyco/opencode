@@ -7,6 +7,7 @@ import { defineSim } from "../../sim/scenario"
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
 
 export default defineSim({
+  config: { session: { verbosity: "medium" } },
   model: [
     {
       items: [

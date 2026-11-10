@@ -61,6 +61,8 @@ fn with_tabs(width: u16, config: Value, check: impl FnOnce(&TestApp, &opencode_t
     let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     std::fs::create_dir_all(&paths.state).unwrap();
+    // Medium verbosity draws the subagent row; low, the default, folds it into one summary.
+    let config = support::merge(config, json!({ "session": { "verbosity": "medium" } }));
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         roots: support::roots(paths, "test"),
