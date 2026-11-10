@@ -4137,8 +4137,13 @@ describe("MCP reconnect", () => {
         expect((yield* server(service))?.status).toBe("failed")
         expect(yield* service.tools()).toEqual(tools)
 
-        // Within the 1 s backoff a call fails with the same error and nothing is spawned.
-        expect((yield* echo(service).pipe(Effect.flip)).message).toContain("missing API key")
+        // Within the 1 s backoff a call fails with the same error and nothing is spawned. The model is told the
+        // server reconnects on its own, not to reconnect it from /mcps.
+        const message = (yield* echo(service).pipe(Effect.flip)).message
+        expect(message).toContain("lost its connection: ")
+        expect(message).toContain("missing API key")
+        expect(message).toContain("It reconnects on the next call; try again shortly.")
+        expect(message).not.toContain("/mcps")
         yield* TestClock.adjust("999 millis")
         yield* echo(service).pipe(Effect.flip)
         expect(fake.state.spawns).toBe(2)

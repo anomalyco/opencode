@@ -87,7 +87,11 @@ export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.Tool
   message: Schema.String,
 }) {}
 
-const unavailable = (server: ServerName, status: Status) => {
+const unavailable = (server: ServerName, entry: ServerEntry) => {
+  const status = entry.status
+  // The model cannot reconnect a server from /mcps; one that dropped on its own reconnects on the next call.
+  if (entry.disconnected)
+    return `MCP server "${server}" lost its connection: ${entry.disconnected.reason}. It reconnects on the next call; try again shortly.`
   switch (status.status) {
     case "failed":
       return `MCP server "${server}" is not connected: ${status.error}. Reconnect it from /mcps.`
@@ -117,7 +121,7 @@ type ServerEntry = {
   retained?: ReadonlyArray<McpClient.Tool>
   // Set while the connection is down after dropping on its own. The next request that needs the server reconnects,
   // unless a reconnect failed and its backoff has not passed yet. An explicit lifecycle operation clears it.
-  disconnected?: { failures: number; retryAt: number }
+  disconnected?: { failures: number; retryAt: number; reason: string }
 }
 
 // A client-hosted MCP server attached over a connection the client opened. Internal: never listed,
@@ -412,7 +416,7 @@ export const layer = (options?: Options) =>
       const drop = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry, reason: string) {
         // A shared connection has already emptied its catalogs, so fall back to the last list read from it.
         entry.retained = entry.connection.tools ?? entry.tagged?.source
-        entry.disconnected = { failures: 0, retryAt: 0 }
+        entry.disconnected = { failures: 0, retryAt: 0, reason }
         yield* entry.connection.stop
         entry.status = { status: "failed", error: disconnectedError(reason) }
         yield* Effect.logWarning("mcp connection dropped", { server: name, reason })
@@ -571,6 +575,7 @@ export const layer = (options?: Options) =>
                   const disconnected = entry.disconnected
                   if (disconnected && failure.status === "failed") {
                     disconnected.failures += 1
+                    disconnected.reason = failure.error
                     disconnected.retryAt =
                       (yield* Clock.currentTimeMillis) +
                       Math.min(
@@ -985,7 +990,7 @@ export const layer = (options?: Options) =>
             return yield* new ToolCallError({
               server,
               tool: input.name,
-              message: unavailable(server, target.entry.status),
+              message: unavailable(server, target.entry),
             })
           return yield* target.entry.connection.recovering(target.client, call).pipe(failed("server"))
         }),
