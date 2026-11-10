@@ -290,6 +290,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         .bg(text_bg)
         .wrap(WrapMode::Word);
     let link = Text::new(app, vec![GO_URL.fg(primary).link(GO_URL)]).bg(text_bg).wrap(WrapMode::None);
+    crate::features::links::open_on_click(app, &link, GO_URL.to_owned());
     let compact = short || height < if narrow { 26 } else { 22 };
     if compact {
         // TS's scrollbox takes its whole `maxHeight`, so the panel reaches the buttons at the bottom.
@@ -442,10 +443,10 @@ impl Connect {
         self.footer.clear();
         let attempt = self.attempt.borrow().clone();
         if let Some(attempt) = &attempt {
-            let details = View::new(app).gap(1).child(
-                &Text::new(app, vec![attempt.url.as_str().fg(theme.markdown.link).link(attempt.url.clone())])
-                    .wrap(WrapMode::Word),
-            );
+            let link = Text::new(app, vec![attempt.url.as_str().fg(theme.markdown.link).link(attempt.url.clone())])
+                .wrap(WrapMode::Word);
+            crate::features::links::open_on_click(app, &link, attempt.url.clone());
+            let details = View::new(app).gap(1).child(&link);
             if !attempt.instructions.is_empty() {
                 details.add(&Text::new(app, attempt.instructions.clone()).fg(theme.text.muted));
             }
