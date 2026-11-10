@@ -646,6 +646,9 @@ export function createComposerEditor(input: {
     parts() {
       return draft.state.prompt
     },
+    insertNewline() {
+      insertEditorNewline(editor)
+    },
     contextItem(id: string) {
       return draft.state.context.items.find((item) => item.key === id)
     },
@@ -844,6 +847,27 @@ export function createComposerEditor(input: {
 }
 
 export type ComposerEditorModel = ReturnType<typeof createComposerEditor>
+
+function insertEditorNewline(target: HTMLElement | undefined) {
+  if (!target) return
+  const selection = window.getSelection()
+
+  if (!selection?.rangeCount) return
+  const range = selection.getRangeAt(0)
+
+  if (!target.contains(range.startContainer) || !target.contains(range.endContainer)) return
+
+  // insertText("\n") creates a trailing div in Chromium; insertLineBreak keeps it a BR, like native Shift+Enter.
+  if (Predicate.isFunction(document.execCommand) && document.execCommand("insertLineBreak", false)) return
+  range.deleteContents()
+  const node = document.createTextNode("\n")
+  range.insertNode(node)
+  range.setStartAfter(node)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertLineBreak", data: "\n" }))
+}
 
 export function shouldHandlePasteAsAttachment(clipboard: DataTransfer | null, readClipboardImage: boolean) {
   if (Array.from(clipboard?.items ?? []).some((item) => item.kind === "file")) return true
