@@ -291,6 +291,92 @@ test("send catch-up does not depend on the order records are applied", () => {
   expect(sequence([fresh, stale])).toBe(150)
 })
 
+test("multiple renames keep the original pre-rename value through either renamed copy", () => {
+  const recency = createSessionRecency()
+  const pre = { ...session, time: { created: 0, updated: 10 } }
+  const first = { ...session, time: { created: 0, updated: 50 } }
+  const second = { ...session, time: { created: 0, updated: 80 } }
+
+  recency.renamed(session.id, pre, 50)
+  expect(recency.apply([first])[0].time.updated).toBe(10)
+
+  // The live store now holds the first rename time, but it is not real activity.
+  recency.renamed(session.id, first, 80)
+  expect(recency.apply([first])[0].time.updated).toBe(10)
+  expect(recency.apply([second])[0].time.updated).toBe(10)
+  expect(recency.apply([first, second]).map((item) => item.time.updated)).toEqual([10, 10])
+})
+
+test("a refetch that lands before the rename event still supplies the pre-rename value", () => {
+  const recency = createSessionRecency()
+  const stale = { ...session, time: { created: 0, updated: 10 } }
+  const renamed = { ...session, time: { created: 0, updated: 50 } }
+
+  recency.apply([stale])
+  recency.apply([renamed])
+  recency.renamed(session.id, undefined, 50)
+
+  expect(recency.apply([renamed])[0].time.updated).toBe(10)
+})
+
+test("a rename during a send does not clamp the session to the local send time", () => {
+  const recency = createSessionRecency()
+  const before = { ...session, time: { created: 0, updated: 200 } }
+
+  recency.acceptSend(session.id, before, 1_000)
+  recency.renamed(session.id, before, 300)
+
+  expect(recency.apply([{ ...session, time: { created: 0, updated: 210 } }])[0].time.updated).toBe(210)
+})
+
+test("remember restores the raw server time after apply projected a send bump", () => {
+  const setup = setupDesktop(async () => Response.json({ data: session }))
+
+  try {
+    setup.seed(100)
+    setSystemTime(new Date(1_000))
+    setup.data.session.acceptSend(session.id)
+
+    const bumped = setup.data.session.apply([{ ...session, time: { created: 0, updated: 100 } }])[0]
+    expect(bumped.time.updated).toBe(1_000)
+    setup.data.session.remember(bumped)
+
+    expect(setup.data.session.get(session.id)?.time.updated).toBe(100)
+    // A synthetic value must not have settled the pending send and raised its floor.
+    expect(setup.data.session.apply([{ ...session, time: { created: 0, updated: 150 } }])[0].time.updated).toBe(150)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("bounds per-session recency state", () => {
+  const recency = createSessionRecency()
+
+  for (let index = 0; index < 600; index++) recency.acceptSend(`ses_${index}`, undefined, 100_000 + index)
+
+  expect(recency.apply([{ ...session, id: "ses_0", time: { created: 0, updated: 0 } }])[0].time.updated).toBe(0)
+})
+
+test("a shutdown interruption does not refresh the session", async () => {
+  let gets = 0
+
+  const setup = setupDesktop(async () => {
+    gets++
+
+    return Response.json({ data: session })
+  })
+
+  try {
+    setup.seed(10)
+    setup.emit("session.execution.interrupted", 50, { reason: "shutdown" })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(gets).toBe(0)
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("an execution end refetches the session and applies the refreshed time", async () => {
   let gets = 0
   const requested = Promise.withResolvers<void>()

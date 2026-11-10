@@ -733,6 +733,7 @@ async function sendCommand(
     skills: request.skills,
     delivery: value.delivery,
   })
+  session.data.session.acceptSend(session.id)
 }
 
 async function applySelection(

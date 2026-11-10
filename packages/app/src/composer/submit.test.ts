@@ -765,9 +765,11 @@ describe("Composer submission", () => {
     const started = Promise.withResolvers<void>()
     const committed = Promise.withResolvers<void>()
     const completed = Promise.withResolvers<void>()
+    const accepted = Promise.withResolvers<void>()
 
     const target = session({
       calls,
+      accept: () => accepted.resolve(),
       switchAgent: async (request) => {
         expect(request.agent).toBe("build")
         calls.push("agent")
@@ -814,7 +816,8 @@ describe("Composer submission", () => {
     agent.resolve()
     committed.resolve()
     await completed.promise
-    expect(calls).toEqual(["track", "agent", "model", "command"])
+    await accepted.promise
+    expect(calls).toEqual(["track", "agent", "model", "command", "accept-send"])
   })
 
   test("cancels selection tracking and does not execute a command when selection fails", async () => {

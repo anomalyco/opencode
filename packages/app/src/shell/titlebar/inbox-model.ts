@@ -397,7 +397,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     })
     void startTransition(() => {
       tabs.select(tabs.addSessionTab({ server: entry.server, sessionId: entry.session.id }))
-      entry.ctx.data.session.remember(entry.session)
+      entry.ctx.data.session.remember(entry.ctx.data.session.get(entry.session.id) ?? entry.session)
       entry.ctx.projects.touch(directory)
     })
   }
