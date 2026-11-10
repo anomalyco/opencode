@@ -317,6 +317,60 @@ fn open_dialog_matches_typescript() {
     assert_fixture(&kit.app.render(), "E.11a/open-worktrees");
 }
 
+/// Home over an in-memory server with events, the projects of [`projects`], and `ses_r1` in a background tab.
+fn evented() -> (Harness, opencode_api::memory::Memory) {
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+    let session = session("ses_r1", Some("Review the plan"), 1.0, json!({}));
+    let mut routes = vec![
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [session], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/project", 200, &projects()),
+        MemoryRoute::json("GET", "/api/location", 200, &support::location(DIRECTORY)),
+        MemoryRoute::json("GET", "/api/worktree", 200, &json!([{ "directory": "/tmp/opencode/app-feature" }])),
+        MemoryRoute::body("POST", "/api/worktree/refresh", 204, None, ""),
+    ];
+    routes.extend(support::session_routes(&session));
+    let memory = Memory::new(routes);
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(support::decode(r#"{ "tabs": { "mode": "off" }, "animations": false }"#)),
+        events: true,
+        route: Route::Home,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    (support::mount(100, 34, deps), memory)
+}
+
+#[test]
+fn a_session_waiting_on_a_form_is_marked_with_a_question() {
+    let (harness, memory) = evented();
+    memory.emit(&json!({
+        "id": "evt_form", "created": 1, "type": "form.created", "location": { "directory": DIRECTORY },
+        "data": { "form": { "id": "frm_1", "sessionID": "ses_r1", "title": "Pick one", "fields": [] } },
+    }));
+    let id = SessionID("ses_r1".into());
+    let attention = || harness.tui.data.read(|state| opencode_tui::dialogs::session_list::attention(state, &id));
+    harness.wait("the form never arrived", || harness.tui.data.read(|state| !state.form_sessions().is_empty()));
+    assert_eq!(attention(), Some('?'));
+}
+
+#[test]
+fn open_reads_the_worktrees_again_on_worktree_updated() {
+    let (harness, memory) = evented();
+    let reads = || memory.requests().iter().filter(|seen| seen.path == "/api/worktree").count();
+    harness.app.press("ctrl+o");
+    harness.wait_for("App");
+    harness.wait_gone("Refreshing");
+    // To the projects section, on App.
+    harness.app.press("alt+down");
+    harness.app.press("right");
+    harness.wait_for("app-feature");
+    assert_eq!(reads(), 1);
+    memory.emit(&json!({
+        "id": "evt_wt", "created": 1, "type": "worktree.updated", "data": { "projectID": "proj_app" },
+    }));
+    harness.wait("worktree.updated read nothing", || reads() == 2);
+}
+
 #[test]
 fn session_list_and_open_read_the_home_location_not_the_launch_directory() {
     let kit = Kit::new(Mode::List);
