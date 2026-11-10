@@ -11,8 +11,8 @@ use super::parts::{Delivery, RunPrompt, is_compact, is_exit, is_new};
 pub enum Submitted {
     Ignored,
     Exit,
-    /// Admit to the inbox now; the prompt has its message ID.
-    Admit(RunPrompt, Delivery),
+    /// Admit to the inbox once the admissions before it are done; call [`Queue::next_admission`].
+    Admit,
     /// Queued here; call [`Queue::pump`]. `first` clears the first-prompt hint.
     Queued {
         first: bool,
@@ -35,6 +35,13 @@ pub struct Queue {
     active: Option<Option<RunPrompt>>,
     /// Admissions made while the active turn ran (`admissionVersion`).
     admissions: u32,
+    /// Prompts submitted while the active turn ran, admitted one at a time in order, after the turn's own prompt
+    /// (the `admissions` chain).
+    follow_ups: VecDeque<(RunPrompt, Delivery)>,
+    /// The active turn's own prompt is still being admitted (`state.admission`).
+    first_pending: bool,
+    /// A follow-up's admission is in flight.
+    admitting: bool,
     closed: bool,
 }
 
@@ -42,6 +49,7 @@ impl Queue {
     pub fn close(&mut self) {
         self.closed = true;
         self.queue.clear();
+        self.follow_ups.clear();
     }
 
     pub fn busy(&self) -> bool {
@@ -72,7 +80,8 @@ impl Queue {
             self.admissions += 1;
             let delivery = prompt.delivery.unwrap_or(Delivery::Queue);
             let sent = RunPrompt { message_id: Some(opencode_api::id::message()), ..prompt };
-            return Submitted::Admit(sent, delivery);
+            self.follow_ups.push_back((sent, delivery));
+            return Submitted::Admit;
         }
         let first = !local(&prompt);
         self.queue.push_back(prompt);
@@ -99,8 +108,34 @@ impl Queue {
             RunPrompt { message_id: prompt.message_id.clone().or_else(|| Some(opencode_api::id::message())), ..prompt }
         };
         self.admissions = 0;
+        self.first_pending = !sent.shell;
         self.active = Some(Some(sent.clone()));
         Some(Work::Run(sent))
+    }
+
+    /// The active turn's own prompt was admitted, or failed: the follow-ups may go.
+    pub fn first_admitted(&mut self) {
+        self.first_pending = false;
+    }
+
+    /// The next follow-up to admit, once the turn's prompt and the follow-up before it are done.
+    pub fn next_admission(&mut self) -> Option<(RunPrompt, Delivery)> {
+        if self.closed || self.first_pending || self.admitting {
+            return None;
+        }
+        let next = self.follow_ups.pop_front()?;
+        self.admitting = true;
+        Some(next)
+    }
+
+    /// A follow-up's admission ended, admitted or not; the next one may go.
+    pub fn admission_done(&mut self) {
+        self.admitting = false;
+    }
+
+    /// Whether every follow-up was admitted (`await admissions`).
+    pub fn admissions_idle(&self) -> bool {
+        !self.admitting && self.follow_ups.is_empty()
     }
 
     /// Whether prompts were admitted while the active turn ran, so it settles once more before it ends.
@@ -134,9 +169,22 @@ mod tests {
         assert_eq!(queue.pump(), None);
         // Enter steers; `prompt.queue` queues; a prompt without a delivery queues.
         let steer = RunPrompt { delivery: Some(Delivery::Steer), ..text("two") };
-        let Submitted::Admit(sent, Delivery::Steer) = queue.submit(steer) else { panic!("admitted") };
+        assert_eq!(queue.submit(steer), Submitted::Admit);
+        assert_eq!(queue.submit(text("three")), Submitted::Admit);
+        // Follow-ups reach the server in order: after the turn's own prompt, one at a time
+        // (`runtime.queue.ts:266-275`).
+        assert_eq!(queue.next_admission(), None);
+        queue.first_admitted();
+        let Some((sent, Delivery::Steer)) = queue.next_admission() else { panic!("two steers") };
+        assert_eq!(sent.text, "two");
         assert!(sent.message_id.is_some());
-        assert!(matches!(queue.submit(text("three")), Submitted::Admit(_, Delivery::Queue)));
+        assert_eq!(queue.next_admission(), None);
+        assert!(!queue.admissions_idle());
+        queue.admission_done();
+        let Some((sent, Delivery::Queue)) = queue.next_admission() else { panic!("three queues") };
+        assert_eq!(sent.text, "three");
+        queue.admission_done();
+        assert!(queue.admissions_idle());
         assert!(queue.take_admissions());
         assert!(!queue.take_admissions());
         assert!(!queue.done());
