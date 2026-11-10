@@ -593,6 +593,10 @@ impl CliConfig {
     /// Calls `on_change` after the config directory changes, debounced. `None` when watching is off or
     /// fails (live reload is lost, nothing else).
     pub fn watch(&self, on_change: impl FnMut() + Send + 'static) -> Option<crate::watch::Watch> {
+        // TS creates the directory at startup (`Global.layer`); a missing one cannot be watched.
+        if let Err(error) = fs::create_dir_all(&self.config) {
+            log::warn!("failed to create {}: {error}", self.config.display());
+        }
         crate::watch::watch(&self.config, |_| true, crate::watch::DEBOUNCE, on_change)
     }
 
