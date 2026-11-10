@@ -100,18 +100,33 @@ export const Plugin = {
 
               const sessionID = context.sessionID
               let cursor: string | null | undefined = input.cursor
-              const follow = () => events.stream({ name, arguments: input.arguments, cursor })
+              let closes = 0
+              // A server that closes the stream itself, as when it restarts in place, is followed from the last
+              // cursor, unless it keeps closing it without sending anything.
+              const follow = (): ReturnType<typeof events.stream> =>
+                events
+                  .stream({ name, arguments: input.arguments, cursor })
+                  .pipe(
+                    Stream.concat(
+                      Stream.unwrap(
+                        Effect.suspend(() =>
+                          ++closes > 3
+                            ? Effect.fail(new Error("the server kept closing the stream"))
+                            : Effect.sleep("500 millis").pipe(Effect.as(follow())),
+                        ),
+                      ),
+                    ),
+                  )
               const deleted = ctx.event.subscribe({ types: ["session.deleted"] }).pipe(
                 Stream.filter((event) => event.data.sessionID === sessionID),
                 Stream.runHead,
               )
               yield* follow().pipe(
-                // A server that closes the stream itself, as when it restarts in place, is followed once more.
-                Stream.concat(Stream.suspend(follow)),
                 (stream) => (input.once === false ? stream : Stream.take(stream, 1)),
                 Stream.interruptWhen(deleted),
                 Stream.runForEach((event) => {
-                  cursor = event.cursor
+                  closes = 0
+                  if (event.cursor !== undefined) cursor = event.cursor
                   return ctx.session.synthetic({
                     sessionID,
                     // A replayed event maps to the same message, which is admitted once.

@@ -68,6 +68,9 @@ const isTransient = (error: unknown) =>
 const EVENTS = "io.modelcontextprotocol/events"
 const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 const STREAM = "ai.opencode/stream"
+// A stream stays open until it's cancelled. The SDK has no unlimited timeout, and setTimeout turns anything past
+// 2^31 - 1 ms (about 24.8 days) into 1 ms.
+const STREAM_TIMEOUT = 2 ** 31 - 1
 const Subscribed = { _meta: Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Schema.String, Schema.Number]) }) }
 
 const EventType = Schema.Struct({
@@ -504,10 +507,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                     client.request(
                       { method: "events/stream", params: { ...input, _meta: { [STREAM]: token } } },
                       StreamResult,
-                      {
-                        signal,
-                        timeout: execution,
-                      },
+                      { signal, timeout: STREAM_TIMEOUT },
                     ),
                   ).pipe(
                     Effect.matchEffect({

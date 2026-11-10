@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { InMemoryTransport, type JSONRPCMessage } from "@modelcontextprotocol/client"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Flag } from "@opencode/core/flag"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -7,7 +8,7 @@ import { McpClient } from "@opencode/core/mcp/client"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { McpEventTools } from "@opencode/core/tool/plugin/mcp-events"
-import { Effect, Layer, PubSub, Stream } from "effect"
+import { Effect, Fiber, Layer, Option, PubSub, Stream } from "effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -58,7 +59,7 @@ const eventServer = Effect.fnUntraced(function* () {
       config: { type: "attached", transport: client },
       directory: import.meta.dir,
     }).pipe(Effect.provide(hostEnvironmentLayer)),
-    event: (id: string | number, eventId: string, cursor: string) =>
+    event: (id: string | number, eventId: string, cursor?: string) =>
       notify("notifications/events/event", id, {
         eventId,
         name: "job.finished",
@@ -155,44 +156,114 @@ describe("watch_mcp_event", () => {
     }),
   )
 
-  it.live("gives a replayed event the same message, follows a closed stream from its cursor once, and stops", () =>
+  it.live("gives a replayed event the same message, follows closed streams from their cursor, and stops", () =>
     Effect.gen(function* () {
       const { state, wakes, watch, event, close, terminate, deleted } = yield* setup()
+      const stopped = (reason: string) => ({
+        sessionID,
+        description: "jobs job.finished watch stopped",
+        text: `Watching jobs job.finished stopped: ${reason}`,
+        metadata: { source: "mcp.event", server: "jobs", event: "job.finished" },
+      })
       yield* watch({ server: "jobs", event: "job.finished", once: false })
       yield* until(() => state.streams.length === 1)
       const first = state.streams[0].id
       yield* event(first, "e1", "c1")
       yield* event(first, "e1", "c1")
       yield* event(first, "e2", "c2")
-      yield* until(() => wakes.length === 3)
+      // An event without a cursor keeps the last one.
+      yield* event(first, "e3")
+      yield* until(() => wakes.length === 4)
       expect(wakes[1].id).toBe(wakes[0].id)
       expect(wakes[2].id).not.toBe(wakes[0].id)
 
-      // The server ends the stream itself, as when it restarts in place: follow it from the last event.
-      yield* close(first)
-      yield* until(() => state.streams.length === 2)
-      expect(state.streams[1].params).toMatchObject({ name: "job.finished", cursor: "c2" })
+      // The server ends the stream itself, as when it restarts in place: follow it from the last cursor, until
+      // it has closed it three times in a row without an event.
+      for (const index of [0, 1, 2, 3, 4, 5]) {
+        if (index === 3) yield* event(state.streams[3].id, "e4", "c4")
+        yield* close(state.streams[index].id)
+        yield* until(() => state.streams.length === index + 2)
+        expect(state.streams[index + 1].params).toMatchObject({ cursor: index < 3 ? "c2" : "c4" })
+      }
+      yield* close(state.streams[6].id)
+      yield* until(() => wakes.length === 6)
+      expect(wakes[5]).toEqual(stopped("the server kept closing the stream"))
+      expect(state.streams).toHaveLength(7)
+
       // Deleting the session cancels its stream.
+      yield* watch({ server: "jobs", event: "job.finished", once: false })
+      yield* until(() => state.streams.length === 8)
       yield* PubSub.publish(deleted, { type: "session.deleted", data: { sessionID } })
-      yield* until(() => state.cancelled.includes(state.streams[1].id))
+      yield* until(() => state.cancelled.includes(state.streams[7].id))
 
       // A terminated stream ends the watch and wakes the session to say so, once.
       yield* watch({ server: "jobs", event: "job.finished", once: false })
-      yield* until(() => state.streams.length === 3)
-      const third = state.streams[2].id
-      yield* terminate(third)
-      yield* event(third, "e3", "c3")
-      yield* until(() => wakes.length === 4)
+      yield* until(() => state.streams.length === 9)
+      const last = state.streams[8].id
+      yield* terminate(last)
+      yield* event(last, "e5", "c5")
+      yield* until(() => wakes.length === 7)
       yield* Effect.sleep("20 millis")
-      expect(wakes.slice(3)).toEqual([
-        {
-          sessionID,
-          description: "jobs job.finished watch stopped",
-          text: "Watching jobs job.finished stopped: Forbidden",
-          metadata: { source: "mcp.event", server: "jobs", event: "job.finished" },
+      expect(wakes.slice(6)).toEqual([stopped("Forbidden")])
+      expect(state.streams).toHaveLength(9)
+    }),
+  )
+
+  it.live("keeps a stream open past the server's execution timeout", () =>
+    Effect.gen(function* () {
+      // A Streamable HTTP server that holds `events/stream` open as SSE and sends one event when told to.
+      const opened: Array<(event: Record<string, unknown>) => void> = []
+      const http = Bun.serve({
+        port: 0,
+        fetch: async (request) => {
+          if (request.method !== "POST") return new Response(null, { status: 405 })
+          const message = (await request.json()) as {
+            id?: string | number
+            method: string
+            params: { protocolVersion?: string }
+          }
+          if (message.id === undefined) return new Response(null, { status: 202 })
+          if (message.method === "initialize")
+            return Response.json({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: {
+                protocolVersion: message.params.protocolVersion,
+                capabilities: { extensions: { "io.modelcontextprotocol/events": {} } },
+                serverInfo: { name: "jobs", version: "1.0.0" },
+              },
+            })
+          const body = new ReadableStream({
+            start: (controller) =>
+              void opened.push((params) =>
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    `data: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/events/event", params: { ...params, _meta: { "io.modelcontextprotocol/subscriptionId": message.id } } })}\n\n`,
+                  ),
+                ),
+              ),
+          })
+          return new Response(body, { headers: { "content-type": "text/event-stream" } })
         },
-      ])
-      expect(state.streams).toHaveLength(3)
+      })
+      yield* Effect.addFinalizer(() => Effect.promise(() => http.stop(true)))
+      const connection = yield* McpClient.connect({
+        server: "jobs",
+        config: new ConfigMCP.Remote({
+          type: "remote",
+          url: http.url.href,
+          oauth: false,
+          timeout: new ConfigMCP.Timeout({ execution: 50 }),
+        }),
+        directory: import.meta.dir,
+      }).pipe(Effect.provide(hostEnvironmentLayer))
+      const next = yield* Effect.forkChild(Stream.runHead(connection.events!.stream({ name: "job.finished" })), {
+        startImmediately: true,
+      })
+      yield* until(() => opened.length === 1)
+      yield* Effect.sleep("150 millis")
+      opened[0]({ eventId: "e1", name: "job.finished", timestamp: "2026-11-10T00:00:00Z", data: {}, cursor: "c1" })
+      expect(Option.getOrThrow(yield* Fiber.join(next))).toMatchObject({ eventId: "e1", cursor: "c1" })
     }),
   )
 
