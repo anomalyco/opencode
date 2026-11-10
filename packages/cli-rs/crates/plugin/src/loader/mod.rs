@@ -76,7 +76,7 @@ pub struct Loader {
     /// `plugins` paths start from (TS `path.dirname(config.path)`).
     config_dir: PathBuf,
     cwd: PathBuf,
-    configured: Vec<Configured>,
+    configured: RefCell<Vec<Configured>>,
     seen: RefCell<HashMap<String, Seen>>,
     /// The targets of the last reconcile, so a removed one leaves the registry whatever its status.
     listed: RefCell<Vec<String>>,
@@ -95,7 +95,7 @@ impl Loader {
             backend,
             config_dir,
             cwd,
-            configured,
+            configured: RefCell::new(configured),
             seen: RefCell::default(),
             listed: RefCell::default(),
             failed: RefCell::default(),
@@ -112,7 +112,8 @@ impl Loader {
             local: Some(path),
             options: None,
         });
-        let configured = self.configured.iter().map(|entry| Target {
+        let configured = self.configured.borrow();
+        let configured = configured.iter().map(|entry| Target {
             target: entry.target.clone(),
             local: local_source(&entry.target, &self.config_dir),
             options: entry.options.clone(),
@@ -131,6 +132,11 @@ impl Loader {
             }
         }
         targets
+    }
+
+    /// Replaces the configured entries, after `cli.json` changed; the next [`Loader::reconcile`] applies them.
+    pub fn set_configured(&self, configured: Vec<Configured>) {
+        self.configured.replace(configured);
     }
 
     /// The directories whose changes can change the targets: the `plugins` directories and `cwd`'s (or, while
@@ -242,8 +248,10 @@ impl Loader {
                 return self.fail(&**host, registry, name, 0, format!("{}: {error}", file.display()));
             }
         };
+        // Setup runs with the options, so new options load the build again (TS `sameGeneration`).
         let mut hasher = DefaultHasher::new();
         hasher.write(&bytes);
+        hasher.write(target.options.as_deref().unwrap_or_default().as_bytes());
         let digest = hasher.finish();
         if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) {
             return false;

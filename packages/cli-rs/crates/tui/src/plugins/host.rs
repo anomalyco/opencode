@@ -617,12 +617,17 @@ fn hosted(tui: &Rc<OnceCell<Weak<Tui>>>, id: &'static str, activate: fn(&Rc<Tui>
 
 /// The registry of the built-ins and the `plugins` config, not yet active.
 pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>) -> Plugins {
-    let targets = info.plugins.iter().flatten().map(|plugin| match plugin {
-        opencode_local::cli_config::Plugin::Name(name) => name.as_str(),
-        opencode_local::cli_config::Plugin::Package { package, .. } => package.as_str(),
-    });
+    let targets = info.plugins.iter().flatten().map(target);
     let tui = Rc::default();
     Plugins { registry: Registry::new(builtins(&tui, external), targets), tui, diffs: RefCell::default() }
+}
+
+/// A `plugins` entry's target.
+fn target(plugin: &opencode_local::cli_config::Plugin) -> &str {
+    match plugin {
+        opencode_local::cli_config::Plugin::Name(name) => name,
+        opencode_local::cli_config::Plugin::Package { package, .. } => package,
+    }
 }
 
 /// The TUI as the plugin registry takes it.
@@ -718,6 +723,38 @@ struct PluginsChanged;
 /// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
 /// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 pub fn external(tui: &Rc<Tui>, external: External) {
+    let entries = configured(tui, tui.plugins.skipped());
+    let loader = Rc::new(Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries));
+    loader.reconcile(&host(tui), &tui.plugins);
+    let watches: Rc<RefCell<Vec<Watched>>> = Rc::default();
+    watch(tui, &loader, &watches);
+    tui.app.on_message({
+        let (loader, watches) = (loader.clone(), watches.clone());
+        bind!(tui, |tui, _, _: &PluginsChanged| {
+            loader.reconcile(&host(&tui), &tui.plugins);
+            watch(&tui, &loader, &watches);
+        })
+    });
+    // TS reconciles again when `config.data.plugins` changes: new entries, options and directives apply.
+    let plugins = RefCell::new(tui.config().info.plugins.clone());
+    let weak = tui.weak();
+    tui.settings.on_change(move |_| {
+        let Some(tui) = weak.upgrade() else { return };
+        let current = tui.config().info.plugins.clone();
+        if *plugins.borrow() == current {
+            return;
+        }
+        let host = host(&tui);
+        let targets = tui.plugins.set_targets(&host, current.iter().flatten().map(target));
+        plugins.replace(current);
+        loader.set_configured(configured(&tui, targets));
+        loader.reconcile(&host, &tui.plugins);
+        watch(&tui, &loader, &watches);
+    });
+}
+
+/// The entries that name no plugin, with their `options` as JSON text.
+fn configured(tui: &Tui, targets: Vec<String>) -> Vec<Configured> {
     let options = |target: &str| {
         tui.config().info.plugins.iter().flatten().find_map(|plugin| match plugin {
             opencode_local::cli_config::Plugin::Package { package, options: Some(options) } if package == target => {
@@ -726,16 +763,7 @@ pub fn external(tui: &Rc<Tui>, external: External) {
             _ => None,
         })
     };
-    let configured =
-        tui.plugins.skipped().into_iter().map(|target| Configured { options: options(&target), target }).collect();
-    let loader = Rc::new(Loader::new(Rc::new(Native), external.config_dir, external.cwd, configured));
-    loader.reconcile(&host(tui), &tui.plugins);
-    let watches: Rc<RefCell<Vec<Watched>>> = Rc::default();
-    watch(tui, &loader, &watches);
-    tui.app.on_message(bind!(tui, |tui, _, _: &PluginsChanged| {
-        loader.reconcile(&host(&tui), &tui.plugins);
-        watch(&tui, &loader, &watches);
-    }));
+    targets.into_iter().map(|target| Configured { options: options(&target), target }).collect()
 }
 
 /// A watched directory, the identity of the directory it watches, and the watch.
