@@ -27,6 +27,9 @@ Die Regeln in `AGENTS.md` (Upstream) gelten weiterhin; dieser Abschnitt ergänzt
   auswerten, Feature abschalten) statt großer Umbauten, damit Merges von `origin/dev` machbar bleiben.
   Jede Fork-spezifische Stelle mit dem Kommentar `// local-only:` kurz begründen, damit sie bei
   Merges auffindbar ist (`grep -rn "local-only:"`).
+- **Protokollieren:** Jede Fork-Änderung bekommt einen Abschnitt in `local-only/FORK-CHANGES.md`
+  (Zweck, Dateien, Eingriff, Konflikt-Hinweise) und eine Prüfung in `local-only/check-fork.sh`. Nach einem
+  Release-Wechsel zeigt `local-only/check-fork.sh`, ob etwas verloren gegangen ist.
 
 ## Bekannte externe Zugriffe (Ausgangslage, nicht vollständig)
 
