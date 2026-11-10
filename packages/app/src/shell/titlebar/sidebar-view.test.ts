@@ -171,7 +171,6 @@ describe("sidebarView", () => {
       ["server:c", true, 1],
     ])
     expect(view.groups[0]?.children?.map((child) => child.collapsed)).toEqual([false, true])
-    expect(view.openKeys).toEqual(["a1", "b2"])
 
     const flat = sidebarView(
       rows,
@@ -182,6 +181,5 @@ describe("sidebarView", () => {
       ["project:p1", true],
       ["project:p2", true],
     ])
-    expect(flat.openKeys).toEqual(["b2"])
   })
 })

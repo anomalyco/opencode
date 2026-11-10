@@ -56,8 +56,6 @@ export type SidebarGroup<R extends SidebarRow> = {
 
 export type SidebarView<R extends SidebarRow> = {
   groups: SidebarGroup<R>[]
-  /** Open row keys in on-screen order; a collapsed group adds only its active row. Drives ⌘1–9 and next/previous. */
-  openKeys: string[]
 }
 
 export const SIDEBAR_STATUSES: readonly SidebarStatus[] = ["running", "input", "unread", "failed", "idle"]
@@ -88,9 +86,7 @@ export function sidebarView<R extends SidebarRow>(rows: readonly R[], state: Sid
     ...(children.get(row.key) ?? []).toSorted((a, b) => b.updated - a.updated || byKey(a, b)).flatMap(withChildren),
   ]
 
-  const groups = buildGroups(top, withChildren, state)
-
-  return { groups, openKeys: groups.flatMap(openKeys) }
+  return { groups: buildGroups(top, withChildren, state) }
 }
 
 const ATTENTION: Record<SidebarStatus, number> = { input: 0, failed: 1, unread: 2, running: 3, idle: 4 }
@@ -209,17 +205,4 @@ function leaf<R extends SidebarRow>(
     spansServers: bucket.kind === "project" && new Set(rows.map((row) => row.server)).size > 1,
     children: undefined,
   }
-}
-
-// A collapsed group still shows its active row, so that row keeps its place in the order.
-function openKeys<R extends SidebarRow>(group: SidebarGroup<R>): string[] {
-  if (group.collapsed) {
-    const rows = group.children ? group.children.flatMap((child) => child.rows) : group.rows
-
-    return rows.filter((row) => row.open && row.active).map((row) => row.key)
-  }
-
-  if (group.children) return group.children.flatMap(openKeys)
-
-  return group.rows.filter((row) => row.open).map((row) => row.key)
 }
