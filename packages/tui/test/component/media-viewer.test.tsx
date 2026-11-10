@@ -10,7 +10,7 @@ import { ManualClock, setRendererCapabilities } from "@opentui/core/testing"
 import { expect, test } from "bun:test"
 import { createRoot, type JSX } from "solid-js"
 import { createSeekThrottle } from "../../src/component/media/seek-bar"
-import { descendants, image, longVideoFixture, renderMedia, video } from "../fixture/media"
+import { descendants, header, image, longVideoFixture, renderMedia, showsHeader, video } from "../fixture/media"
 
 type Viewer = Awaited<ReturnType<typeof renderViewer>>
 
@@ -50,7 +50,7 @@ test("takes the keys from the editor, even when a closing dialog focuses it, and
 test("fills the terminal under toasts, and a dialog over it takes its keys until it closes", async () => {
   await using viewer = await renderViewer()
   viewer.media().openViewer([image("a"), image("b")], 0)
-  await viewer.until(() => viewer.frame().includes("Image 1 of 2"))
+  await viewer.until(() => showsHeader(viewer.frame(), "a.png", "1 of 2"))
   expect(viewer.find("media-viewer")).toMatchObject({ width: 80, height: 30 })
   viewer.toast().show({ message: "Copied to clipboard", variant: "info" })
   await viewer.app.renderOnce()
@@ -58,12 +58,13 @@ test("fills the terminal under toasts, and a dialog over it takes its keys until
 
   viewer.dialog().replace(() => <text>over the viewer</text>)
   await viewer.press("]")
-  expect(viewer.frame()).toContain("Image 1 of 2")
+  // The toast covers the header's right end; its name still shows the item.
+  expect(header(viewer.frame())).toStartWith("a.png")
   viewer.app.mockInput.pressEscape()
   await viewer.until(() => viewer.dialog().stack.length === 0)
   expect(viewer.media().viewer()).toBeDefined()
   await viewer.press("]")
-  await viewer.until(() => viewer.frame().includes("Image 2 of 2"))
+  await viewer.until(() => header(viewer.frame()).startsWith("b.png"))
 
   // The keys panel lists every group and closes on escape before the viewer does.
   await viewer.press("?")
@@ -78,7 +79,7 @@ test("fills the terminal under toasts, and a dialog over it takes its keys until
 test("zooms an image with keys and the wheel, pans it by dragging, resets, and closes from the header", async () => {
   await using viewer = await renderViewer()
   viewer.media().openViewer([image("a"), image("b")], 0)
-  await viewer.until(() => viewer.frame().includes("Image 1 of 2") && picture(viewer).crop !== undefined)
+  await viewer.until(() => showsHeader(viewer.frame(), "a.png", "1 of 2") && picture(viewer).crop !== undefined)
   const full = { left: 0, top: 0, width: 96, height: 48 }
   expect(picture(viewer).crop).toEqual(full)
 
@@ -96,7 +97,7 @@ test("zooms an image with keys and the wheel, pans it by dragging, resets, and c
   const tile = viewer.find("media-viewer-filmstrip")!.getChildren()[0]!
   await viewer.app.mockMouse.click(tile.x + 1, tile.y + 1)
   await viewer.app.renderOnce()
-  expect(viewer.frame()).toContain("Image 1 of 2")
+  expect(showsHeader(viewer.frame(), "a.png", "1 of 2")).toBe(true)
   expect(picture(viewer).crop).toEqual(zoomed)
 
   const stage = viewer.find("media-viewer-stage")!
@@ -115,7 +116,7 @@ test("zooms an image with keys and the wheel, pans it by dragging, resets, and c
 
   // esc in the header closes the viewer on a click, not when a drag is released over it.
   const lines = viewer.frame().split("\n")
-  const row = lines.findIndex((line) => line.includes("Image 1 of 2"))
+  const row = lines.findIndex((line) => line.includes("1 of 2  esc"))
   const esc = { x: lines[row]!.lastIndexOf("esc"), y: row }
   await viewer.app.mockMouse.drag(center.x, center.y, esc.x, esc.y)
   expect(viewer.media().viewer()).toBeDefined()
@@ -123,24 +124,35 @@ test("zooms an image with keys and the wheel, pans it by dragging, resets, and c
   expect(viewer.media().viewer()).toBeUndefined()
 })
 
+test("the header names the file without its path, and a long name gives way to the position and esc", async () => {
+  await using viewer = await renderViewer()
+  const name = `/home/me/pasted/${"long-name-".repeat(9)}end.png`
+  viewer.media().openViewer([image("long", { name }), image("b")], 0)
+  await viewer.until(() => header(viewer.frame()).endsWith("1 of 2  esc"))
+  const line = header(viewer.frame())
+  expect(line).not.toContain("/home/me")
+  // Shortened in the middle, keeping its start and extension, with a gap before the position.
+  expect(line).toMatch(/^long-name-\S*\.\.\.\S*-end\.png {2,}1 of 2  esc$/)
+})
+
 test("arrows move between images and seek in a video, brackets move on, and unplayable media is explained", async () => {
   await using viewer = await renderViewer()
   const webm = { id: "webm", kind: "video" as const, mime: "video/webm", uri: "", name: "clip.webm" }
   viewer.media().openViewer([image("image"), video("clip"), video("broken", { path: import.meta.path }), webm], 0)
-  await viewer.until(() => viewer.frame().includes("Image 1 of 4"))
+  await viewer.until(() => showsHeader(viewer.frame(), "image.png", "1 of 4"))
   await viewer.press("right")
-  await viewer.until(() => viewer.frame().includes("Video 2 of 4"))
+  await viewer.until(() => showsHeader(viewer.frame(), "clip.mp4", "2 of 4"))
   await viewer.press("right")
-  expect(viewer.frame()).toContain("Video 2 of 4")
+  expect(showsHeader(viewer.frame(), "clip.mp4", "2 of 4")).toBe(true)
   await viewer.press("]")
   await viewer.until(() => viewer.frame().includes("Can't play this video"))
   expect(viewer.frame()).toContain("H.264")
   await viewer.press("]")
   await viewer.until(() => viewer.frame().includes("Can't play video/webm"))
   await viewer.press("]")
-  await viewer.until(() => viewer.frame().includes("Image 1 of 4"))
+  await viewer.until(() => showsHeader(viewer.frame(), "image.png", "1 of 4"))
   await viewer.press("[")
-  await viewer.until(() => viewer.frame().includes("Video 4 of 4"))
+  await viewer.until(() => showsHeader(viewer.frame(), "clip.webm", "4 of 4"))
 })
 
 test("controls a video from the keyboard, adding up held keys into one throttled seek", async () => {
