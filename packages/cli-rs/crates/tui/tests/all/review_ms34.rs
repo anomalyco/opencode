@@ -190,6 +190,11 @@ fn sessions() -> Vec<MemoryRoute> {
             &json!({ "data": session(id, directory, title, agent) }),
         ));
     }
+    let saved = support::merge(
+        session("ses_m", DIRECTORY, "Saved model", None),
+        json!({ "model": { "providerID": "opencode", "id": "big" } }),
+    );
+    routes.push(MemoryRoute::json("GET", "/api/session/ses_m", 200, &json!({ "data": saved })));
     for list in ["inbox", "permission", "form"] {
         routes.push(MemoryRoute::json("GET", &format!("/api/session/:id/{list}"), 200, &json!({ "data": [] })));
     }
@@ -373,6 +378,22 @@ fn startup_agent_and_model_reach_the_selection() {
     h.wait_for("Write the docs");
     assert_eq!(h.agent().as_deref(), Some("plan"));
     assert_eq!(h.writes(), Vec::<String>::new());
+}
+
+// `--model` leaves the model saved on the session `-s` opens, and stays `fallbackModel`'s first choice
+// (`local.tsx:184-196,266-283`, `app.tsx:666-686`).
+#[test]
+fn startup_model_keeps_a_saved_session_model_and_leads_the_fallback() {
+    let h = mount(session_route("ses_m"), Args { model: Some("demo/other".into()), ..Args::default() }, animations_off());
+    h.wait_for("Saved model");
+    h.wait("the recent model", || h.tui.local.recent() == [Model::new("demo", "other")]);
+    assert_eq!(h.tui.local.current(), Some(Model::new("opencode", "big")));
+
+    // On home, a recent model chosen later does not displace `--model` for an agent without its own.
+    h.tui.navigate(Route::Home);
+    h.tui.local.set(&Model::new("opencode", "big"), true);
+    h.tui.local.set_agent("plan");
+    h.wait("the fallback", || h.tui.local.current() == Some(Model::new("demo", "other")));
 }
 
 #[test]

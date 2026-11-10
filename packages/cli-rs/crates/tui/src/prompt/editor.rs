@@ -583,7 +583,8 @@ impl Inner {
     /// Rebuilds the catalog from the store and repaints.
     fn read_catalog(&self, tui: &Tui) {
         let location = self.location(tui);
-        let catalog = tui.data.read(|state| Catalog::read(state, &location, &tui.prompt.preferences));
+        let startup = tui.local.startup_model.borrow().clone();
+        let catalog = tui.data.read(|state| Catalog::read(state, &location, &tui.prompt.preferences, startup));
         if let Some(catalog) = catalog {
             *self.catalog.borrow_mut() = Some(Rc::new(catalog));
             self.refresh(tui);
