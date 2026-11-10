@@ -707,7 +707,6 @@ export const dict = {
   "session.new.starting": "Starting session",
   "session.new.timedOut": "The server took too long to respond. Send again to retry.",
   "session.new.workspace.runIn": "Run session in",
-  "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Local repository",
   "session.new.workspace.existingLabel": "Worktree",
   "session.new.workspace.fromBranch": "from {{branch}}",

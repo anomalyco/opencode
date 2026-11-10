@@ -350,7 +350,6 @@ export const dict = {
   "session.new.project.search": "ལས་གཞི་འཚོལ་ཞིབ།",
   "session.new.project.add": "ལས་འགུལ་ཁ་སྐོང་རྐྱབས།",
   "session.new.workspace.runIn": "ནང་ལཱ་ཡུན་གཡོག་བཀོལ།",
-  "session.new.workspace.triggerLocal": "ས་གནས་ཀྱི",
   "session.new.workspace.local": "ས་གནས་ཀྱི་མཛོད་ཁང་།",
   "session.new.git.none": "མེད། Git།",
   "session.header.open.finder": "Finder།",

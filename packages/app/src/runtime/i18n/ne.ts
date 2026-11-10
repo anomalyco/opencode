@@ -341,7 +341,6 @@ export const dict = {
   "session.new.project.search": "परियोजनाहरू खोज्नुहोस्",
   "session.new.project.add": "परियोजना थप्नुहोस्",
   "session.new.workspace.runIn": "मा सत्र चलाउनुहोस्",
-  "session.new.workspace.triggerLocal": "स्थानीय",
   "session.new.workspace.local": "स्थानीय भण्डार",
   "session.new.git.none": "छैन Git",
   "session.header.open.finder": "Finder",

@@ -336,7 +336,6 @@ export const dict = {
   "session.new.project.search": "Szukaj projektów",
   "session.new.project.add": "Dodaj projekt",
   "session.new.workspace.runIn": "Uruchom sesję w",
-  "session.new.workspace.triggerLocal": "Lokalnie",
   "session.new.workspace.local": "Lokalne repozytorium",
   "session.new.git.none": "Brak Git",
   "settings.tab.servers": "Serwery",
