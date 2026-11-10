@@ -509,11 +509,11 @@ impl Prompt for Int {
             },
             "k" | "up" => Action::Next(state.with(match state.value.as_str() {
                 "" | "-" => "1".into(),
-                value => (parse_int(value).unwrap_or(0) + 1).to_string(),
+                value => parse_int(value).unwrap_or(0).saturating_add(1).to_string(),
             })),
             "j" | "down" => Action::Next(state.with(match state.value.as_str() {
                 "" | "-" => "-1".into(),
-                value => (parse_int(value).unwrap_or(0) - 1).to_string(),
+                value => parse_int(value).unwrap_or(0).saturating_sub(1).to_string(),
             })),
             "enter" | "return" => {
                 let Some(value) = parse_int(&state.value) else {
@@ -561,8 +561,8 @@ fn parse_int(text: &str) -> Option<i64> {
         _ => (false, text),
     };
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-    let value = digits.parse::<i64>().ok()?;
-    Some(if negative { -value } else { value })
+    // Parsing the sign with the digits reads `i64::MIN`, whose magnitude does not fit.
+    format!("{}{digits}", if negative { "-" } else { "" }).parse().ok()
 }
 
 pub struct Text {
@@ -677,10 +677,27 @@ mod tests {
             ("-12", Some(-12)),
             (" 7", Some(7)),
             ("+3", Some(3)),
+            ("-9223372036854775808", Some(i64::MIN)),
         ];
         for (text, expected) in cases {
             assert_eq!(parse_int(text), expected, "parseInt({text:?})");
         }
+    }
+
+    // JavaScript numbers do not overflow; the `i64` steps stop at the ends instead of panicking.
+    #[test]
+    fn int_steps_stop_at_the_ends() {
+        let prompt = Int { message: String::new(), default: None, min: None, max: None };
+        let step = |name: &str, value: i64| {
+            let key = crate::prompt::Key { name: Some(name.into()), ..Default::default() };
+            match prompt.process(&Press { char: None, key }, &Field::new(value.to_string())) {
+                Action::Next(state) => state.value,
+                _ => panic!("{name} does not step"),
+            }
+        };
+        assert_eq!(step("up", i64::MAX), i64::MAX.to_string());
+        assert_eq!(step("down", i64::MIN), i64::MIN.to_string());
+        assert_eq!(step("up", i64::MIN), (i64::MIN + 1).to_string());
     }
 
     #[test]
