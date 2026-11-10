@@ -3,7 +3,6 @@
 
 use crate::support::{self, DIRECTORY, Fake, deref_harness, list};
 
-use std::ffi::c_void;
 use std::sync::Arc;
 
 use opencode_plugin::{Host, SlotInput, abi, slot};
@@ -191,26 +190,17 @@ fn the_sections_let_go_of_their_settings_listeners() {
     assert_eq!(mounts(50), before);
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn mcp_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    let plugin = opencode_tui::plugins::sidebar_mcp::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("loopback.sidebar.mcp", plugin.setup, host, options, instance, out) }
-}
-
 /// The frames of the sidebar as mounted, after a click folds the MCP list, and after one opens it again. With
 /// `loopback`, the MCP section is wired through the byte shims of the C ABI (`Loopback`) instead of running in
 /// process.
 fn mcp_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     let h = mount(if loopback { &["-opencode.sidebar.mcp"] } else { &[] }, false);
     if loopback {
-        let (definition, _) =
-            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), mcp_create).unwrap();
+        let (definition, _) = opencode_plugin::loader::native::loopback(
+            &opencode_tui::plugins::host::host(&h.tui),
+            abi::export_plugin!(@loopback "loopback.sidebar.mcp", opencode_tui::plugins::sidebar_mcp::plugin().setup),
+        )
+        .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
     }
     h.servers();

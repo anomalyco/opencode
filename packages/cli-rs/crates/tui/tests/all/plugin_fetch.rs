@@ -4,7 +4,6 @@
 
 use crate::support::{self, DIRECTORY, Harness, Seen};
 
-use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -135,27 +134,17 @@ fn mount(server: &Server, plugins: &[&str]) -> Harness {
     h
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn stats_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    let plugin = opencode_tui::plugins::stats::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("loopback.stats", plugin.setup, host, options, instance, out) }
-}
-
 /// The poster's cells as `/stats` opens it from the session, twice, going back with escape in between. With
 /// `loopback`, stats runs through the byte shims of the C ABI.
 fn stats_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
     let server = Server::new(true);
     let h = mount(&server, if loopback { &["-opencode.stats"] } else { &[] });
     if loopback {
-        let (definition, _) =
-            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), stats_create)
-                .unwrap();
+        let (definition, _) = opencode_plugin::loader::native::loopback(
+            &opencode_tui::plugins::host::host(&h.tui),
+            abi::export_plugin!(@loopback "loopback.stats", opencode_tui::plugins::stats::plugin().setup),
+        )
+        .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
         h.wait_for("Fix the parser");
     }
@@ -352,17 +341,6 @@ fn probe_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn probe_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("loopback.probe", probe_setup, host, options, instance, out) }
-}
-
 // Expected (plugin-live R2-2): a fetch that gets 404 or 500 replies with the status and the body's text, or a
 // declared error's message as TS's `errorMessage` shows it, never `UnsupportedContentType`; the same in process and
 // through the C ABI's byte shims.
@@ -387,7 +365,12 @@ fn an_error_status_reaches_the_plugin_with_its_status_and_body() {
             false => abi::Plugin { id: "probe", setup: probe_setup }.into(),
             true => {
                 let host = opencode_tui::plugins::host::host(&h.tui);
-                opencode_plugin::loader::native::loopback(&host, probe_create).unwrap().0
+                opencode_plugin::loader::native::loopback(
+                    &host,
+                    abi::export_plugin!(@loopback "loopback.probe", probe_setup),
+                )
+                .unwrap()
+                .0
             }
         };
         opencode_tui::plugins::host::add(&h.tui, definition);

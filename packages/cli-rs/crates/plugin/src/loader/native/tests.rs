@@ -541,28 +541,6 @@ fn stream(host: &Rc<TestHost>, registry: &Registry, chunks: &[&str]) -> Vec<Capt
         .collect()
 }
 
-unsafe extern "C" fn latex_create(
-    host: *const HostApi,
-    options: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    let plugin = opencode_latex::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create(plugin.id, plugin.setup, host, options, instance, out) }
-}
-
-unsafe extern "C" fn mermaid_create(
-    host: *const HostApi,
-    options: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    let plugin = opencode_mermaid::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create(plugin.id, plugin.setup, host, options, instance, out) }
-}
-
 /// A built-in whose `create` is `create`, wired through the byte shims of the C ABI (`Loopback`) and active.
 fn loopback(
     host: &Rc<TestHost>,
@@ -636,7 +614,8 @@ fn latex_streams_the_same_through_the_c_abi_loopback() {
     let host = host();
     let in_process = Registry::define(vec![opencode_latex::plugin().into()], []);
     in_process.activate(&dynamic(&host));
-    let loopback = loopback(&host, latex_create);
+    let loopback =
+        loopback(&host, abi::export_plugin!(@loopback opencode_latex::plugin().id, opencode_latex::plugin().setup));
 
     let chunks = ["```latex\n\\frac{a_1+b_1}{c_1+d_1}", "+\\frac{a_", "2+b_2}{c_2+d_2}"];
     let direct = stream(&host, &in_process, &chunks);
@@ -655,7 +634,8 @@ fn mermaid_streams_the_same_through_the_c_abi_loopback() {
     let host = host();
     let in_process = Registry::define(vec![opencode_mermaid::plugin().into()], []);
     in_process.activate(&dynamic(&host));
-    let loopback = loopback(&host, mermaid_create);
+    let loopback =
+        loopback(&host, abi::export_plugin!(@loopback opencode_mermaid::plugin().id, opencode_mermaid::plugin().setup));
 
     let chunks = ["```mermaid\nflowchart LR\n  A -->|go| B", "\n  B --> C", "\n  C((cir"];
     let direct = stream(&host, &in_process, &chunks);
@@ -763,22 +743,12 @@ fn second(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-unsafe extern "C" fn first_create(
-    host: *const HostApi,
-    options: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("first", first, host, options, instance, out) }
-}
-
 // Expected: the effects of a plugin over the C ABI and of one in process share one queue, so they run in the order the
 // handlers ran, which is the order the plugins subscribed in.
 #[test]
 fn effects_of_both_paths_run_in_call_order() {
     let host = host();
-    let _native = loopback(&host, first_create);
+    let _native = loopback(&host, abi::export_plugin!(@loopback "first", first));
     let direct = Registry::define(vec![abi::Plugin { id: "second", setup: second }.into()], []);
     direct.activate(&dynamic(&host));
     host.emit(&succeeded("ses_1"));
@@ -853,16 +823,6 @@ fn fenced(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-unsafe extern "C" fn fenced_create(
-    host: *const HostApi,
-    options: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("fenced", fenced, host, options, instance, out) }
-}
-
 // Expected: a fence registered as `ts`, which the host knows as `typescript`, reaches its render through the C ABI as
 // in process, sees the same language, and reads the same host.
 #[test]
@@ -872,7 +832,7 @@ fn a_fence_reads_and_renders_the_same_in_process_and_through_the_c_abi() {
     in_process.activate(&dynamic(&host));
     let direct = markdown(&host, &in_process, "```ts\nlet a = 1\n```\n");
     assert!(direct.contains("custom typescript big"), "{direct}");
-    let loopback = loopback(&host, fenced_create);
+    let loopback = loopback(&host, abi::export_plugin!(@loopback "fenced", fenced));
     assert_eq!(markdown(&host, &loopback, "```ts\nlet a = 1\n```\n"), direct);
 }
 
@@ -988,16 +948,6 @@ fn replying(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-unsafe extern "C" fn replying_create(
-    host: *const HostApi,
-    options: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("replying", replying, host, options, instance, out) }
-}
-
 // Expected: a reply that arrives after its plugin was disabled reaches nothing, in process and over the C ABI, also while
 // a claim of it is still mounted, while a reply to an active plugin does.
 #[test]
@@ -1005,7 +955,7 @@ fn a_slow_reply_across_a_disable_delivers_nothing() {
     let host = host();
     let registries = [
         Registry::define(vec![abi::Plugin { id: "replying", setup: replying }.into()], []),
-        loopback(&host, replying_create),
+        loopback(&host, abi::export_plugin!(@loopback "replying", replying)),
     ];
     for registry in registries {
         registry.activate(&dynamic(&host));
@@ -1128,16 +1078,6 @@ fn waking(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-unsafe extern "C" fn waking_create(
-    host: *const HostApi,
-    options: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("waking", waking, host, options, instance, out) }
-}
-
 // Expected: a wake from the plugin's thread runs its wake handler on the UI thread, whose effects go out, and then its
 // claim renders again with `woken`; the same in process and through the C ABI's byte shims (`Loopback`).
 #[test]
@@ -1145,7 +1085,7 @@ fn a_wake_runs_the_wake_handlers_then_renders_on_both_paths() {
     let host = host();
     let registries = [
         Registry::define(vec![abi::Plugin { id: "waking", setup: waking }.into()], []),
-        loopback(&host, waking_create),
+        loopback(&host, abi::export_plugin!(@loopback "waking", waking)),
     ];
     for registry in registries {
         host.fetches.borrow_mut().clear();
@@ -1235,26 +1175,6 @@ fn lifecycle_failing(setup: &mut abi::Setup) -> Result<(), String> {
     Err("lifecycle failed".to_owned())
 }
 
-unsafe extern "C" fn lifecycle_create(
-    host: *const HostApi,
-    options: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("lifecycle", lifecycle, host, options, instance, out) }
-}
-
-unsafe extern "C" fn lifecycle_failing_create(
-    host: *const HostApi,
-    options: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("lifecycle", lifecycle_failing, host, options, instance, out) }
-}
-
 /// `setup` in process, or `create` through the C ABI's byte shims, set up, then disabled: its status after setup, and
 /// the toasts and fetches of the whole run.
 fn lifecycled(
@@ -1305,16 +1225,16 @@ fn lifecycled(
 // runs it as it fails, leaves the plugin failed and not active, and acts the same on both paths.
 #[test]
 fn setup_and_dispose_effects_are_the_same_on_both_paths() {
-    let direct = lifecycled(lifecycle, lifecycle_create, false);
+    let direct = lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), false);
     assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Active, true));
     assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
-    let through = lifecycled(lifecycle, lifecycle_create, true);
+    let through = lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), true);
     assert_eq!((through.1, through.2), (direct.1, direct.2));
 
-    let direct = lifecycled(lifecycle_failing, lifecycle_failing_create, false);
+    let direct = lifecycled(lifecycle_failing, abi::export_plugin!(@loopback "lifecycle", lifecycle_failing), false);
     assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Failed("lifecycle failed".to_owned()), false));
     assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
-    let through = lifecycled(lifecycle_failing, lifecycle_failing_create, true);
+    let through = lifecycled(lifecycle_failing, abi::export_plugin!(@loopback "lifecycle", lifecycle_failing), true);
     assert_eq!(
         (through.0.status, through.0.active, through.1, through.2),
         (direct.0.status, false, direct.1, direct.2)
@@ -1419,7 +1339,7 @@ fn deactivating_all_disposes_every_active_plugin() {
     let host = host();
     let registry = Registry::define(vec![abi::Plugin { id: "lifecycle", setup: lifecycle }.into()], []);
     registry.activate(&dynamic(&host));
-    let (definition, error) = super::loopback(&dynamic(&host), first_create).unwrap();
+    let (definition, error) = super::loopback(&dynamic(&host), abi::export_plugin!(@loopback "first", first)).unwrap();
     registry.load(&dynamic(&host), definition.external("first.so", error));
     registry.deactivate_all();
     host.app.advance(Duration::from_millis(1));
