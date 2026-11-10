@@ -3,7 +3,7 @@
 ## Structure
 
 - This folder is the docs on the site: content, components, styles, build and serving. Keep docs code here; the site's shared files only plug it in (`vite.config.ts`, `src/middleware.ts`, `script/build.ts`, `cloudflare.config.ts`).
-- The docs are two sets (`config.ts` `docsSets`), each with its own mount path, MDX folder, files and search index, and one renderer, stylesheet and script: the V2 docs at `/docs` (`content/`), and the V1 docs at `/v1/docs`, read in place from their old Starlight app (`packages/web/src/content/docs`, in 18 languages). `remark-starlight.ts` turns Starlight's syntax into these components, `lib/v1-navigation.ts` is the V1 sidebar and languages, and V1 pages are noindex with a notice that links the latest docs.
+- The docs are two sets (`config.ts` `docsSets`), each with its own mount path, MDX folder, files and search index, and one renderer, stylesheet and script: the V2 docs at `/docs` (`content/`), and the V1 docs at `/v1/docs`, in their old Starlight app's MDX (`v1/content`, in 18 languages). `remark-starlight.ts` turns Starlight's syntax into these components, `lib/v1-navigation.ts` is the V1 sidebar and languages, and V1 pages are noindex with a notice that links the latest docs.
 - Content lives in `content/` as MDX. A file's path is its URL: `content/cli/keybinds.mdx` is `/docs/cli/keybinds/`. Other repositories read some of these files by path, so don't move them without checking.
 - `lib/navigation.ts` is the source of truth for header sections and sidebar ordering.
 - `frontmatter.ts` is the frontmatter schema; a page that doesn't match it fails the build.
