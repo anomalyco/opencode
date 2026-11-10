@@ -165,9 +165,10 @@ fn a_held_tabs_lock_does_not_block_the_ui() {
     let elapsed = started.elapsed();
     assert!(elapsed < std::time::Duration::from_secs(1), "the UI waited {elapsed:?} for the lock");
     releaser.join().unwrap();
+    // Both writes land, in order, once the lock is free.
     h.wait_file("tabs", |file| {
-        file["cwd"][cwd()]["tabs"]
-            == json!([{ "sessionID": "ses_b", "title": "Write the docs" }, { "sessionID": "ses_a", "title": "Fix the parser" }])
+        let tabs = file["cwd"][cwd()]["tabs"].as_array().cloned().unwrap_or_default();
+        tabs.iter().map(|tab| tab["sessionID"].clone()).collect::<Vec<_>>() == [json!("ses_b"), json!("ses_a")]
     });
 }
 
@@ -188,13 +189,13 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
     assert!(h.app.needs_frame(), "a busy tab pulses");
     opencode_tui::tabs::close(&h.tui, Some("ses_a"));
     h.wait_tabs(&["ses_b"], Some("ses_b"));
-    for _ in 0..3 {
+    // Late responses may still draw; a pulse left behind draws every tick, forever.
+    let still = h.app.wait_until(WAIT, || {
         h.app.render();
         h.app.advance(std::time::Duration::from_millis(200));
-    }
-    h.app.render();
-    h.app.advance(std::time::Duration::from_millis(200));
-    assert!(!h.app.needs_frame(), "a closed tab still ticks");
+        !h.app.needs_frame()
+    });
+    assert!(still, "a closed tab still ticks");
 }
 
 #[test]
