@@ -105,16 +105,15 @@ async function firstEvent(stream: AsyncIterator<Event>, signal: AbortSignal) {
  */
 export async function runNonInteractivePrompt(input: Input) {
   const controller = new AbortController()
-  // SIGINT and SIGTERM must interrupt the opening wait too, so the subscription is opened under the
-  // caller's signal and closed again whatever happens to the run.
-  const abort = () => controller.abort()
-  if (input.signal.aborted) abort()
-  else input.signal.addEventListener("abort", abort, { once: true })
+  // A run cancelled before it starts opens no subscription at all. The caller's signal is not
+  // forwarded to the stream after that: closing it on SIGINT or SIGTERM would take away the terminal
+  // events cancel() waits for, and the run would sit out its shutdown timeout waiting for jobs it
+  // already stopped. The opening wait takes the signal itself, and the stream is closed in the finally.
+  if (input.signal.aborted) controller.abort()
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
   try {
     return await run(input, stream, controller.signal)
   } finally {
-    input.signal.removeEventListener("abort", abort)
     controller.abort()
     void stream.return?.(undefined).catch(() => {})
   }

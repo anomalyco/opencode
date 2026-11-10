@@ -269,13 +269,25 @@ async function run(input: {
   active?: () => SessionActiveOutput
   terminalDelay?: number
   signal?: AbortSignal
+  // Closes the stream when the subscription signal aborts, like the real client does.
+  honorSignal?: boolean
+  // Receives a function that queues an event for the live turn, as a server would send it.
+  register?: (push: (event: V2Event) => void) => void
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
+  let closed = false
+  const push = (event: V2Event) => {
+    values.push(event)
+    wake?.()
+    wake = undefined
+  }
+  input.register?.(push)
   const wait = Promise.withResolvers<void>()
   const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
     while (true) {
+      if (closed) return
       const value = values.shift()
       if (!value) {
         await new Promise<void>((resolve) => {
@@ -290,7 +302,19 @@ async function run(input: {
       yield value
     }
   })()
-  spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
+  spyOn(sdk.event, "subscribe").mockImplementation(((request?: { signal?: AbortSignal }) => {
+    request?.signal?.addEventListener(
+      "abort",
+      () => {
+        if (!input.honorSignal) return
+        closed = true
+        wake?.()
+        wake = undefined
+      },
+      { once: true },
+    )
+    return stream
+  }) as typeof sdk.event.subscribe)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.session.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
@@ -841,6 +865,28 @@ describe("runNonInteractivePrompt", () => {
     expect(sdk.session.interrupt).toHaveBeenCalledWith({ sessionID: "ses_child" })
     expect(sdk.shell.remove).toHaveBeenCalledWith({ id: "sh_train", location: { directory: "/work tree" } })
     expect(sdk.shell.remove).not.toHaveBeenCalledWith(expect.objectContaining({ id: "sh_dev" }))
+  })
+
+  test("a cancelled run keeps the stream open so the jobs it stopped can finish", async () => {
+    const controller = new AbortController()
+    let finished = false
+    let push: ((event: V2Event) => void) | undefined
+    // Started after this prompt was admitted, so cancel() owns it and has to see it end.
+    const job = { ...shellJob("sh_train", "python train.py"), time: { started: 2 } }
+    const running = run({
+      signal: controller.signal,
+      honorSignal: true,
+      register: (value) => (push = value),
+      turn: (id) => [prompted(id), settled()],
+      jobs: () => (finished ? [] : [job]),
+    })
+    expect(await Promise.race([running.then(() => "exited"), Bun.sleep(20).then(() => "waiting")])).toBe("waiting")
+    controller.abort()
+    // Closing the stream here would hide the terminal event the cancel is still waiting for.
+    expect(await Promise.race([running.then(() => "exited"), Bun.sleep(20).then(() => "waiting")])).toBe("waiting")
+    finished = true
+    push!(settled())
+    expect(await Promise.race([running.then(() => "exited"), Bun.sleep(2_000).then(() => "hung")])).toBe("exited")
   })
 
   test("a stream that never sends anything fails the run instead of hanging", async () => {
