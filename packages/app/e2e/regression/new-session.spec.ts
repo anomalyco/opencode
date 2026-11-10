@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
+import { draftHref, expectPath, holdRoute, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import {
   newSessionLocation,
@@ -119,6 +119,33 @@ test("the main checkout shows its branch and is targeted when the draft opened i
   await view.editor.fill("Run in the main checkout")
   await submit(page).click()
   await expect.poll(() => created).toEqual([{ directory: root }])
+})
+
+test("the main checkout trigger holds a placeholder while its branch loads, then shows the icon alone without one", async ({
+  page,
+}) => {
+  const vcs = Promise.withResolvers<Awaited<ReturnType<typeof holdRoute>>>()
+
+  await openDraft(page, {
+    name: "DetachedCheckout",
+    vcs: { default: "main" },
+    beforeOpen: async () => {
+      vcs.resolve(await holdRoute(page, /\/api\/vcs\?/))
+    },
+  })
+
+  const held = await vcs.promise
+  const trigger = newSessionWorktree(page)
+
+  await held.arrived
+  await expect(trigger).toHaveAttribute("aria-busy", "true")
+  await expect(trigger).toHaveAccessibleName("Choose worktree")
+  held.release()
+  await expect(trigger).toHaveAttribute("aria-busy", "false")
+  await expect(trigger).toHaveText("")
+  await expect(trigger).toHaveAccessibleName("Choose worktree")
+  await trigger.click()
+  await expect(page.getByRole("combobox", { name: "Search worktrees", exact: true })).toBeFocused()
 })
 
 for (const binding of ["custom", "none"]) {
