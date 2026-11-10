@@ -236,6 +236,34 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
+test("Alt+Enter queues a follow-up first without steering, regardless of the follow-up preference", async ({
+  page,
+}) => {
+  const mock = createQueueMock(["Follow-up A", "Follow-up B"])
+
+  const view = await openQueue(page, mock, "steer")
+
+  await view.input.fill("Follow-up C")
+  await view.input.press("Alt+Enter")
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
+    "Follow-up C",
+    "Follow-up A",
+    "Follow-up B",
+  ])
+  await expect
+    .poll(() => mock.rows.map((row) => [row.payload.text, row.delivery]))
+    .toEqual([
+      ["Follow-up C", "queue"],
+      ["Follow-up A", "queue"],
+      ["Follow-up B", "queue"],
+    ])
+  await expect(view.input).toHaveText("")
+  expect(mock.changes.every((change) => change.action === "cancel")).toBe(true)
+  await view.input.fill("Another follow-up")
+  await view.composer.locator('[data-action="composer-alternate-delivery"]').hover()
+  await expect(page.getByRole("tooltip")).toContainText("Queue first")
+})
+
 test("a blank Enter leaves the running session alone while Stop still interrupts it, as in the TUI", async ({
   page,
 }) => {
