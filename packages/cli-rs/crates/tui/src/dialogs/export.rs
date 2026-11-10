@@ -173,6 +173,10 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
             ];
             let (view, select) = select::select(cx, props);
             *handle.borrow_mut() = Some(select);
+            // The select's handlers hold `handle`; closing takes the select out, which ends the cycle.
+            cx.on_close(opentui::keymap::Disposer::new(move || {
+                handle.borrow_mut().take();
+            }));
             view
         },
         None,
