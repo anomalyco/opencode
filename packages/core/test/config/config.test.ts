@@ -5,6 +5,7 @@ import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
+import { ConfigManaged } from "@opencode/core/config/managed"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigModel } from "@opencode/schema/config/model"
 import { ConfigProvider } from "@opencode/schema/config/provider"
@@ -617,7 +618,8 @@ describe("Config", () => {
         })
         const supplied = (entries: readonly Entry[]) =>
           entries.flatMap((entry) =>
-            entry.type === "document" && !entry.path
+            // local-only: the compiled-in configuration (src/config/builtin.ts) is a managed document without a path too.
+            entry.type === "document" && !entry.path && !(entry instanceof ConfigManaged.Document)
               ? [{ servers: Object.keys(entry.info.mcp?.servers ?? {}), policies: entry.info.policies?.length ?? 0 }]
               : [],
           )

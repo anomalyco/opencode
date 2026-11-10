@@ -12,8 +12,8 @@
   // Kein Teilen von Sessions über opencode.ai
   "share": "disabled",
 
-  // Websuche komplett aus (Exa funktioniert sonst sogar ohne API-Key: packages/core/src/plugin/websearch/exa.ts)
-  "websearch": false,
+  // Websuche: fest im Programm gesperrt (packages/core/src/config/builtin.ts), hier nicht einstellbar.
+  // Grund: Suchanfragen des Modells können Code aus der Session an einen externen Dienst schicken.
 
   // Kein automatisches Nachinstallieren von prettier/oxfmt/biome aus der npm-Registry
   "formatter": false,
@@ -28,19 +28,17 @@
     // Nur Loopback erlauben (z. B. lokale Doku-Server)
     { "action": "webfetch", "resource": "http://localhost*", "effect": "allow" },
     { "action": "webfetch", "resource": "http://127.0.0.1*", "effect": "allow" },
-    { "action": "websearch", "resource": "*", "effect": "deny" },
     { "action": "experimental_image_generate", "resource": "*", "effect": "deny" }
   ],
 
   // Policies: letzte passende Regel gewinnt (packages/core/src/managed-policy.ts)
   "policies": [
-    // Alle Cloud-Provider, Konten-Anbindungen (opencode Console, Copilot, ChatGPT, ...) und Websuche sperren
+    // Alle Cloud-Provider und Konten-Anbindungen (opencode Console, Copilot, ChatGPT, ...) sperren
     { "action": "provider.use", "resource": "*", "effect": "deny" },
     { "action": "integration.connect", "resource": "*", "effect": "deny" },
     { "action": "integration.use", "resource": "*", "effect": "deny" },
-    { "action": "websearch.use", "resource": "*", "effect": "deny" },
     { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
-    // Optional: webfetch wieder zulassen (gehört zur "ask"-Regel unter "permissions"; Websuche bleibt gesperrt)
+    // Optional: webfetch wieder zulassen (gehört zur "ask"-Regel unter "permissions"; Websuche bleibt fest gesperrt)
     // { "action": "tool.use", "resource": "webfetch:*", "effect": "allow" },
 
     // Lokale LLM-Server freigeben (nur die tatsächlich genutzten behalten!). Ein freigegebener Provider zeigt

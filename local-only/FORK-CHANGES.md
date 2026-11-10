@@ -38,7 +38,7 @@ git checkout <alter-fork-branch> -- local-only CLAUDE.md packages/tui/assets/tre
   packages/tui/src/parsers-local.node.ts packages/tui/src/tree-sitter-assets.d.ts \
   packages/tui/test/util/parsers-local.test.ts
 node packages/tui/script/vendor-parsers.mjs       # Grammatiken passend zur neuen parsers-config.ts (braucht Netz)
-# danach die Code-Eingriffe aus den Abschnitten 1–3 von Hand einbauen
+# danach die Code-Eingriffe aus den Abschnitten 1–4 von Hand einbauen
 ```
 
 Nach dem Wechsel zusätzlich die **Restliste externer Zugriffe** neu erzeugen (`check-fork.sh` gibt sie aus) und
@@ -196,11 +196,58 @@ const treeSitterRoot = path.resolve(dir, "../tui/assets/tree-sitter")   // neben
 
 ---
 
-## 4. Offline-Konfiguration und Startskripte (nur `local-only/`, konfliktfrei)
+## 4. Websuche fest einkompiliert gesperrt
+
+**Zweck:** Die Websuche (`websearch`-Tool, Server-Aktion `websearch.query`) ist im Programm selbst gesperrt, nicht
+nur per Config. Grund: Suchanfragen des Modells können Code aus der Session an einen externen Dienst schicken. Der
+Anwender kann die Sperre weder in seiner Config noch per `OPENCODE_CONFIG_CONTENT` noch über die System-Config
+aufheben. webfetch bleibt bewusst per Config geregelt (Abschnitt 5).
+
+**Neue Datei:** `packages/core/src/config/builtin.ts` – die einkompilierte Config als JSONC-Text:
+
+```jsonc
+{
+  "websearch": false,
+  "policies": [{ "action": "websearch.use", "resource": "*", "effect": "deny" }]
+}
+```
+
+`websearch: false` nimmt dem Modell das Tool weg; die Policy entfernt zusätzlich alle Suchanbieter
+(`packages/core/src/config/plugin/policy.ts`), sodass auch eine direkte Server-Anfrage ins Leere läuft.
+
+**Eingriff:** `packages/core/src/config.ts`
+- Import `ConfigBuiltin` neben `ConfigManaged`.
+- Vor `const loadFile`: Text mit `parseInfo` lesen, bei Fehler `Effect.die` (fail closed), daraus
+  `const builtin = new Document(...)`.
+- In `load` als letzter Eintrag der Liste `managed` (nach Systemverzeichnis und MDM-plist):
+  `...(sources.system ? [builtin] : [])`. Dadurch gilt die Rangfolge der verwalteten Config: Einstellungen werden
+  zuletzt geladen, Policies zuerst geprüft – beides hat Vorrang vor allen anderen Quellen.
+- Übersprungen wird die eingebaute Config nur mit der Test-Option `system: false` (in Produktion nie gesetzt), damit
+  Upstream-Tests unabhängig von den Fork-Sperren bleiben.
+
+**Tests:**
+- Neu: `packages/core/test/config/builtin.test.ts` (Benutzer-, Projekt-, System- und Content-Config schalten die
+  Websuche ein und erlauben sie → Ergebnis bleibt `false`/`deny`; ohne Systemverzeichnis ebenso).
+- Angepasst: `packages/core/test/config/config.test.ts`, Test „keeps only the policies of documents from
+  integrations managed policy denies“ – der Hilfsfilter `supplied` schließt `ConfigManaged.Document` aus
+  (+ Import `ConfigManaged`), weil die eingebaute Config wie Integrations-Dokumente keinen Pfad hat.
+
+**Sperre aufheben (falls nötig):** Text in `builtin.ts` auf `{}` setzen oder die betreffenden Zeilen entfernen und
+neu bauen. `config.ts` bleibt unverändert. Bewusst gibt es keinen Laufzeit-Schalter (Env-Variable o. Ä.).
+
+**Konflikt-Hinweise:** Wenn Upstream die Ladereihenfolge in `load` umbaut, die eingebaute Config wieder hinter allen
+verwalteten Quellen einhängen (Einstellungen: zuletzt geladen; Policies: zuerst geprüft). Neue Upstream-Tests, die
+mit einem System-Verzeichnis alle Dokumente aufzählen, sehen zwei zusätzliche Einträge ohne Pfad.
+
+**Prüfen:** `cd packages/core && bun test test/config/builtin.test.ts test/config/config.test.ts`
+
+---
+
+## 5. Offline-Konfiguration und Startskripte (nur `local-only/`, konfliktfrei)
 
 | Datei | Zweck |
 | --- | --- |
-| `local-only/opencode.jsonc` | Config, die per Config abschaltbare Zugriffe sperrt: `update: disable`, `share: disabled`, `websearch: false`, `formatter: false`, webfetch-Deny (Loopback erlaubt), festes Standardmodell, Provider-Vorlage `firma` (OpenAI-kompatibel, lokale Basis-URL, Hinweis zu `reasoning_effort`) |
+| `local-only/opencode.jsonc` | Config, die per Config abschaltbare Zugriffe sperrt: `update: disable`, `share: disabled`, `formatter: false`, webfetch-Deny (Loopback erlaubt), festes Standardmodell, Provider-Vorlage `firma` (OpenAI-kompatibel, lokale Basis-URL, Hinweis zu `reasoning_effort`) |
 | `local-only/offline.env` | Env-Variablen für macOS/Linux: `OPENCODE_DISABLE_MODELS_FETCH`, `OPENCODE_DISABLE_AUTOUPDATE`, `OPENCODE_DISABLE_FREE_MODELS` |
 | `local-only/opencode-offline.cmd` | Windows-Starter: gleiche Variablen, `rg.exe` neben `opencode.exe` im `PATH` |
 
@@ -211,12 +258,12 @@ const treeSitterRoot = path.resolve(dir, "../tui/assets/tree-sitter")   // neben
 grep -rn "OPENCODE_DISABLE_AUTOUPDATE\|OPENCODE_DISABLE_FREE_MODELS\|OPENCODE_DISABLE_MODELS_FETCH\|OPENCODE_MODELS_URL\|OPENCODE_MODELS_PATH" packages/*/src | head
 ```
 
-Config-Schlüssel (`update`, `share`, `websearch`, `formatter`, `permissions`, `policies`) im Schema unter
+Config-Schlüssel (`update`, `share`, `formatter`, `permissions`, `policies`; `websearch` siehe Abschnitt 4) im Schema unter
 `packages/schema/src/config/` gegenüberprüfen.
 
 ---
 
-## 5. Projektdokumentation
+## 6. Projektdokumentation
 
 - `CLAUDE.md`: Fork-Ziel, Regeln, Tabelle der bekannten externen Zugriffe (✅ = erledigt).
 - `local-only/FORK-CHANGES.md` (diese Datei), `local-only/check-fork.sh`.
@@ -228,6 +275,6 @@ erhalten bleiben.
 
 ## Offene Punkte (noch nicht umgesetzt)
 
-Siehe Tabelle in `CLAUDE.md` – Einträge ohne ✅: Auto-Update-Code, Console/Konto, Web-Tools im Code,
+Siehe Tabelle in `CLAUDE.md` – Einträge ohne ✅: Auto-Update-Code, Console/Konto, webfetch im Code,
 Cloud-Provider-Plugins, OAuth/MCP, Free Models/Upsell/Stats, Plugin-Downloads, Sharing. Diese sind derzeit nur
-über Config/Env abgeschaltet (Abschnitt 4), nicht im Code.
+über Config/Env abgeschaltet (Abschnitt 5), nicht im Code. Die Websuche ist seit Abschnitt 4 im Code gesperrt.

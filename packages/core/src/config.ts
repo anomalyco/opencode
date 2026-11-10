@@ -19,6 +19,8 @@ import { ConfigDiscovery } from "./config/discovery.js"
 import { ConfigWatch } from "./config/watch.js"
 import { ConfigIntegration } from "./config/integration.js"
 import { ConfigManaged } from "./config/managed.js"
+// local-only: compiled-in locks, see config/builtin.ts
+import { ConfigBuiltin } from "./config/builtin.js"
 import { ManagedPolicy } from "./managed-policy.js"
 import { Connection } from "@opencode/schema/connection"
 import { WellKnown } from "./wellknown.js"
@@ -170,6 +172,11 @@ export const layer = (options?: Options) =>
         })
       })
 
+      // local-only: fail closed when the compiled-in configuration does not parse.
+      const builtinInfo = yield* parseInfo(ConfigBuiltin.text, ConfigBuiltin.source)
+      if (!builtinInfo) return yield* Effect.die(new Error(`${ConfigBuiltin.source} is invalid`))
+      const builtin = new Document({ type: "document", info: builtinInfo })
+
       const loadFile = Effect.fnUntraced(function* (filepath: string) {
         const text = yield* fs.readFileStringSafe(filepath)
         if (text === undefined) return
@@ -309,6 +316,9 @@ export const layer = (options?: Options) =>
         const managed = [
           ...(sources.system?.present ? yield* loadDirectory(sources.system.path).pipe(Effect.orDie) : []),
           ...(sources.preferences ? yield* loadPreferences(sources.preferences).pipe(Effect.orDie) : []),
+          // local-only: compiled-in locks (config/builtin.ts) load last and so outrank every other source. Only the
+          // `system: false` test option skips them, keeping upstream tests independent of the fork's locks.
+          ...(sources.system ? [builtin] : []),
         ]
         const managedPolicies = managed
           .flatMap((entry) =>

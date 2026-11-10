@@ -38,7 +38,7 @@ Die Regeln in `AGENTS.md` (Upstream) gelten weiterhin; dieser Abschnitt ergänzt
 | ✅ Modellkatalog | `packages/core/src/models-dev.ts` (`defaultSource = https://models.opencode.ai`) | **erledigt:** Abruf/Refresh nur noch, wenn `OPENCODE_MODELS_URL` gesetzt ist (lokaler Mirror); sonst gebündelter Snapshot bzw. `OPENCODE_MODELS_PATH`. Gilt auch ohne `OPENCODE_DISABLE_MODELS_FETCH` (z. B. Hintergrund-Server) |
 | Auto-Update / Upgrade | `packages/cli/src/services/updater.ts` (opencode.ai, formulae.brew.sh, Install-Script per curl) | `OPENCODE_DISABLE_AUTOUPDATE` existiert → Update-Mechanismus standardmäßig aus |
 | Console / Konto | `packages/core/src/console-access.ts` (`https://opencode.ai/console`) | deaktivieren |
-| Web-Tools | `packages/core/src/tool/plugin/webfetch.ts`, `websearch.ts` | abschalten oder auf lokale Quellen beschränken |
+| Web-Tools | `packages/core/src/tool/plugin/webfetch.ts`, `websearch.ts` | ✅ **websearch erledigt:** fest einkompiliert gesperrt (`packages/core/src/config/builtin.ts`, Vorrang vor jeder Config). webfetch bleibt per Config gesperrt (`local-only/opencode.jsonc`, Loopback erlaubt) |
 | Provider-Plugins | `packages/core/src/plugin/provider/*`, `packages/ai/src/providers/*` | Cloud-Defaults (OpenAI, Anthropic, OpenRouter, Bedrock, Vertex, …) entfernen/abschalten; lokale OpenAI-kompatible Endpunkte erhalten |
 | OAuth / MCP | `packages/core/src/mcp/oauth.ts`, Copilot-/OpenAI-Auth | Remote-OAuth abschalten; MCP nur lokal (stdio / localhost) |
 | Free Models / Upsell / Stats | `OPENCODE_DISABLE_FREE_MODELS`, `packages/tui/src/component/dialog-go-upsell.tsx`, `packages/cli/src/commands/handlers/stats.ts`, `packages/tui/src/util/usage-limits.ts` | entfernen bzw. abschalten |

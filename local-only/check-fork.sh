@@ -38,7 +38,15 @@ for f in packages/tui/script/vendor-parsers.mjs packages/tui/script/parsers-lang
 others=$(grep -rlE "from \"[^\"]*parsers-config\"" packages/*/src --include='*.ts' --include='*.tsx' 2>/dev/null || true)
 if [ -n "$others" ]; then echo "  PRÜFEN  weitere Importe von parsers-config:"; echo "$others" | sed 's/^/            /'; fail=1; fi
 
-echo "4. Offline-Konfiguration"
+echo "4. Websuche fest gesperrt"
+exists packages/core/src/config/builtin.ts
+check "websearch aus"         packages/core/src/config/builtin.ts '"websearch": false'
+check "websearch.use deny"    packages/core/src/config/builtin.ts '{ "action": "websearch.use", "resource": "*", "effect": "deny" }'
+check "Config lädt builtin"   packages/core/src/config.ts '...(sources.system ? [builtin] : [])'
+check "Test-Filter angepasst" packages/core/test/config/config.test.ts '!(entry instanceof ConfigManaged.Document)'
+exists packages/core/test/config/builtin.test.ts
+
+echo "5. Offline-Konfiguration"
 for f in local-only/opencode.jsonc local-only/offline.env local-only/opencode-offline.cmd; do exists "$f"; done
 for flag in OPENCODE_DISABLE_AUTOUPDATE OPENCODE_DISABLE_FREE_MODELS OPENCODE_DISABLE_MODELS_FETCH OPENCODE_MODELS_URL; do
   if grep -rqF "$flag" packages/*/src 2>/dev/null; then echo "  OK      Flag $flag wird noch ausgewertet"
@@ -53,7 +61,7 @@ grep -rhoE "https?://[a-zA-Z0-9.-]+" packages/*/src --include='*.ts' --include='
 if [ "${1:-}" != "--no-tests" ]; then
   echo
   echo "Tests der Fork-Änderungen:"
-  (cd packages/core && bun test test/models.test.ts test/ripgrep.test.ts) || fail=1
+  (cd packages/core && bun test test/models.test.ts test/ripgrep.test.ts test/config/builtin.test.ts test/config/config.test.ts) || fail=1
   (cd packages/tui && bun test test/util/parsers-local.test.ts test/cli/tui/group-view.test.tsx) || fail=1
 fi
 
