@@ -1,4 +1,12 @@
-import type { BoxRenderable, Clock, MouseEvent, TimerHandle, VideoMetadata, VideoRenderable } from "@opentui/core"
+import {
+  TextAttributes,
+  type BoxRenderable,
+  type Clock,
+  type MouseEvent,
+  type TimerHandle,
+  type VideoMetadata,
+  type VideoRenderable,
+} from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, Index, onCleanup, Show, type JSX } from "solid-js"
 import { useMedia, type MediaPlayback } from "../../context/media"
@@ -70,34 +78,65 @@ export function createTransport(start: MediaPlayback) {
   }
 }
 
-/** The play button, the elapsed time (with `total`, also the duration) and the seek bar of a transport row. */
-export function TransportControls(props: { transport: Transport; total?: boolean; preview?: boolean }) {
+/**
+ * A transport row: the play button, the elapsed time, the seek bar, the total time, and `children` such as toggles. The
+ * total time goes before the seek bar would shrink below 10 cells.
+ */
+export function TransportControls(props: {
+  transport: Transport
+  gap: number
+  preview?: boolean
+  children?: JSX.Element
+}) {
   const theme = useTheme()
-  const time = () => formatTimecode(props.transport.position())
+  const [barWidth, setBarWidth] = createSignal(0)
+  const total = () => formatDuration(props.transport.metadata()?.duration ?? 0)
+  const showTotal = createMemo<boolean>((shown) => barWidth() >= 10 + (shown ? 0 : total().length + props.gap), false)
   return (
-    <>
-      <Toggle id="media-play" on={props.transport.playing()} run={props.transport.toggle}>
+    <box height={1} flexDirection="row" gap={props.gap}>
+      <Control id="media-play" primary run={props.transport.toggle}>
         {props.transport.playing() ? "⏸" : "▶"}
-      </Toggle>
-      <text fg={theme.text.muted} wrapMode="none" flexShrink={0} selectable={false}>
-        {props.total ? `${time()} / ${formatDuration(props.transport.metadata()?.duration ?? 0)}` : time()}
+      </Control>
+      <text fg={theme.text.base} wrapMode="none" flexShrink={0} selectable={false}>
+        {formatTimecode(props.transport.position())}
       </text>
-      <SeekBar transport={props.transport} preview={props.preview} />
-    </>
+      <SeekBar transport={props.transport} preview={props.preview} onWidth={setBarWidth} />
+      <Show when={showTotal()}>
+        <text fg={theme.text.muted} wrapMode="none" flexShrink={0} selectable={false}>
+          {total()}
+        </text>
+      </Show>
+      {props.children}
+    </box>
   )
 }
 
-/** A clickable control, highlighted while `on`. */
-export function Toggle(props: { id?: string; on: boolean; run: () => void; children: JSX.Element }) {
+/**
+ * A clickable glyph: in the accent while `on`; otherwise muted, or the base colour when `primary`, and brighter while
+ * hovered. `struck` crosses it out, as a muted sound is.
+ */
+export function Control(props: {
+  id?: string
+  on?: boolean
+  primary?: boolean
+  struck?: boolean
+  run: () => void
+  children: JSX.Element
+}) {
   const theme = useTheme()
   const click = createMediaClick(() => props.run())
+  const [hovered, setHovered] = createSignal(false)
+  const action = () => theme.text.action[props.primary ? "primary" : "secondary"]
   return (
     <text
       id={props.id}
-      fg={props.on ? theme.text.formfield.selected : theme.text.muted}
+      fg={props.on ? theme.text.action.primary.selected : action().state({ hovered: hovered() })}
+      attributes={props.struck ? TextAttributes.STRIKETHROUGH : undefined}
       wrapMode="none"
       flexShrink={0}
       selectable={false}
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
       {...click}
     >
       {props.children}
@@ -114,7 +153,7 @@ const PREVIEW_REST_MS = 80
  * A one-row slider over the video: the elapsed part fills up to the playhead, a click seeks, and a drag scrubs with
  * playback paused. With `preview`, hovering shows the frame at the pointer and its timecode above the bar.
  */
-function SeekBar(props: { transport: Transport; preview?: boolean }) {
+function SeekBar(props: { transport: Transport; preview?: boolean; onWidth: (width: number) => void }) {
   const theme = useTheme()
   const [width, setWidth] = createSignal(0)
   const [hover, setHover] = createSignal<number>()
@@ -145,7 +184,7 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
     const segments = [
       { cell: "━", fg: formfield.selected, from: 0, to: head() },
       { cell: "●", fg: scrubbing() ? formfield.pressed : formfield.focused, from: head(), to: head() + 1 },
-      { cell: "─", fg: formfield.base, from: head() + 1, to: width() },
+      { cell: "─", fg: theme.text.muted, from: head() + 1, to: width() },
     ]
     // The hover marker takes one cell of the fill or the track.
     return segments.flatMap((segment) => {
@@ -161,10 +200,12 @@ function SeekBar(props: { transport: Transport; preview?: boolean }) {
       ref={(element: BoxRenderable) => (bar = element)}
       height={1}
       flexGrow={1}
+      flexBasis={0}
       minWidth={4}
       position="relative"
       onSizeChange={function (this: BoxRenderable) {
         setWidth(this.width)
+        props.onWidth(this.width)
       }}
       onMouseDown={(event: MouseEvent) => {
         const video = props.transport.player()
@@ -255,6 +296,7 @@ function SeekPreview(props: {
       flexDirection="column"
       alignItems="center"
       border
+      borderStyle="rounded"
       borderColor={theme.border.base}
       backgroundColor={theme.background.raised.base}
     >

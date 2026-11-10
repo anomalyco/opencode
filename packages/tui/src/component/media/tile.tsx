@@ -12,21 +12,15 @@ const HOVER_REST_MS = 300
 /**
  * A thumbnail for an image or video. A video shows a poster frame while the media context lets it keep a player, and
  * plays silently in a loop as the one active tile once the pointer rests on it; leaving it pauses and returns to the
- * poster. A click calls `onOpen`. A `still` video, or one over the limit, shows only its name, keeping no decoder open.
+ * poster. A click calls `onOpen`. A video over the limit shows only its name, keeping no decoder open.
  */
-export function MediaTile(props: {
-  item: MediaItem
-  width: number
-  height: number
-  still?: boolean
-  onOpen?: () => void
-}) {
+export function MediaTile(props: { item: MediaItem; width: number; height: number; onOpen?: () => void }) {
   const media = useMedia()
   const theme = useTheme()
   const renderer = useRenderer()
   const key = createUniqueId()
   const click = createMediaClick(() => props.onOpen?.())
-  const poster = () => isPlayableVideo(props.item) && !props.still
+  const poster = () => isPlayableVideo(props.item)
   const active = () => media.activeTile() === key
   let box: BoxRenderable | undefined
   let hovered = false
@@ -76,7 +70,7 @@ export function MediaTile(props: {
         <Match when={poster() && (active() || media.posterOpen(key))}>
           <TileVideo item={props.item} active={active()} />
         </Match>
-        <Match when={isPlayableVideo(props.item) && (props.still || media.posterShown(key))}>
+        <Match when={isPlayableVideo(props.item) && media.posterShown(key)}>
           <TileLabel item={props.item} text={`▶ ${props.item.name ?? "video"}`} />
         </Match>
         {/* Further off screen, a video tile draws nothing. */}
@@ -97,7 +91,7 @@ function TileLabel(props: { item: MediaItem; text?: string }) {
   )
 }
 
-function TileImage(props: { item: MediaItem }) {
+export function TileImage(props: { item: MediaItem }) {
   const source = createImageSource(() => props.item)
   return (
     <Show when={!source.failed()} fallback={<TileLabel item={props.item} />}>
@@ -145,7 +139,10 @@ function TileVideo(props: { item: MediaItem; active: boolean }) {
                 maxFps={media.thumbnailFps()}
                 width="100%"
                 height="100%"
-                onReady={(metadata) => setDuration(metadata.duration)}
+                onReady={(metadata) => {
+                  setDuration(metadata.duration)
+                  media.noteDuration(props.item, metadata.duration)
+                }}
                 onError={() => setBroken(path())}
               />
               <box position="absolute" left={0} bottom={0} zIndex={1} backgroundColor={theme.background.raised.high}>

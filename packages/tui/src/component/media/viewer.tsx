@@ -1,22 +1,70 @@
-import { CliRenderEvents, RGBA, type BoxRenderable, type MouseEvent, type Renderable } from "@opentui/core"
+import {
+  CliRenderEvents,
+  RGBA,
+  TextAttributes,
+  type BoxRenderable,
+  type MouseEvent,
+  type Renderable,
+  type TimerHandle,
+} from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createMemo, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { useNewDesigns } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { MEDIA_VIEWER_Z_INDEX, registerMediaViews, useMedia, type MediaViewerRequest } from "../../context/media"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
+import { Locale } from "../../util/locale"
 import { isPlayableVideo, type MediaItem } from "./model"
 import { MediaPip } from "./pip"
-import { createTransport, Toggle, TransportControls } from "./seek-bar"
+import { Control, createTransport, TransportControls } from "./seek-bar"
 import { createImageSource, createVideoFile } from "./source"
-import { createMediaClick, formatDuration, MediaTile } from "./tile"
+import { createMediaClick, formatDuration, TileImage } from "./tile"
 import { actualZoom, fillZoom, initialView, layoutView, panBy, zoomAt, type Size, type ZoomView } from "./zoom"
 
 registerMediaViews({ viewer: MediaViewer, pip: MediaPip })
 
-const TILE_WIDTH = 12
-const TILE_HEIGHT = 4
+const CARD_HEIGHT = 4
+const CARD_GAP = 2
+/** How long a message such as "Volume 80%" stays on the picture. */
+const OSD_MS = 1_200
+const KIND = { image: "Image", video: "Video", other: "File" }
 const PLAYABLE_HINT = "The viewer plays MP4, MOV and M4V files with H.264 video and AAC audio."
+const KEYS = [
+  {
+    title: "Playback",
+    keys: [
+      ["space", "Play or pause"],
+      ["← →", "Seek 5 seconds"],
+      ["⇧← ⇧→", "Seek 1 second"],
+      [", .", "Step one frame"],
+      ["0–9", "Jump to 0–90%"],
+      ["↑ ↓", "Volume"],
+      ["m", "Mute"],
+      ["l", "Loop"],
+    ],
+  },
+  {
+    title: "Navigate",
+    keys: [
+      ["[ ]", "Previous or next"],
+      ["← →", "Previous or next image"],
+      ["p", "Picture-in-picture"],
+      ["esc", "Close"],
+    ],
+  },
+  {
+    title: "View",
+    keys: [
+      ["+ -", "Zoom"],
+      ["f", "Fit, fill, actual size"],
+      ["r", "Reset zoom"],
+      ["drag", "Pan a zoomed picture"],
+      ["i", "Details"],
+      ["?", "Keys"],
+    ],
+  },
+]
 
 /** The fullscreen viewer over a gallery, shown while `useMedia().viewer()` holds a request. */
 function MediaViewer(props: { request: MediaViewerRequest }) {
@@ -26,6 +74,9 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
+  const header = theme.surface("dialog")
+  const newDesigns = useNewDesigns()
+  const closeClick = createMediaClick(media.closeViewer)
   const items = props.request.items
   // Sound is off in a remote session, where it would play on the remote machine.
   const remote = renderer.capabilities?.remote === true
@@ -40,10 +91,18 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const [volume, setVolume] = createSignal(props.request.volume ?? 1)
   const [loop, setLoop] = createSignal(props.request.loop ?? false)
   const [info, setInfo] = createSignal(false)
+  const [keys, setKeys] = createSignal(false)
   // The request's time and playing state apply to the item it opened at.
   let start: Partial<MediaViewerRequest> = props.request
   const transport = createMemo(on(index, () => createTransport(start)))
   let stageBox: BoxRenderable | undefined
+  let keyList: BoxRenderable | undefined
+  const [keyScroll, setKeyScroll] = createSignal(0)
+  // The rows of the keys list that a short terminal cuts off, out of the panel's height less its border and padding.
+  const scrollKeys = (rows: number) => {
+    const overflow = (keyList?.height ?? 0) - (keyList?.parent?.height ?? 0) + 2 + (roomy() ? 1 : 0)
+    setKeyScroll((value) => Math.max(0, Math.min(overflow, value + rows)))
+  }
 
   const current = () => items[index()]!
   const failure = createMemo(() => error() ?? unsupported(current()))
@@ -64,6 +123,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   const percent = () => `${Math.round(layout()!.scale * media.cellPixels() * 100)}%`
   const fps = () => metadata()?.fps || 30
   const length = () => metadata()?.duration ?? 0
+  const roomy = () => dimensions().height >= 22
 
   // The viewer takes the keys: whatever takes focus while it is open, such as a dialog closing behind it giving focus
   // back to the prompt, is blurred and gets it back once the viewer closes.
@@ -84,6 +144,15 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   })
   onCleanup(keymap.mode.push("modal"))
 
+  const [osd, setOsd] = createSignal<() => string>()
+  let osdTimer: TimerHandle | undefined
+  function flash(message: () => string) {
+    if (osdTimer) renderer.clock.clearTimeout(osdTimer)
+    osdTimer = renderer.clock.setTimeout(() => setOsd(undefined), OSD_MS)
+    setOsd(() => message)
+  }
+  onCleanup(() => osdTimer && renderer.clock.clearTimeout(osdTimer))
+
   function go(next: number) {
     const target = (next + items.length) % items.length
     if (target === index()) return
@@ -96,29 +165,41 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
     })
   }
 
-  const seek = (target: number) => video() && transport().seek(target)
+  function seek(target: number, message?: string) {
+    if (!video()) return
+    transport().seek(target)
+    if (message) flash(() => message)
+  }
 
   function step(frames: number) {
     const player = video()
     if (!player) return
     player.pause()
-    seek((Math.round(transport().position() * fps()) + frames) / fps())
+    seek((Math.round(transport().position() * fps()) + frames) / fps(), frames > 0 ? "Next frame" : "Previous frame")
   }
 
-  function zoom(next: (value: NonNullable<ReturnType<typeof geometry>>, view: ZoomView) => ZoomView) {
+  function zoom(next: (value: NonNullable<ReturnType<typeof geometry>>, view: ZoomView) => ZoomView, label?: string) {
     const value = geometry()
-    if (value) setView(next(value, layout()!.view))
+    if (!value) return
+    setView(next(value, layout()!.view))
+    flash(() => label ?? (zoomed() ? `Zoom ${percent()}` : "Fit"))
   }
 
   function arrow(dx: number, dy: number) {
+    if (keys() && dy !== 0) return scrollKeys(dy)
     if (current().kind === "image" && !zoomed()) return dx === 0 ? undefined : go(index() + dx)
     const area = stage()
-    if (current().kind === "image")
-      return zoom((value, view) =>
-        panBy(value, view, -dx * Math.ceil(area.width / 8), -dy * Math.ceil(area.height / 8)),
+    if (current().kind === "image") {
+      const value = geometry()
+      return (
+        value &&
+        setView(panBy(value, layout()!.view, -dx * Math.ceil(area.width / 8), -dy * Math.ceil(area.height / 8)))
       )
-    if (dx !== 0) return seek(transport().position() + dx * 5)
-    if (video()) setVolume((value) => Math.round(Math.max(0, Math.min(1, value - dy * 0.1)) * 10) / 10)
+    }
+    if (dx !== 0) return seek(transport().position() + dx * 5, dx > 0 ? "+5s" : "−5s")
+    if (!video()) return
+    setVolume((value) => Math.round(Math.max(0, Math.min(1, value - dy * 0.1)) * 10) / 10)
+    flash(() => `Volume ${Math.round(volume() * 100)}%`)
   }
 
   function pip() {
@@ -150,23 +231,31 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
     ),
   )
 
-  const closeClick = createMediaClick(media.closeViewer)
-  const toggleMute = () => setMuted((value) => !value)
-  const toggleLoop = () => setLoop((value) => !value)
+  const toggleMute = () => {
+    setMuted((value) => !value)
+    flash(() => (muted() ? "Muted" : `Volume ${Math.round(volume() * 100)}%`))
+  }
+  const toggleLoop = () => {
+    setLoop((value) => !value)
+    flash(() => (loop() ? "Loop on" : "Loop off"))
+  }
   const command = (bind: string, title: string, run: () => void) => ({ bind, title, group: "Media", run })
   Keymap.createLayer(() => ({
     mode: "modal",
     enabled: dialog.stack.length === 0,
     commands: [
-      command("escape,q,ctrl+c", "Close viewer", media.closeViewer),
+      command("escape,q,ctrl+c", "Close keys, details or viewer", () => {
+        if (keys() || info()) return batch(() => (setKeys(false), setInfo(false)))
+        media.closeViewer()
+      }),
       command("[,pageup", "Previous item", () => go(index() - 1)),
       command("],pagedown", "Next item", () => go(index() + 1)),
       command("left", "Previous image, pan or seek back", () => arrow(-1, 0)),
       command("right", "Next image, pan or seek forward", () => arrow(1, 0)),
       command("up", "Pan up or volume up", () => arrow(0, -1)),
       command("down", "Pan down or volume down", () => arrow(0, 1)),
-      command("shift+left", "Seek back 1s", () => seek(transport().position() - 1)),
-      command("shift+right", "Seek forward 1s", () => seek(transport().position() + 1)),
+      command("shift+left", "Seek back 1s", () => seek(transport().position() - 1, "−1s")),
+      command("shift+right", "Seek forward 1s", () => seek(transport().position() + 1, "+1s")),
       command("space", "Play or pause", () => video() && transport().toggle()),
       command(".", "Next frame", () => step(1)),
       ...Array.from({ length: 10 }, (_, digit) =>
@@ -176,14 +265,20 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
       command("l", "Loop", toggleLoop),
       command("+,=", "Zoom in", () => zoom((value, view) => zoomAt(value, view, 1.5))),
       command("-", "Zoom out", () => zoom((value, view) => zoomAt(value, view, 1 / 1.5))),
-      command("r", "Reset zoom", () => setView(undefined)),
-      command("f", "Cycle fit, fill and actual size", () =>
-        zoom((value, view) => {
-          const targets = [fillZoom(value), actualZoom(value, media.cellPixels())].sort((a, b) => a - b)
-          return { ...view, zoom: targets.find((target) => target > view.zoom + 1e-3) ?? 1 }
-        }),
-      ),
-      command("i", "Media info", () => setInfo((value) => !value)),
+      command("r", "Reset zoom", () => zoom(() => initialView(geometry()!.source), "Fit")),
+      command("f", "Cycle fit, fill and actual size", () => {
+        const value = geometry()
+        if (!value) return
+        const fill = fillZoom(value)
+        const actual = actualZoom(value, media.cellPixels())
+        const target = [fill, actual].sort((a, b) => a - b).find((target) => target > layout()!.view.zoom + 1e-3) ?? 1
+        zoom((_, view) => ({ ...view, zoom: target }), target === 1 ? "Fit" : target === fill ? "Fill" : "Actual size")
+      }),
+      command("i", "Media details", () => setInfo((value) => !value)),
+      command("?,shift+?,shift+/", "Keys", () => {
+        setKeyScroll(0)
+        setKeys((value) => !value)
+      }),
       command("p", "Picture-in-picture", pip),
     ],
   }))
@@ -198,41 +293,23 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
     }),
   )
 
+  createEffect(() => metadata() && media.noteDuration(current(), metadata()!.duration))
+
   const size = () => facts() && `${facts()!.width}×${facts()!.height}`
-  const duration = () => metadata() && formatDuration(metadata()!.duration)
-  const fpsLabel = () => metadata()?.fps && `${+metadata()!.fps.toFixed(2)} fps`
-  const audible = () => !!metadata()?.hasAudio && !remote && !muted()
-  const sound = () => (metadata()?.hasAudio ? (audible() ? `♪ ${Math.round(volume() * 100)}%` : "♪ off") : "no audio")
+  const audible = () => !!metadata()?.hasAudio && !remote
 
-  // Most useful first: the footer drops the hints that do not fit.
-  const hints = createMemo(() => {
-    const zoomable = geometry() !== undefined
-    const all = [
-      "esc close",
-      items.length > 1 && (current().kind === "image" && !zoomed() ? "←→ [ ] prev/next" : "[ ] prev/next"),
-      playable() && `space ${transport().playing() ? "pause" : "play"}`,
-      playable() && "←→ ±5s",
-      zoomed() && (playable() ? "drag pan" : "←↑↓→ pan"),
-      zoomed() && "r reset",
-      playable() && ", . frame",
-      playable() && `m ${muted() ? "unmute" : "mute"}`,
-      playable() && "p pip",
-      zoomable && "+ - zoom",
-      zoomable && "f fit",
-      "i info",
-    ].filter((hint): hint is string => typeof hint === "string")
-    let room = dimensions().width
-    return all.filter((hint) => (room -= hint.length + 2) >= 0)
-  })
-
+  const filmstrip = () => items.length > 1 && dimensions().height >= 24
+  // Cards share the width evenly, within bounds, and the window keeps the current item near its middle.
   const strip = createMemo(() => {
-    const count = Math.max(1, Math.floor((dimensions().width - 1) / (TILE_WIDTH + 1)))
+    const room = dimensions().width - 4 + CARD_GAP
+    const width = Math.max(12, Math.min(18, Math.floor(room / items.length) - CARD_GAP))
+    const count = Math.max(1, Math.min(items.length, Math.floor(room / (width + CARD_GAP))))
     const first = Math.max(0, Math.min(items.length - count, index() - Math.floor(count / 2)))
-    return items.slice(first, first + count)
+    return { width, items: items.slice(first, first + count) }
   })
 
   // OpenTUI reports the Kitty file transport's state without an event, and its probe or a fallback changes it, so read
-  // it again every second while the info shows.
+  // it again every second while the details show.
   const [fileState, setFileState] = createSignal(renderer.kittyImageTransportStatus.fileState)
   createEffect(() => {
     if (!info()) return
@@ -243,32 +320,45 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
   })
 
   const infoRows = () => {
+    const item = current()
     const area = layout()
-    return [
-      ["file", current().name ?? current().id],
-      ["type", current().mime || current().kind],
-      ["size", size() || "…"],
-      ...(current().kind === "video"
-        ? [
-            ["fps", fpsLabel() || "…"],
-            ["duration", duration() || "…"],
-            ["audio", sound()],
-            ["quality", transport().tier() ? `tier ${transport().tier()} · reduced to keep up` : "tier 0 · full size"],
-          ]
-        : []),
+    const bytes = item.path ? Bun.file(item.path).size : 0
+    const rows = [
+      ["Name", item.name ?? item.id],
+      ["Type", item.mime || item.kind],
+      ["Resolution", size() || "…"],
+      item.kind === "video" && ["Duration", metadata() ? formatDuration(metadata()!.duration) : "…"],
+      item.kind === "video" && ["Frame rate", metadata()?.fps ? `${+metadata()!.fps.toFixed(2)} fps` : "…"],
+      item.kind === "video" && [
+        "Sound",
+        !metadata()?.hasAudio
+          ? "none"
+          : remote
+            ? "off in a remote session"
+            : muted()
+              ? "muted"
+              : `${Math.round(volume() * 100)}%`,
+      ],
+      item.kind === "video" && [
+        "Quality",
+        transport().tier() ? `reduced to keep up (tier ${transport().tier()})` : "full size",
+      ],
+      bytes > 0 && ["Size", bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.ceil(bytes / 1e3)} KB`],
       [
-        "protocol",
+        "Protocol",
         media.protocol() === "kitty"
           ? `kitty · ${fileState() === "ready" ? "file" : fileState() === "probing" ? "probing" : "raw"}`
           : media.protocol(),
       ],
       [
-        "zoom",
+        "Zoom",
         area && zoomed()
           ? `${percent()} · ${area.crop.width}×${area.crop.height} at ${area.crop.left},${area.crop.top}`
           : "fit",
       ],
+      item.path && ["Path", Locale.truncateMiddle(item.path, 40)],
     ]
+    return rows.filter((row): row is string[] => Array.isArray(row))
   }
 
   function VideoStage(stageProps: { item: MediaItem }) {
@@ -330,23 +420,18 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
       backgroundColor={opaque(theme.background.base)}
       flexDirection="column"
     >
-      <box height={1} flexDirection="row" paddingLeft={1} paddingRight={1} gap={2}>
-        <text fg={theme.text.base} wrapMode="none" truncate flexShrink={1} selectable={false}>
-          {current().name ?? current().kind}
+      {/* The image preview dialog's header, whose esc ignores the release of a drag or selection over it. */}
+      <box
+        marginTop={roomy() ? 1 : 0}
+        paddingLeft={2}
+        paddingRight={2}
+        flexDirection="row"
+        justifyContent="space-between"
+      >
+        <text attributes={newDesigns() ? undefined : TextAttributes.BOLD} fg={header.text.base} selectable={false}>
+          {`${KIND[current().kind]} ${index() + 1} of ${items.length}`}
         </text>
-        <text fg={theme.text.muted} wrapMode="none" flexShrink={0} selectable={false}>
-          {[
-            items.length > 1 && `${index() + 1} / ${items.length}`,
-            size(),
-            duration(),
-            fpsLabel(),
-            zoomed() && percent(),
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </text>
-        <box flexGrow={1} />
-        <text fg={theme.text.muted} flexShrink={0} selectable={false} {...closeClick}>
+        <text fg={header.text.muted} flexShrink={0} selectable={false} {...closeClick}>
           esc
         </text>
       </box>
@@ -355,6 +440,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
         ref={(element: BoxRenderable) => (stageBox = element)}
         flexGrow={1}
         minHeight={1}
+        marginTop={roomy() ? 1 : 0}
         position="relative"
         onSizeChange={function (this: BoxRenderable) {
           setStage({ width: this.width, height: this.height })
@@ -400,24 +486,52 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
           }
         >
           {(value) => (
+            <box width="100%" height="100%" alignItems="center" justifyContent="center" padding={1}>
+              <box
+                id="media-viewer-failure"
+                maxWidth={64}
+                border
+                borderStyle="rounded"
+                borderColor={theme.border.base}
+                paddingLeft={2}
+                paddingRight={2}
+                paddingTop={1}
+                paddingBottom={1}
+                flexDirection="column"
+                gap={1}
+              >
+                <For each={value()}>
+                  {(line, index) => (
+                    <text fg={index() === 0 ? theme.text.feedback.error.base : theme.text.muted} wrapMode="word">
+                      {line}
+                    </text>
+                  )}
+                </For>
+              </box>
+            </box>
+          )}
+        </Show>
+        <Show when={osd()}>
+          {(message) => (
             <box
-              id="media-viewer-failure"
+              position="absolute"
+              top={1}
+              left={0}
               width="100%"
-              height="100%"
-              alignItems="center"
+              zIndex={6}
+              flexDirection="row"
               justifyContent="center"
-              flexDirection="column"
-              gap={1}
-              paddingLeft={2}
-              paddingRight={2}
             >
-              <For each={value()}>
-                {(line, index) => (
-                  <text fg={index() === 0 ? theme.text.feedback.error.base : theme.text.muted} wrapMode="word">
-                    {line}
-                  </text>
-                )}
-              </For>
+              <box
+                id="media-viewer-osd"
+                paddingLeft={2}
+                paddingRight={2}
+                backgroundColor={theme.background.raised.high}
+              >
+                <text fg={theme.text.base} wrapMode="none" selectable={false}>
+                  {message()()}
+                </text>
+              </box>
             </box>
           )}
         </Show>
@@ -426,16 +540,22 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
             id="media-viewer-info"
             position="absolute"
             top={0}
-            right={1}
+            right={2}
             zIndex={5}
-            padding={1}
+            border
+            borderStyle="rounded"
+            borderColor={theme.border.base}
+            title=" Details "
+            titleColor={theme.text.base}
+            paddingLeft={1}
+            paddingRight={1}
             flexDirection="column"
             backgroundColor={theme.background.raised.base}
           >
             <For each={infoRows()}>
               {(row) => (
                 <text wrapMode="none" selectable={false}>
-                  <span style={{ fg: theme.text.muted }}>{row[0]!.padEnd(10)}</span>
+                  <span style={{ fg: theme.text.muted }}>{row[0]!.padEnd(12)}</span>
                   <span style={{ fg: theme.text.base }}>{row[1]}</span>
                 </text>
               )}
@@ -443,54 +563,154 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
           </box>
         </Show>
       </box>
-      <Show when={playable() && transport().metadata()}>
-        <box height={1} flexDirection="row" paddingLeft={1} paddingRight={1} gap={1}>
-          <TransportControls transport={transport()} total preview />
-          <Toggle on={audible()} run={toggleMute}>
-            {sound()}
-          </Toggle>
-          <Toggle on={loop()} run={toggleLoop}>
-            loop
-          </Toggle>
-        </box>
-      </Show>
-      <Show when={items.length > 1 && dimensions().height >= 22}>
-        <box
-          id="media-viewer-filmstrip"
-          height={TILE_HEIGHT + 2}
-          paddingTop={1}
-          flexDirection="row"
-          justifyContent="center"
-          gap={1}
-        >
-          <For each={strip()}>
-            {(item) => (
-              <box flexDirection="column" width={TILE_WIDTH}>
-                <MediaTile
+      <box id="media-viewer-controls" flexShrink={0} paddingBottom={roomy() ? 1 : 0}>
+        <Show when={playable()}>
+          <box height={1} marginTop={roomy() ? 1 : 0} paddingLeft={2} paddingRight={2}>
+            <Show when={transport().metadata()}>
+              <TransportControls transport={transport()} gap={2} preview>
+                <Show when={audible()}>
+                  <Control on={!muted()} struck={muted()} run={toggleMute}>
+                    ♪
+                  </Control>
+                </Show>
+                <Control on={loop()} run={toggleLoop}>
+                  ↻
+                </Control>
+              </TransportControls>
+            </Show>
+          </box>
+        </Show>
+        <Show when={filmstrip()}>
+          <box
+            id="media-viewer-filmstrip"
+            height={CARD_HEIGHT + 1}
+            marginTop={1}
+            flexDirection="row"
+            justifyContent="center"
+            gap={CARD_GAP}
+          >
+            <For each={strip().items}>
+              {(item) => (
+                <Card
                   item={item}
-                  width={TILE_WIDTH}
-                  height={TILE_HEIGHT}
-                  still
+                  width={strip().width}
+                  current={items.indexOf(item) === index()}
                   onOpen={() => go(items.indexOf(item))}
                 />
-                <text fg={theme.text.formfield.selected} wrapMode="none" selectable={false}>
-                  {items.indexOf(item) === index() ? "━".repeat(TILE_WIDTH) : ""}
-                </text>
-              </box>
-            )}
-          </For>
+              )}
+            </For>
+          </box>
+        </Show>
+      </box>
+      <Show when={keys()}>
+        <box
+          position="absolute"
+          left={0}
+          top={0}
+          width="100%"
+          height="100%"
+          zIndex={10}
+          alignItems="center"
+          justifyContent="center"
+        >
+          <box
+            id="media-viewer-keys"
+            maxWidth={dimensions().width - 2}
+            maxHeight={dimensions().height - 2}
+            overflow="hidden"
+            onMouseScroll={(event: MouseEvent) => scrollKeys(event.scroll?.direction === "up" ? -1 : 1)}
+            border
+            borderStyle="rounded"
+            borderColor={theme.border.base}
+            title=" Keys "
+            titleColor={theme.text.base}
+            backgroundColor={theme.background.raised.base}
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={roomy() ? 1 : 0}
+          >
+            {/* A short terminal scrolls the list with the up and down keys or the wheel. */}
+            <box
+              ref={(element: BoxRenderable) => (keyList = element)}
+              marginTop={-keyScroll()}
+              flexShrink={0}
+              flexDirection="row"
+              flexWrap="wrap"
+              columnGap={4}
+            >
+              <For each={KEYS}>
+                {(group) => (
+                  <box flexDirection="column" paddingBottom={1}>
+                    <text fg={theme.text.base} attributes={TextAttributes.BOLD} wrapMode="none" selectable={false}>
+                      {group.title}
+                    </text>
+                    <For each={group.keys}>
+                      {(key) => (
+                        <text wrapMode="none" selectable={false}>
+                          <span style={{ fg: theme.text.base }}>{key[0]!.padEnd(7)}</span>
+                          <span style={{ fg: theme.text.muted }}>{key[1]}</span>
+                        </text>
+                      )}
+                    </For>
+                  </box>
+                )}
+              </For>
+            </box>
+          </box>
         </box>
       </Show>
-      <box id="media-viewer-footer" height={1} flexDirection="row" paddingLeft={1} paddingRight={1} gap={2}>
-        <For each={hints()}>
-          {(hint) => (
-            <text wrapMode="none" flexShrink={0} selectable={false}>
-              <span style={{ fg: theme.text.base }}>{hint.slice(0, hint.lastIndexOf(" "))}</span>
-              <span style={{ fg: theme.text.muted }}>{hint.slice(hint.lastIndexOf(" "))}</span>
+    </box>
+  )
+}
+
+/**
+ * A filmstrip card: an image's thumbnail, or for a video a play mark and its duration once a player has read it, with
+ * the name under it. The current item has a heavy border in the accent.
+ */
+function Card(props: { item: MediaItem; width: number; current: boolean; onOpen: () => void }) {
+  const media = useMedia()
+  const theme = useTheme()
+  const click = createMediaClick(() => props.onOpen())
+  const [hovered, setHovered] = createSignal(false)
+  const formfield = theme.text.formfield
+  const duration = () => media.duration(props.item)
+  return (
+    <box width={props.width} flexShrink={0} flexDirection="column">
+      <box
+        height={CARD_HEIGHT}
+        border
+        borderStyle={props.current ? "heavy" : "rounded"}
+        borderColor={props.current ? formfield.selected : hovered() ? formfield.hovered : theme.border.base}
+        alignItems="center"
+        justifyContent="center"
+        onMouseOver={() => setHovered(true)}
+        onMouseOut={() => setHovered(false)}
+        {...click}
+      >
+        <Switch>
+          <Match when={props.item.kind === "image"}>
+            <TileImage item={props.item} />
+          </Match>
+          <Match when={props.item.kind === "video"}>
+            <text fg={isPlayableVideo(props.item) ? theme.text.base : theme.text.muted} selectable={false}>
+              ▶
             </text>
-          )}
-        </For>
+            <Show when={duration() !== undefined}>
+              <text fg={theme.text.muted} selectable={false}>
+                {formatDuration(duration()!)}
+              </text>
+            </Show>
+          </Match>
+        </Switch>
       </box>
+      <text
+        fg={props.current ? theme.text.base : theme.text.muted}
+        alignSelf="center"
+        wrapMode="none"
+        selectable={false}
+      >
+        {Locale.truncateMiddle(props.item.name ?? props.item.kind, props.width)}
+      </text>
     </box>
   )
 }

@@ -5,7 +5,7 @@ import { Keymap } from "../../context/keymap"
 import { MEDIA_PIP_Z_INDEX, useMedia, type MediaPipRequest } from "../../context/media"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
-import { createTransport, Toggle, TransportControls } from "./seek-bar"
+import { Control, createTransport, TransportControls } from "./seek-bar"
 import { createVideoFile } from "./source"
 import { createMediaClick } from "./tile"
 
@@ -20,6 +20,7 @@ export function MediaPip(props: { pip: MediaPipRequest }) {
   // It opens paused; the effect below starts it once ready, or once the viewer covering it closes.
   const transport = createTransport({ time: props.pip.time, playing: false })
   const [muted, setMuted] = createSignal(props.pip.muted ?? false)
+  const [loop, setLoop] = createSignal(props.pip.loop ?? false)
   const [failed, setFailed] = createSignal(false)
   const [moved, setMoved] = createSignal<{ left: number; top: number }>()
   // Sound would play on the remote machine in a remote session.
@@ -55,7 +56,7 @@ export function MediaPip(props: { pip: MediaPipRequest }) {
       playing: transport.player()?.playing || resume,
       muted: muted(),
       volume: props.pip.volume,
-      loop: props.pip.loop,
+      loop: loop(),
     }
     batch(() => {
       media.closePip()
@@ -99,8 +100,6 @@ export function MediaPip(props: { pip: MediaPipRequest }) {
   Keymap.createLayer(() => ({ bindings: commands.map((command) => command.id) }))
 
   const toggleClick = createMediaClick(transport.toggle)
-  const expandClick = createMediaClick(expand)
-  const closeClick = createMediaClick(media.closePip)
   let drag: { x: number; y: number; left: number; top: number } | undefined
 
   return (
@@ -138,9 +137,15 @@ export function MediaPip(props: { pip: MediaPipRequest }) {
         <text fg={theme.text.muted} flexShrink={0} selectable={false}>
           ⠿
         </text>
-        <text fg={theme.text.base} wrapMode="none" truncate flexShrink={1} selectable={false}>
+        <text fg={theme.text.base} wrapMode="none" truncate flexGrow={1} flexShrink={1} selectable={false}>
           {props.pip.item.name ?? "video"}
         </text>
+        <Control id="media-pip-expand" run={expand}>
+          ⤢
+        </Control>
+        <Control id="media-pip-close" run={media.closePip}>
+          ✕
+        </Control>
       </box>
       <box height={videoHeight()} {...toggleClick}>
         <Switch>
@@ -156,7 +161,7 @@ export function MediaPip(props: { pip: MediaPipRequest }) {
                 source={source()}
                 muted={muted()}
                 volume={props.pip.volume}
-                loop={props.pip.loop}
+                loop={loop()}
                 fit="fit"
                 width="100%"
                 height="100%"
@@ -167,19 +172,17 @@ export function MediaPip(props: { pip: MediaPipRequest }) {
           </Match>
         </Switch>
       </box>
-      <box height={1} flexDirection="row" paddingLeft={1} paddingRight={1} gap={1}>
-        <TransportControls transport={transport} />
-        <Show when={audio && transport.metadata()?.hasAudio}>
-          <Toggle on={!muted()} run={() => setMuted((value) => !value)}>
-            ♪
-          </Toggle>
-        </Show>
-        <text id="media-pip-expand" fg={theme.text.base} selectable={false} {...expandClick}>
-          ⤢
-        </text>
-        <text id="media-pip-close" fg={theme.text.base} selectable={false} {...closeClick}>
-          ✕
-        </text>
+      <box height={1} paddingLeft={1} paddingRight={1}>
+        <TransportControls transport={transport} gap={1}>
+          <Show when={audio && transport.metadata()?.hasAudio}>
+            <Control on={!muted()} struck={muted()} run={() => setMuted((value) => !value)}>
+              ♪
+            </Control>
+          </Show>
+          <Control on={loop()} run={() => setLoop((value) => !value)}>
+            ↻
+          </Control>
+        </TransportControls>
       </box>
     </box>
   )
