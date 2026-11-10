@@ -5,6 +5,7 @@ import { describe, expect } from "bun:test"
 import { Event } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import {
+  Context,
   DateTime,
   Deferred,
   Duration,
@@ -15,6 +16,7 @@ import {
   Hash,
   Layer,
   LayerMap,
+  Logger,
   Option,
   RcMap,
   Schema,
@@ -29,11 +31,13 @@ import { Global } from "@opencode/util/global"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { Location } from "@opencode/core/location"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Config } from "@opencode/core/config"
 import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
 import { Plugin } from "@opencode/core/plugin"
 import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -316,11 +320,41 @@ describe("LocationServiceMap", () => {
     }),
   )
 
+  for (const holder of ["stays", "releases on shutdown"] as const)
+    it.effect(
+      `warns when a borrower ${holder === "stays" ? "still holds" : "lets go of"} an invalidated location`,
+      () => {
+        const warnings: unknown[] = []
+        const logger = Logger.map(Logger.formatStructured, (entry) => {
+          if (entry.level === "WARN") warnings.push(entry.message)
+        })
+        return Effect.gen(function* () {
+          const dir = yield* tmpdirScoped()
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const locations = yield* LocationServiceMap.Service
+          const borrow = yield* Scope.make()
+          const context = yield* locations.contextEffect(ref).pipe(Scope.provide(borrow))
+          if (holder === "releases on shutdown")
+            yield* Context.get(context, LocationLifecycle.Service).awaitShutdown.pipe(
+              Effect.andThen(Scope.close(borrow, Exit.void)),
+              Effect.forkScoped,
+            )
+
+          yield* locations.invalidate(ref)
+          yield* Effect.yieldNow
+          yield* TestClock.adjust("30 seconds")
+          expect(warnings).toEqual(
+            holder === "stays"
+              ? [["location still held after shutdown", { directory: dir.path, workspaceID: undefined, holders: 1 }]]
+              : [],
+          )
+          yield* Scope.close(borrow, Exit.void)
+        }).pipe(Effect.provide(Logger.layer([logger])))
+      },
+    )
+
   it.live("retries a location after its missing directory is recreated", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const locations = yield* LocationServiceMap.Service
@@ -339,10 +373,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("keeps a workspace location admitted when its directory does not exist locally", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const locations = yield* LocationServiceMap.Service
@@ -405,10 +436,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("reuses cached services for constructed and decoded location refs", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -429,10 +457,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("normalizes equivalent refs to one cached location graph", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -582,10 +607,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("rejects an unavailable selected model during location model resolution", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
@@ -621,6 +643,7 @@ describe("LocationServiceMap", () => {
                 location,
               }),
               modelState.available,
+              { kind: "primary", agent: Agent.ID.make("build") },
             )
           }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
@@ -635,10 +658,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("explains replacements for unavailable legacy provider models", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
@@ -664,6 +684,7 @@ describe("LocationServiceMap", () => {
                   location,
                 }),
                 modelState.available,
+                { kind: "primary", agent: Agent.ID.make("build") },
               )
             }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
@@ -682,10 +703,7 @@ describe("LocationServiceMap", () => {
   )
 
   it.live("preserves the selected catalog identity when the package model id differs", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
@@ -719,6 +737,7 @@ describe("LocationServiceMap", () => {
                 location,
               }),
               modelState.available,
+              { kind: "primary", agent: Agent.ID.make("build") },
             )
           }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
 
@@ -730,6 +749,72 @@ describe("LocationServiceMap", () => {
             }),
           )
           expect(String(resolved.model.id)).toBe("base")
+        }),
+      ),
+    ),
+  )
+
+  it.live("lets plugins serve a request with another model from the same provider", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const router = Provider.ID.make("router")
+          const result = yield* Effect.gen(function* () {
+            const providers = yield* Provider.Service
+            yield* providers.transform((editor) => {
+              for (const id of ["router", "other"])
+                editor.update(Provider.ID.make(id), (provider) => {
+                  provider.package = "@opencode/ai/providers/openai"
+                })
+              editor.models.update(router, Model.ID.make("auto"), () => {})
+              editor.models.update(router, Model.ID.make("hidden"), (model) => {
+                model.enabled = false
+              })
+              editor.models.update(Provider.ID.make("other"), Model.ID.make("hidden"), () => {})
+            })
+            const seen: unknown[] = []
+            const target = { providerID: router }
+            const hooks = yield* PluginHooks.Service
+            yield* hooks.register("session", "experimental.model.resolve", (event) =>
+              Effect.sync(() => {
+                seen.push({ kind: event.kind, agent: event.agent, model: event.model.id })
+                if (event.model.id === "auto")
+                  event.model = Model.Ref.make({ providerID: target.providerID, id: Model.ID.make("hidden") })
+              }),
+            )
+            const modelState = yield* Model.Service
+            const models = yield* SessionRunnerModel.Service
+            const session = Session.Info.make({
+              id: Session.ID.make("ses_routed_model"),
+              projectID: Project.ID.global,
+              title: "test",
+              model: { id: Model.ID.make("auto"), providerID: router },
+              cost: Money.USD.zero,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+              location,
+            })
+            const resolved = yield* models.resolve(session, modelState.available, {
+              kind: "compaction",
+              agent: Agent.ID.make("compaction"),
+            })
+            target.providerID = Provider.ID.make("other")
+            const crossed = yield* models
+              .resolve(session, modelState.available, { kind: "primary", agent: Agent.ID.make("build") })
+              .pipe(Effect.flip)
+            return { resolved, crossed, seen }
+          }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.Service.get(location)))
+
+          expect(result.seen[0]).toEqual({ kind: "compaction", agent: "compaction", model: "auto" })
+          expect(result.resolved.ref).toEqual(Model.Ref.make({ id: Model.ID.make("hidden"), providerID: router }))
+          expect(String(result.resolved.model.id)).toBe("hidden")
+          // A model from another provider would bypass the selection's credentials and provider hooks.
+          expect(result.crossed).toMatchObject({
+            _tag: "SessionRunnerModel.ModelUnavailableError",
+            providerID: "other",
+            modelID: "hidden",
+          })
         }),
       ),
     ),

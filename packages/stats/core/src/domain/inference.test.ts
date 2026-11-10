@@ -41,6 +41,7 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("mimo-v2-omni")).toBe("xiaomi")
     expect(modelAuthor("minimax-m2.7")).toBe("minimax")
     expect(modelAuthor("muse-spark-1.2-contributor")).toBe("meta")
+    expect(modelAuthor("muse-ember-1.0")).toBe("meta")
     expect(modelAuthor("nemotron-3-super-free")).toBe("nvidia")
     expect(modelAuthor("qwen3.7-max")).toBe("qwen")
     expect(modelAuthor("alpha-gpt-next")).toBeUndefined()
@@ -153,6 +154,9 @@ describe("inference stat normalization", () => {
       },
     ])
     expect(toProviderAggregate(aggregate("ox-alpha", "unknown"))).toMatchObject([{ provider: "zhipu" }])
+    expect(statModel("crouton-alpha-free", "")).toBe("muse-ember-1.0")
+    expect(RETIRED_STAT_MODELS).toContain("crouton-alpha")
+    expect(statProvider("crouton-alpha-free", "", "unknown")).toBe("meta")
   })
 
   test("renames DeepSeek Flash to V4.1 without merging V4 or vision usage", () => {
@@ -307,7 +311,7 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
       expect(query).toContain(
-        "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
+        "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'union-alpha') THEN 'unknown'\n",
       )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
@@ -319,7 +323,9 @@ describe("inference stat normalization", () => {
     expect(queries[6]).toContain("'2026-08-12' AS period_key")
     expect(queries[0]).toContain('FROM "inference"."generation"')
     expect(queries[0]).toContain("event_type = 'generation.completed'")
-    expect(queries[0]).toContain("AND (product IN ('go', 'go-plus') OR (lower(COALESCE(model_tier, '')) = 'free'")
+    expect(queries[0]).toContain(
+      "AND (product IN ('go', 'go-plus', 'go-teams') OR (lower(COALESCE(model_tier, '')) = 'free'",
+    )
     expect(queries[0]).toContain("COALESCE(NULLIF(lower(model_tier), ''), '') AS raw_tier")
     expect(queries[0]).toContain("WHEN lower(COALESCE(raw_tier, '')) = 'free'")
     expect(queries[0]).toContain("regexp_replace(NULLIF(route_model, ''), '^.*/', '')")
@@ -365,6 +371,21 @@ describe("inference stat normalization", () => {
     expect(query).toContain("(source = 'inference' AND started_at >= '2026-08-11T10:57:48.186Z')")
   })
 
+  test("counts every Go product level, including Go Teams", () => {
+    const source = { namespace: "inference", table: "generation", dataset: "zen" }
+    const [query] = buildStatsQueries(
+      new Date("2026-08-11T00:00:00.000Z"),
+      new Date("2026-08-12T00:00:00.000Z"),
+      source,
+    )
+
+    expect(query).toContain("product IN ('go', 'go-plus', 'go-teams')")
+    expect(
+      buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-31T00:00:00.000Z"), source)[0]
+        ?.query,
+    ).toContain("AND product IN ('go', 'go-plus', 'go-teams')")
+  })
+
   test("builds complete week-over-week retention queries", () => {
     const queries = buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-31T00:00:00.000Z"), {
       namespace: "inference",
@@ -377,10 +398,10 @@ describe("inference stat normalization", () => {
       expect(query).toContain("= 'deepseek-flash' THEN 'deepseek-v4.1-flash'")
     })
     expect(queries.map((query) => query.cohortDates)).toEqual([["2026-08-10"], ["2026-08-17"]])
-    expect(queries[0]?.query).toContain("AND product IN ('go', 'go-plus')")
+    expect(queries[0]?.query).toContain("AND product IN ('go', 'go-plus', 'go-teams')")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")

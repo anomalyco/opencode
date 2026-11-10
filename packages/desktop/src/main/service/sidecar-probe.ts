@@ -26,8 +26,12 @@ export function startSidecarProbe() {
     .catch(() => undefined)
 }
 
-export async function sidecarProbe(file: string) {
-  const endpoint = await probe
+/** The probe's result, once: a later connect must not adopt a service that may have exited since boot. */
+export async function takeSidecarProbe(file: string) {
+  const result = probe
+  probe = undefined
+  const endpoint = await result
+
   return file === probeFile ? endpoint : undefined
 }
 

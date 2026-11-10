@@ -29,14 +29,15 @@ import { sseEvents } from "../lib/sse.js"
 const GRAMMAR = 'start: "ZZ" /[0-9]{3}/'
 
 const tools = (freeform?: Freeform) =>
-  toDefinitions({
-    run: tool({
+  toDefinitions([
+    tool({
+      name: "run",
       description: "Run code",
-      parameters: Schema.Struct({ code: Schema.String }),
+      input: Schema.Struct({ code: Schema.String }),
       success: Schema.String,
       freeform,
     }),
-  })
+  ])
 
 const lark = tools({ type: "lark", grammar: GRAMMAR })
 // The same tool without `freeform`, as a caller declares it for a model without custom tools.
@@ -298,10 +299,11 @@ describe("freeform tools", () => {
 
   it.effect("rejects freeform tools without exactly one required string parameter", () =>
     Effect.sync(() => {
-      const make = (parameters: Schema.Struct<Schema.Struct.Fields>) =>
+      const make = (fields: Schema.Struct<Schema.Struct.Fields>) =>
         tool({
+          name: "run",
           description: "Run code",
-          jsonSchema: Schema.toJsonSchemaDocument(parameters).schema,
+          input: Schema.toJsonSchemaDocument(fields).schema,
           freeform: { type: "text" },
         })
       expect(() => make(Schema.Struct({ code: Schema.Number }))).toThrow("exactly one parameter, a required string")
