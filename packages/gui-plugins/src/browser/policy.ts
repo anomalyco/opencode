@@ -42,10 +42,22 @@ export function fileURLWithin(input: string, roots: ReadonlyArray<string>) {
   })
 }
 
-export type Policy = { readonly fileRoots?: ReadonlyArray<string> }
+/** A page of one of the loaded extensions, such as its popup or options page. */
+export function extensionURL(input: string, extensions: ReadonlyArray<string>) {
+  if (!URL.canParse(input)) return false
+  const url = new URL(input)
+
+  return url.protocol === "chrome-extension:" && extensions.includes(url.hostname)
+}
+
+export type Policy = { readonly fileRoots?: ReadonlyArray<string>; readonly extensions?: ReadonlyArray<string> }
 
 export function allowedDestination(input: string, policy?: Policy) {
-  return !!destinationOrigin(input) || fileURLWithin(input, policy?.fileRoots ?? [])
+  return (
+    !!destinationOrigin(input) ||
+    fileURLWithin(input, policy?.fileRoots ?? []) ||
+    extensionURL(input, policy?.extensions ?? [])
+  )
 }
 
 export function normalizeURL(input: string, policy?: Policy) {

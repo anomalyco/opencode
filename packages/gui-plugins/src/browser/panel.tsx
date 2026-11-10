@@ -47,6 +47,7 @@ import {
   type OverlayEvent,
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
+import { BrowserProfile } from "./profile/ipc"
 import {
   initialSiteState,
   SITE_CLEAR_TIMEOUT_MS,
@@ -77,6 +78,13 @@ export default function SessionBrowserPane(props: {
   const failed = () => !!state()?.loadError
   const suspended = () => props.model.suspended(props.session)
   const command = (action: Browser.Action) => props.model.command(props.session, action)
+  const profile = plugin.use(BrowserProfile)
+
+  const extensions = () => {
+    const current = profile()
+
+    return current.status === "active" ? (current.value.state()?.extensions ?? []) : []
+  }
 
   const page = () => {
     const tab = state()
@@ -660,6 +668,53 @@ export default function SessionBrowserPane(props: {
               icon={<Icon name="outline-browser-annotate" />}
             />
           </Tooltip>
+          <Menu gutter={4} modal={false} placement="bottom-end">
+            <Tooltip placement="top" value={plugin.t("extensions.menu")}>
+              <Menu.Trigger
+                as={IconButton}
+                variant="ghost-muted"
+                size="large"
+                data-action="browser-extensions"
+                icon={<Icon name="extensions" />}
+                aria-label={plugin.t("extensions.menu")}
+              />
+            </Tooltip>
+            <Menu.Portal>
+              <Menu.Content class="w-[220px]">
+                {/* Extensions load into the profile, where pages of a server on this computer browse. */}
+                <Show
+                  when={props.session.server.local}
+                  fallback={<Menu.Item disabled>{plugin.t("extensions.remote")}</Menu.Item>}
+                >
+                  <For each={extensions()} fallback={<Menu.Item disabled>{plugin.t("extensions.none")}</Menu.Item>}>
+                    {(extension) => (
+                      <Menu.Item
+                        disabled={!extension.enabled || !(extension.popup ?? extension.options)}
+                        onSelect={() => {
+                          const page = extension.popup ?? extension.options
+
+                          if (page) props.model.openURL(props.session, page)
+                        }}
+                      >
+                        <Show
+                          when={extension.icon}
+                          fallback={<Icon name="extensions" class="text-v2-icon-icon-muted" />}
+                        >
+                          {(icon) => <img src={icon()} alt="" class="size-4 shrink-0" />}
+                        </Show>
+                        <span class="min-w-0 truncate">{extension.name}</span>
+                      </Menu.Item>
+                    )}
+                  </For>
+                </Show>
+                <Menu.Separator />
+                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>
+                  {plugin.t("extensions.manage")}
+                </Menu.Item>
+                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("signins.import")}</Menu.Item>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
           <Menu gutter={4} modal={false} placement="bottom-end">
             <Tooltip placement="top" value={plugin.t("options")}>
               <Menu.Trigger

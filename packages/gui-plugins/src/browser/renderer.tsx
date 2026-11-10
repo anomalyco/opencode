@@ -12,7 +12,7 @@ import {
   untrack,
 } from "solid-js"
 import { Button } from "@opencode/ui/button"
-import { Command, createKeyed, LinkHandler, MenuItem, Style, type Plugin } from "@opencode/plugin/gui"
+import { Command, createKeyed, LinkHandler, MenuItem, SettingsPage, Style, type Plugin } from "@opencode/plugin/gui"
 import { BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser } from "@opencode/plugin/gui/browser"
 import type definition from "./index"
@@ -250,6 +250,48 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     open(link) {
       if (link.session) model()?.reveal(link.session, link.href)
     },
+  })
+
+  // A web link the user clicked in a session opens beside it, in the profile where they are signed in. While the pane
+  // cannot open it, or the user turned this off, the link goes on to the system browser.
+  ctx.add(LinkHandler, {
+    priority: 5,
+    match: (link) =>
+      link.origin === undefined &&
+      /^https?:\/\//i.test(link.href) &&
+      ctx.stores.preferences.value.links &&
+      !!link.session &&
+      !!model()?.available(link.session),
+    open(link) {
+      if (link.session) model()?.openURL(link.session, link.href)
+    },
+  })
+
+  const SettingsView = lazy(() => import("./settings"))
+
+  ctx.add(SettingsPage, {
+    id: "browser",
+    icon: "globe",
+    get title() {
+      return ctx.t("settings.title")
+    },
+    get entries() {
+      return [
+        { id: "settings-browser-links", title: ctx.t("settings.links.title"), keywords: "links open system browser" },
+        { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out" },
+        {
+          id: "settings-browser-import",
+          title: ctx.t("settings.import.browser.title"),
+          keywords: "import cookies chrome edge firefox safari helium arc brave sign in",
+        },
+        { id: "settings-browser-extensions", title: ctx.t("settings.extensions.title"), keywords: "extensions" },
+      ]
+    },
+    render: () => (
+      <Suspense>
+        <SettingsView />
+      </Suspense>
+    ),
   })
 
   // Stable tab objects with live labels, so title and URL changes never remount a trigger.

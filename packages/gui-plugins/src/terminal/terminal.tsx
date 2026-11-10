@@ -156,6 +156,7 @@ export const Terminal = (props: TerminalProps) => {
   const appearance = plugin.appearance
   const keybinds = plugin.keybinds
   const system = plugin.system
+  const links = plugin.links
   const desktop = plugin.desktop
   const theme = useTheme()
   let container!: HTMLDivElement
@@ -320,6 +321,9 @@ export const Terminal = (props: TerminalProps) => {
 
     event.preventDefault()
     event.stopImmediatePropagation()
+
+    // A web link goes where the app's links go, such as the browser pane; anything else to the system.
+    if (/^https?:\/\//i.test(text) && links.open({ href: text, session: plugin.sessions.current() })) return
     system.openExternal(text)
   }
 

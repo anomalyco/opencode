@@ -106,3 +106,17 @@ test("a media URL whose viewer committed has loaded, while a download or network
   expect(committedLoad(refused, true)).toBe(false)
   expect(committedLoad(new Error("ERR_FAILED"), true)).toBe(false)
 })
+
+test("only the pages of a loaded extension open, so its popup and options can show in a tab", () => {
+  const extensions = ["nngceckbapebfimnlniiiahkandclblb"]
+
+  expect(
+    [
+      "chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html",
+      "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/popup.html",
+      "chrome://settings",
+    ].map((url) => allowedDestination(url, { extensions })),
+  ).toEqual([true, false, false])
+  expect(allowedDestination("chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html")).toBe(false)
+  expect(refusal("chrome-extension://nngceckbapebfimnlniiiahkandclblb/options.html", { extensions })).toBeUndefined()
+})

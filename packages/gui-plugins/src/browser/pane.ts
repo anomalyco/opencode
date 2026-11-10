@@ -9,8 +9,9 @@ import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
-import { createBrowserNetwork, type BrowserNetwork } from "./network"
+import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
+import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
 import {
@@ -44,6 +45,8 @@ type Handle = {
   window: number
   win: BrowserWindow
   partition: string
+  /** The pages browse in the desktop profile itself, with this machine's network; else in a linked partition. */
+  shared: boolean
   abort: AbortController
   registered: ReturnType<typeof Promise.withResolvers<void>>
   cleanup: () => void
@@ -68,10 +71,14 @@ export function createBrowserPane(input: {
   /** The declared store of reserved element refs. */
   readonly refs: Persisted<number, number>
   readonly embeds: Embeds
+  /** The desktop browser's one profile: cookies, site data and extensions for every session. */
+  readonly profile: Profile
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
+  // Each page of the profile's partition may load file: subresources inside its own session's workspace only.
+  const fileGrants = new WeakMap<BrowserPage, () => void>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
@@ -96,15 +103,19 @@ export function createBrowserPane(input: {
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
-      const partition = `opencode-browser-${crypto.randomUUID()}`
+      // A server on this machine reaches the same network as this desktop, so its pages browse in the profile. Another
+      // server's pages need its network through a proxy, which Chromium sets per partition.
+      const shared = server.sameMachine
+      const partition = shared ? input.profile.partition : `opencode-browser-${crypto.randomUUID()}`
 
       // Navigation guards cover documents; subresources (img, script, fetch) also must not read
       // file: URLs outside the roots. One listener per partition covers every page in this attachment.
-      electron.session
-        .fromPartition(partition)
-        .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
-          callback({ cancel: !fileURLWithin(details.url, selectFileRoots(machine.state, binding)) }),
-        )
+      if (!shared)
+        electron.session
+          .fromPartition(partition)
+          .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
+            callback({ cancel: !fileURLWithin(details.url, selectFileRoots(machine.state, binding)) }),
+          )
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
 
@@ -119,6 +130,7 @@ export function createBrowserPane(input: {
         window,
         win,
         partition,
+        shared,
         abort: new AbortController(),
         registered: Promise.withResolvers(),
         cleanup: () => {
@@ -167,7 +179,18 @@ export function createBrowserPane(input: {
 
             const attachment = { sessionID, connectionID: crypto.randomUUID() }
             const rpc = client.rpc(Browser.Definition)
-            handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
+
+            if (shared) handle.network = createDirectNetwork(input.profile.session)
+
+            if (!shared) {
+              handle.network = yield* createBrowserNetwork({ rpc, attachment, location: options.location, partition })
+              // Sign-ins carry over both ways, so a page of a remote server is signed in where the profile is.
+              yield* Effect.acquireRelease(
+                Effect.promise(() => input.profile.link(electron.session.fromPartition(partition))),
+                (unlink) => Effect.sync(unlink),
+              )
+            }
+
             const connected = yield* Deferred.make<void>()
             const outbound = yield* Queue.unbounded<Effect.Effect<void>>()
 
@@ -335,7 +358,9 @@ export function createBrowserPane(input: {
 
       // The window explains a refused address by its code; the agent's commands get main's own message instead.
       const reason =
-        url === undefined ? undefined : refusal(url, { fileRoots: selectFileRoots(machine.state, binding) })
+        url === undefined
+          ? undefined
+          : refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding) })
 
       if (reason) throw new Error(reason)
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
@@ -428,7 +453,13 @@ export function createBrowserPane(input: {
     input.emit(handle.window, { binding, event })
   }
 
+  /** Extensions whose pages may open in the binding's tabs: the profile's, which only the profile partition loads. */
+  function extensions(binding: string) {
+    return handles.get(binding)?.shared ? input.profile.extensionIDs() : []
+  }
+
   function release(page: BrowserPage) {
+    fileGrants.get(page)?.()
     const done = page.dispose()
     const settled = done.catch(() => undefined)
     disposals.set(page, done)
@@ -511,6 +542,7 @@ export function createBrowserPane(input: {
       restore: options.restore,
       popupOptions: options.popupOptions,
       fileRoots: () => selectFileRoots(machine.state, binding),
+      extensions: () => extensions(binding),
       shared,
       embeds: input.embeds,
       fail,
@@ -545,6 +577,11 @@ export function createBrowserPane(input: {
       },
     })
 
+    if (handle.shared)
+      fileGrants.set(
+        page,
+        input.profile.allowFiles(page.contents.id, () => selectFileRoots(machine.state, binding)),
+      )
     handle.pages.set(attempt, page)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.

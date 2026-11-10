@@ -42,6 +42,7 @@ import {
   allowedDestination,
   committedLoad,
   destinationOrigin,
+  extensionURL,
   fileURLWithin,
   localFileURL,
   normalizeURL,
@@ -201,6 +202,8 @@ export function createBrowserPage(
     popupOptions?: Electron.BrowserWindowConstructorOptions
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
+    /** Extensions whose `chrome-extension://` pages may open, such as their popups and options. */
+    extensions?: () => ReadonlyArray<string>
     shared: Shared
     embeds: Embeds
   },
@@ -208,6 +211,9 @@ export function createBrowserPage(
   const policy: Policy = {
     get fileRoots() {
       return options.fileRoots?.() ?? []
+    },
+    get extensions() {
+      return options.extensions?.() ?? []
     },
   }
 
@@ -446,7 +452,7 @@ export function createBrowserPage(
   contents.on("will-redirect", guard)
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
   contents.setWindowOpenHandler(({ url, disposition }) =>
-    url === "about:blank" || destinationOrigin(url)
+    url === "about:blank" || destinationOrigin(url) || extensionURL(url, policy.extensions ?? [])
       ? {
           action: "allow",
           outlivesOpener: true,
