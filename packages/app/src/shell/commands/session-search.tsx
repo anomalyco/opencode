@@ -50,6 +50,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
       recentCategory: () =>
         language.t(props.archived ? "sidebar.inbox.archived.title" : "palette.group.recentSessions"),
       recentLimit: RECENT_LIMIT,
+      waitForRecentSnapshot: true,
     })
 
     const tag = registry.tag(conn)

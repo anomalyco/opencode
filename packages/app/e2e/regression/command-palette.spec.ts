@@ -308,7 +308,8 @@ test("titlebar search opens recent sessions in the server's order on every open"
   }
 
   const mock = await openPaletteWorkspace(page, true, [busy, fresh])
-  // A step starts after Home loaded its index, so the server now lists the busy session first.
+  // A step does not promote a session live, so Home keeps its loaded order. The server already lists the busy session
+  // first, and search shows that order on every open.
   busy.time.updated = 1700000002000
   // SAFETY: a step in a session whose transcript is not open; only its session ID and time matter here.
   await mock.push([
@@ -328,7 +329,7 @@ test("titlebar search opens recent sessions in the server's order on every open"
     } as OpenCodeEvent,
   ])
   const home = page.getByRole("region", { name: "Recent sessions" }).getByRole("button", { name: /fixture session/ })
-  await expect(home).toHaveText([/Palette fixture session/, /Fresh fixture session/])
+  await expect(home).toHaveText([/Fresh fixture session/, /Palette fixture session/])
 
   await page.evaluate(() => {
     const seen: string[][] = []

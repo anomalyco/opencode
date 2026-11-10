@@ -279,6 +279,8 @@ export function createServerSessionEntries(props: {
   category: () => string
   recentCategory: () => string
   recentLimit?: number
+  /** Shows no recent rows until the first server list settles, so they open in the server's order. */
+  waitForRecentSnapshot?: boolean
 }) {
   const [sourceState, setSourceState] = createSignal(INITIAL_SESSION_SOURCE_STATE)
 
@@ -433,7 +435,18 @@ export function createServerSessionEntries(props: {
     items(text: string) {
       const search = text.trim()
 
-      if (!search) return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
+      if (!search) {
+        // Cached lists only learn a step's newer time on refresh, so the first paint waits for this open's own list.
+        // Once it lands, `known` merges it and later empty queries can show the merged order at once.
+        const source = sourceState()
+
+        const first =
+          source.status === "idle" ? source.issued === 0 : source.status !== "disposed" && source.attempt === 1
+
+        if (props.waitForRecentSnapshot && first) return []
+
+        return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
+      }
 
       // The server matches titles, so narrow the loaded sessions before building entries for them. Building an entry
       // per known session on every keystroke is what made search slow once the loaded index grew.
