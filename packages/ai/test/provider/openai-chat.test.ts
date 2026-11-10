@@ -1264,6 +1264,46 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("adds the provider's bill to a bring-your-own-key call, and only then", () =>
+    Effect.gen(function* () {
+      const costOf = (usage: object) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }, "stop"), usageChunk(usage)))),
+          Effect.map((response) => response.usage?.cost),
+        )
+
+      // BYOK: `cost` is OpenRouter's gateway fee, `cost_details.upstream_inference_cost` the provider's bill.
+      expect(
+        yield* costOf({
+          prompt_tokens: 5,
+          completion_tokens: 2,
+          cost: 0.0001,
+          is_byok: true,
+          cost_details: { upstream_inference_cost: 0.0446 },
+        }),
+      ).toBeCloseTo(0.0447, 6)
+
+      // Not BYOK: the upstream figure is informational, adding it would bill the call twice.
+      expect(
+        yield* costOf({
+          prompt_tokens: 5,
+          completion_tokens: 2,
+          cost: 0.0447,
+          is_byok: false,
+          cost_details: { upstream_inference_cost: 0.0446 },
+        }),
+      ).toBeCloseTo(0.0447, 6)
+
+      // A BYOK call with no upstream figure keeps the gateway fee it reported.
+      expect(
+        yield* costOf({ prompt_tokens: 5, completion_tokens: 2, cost: 0.0001, is_byok: true, cost_details: null }),
+      ).toBeCloseTo(0.0001, 6)
+
+      // A BYOK call that reports no bill at all leaves the cost to catalog pricing.
+      expect(yield* costOf({ prompt_tokens: 5, completion_tokens: 2, cost: 0, is_byok: true })).toBeUndefined()
+    }),
+  )
+
   it.effect("reads top-level reasoning tokens whether or not completion tokens include them", () =>
     Effect.gen(function* () {
       const generate = (usage: object) =>

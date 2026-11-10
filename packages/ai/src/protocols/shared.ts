@@ -49,9 +49,15 @@ export const lenient = <const S extends Schema.Top>(schema: S) =>
 /** A billed amount in USD; a malformed or negative one decodes as absent. */
 const billedAmount = lenient(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)))
 
-/** Billing an endpoint reports beside its token usage: `cost` is the USD it charged (OpenRouter, LiteLLM, OpenCode Zen). */
+/**
+ * Billing an endpoint reports beside its token usage: `cost` is the USD it charged (OpenRouter, LiteLLM, OpenCode Zen).
+ * On a bring-your-own-key OpenRouter call `cost` is only the gateway fee, and the provider's own bill rides in
+ * `cost_details.upstream_inference_cost`; `is_byok` says whether to add it.
+ */
 export const ReportedBilling = Schema.Struct({
   cost: billedAmount,
+  is_byok: lenient(Schema.Boolean),
+  cost_details: lenient(Schema.Struct({ upstream_inference_cost: billedAmount })),
 })
 
 /**
@@ -68,8 +74,18 @@ const decodeCopilotBilling = Schema.decodeUnknownOption(CopilotBilling)
  * Copilot's billing from the frames that carry the usage.
  */
 export const reportedBilling = (usage: unknown, ...frames: ReadonlyArray<unknown>) => {
-  const reported = Option.getOrUndefined(Schema.decodeUnknownOption(ReportedBilling)(usage))?.cost
-  if (reported !== undefined) return { cost: reported }
+  const billing = Option.getOrUndefined(Schema.decodeUnknownOption(ReportedBilling)(usage))
+  if (billing?.cost !== undefined) {
+    // BYOK: `cost` is only OpenRouter's gateway fee, never the provider's bill, which rides in `cost_details`.
+    // Outside BYOK the upstream figure is informational, and adding it would bill the call twice.
+    const upstream = billing.is_byok ? (billing.cost_details?.upstream_inference_cost ?? 0) : 0
+    const total = billing.cost + upstream
+    if (total > 0) return { cost: total }
+    // A BYOK call that reports no bill at all says nothing about what the provider charged: leave the cost out so
+    // catalog pricing applies. Any other reported zero stays authoritative.
+    if (billing.is_byok) return {}
+    return { cost: total }
+  }
   const nanoAiu = frames
     .map((frame) => Option.getOrUndefined(decodeCopilotBilling(frame))?.copilot_usage.total_nano_aiu)
     .find((value) => value !== undefined)
