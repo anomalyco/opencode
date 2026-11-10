@@ -35,8 +35,13 @@ export function SidebarViewMenu(props: {
   const options = (kind: SidebarFilterKind) => filterOptions(kind, props, language.t)
   const active = () => filterCount(props.state)
 
-  // A server filter only narrows anything once more than one server is connected.
-  const filterKinds = () => FILTER_KINDS.filter((kind) => kind !== "server" || props.servers.length > 1)
+  // Server grouping and the server filter only separate anything once there is more than one server.
+  const multiServer = () => props.servers.length > 1
+
+  const filterKinds = () => FILTER_KINDS.filter((kind) => kind !== "server" || multiServer())
+
+  const groupings = () =>
+    SIDEBAR_GROUPINGS.filter((value) => multiServer() || (value !== "server" && value !== "server-project"))
 
   // Kobalte closes a submenu only when focus leaves it, and hovering a sibling trigger keeps focus in the parent
   // menu, so without this every submenu hovered stays open on top of the next.
@@ -88,7 +93,7 @@ export function SidebarViewMenu(props: {
                     if (next) props.onGrouping(next)
                   }}
                 >
-                  <For each={SIDEBAR_GROUPINGS}>
+                  <For each={groupings()}>
                     {(value) => (
                       <Menu.RadioItem value={value}>{language.t(`sidebar.view.grouping.${value}`)}</Menu.RadioItem>
                     )}

@@ -139,8 +139,14 @@ export function SidebarCustomized(props: {
     }),
   }))
 
+  // Server groupings only separate anything once a second server is added; the saved choice returns with it.
+  const grouping = () =>
+    global.servers.list().length > 1 || (view.grouping !== "server" && view.grouping !== "server-project")
+      ? view.grouping
+      : "project"
+
   const state = (): SidebarViewState => ({
-    grouping: view.grouping,
+    grouping: grouping(),
     ordering: view.ordering,
     show: view.show,
     filters: local.filters,
