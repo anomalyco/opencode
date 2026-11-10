@@ -89,7 +89,8 @@ const queued = {
   payload: { text: "Queued", files: [inline(imageBase64, "image/png", "queued.png")] },
 }
 // The transcript shows the user's video, the named video, the tool's first three files, and the generated image. The
-// viewer's gallery adds the tool's other three, and leaves out the reverted and queued messages' images.
+// viewer shows each file once: the tool's files repeat one image and the user's video, so it holds the video, the named
+// video, the image and the generated image, and leaves out the reverted and queued messages' images.
 const transcriptTiles = { videos: 3, images: 3 }
 
 type Stashed = { text: string; files: PromptFile[] }
@@ -198,10 +199,10 @@ async function openNamedVideo(app: App, name: string) {
     .filter((tile) => tile.y > y)
     .toSorted((a, b) => a.y - b.y)[0]!
   await app.mockMouse.click(tile.x + 1, tile.y + 1)
-  const header = await app.waitForFrame((frame) => frame.includes("2 / 9"))
+  const header = await app.waitForFrame((frame) => frame.includes("2 / 4"))
   expect(header.split("\n")[0]).toContain(name)
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("2 / 9"))
+  await app.waitForFrame((frame) => !frame.includes("2 / 4"))
 }
 
 test("against a remote server, media shows as tiles that open the viewer, and a pasted video drafts as its path", async () => {
@@ -222,20 +223,22 @@ test("against a remote server, media shows as tiles that open the viewer, and a 
   await openNamedVideo(app, "demo.mp4")
   expect(app.listed).toEqual(["out"])
 
-  // "+3 more" opens the first hidden tool file. The open viewer keeps keys from the prompt.
+  // "+3 more" opens the first hidden tool file, which is the user's video again, where it first appears. The open
+  // viewer keeps keys from the prompt.
   await app.click("+3 more")
-  await app.waitForFrame((frame) => frame.includes("6 / 9"))
+  const repeated = await app.waitForFrame((frame) => frame.includes("1 / 4"))
+  expect(repeated.split("\n")[0]).toContain("clip.mp4")
   await app.mockInput.typeText("abc")
   expect(app.composer()).toBe("")
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("6 / 9"))
+  await app.waitForFrame((frame) => !frame.includes("1 / 4"))
 
   // The palette opens it at the newest item. The palette gives focus back on a timer, which the prompt must refuse.
   await app.palette("View media")
-  await app.waitForFrame((frame) => frame.includes("9 / 9"))
+  await app.waitForFrame((frame) => frame.includes("4 / 4"))
   expect(app.textarea()?.focusable).toBe(false)
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("9 / 9"))
+  await app.waitForFrame((frame) => !frame.includes("4 / 4"))
 
   // The draft plays the pasted file itself, which pasting did not read, and attaching an image keeps its tile.
   app.mockInput.pasteBracketedText(videoFixture)
