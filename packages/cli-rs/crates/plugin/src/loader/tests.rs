@@ -279,6 +279,10 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
     assert_eq!(local_source("/abs/x", dir), Some("/abs/x".into()));
     assert_eq!(local_source("file:///abs/y.wasm", dir), Some("/abs/y.wasm".into()));
     assert_eq!(local_source("@acme/opencode-tui", dir), None);
+    // Expected (r2 review, bigboi-ui-8 and carbon-ui-8): a file URL means what `fileURLToPath(new URL(spec))` says.
+    assert_eq!(local_source("file:///a/My%20Plugin", dir), Some("/a/My Plugin".into()));
+    assert_eq!(local_source("file://localhost/a/b", dir), Some("/a/b".into()));
+    assert_eq!(local_source("file:///a/b/../c", dir), Some("/a/c".into()));
 }
 
 #[test]

@@ -786,6 +786,7 @@ name = "opencode-plugin"
 version = "0.1.0"
 dependencies = [
  "log",
+ "opencode-api-types",
  "opencode-latex",
  "opencode-mermaid",
  "opencode-plugin-abi",

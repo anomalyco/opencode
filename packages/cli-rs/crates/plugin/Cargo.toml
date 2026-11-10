@@ -19,6 +19,7 @@ opencode-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-width.workspace = true
+opencode-api-types.workspace = true
 
 [dev-dependencies]
 opencode-util.workspace = true

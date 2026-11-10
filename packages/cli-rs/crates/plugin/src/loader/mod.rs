@@ -374,14 +374,15 @@ pub fn discover(directories: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 /// The local path a `plugins` target names (TS `localSource`): a `file://` URL, or a `./`, `../`, or absolute
-/// path resolved against `directory`. A package name is not local.
+/// path resolved against `directory`. A package name is not local. A URL decodes as TS `fileURLToPath` does; one
+/// that names no local file (a remote host) is not local.
 pub fn local_source(target: &str, directory: &Path) -> Option<PathBuf> {
-    let path = match target.strip_prefix("file://") {
-        Some(path) => PathBuf::from(path),
-        None if target.starts_with("./") || target.starts_with("../") || Path::new(target).is_absolute() => {
-            directory.join(target)
-        }
-        None => return None,
+    let path = if target.starts_with("file://") {
+        opencode_api_types::js::parse_url(target).ok()?.to_file_path().ok()?
+    } else if target.starts_with("./") || target.starts_with("../") || Path::new(target).is_absolute() {
+        directory.join(target)
+    } else {
+        return None;
     };
     let mut resolved = PathBuf::new();
     for component in path.components() {
