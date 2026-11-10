@@ -299,11 +299,12 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
             if session.as_ref().is_some_and(|info| info.revert.is_some()) {
                 let client = tui.data.client().clone();
                 let input = SessionRevertCommitInput { session_id: target.clone() };
-                let weak = prompt.this.clone();
+                // The send follows the TUI, not this composer: leaving the session must not drop it.
+                let (owner, weak) = (tui.weak(), prompt.this.clone());
                 tui.app.spawn(
                     async move { client.session_revert_commit(&input).await.map_err(Error::new) },
                     move |_, result| {
-                        let Some(tui) = weak.upgrade().and_then(|prompt| prompt.tui.upgrade()) else {
+                        let Some(tui) = owner.upgrade() else {
                             return;
                         };
                         match result {
