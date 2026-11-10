@@ -14,8 +14,8 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { compareSessionTime } from "@/shell/layout/helpers"
-import { mergeHomeSessionIndex } from "@/home/sessions/index"
-import { homeSessionsQuery } from "@/home/sessions/queries"
+import { mergeSessionIndex } from "@/runtime/server/session-index"
+import { sessionIndexQuery } from "@/runtime/server/session-queries"
 import { listClosedTabs, type ClosedTab } from "@/shell/tabs/closed"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { sessionTabTitle } from "./tab-title"
@@ -56,7 +56,7 @@ export function RecentlyClosedTabsMenu(props: {
       const ctx = global.serverCtx(ServerConnection.key(conn))
 
       return {
-        ...homeSessionsQuery(conn, ctx),
+        ...sessionIndexQuery(conn, ctx),
         enabled: state.open && recent().length < 10 && ctx?.sdk.connection.status() === "connected",
       }
     }),
@@ -74,7 +74,7 @@ export function RecentlyClosedTabsMenu(props: {
         if (!ctx) return []
 
         return ctx.data.session
-          .apply(mergeHomeSessionIndex(sessions[index]?.data?.() ?? [], ctx.data.session.list()))
+          .apply(mergeSessionIndex(sessions[index]?.data?.() ?? [], ctx.data.session.list()))
           .filter((session) => !sessionIDHasOpenTab(tabs.store, server, session.id))
           .filter(
             (session) => !recent().some((entry) => entry.tab.server === server && entry.tab.sessionId === session.id),

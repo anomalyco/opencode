@@ -13,7 +13,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { displayName } from "@opencode/ui/project-avatar"
-import { homeSessionsQuery } from "@/home/sessions/queries"
+import { sessionIndexQuery } from "@/runtime/server/session-queries"
 import { createProjectActions } from "@/home/projects/actions"
 import { ProjectMenuItems } from "@/home/projects/menu"
 import { buildHomeSessionRecords } from "@/home/sessions/records"
@@ -229,7 +229,7 @@ function ProjectList(props: {
   })
 
   const sessions = useQuery(() => ({
-    ...homeSessionsQuery(connection(), ctx()),
+    ...sessionIndexQuery(connection(), ctx()),
     enabled: ctx()?.sdk.connection.status() === "connected",
   }))
 

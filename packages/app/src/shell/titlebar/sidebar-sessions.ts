@@ -1,6 +1,6 @@
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { mergeHomeSessionIndex } from "@/home/sessions/index"
+import { mergeSessionIndex } from "@/runtime/server/session-index"
 
 const activityTypes = [
   "session.inbox.enqueued",
@@ -50,7 +50,7 @@ export function mergeSidebarSessions(
 ) {
   const timestamps = new Map(indexed.map((session) => [session.id, session.time.updated]))
 
-  return mergeHomeSessionIndex(
+  return mergeSessionIndex(
     indexed,
     known.map((session) => {
       const updated = timestamps.get(session.id)
