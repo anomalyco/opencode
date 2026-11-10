@@ -853,8 +853,11 @@ impl Viewer {
 
     /// Whether `file` is marked reviewed.
     pub fn is_reviewed(&self, file: usize) -> bool {
-        let files = self.files();
-        files.get(file).is_some_and(|file| self.state.borrow().reviewed.contains(&file.file))
+        let state = self.state.borrow();
+        match &state.load {
+            Load::Ready { files, .. } => files.get(file).is_some_and(|file| state.reviewed.contains(&file.file)),
+            _ => false,
+        }
     }
 
     /// `scrollToPatchFileIndexAfterRender`.

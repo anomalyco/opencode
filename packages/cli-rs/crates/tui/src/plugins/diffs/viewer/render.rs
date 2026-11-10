@@ -159,8 +159,15 @@ impl Viewer {
                 crate::plugins::diffs::sources::open(&viewer);
             }
         });
-        let files = self.files();
-        let reviewed = (0..files.len()).filter(|&file| self.is_reviewed(file)).count();
+        let (reviewed, total) = {
+            let state = self.state.borrow();
+            match &state.load {
+                Load::Ready { files, .. } => {
+                    (files.iter().filter(|file| state.reviewed.contains(&file.file)).count(), files.len())
+                }
+                _ => (0, 0),
+            }
+        };
         View::new(app)
             .row()
             .gap(1)
@@ -171,7 +178,7 @@ impl Viewer {
             .height(if docked { 2 } else { 1 })
             .child(&switch)
             .child(
-                &Text::new(app, format!("{reviewed}/{}", files.len()))
+                &Text::new(app, format!("{reviewed}/{total}"))
                     .fg(theme.text.muted)
                     .wrap(WrapMode::None)
                     .shrink(0.0),
