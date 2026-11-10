@@ -437,7 +437,7 @@ test("customized vertical sidebar merges a project across servers and narrows it
 
   const titles = sidebar.locator("[data-titlebar-tab-slot] [data-titlebar-tab-title]")
 
-  await expect(groups).toHaveText([/shared\s*2/])
+  await expect(groups).toHaveText([/shared$/])
   await expect(titles).toHaveText([local.title, remote.title])
   // Only the tab from the other machine names its server.
   await expect(sidebar.locator('[data-slot="tab-label"]')).toHaveCount(1)
@@ -448,6 +448,8 @@ test("customized vertical sidebar merges a project across servers and narrows it
 
   await header.click()
   await expect(header).toHaveAttribute("aria-expanded", "false")
+  // Only a collapsed group counts its open tabs.
+  await expect(groups).toHaveText([/shared\s*2$/])
   await expect(titles).toHaveText([local.title])
   await expect(sidebar.getByRole("button", { name: recent.title })).toHaveCount(0)
   await header.click()

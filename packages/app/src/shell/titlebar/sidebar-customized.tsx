@@ -551,23 +551,31 @@ export function SidebarCustomized(props: {
           <span class="min-w-0 flex-1 truncate" dir="auto">
             {label()}
           </span>
-          <Show when={group().open > 0}>
-            <span class="shrink-0 text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint">
+        </button>
+        {/* Shares the column of the Sessions "+": a collapsed group's open count, swapped for new session on hover. */}
+        <span class="relative flex size-5 shrink-0 items-center justify-center">
+          <Show when={group().collapsed && group().open > 0}>
+            <span
+              class="text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
+              classList={{
+                "group-hover/sidebar-group:invisible group-has-[:focus-visible]/sidebar-group:invisible": !!project(),
+              }}
+            >
               {group().open}
             </span>
           </Show>
-        </button>
-        <Show when={project()}>
-          <span class="hover-reveal flex shrink-0 items-center group-hover/sidebar-group:opacity-100 focus-within:opacity-100">
-            <IconButton
-              icon={<Icon name="edit" />}
-              variant="ghost-muted"
-              size="small"
-              aria-label={language.t("command.session.new")}
-              onClick={newSession}
-            />
-          </span>
-        </Show>
+          <Show when={project()}>
+            <span class="hover-reveal absolute inset-0 flex items-center justify-center group-hover/sidebar-group:opacity-100 focus-within:opacity-100">
+              <IconButton
+                icon={<Icon name="edit" />}
+                variant="ghost-muted"
+                size="small"
+                aria-label={language.t("command.session.new")}
+                onClick={newSession}
+              />
+            </span>
+          </Show>
+        </span>
       </div>
     )
   }
