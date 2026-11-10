@@ -28,11 +28,11 @@ export const latestDocs: DocsSet = {
   files: ["_build", "assets", "pagefind", "favicon.svg", "llms.txt", "sitemap.xml", "openapi.json"],
 }
 
-// The V1 docs, in their Starlight app's MDX (vite.ts reads its syntax) until that app is retired.
+// The V1 docs, in their Starlight app's MDX (vite.ts reads its syntax).
 export const v1Docs: DocsSet = {
   id: "v1",
   base: "/v1/docs/",
-  content: "packages/web/src/content/docs",
+  content: "services/site/src/docs/v1/content",
   files: ["assets", "pagefind", "llms.txt", "theme.json"],
   locales: [
     "ar",

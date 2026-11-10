@@ -8,6 +8,8 @@ run-name: "${{ format('release {0}{1}', inputs.bump, inputs.version) }}"
 # - sign-* and publish-* jobs read their secrets from AWS Secrets Manager: they assume
 #   arn:aws:iam::604439173067:role/github/opencode-release over GitHub OIDC in the release environment. The Azure
 #   trusted signing ids are repository variables.
+# - publish-cli and publish-desktop upload to R2 with a 30-minute token minted by the token issuer from that role
+#   (.github/release/cloudflare-token.sh), not with a long-lived Cloudflare token from Secrets Manager.
 # - plan decides version, channel and npm dist-tag from the event, inputs and ref; only a dispatch with a bump or
 #   version on dev reaches latest.
 # .github/release/ and this file are the security boundary for releases.
@@ -649,16 +651,17 @@ jobs:
           role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
-      - name: Read publish secrets
+      - name: Cloudflare token
+        id: cloudflare-token
         if: needs.plan.outputs.dry_run != 'true'
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: CLOUDFLARE_API_TOKEN,opencode/release/CLOUDFLARE_API_TOKEN
-          parse-json-secrets: false
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
       - name: Publish
         run: bash .github/release/publish-cli.sh "$RUNNER_TEMP/in/build-archives" "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/sign-windows"
         env: &cloudflare
           CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
 
   publish-desktop:
     needs: [plan, sign-macos, sign-desktop-windows-installer]
@@ -683,12 +686,12 @@ jobs:
           role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
-      - name: Read publish secrets
+      - name: Cloudflare token
+        id: cloudflare-token
         if: needs.plan.outputs.dry_run != 'true'
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: CLOUDFLARE_API_TOKEN,opencode/release/CLOUDFLARE_API_TOKEN
-          parse-json-secrets: false
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
       - name: Publish
         run: |
           bash .github/release/publish-desktop.sh "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/sign-desktop-windows-installer" \

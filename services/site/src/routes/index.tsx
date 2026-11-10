@@ -33,6 +33,7 @@ import {
   ProductCarouselSkeleton,
   useDevicePlatform,
 } from "~/component/site/products"
+import ProductsArrows from "~/component/site/products-arrows"
 import { ProviderLogos } from "~/component/site/provider-logos"
 import { PhoneFeatures } from "~/component/site/phone-features"
 import { byos } from "~/lib/byos"
@@ -302,6 +303,8 @@ export default function Home() {
             <InstallRow />
           </Show>
         }
+        // A mouse wheel can't scroll the cards sideways, so a fine pointer gets arrows.
+        arrows={<ProductsArrows track="products-track" />}
       />
       {/* Before first paint: where the carousel's cards (or its skeleton's) start on the page, so on
           phones a card runs down to the bottom of the small viewport (products.css) and never past

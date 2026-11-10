@@ -5,10 +5,11 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Tool } from "@opencode/schema/tool"
-import { Deferred, Effect, Schema, Scope } from "effect"
+import { Deferred, Effect, Option, Schema, Scope } from "effect"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
+import { Flag } from "../../flag.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
@@ -31,7 +32,7 @@ const OS =
       : process.platform === "linux"
         ? "Linux"
         : process.platform
-const description = (shell?: string) =>
+const description = (shell?: string, autoBackground = false) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
@@ -39,7 +40,9 @@ const description = (shell?: string) =>
     "Prefer dedicated tools over shell commands when possible.",
     "When output is large, the full result is saved to a file and a truncated preview is returned.",
     "Rely on automatic truncation unless filtering the output is more useful.",
-    "Commands accept an optional timeout, background commands have no timeout by default.",
+    autoBackground
+      ? "Commands still running after their timeout move to the background."
+      : "Commands accept an optional timeout, background commands have no timeout by default.",
     "Background commands return immediately, and you will be notified when they complete.",
   ].join(" ")
 
@@ -62,6 +65,7 @@ const StructuredOutput = Schema.Struct({
   exit: Schema.optionalKey(Schema.Number),
   signal: Schema.optionalKey(Schema.String),
   shellID: Schema.optionalKey(Schema.String),
+  pid: Schema.optionalKey(NonNegativeInt),
   truncated: Schema.Boolean,
   timeout: Schema.optionalKey(Schema.Boolean),
 })
@@ -87,13 +91,25 @@ const toolResult = (output: Output, timeout?: number) => {
       status: output.status,
       ...ShellResult.metadata(output),
       ...(output.shellID !== undefined ? { shellID: output.shellID } : {}),
+      ...(output.pid !== undefined ? { pid: output.pid } : {}),
     },
   }
 }
 
-const backgroundResult = (shellID: string, file: string) => ({
-  output: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${file}`,
-  shellID,
+const backgroundResult = (info: ShellResult.Result["info"], timeout?: number) => ({
+  output: [
+    `Command moved to the background (shell ID: ${info.id}).`,
+    ...(info.pid === undefined ? [] : [`PID: ${info.pid}`]),
+    `Output is streaming to: ${info.file}`,
+    ...(timeout === undefined
+      ? []
+      : [
+          "",
+          `The command did not finish within its timeout of ${timeout / 1_000} seconds and was moved to the background. Do not start another copy while it is running.`,
+        ]),
+  ].join("\n"),
+  shellID: info.id,
+  ...(info.pid === undefined ? {} : { pid: info.pid }),
   truncated: false,
   status: "running" as const,
 })
@@ -110,6 +126,7 @@ export const Plugin = {
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
+    const autoBackground = yield* Flag.enabled("shell_timeout_background")
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
@@ -180,7 +197,7 @@ export const Plugin = {
         editor.add({
           name,
           options: { codemode: false },
-          description: description(),
+          description: description(undefined, autoBackground),
           input: Input,
           output: Output,
           execute: (input, context) => {
@@ -202,6 +219,7 @@ export const Plugin = {
                     invocation.env.AI_AGENT ||= "opencode"
                     invocation.env.OPENCODE_SESSION_ID = context.sessionID
                     finalTimeout = yield* prepare(invocation, context)
+                    if (autoBackground) invocation.timeout = 0
                   }),
               )
               yield* context.progress({ shellID: info.id })
@@ -234,17 +252,34 @@ export const Plugin = {
               if (input.background === true) {
                 yield* jobs.background(job.id)
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                return backgroundResult(info.id, info.file)
+                return backgroundResult(info)
               }
 
-              const result = yield* jobs
-                .block({ id: job.id, sessionID: context.sessionID })
-                .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
+              const waiting = jobs.block({ id: job.id, sessionID: context.sessionID })
+              const result = yield* (
+                autoBackground && finalTimeout > 0
+                  ? waiting.pipe(
+                      Effect.timeoutOption(finalTimeout),
+                      Effect.flatMap((result) =>
+                        Option.isSome(result)
+                          ? Effect.succeed(result.value)
+                          : jobs
+                              .background(job.id)
+                              .pipe(
+                                Effect.map((info) =>
+                                  info ? { type: "backgrounded" as const, info, timedOut: true } : undefined,
+                                ),
+                              ),
+                      ),
+                    )
+                  : waiting
+              ).pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
                 yield* shell.timeout(info.id, 0)
+                const elapsed = "timedOut" in result ? finalTimeout : undefined
                 finalTimeout = 0
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                return backgroundResult(info.id, info.file)
+                return backgroundResult(info, elapsed)
               }
               if (result?.info.status === "error")
                 return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
@@ -271,7 +306,7 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        tool.description = description(ShellSelect.name(yield* compatibleShell))
+        tool.description = description(ShellSelect.name(yield* compatibleShell), autoBackground)
       })
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)

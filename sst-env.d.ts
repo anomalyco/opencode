@@ -20,10 +20,6 @@ declare module "sst" {
       "value": string
     }
     "Share": import("@cloudflare/workers-types").Service
-    "Web": {
-      "type": "sst.cloudflare.Astro"
-      "url": string
-    }
     "WebApp": {
       "type": "sst.cloudflare.StaticSite"
       "url": string

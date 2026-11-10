@@ -309,6 +309,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
       return (alternate ? queue.alternate() : queue.delivery()) ?? "steer"
     },
+    queueFirst: (inboxID) => options?.queue?.first(inboxID),
     notify: {
       missingSelection: () =>
         showToast({
@@ -553,6 +554,14 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
           // place; the alternate action sends it as a steer.
           if (queue?.editing()) {
             queue.confirmEdit(submitOptions?.alternate ? "steer" : "queue")
+
+            return
+          }
+
+          // With no draft to send, the explicit alternate shortcut acts on the next queued prompt.
+          // Plain Enter, touch's primary send and an empty shell composer still do nothing.
+          if (submitOptions?.alternate && mode() === "normal" && blank()) {
+            if (adapter.working() && submitView().canSubmit && prompt.context.items().length === 0) queue?.steerFirst()
 
             return
           }

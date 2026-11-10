@@ -39,12 +39,8 @@ const SidebarState = Persistence.struct({
   order: Persistence.record(Schema.mutable(Schema.Array(Schema.String))),
 })
 
-export function SidebarOrganized(props: {
-  currentTab: Tab | undefined
-  children: (highlightActive: Accessor<boolean>, onNavigate: () => void) => JSX.Element
-}) {
-  const language = useLanguage()
-
+/** Tracks session activity on every server, and keeps a preview tab once its session does something. */
+export function createSidebarActivityListener() {
   const tabs = useTabs()
 
   const global = useGlobal()
@@ -75,6 +71,19 @@ export function SidebarOrganized(props: {
       )
     })
   })
+
+  return activity
+}
+
+export function SidebarOrganized(props: {
+  currentTab: Tab | undefined
+  children: (highlightActive: Accessor<boolean>, onNavigate: () => void) => JSX.Element
+}) {
+  const language = useLanguage()
+
+  const tabs = useTabs()
+
+  const activity = createSidebarActivityListener()
 
   const [local, setLocal] = createStore<{
     projectSession: { server: ServerConnection.Key; sessionId: string } | undefined

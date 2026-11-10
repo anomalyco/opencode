@@ -203,7 +203,7 @@
   }
 }
 
-/* While any other menu, sheet or Contents menu is open (menu-open.ts), the Hex promo's orb fades out
+/* While any other menu, sheet or Contents menu is open (menu-watch.ts), the Hex promo's orb fades out
    and leaves the tab order (visibility), so it never covers the menu's items. */
 [data-component="voice-mode"][data-promo] [data-slot="orb"][data-shown] {
   transition:
