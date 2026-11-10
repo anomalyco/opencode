@@ -72,7 +72,8 @@ const SourceApi = Schema.Struct({
   base_url: Schema.optional(Schema.String),
   capabilities: Schema.optional(
     Schema.Struct({
-      tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.Unknown)) })),
+      // Format names this version doesn't know are skipped when the route is built.
+      tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.String)) })),
     }),
   ),
   sdk: Schema.optional(
