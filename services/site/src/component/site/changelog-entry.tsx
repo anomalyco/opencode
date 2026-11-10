@@ -33,6 +33,7 @@ import {
 } from "./settings"
 import { SettingsSelect, type SettingsSectionID } from "./site"
 import { SiteMenu } from "./site-menu"
+import { staticRender } from "~/lib/static-render"
 
 /** A changelog day as the site shows it, in UTC so it matches the day releases are grouped by. */
 export function formatDay(date: string, locale: string) {
@@ -626,10 +627,12 @@ function EntryVideo(props: { src: string; poster?: string; label: string; playin
         onPlay={() => setRunning(true)}
         onPause={() => setRunning(false)}
       />
+      {/* A static page's script (src/client/islands/changelog.ts) switches the label to data-pause as the video plays. */}
       <button
         type="button"
         data-slot="play"
         aria-label={running() ? i18n.t("changelog.media.pause") : i18n.t("changelog.media.play")}
+        data-pause={staticRender() ? i18n.t("changelog.media.pause") : undefined}
         onClick={() => {
           if (running()) {
             setStopped(true)

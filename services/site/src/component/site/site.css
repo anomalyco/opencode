@@ -845,6 +845,11 @@ html:has([data-site][data-theme="dark"]) {
       transform-origin: bottom var(--x-start, left);
       animation: menu-in 160ms var(--ease-out);
 
+      /* Closed: in the page (site-menu.tsx), but not shown. */
+      &[hidden] {
+        display: none;
+      }
+
       [data-slot="install"],
       [data-slot="store"],
       [data-slot="item"] {
@@ -1091,10 +1096,6 @@ html:has([data-site][data-theme="dark"]) {
       font-size: var(--fs-large);
 
       /* Draw the icon with two bars so the vertical one can collapse into a minus. */
-      svg {
-        display: none;
-      }
-
       &::before,
       &::after {
         content: "";

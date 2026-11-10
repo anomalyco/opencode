@@ -29,7 +29,12 @@ const englishFile = path.posix.join(root, "src/i18n/english.ts")
 // An import() of a module, with any spaces or comments (such as /* @vite-ignore */) inside.
 const dynamicImport = /\bimport\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'])([^"'`]+)\1\s*\)/g
 
-export function i18nSlices(): Plugin {
+/**
+ * `app: false` for the static pages' script (script/static-client.ts): no route list to check, and
+ * its first file must not bring the runtime, so a boundary's import() loads the runtime with import()
+ * too. The app loads the runtime up front anyway.
+ */
+export function i18nSlices(options: { app?: boolean } = {}): Plugin {
   let build = false
   let slices: Slices | undefined
   // Output file of each virtual module in the client build, by its id.
@@ -43,6 +48,12 @@ export function i18nSlices(): Plugin {
     return slices
   }
   const boundary = (id: string) => analyze().boundaries[slashes(id).split("?")[0]]
+  // A slice with no strings in any language, which the tables leave out.
+  const empty = (slice: string) =>
+    Object.values(analyze().locales).every((locale) => {
+      const payload = locale.slices[analyze().shared[slice]]
+      return !Object.keys(payload.dict).length && !Object.keys(payload.content).length
+    })
   const routes = () => Object.keys(analyze().boundaries).filter((file) => file.startsWith(`${root}src/routes/`))
   // The page routes whose import() in SolidStart's route list loads their slice (checked in generateBundle).
   const routed = new Set<string>()
@@ -88,15 +99,23 @@ export function i18nSlices(): Plugin {
       for (const match of code.matchAll(dynamicImport)) {
         const target = await this.resolve(match[2], id)
         const slice = target && boundary(target.id)
-        if (!target || !slice) continue
+        // A boundary without strings (the funnel's config) has nothing to wait for, but SolidStart's
+        // route list is checked below.
+        if (!target || !slice || (id !== "solid-start:routes" && empty(slice))) continue
         slices.set(match[0], slice)
         if (id === "solid-start:routes") routed.add(slashes(target.id).split("?")[0])
       }
       if (!slices.size) return
       return {
         code: [
-          `import { loadSlice as __i18nSlice } from ${JSON.stringify(runtime)};`,
-          "const __i18nWith = (module, slice) => Promise.all([module, __i18nSlice(slice).catch(() => {})]).then((loaded) => loaded[0]);",
+          ...(options.app === false
+            ? [
+                `const __i18nWith = (module, slice) => Promise.all([module, import(${JSON.stringify(runtime)}).then((i18n) => i18n.loadSlice(slice)).catch(() => {})]).then((loaded) => loaded[0]);`,
+              ]
+            : [
+                `import { loadSlice as __i18nSlice } from ${JSON.stringify(runtime)};`,
+                "const __i18nWith = (module, slice) => Promise.all([module, __i18nSlice(slice).catch(() => {})]).then((loaded) => loaded[0]);",
+              ]),
           code.replace(dynamicImport, (text) => (slices.has(text) ? `__i18nWith(${text}, ${JSON.stringify(slices.get(text))})` : text)),
         ].join("\n"),
         map: null,
@@ -106,7 +125,7 @@ export function i18nSlices(): Plugin {
       if (!client(this.environment)) return
       // A page route whose import() wasn't rewritten would run before its strings arrive: fail the
       // build instead (a change in how SolidStart writes its route list, for example).
-      const missed = routes().filter((file) => !routed.has(file))
+      const missed = options.app === false ? [] : routes().filter((file) => !routed.has(file))
       if (missed.length)
         throw new Error(`i18n-slices: SolidStart's route list doesn't load the strings of ${missed.join(", ")}`)
       for (const chunk of Object.values(bundle))

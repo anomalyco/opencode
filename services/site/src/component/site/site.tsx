@@ -6,7 +6,7 @@ import "./github-link.css"
 import "./tap-targets.css"
 import "./asset-buttons.css"
 import { Link, Meta } from "@solidjs/meta"
-import { A, createAsync, useLocation, useNavigate, usePreloadRoute } from "@solidjs/router"
+import { A, useLocation, useNavigate, usePreloadRoute } from "@solidjs/router"
 import {
   createEffect,
   createMemo,
@@ -36,6 +36,10 @@ import { strip } from "~/lib/language"
 import { brandAssets } from "~/lib/media"
 import { installConsoleStub } from "~/lib/console-stub"
 import { status, type ServiceStatus } from "~/lib/status"
+import { pageData } from "~/lib/page-data"
+import { staticRender } from "~/lib/static-render"
+import { staticPath, staticPaths } from "~/static/routes"
+import { clientStrings } from "~/client/strings"
 import { useViewportCover } from "~/lib/viewport"
 import { loadMarkdownPages, markdownKey, markdownPagesLoaded } from "./use-markdown"
 import type { MarkdownPages } from "./markdown-pages"
@@ -114,13 +118,16 @@ const SiteBanner =
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
 
 // Pages of this site that render client-side; everything else keeps a full page load. The docs
-// (/docs) are served separately, and /download redirects on the server.
+// (/docs) are served separately, /download redirects on the server, and the static pages
+// (static/routes.ts) never hydrate in production.
 const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?)?\/?$/
 function clientPage(pathname: string) {
-  return clientPages.test(strip(pathname))
+  const path = strip(pathname)
+  return clientPages.test(path) && (import.meta.env.DEV || !staticPath(path))
 }
 // The full page loads a link here can lead to on this domain (this site's other pages, in any
-// language, the docs and Stats), fetched once the pointer rests on the link so the page opens sooner.
+// language, the static ones among them, the docs and Stats), fetched once the pointer rests on the
+// link so the page opens sooner.
 // Only addresses that are safe to request ahead of time: never the Console or a download, and never a
 // language link (hreflang), whose page sets the language cookie. Browsers without Speculation Rules
 // ignore it.
@@ -136,6 +143,7 @@ const speculationRules = JSON.stringify({
               "{/:locale}?/:page(product|ide|mini|font)",
               "{/:locale}?/product/*",
               "{/:locale}?/extensions/*",
+              ...(import.meta.env.DEV ? [] : staticPaths.map((path) => `{/:locale}?${path}`)),
               "/docs{/*}?",
               "/data{/*}?",
             ],
@@ -376,7 +384,7 @@ export function Site(props: {
   const logoVariant = () => siteSettings.logo
   const popoverTheme = () => siteSettings.popover
   const statusPreview = () => (props.status ? "live" : siteSettings.status)
-  const liveStatus = props.status ?? createAsync(() => status())
+  const liveStatus = props.status ?? pageData(() => status())
   const statusBars = () => {
     const preview = statusPreview()
     if (preview !== "live") return statusSamples[preview]
@@ -1236,6 +1244,13 @@ export function Site(props: {
       }
       data-site
       data-page={props.page}
+      // The static pages' script shows these in the page's language (src/client/dom.ts). Server only,
+      // so the browser's build leaves the list out.
+      data-strings={
+        import.meta.env.SSR && staticRender()
+          ? JSON.stringify(Object.fromEntries(clientStrings.map((key) => [key, i18n.t(key)])))
+          : undefined
+      }
       data-theme={theme()}
       data-popover={popoverTheme()}
       data-letters-bar={lettersBarShown() && lettersBarInView() ? "" : undefined}

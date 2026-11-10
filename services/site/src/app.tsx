@@ -1,7 +1,7 @@
 import { Link, Title, Meta } from "@solidjs/meta"
 import { Router, useBeforeLeave, useCurrentMatches, useIsRouting, useLocation } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
-import { createEffect, Show, Suspense } from "solid-js"
+import { createEffect, type JSX, Show, Suspense } from "solid-js"
 import { isServer } from "solid-js/web"
 import { Favicon } from "@opencode/ui/favicon"
 import { Font } from "@opencode/ui/font"
@@ -106,18 +106,23 @@ export default function App() {
       // The browser's own restore lands right after popstate, on the page being left, and shows as
       // a jump at the start of the hero's shrink back into its card.
       scrollRestoration
-      root={(props) => (
-        <LanguageProvider>
-          <I18nProvider>
-            <HeadMetaProvider>
-              <AppMeta />
-              <Suspense>{props.children}</Suspense>
-            </HeadMetaProvider>
-          </I18nProvider>
-        </LanguageProvider>
-      )}
+      root={AppRoot}
     >
       <Routes />
     </Router>
+  )
+}
+
+/** Every page's providers and default head tags, here and on the static pages (src/static/render.tsx). */
+export function AppRoot(props: { children?: JSX.Element }) {
+  return (
+    <LanguageProvider>
+      <I18nProvider>
+        <HeadMetaProvider>
+          <AppMeta />
+          <Suspense>{props.children}</Suspense>
+        </HeadMetaProvider>
+      </I18nProvider>
+    </LanguageProvider>
   )
 }
