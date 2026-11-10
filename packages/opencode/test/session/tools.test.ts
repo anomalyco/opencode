@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -15,8 +16,15 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { Plugin } from "@/plugin"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Effect, Layer, Schema } from "effect"
-import { testEffect } from "../lib/effect"
+import { Deferred, Effect, Layer, Schema } from "effect"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { InstanceStore } from "@/project/instance-store"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 const callID = "call-test"
 const sessionID = SessionID.make("ses_test")
@@ -163,5 +171,115 @@ it.effect("preserves running tool start time across metadata updates", () =>
     if (state.state.status === "running") {
       expect(state.state.time.start).toBe(100)
     }
+  }),
+)
+
+const cancellation = testEffect(
+  Layer.mergeAll(
+    layer,
+    AppNodeBuilder.build(
+      LayerNode.group([Permission.node, EventV2Bridge.node, CrossSpawnSpawner.node, InstanceStore.node]),
+      [[InstanceStore.bootstrapNode, Layer.mock(InstanceBootstrap.Service, { run: Effect.void })]],
+    ),
+  ),
+)
+
+cancellation.instance("registry callback abort cancels real permission and prevents tool execution", () =>
+  Effect.gen(function* () {
+    const permission = yield* Permission.Service
+    const events = yield* EventV2Bridge.Service
+    const asked = yield* Deferred.make<void>()
+    const replies: unknown[] = []
+    const unsubscribe = yield* events.listen((event) => {
+      if (event.type === Permission.Event.Replied.type) replies.push(event.data)
+      if (event.type === Permission.Event.Asked.type) return Deferred.succeed(asked, undefined).pipe(Effect.asVoid)
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => unsubscribe)
+    const effects: string[] = []
+    const registry = Layer.mock(ToolRegistry.Service, {
+      tools: () =>
+        Effect.succeed([
+          {
+            id: "guarded",
+            description: "requires permission before execution",
+            parameters: Schema.Struct({}),
+            jsonSchema: { type: "object", properties: {} },
+            execute: (_args, ctx) =>
+              Effect.gen(function* () {
+                yield* ctx.ask({ permission: "bash", patterns: ["touch marker"], metadata: {}, always: [] })
+                effects.push("executed")
+                return { title: "guarded", metadata: {}, output: "done" }
+              }),
+          } satisfies Tool.Def,
+        ]),
+    })
+    const tools = yield* SessionTools.resolve({
+      agent: { ...agent, permission: [] },
+      model,
+      session: {
+        id: sessionID,
+        permission: [],
+        slug: "cancel",
+        projectID: ProjectV2.ID.make("project"),
+        directory: "/tmp",
+        title: "Cancellation",
+        version: "1",
+        time: { created: 1, updated: 1 },
+      },
+      processor: {
+        message: {
+          id: messageID,
+          sessionID,
+          role: "assistant",
+          parentID: MessageID.ascending(),
+          agent: "build",
+          mode: "build",
+          path: { cwd: "/tmp", root: "/tmp" },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: ModelV2.ID.make("test-model"),
+          providerID: ProviderV2.ID.make("test"),
+          time: { created: 1 },
+        },
+        updateToolCall: () => Effect.succeed(undefined),
+        completeToolCall: () => Effect.void,
+      },
+      bypassAgentCheck: false,
+      messages: [],
+      promptOps: {} as never,
+    }).pipe(Effect.provide(registry))
+    const execute = tools.guarded.execute
+    if (!execute) throw new Error("guarded tool is missing execute")
+    const controller = new AbortController()
+    const result = Promise.resolve(
+      execute(
+        {},
+        {
+          toolCallId: callID,
+          abortSignal: controller.signal,
+          messages: [],
+        },
+      ),
+    ).then(
+      () => "completed",
+      () => "interrupted",
+    )
+    yield* awaitWithTimeout(Deferred.await(asked), "real permission was not asked")
+    const [request] = yield* permission.list()
+    expect(request).toBeDefined()
+    controller.abort()
+    expect(
+      yield* awaitWithTimeout(
+        Effect.promise(() => result),
+        "tool callback ignored cancellation",
+      ),
+    ).toBe("interrupted")
+    expect(yield* permission.list()).toEqual([])
+    expect(replies).toEqual([{ sessionID, requestID: request.id, reply: "reject" }])
+    expect(yield* permission.reply({ requestID: request.id, reply: "once" }).pipe(Effect.flip)).toBeInstanceOf(
+      PermissionV1.NotFoundError,
+    )
+    expect(effects).toEqual([])
   }),
 )
