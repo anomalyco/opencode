@@ -44,6 +44,9 @@ export class UpgradeError extends Error {
 const decodeVpPackages = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Array(Schema.Struct({ name: Schema.String }))),
 )
+const decodeManifestVersion = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ version: Schema.String })),
+)
 
 const installNames: Record<Method, string> = {
   curl: "The OpenCode installer",
@@ -160,6 +163,18 @@ const make = Effect.gen(function* () {
   )
   // WinGet extracts portable packages into a directory named after the package identifier.
   const installedWinget = /[\\/]winget[\\/]packages[\\/]anomaly\.opencode_/i.test(executable)
+  // npm keeps global packages in <prefix>/lib/node_modules (<prefix>\node_modules on Windows). The npm on PATH may
+  // belong to another Node install (fnm, nvm, mise) or prefix, so target the prefix that owns the running binary.
+  const npmPrefix = installedPackage
+    ? (process.platform === "win32" ? /^(.+)\\node_modules\\/ : /^(.+)\/lib\/node_modules\//).exec(executable)?.[1]
+    : undefined
+  const npmPrefixArgs = npmPrefix ? ["--prefix", npmPrefix] : []
+  const npm =
+    npmPrefix &&
+    process.platform !== "win32" &&
+    (yield* fs.exists(path.join(npmPrefix, "bin", "npm")).pipe(Effect.orElseSucceed(() => false)))
+      ? path.join(npmPrefix, "bin", "npm")
+      : "npm"
 
   const readPolicy = Effect.fnUntraced(function* () {
     const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -219,7 +234,7 @@ const make = Effect.gen(function* () {
 
     const parts = executable.toLowerCase().split(path.sep).map((part) => part.replace(/^\./, ""))
     const checks: Array<{ method: Method; command: string[] }> = [
-      { method: "npm", command: ["npm", "list", "-g", "--depth=0", installedPackage] },
+      { method: "npm", command: [npm, "list", "-g", "--depth=0", ...npmPrefixArgs, installedPackage] },
       { method: "pnpm", command: ["pnpm", "list", "-g", "--depth=0", installedPackage] },
       { method: "bun", command: ["bun", "pm", "ls", "-g"] },
       { method: "yarn", command: ["yarn", "global", "list"] },
@@ -248,7 +263,7 @@ const make = Effect.gen(function* () {
     if (method === "winget") return ["winget", "uninstall", ...wingetArgs]
     if (method === "curl" || method === "brew" || !installedPackage) return undefined
     const commands = {
-      npm: ["npm", "uninstall", "--global", installedPackage],
+      npm: [npm, "uninstall", "--global", ...npmPrefixArgs, installedPackage],
       pnpm: ["pnpm", "remove", "--global", installedPackage],
       bun: ["bun", "remove", "--global", installedPackage],
       yarn: ["yarn", "global", "remove", installedPackage],
@@ -438,9 +453,10 @@ const make = Effect.gen(function* () {
     const commands: Record<Exclude<Method, "bun" | "curl" | "brew" | "winget">, string[]> = {
       // Keep the old package: uninstalling it can unlink the replacement command.
       npm: [
-        "npm",
+        npm,
         "install",
         "--global",
+        ...npmPrefixArgs,
         `--allow-scripts=${packageName}`,
         ...((OPENCODE_ARTIFACT === "cli" && !installedPackage?.endsWith("/cli-node")) ||
         (installedPackage && packageName !== installedPackage)
@@ -527,8 +543,22 @@ const make = Effect.gen(function* () {
               { cause },
             ),
       ),
-      Effect.asVoid,
     )
+    // A package manager can succeed while updating a different copy, for example another prefix. pnpm keeps each
+    // version in its own store directory, so the running copy never changes there.
+    if (installedPackage !== packageName || !(method === "npm" || method === "bun" || method === "yarn")) return
+    const installed = yield* fs.readFileString(path.join(path.dirname(path.dirname(executable)), "package.json")).pipe(
+      Effect.map((text) => Option.getOrUndefined(decodeManifestVersion(text))?.version),
+      Effect.orElseSucceed(() => undefined),
+    )
+    if (installed !== version)
+      return yield* Effect.fail(
+        new UpgradeError({
+          title: `${installNames[method]} did not update this copy of OpenCode`,
+          detail: `${installNames[method]} reported success, but ${executable} is still version ${installed ?? "unknown"}.`,
+          retry: `Update the copy at ${executable} with the package manager that installed it, then run opencode upgrade again.`,
+        }),
+      )
   })
 
   const inspect = Effect.fnUntraced(function* () {

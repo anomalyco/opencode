@@ -6,7 +6,7 @@ import { AppProcess } from "@opencode/util/process"
 import { expect, spyOn, test } from "bun:test"
 import { Effect, FileSystem, Layer, PlatformError, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
-import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { Updater } from "../src/services/updater"
 import { testEffect } from "../../core/test/lib/effect"
@@ -33,7 +33,9 @@ function fixture(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
     const execPath = process.execPath
-    const modules = path.join(root, "node_modules")
+    // npm's global layout: <prefix>/lib/node_modules, or <prefix>\node_modules on Windows.
+    const modules =
+      process.platform === "win32" ? path.join(root, "node_modules") : path.join(root, "lib", "node_modules")
     const executable = executableOverride
       ? yield* executableOverride(root, path.join(root, "home"))
       : formula
@@ -83,6 +85,7 @@ function fixture(
       yield* fs.writeFileString(bash, "bash")
     }
     const commands: string[][] = []
+    const manifest = path.join(modules, "@opencode", "cli", "package.json")
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
       Effect.provide(
@@ -120,6 +123,10 @@ function fixture(
                 ? { stdout: Buffer.from(`${path.join(git, "mingw64", "libexec", "git-core")}\n`) }
                 : respond({ command: command.command, args })
               if (result.error) return Effect.fail(result.error)
+              // Successful installs replace the running copy, which the updater verifies afterwards.
+              const installed = args.find((arg) => arg.startsWith(`${name}@`))?.slice(name.length + 1)
+              if (!formula && !executableOverride && installed && (result.exitCode ?? 0) === 0)
+                writeFileSync(manifest, JSON.stringify({ name, version: installed, bin: { opencode: "bin/opencode" } }))
               return Effect.succeed({
                 command: command.command,
                 exitCode: 0,
@@ -134,7 +141,7 @@ function fixture(
         }),
       ),
     )
-    return { updater, commands, requests, global, fs, executable, bash }
+    return { updater, commands, requests, global, fs, executable, bash, prefix: yield* fs.realPath(root) }
   })
 }
 
@@ -144,14 +151,23 @@ const unix = process.platform === "win32" ? it.live.skip : it.live
 const installs = [
   {
     method: "npm",
-    command: ["npm", "install", "--global", "--allow-scripts=@opencode/cli", "--force", "@opencode/cli@2.3.4-beta.1"],
+    command: (prefix: string) => [
+      "npm",
+      "install",
+      "--global",
+      "--prefix",
+      prefix,
+      "--allow-scripts=@opencode/cli",
+      "--force",
+      "@opencode/cli@2.3.4-beta.1",
+    ],
   },
   {
     method: "pnpm",
-    command: ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
+    command: () => ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
   },
-  { method: "yarn", command: ["yarn", "global", "add", "@opencode/cli@2.3.4-beta.1"] },
-  { method: "vp", command: ["vp", "update", "-g", "@opencode/cli@2.3.4-beta.1"] },
+  { method: "yarn", command: () => ["yarn", "global", "add", "@opencode/cli@2.3.4-beta.1"] },
+  { method: "vp", command: () => ["vp", "update", "-g", "@opencode/cli@2.3.4-beta.1"] },
 ] as const
 
 installs.forEach(({ method, command }) => {
@@ -159,10 +175,64 @@ installs.forEach(({ method, command }) => {
     Effect.gen(function* () {
       const test = yield* fixture()
       yield* test.updater.upgrade(method, "v2.3.4-beta.1")
-      expect(test.commands).toEqual([[...command]])
+      expect(test.commands).toEqual([command(test.prefix)])
     }),
   )
 })
+
+// Version managers such as fnm give each Node install its own prefix, while the npm on PATH may belong to another one.
+const stale = (npm: boolean) =>
+  fixture(
+    () => ({}),
+    "@opencode/cli",
+    false,
+    "@opencode/cli",
+    undefined,
+    (root) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
+        const modules =
+          process.platform === "win32" ? path.join(root, "node_modules") : path.join(root, "lib", "node_modules")
+        yield* fs.makeDirectory(path.join(modules, "@opencode", "cli"), { recursive: true })
+        yield* fs.writeFileString(
+          path.join(modules, "@opencode", "cli", "package.json"),
+          JSON.stringify({ name: "@opencode/cli", version: "2.2.7", bin: { opencode: "bin/opencode" } }),
+        )
+        if (npm) {
+          yield* fs.makeDirectory(path.join(root, "bin"), { recursive: true })
+          yield* fs.writeFileString(path.join(root, "bin", "npm"), "npm")
+        }
+        return path.join(modules, "@opencode", "cli", "bin", "opencode")
+      }),
+  )
+
+unix("npm runs from the prefix that owns the running binary", () =>
+  Effect.gen(function* () {
+    const test = yield* stale(true)
+    yield* test.updater.method()
+    expect(test.commands[0]).toEqual([
+      path.join(test.prefix, "bin", "npm"),
+      "list",
+      "-g",
+      "--depth=0",
+      "--prefix",
+      test.prefix,
+      "@opencode/cli",
+    ])
+  }),
+)
+
+it.live("npm upgrades fail when the running copy keeps its old version", () =>
+  Effect.gen(function* () {
+    const test = yield* stale(false)
+    const error = yield* test.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
+    expect(test.commands).toHaveLength(1)
+    expect(error).toBeInstanceOf(Updater.UpgradeError)
+    expect(error.message).toBe(
+      `npm reported success, but ${yield* test.fs.realPath(test.executable)} is still version 2.2.7.`,
+    )
+  }),
+)
 
 it.live("vp force-installs a renamed V2 package that replaces the existing binary owner", () =>
   Effect.gen(function* () {
@@ -285,7 +355,7 @@ it.live("install failures expose stderr and process errors do not report success
       }))
       expect(yield* test.updater.method()).toBe(method)
       expect(test.commands).toEqual([
-        ["npm", "list", "-g", "--depth=0", "@opencode/cli"],
+        ["npm", "list", "-g", "--depth=0", "--prefix", test.prefix, "@opencode/cli"],
         ["pnpm", "list", "-g", "--depth=0", "@opencode/cli"],
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
@@ -592,12 +662,20 @@ if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-no
       yield* test.updater.upgrade("pnpm", "v2.3.4")
       yield* test.updater.upgrade("vp", "v2.3.4")
       expect(test.commands).toEqual([
-        ["npm", "list", "-g", "--depth=0", "@opencode/cli-node"],
+        ["npm", "list", "-g", "--depth=0", "--prefix", test.prefix, "@opencode/cli-node"],
         ["pnpm", "list", "-g", "--depth=0", "@opencode/cli-node"],
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
         ["vp", "list", "-g", "--json", "@opencode/cli-node"],
-        ["npm", "install", "--global", "--allow-scripts=@opencode/cli-node", "@opencode/cli-node@2.3.4"],
+        [
+          "npm",
+          "install",
+          "--global",
+          "--prefix",
+          test.prefix,
+          "--allow-scripts=@opencode/cli-node",
+          "@opencode/cli-node@2.3.4",
+        ],
         ["pnpm", "add", "--global", "--allow-build=@opencode/cli-node", "@opencode/cli-node@2.3.4"],
         ["vp", "update", "-g", "@opencode/cli-node@2.3.4"],
       ])
