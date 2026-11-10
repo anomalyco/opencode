@@ -169,3 +169,53 @@ fn patch_matches_typescript() {
     app.root().add(&View::new(&app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 3).child(&patch));
     assert_parity(&app.render(), "U.4a/diff");
 }
+
+/// The added JSON file of TS `diff-viewer.test.tsx` "virtualizes a large added file": 7,502 lines, one of them very
+/// long.
+fn large_added_patch() -> String {
+    let rows = (0..7500).map(|index| {
+        let repeat = if index == 777 {
+            2000
+        } else if index % 7 == 0 {
+            24
+        } else {
+            1
+        };
+        let comma = if index == 7499 { "" } else { "," };
+        format!("+  \"row-{index:04}\": \"{}\"{comma}", "value".repeat(repeat))
+    });
+    let lines: Vec<String> = std::iter::once("+{".to_owned()).chain(rows).chain(["+}".to_owned()]).collect();
+    format!(
+        "diff --git a/snapshot.json b/snapshot.json\nnew file mode 100644\n--- /dev/null\n+++ b/snapshot.json\n@@ -0,0 +1,{} @@\n{}",
+        lines.len(),
+        lines.join("\n")
+    )
+}
+
+// Expected (r2 review, bigboi-ui-6): an added file over 3,000 lines mounts only the 128-line chunks near the view,
+// as TS `VirtualAddedPatch` does: fewer than 2,000 lines at the start and at the end, and every row in place.
+#[test]
+fn a_large_added_file_mounts_only_the_chunks_in_view() {
+    let app = TestApp::new(80, 24);
+    let theme = theme("opencode", ThemeMode::Dark);
+    let syntax = code::syntax_theme(&theme);
+    let patch = large_added_patch();
+    assert!(diff::split_added("@@ -1 +1 @@\n-a\n+b", 128).is_none());
+    let chunks = diff::split_added(&patch, 128).unwrap();
+    assert_eq!((chunks.len(), chunks.iter().map(|chunk| chunk.rows).sum::<usize>()), (59, 7502));
+    assert!(
+        chunks[1].patch.ends_with("\"value\",") && chunks[1].patch.contains("@@ -0,0 +129,128 @@\n+  \"row-0127\"")
+    );
+    let chunked = diff::Chunked::new(app.app(), &theme, &syntax, &patch, Some("json"), 0).unwrap();
+    let scroll = ScrollBox::new(app.app()).scrollbars(false).width(80).height(24);
+    scroll.add(chunked.root());
+    app.root().add(&scroll);
+    assert!(app.render().text().contains("row-0000"));
+    assert!(chunked.mounted_lines() < 2000, "{}", chunked.mounted_lines());
+    scroll.scroll_to(0.0, 7502.0 - 24.0);
+    chunked.show(7502 - 24, 24);
+    let screen = app.render().text();
+    assert!(screen.contains("row-7499") && screen.contains('}'), "{screen}");
+    assert!(chunked.mounted_lines() < 2000, "{}", chunked.mounted_lines());
+    assert!(diff::Chunked::new(app.app(), &theme, &syntax, &corpus("diff"), None, 0).is_none());
+}
