@@ -315,6 +315,19 @@ test("gives new designs dialogs an opaque background when V1 panels are see-thro
   expect(opaque.light?.["@dialog"]?.background?.base).toBe("$hue.neutral.800")
 })
 
+test("lifts the new designs composer to step 700 in light unless V1 panels are see-through", () => {
+  for (const name of ["tokyonight", "lucent-orng"]) {
+    const migrated = migrateV1NewDesigns(DEFAULT_THEMES[name]!)
+    const light = resolveThemeDocument(migrated, "light")
+    const dark = resolveThemeDocument(migrated, "dark")
+    const lifted = resolveV1(DEFAULT_THEMES[name]!, "light").backgroundPanel.a === 1
+    expect(light.surface("composer").background.raised.high).toBe(
+      lifted ? light.hue.neutral[700] : light.hue.neutral[600],
+    )
+    expect(dark.surface("composer").background.raised.high).toBe(dark.hue.neutral[600])
+  }
+})
+
 test("keeps both modes when a shared background has different contrast", () => {
   const source = structuredClone(opencodeV1)
   source.theme.background = "#808080"

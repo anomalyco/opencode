@@ -10,7 +10,7 @@ import {
   type ResolvedTheme,
   type ThemeDefinition,
 } from "@opencode/theme/tui"
-import { getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
+import { getOpenCode2Theme, getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 
 const opencodeLight = selectTheme(getOpenCodeTheme(), "light")
 const opencodeDark = selectTheme(getOpenCodeTheme(), "dark")
@@ -352,6 +352,25 @@ test("dialog footer overrides layer on the dialog surface", () => {
   expect(theme.surface("dialog").text.muted.toInts()).not.toEqual([102, 102, 102, 255])
   const plain = resolveTheme(light)
   expect(plain.surface("dialog.footer")).toBe(plain.surface("dialog"))
+})
+
+test("composer overrides layer on the base tokens and fall back to them", () => {
+  const theme = resolveTheme(
+    override(light, { "@composer": { background: { raised: { high: "$hue.neutral.700" } } } }),
+  )
+  const composer = theme.surface("composer")
+  expect(composer.background.raised.high).toBe(theme.hue.neutral[700])
+  expect(composer.background.raised.base).toBe(theme.background.raised.base)
+  expect(theme.background.raised.high).toBe(theme.hue.neutral[600])
+  const plain = resolveTheme(light)
+  expect(plain.surface("composer")).toBe(plain)
+})
+
+test("opencode2 lifts the composer to step 700 in light and keeps step 600 in dark", () => {
+  const light = resolveThemeDocument(getOpenCode2Theme(), "light")
+  const dark = resolveThemeDocument(getOpenCode2Theme(), "dark")
+  expect(light.surface("composer").background.raised.high).toBe(light.hue.neutral[700])
+  expect(dark.surface("composer").background.raised.high).toBe(dark.hue.neutral[600])
 })
 
 test("rejects missing and circular references", () => {
