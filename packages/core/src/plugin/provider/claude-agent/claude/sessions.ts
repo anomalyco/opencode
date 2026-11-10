@@ -255,6 +255,14 @@ export function registry() {
             }
             if (part.type !== "tool_use") continue
             const name = ToolNames.original(part.name, request.tools)
+            if (!name && part.name.startsWith(ToolNames.PREFIX)) {
+              // A tool removed after this process started is still on its tool server; answer here so the turn goes on.
+              live.pending.expect(part.id, part.name)
+              live.pending.resolve(part.id, {
+                mcp: { isError: true, content: [{ type: "text", text: "This tool is no longer available." }] },
+                replacement: undefined,
+              })
+            }
             if (!name) continue
             live.pending.expect(part.id, part.name)
             waiting.push(part.id)
@@ -372,9 +380,13 @@ export function registry() {
 
     const prepare = Effect.fn("ClaudeSessions.prepare")(function* (entry: Entry, request: Request) {
       // Retire an exited or incompatible process first: once we continue its parked turn, open() must not replace it.
+      // Stopping a turn that waits on tool results makes Claude Code record them as refused by the user, so a launch
+      // change waits for that turn to end. OpenCode still checks permissions when it runs each tool. A step without
+      // tools (the step limit) still stops the turn, since the old process would keep offering them.
       if (entry.process) {
-        const needsRestart = entry.process.session.ended || entry.process.launch !== launch(request)
-        if (needsRestart) yield* stop(entry)
+        const process = entry.process
+        const parked = process.waiting !== undefined && process.session.running && request.tools.length > 0
+        if (process.session.ended || (process.launch !== launch(request) && !parked)) yield* stop(entry)
       }
 
       if (!request.sessionID) {
@@ -416,7 +428,8 @@ export function registry() {
       }
       if (collected.aborted) {
         // A stopped OpenCode turn needs a fresh Claude turn; addUser would only steer the old one.
-        yield* interrupt(entry)
+        if (live.launch === launch(request)) yield* interrupt(entry)
+        else yield* stop(entry)
         return { start, continuation: undefined }
       }
       return { start, continuation }

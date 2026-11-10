@@ -342,6 +342,55 @@ describe("Claude tool steps", () => {
     }),
   )
 
+  it.effect("a tool list change while results are ready finishes the parked turn instead of interrupting it", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make(FakeClaude.replay("tools"))
+      const test = yield* TestSessions.start(claude)
+      const prompt = TestTools.prompt()
+      const extra = { ...TestTools.tools[0]!, name: "added_later", description: "Appeared mid-turn." }
+      const steps = []
+      for (const tools of [TestTools.tools, [...TestTools.tools, extra], [...TestTools.tools, extra]]) {
+        const parts = yield* TestTools.step(test.model, prompt, tools)
+        steps.push(parts)
+        TestTools.append(prompt, parts, TestTools.output)
+      }
+      expect(TestSessions.text(steps[2]!)).toBe("COPPER-OTTER")
+      expect(claude.runs).toHaveLength(1)
+      const received = claude.runs[0]!.received
+      expect(received.some((message) => message.request?.subtype === "interrupt")).toBe(false)
+      const outputs = received
+        .filter((message) => message.response?.response?.mcp_response)
+        .map((message) => message.response.response.mcp_response.result.content[0].text)
+      expect(outputs).toEqual(["LILAC-HERON", "LEMON-IBIS", "COPPER-OTTER"])
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("a call to a tool removed mid-turn gets an error instead of hanging", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make(FakeClaude.replay("tools"))
+      const test = yield* TestSessions.start(claude)
+      const prompt = TestTools.prompt()
+      TestTools.append(prompt, yield* TestTools.step(test.model, prompt), TestTools.output)
+      const remaining = TestTools.tools.filter((tool) => tool.name !== "confirm")
+      const second = yield* TestTools.step(test.model, prompt, remaining)
+      expect(second.some((part) => part.type === "tool-call")).toBe(false)
+      expect(claude.runs).toHaveLength(1)
+      const received = claude.runs[0]!.received
+      expect(received.some((message) => message.request?.subtype === "interrupt")).toBe(false)
+      const outputs = received
+        .filter((message) => message.response?.response?.mcp_response)
+        .map((message) => message.response.response.mcp_response.result)
+      expect(outputs.at(-1)).toEqual({
+        isError: true,
+        content: [{ type: "text", text: "This tool is no longer available." }],
+      })
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
   it.effect("an unavailable OpenCode server fails closed", () =>
     Effect.gen(function* () {
       const turn = FakeClaude.expectTurn()
