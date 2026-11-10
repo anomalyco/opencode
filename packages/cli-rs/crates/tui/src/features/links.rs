@@ -48,6 +48,20 @@ pub fn install(tui: &Rc<Tui>) {
     }));
 }
 
+/// `Link`'s `onMouseUp`: a plain left release on `text` opens `url`, and a failure is ignored. A dialog needs it: its
+/// panel stops a release before [`install`]'s handler sees it.
+pub fn open_on_click(app: &App, text: &Text, url: String) {
+    let app = app.clone();
+    text.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
+        let plain = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SHIFT]
+            .into_iter()
+            .all(|modifier| !event.modifiers.contains(modifier));
+        if event.kind == MouseEventKind::Up(MouseButton::Left) && plain && app.selected_text().is_none() {
+            let _ = open_url(&url);
+        }
+    });
+}
+
 /// The hyperlink presented at a cell (`renderer.getLinkAt`).
 pub fn link_at(app: &App, x: u16, y: u16) -> Option<String> {
     let session = app.session();
