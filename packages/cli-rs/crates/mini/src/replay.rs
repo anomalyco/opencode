@@ -751,7 +751,14 @@ impl Transcript {
             SessionMessageCompaction::Failed(failed) => (failed.id.as_str(), "", false),
             SessionMessageCompaction::Unknown(_) => return Output::default(),
         };
-        if !self.message_ids.insert(id.to_owned()) {
+        let visible = !self.message_ids.insert(id.to_owned());
+        // A client that attaches while it runs sees no `session.compaction.started` that would set it.
+        if matches!(message, SessionMessageCompaction::Running(_)) {
+            self.active_compaction = Some(id.to_owned());
+        } else if self.active_compaction.as_deref() == Some(id) {
+            self.active_compaction = None;
+        }
+        if visible {
             return Output::default();
         }
         let header = || {
@@ -1822,6 +1829,23 @@ mod tests {
             ]
         );
         assert!(!transcript.replaying());
+    }
+
+    /// A compaction already running when the session is listed goes on to print the rest of its summary.
+    #[test]
+    fn a_listed_running_compaction_prints_its_tail() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        let running = message(json!({ "id": "msg_c", "type": "compaction", "status": "running", "reason": "auto",
+            "summary": "Part one" }));
+        assert_eq!(
+            texts(&transcript.hydrate(&[running], true)),
+            [(EntryKind::System, "Compaction".into()), (EntryKind::Assistant, "Part one".into())]
+        );
+        let ended = event("session.compaction.ended", json!({ "reason": "auto", "text": "Part one and two" }));
+        assert_eq!(
+            texts(&transcript.event(&ended)),
+            [(EntryKind::Assistant, " and two".into()), (EntryKind::Assistant, "".into())]
+        );
     }
 
     /// A streamed part is remembered as one local row holding its whole text, as each delta extends it.
