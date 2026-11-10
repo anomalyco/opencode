@@ -14,6 +14,7 @@ export type Effect = typeof Effect.Type
  *   signed-out free tier).
  * - `mcp.use`, `skill.use`, `plugin.use`: resource is an MCP server name, skill ID, or plugin target.
  * - `websearch.use`: resource is a web search provider ID, such as `opencode` or `exa`.
+ * - `remote.use`: resource is the remote access tunnel provider; `opentunnel` is the only one.
  */
 export const Action = Schema.Literals([
   "provider.use",
@@ -24,6 +25,7 @@ export const Action = Schema.Literals([
   "skill.use",
   "plugin.use",
   "websearch.use",
+  "remote.use",
 ])
 export type Action = typeof Action.Type
 

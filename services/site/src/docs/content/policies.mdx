@@ -40,11 +40,11 @@ merges into `policies`:
 
 Each statement has three fields:
 
-| Field      | Values                                                                                                                      | Meaning                                              |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `action`   | `provider.use`, `tool.use`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use`, `websearch.use` | The operation being controlled                       |
-| `resource` | string or wildcard pattern                                                                                                  | What the statement applies to; depends on the action |
-| `effect`   | `allow`, `deny`                                                                                                             | The decision when this statement matches             |
+| Field      | Values                                                                                                                                    | Meaning                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use`, `websearch.use`, `remote.use` | The operation being controlled                       |
+| `resource` | string or wildcard pattern                                                                                                                | What the statement applies to; depends on the action |
+| `effect`   | `allow`, `deny`                                                                                                                           | The decision when this statement matches             |
 
 Statements that fail validation are dropped with a warning in the server log and
 the rest of the list still applies. Check the log after editing a `deny`.
@@ -266,6 +266,25 @@ the ID of a provider a plugin adds.
 Denied providers are removed even when they work without an API key, such as Exa and
 TinyFish. When every provider is denied, the `websearch` tool is no longer offered.
 Clients older than 2.2.6 ignore `websearch.use`.
+
+## Remote access
+
+`remote.use` controls remote access, which `opencode pair --remote` turns on to reach
+this machine through an OpenTunnel address. The resource is the tunnel provider;
+`opentunnel` is the only one.
+
+```jsonc
+{
+  "policies": [{ "action": "remote.use", "resource": "*", "effect": "deny" }],
+}
+```
+
+While denied, every request that arrives through the tunnel is refused with a
+`ForbiddenError` naming the policy, so another device can't use this machine. The
+service still answers on its own address. This covers OpenTunnel only: a server bound
+to the local network (`opencode service set hostname 0.0.0.0`) or reached over SSH
+port forwarding isn't affected. An organization's policy applies once OpenCode has
+loaded it from the Console; a managed policy applies right away.
 
 ## Precedence
 

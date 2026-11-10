@@ -45,6 +45,7 @@ import { ServerAuth } from "./auth"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
+import { RemoteAccess } from "./middleware/remote-access"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { ServerPairing } from "./pairing"
 import { layer } from "./location"
@@ -91,13 +92,15 @@ export function createRoutes(
   options: ServerOptions = {},
   serviceURLs: () => ReadonlyArray<string> = () => [],
   overrides: LayerNode.Replacements = [],
+  // The remote access tunnel's URLs, whose requests `remote.use` policy can refuse.
+  remoteURLs: () => ReadonlyArray<string> = () => [],
 ) {
   return makeRoutes(
     options.password
       ? ServerAuth.Config.configLayer({ password: Option.some(options.password) })
       : ServerAuth.Config.layer,
     options,
-    serviceURLs,
+    { all: serviceURLs, remote: remoteURLs },
     overrides,
   )
 }
@@ -111,13 +114,19 @@ export function createEmbeddedRoutes(
   overrides: LayerNode.Replacements = [],
   instances?: InstanceNode,
 ) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
+  return makeRoutes(
+    ServerAuth.Config.configLayer({ password: Option.none() }),
+    options,
+    { all: () => [], remote: () => [] },
+    overrides,
+    instances,
+  )
 }
 
 function makeRoutes<AuthError, AuthServices>(
   auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
   options: ServerOptions,
-  serviceURLs: () => ReadonlyArray<string>,
+  urls: { readonly all: () => ReadonlyArray<string>; readonly remote: () => ReadonlyArray<string> },
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
@@ -184,7 +193,7 @@ function makeRoutes<AuthError, AuthServices>(
             WellKnown.Service,
           )(context),
         ),
-        ServerInfo.layer(serviceURLs, Context.get(context, Global.Service).tmp, options.app),
+        ServerInfo.layer(urls.all, Context.get(context, Global.Service).tmp, options.app),
       )
       const api = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
         Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),
@@ -194,6 +203,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(authorizationLayer),
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
+        Layer.merge(RemoteAccess.layer(urls.remote)),
         HttpRouter.provideRequest(requestServices),
         Layer.provideMerge(services),
         Layer.provideMerge(HttpRouter.layer),

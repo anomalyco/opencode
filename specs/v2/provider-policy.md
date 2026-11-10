@@ -27,6 +27,9 @@ resource: MCP server name, skill ID, or unversioned package / absolute local pat
 action:   websearch.use
 resource: web search provider ID, such as opencode, exa, or tinyfish
 
+action:   remote.use
+resource: remote access tunnel provider; opentunnel is the only one
+
 Legacy integration.use statements with an mcp:, skill:, or plugin: prefix are
 converted to the matching *.use action when ConfigPolicy.Info decodes them.
 ```
@@ -82,6 +85,7 @@ interface PolicyInfo {
     | "skill.use"
     | "plugin.use"
     | "websearch.use"
+    | "remote.use"
   resource: string
 }
 ```
