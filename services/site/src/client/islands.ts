@@ -11,6 +11,17 @@ const islands: {
   load: () => Promise<{ default: (root: HTMLElement) => void }>
 }[] = [
   { selector: '[data-component="wordmark"]', when: "near", load: () => import("./islands/wordmark") },
+  { selector: '[data-component="legal-body"]', when: "idle", load: () => import("./islands/legal") },
+  { selector: 'section[data-slot="timeline"]', when: "near", load: () => import("./islands/changelog") },
+  { selector: '[data-site][data-page="press"]', when: "idle", load: () => import("./islands/press") },
+  { selector: '[data-site][data-page="brand"]', when: "idle", load: () => import("./islands/brand") },
+  { selector: '[data-slot="agent-rules"]', when: "idle", load: () => import("./islands/agent-rules") },
+  { selector: '[data-component="product-hero"]', when: "idle", load: () => import("./islands/product-hero") },
+  {
+    selector: '[data-slot="product-download"] > [data-slot="body"]',
+    when: "near",
+    load: () => import("./islands/download-list"),
+  },
 ]
 
 export function startIslands() {

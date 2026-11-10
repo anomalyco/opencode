@@ -5,7 +5,16 @@
  * app's again, on the server and in the browser. The development server keeps them all hydrated:
  * Design mode and Settings need the app. perf/serve.ts serves a production build to try them.
  */
-export const staticPaths: string[] = []
+export const staticPaths = [
+  "/legal",
+  "/legal/privacy-policy",
+  "/legal/terms-of-service",
+  "/brand",
+  "/press",
+  "/changelog",
+  "/changelog/:tag",
+  "/product/browse",
+]
 
 /** The static route a path (without its locale) is, if any. No imports, so the browser can use it too. */
 export function staticPath(path: string) {

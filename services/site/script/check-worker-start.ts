@@ -32,6 +32,11 @@ const pages: {
   static?: boolean
 }[] = [
   { path: "/", status: 200 },
+  { path: "/legal", status: 200, static: true },
+  { path: "/ja/legal/privacy-policy", status: 200, static: true },
+  { path: "/brand", status: 200, static: true },
+  { path: "/ar/press", status: 200, static: true },
+  { path: "/changelog", status: 200, static: true },
   { path: "/ja", status: 200 },
   { path: "/desktop", status: 200 },
   { path: "/check-worker-start-404", status: 404 },

@@ -1096,10 +1096,6 @@ html:has([data-site][data-theme="dark"]) {
       font-size: var(--fs-large);
 
       /* Draw the icon with two bars so the vertical one can collapse into a minus. */
-      svg {
-        display: none;
-      }
-
       &::before,
       &::after {
         content: "";
