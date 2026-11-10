@@ -154,8 +154,7 @@ export const layer = Layer.effect(
         ),
     })
 
-    // Teardown interrupts without calling `interrupt`, so an interrupt with no recorded reason is a shutdown.
-    interruption = (sessionID) => coordinator.interruption(sessionID) ?? "shutdown"
+    interruption = coordinator.interruption
     return Service.of({
       active: coordinator.active,
       isActive: coordinator.isActive,

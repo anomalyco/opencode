@@ -2398,28 +2398,52 @@ describe("ShellTool stopped", () => {
     ),
   )
 
-  fakeDaemonIt.live("leaves a command running when a shutdown interrupts its call while it starts", () =>
-    withTempDir((tmp) => {
-      reset()
-      return withSession(tmp.path, (registry) =>
-        Effect.gen(function* () {
-          const jobs = yield* Job.Service
-          const call = yield* startSlowCall(registry, "call-shutdown-start")
-          const interrupting = yield* Fiber.interrupt(call.fiber).pipe(Effect.forkChild({ startImmediately: true }))
-          yield* call.release
-          yield* Fiber.join(interrupting)
-          const process = fake?.processes[0]
-          // Nothing stopped it: a restart takes it over through its recorded tool call.
-          expect(process?.lifecycle.status).toBe("running")
-          expect(process?.pipe?.metadata).toMatchObject({ toolCall: { callID: "call-shutdown-start" } })
-          expect(fake?.ops).not.toContain("signal")
-          const shellID = String(process?.pipe?.metadata.id)
-          expect((yield* jobs.get(shellID))?.status).toBe("running")
-          yield* jobs.cancel(shellID)
-        }),
+  for (const handoff of [false, true])
+    for (const starting of [true, false])
+      fakeDaemonIt.live(
+        `${handoff ? "leaves a command running" : "stops a command"} when an interrupt ${handoff ? "during a handoff " : ""}cuts its call off while it ${starting ? "starts" : "runs"}`,
+        () =>
+          withTempDir((tmp) => {
+            reset()
+            return withSession(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const jobs = yield* Job.Service
+                const pty = yield* PersistentPty.Service
+                const call = yield* startSlowCall(registry, "call-interrupted")
+                if (handoff) expect(yield* pty.handoff()).not.toBeNull()
+                if (!starting) {
+                  yield* call.release
+                  while (fake!.waiters(fake!.processes[0]?.id ?? -1) === 0) yield* Effect.sleep(2)
+                }
+                const interrupting = yield* Fiber.interrupt(call.fiber).pipe(
+                  Effect.forkChild({ startImmediately: true }),
+                )
+                if (starting) yield* call.release
+                yield* Fiber.join(interrupting)
+                expect(Exit.hasInterrupts(yield* Fiber.await(call.fiber))).toBe(true)
+                const process = fake?.processes[0]
+                const shellID = String(process?.pipe?.metadata.id)
+                if (handoff) {
+                  // Nothing stopped it: the next server takes it over through its recorded tool call.
+                  expect(process?.lifecycle.status).toBe("running")
+                  expect(process?.pipe?.metadata).toMatchObject({ toolCall: { callID: "call-interrupted" } })
+                  expect(fake?.ops).not.toContain("signal")
+                  expect((yield* jobs.get(shellID))?.status).toBe("running")
+                  yield* jobs.cancel(shellID)
+                  return
+                }
+                // Nothing will take it over, so it is stopped and its job ends.
+                const shell = yield* Shell.Service
+                expect((yield* shell.wait(ID.make(shellID))).status).toBe("killed")
+                expect(fake?.requests).toContainEqual(
+                  expect.objectContaining({ op: "signal", id: process?.id, signal: "SIGTERM" }),
+                )
+                expect(process?.lifecycle.status).toBe("exited")
+                expect((yield* jobs.get(shellID))?.status).toBe("cancelled")
+              }),
+            )
+          }),
       )
-    }),
-  )
 
   fakeDaemonIt.live("records which call waits on a daemon command, and keeps no timeout for a restart", () =>
     withTempDir((tmp) => {
@@ -2468,7 +2492,7 @@ describe("ShellTool stopped", () => {
       )
     }))
 
-  test("leaves a call a shutdown interrupted, and its command, for the next server", () =>
+  test("stops a command whose call an interrupt cut off, with no handoff to take it over", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -2477,12 +2501,8 @@ describe("ShellTool stopped", () => {
           const jobs = yield* Job.Service
           const { shellID, exit } = yield* stopCall(registry, "printf ready; sleep 60", "call-teardown", "interrupt")
           expect(Exit.hasInterrupts(exit)).toBe(true)
-          // Nothing stops the command or ends its job: the next server takes the call over.
-          expect((yield* shell.get(shellID)).status).toBe("running")
-          expect((yield* jobs.get(shellID))?.status).toBe("running")
-          // Only an explicit cancel stops it.
-          yield* jobs.cancel(shellID)
           expect((yield* shell.wait(shellID)).status).toBe("killed")
+          expect((yield* jobs.get(shellID))?.status).toBe("cancelled")
         }),
       )
     }))

@@ -147,7 +147,7 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
-  it.effect("tells the drain whether the user stopped it or the server is shutting down", () =>
+  it.effect("tells the drain once the user stopped it", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const sessionID = Session.ID.make("ses_interruption_user")
@@ -161,8 +161,8 @@ describe("SessionExecution lifecycle", () => {
       const execution = Context.get(context, SessionExecution.Service)
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
       const reason = yield* Deferred.await(draining)
-      // Until someone stops it, an interrupt can only be the server shutting down.
-      expect(reason?.()).toBe("shutdown")
+      // Teardown interrupts without a reason, so only a user's stop reads as one.
+      expect(reason?.()).toBeUndefined()
       yield* execution.interrupt(sessionID)
       expect(reason?.()).toBe("user")
       yield* execution.awaitIdle(sessionID)
@@ -1728,6 +1728,7 @@ function buildExecution(
             Shell.Daemon.of({
               at: () => Effect.die("the harness has no daemon registry"),
               watch: (effect) => effect.pipe(Effect.ignore, Effect.forkIn(scope), Effect.asVoid),
+              handoffPrepared: () => false,
             }),
           ),
         ),

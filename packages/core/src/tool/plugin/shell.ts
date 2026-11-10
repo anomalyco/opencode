@@ -192,9 +192,13 @@ const startJob = Effect.fnUntraced(function* (
     }).pipe(
       Effect.tap((output) => Deferred.succeed(settled, output)),
       Effect.map((output) => resultMessages(output, input.timeout?.()).join("\n\n")),
+      // Interrupting the job (its registry closing) stops the command too, unless the server is handing its daemon
+      // over: then the command keeps running for the next server.
+      Effect.onInterrupt(() =>
+        shell.handoffPrepared() ? Effect.void : shell.stop(info.id, "killed").pipe(Effect.ignore, Effect.asVoid),
+      ),
     ),
-    // Only cancelling the job stops the command, keeping it and its output file. A server shutdown interrupts
-    // the job without stopping it, so the command keeps running for the next server.
+    // Cancelling the job stops the command, keeping it and its output file.
     cancel: shell.stop(info.id, "killed").pipe(Effect.ignore, Effect.asVoid),
   })
   return { job, settled }
@@ -407,12 +411,17 @@ export const Plugin = {
                           ),
                         )
                       : waiting
-                  // A user's stop arrives through `cancel`. An interrupt (a server shutdown) leaves the command and its
-                  // job running: the next server takes the call over and moves the command to the background.
+                  // A user's stop arrives through `cancel`. Any interrupt stops the command too, unless the server is
+                  // handing its daemon over: then the command and its job keep running, and the next server takes the
+                  // call over and moves the command to the background.
                   const outcome = yield* restore(
                     Effect.raceFirst(
                       blocked.pipe(Effect.map((result) => ({ type: "settled" as const, result }))),
                       Deferred.await(stopped).pipe(Effect.as({ type: "cancelled" as const })),
+                    ),
+                  ).pipe(
+                    Effect.onInterrupt(() =>
+                      shell.handoffPrepared() ? Effect.void : jobs.cancel(job.id).pipe(Effect.ignore),
                     ),
                   )
                   if (outcome.type === "cancelled") return yield* cancelled(info, job.id)

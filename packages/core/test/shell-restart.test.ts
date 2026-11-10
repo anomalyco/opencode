@@ -1,5 +1,5 @@
-// A foreground shell call across a graceful restart, through the whole app: server 1 runs the turn and is torn down
-// mid-call, server 2 recovers the command from the same process daemon and resumes the session.
+// A foreground shell call across a graceful restart, through the whole app: server 1 runs the turn, prepares a
+// handoff and is torn down mid-call, server 2 recovers the command from the same process daemon and resumes the session.
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Context, Effect, Exit, Layer, Scope } from "effect"
@@ -68,22 +68,25 @@ const world = Effect.gen(function* () {
   // A server: the whole app on the shared pieces, torn down when its scope closes.
   const server = (scope: Scope.Scope) =>
     Layer.buildWithScope(
-      AppNodeBuilder.build(LayerNode.group([Session.node, LocationServiceMap.node, SessionRestart.node]), [
-        Global.node.replace(global),
-        Database.node.replace(Layer.succeedContext(database)),
-        LayerNodePlatform.llmClient.replace(Layer.succeedContext(Context.pick(LLMClient.Service)(llm))),
-        PersistentPty.node.replace(
-          makeGlobalNode({
-            service: PersistentPty.Service,
-            layer: PersistentPty.layerWith(daemon.options),
-            deps: [Bus.node, Global.node],
-          }),
-        ),
-        Permission.node.replace(permissionLayer({ assert: () => Effect.void })),
-        Watcher.node.replace(Watcher.configured({ enabled: false })),
-        offlineModels,
-        model,
-      ]),
+      AppNodeBuilder.build(
+        LayerNode.group([Session.node, LocationServiceMap.node, SessionRestart.node, PersistentPty.node]),
+        [
+          Global.node.replace(global),
+          Database.node.replace(Layer.succeedContext(database)),
+          LayerNodePlatform.llmClient.replace(Layer.succeedContext(Context.pick(LLMClient.Service)(llm))),
+          PersistentPty.node.replace(
+            makeGlobalNode({
+              service: PersistentPty.Service,
+              layer: PersistentPty.layerWith(daemon.options),
+              deps: [Bus.node, Global.node],
+            }),
+          ),
+          Permission.node.replace(permissionLayer({ assert: () => Effect.void })),
+          Watcher.node.replace(Watcher.configured({ enabled: false })),
+          offlineModels,
+          model,
+        ],
+      ),
       scope,
     )
   return { daemon, llm: Context.get(llm, TestLLM.Test), project, server }
@@ -135,6 +138,8 @@ describe("shell commands across a graceful restart", () => {
           yield* sessions.prompt({ sessionID: session.id, text: "run it" })
           yield* until(() => daemon.processes.length === 1 && daemon.waiters(daemon.processes[0]!.id) > 0)
           const command = daemon.processes[0]!
+          // A graceful restart: the server hands its daemon over to the next one, then shuts down.
+          expect(yield* Context.get(one, PersistentPty.Service).handoff()).not.toBeNull()
           yield* Scope.close(first, Exit.void)
 
           // The shutdown stopped nothing and settled nothing.

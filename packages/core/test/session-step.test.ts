@@ -233,8 +233,9 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
 // Interrupts an attempt running a tool that stops on `cancel` and one that never does, and returns how the step and
 // its calls were recorded.
 const stopTwoTools = (how: {
-  reason: "user" | "shutdown"
+  reason: "user" | "shutdown" | undefined
   locationClosed: boolean
+  handoffPrepared?: boolean
   // What the cooperative tool does once asked to stop; by default it fails with its partial output.
   stopped?: Effect.Effect<never, Permission.DeclinedError>
 }) =>
@@ -284,6 +285,7 @@ const stopTwoTools = (how: {
       .attempt({
         isLocationClosed: () => how.locationClosed,
         interruption: () => how.reason,
+        handoffPrepared: () => how.handoffPrepared === true,
         sessionID,
         assistantMessageID,
         agent: Agent.defaultID,
@@ -392,9 +394,34 @@ it.live("classifies what a tool raises while the user's stop settles it: a defec
   }),
 )
 
-it.live("leaves an interrupted step as a crash would when the server shuts down", () =>
+// Without a handoff nothing will take the calls over, so they settle here however the step was interrupted.
+for (const reason of ["shutdown", undefined] as const)
+  it.live(
+    `settles every call as interrupted on ${reason === "shutdown" ? "a server shutdown" : "an unexplained interrupt"} without a handoff`,
+    () =>
+      Effect.gen(function* () {
+        const { exit, data, requests, interrupted } = yield* stopTwoTools({ reason, locationClosed: false })
+        expect(Exit.hasInterrupts(exit)).toBe(true)
+        expect(requests).toBe(1)
+        expect(interrupted).toBe(true)
+        const generic = { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } }
+        expect(data).toMatchObject({
+          error: { type: "aborted", message: "Step interrupted" },
+          content: [
+            { type: "tool", id: "call-cooperative", state: generic },
+            { type: "tool", id: "call-stuck", state: generic },
+          ],
+        })
+      }),
+  )
+
+it.live("leaves an interrupted step as a crash would while the server hands its daemon over", () =>
   Effect.gen(function* () {
-    const { exit, data, requests } = yield* stopTwoTools({ reason: "shutdown", locationClosed: false })
+    const { exit, data, requests } = yield* stopTwoTools({
+      reason: "shutdown",
+      locationClosed: false,
+      handoffPrepared: true,
+    })
     expect(Exit.hasInterrupts(exit)).toBe(true)
     expect(requests).toBe(1)
     // No step end and no settled call: the next server finds the calls unsettled.

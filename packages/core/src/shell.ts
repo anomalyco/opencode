@@ -174,6 +174,8 @@ export interface Interface {
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
   /** Runs `effect` until it ends or the server stops, outliving this Location (e.g. a job's completion notice). */
   readonly watch: DaemonInterface["watch"]
+  /** Whether the server is handing its daemon commands over to the next one, which takes them over. */
+  readonly handoffPrepared: () => boolean
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
@@ -260,6 +262,7 @@ export interface DaemonInterface {
   readonly at: (location: Location.Interface) => Effect.Effect<Runs>
   /** Runs `effect` until it ends or the server stops, outliving the caller's Location (e.g. a job's completion notice). */
   readonly watch: (effect: Effect.Effect<void, unknown>) => Effect.Effect<void>
+  readonly handoffPrepared: () => boolean
 }
 
 /** The process daemon's shell commands, owned by the server and grouped by Location. */
@@ -577,6 +580,7 @@ const daemonLayer = Layer.effect(
 
     return Daemon.of({
       at,
+      handoffPrepared: pty.handoffPrepared,
       watch: (effect) =>
         fork(effect.pipe(Effect.catch((error) => Effect.logError("shell watcher failed", { error })))).pipe(
           Effect.asVoid,
@@ -1112,6 +1116,7 @@ const layer = () =>
         output,
         remove,
         watch: daemon.watch,
+        handoffPrepared: daemon.handoffPrepared,
       })
     }),
   )

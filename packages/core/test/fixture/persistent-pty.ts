@@ -5,4 +5,5 @@ import { PersistentPty } from "@opencode/core/persistent-pty"
 export const disabledPersistentPtyLayer = Layer.mock(PersistentPty.Service, {
   createPipe: () => Effect.fail(new PersistentPty.UnavailableError({ message: "process daemon disabled" })),
   listPipes: () => Effect.succeed([]),
+  handoffPrepared: () => false,
 })
