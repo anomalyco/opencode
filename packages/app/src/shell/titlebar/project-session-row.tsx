@@ -27,6 +27,8 @@ import {
   type SessionRenameDialogEffect,
   type SessionRenameDialogEvent,
 } from "./session-rename-dialog-machine"
+import type { Project } from "@/runtime/server/types"
+import { ProjectIcon } from "@/shell/layout/project-icon"
 import "./tab-nav.css"
 
 export function ProjectSessionRow(props: {
@@ -38,6 +40,8 @@ export function ProjectSessionRow(props: {
   label?: string
   /** Extra nesting steps of 14px, for subagent sessions and nested groups. */
   depth?: number
+  /** Shows the project avatar in the leading slot, where no project header names it. */
+  project?: Project
   onOpen: () => void
 }) {
   const language = useLanguage()
@@ -132,6 +136,13 @@ export function ProjectSessionRow(props: {
         style={props.depth ? { "padding-inline-start": `calc(2rem + ${props.depth * 14}px)` } : undefined}
         onClick={props.onOpen}
       >
+        <Show when={props.project && !props.openTab ? props.project : undefined}>
+          {(project) => (
+            <span class="absolute start-2 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center">
+              <ProjectIcon project={project()} />
+            </span>
+          )}
+        </Show>
         <Show when={props.openTab}>
           <span
             role="img"

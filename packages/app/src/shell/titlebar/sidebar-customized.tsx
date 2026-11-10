@@ -339,6 +339,13 @@ export function SidebarCustomized(props: {
     })
   }
 
+  // Rows outside a project group carry their project's avatar, as open tabs always do; subagents follow their parent.
+  const avatarOf = (row: Row, group: SidebarGroup<Row>) => {
+    if (group.kind === "project" || row.parentKey || !row.projectID) return
+
+    return projectLabels().get(row.projectID) ?? row.project
+  }
+
   const sessionRow = (row: Row, group: SidebarGroup<Row>, byKey: Map<string, Row>) => (
     <Show when={row.session && row.conn && { session: row.session, conn: row.conn }}>
       {(item) => (
@@ -349,6 +356,7 @@ export function SidebarCustomized(props: {
           active={row.active}
           label={showLabel(row, group)}
           depth={depthOf(row, byKey)}
+          project={avatarOf(row, group)}
           onOpen={() => openSession(row)}
         />
       )}
