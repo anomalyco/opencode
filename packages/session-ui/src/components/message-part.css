@@ -2137,3 +2137,60 @@
     vertical-align: top;
   }
 }
+
+/* Rows in an opened group read like the group's own label: the tool muted, what it worked on bright, counts muted, all at
+   one weight. */
+[data-activity-timeline] [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"] {
+  [data-slot="basic-tool-tool-title"],
+  [data-slot="basic-tool-tool-subtitle"],
+  [data-slot="basic-tool-tool-arg"],
+  [data-slot="context-tool-group-matches"] {
+    font-weight: 440;
+  }
+
+  [data-slot="basic-tool-tool-title"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="basic-tool-tool-subtitle"],
+  [data-slot="basic-tool-tool-arg"] {
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="context-tool-group-matches"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  /* A compact row sets its title's weight from a more specific rule, so this one names the trigger too. */
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"] [data-slot="basic-tool-tool-title"] {
+    font-weight: 440;
+  }
+
+  /* A thought's subtitle is how long it took, which the label keeps muted. */
+  [data-component="reasoning-part"] [data-slot="basic-tool-tool-subtitle"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="tool-loaded-label"] {
+    font-weight: 440;
+    color: var(--v2-text-text-muted);
+  }
+  /* A fetched page's link reads like a link in the user's message: the row's text color, underlined faintly. */
+  [data-slot="basic-tool-tool-subtitle"].webfetch-link {
+    color: var(--v2-text-text-base);
+
+    [data-slot="webfetch-link-text"] {
+      text-decoration: underline;
+      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
+      text-underline-offset: 2px;
+    }
+
+    &:hover [data-slot="webfetch-link-text"] {
+      text-decoration-color: currentColor;
+    }
+
+    .webfetch-link-icon {
+      display: none;
+    }
+  }
+}

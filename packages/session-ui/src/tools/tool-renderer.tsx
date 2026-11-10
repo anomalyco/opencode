@@ -44,6 +44,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { Badge } from "@opencode/ui/badge"
 import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "@kitlangton/solid-motion"
@@ -981,7 +982,18 @@ export function CurrentContextToolGroup(props: {
                                           {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
                                         </For>
                                       </div>
-                                      <Show when={trigger().matches}>
+                                      <Show
+                                        when={props.activity ? undefined : trigger().matches}
+                                        fallback={
+                                          <Show when={props.activity ? trigger().count : undefined}>
+                                            {(count) => (
+                                              <Badge data-slot="context-tool-group-matches" appearance="standard">
+                                                {i18n.plural("ui.messagePart.context.matchCount", count())}
+                                              </Badge>
+                                            )}
+                                          </Show>
+                                        }
+                                      >
                                         {(matches) => (
                                           <>
                                             <span data-slot="context-tool-group-dot" />
@@ -1261,7 +1273,8 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
   const matches = (count: number | undefined) =>
     count ? i18n.plural("ui.messagePart.context.match", count) : undefined
 
-  if (tool.name === "list") return { title: i18n.t("ui.tool.list"), subtitle, args: [], matches: undefined }
+  if (tool.name === "list")
+    return { title: i18n.t("ui.tool.list"), subtitle, args: [], matches: undefined, count: undefined }
 
   if (tool.name === "glob")
     return {
@@ -1269,9 +1282,11 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
       subtitle,
       args: input.pattern ? [`pattern=${input.pattern}`] : [],
       matches: matches(metadata.count),
+      count: metadata.count || undefined,
     }
 
   return {
+    count: metadata.matches || undefined,
     title: i18n.t("ui.tool.grep"),
     subtitle,
     args: [
@@ -1732,12 +1747,14 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     const i18n = useI18n()
+    // The Activity timeline shows what was searched, not the raw list it returned.
+    const activity = useActivityTimeline()
 
     return (
       <BasicTool
         {...props}
         icon="bullet-list"
-        hasContent={!!props.output}
+        hasContent={!activity() && !!props.output}
         trigger={{
           title: i18n.t("ui.tool.list"),
           subtitle: displayDirectory(toolInput(props.input).path ?? "/"),
@@ -1763,13 +1780,15 @@ ToolRegistry.register({
   name: "glob",
   render(props) {
     const i18n = useI18n()
+    // The Activity timeline shows what was searched, not the raw list it returned.
+    const activity = useActivityTimeline()
     const input = createMemo(() => toolInput(props.input))
 
     return (
       <BasicTool
         {...props}
         icon="magnifying-glass-menu"
-        hasContent={!!props.output}
+        hasContent={!activity() && !!props.output}
         trigger={{
           title: i18n.t("ui.tool.glob"),
           subtitle: displayDirectory(input().path ?? "/"),
@@ -1796,6 +1815,8 @@ ToolRegistry.register({
   name: "grep",
   render(props) {
     const i18n = useI18n()
+    // The Activity timeline shows what was searched, not the raw list it returned.
+    const activity = useActivityTimeline()
     const input = createMemo(() => toolInput(props.input))
 
     const args = () => [
@@ -1807,7 +1828,7 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="magnifying-glass-menu"
-        hasContent={!!props.output}
+        hasContent={!activity() && !!props.output}
         trigger={{
           title: i18n.t("ui.tool.grep"),
           subtitle: displayDirectory(input().path ?? "/"),
@@ -1834,6 +1855,7 @@ ToolRegistry.register({
   name: "webfetch",
   render(props) {
     const i18n = useI18n()
+    const activity = useActivityTimeline()
     const pending = createMemo(() => props.status === "streaming" || props.status === "running")
 
     const url = createMemo(() => toolInput(props.input).url ?? "")
@@ -1847,7 +1869,7 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
+                <TextShimmer text={i18n.t(activity() ? "ui.tool.fetch" : "ui.tool.webfetch")} active={pending()} />
               </span>
               <Show when={props.status !== "streaming" && url()}>
                 <a
@@ -1877,12 +1899,19 @@ ToolRegistry.register({
 
     const query = createMemo(() => toolInput(props.input).query ?? "")
 
-    const title = createMemo(() => webSearchProviderLabel(toolMetadata(props.metadata).provider, i18n))
+    const activity = useActivityTimeline()
+
+    // The Activity timeline names the action rather than the search provider.
+    const title = createMemo(() =>
+      activity() ? i18n.t("ui.tool.searchWeb") : webSearchProviderLabel(toolMetadata(props.metadata).provider, i18n),
+    )
 
     return (
       <BasicTool
         {...props}
         icon="window-cursor"
+        // The body lists the result links, so a search that returned none has nothing to open.
+        hasContent={urls(props.output).length > 0}
         trigger={{
           title: title(),
           subtitle: query(),

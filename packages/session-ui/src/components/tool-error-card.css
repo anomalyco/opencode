@@ -176,3 +176,29 @@
     color: var(--v2-text-text-base);
   }
 }
+
+/* In the Activity timeline a failed call reads like the other rows: the tool muted, its subject bright, then a Failed
+   tag. Opening it shows the error in full, in the body text color. */
+[data-activity-timeline] [data-component="card"][data-kind="tool-error-card"] {
+  [data-slot="basic-tool-tool-title"] {
+    font-weight: 440;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="basic-tool-tool-subtitle"] {
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="tool-error-card-failed"] {
+    flex-shrink: 0;
+  }
+
+  /* Without the warning icon, the error lines up under the tool's name. */
+  [data-slot="tool-error-card-content"] {
+    padding-left: 0;
+  }
+
+  [data-slot="tool-error-card-content"] [data-slot="card-description"] {
+    color: var(--v2-text-text-base);
+  }
+}

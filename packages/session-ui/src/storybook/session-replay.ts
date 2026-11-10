@@ -276,6 +276,46 @@ function change(file: string, before: string, after: string, status: "modified" 
   return { file, status, ...counts, patch: createTwoFilesPatch(file, file, before, after) }
 }
 
+const settingsFiles = [
+  "src/settings/general.tsx",
+  "src/settings/editor.tsx",
+  "src/settings/keyboard.tsx",
+  "src/settings/row.tsx",
+  "src/settings/section.tsx",
+  "src/settings/font-picker.tsx",
+].join("\n")
+
+const colorSchemeMatches = [
+  "src/theme/provider.tsx:12: const scheme = colorScheme()",
+  "src/theme/provider.tsx:18: root.style.colorScheme = scheme",
+  'src/app.tsx:40: <meta name="color-scheme" content={colorScheme()} />',
+  "src/settings/general.tsx:31: // colorScheme lives in the theme store",
+].join("\n")
+
+const themeListing = ["index.ts", "provider.tsx", "scheme.ts", "scheme.test.ts", "tokens.ts"].join("\n")
+
+const schemeSearchResults = [
+  "Title: prefers-color-scheme - CSS | MDN",
+  "URL: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme",
+  "",
+  "Title: Building a theme switch component | web.dev",
+  "URL: https://web.dev/articles/building/a-theme-switch-component",
+  "",
+  "Title: The best light/dark mode theme toggle in JavaScript",
+  "URL: https://whitep4nth3r.com/blog/best-light-dark-mode-theme-toggle-javascript/",
+].join("\n")
+
+const safariSearchResults = [
+  "Title: Dark Mode Support in WebKit",
+  "URL: https://webkit.org/blog/8840/dark-mode-support-in-webkit/",
+  "",
+  "Title: color-scheme - CSS | MDN",
+  "URL: https://developer.mozilla.org/en-US/docs/Web/CSS/color-scheme",
+].join("\n")
+
+const mdnPage =
+  "# prefers-color-scheme\n\nThe prefers-color-scheme CSS media feature detects whether a user has asked for a light or dark color theme."
+
 const featureWork: Beat[] = [
   { kind: "user", text: "Add a dark mode toggle to the settings page and make sure the tests pass." },
   {
@@ -286,16 +326,18 @@ const featureWork: Beat[] = [
     kind: "tool",
     name: "glob",
     input: { pattern: "src/settings/**/*.tsx", path: "/workspace" },
+    output: settingsFiles,
     metadata: { count: 6 },
   },
   {
     kind: "tool",
     name: "grep",
     input: { pattern: "colorScheme", path: "/workspace/src", include: "*.tsx" },
+    output: colorSchemeMatches,
     metadata: { matches: 4 },
   },
-  { kind: "tool", name: "read", input: { path: "/workspace/src/settings/general.tsx" } },
-  { kind: "tool", name: "read", input: { path: "/workspace/src/theme/scheme.ts" } },
+  { kind: "tool", name: "read", input: { path: "/workspace/src/settings/general.tsx" }, output: generalBefore },
+  { kind: "tool", name: "read", input: { path: "/workspace/src/theme/scheme.ts" }, output: schemeBefore },
   { kind: "step" },
   {
     kind: "say",
@@ -370,11 +412,17 @@ const featureWork: Beat[] = [
     kind: "think",
     text: "## Checking conventions\n\nI should match how other apps document a color scheme preference.",
   },
-  { kind: "tool", name: "websearch", input: { query: "prefers-color-scheme settings toggle best practices" } },
+  {
+    kind: "tool",
+    name: "websearch",
+    input: { query: "prefers-color-scheme settings toggle best practices" },
+    output: schemeSearchResults,
+  },
   {
     kind: "tool",
     name: "webfetch",
     input: { url: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme" },
+    output: mdnPage,
   },
   { kind: "tool", name: "skill", input: { name: "docs-style" }, metadata: { name: "docs-style" } },
   { kind: "step" },
@@ -422,6 +470,146 @@ const featureWork: Beat[] = [
   },
   { kind: "step" },
   { kind: "say", text: "Added the changelog entry under the next release." },
+  { kind: "idle" },
+]
+
+// Every tool the timeline draws, finished and failed, so each row and its expanded view can be checked in one place.
+const everyTool: Beat[] = [
+  { kind: "user", text: "Audit how the app handles the color scheme, and file anything broken." },
+  { kind: "tool", name: "list", input: { path: "/workspace/src/theme" }, output: themeListing },
+  {
+    kind: "tool",
+    name: "glob",
+    input: { pattern: "src/**/*.{test,spec}.tsx", path: "/workspace" },
+    output: "src/settings/settings.test.tsx\nsrc/theme/scheme.test.ts",
+    metadata: { count: 2 },
+  },
+  {
+    kind: "tool",
+    name: "glob",
+    input: { pattern: "src/**/[*.tsx", path: "/workspace" },
+    error: "Invalid glob pattern: unclosed character class in src/**/[*.tsx",
+  },
+  {
+    kind: "tool",
+    name: "grep",
+    input: { pattern: "matchMedia", path: "/workspace/src", include: "*.ts" },
+    output: 'src/theme/scheme.ts:6: const query = window.matchMedia("(prefers-color-scheme: dark)")',
+    metadata: { matches: 1 },
+  },
+  { kind: "tool", name: "read", input: { path: "/workspace/src/theme/scheme.ts" }, output: schemeBefore },
+  {
+    kind: "tool",
+    name: "read",
+    input: { path: "/workspace/src/theme/provider.tsx" },
+    output: "export function ThemeProvider() {}",
+  },
+  { kind: "tool", name: "read", input: { path: "/workspace/src/theme/tokens.ts" }, output: "export const tokens = {}" },
+  {
+    kind: "tool",
+    name: "read",
+    input: { path: "/workspace/src/theme/legacy.ts" },
+    error: "File not found: /workspace/src/theme/legacy.ts",
+  },
+  { kind: "step" },
+  {
+    kind: "tool",
+    name: "websearch",
+    input: { query: "safari color-scheme meta tag flash of light theme" },
+    output: safariSearchResults,
+  },
+  {
+    kind: "tool",
+    name: "websearch",
+    input: { query: '"applyScheme" opencode theme flash' },
+    output: "No results found.",
+  },
+  {
+    kind: "tool",
+    name: "webfetch",
+    input: { url: "https://webkit.org/blog/8840/dark-mode-support-in-webkit/" },
+    output: "# Dark Mode Support in WebKit\n\nThe color-scheme meta tag tells WebKit which schemes a page supports.",
+  },
+  {
+    kind: "tool",
+    name: "webfetch",
+    input: { url: "https://internal.example.com/design/theme-spec" },
+    error: "Request failed with status 403 Forbidden",
+  },
+  { kind: "tool", name: "skill", input: { name: "bug-report" }, metadata: { name: "bug-report" } },
+  { kind: "step" },
+  {
+    kind: "say",
+    text: "The scheme applies after the first paint, so Safari flashes the light theme on load. I'll file it and check the fix with a test.",
+  },
+  {
+    kind: "tool",
+    name: "linear_create_issue",
+    input: { title: "Light theme flashes on load in Safari", team: "Desktop" },
+    output: "Created DES-418: https://linear.app/opencode/issue/DES-418",
+  },
+  {
+    kind: "tool",
+    name: "slack_post_message",
+    input: { channel: "#desktop", text: "Filed DES-418" },
+    error: "MCP server slack is not connected",
+  },
+  {
+    kind: "tool",
+    name: "execute",
+    input: {
+      code: 'const issue = await tools.linear.get_issue({ id: "DES-418" })\nawait tools.linear.add_label({ id: issue.id, label: "regression" })\nreturn issue.url',
+    },
+    output: "linear.add_label: label regression does not exist",
+    metadata: {
+      error: true,
+      toolCalls: [
+        { tool: "linear.get_issue", status: "completed", input: { id: "DES-418" } },
+        { tool: "linear.add_label", status: "error", input: { id: "DES-418", label: "regression" } },
+      ],
+    },
+  },
+  { kind: "step" },
+  {
+    kind: "tool",
+    name: "edit",
+    input: { path: "/workspace/src/theme/scheme.ts", oldString: "missing", newString: "after" },
+    error: "oldString not found in /workspace/src/theme/scheme.ts",
+  },
+  {
+    kind: "tool",
+    name: "edit",
+    input: { path: "/workspace/src/theme/scheme.ts", oldString: "before", newString: "after" },
+    metadata: { files: [change("/workspace/src/theme/scheme.ts", schemeBefore, schemeAfter)] },
+  },
+  {
+    kind: "tool",
+    name: "shell",
+    input: { command: "bun test src/theme", description: "Run the theme tests" },
+    output:
+      "scheme.test.ts:\n✓ resolves the system scheme\n✓ applies the stored scheme\n✓ sets the scheme straight away\n✓ keeps the scheme after a reload\n\n4 pass, 0 fail",
+    metadata: { exit: 0 },
+  },
+  {
+    kind: "tool",
+    name: "shell",
+    input: { command: "bun run lint src/theme", description: "Lint the theme" },
+    output:
+      "src/theme/scheme.ts\n  14:3  error  Unexpected console statement  no-console\n\n1 problem (1 error, 0 warnings)",
+    metadata: { exit: 1 },
+  },
+  {
+    kind: "tool",
+    name: "subagent",
+    input: { agent: "review", description: "Review the scheme fix", prompt: "Review the diff." },
+    error: "The subagent stopped: the model is overloaded",
+    metadata: { sessionID: "session_child_review_failed" },
+  },
+  { kind: "step" },
+  {
+    kind: "say",
+    text: "Filed **DES-418** and fixed the flash: the scheme now applies before the first paint. Tests pass; lint flags one stray `console` call.",
+  },
   { kind: "idle" },
 ]
 
@@ -474,6 +662,7 @@ const encryptedThinking: Beat[] = [
 
 export const scenarios = {
   "Feature work": featureWork,
+  "Every tool": everyTool,
   "Thinking only": thinkingOnly,
   "Thinking after tools": thinkingAfterTools,
   "Encrypted thinking": encryptedThinking,

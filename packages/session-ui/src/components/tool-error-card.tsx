@@ -1,5 +1,7 @@
 import { type ComponentProps, createMemo, onMount, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useActivityTimeline } from "../timeline/activity-context"
+import { Badge } from "@opencode/ui/badge"
 import { Card, CardDescription } from "@opencode/ui/card"
 import { Collapsible } from "@opencode/ui/collapsible"
 import { Icon } from "@opencode/ui/icon"
@@ -64,6 +66,9 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     disclosure.setOpen(value)
   }
 
+  // The Activity timeline tags the row Failed, open or closed; opening it shows the error itself.
+  const activity = useActivityTimeline()
+
   const name = createMemo(() => {
     if (split.title) return split.title
 
@@ -85,6 +90,9 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       ["question", "ui.tool.questions"],
     ])
 
+    if (activity() && split.tool === "websearch") return i18n.t("ui.tool.searchWeb")
+
+    if (activity() && split.tool === "webfetch") return i18n.t("ui.tool.fetch")
     const key = map.get(split.tool)
 
     if (!key) return split.tool
@@ -144,9 +152,11 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
         <Collapsible.Trigger>
           <div data-component="tool-trigger">
             <div data-slot="basic-tool-tool-trigger-content">
-              <span data-slot="basic-tool-tool-indicator" data-component="tool-error-card-icon">
-                <Icon name="outline-hexagonal-warning" />
-              </span>
+              <Show when={!activity()}>
+                <span data-slot="basic-tool-tool-indicator" data-component="tool-error-card-icon">
+                  <Icon name="outline-hexagonal-warning" />
+                </span>
+              </Show>
               <div data-slot="basic-tool-tool-info">
                 <div data-slot="basic-tool-tool-info-structured">
                   <div data-slot="basic-tool-tool-info-main">
@@ -173,8 +183,17 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         </a>
                       </Show>
                     </Show>
-                    <Show when={!open()}>
-                      <span data-slot="tool-error-card-summary">{summary()}</span>
+                    <Show
+                      when={activity()}
+                      fallback={
+                        <Show when={!open()}>
+                          <span data-slot="tool-error-card-summary">{summary()}</span>
+                        </Show>
+                      }
+                    >
+                      <Badge data-slot="tool-error-card-failed" appearance="standard" variant="danger">
+                        {i18n.t("ui.toolErrorCard.failed")}
+                      </Badge>
                     </Show>
                   </div>
                 </div>
