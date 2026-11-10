@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
-  linuxBusLocked,
   login1Locked,
   parseGdbusBoolean,
   parseLogin1Changed,
-  parseScreensaverLine,
-  setLinuxLockSource,
+  parseLogin1SessionPath,
 } from "./linux-screen-lock"
 
 describe("linux screen lock hints", () => {
@@ -54,25 +52,14 @@ describe("linux screen lock hints", () => {
     expect(login1Locked(undefined, undefined)).toBeUndefined()
   })
 
-  test("combines startup and watcher loss without clearing another source", () => {
-    expect(linuxBusLocked({ login1: false })).toBe(false)
-    expect(linuxBusLocked({ login1: true })).toBe(true)
-    expect(linuxBusLocked({ login1: false, screensaver: true })).toBe(true)
-    expect(linuxBusLocked({ login1: true, screensaver: false })).toBe(true)
-    expect(linuxBusLocked({ login1: undefined, screensaver: undefined })).toBeUndefined()
-
-    const started = setLinuxLockSource({}, "login1", true)
-    expect(started).toEqual({ login1: true })
-
-    const stopped = setLinuxLockSource(started, "login1", undefined)
-    expect(linuxBusLocked(stopped)).toBeUndefined()
-    expect(linuxBusLocked(setLinuxLockSource(stopped, "screensaver", false))).toBe(false)
-  })
-
-  test("reads xscreensaver watch lines", () => {
-    expect(parseScreensaverLine("LOCK 2026-11-09 12:00:00")).toBe(true)
-    expect(parseScreensaverLine("BLANK 2026-11-09 12:00:00")).toBeUndefined()
-    expect(parseScreensaverLine("RUN 1 2026-11-09 12:00:10")).toBeUndefined()
-    expect(parseScreensaverLine("UNBLANK 2026-11-09 12:01:00")).toBe(false)
+  test("reads a login1 session path from PID lookup or the user display fallback", () => {
+    expect(parseLogin1SessionPath("(objectpath '/org/freedesktop/login1/session/_32',)")).toBe(
+      "/org/freedesktop/login1/session/_32",
+    )
+    expect(parseLogin1SessionPath("(objectpath '/org/freedesktop/login1/session/c2',)")).toBe(
+      "/org/freedesktop/login1/session/c2",
+    )
+    expect(parseLogin1SessionPath("()")).toBeUndefined()
   })
 })
+

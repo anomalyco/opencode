@@ -378,11 +378,11 @@ export default function SessionBrowserPane(props: {
     () => box,
     (rect) => setSize({ width: rect.width, height: rect.height }),
   )
-  const pillVisible = () => shown() && connection() !== "connected"
+  const pillVisible = () => shown() && !overlayed().frozen && connection() !== "connected"
   createPillPresentation({
     visible: pillVisible,
     label: () => plugin.t("disconnected"),
-    mode: () => plugin.appearance.mode(),
+    owner: () => props.model.pillEmbed(),
     send: (pill) => props.model.pill(pill),
   })
 
@@ -934,11 +934,11 @@ export default function SessionBrowserPane(props: {
           )}
         </Show>
         </embeds.View>
-        <Show when={props.model.pillEmbed()}>
+        <Show when={pillVisible() && props.model.pillEmbed()}>
           {(pill) => (
             <embeds.View
               id={pill()}
-              visible={pillVisible()}
+              visible={true}
               class="absolute left-1/2 top-[2px] h-11 w-36 -translate-x-1/2"
             />
           )}

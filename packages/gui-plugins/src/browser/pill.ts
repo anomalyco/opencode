@@ -1,6 +1,6 @@
 import { onCleanup } from "solid-js"
 import { createKeyed } from "@opencode/plugin/gui"
-import type { PillOverlay, PillPresentation } from "./ipc"
+import type { PillPresentation } from "./ipc"
 
 function readTheme(): PillPresentation {
   const probe = document.createElement("div")
@@ -32,15 +32,14 @@ function readTheme(): PillPresentation {
 export function createPillPresentation(input: {
   readonly visible: () => boolean
   readonly label: () => string
-  readonly mode: () => "light" | "dark"
-  readonly send: (pill: PillOverlay) => void
+  readonly owner: () => string | undefined
+  readonly send: (pill: PillPresentation) => void
 }) {
-  let lastVisible: boolean | undefined
+  let lastVisible = false
   let lastKey = ""
 
   const emit = () => {
     if (!input.visible()) {
-      if (lastVisible !== false) input.send({ visible: false })
       lastVisible = false
 
       return
@@ -48,20 +47,20 @@ export function createPillPresentation(input: {
 
     const theme = readTheme()
     const presentation = { ...theme, label: input.label() }
-    const key = JSON.stringify(presentation)
+    const key = `${input.owner() ?? ""}\n${JSON.stringify(presentation)}`
 
-    if (lastVisible === true && key === lastKey) return
+    if (lastVisible && key === lastKey) return
     lastVisible = true
     lastKey = key
-    input.send({ visible: true, presentation })
+    input.send(presentation)
   }
 
   createKeyed(
-    () => ({ visible: input.visible(), label: input.label(), mode: input.mode() }),
+    () => ({ visible: input.visible(), label: input.label(), owner: input.owner() }),
     emit,
     {
       equals: (previous, next) =>
-        previous.visible === next.visible && previous.label === next.label && previous.mode === next.mode,
+        previous.visible === next.visible && previous.label === next.label && previous.owner === next.owner,
     },
   )
   const theme = new MutationObserver(emit)
@@ -71,6 +70,5 @@ export function createPillPresentation(input: {
   })
   onCleanup(() => {
     theme.disconnect()
-    input.send({ visible: false })
   })
 }

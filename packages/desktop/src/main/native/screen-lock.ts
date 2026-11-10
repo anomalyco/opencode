@@ -7,8 +7,8 @@ import {
   type ScreenLockEvent,
 } from "./screen-lock-machine"
 
-// Linux uses logind/elogind or the X11 screensaver watcher for lock edges when present, and the idle state otherwise;
-// elsewhere the timer only catches a missed event. A cold start while already locked has no lock edge to observe, so
+// Linux uses logind/elogind for lock edges when present, and the idle state otherwise; elsewhere the timer only catches
+// a missed event. A cold start while already locked has no lock edge to observe, so
 // the first probe (and, on macOS, Electron's idle state) is the only chance to see it.
 const PROBE_MS = 5_000
 

@@ -23,14 +23,6 @@ export const PillPresentation = Schema.Struct({
 
 export type PillPresentation = typeof PillPresentation.Type
 
-/** The connection pill's visibility and current appearance; the renderer sends it only when they change. */
-export const PillOverlay = Schema.Struct({
-  visible: Schema.Boolean,
-  presentation: Schema.optionalKey(PillPresentation),
-})
-
-export type PillOverlay = typeof PillOverlay.Type
-
 /** An element the user picked in the page. The ref stays valid for browser tools until the page navigates. */
 export const PaneElement = Schema.Struct({
   ref: Browser.Ref,
@@ -161,8 +153,8 @@ export const BrowserPane = Ipc.define({
         session: text(256).check(Schema.isStartingWith("ses")),
       }),
     },
-    // The app renderer draws the connection pill with its resolved theme and sends the bitmap and window bounds.
-    pill: { input: PillOverlay },
+    // The app renderer sends the pill's resolved label and appearance when it is visible and changes.
+    pill: { input: PillPresentation },
   },
   events: {
     event: Schema.Struct({ binding: Schema.String, event: PaneEvent }),

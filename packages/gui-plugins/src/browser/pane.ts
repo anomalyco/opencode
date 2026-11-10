@@ -12,7 +12,7 @@ import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork, type BrowserNetworkUpstream } from "./network"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
-import type { PaneEvent, PillOverlay, PillPresentation } from "./ipc"
+import type { PaneEvent, PillPresentation } from "./ipc"
 import {
   attachmentFailure,
   createPaneState,
@@ -205,7 +205,7 @@ export function createBrowserPane(input: {
         // Let the other continuations of the same create promise claim the record first. Only an unowned record is
         // discarded; a concurrent register that won keeps it.
         queueMicrotask(() => {
-          if (records.get(liveKey) === record && !claimed(record)) void discardLater(record)
+          if (records.get(liveKey) === record && !claimed(record)) void discardRecord(record)
         })
         throw new Error("browser.pane.registration.closed")
       }
@@ -479,24 +479,12 @@ export function createBrowserPane(input: {
     release(window: number, server: string, session: string) {
       releaseKey(`${window}\n${server}\n${session}`)
     },
-    /** Shows or hides the small native pill view, and gives it the renderer's current presentation. */
-    pill(window: number, overlay: PillOverlay) {
-      const current = pillViews.get(window)
-
-      if (!overlay.visible) {
-        if (current) current.embed.show(false)
-
-        return
-      }
-
-      const entry = current ?? pillView(window)
+    /** Gives the small native pill view the renderer's current label and appearance. */
+    pill(window: number, presentation: PillPresentation) {
+      const entry = pillViews.get(window) ?? pillView(window)
 
       if (!entry) return
-      input.pillEmbed(window, entry.embed.id)
-      entry.embed.show(true)
-
-      if (!overlay.presentation) return
-      entry.presentation = overlay.presentation
+      entry.presentation = presentation
       applyPill(entry)
     },
     /** The screen locked: every attachment ends, so the server drops this desktop's browser tools until it unlocks. */
@@ -518,18 +506,24 @@ export function createBrowserPane(input: {
       // A register may be waiting for a record; let it settle so its record is in the map (or discarded) before the
       // runtime and its proxies go away.
       await Promise.allSettled(Array.from(creating.values()))
-      await Promise.all(Array.from(records.keys(), (storageKey) => releaseLater(storageKey)))
+      await Promise.all(Array.from(records.keys(), (storageKey) => releaseRecord(storageKey)))
       await Promise.all(releasingRecords)
       await Promise.all(releasing)
-      pillViews.forEach((entry) => {
-        input.pillEmbed(entry.win.id, undefined)
-        entry.embed.dispose()
-
-        if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close()
-      })
+      pillViews.forEach((entry) => disposePill(entry, true))
       pillViews.clear()
       await runtime.dispose()
     },
+  }
+
+  function disposePill(entry: PillEntry, notify: boolean) {
+    if (pillViews.get(entry.win.id) !== entry) return
+
+    pillViews.delete(entry.win.id)
+
+    if (notify) input.pillEmbed(entry.win.id, undefined)
+    entry.embed.dispose()
+
+    if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close()
   }
 
   function applyPill(entry: PillEntry) {
@@ -570,17 +564,16 @@ export function createBrowserPane(input: {
     const embed = input.embeds.create(view, win)
 
     view.setBackgroundColor("#00000000")
-    embed.show(false)
+    embed.show(true)
     const entry: PillEntry = { win, view, embed, ready: false }
 
     pillViews.set(window, entry)
+    input.pillEmbed(window, embed.id)
     view.webContents.on("did-finish-load", () => {
       entry.ready = true
       applyPill(entry)
     })
-    win.once("closed", () => {
-      if (pillViews.get(window) === entry) pillViews.delete(window)
-    })
+    win.once("closed", () => disposePill(entry, false))
     void view.webContents
       .loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(pillMarkup())}`)
       .catch(() => undefined)
@@ -622,7 +615,7 @@ export function createBrowserPane(input: {
 
     if (effect.type === "remove-restore") return restore.remove(effect.storageKey)
 
-    if (effect.type === "release-record") return void releaseLater(effect.liveKey)
+    if (effect.type === "release-record") return void releaseRecord(effect.liveKey)
 
     if (effect.type === "warn") return void runtime.runFork(Effect.logWarning(effect.message, effect.detail))
     const handle = handles.get(effect.binding)
@@ -815,10 +808,6 @@ export function createBrowserPane(input: {
     await discardRecord(record)
   }
 
-  function discardLater(record: SessionRecord) {
-    return discardRecord(record)
-  }
-
   function releaseKey(liveKey: string) {
     const record = records.get(liveKey)
     const pending = creating.get(liveKey)
@@ -830,15 +819,7 @@ export function createBrowserPane(input: {
       void pending.then(discardRecord, () => undefined)
     }
 
-    if (record) void releaseLater(liveKey)
-  }
-
-  function releaseLater(liveKey: string) {
-    const done = releaseRecord(liveKey)
-    releasingRecords.add(done)
-    void done.finally(() => releasingRecords.delete(done))
-
-    return done
+    if (record) void releaseRecord(liveKey)
   }
 
   /**

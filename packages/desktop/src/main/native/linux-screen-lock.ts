@@ -3,16 +3,8 @@ import { promisify } from "node:util"
 
 const execFileAsync = promisify(execFile)
 
-/** How long a failed login1 or screensaver watcher waits before trying again. */
+/** How long a transient login1 lookup failure waits before trying again. */
 const RETRY_MS = 30_000
-
-export type LinuxLockSource = "login1" | "screensaver"
-
-/** The contribution of each Linux watcher. Undefined means that watcher is not running. */
-export type LinuxLockSources = {
-  readonly login1?: boolean
-  readonly screensaver?: boolean
-}
 
 type Login1Changed = {
   locked?: boolean
@@ -23,28 +15,9 @@ export interface LinuxScreenLockHint {
   close(): void
 }
 
-/** The lock value the Linux watchers report together: a lock from either source wins, and undefined means neither knows. */
-export function linuxBusLocked(sources: LinuxLockSources) {
-  if (sources.login1 === true || sources.screensaver === true) return true
-
-  if (sources.login1 === false || sources.screensaver === false) return false
-
-  return undefined
-}
-
-export function setLinuxLockSource(
-  sources: LinuxLockSources,
-  source: LinuxLockSource,
-  locked: boolean | undefined,
-): LinuxLockSources {
-  if (sources[source] === locked) return sources
-
-  return { ...sources, [source]: locked }
-}
-
 /**
  * login1 exposes the lock as `LockedHint`, and an inactive session (another user at the console) as `Active=false`.
- * `LockedHint` is authoritative; when it is absent, report nothing so another watcher can answer.
+ * `LockedHint` is authoritative; when it is absent, report nothing so the idle fallback can answer.
  */
 export function login1Locked(locked: boolean | undefined, active: boolean | undefined) {
   if (locked === true || active === false) return true
@@ -52,6 +25,13 @@ export function login1Locked(locked: boolean | undefined, active: boolean | unde
   if (locked === false) return false
 
   return undefined
+}
+
+/** Reads a session object path from a gdbus `objectpath` reply. */
+export function parseLogin1SessionPath(output: string) {
+  const match = output.match(/\/org\/freedesktop\/login1\/session\/[^'",)\s]+/)
+
+  return match?.[0]
 }
 
 /** Reads a gdbus PropertiesChanged line, deliberately line-scoped and limited to login1's session interface. */
@@ -87,77 +67,62 @@ export function parseGdbusBoolean(output: string) {
   return value === undefined ? undefined : value === "true"
 }
 
-export function parseScreensaverLine(line: string) {
-  if (/\bUNBLANK\b/.test(line)) return false
-
-  if (/\bLOCK\b/.test(line)) return true
-
-  return undefined
-}
-
 /**
- * Best-effort Linux lock detection. login1/elogind and xscreensaver watch independently, and each report is cleared
- * when its watcher stops, so a dead monitor cannot hold the screen locked. The caller keeps its idle fallback either way.
+ * Best-effort Linux lock detection through login1/elogind. Electron's idle probe remains the fallback for desktops
+ * without logind or when the bus watcher is unavailable. A watcher that stops clears its own contribution.
  */
 export function watchLinuxScreenLock(onChange: (locked: boolean | undefined) => void): LinuxScreenLockHint {
-  let sources: LinuxLockSources = {}
   let last: boolean | undefined
   let closed = false
-  let login1Child: ReturnType<typeof spawn> | undefined
-  let screensaverChild: ReturnType<typeof spawn> | undefined
-  let login1Timer: ReturnType<typeof setTimeout> | undefined
-  let screensaverTimer: ReturnType<typeof setTimeout> | undefined
+  let child: ReturnType<typeof spawn> | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  const publish = () => {
-    const next = linuxBusLocked(sources)
-
+  const publish = (next: boolean | undefined) => {
     if (next === last) return
     last = next
     onChange(next)
   }
 
-  const update = (source: LinuxLockSource, locked: boolean | undefined) => {
-    sources = setLinuxLockSource(sources, source, locked)
-    publish()
-  }
-
-  const schedule = (timer: "login1" | "screensaver") => {
+  const schedule = () => {
     if (closed) return
 
-    const run = () => (timer === "login1" ? void startLogin1() : startScreensaver())
-
-    if (timer === "login1") login1Timer = setTimeout(run, RETRY_MS).unref()
-    else screensaverTimer = setTimeout(run, RETRY_MS).unref()
+    timer = setTimeout(() => void start(), RETRY_MS).unref()
   }
 
-  const startLogin1 = async () => {
+  const start = async () => {
     if (closed) return
     const session = await login1Session()
 
     if (closed) return
 
-    if (!session) return schedule("login1")
-    const [locked, active] = await Promise.all([login1Property(session, "LockedHint"), login1Property(session, "Active")])
+    if (session.missing) return
+
+    if (!session.path) return schedule()
+
+    const [locked, active] = await Promise.all([
+      login1Property(session.path, "LockedHint"),
+      login1Property(session.path, "Active"),
+    ])
 
     if (closed) return
 
-    if (locked === undefined && active === undefined) return schedule("login1")
-    update("login1", login1Locked(locked, active))
+    if (locked === undefined && active === undefined) return schedule()
+    publish(login1Locked(locked, active))
 
-    const child = spawn(
+    const monitor = spawn(
       "gdbus",
-      ["monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", session],
+      ["monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", session.path],
       { stdio: ["ignore", "pipe", "ignore"] },
     )
 
-    login1Child = child
+    child = monitor
     let buffer = ""
     let ended = false
     let lockedNow = locked
     let activeNow = active
 
-    child.stdout?.setEncoding("utf8")
-    child.stdout?.on("data", (chunk: string) => {
+    monitor.stdout?.setEncoding("utf8")
+    monitor.stdout?.on("data", (chunk: string) => {
       buffer += chunk
       const lines = buffer.split("\n")
       buffer = lines.pop() ?? ""
@@ -170,7 +135,7 @@ export function watchLinuxScreenLock(onChange: (locked: boolean | undefined) => 
         if (changed.locked !== undefined) lockedNow = changed.locked
 
         if (changed.active !== undefined) activeNow = changed.active
-        update("login1", login1Locked(lockedNow, activeNow))
+        publish(login1Locked(lockedNow, activeNow))
       })
     })
 
@@ -178,66 +143,30 @@ export function watchLinuxScreenLock(onChange: (locked: boolean | undefined) => 
       if (ended) return
       ended = true
 
-      if (login1Child === child) login1Child = undefined
-      update("login1", undefined)
-      schedule("login1")
+      if (child === monitor) child = undefined
+      publish(undefined)
+      schedule()
     }
 
-    child.on("error", finish)
-    child.on("exit", finish)
-  }
-
-  const startScreensaver = () => {
-    if (closed) return
-    const child = spawn("xscreensaver-command", ["-watch"], { stdio: ["ignore", "pipe", "ignore"] })
-    screensaverChild = child
-    let buffer = ""
-    let ended = false
-
-    child.stdout?.setEncoding("utf8")
-    child.stdout?.on("data", (chunk: string) => {
-      buffer += chunk
-      const lines = buffer.split("\n")
-      buffer = lines.pop() ?? ""
-
-      lines.forEach((line) => {
-        const locked = parseScreensaverLine(line)
-
-        if (locked !== undefined) update("screensaver", locked)
-      })
-    })
-
-    const finish = () => {
-      if (ended) return
-      ended = true
-
-      if (screensaverChild === child) screensaverChild = undefined
-      update("screensaver", undefined)
-      schedule("screensaver")
-    }
-
-    child.on("error", finish)
-    child.on("exit", finish)
+    monitor.on("error", finish)
+    monitor.on("exit", finish)
   }
 
   const close = () => {
     if (closed) return
     closed = true
-    clearTimeout(login1Timer)
-    clearTimeout(screensaverTimer)
-    login1Child?.kill()
-    screensaverChild?.kill()
+    clearTimeout(timer)
+    child?.kill()
     process.off("exit", close)
   }
 
   process.once("exit", close)
-  void startLogin1()
-  startScreensaver()
+  void start()
 
   return { close }
 }
 
-async function login1Session() {
+async function login1Session(): Promise<{ path?: string; missing?: boolean }> {
   try {
     const { stdout } = await execFileAsync(
       "gdbus",
@@ -255,11 +184,36 @@ async function login1Session() {
       { timeout: 1_000 },
     )
 
-    const match = stdout.match(/\/org\/freedesktop\/login1\/session\/[^'",)\s]+/)
+    const path = parseLogin1SessionPath(stdout)
 
-    return match?.[0]
-  } catch {
-    return undefined
+    if (path) return { path }
+  } catch (cause) {
+    if (missingExecutable(cause)) return { missing: true }
+  }
+
+  // `user/self` is this same user, but its Display is one seat's graphical session. On multi-seat machines this is
+  // deliberately a best-effort fallback for launches whose PID lookup (systemd user@UID/app.slice) has no session.
+  try {
+    const { stdout } = await execFileAsync(
+      "gdbus",
+      [
+        "call",
+        "--system",
+        "--dest",
+        "org.freedesktop.login1",
+        "--object-path",
+        "/org/freedesktop/login1/user/self",
+        "--method",
+        "org.freedesktop.DBus.Properties.Get",
+        "org.freedesktop.login1.User",
+        "Display",
+      ],
+      { timeout: 1_000 },
+    )
+
+    return { path: parseLogin1SessionPath(stdout) }
+  } catch (cause) {
+    return missingExecutable(cause) ? { missing: true } : {}
   }
 }
 
@@ -286,4 +240,8 @@ async function login1Property(session: string, property: string) {
   } catch {
     return undefined
   }
+}
+
+function missingExecutable(cause: unknown) {
+  return cause instanceof Error && "code" in cause && cause.code === "ENOENT"
 }

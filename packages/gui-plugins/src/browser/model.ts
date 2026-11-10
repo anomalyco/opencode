@@ -16,7 +16,7 @@ import {
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
-import { BrowserPane, type PaneEvent, type PillOverlay } from "./ipc"
+import { BrowserPane, type PaneEvent, type PillPresentation } from "./ipc"
 import {
   addressFocusTab,
   createInitialState,
@@ -662,8 +662,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return code === undefined ? undefined : describe(code)
     },
     suspended: (session: Session) => sessionSuspended(machine(), session.key),
-    /** Sends the pill's visibility and resolved appearance to its small native view. */
-    pill(input: PillOverlay) {
+    /** Sends the pill's resolved label and appearance to its small native view. */
+    pill(input: PillPresentation) {
       void client()
         ?.pill(input)
         .catch(() => undefined)

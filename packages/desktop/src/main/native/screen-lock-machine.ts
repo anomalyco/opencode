@@ -5,15 +5,15 @@ export type IdleState = "active" | "idle" | "locked" | "unknown"
  * Whether the user is away from this desktop.
  *
  * `screen` is an explicit lock-screen event, `sleeping` is a suspend not yet followed by resume, `away` is a macOS switch
- * to another login session, `probed` is the idle-state fallback, and `bus` is the Linux login1/elogind or screensaver
- * hint. Each source stays separate so one source going quiet or reporting unlocked cannot clear another's lock.
+ * to another login session, `probed` is the idle-state fallback, and `bus` is the Linux login1/elogind hint. Each
+ * source stays separate so one source going quiet or reporting unlocked cannot clear another's lock.
  */
 export type ScreenLockState = {
   readonly screen: boolean
   readonly away: boolean
   readonly sleeping: boolean
   readonly probed: boolean
-  /** Linux login1/elogind or screensaver: undefined while no watcher is available. */
+  /** Linux login1/elogind: undefined while no watcher is available. */
   readonly bus: boolean | undefined
 }
 
@@ -28,7 +28,7 @@ export type ScreenLockEvent =
   | { readonly type: "resumed"; readonly idle: IdleState }
   /** A periodic read of the idle state, the fallback when no Linux bus watcher is available. `unknown` changes nothing. */
   | { readonly type: "probed"; readonly idle: IdleState }
-  /** A Linux bus hint; undefined clears that watcher's contribution when it stops. */
+  /** A Linux login1/elogind hint; undefined clears its contribution when the watcher stops. */
   | { readonly type: "bus"; readonly locked: boolean | undefined }
 
 export const initialScreenLockState: ScreenLockState = Object.freeze({

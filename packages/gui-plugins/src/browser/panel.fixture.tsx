@@ -394,7 +394,7 @@ export function mountBrowserPane(input: PaneHost) {
         report()
       },
       close: async () => undefined,
-      state: () => undefined,
+      state: () => ({ locked: false, pill: "pill-embed" }),
       on: (_name, listener) => {
         // SAFETY: the pane's Ipc has one event, whose payload is exactly this binding and PaneEvent.
         const added = listener as (value: { binding: string; event: PaneEvent }) => void
@@ -562,6 +562,24 @@ export function mountBrowserPane(input: PaneHost) {
               Page icon
             </button>
           </nav>
+          <div style={{ position: "fixed", top: "8px", right: "8px", display: "flex", gap: "8px", "z-index": "1002" }}>
+            <button
+              onClick={() => {
+                setStore("error", "browser.pane.disconnected")
+                report()
+              }}
+            >
+              Drop pane connection
+            </button>
+            <button
+              onClick={() => {
+                setStore("error", undefined)
+                report()
+              }}
+            >
+              Restore pane connection
+            </button>
+          </div>
           <p>Captures: {store.captures}</p>
           <p>Zoom: {Math.round(store.zoom * 100)}</p>
           <p>Visits: {store.history.visits.map((visit) => visit.url).join(" ")}</p>
@@ -619,6 +637,9 @@ export function mountBrowserPane(input: PaneHost) {
               />
             </Portal>
           </Show>
+          <p data-testid="native-pill" data-visible={!!store.layouts["pill-embed"]?.visible}>
+            Pill: {store.layouts["pill-embed"]?.visible ? "visible" : "hidden"}
+          </p>
           <For each={tabs}>
             {(tab) => (
               <div
