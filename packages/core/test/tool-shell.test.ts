@@ -1371,11 +1371,13 @@ describe("ShellTool", () => {
             const shell = yield* Shell.Service
             const info = yield* shell.get(id)
             expect(result.status).toBe("completed")
-            expect(result.metadata).toMatchObject({ status: "running", shellID: id, truncated: false })
+            expect(info.pid).toBeGreaterThan(0)
+            expect(result.metadata).toMatchObject({ status: "running", shellID: id, pid: info.pid, truncated: false })
+            expect(result.output).toMatchObject({ shellID: id, pid: info.pid })
             expect(result.metadata).not.toHaveProperty("timeout")
             expect(result.content?.[0]).toEqual({
               type: "text",
-              text: `Command moved to the background (shell ID: ${id}).\nOutput is streaming to: ${info.file}\n\nThe command did not finish within its timeout of 0.01 seconds and was moved to the background. Do not start another copy while it is running.`,
+              text: `Command moved to the background (shell ID: ${id}).\nPID: ${info.pid}\nOutput is streaming to: ${info.file}\n\nThe command did not finish within its timeout of 0.01 seconds and was moved to the background. Do not start another copy while it is running.`,
             })
             expect(info.status).toBe("running")
             expect((yield* shell.list()).map((item) => item.id)).toEqual([id])
@@ -1737,7 +1739,7 @@ describe("ShellTool", () => {
     }),
   )
 
-  it.live("returns the shell id for a background command", () =>
+  it.live("returns the shell id and PID for a background command", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1757,10 +1759,13 @@ describe("ShellTool", () => {
           if (!shellID) return
           const id = ID.make(shellID)
           const info = yield* shell.get(id)
+          expect(info.pid).toBeGreaterThan(0)
+          expect(settled.metadata).toMatchObject({ pid: info.pid })
+          expect(settled.output).toMatchObject({ shellID, pid: info.pid })
           expect(settled.content).toEqual([
             {
               type: "text",
-              text: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${info.file}`,
+              text: `Command moved to the background (shell ID: ${shellID}).\nPID: ${info.pid}\nOutput is streaming to: ${info.file}`,
             },
             {
               type: "text",
@@ -2034,7 +2039,7 @@ describe("ShellTool", () => {
           const info = yield* shell.get(id)
           expect(settled.content?.[0]).toEqual({
             type: "text",
-            text: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${info.file}`,
+            text: `Command moved to the background (shell ID: ${shellID}).\nPID: ${info.pid}\nOutput is streaming to: ${info.file}`,
           })
           expect(settled.content?.[1]).toEqual({
             type: "text",

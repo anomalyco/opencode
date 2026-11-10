@@ -65,6 +65,7 @@ const StructuredOutput = Schema.Struct({
   exit: Schema.optionalKey(Schema.Number),
   signal: Schema.optionalKey(Schema.String),
   shellID: Schema.optionalKey(Schema.String),
+  pid: Schema.optionalKey(NonNegativeInt),
   truncated: Schema.Boolean,
   timeout: Schema.optionalKey(Schema.Boolean),
 })
@@ -90,14 +91,16 @@ const toolResult = (output: Output, timeout?: number) => {
       status: output.status,
       ...ShellResult.metadata(output),
       ...(output.shellID !== undefined ? { shellID: output.shellID } : {}),
+      ...(output.pid !== undefined ? { pid: output.pid } : {}),
     },
   }
 }
 
-const backgroundResult = (shellID: string, file: string, timeout?: number) => ({
+const backgroundResult = (info: ShellResult.Result["info"], timeout?: number) => ({
   output: [
-    `Command moved to the background (shell ID: ${shellID}).`,
-    `Output is streaming to: ${file}`,
+    `Command moved to the background (shell ID: ${info.id}).`,
+    ...(info.pid === undefined ? [] : [`PID: ${info.pid}`]),
+    `Output is streaming to: ${info.file}`,
     ...(timeout === undefined
       ? []
       : [
@@ -105,7 +108,8 @@ const backgroundResult = (shellID: string, file: string, timeout?: number) => ({
           `The command did not finish within its timeout of ${timeout / 1_000} seconds and was moved to the background. Do not start another copy while it is running.`,
         ]),
   ].join("\n"),
-  shellID,
+  shellID: info.id,
+  ...(info.pid === undefined ? {} : { pid: info.pid }),
   truncated: false,
   status: "running" as const,
 })
@@ -248,7 +252,7 @@ export const Plugin = {
               if (input.background === true) {
                 yield* jobs.background(job.id)
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                return backgroundResult(info.id, info.file)
+                return backgroundResult(info)
               }
 
               const waiting = jobs.block({ id: job.id, sessionID: context.sessionID })
@@ -275,7 +279,7 @@ export const Plugin = {
                 const elapsed = "timedOut" in result ? finalTimeout : undefined
                 finalTimeout = 0
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                return backgroundResult(info.id, info.file, elapsed)
+                return backgroundResult(info, elapsed)
               }
               if (result?.info.status === "error")
                 return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
