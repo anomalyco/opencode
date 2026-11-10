@@ -21,7 +21,6 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
-import { Bus } from "@opencode/core/bus"
 import { advance, drain } from "../lib/clock"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { testEffect } from "../lib/effect"
@@ -624,7 +623,7 @@ describe("GithubCopilotPlugin", () => {
   it.effect("routes Auto through Copilot's router and keeps the pick until compaction", () =>
     Effect.gen(function* () {
       const picks: unknown[] = []
-      const state = { pick: "routed", available: true, listed: false }
+      const state = { pick: "routed", available: true, listed: false, auth: "" }
       const remote = (id: string, extra: Record<string, unknown> = {}) => ({
         model_picker_enabled: false,
         id,
@@ -655,7 +654,7 @@ describe("GithubCopilotPlugin", () => {
               }),
             )
           }
-          expect(request.headers.authorization).toBe("Bearer token")
+          state.auth = request.headers.authorization
           picks.push(
             request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : null,
           )
@@ -728,16 +727,27 @@ describe("GithubCopilotPlugin", () => {
       expect(yield* token("other")).toBe("token-other")
       expect(picks).toHaveLength(2)
 
+      expect(state.auth).toBe("Bearer token")
+
+      // A pick belongs to the account that made it.
       state.pick = "routed"
-      const bus = yield* Bus.Service
-      yield* bus.publish(
-        Credential.Event.Switched,
-        { integrationID: Integration.ID.make("github-copilot"), credentialID: null },
-        { global: true },
-      )
+      state.listed = false
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
+        integrationID: Integration.ID.make("github-copilot"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "second",
+          refresh: "second",
+          expires: 0,
+          metadata: { apiEndpoint: "https://copilot.test" },
+        }),
+      })
+      yield* advance(() => state.listed)
       yield* drain
       expect(yield* resolve("primary")).toBe("routed")
-      expect(picks).toHaveLength(3)
+      expect(state.auth).toBe("Bearer second")
 
       state.available = false
       expect(yield* resolve("primary", ids.child)).toBe("fallback")

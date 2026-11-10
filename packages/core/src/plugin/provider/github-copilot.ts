@@ -171,12 +171,8 @@ export const GithubCopilotPlugin = define({
     const http = yield* HttpClient.HttpClient
     const outbound = yield* FetchHttpClient.Fetch
     // Each Session keeps the model Copilot's Auto router picked until its token nears expiry, the Session is compacted,
-    // or the account switches. The token unlocks the pick and its Auto discount; Copilot rejects it for any other model.
-    const routes = new Map<Session.ID, { model: string; token?: string; until: number }>()
-    yield* ProviderRefresh.onSwitch(
-      "github-copilot",
-      Effect.sync(() => routes.clear()),
-    )
+    // or the account changes. The token unlocks the pick and its Auto discount; Copilot rejects it for any other model.
+    const routes = new Map<Session.ID, { model: string; account: string; token?: string; until: number }>()
     const discovered = yield* ProviderRefresh.start({
       integrationID: "github-copilot",
       initial: {} as {
@@ -348,13 +344,16 @@ export const GithubCopilotPlugin = define({
       if (Option.isSome(picked) && loaded.models.has(picked.value.selected_model.id))
         return {
           model: picked.value.selected_model.id,
+          account: loaded.token,
           token: picked.value.session_token,
           // Route again before the token can expire mid-request.
           until: picked.value.expires_at * 1000 - 5 * 60_000,
         }
-      const fallback = Array.from(loaded.models.values()).find((model) => model.is_chat_fallback)
+      const models = Array.from(loaded.models.values())
+      const fallback =
+        models.find((model) => model.is_chat_fallback) ?? models.find((model) => model.billing?.auto_discount)
       // Retry routing soon when the router fails or picks a model this client cannot serve.
-      return fallback && { model: fallback.id, until: now + 5 * 60_000 }
+      return fallback && { model: fallback.id, account: loaded.token, until: now + 5 * 60_000 }
     })
     yield* ctx.session.hook(
       "experimental.model.resolve",
@@ -364,8 +363,12 @@ export const GithubCopilotPlugin = define({
           if (evt.model.id !== CopilotModels.auto || evt.kind === "title") return
           const now = yield* Clock.currentTimeMillis
           const cached = routes.get(evt.sessionID)
-          const current = cached && cached.until > now ? cached : yield* route(evt.sessionID)
+          const current =
+            cached && cached.until > now && cached.account === discovered.current.token
+              ? cached
+              : yield* route(evt.sessionID)
           if (!current) return
+          for (const [id, route] of routes) if (route.until <= now) routes.delete(id)
           routes.set(evt.sessionID, current)
           evt.target = Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make(current.model) })
         }),
