@@ -158,11 +158,12 @@ fn view(model: &Model, session: &str) -> Node {
             let mut spans: Vec<Span> =
                 model.keys.child.iter().map(|key| Span::new(format!("{key} ")).fg("text.base")).collect();
             spans.push(Span::new(live.join(" · ")));
+            let tab = if model.subagents > 0 { "subagents" } else { "shell" };
             status.push(
                 text(spans)
                     .fg("text.muted")
                     .hover_fg("text.base")
-                    .on_click(Click::command("session.child.first", None)),
+                    .on_click(Click::command("session.child.first", Some(tab.to_owned()))),
             );
         }
         if let Some(goal) = &model.goal {
