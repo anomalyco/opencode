@@ -166,23 +166,50 @@ export const read = Effect.fn("ReadTool.read")(function* (
   }
 
   if (first.bytes.length >= first.info.size) return yield* completePage(input, resource, first.bytes, page)
+  // A negative offset counts back from the last line, so count the lines first, then read forward from there.
+  if (page.offset !== undefined && page.offset < 0) {
+    const total = yield* countLines(files, input, resource, first)
+    return yield* streamPage(files, input, resource, first, { ...page, offset: Math.max(1, total + page.offset + 1) })
+  }
+  return yield* streamPage(files, input, resource, first, page)
+})
 
+type First = { readonly bytes: Uint8Array; readonly info: { readonly size: number } }
+
+// Reads a file larger than its first chunk forward, dropping the chunks that end before line `keep`.
+const streamPage = Effect.fnUntraced(function* (
+  files: Files,
+  input: AbsolutePath,
+  resource: string,
+  first: First,
+  page: PageInput,
+  keep = page.offset || 1,
+): Effect.fn.Return<TextPage, ReadError> {
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const leaves = [textLeaf(first.bytes)]
+  // Newlines in the dropped chunks, and whether any were dropped or had a NUL byte.
+  let before = 0
+  let dropped = false
+  let binaryBefore = false
   let bytes = first.bytes.length
   let lines = leaves[0].summary.lines
   let ended = false
+  // A page can only settle once another line ends, so a chunk without a newline doesn't try again.
+  let ending = true
   while (true) {
     const eof = ended || bytes >= first.info.size
     const total = lineCount(lines, leaves.at(-1)?.bytes.at(-1))
     if (eof && offset > total) {
       const skipped = Math.max(0, total - Math.min(page.limit || TAIL_LINES, TAIL_LINES))
+      // The tail started in a dropped chunk, so read again, keeping from its first line.
+      if (dropped && skipped <= before)
+        return yield* streamPage(files, input, resource, first, page, Math.max(1, skipped))
       // Decode from the newline ending the last skipped line, so a byte order mark
       // starting the tail stays content. That empty first line is never in the tail.
       const tree = textTree(leaves)
       const tail = textPage(
-        textSlice(leaves, Math.max(0, textOffset(tree, skipped) - 1), tree.summary.bytes),
+        textSlice(leaves, Math.max(0, textOffset(tree, skipped - before) - 1), tree.summary.bytes),
         true,
         page,
       )
@@ -191,30 +218,30 @@ export const read = Effect.fn("ReadTool.read")(function* (
         input,
         resource,
         { ...tail, offset: Math.max(0, skipped - 1) + tail.offset },
-        leaves.some((leaf) => leaf.bytes.includes(0)),
+        binaryBefore || leaves.some((leaf) => leaf.bytes.includes(0)),
       )
     }
-    if (eof || (offset > 0 && lines >= offset - 1)) {
-      // A negative offset only resolves at EOF, counting back from the last line.
-      const from = offset < 0 ? Math.max(1, total + offset + 1) : offset
+    if (eof || (ending && lines >= offset - 1)) {
       const tree = textTree(leaves)
-      const start = textOffset(tree, from - 1)
+      const start = textOffset(tree, offset - 1 - before)
       // Decode only the requested lines plus one byte, enough to tell whether more follow.
-      const end = Math.min(tree.summary.bytes, textOffset(tree, from - 1 + limit) + 1)
+      const end = Math.min(tree.summary.bytes, textOffset(tree, offset - 1 - before + limit) + 1)
       const result = textPage(textSlice(leaves, start, end), eof && end === tree.summary.bytes, { limit })
       if (result !== undefined) {
         const translated = {
           ...result,
-          offset: from,
-          ...(result.next === undefined ? { next: undefined } : { next: from + result.next - 1 }),
+          offset,
+          ...(result.next === undefined ? { next: undefined } : { next: offset + result.next - 1 }),
         }
         const consumed = start + result.consumed
         let checked = 0
-        const binary = leaves.some((leaf) => {
-          const length = Math.min(leaf.summary.bytes, consumed - checked)
-          checked += leaf.summary.bytes
-          return length > 0 && leaf.bytes.subarray(0, length).includes(0)
-        })
+        const binary =
+          binaryBefore ||
+          leaves.some((leaf) => {
+            const length = Math.min(leaf.summary.bytes, consumed - checked)
+            checked += leaf.summary.bytes
+            return length > 0 && leaf.bytes.subarray(0, length).includes(0)
+          })
         return yield* makeTextPage(input, resource, translated, binary)
       }
     }
@@ -228,7 +255,29 @@ export const read = Effect.fn("ReadTool.read")(function* (
     leaves.push(leaf)
     bytes += leaf.summary.bytes
     lines += leaf.summary.lines
+    ending = leaf.summary.lines > 0
+    while (leaves.length > 1 && before + leaves[0].summary.lines < keep - 1) {
+      const oldest = leaves.shift()!
+      before += oldest.summary.lines
+      dropped = true
+      binaryBefore ||= oldest.bytes.includes(0)
+    }
   }
+})
+
+// Counts the lines of a file larger than its first chunk without keeping it.
+const countLines = Effect.fnUntraced(function* (files: Files, input: AbsolutePath, resource: string, first: First) {
+  let bytes = first.bytes.length
+  let lines = textLeaf(first.bytes).summary.lines
+  let last = first.bytes.at(-1)
+  while (bytes < first.info.size) {
+    const next = yield* readFile(files, input, resource, { offset: bytes, length: FIRST_CHUNK })
+    if (next.bytes.length === 0) break
+    bytes += next.bytes.length
+    lines += textLeaf(next.bytes).summary.lines
+    last = next.bytes.at(-1)
+  }
+  return lineCount(lines, last)
 })
 
 const readFile = (
@@ -374,7 +423,7 @@ type TextNode =
 
 const textLeaf = (bytes: Uint8Array): Extract<TextNode, { readonly type: "leaf" }> => {
   let lines = 0
-  for (const byte of bytes) if (byte === 10) lines++
+  for (let index = bytes.indexOf(10); index !== -1; index = bytes.indexOf(10, index + 1)) lines++
   return { type: "leaf", bytes, summary: { bytes: bytes.length, lines } }
 }
 

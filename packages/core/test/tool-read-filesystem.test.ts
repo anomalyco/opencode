@@ -392,6 +392,53 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("reads the end of a file many chunks long", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string | Uint8Array, page: ReadToolFileSystem.PageInput) =>
+        (typeof content === "string"
+          ? files.writeFileString(path.join(directory, name), content)
+          : files.writeFile(path.join(directory, name), content)
+        ).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      // 60,000 lines of 51 bytes span 12 chunks.
+      const lines = Array.from({ length: 60_000 }, (_, index) => `${index + 1}`.padEnd(50, "x"))
+      const content = lines.join("\n") + "\n"
+      const expected = (from: number, to: number) =>
+        lines.slice(from - 1, to).map((line, index) => `${from + index}: ${line}`)
+
+      expect(yield* read("negative.txt", content, { offset: -5 })).toEqual([
+        "Read file negative.txt, lines 59996-60000",
+        ...expected(59_996, 60_000),
+      ])
+      expect(yield* read("past.txt", content, { offset: 70_000, limit: 3 })).toEqual([
+        "Read file past.txt, lines 59998-60000 (offset 70000 is past the end; the file has 60000 lines)",
+        ...expected(59_998, 60_000),
+      ])
+      expect(yield* read("deep.txt", content, { offset: 45_000, limit: 2 })).toEqual([
+        "Read file deep.txt, lines 45000-45001",
+        ...expected(45_000, 45_001),
+        "[Output truncated. Continue reading with offset: 45002]",
+      ])
+      // Far from the end, a negative offset still reads from the line it counts back to.
+      expect(yield* read("far.txt", content, { offset: -10_000, limit: 3 })).toEqual([
+        "Read file far.txt, lines 50001-50003",
+        ...expected(50_001, 50_003),
+        "[Output truncated. Continue reading with offset: 50004]",
+      ])
+
+      // A null byte in a chunk dropped from the window still marks the file as binary.
+      const early = new TextEncoder().encode(content)
+      early[10] = 0
+      const negative = yield* read("early-nul.txt", early, { offset: -5 }).pipe(Effect.flip)
+      expect(negative).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+      const past = yield* read("early-nul-past.txt", early, { offset: 70_000 }).pipe(Effect.flip)
+      expect(past).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+
   it.effect("rejects a negative offset for a directory", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
