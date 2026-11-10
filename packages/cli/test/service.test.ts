@@ -214,7 +214,7 @@ test("saved service environment cannot move the registration's state directory",
       ServiceConfig.options().pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)),
     )
     expect(options.env).toEqual({ A: "1" })
-    expect(options.file).toBe(path.join(root, "state", ServiceConfig.filename()))
+    expect(options.file).toBe(path.join(root, "state", ServiceConfig.registrationFilename()))
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
@@ -274,6 +274,68 @@ test("service filenames share release channels and identify preview channels", (
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-other-1234", "preview-a")).toBe(false)
   expect(ServiceConfig.versionBelongsToChannel("1.2.3", "preview-a")).toBe(false)
 })
+
+test("service registration filenames are scoped to the network namespace", () => {
+  const state = path.join("root", "state")
+  expect(ServiceConfig.registrationFilename("latest", "4026531840")).toBe("service-netns-4026531840.json")
+  expect(ServiceConfig.registrationFilename("dev", "4026531840")).toBe("service-netns-4026531840.json")
+  expect(ServiceConfig.registrationFilename("local", "4026531840")).toBe("service-local-netns-4026531840.json")
+  expect(ServiceConfig.registrationFilename("preview-a", "4026531840")).toBe(
+    "service-preview-a-netns-4026531840.json",
+  )
+  // Two namespaces sharing one state directory resolve to different registration files.
+  expect(path.join(state, ServiceConfig.registrationFilename("latest", "4026531840"))).not.toBe(
+    path.join(state, ServiceConfig.registrationFilename("latest", "4026531841")),
+  )
+  // One namespace always resolves to the same file.
+  expect(ServiceConfig.registrationFilename("latest", "4026531840")).toBe(
+    ServiceConfig.registrationFilename("latest", "4026531840"),
+  )
+  // Omitting the identity scopes to the current namespace, which is the
+  // unscoped name where no identity can be determined.
+  const current = ServiceConfig.netns()
+  expect(ServiceConfig.registrationFilename("latest")).toBe(
+    current === undefined ? "service.json" : `service-netns-${current}.json`,
+  )
+  expect(ServiceConfig.registrationFilename("preview-a")).toBe(
+    current === undefined ? "service-preview-a.json" : `service-preview-a-netns-${current}.json`,
+  )
+  // The configuration filename is never scoped.
+  expect(ServiceConfig.filename("latest")).toBe("service.json")
+  expect(ServiceConfig.filename("preview-a")).toBe("service-preview-a.json")
+})
+
+test.skipIf(process.platform !== "linux")("the current network namespace is read from /proc", () => {
+  expect(ServiceConfig.netns()).toMatch(/^\d+$/)
+})
+
+test.skipIf(process.platform === "linux")("there is no network namespace identity off Linux", () => {
+  expect(ServiceConfig.netns()).toBeUndefined()
+})
+
+test.skipIf(process.platform !== "linux")(
+  "service registration migrates from the unscoped file into the namespace-scoped file",
+  async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-netns-migration-"))
+    const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+    try {
+      await fs.mkdir(path.join(root, "state"), { recursive: true })
+      const legacy = path.join(root, "state", ServiceConfig.filename())
+      await fs.writeFile(
+        legacy,
+        JSON.stringify({ id: "previous", version: OPENCODE_VERSION, url: "http://127.0.0.1:4096", pid: 1 }),
+      )
+      const options = await Effect.runPromise(
+        ServiceConfig.options().pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)),
+      )
+      expect(options.file).toBe(path.join(root, "state", ServiceConfig.registrationFilename()))
+      expect(options.file).not.toBe(legacy)
+      expect(await Bun.file(options.file).json()).toMatchObject({ id: "previous" })
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+)
 
 test("service config migrates from the hashed channel filename", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-config-migration-"))
@@ -395,7 +457,7 @@ test("concurrent service processes elect one server", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-election-"))
   const env = serviceEnv(root)
   const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
-  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename("local"))
   const port = await availablePort()
   const config = path.join(root, "config", "opencode", "service-local.json")
   await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
@@ -464,7 +526,7 @@ test("configured managed service port overrides the channel default", async () =
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-port-"))
   const port = await availablePort()
   const env = serviceEnv(root)
-  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename("local"))
   const config = path.join(root, "config", "opencode", "service-local.json")
   await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
   await fs.writeFile(config, JSON.stringify({ port, password: "" }))
@@ -498,7 +560,7 @@ test.each([
   async ({ args, origins }) => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-cors-"))
     const config = path.join(root, "config", ServiceConfig.filename())
-    const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+    const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename())
     const cors = ["http://192.0.2.10:3001", "https://configured.example.com"]
     await fs.mkdir(path.dirname(config), { recursive: true })
     await fs.writeFile(config, JSON.stringify({ cors }))
@@ -544,7 +606,7 @@ test("the original managed service contender binds when the occupied port is rel
   })
   const port = listener.port
   if (port === undefined) throw new Error("Server did not bind a port")
-  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename("local"))
   await fs.mkdir(path.join(root, "config"), { recursive: true })
   await fs.mkdir(path.dirname(registration), { recursive: true })
   await fs.writeFile(path.join(root, "config", "service-local.json"), JSON.stringify({ port }))
@@ -613,7 +675,7 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
       return new Promise<Response>(() => {})
     },
   })
-  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename("local"))
   await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
   await fs.mkdir(path.dirname(registration), { recursive: true })
   await fs.writeFile(
@@ -678,7 +740,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
       )
     },
   })
-  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename("local"))
   const config = path.join(root, "config", "opencode", "service-local.json")
   await fs.mkdir(path.dirname(config), { recursive: true })
   await fs.writeFile(config, JSON.stringify({ port: listener.port }))
@@ -722,7 +784,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
 
 test("service registration replaces a stale owner with the bound address", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-stale-"))
-  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename("local"))
   await fs.mkdir(path.dirname(registration), { recursive: true })
   await fs.writeFile(
     registration,
@@ -761,7 +823,7 @@ test("a failed service stays registered and owns the selected port until stopped
   await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port }))
   const env = { ...serviceEnv(root), OPENCODE_DB: database }
   const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
-  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename("local"))
   const owner = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
 
   try {
@@ -864,7 +926,7 @@ function serviceEnv(root: string) {
 async function startManagedService(prefix: string, failBoot = false) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), prefix))
   const port = await availablePort()
-  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const registration = path.join(root, "state", "opencode", ServiceConfig.registrationFilename("local"))
   await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
   if (failBoot) await fs.mkdir(path.join(root, "database"))
   await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port }))

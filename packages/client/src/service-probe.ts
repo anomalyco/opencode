@@ -1,3 +1,4 @@
+import { readlinkSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
@@ -35,9 +36,29 @@ function fail(message: string) {
   return { _tag: "fail" as const, error: new Error(message) }
 }
 
-/** The default registration file. */
+/** The default registration file, scoped to this process's network namespace when it has one. */
 export function fallback() {
-  return join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"), "opencode", "service.json")
+  const namespace = netns()
+  return join(
+    process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"),
+    "opencode",
+    namespace === undefined ? "service.json" : `service-netns-${namespace}.json`,
+  )
+}
+
+// The identity of the network namespace this process runs in: the inode of
+// /proc/self/ns/net. A registration written by one namespace names a service
+// that is unreachable from another, so discovery reads this namespace's
+// registration. Kept in step with the CLI's service configuration; where the
+// identity cannot be determined (not Linux, or the namespace file cannot be
+// read) the unscoped default is used.
+function netns() {
+  if (process.platform !== "linux") return undefined
+  try {
+    return /\[(\d+)\]$/.exec(readlinkSync("/proc/self/ns/net"))?.[1]
+  } catch {
+    return undefined
+  }
 }
 
 /** Whether two registrations describe the same service instance. */

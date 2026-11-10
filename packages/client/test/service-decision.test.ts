@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
-import { decide, type LocalService } from "../src/service-probe"
+import { readlinkSync } from "node:fs"
+import { join } from "node:path"
+import { decide, fallback, type LocalService } from "../src/service-probe"
 
 const protocolError =
   "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
@@ -11,6 +13,15 @@ function service(input: Pick<LocalService, "state" | "compatible" | "version">) 
     ...input,
   } satisfies LocalService
 }
+
+test("the default registration file is scoped to the current network namespace", () => {
+  if (process.platform !== "linux") {
+    expect(fallback().endsWith(join("opencode", "service.json"))).toBe(true)
+    return
+  }
+  const id = /\[(\d+)\]$/.exec(readlinkSync("/proc/self/ns/net"))?.[1]
+  expect(fallback().endsWith(join("opencode", `service-netns-${id}.json`))).toBe(true)
+})
 
 test("a missing health endpoint fails unless the caller requires a different version", () => {
   const missing = service({ version: "2.0.0", state: "ready", compatible: false })

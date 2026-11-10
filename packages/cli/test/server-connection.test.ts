@@ -210,7 +210,9 @@ test("local config commands do not start or require a server", async () => {
         },
       },
     })
-    expect(await Bun.file(path.join(root, "state", "opencode", ServiceConfig.filename())).exists()).toBe(false)
+    expect(await Bun.file(path.join(root, "state", "opencode", ServiceConfig.registrationFilename())).exists()).toBe(
+      false,
+    )
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
