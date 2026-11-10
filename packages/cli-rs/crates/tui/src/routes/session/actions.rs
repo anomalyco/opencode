@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    ExperimentalSessionExportInput, ExperimentalSessionWaitInput, ModelRef, ProviderID, SessionID,
+    ExperimentalSessionExportInput, ExperimentalSessionWaitInput, ModelRef, PromptAgentAttachment,
+    PromptFileAttachment, PromptFileSource, PromptMention, PromptSkillAttachment, ProviderID, SessionID,
     SessionInboxCancelInput, SessionInboxInfo, SessionInfo, SessionInterruptInput, SessionMessageAssistantContentItem,
     SessionMessageCompaction, SessionMessageInfo, SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput,
     SessionUpdateInput,
@@ -205,7 +206,9 @@ impl Inner {
         let client = tui.data.client().clone();
         let session = self.session.clone();
         let target = self.session.clone();
-        let SessionMessageUser { id, text, .. } = message;
+        let prompt =
+            projected(&message.text, message.files.as_deref(), message.agents.as_deref(), message.skills.as_deref());
+        let SessionMessageUser { id, .. } = message;
         if pending {
             tui.app.spawn(
                 async move {
@@ -214,7 +217,7 @@ impl Inner {
                 },
                 bind!(tui, |tui, _, result| {
                     match result {
-                        Ok(()) => append_prompt(&tui, &target, &text),
+                        Ok(()) => append_prompt(&tui, &target, prompt.clone()),
                         Err(error) => tui.toasts.show(
                             ToastOptions::new(Variant::Error, error.to_string())
                                 .title("Failed to delete pending prompt"),
@@ -234,7 +237,7 @@ impl Inner {
             },
             bind!(tui, |tui, _, result| {
                 match result {
-                    Ok(_) => append_prompt(&tui, &target, &text),
+                    Ok(_) => append_prompt(&tui, &target, prompt.clone()),
                     Err(error) => tui.toasts.show(
                         ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)),
                     ),
@@ -406,23 +409,95 @@ fn last_reply(messages: &[SessionMessageInfo]) -> Option<String> {
     })
 }
 
-/// `appendToSessionPrompt`: the restored text after the composer's own, with a blank line between, or into the
-/// session's draft when its composer is not mounted. Only the text comes back (see `fork::restored`).
-pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, text: &str) {
-    let join = |current: &str| {
-        if current.is_empty() { text.to_owned() } else { format!("{current}\n\n{text}") }
-    };
-    let mounted = tui.textarea.borrow().clone();
-    if let Some(textarea) = mounted.filter(|_| tui.route() == (Route::Session { id: session.clone() })) {
-        textarea.set_text(join(&textarea.text()));
-        textarea.set_cursor_offset(u32::MAX);
+/// `appendToSessionPrompt` (`draft-stash.ts:37-47`): the restored prompt after what the session's composer holds,
+/// in normal mode, or after its draft when the composer is not mounted.
+pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, prompt: Value) {
+    let mounted = tui.prompt.current.borrow().upgrade().filter(|inner| inner.session.as_ref() == Some(session));
+    if let Some(inner) = mounted {
+        inner.restore(append(&inner.snapshot(), prompt));
+        inner.textarea.set_cursor_offset(inner.text_end());
         return;
     }
-    let mut prompt =
-        tui.prompt.drafts.take(Some(session)).map_or_else(opencode_local::jsonl::empty_prompt, |draft| draft.prompt);
-    let current = prompt["text"].as_str().unwrap_or_default().to_owned();
-    prompt["text"] = Value::String(join(&current));
+    let prompt = match tui.prompt.drafts.take(Some(session)) {
+        Some(draft) => append(&draft.prompt, prompt),
+        None => prompt,
+    };
     tui.prompt.drafts.save(Some(session), Draft { prompt, cursor: u32::MAX });
+}
+
+/// `appendPrompt` (`prompt/history.tsx:37-62`): `following` after `prompt` with a blank line between, its parts'
+/// ranges shifted by the cursor offset of what precedes it. The result has no mode, so it shows in normal mode.
+fn append(prompt: &Value, following: Value) -> Value {
+    let text =
+        prompt["text"].as_str().filter(|text| !text.is_empty()).map_or_else(String::new, |text| format!("{text}\n\n"));
+    let offset = opencode_ui::prompt_input::parse::measure(&text);
+    let mut merged = serde_json::json!({ "text": format!("{text}{}", following["text"].as_str().unwrap_or_default()) });
+    for (key, range) in [("files", "mention"), ("agents", "mention"), ("skills", "mention"), ("pasted", "source")] {
+        let before = prompt[key].as_array().cloned().unwrap_or_default();
+        let after = following[key].as_array().cloned().unwrap_or_default().into_iter().map(|mut part| {
+            for edge in ["start", "end"] {
+                if let Some(at) = part[range][edge].as_f64() {
+                    part[range][edge] = (at as u64 + u64::from(offset)).into();
+                }
+            }
+            part
+        });
+        merged[key] = Value::Array(before.into_iter().chain(after).collect());
+    }
+    merged
+}
+
+/// `projectedPromptInput` (`prompt/codec.ts:14-37`) with no pastes (`prompt/restore.ts`): a sent prompt as the
+/// composer holds it, with its files, agents, skills and their mentions. A user message carries its files' bytes,
+/// so none is read back.
+pub(crate) fn projected(
+    text: &str,
+    files: Option<&[PromptFileAttachment]>,
+    agents: Option<&[PromptAgentAttachment]>,
+    skills: Option<&[PromptSkillAttachment]>,
+) -> Value {
+    let part = |fields: Vec<(&str, Option<Value>)>, mention: &Option<PromptMention>| {
+        let mut part = serde_json::Map::new();
+        for (key, value) in fields {
+            if let Some(value) = value {
+                part.insert(key.to_owned(), value);
+            }
+        }
+        if let Some(mention) = mention {
+            let mention = serde_json::json!({
+                "start": mention.start as u64, "end": mention.end as u64, "text": mention.text,
+            });
+            part.insert("mention".to_owned(), mention);
+        }
+        Value::Object(part)
+    };
+    let files = files.unwrap_or_default().iter().map(|file| {
+        let uri = match &file.source {
+            PromptFileSource::Uri(source) => source.uri.clone(),
+            _ => format!("data:{};base64,{}", file.mime, file.data.as_str()),
+        };
+        let fields = vec![
+            ("uri", Some(Value::String(uri))),
+            ("name", file.name.clone().map(Value::String)),
+            ("description", file.description.clone().map(Value::String)),
+        ];
+        part(fields, &file.mention)
+    });
+    let agents = agents
+        .unwrap_or_default()
+        .iter()
+        .map(|agent| part(vec![("name", Some(Value::String(agent.name.clone())))], &agent.mention));
+    let skills = skills
+        .unwrap_or_default()
+        .iter()
+        .map(|skill| part(vec![("id", Some(Value::String(skill.id.0.clone())))], &skill.mention));
+    serde_json::json!({
+        "text": text,
+        "files": files.collect::<Vec<_>>(),
+        "agents": agents.collect::<Vec<_>>(),
+        "skills": skills.collect::<Vec<_>>(),
+        "pasted": [],
+    })
 }
 
 /// `experimental.session.export`, read as the JSON the server sent, so a JSON export keeps its fields and order.
