@@ -177,12 +177,7 @@ impl Viewer {
             .padding_edge(Edge::Top, u16::from(docked))
             .height(if docked { 2 } else { 1 })
             .child(&switch)
-            .child(
-                &Text::new(app, format!("{reviewed}/{total}"))
-                    .fg(theme.text.muted)
-                    .wrap(WrapMode::None)
-                    .shrink(0.0),
-            )
+            .child(&Text::new(app, format!("{reviewed}/{total}")).fg(theme.text.muted).wrap(WrapMode::None).shrink(0.0))
     }
 
     /// The fixed top edge and the scrolled cards.
@@ -514,7 +509,11 @@ impl Viewer {
         let on_source = Rc::new(bind!(weak, |viewer| crate::plugins::diffs::sources::open(&viewer)));
         let weak = self.this.clone();
         let on_menu: tree::OnMenu = Rc::new(bind!(weak, |viewer, file, x, y| viewer.open_menu(file, x, y)));
-        let pane = tree::pane(
+        let weak = self.this.clone();
+        let on_help = Rc::new(bind!(weak, |viewer| crate::plugins::diffs::help::open(&viewer)));
+        let rows = tree::flatten(&tree, Some(&expanded));
+        let mark = (rows.iter().position(|row| row.file.is_some() && row.file == selected), rows.len());
+        let (pane, scroll) = tree::pane(
             &tui.app,
             &theme,
             &tree::Pane {
@@ -531,8 +530,30 @@ impl Viewer {
             on_row,
             on_source,
             on_menu,
+            on_help,
         );
         slot.add(&pane);
+        // The rebuilt tree keeps its offset; a new selection or new rows scroll the selected row into view
+        // (`scrollFileTreeRowIntoView`).
+        // A tree rebuilt again before a frame drew it has no layout yet: it keeps the offset and height last known.
+        let previous = self.tree_scroll.borrow_mut().take();
+        let (mut top, height) = match &previous {
+            Some(last) if last.scroll.rect().height > 0.0 => {
+                (last.scroll.scroll_position().1, f64::from(last.scroll.rect().height))
+            }
+            Some(last) => (last.top, last.height),
+            None => (0.0, 0.0),
+        };
+        if let (Some(row), true) = (mark.0, previous.as_ref().is_none_or(|last| last.mark != mark)) {
+            let row = row as f64;
+            if row < top {
+                top = row;
+            } else if height > 0.0 && row + 1.0 > top + height {
+                top = row + 1.0 - height;
+            }
+        }
+        scroll.scroll_to(0.0, top);
+        *self.tree_scroll.borrow_mut() = Some(super::TreeScroll { scroll, mark, top, height });
     }
 }
 

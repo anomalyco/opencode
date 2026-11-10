@@ -221,7 +221,8 @@ pub type OnRow = Rc<dyn Fn(&Row)>;
 /// What a right-click on a file row does, with the file and the cell (`onFileContextMenu`).
 pub type OnMenu = Rc<dyn Fn(usize, u16, u16)>;
 
-/// The pane (`DiffViewerFileTree`, tree layout): the source header, the rows, and the help footer.
+/// The pane (`DiffViewerFileTree`, tree layout): the source header, the rows, and the help footer. Returns the pane and
+/// the rows' scroll box.
 pub fn pane(
     app: &App,
     theme: &Theme,
@@ -230,7 +231,8 @@ pub fn pane(
     on_row: OnRow,
     on_source: Rc<dyn Fn()>,
     on_menu: OnMenu,
-) -> View {
+    on_help: Rc<dyn Fn()>,
+) -> (View, ScrollBox) {
     let surface = theme.background.raised.base;
     let faint = tint(theme.text.muted, surface, 0.45);
     let rail = tint(theme.text.muted, surface, 0.7);
@@ -345,11 +347,16 @@ pub fn pane(
         .child(&header)
         .child(&scroll);
     if let Some(help) = &input.help {
-        body.add(&View::new(app).shrink(0.0).padding_edge(Edge::Top, 1).padding_edge(Edge::Bottom, 1).child(
-            &Text::new(app, vec![help.clone().fg(theme.text.base), " help".fg(theme.text.muted)]).wrap(WrapMode::None),
-        ));
+        // `HelpShortcut`: a left click opens the help.
+        let text =
+            Text::new(app, vec![help.clone().fg(theme.text.base), " help".fg(theme.text.muted)]).wrap(WrapMode::None);
+        text.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
+            cx.stop_propagation();
+            on_help();
+        });
+        body.add(&View::new(app).shrink(0.0).padding_edge(Edge::Top, 1).padding_edge(Edge::Bottom, 1).child(&text));
     }
-    View::new(app)
+    let pane = View::new(app)
         .column()
         .width(input.width)
         .height(Length::percent(100.0))
@@ -357,7 +364,8 @@ pub fn pane(
         .min_height(0)
         .shrink(0.0)
         .child(&View::new(app).height(1).shrink(0.0).bg(surface))
-        .child(&body)
+        .child(&body);
+    (pane, scroll)
 }
 
 #[cfg(test)]
