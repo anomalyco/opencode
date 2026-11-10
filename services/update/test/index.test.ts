@@ -125,13 +125,13 @@ test("retries D1 on the next lookup after a failed read", async () => {
 
 test("selects the minimum and active artifacts from the partial indexes", async () => {
   const db = database()
-  db.insert({ channel: "minimum", version: "1.0.0", time: 1, minimum: true })
-  db.insert({ channel: "minimum", version: "1.5.0", time: 2 })
-  db.insert({ channel: "minimum", version: "2.0.0", time: 3, active: true })
+  db.insert({ channel: "latest", version: "1.0.0", time: 1, minimum: true })
+  db.insert({ channel: "latest", version: "1.5.0", time: 2 })
+  db.insert({ channel: "latest", version: "2.0.0", time: 3, active: true })
 
-  expect(await version(await lookup(db.env, "minimum/cli/opencode?current=0.9.0"))).toBe("1.0.0")
-  expect(await version(await lookup(db.env, "minimum/cli/opencode?current=1.0.0"))).toBe("2.0.0")
-  expect(await version(await lookup(db.env, "minimum/cli/opencode"))).toBe("2.0.0")
+  expect(await version(await lookup(db.env, "latest/cli/opencode?current=0.9.0"))).toBe("1.0.0")
+  expect(await version(await lookup(db.env, "latest/cli/opencode?current=1.0.0"))).toBe("2.0.0")
+  expect(await version(await lookup(db.env, "latest/cli/opencode"))).toBe("2.0.0")
 
   // A release that is both active and minimum is listed once.
   db.insert({ channel: "both", version: "3.0.0", time: 1, active: true, minimum: true })
@@ -139,6 +139,34 @@ test("selects the minimum and active artifacts from the partial indexes", async 
   expect(response.status).toBe(200)
   const body = (await response.json()) as { artifacts: { version: string }[] }
   expect(body.artifacts.map((artifact) => artifact.version)).toEqual(["3.0.0"])
+})
+
+// Dev build numbers reset, so a stray dev minimum kept sending clients to a build they had already passed.
+test("ignores minimum artifacts outside the latest channel", async () => {
+  const db = database()
+  db.insert({ channel: "dev", version: "0.0.0-dev-20000", time: 1, minimum: true })
+  db.insert({ channel: "dev", version: "0.0.0-dev-18952", time: 2, active: true })
+
+  expect(
+    await version(
+      await lookup(db.env, "dev/cli/opencode", { "User-Agent": "opencode/dev/0.0.0-dev-18952/cli" }),
+    ),
+  ).toBe("0.0.0-dev-18952")
+  expect(await version(await lookup(db.env, "dev/cli/opencode?current=garbage"))).toBe("0.0.0-dev-18952")
+})
+
+test("rejects setting a minimum outside the latest channel", async () => {
+  const db = database()
+  const response = await worker.fetch(
+    new Request("https://opencode.ai/update/admin/minimum", {
+      method: "POST",
+      body: new URLSearchParams({ channel: "dev", name: "cli", distribution: "opencode", version: "0.0.0-dev-18952" }),
+    }),
+    db.env,
+    { waitUntil: () => {} },
+  )
+  expect(response.status).toBe(400)
+  expect(await response.json()).toEqual({ error: "Minimum is only supported on the latest channel" })
 })
 
 test("caches rollout fallback reads across caller IPs and overlapping releases", async () => {

@@ -1,6 +1,26 @@
-import { createMemo, createSignal, Index, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { createMemo, createSignal, Index, onCleanup, onMount, Show, untrack, type JSX } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createKeyed } from "@opencode/plugin/gui"
+import { PreviewControls } from "@opencode/ui/preview-controls"
+import { DocumentSurface } from "@opencode/ui/document-surface"
+import {
+  INITIAL_OFFICE_PAGES_STATE,
+  pageFit,
+  pagesControlsDisabled,
+  pagesGutter,
+  pagesList,
+  pagesMounted,
+  pagesPendingScrollIndex,
+  pagesSettledWidth,
+  pagesWidth,
+  pagesZoom,
+  pagesZoomInDisabled,
+  pagesZoomOutDisabled,
+  transitionOfficePages,
+  type OfficePagesEffect,
+  type OfficePagesEvent,
+  type PageSize,
+} from "./pages-machine"
 import { paper } from "./paper"
 
 /** Paints one page into `canvas` at `scale`; `signal` aborts once a newer paint replaces this one or the page leaves. */
@@ -12,43 +32,26 @@ export type PageOverlay = (input: { readonly index: number; readonly scale: numb
 /** Scrolls the column so a point of a page shows near the top. */
 export type ScrollToPage = (index: number, y: number) => void
 
-/** A page's size and paper colour; a new object for a page is a changed page, which paints again. */
-type PageSize = { readonly width: number; readonly height: number; readonly background?: string }
-
 /** Tells a page whether it is near the viewport. */
 type Watch = (element: Element, change: (near: boolean) => void) => void
-
-/** A scroll to a page whose row is not mounted yet, if one waits. */
-type PendingScroll = { target: { readonly index: number; readonly y: number } | undefined }
 
 /** The observer every page shares, made once the first page mounts. */
 type SharedObserver = { value: IntersectionObserver | undefined }
 
-/** The timer of the next slice of rows, and how many rows it mounts. */
-type Growth = { timer: ReturnType<typeof setTimeout> | undefined; slice: number }
-
-const padding = 24
-
-/** How long a resize has to settle before visible pages paint again at the new scale. */
-const settleDelay = 150
-
-/** The rows mounted with the column: enough to fill a tall screen with the first pages. */
-const firstSlice = 6
-
-/** How long mounting one later slice of rows should take, in milliseconds. */
-const sliceBudget = 12
-
-/** The most rows one slice mounts. */
-const maxSlice = 200
+/** The resize settle timer, the next growth step's timer, and how long the last growth step took. */
+type PagesTimers = {
+  settle: ReturnType<typeof setTimeout> | undefined
+  growth: ReturnType<typeof setTimeout> | undefined
+  elapsed: number | undefined
+}
 
 /**
- * A column of pages that fit the pane's width, up to `maxScale`. Only pages near the viewport hold a bitmap, an
+ * A column of pages that fit the pane's width. Only pages near the viewport hold a bitmap, an
  * overlay and the work that keeps them: a long document would otherwise keep hundreds of page-sized canvases in memory,
  * and mount the work for each at once.
  */
 export function OfficePages(props: {
   pages: readonly PageSize[]
-  maxScale: number
   paint: PaintPage
   label: (index: number) => string
   /** Laid over each page near the viewport, such as a text layer for selection, links and screen readers. */
@@ -60,35 +63,117 @@ export function OfficePages(props: {
   /** Receives the column's scroll function once it mounts. */
   onScrollTo?: (scrollTo: ScrollToPage) => void
 }) {
-  const [width, setWidth] = createSignal(0)
-  // The width pages paint at: a resize repaints each visible page once it settles, while the CSS size follows at once.
-  const [settled, setSettled] = createSignal(0)
+  // The pane's width, the rows mounted, a scroll that waits, and the zoom.
+  const [pagesState, setPagesState] = createSignal(INITIAL_OFFICE_PAGES_STATE)
   const [ratio, setRatio] = createSignal(window.devicePixelRatio || 1)
-  // How many rows are mounted: the first slice at once, the rest a slice per task.
-  const [mounted, setMounted] = createSignal(firstSlice)
-  const shown = createMemo(() => props.pages.slice(0, mounted()))
-  // A scroll to a page whose row is not mounted yet.
-  const pending: PendingScroll = { target: undefined }
-  const pages: HTMLDivElement[] = []
+  const list = createMemo(() => pagesList(pagesState()))
+  const mounted = createMemo(() => pagesMounted(pagesState()))
+  const shown = createMemo(() => list().slice(0, mounted()))
+  // The width pages size to at once, and the width they paint at once a resize settles.
+  const width = createMemo(() => pagesWidth(pagesState()))
+  const settled = createMemo(() => pagesSettledWidth(pagesState()))
+  const gutter = createMemo(() => pagesGutter(pagesState()))
+  const zoom = createMemo(() => pagesZoom(pagesState()))
+  // Each mounted row's page, by index, which scrolls measure.
+  const rows = new Map<number, HTMLDivElement>()
   const watched = new Map<Element, (near: boolean) => void>()
   const observer: SharedObserver = { value: undefined }
+  const timers: PagesTimers = { settle: undefined, growth: undefined, elapsed: undefined }
+  // Effects can dispatch while they run (a growth step mounts the row a scroll waits for), so events apply one at a time.
+  const queue: OfficePagesEvent[] = []
   let scroller: HTMLDivElement | undefined
-  let timer: ReturnType<typeof setTimeout> | undefined
+  let column: HTMLDivElement | undefined
+
+  const dispatch = (event: OfficePagesEvent) => {
+    queue.push(event)
+
+    if (queue.length === 1) drain()
+  }
+
+  const drain = () => {
+    const event = queue[0]
+
+    if (!event) return
+
+    try {
+      const next = transitionOfficePages(untrack(pagesState), event)
+
+      setPagesState(() => next.state)
+      next.effects.forEach((effect) => void Promise.try(() => run(effect)).catch(() => undefined))
+    } finally {
+      queue.shift()
+    }
+
+    drain()
+  }
+
+  const run = (effect: OfficePagesEffect) => {
+    if (effect.type === "schedule-settle") {
+      clearTimeout(timers.settle)
+      timers.settle = setTimeout(() => dispatch({ type: "resize.settled", attempt: effect.attempt }), effect.delayMs)
+
+      return
+    }
+
+    if (effect.type === "cancel-settle") return clearTimeout(timers.settle)
+
+    if (effect.type === "schedule-growth") {
+      clearTimeout(timers.growth)
+      timers.growth = setTimeout(() => grow(effect.attempt, effect.added))
+
+      return
+    }
+
+    if (effect.type === "cancel-growth") return clearTimeout(timers.growth)
+
+    if (effect.type === "scroll-to") {
+      const row = rows.get(effect.index)
+
+      if (scroller && row) scroller.scrollTo({ top: row.offsetTop + effect.topOffset })
+
+      return
+    }
+
+    scroller?.scrollTo({ left: 0 })
+  }
+
+  // Mounts the next slice of rows and times it, so the slice after takes about the budget. Rows only ever join below
+  // the ones mounted, so nothing on screen moves.
+  const grow = (attempt: number, added: number) => {
+    const started = performance.now()
+
+    dispatch({ type: "growth.stepped", attempt, previousElapsedMs: timers.elapsed, previousAdded: added })
+    timers.elapsed = performance.now() - started
+  }
+
+  // Whether the row a scroll waits for is in the column.
+  const pendingRowMounted = () => {
+    const index = pagesPendingScrollIndex(untrack(pagesState))
+
+    return index !== undefined && rows.has(index)
+  }
+
+  createKeyed(
+    () => props.pages,
+    (pages) => dispatch({ type: "pages.changed", pages }),
+  )
 
   createResizeObserver(
     () => scroller,
     (rect) => {
-      setWidth(rect.width)
-      clearTimeout(timer)
+      if (!column) return
 
-      if (settled() === 0) return void setSettled(rect.width)
-
-      timer = setTimeout(() => setSettled(rect.width), settleDelay)
+      dispatch({
+        type: "scroller.measured",
+        width: rect.width,
+        gutter: Number.parseFloat(getComputedStyle(column).paddingInlineStart),
+        scrollRowMounted: pendingRowMounted(),
+      })
     },
   )
 
   onCleanup(() => {
-    clearTimeout(timer)
+    dispatch({ type: "disposed" })
     observer.value?.disconnect()
   })
 
@@ -102,49 +187,11 @@ export function OfficePages(props: {
     onCleanup(() => query.removeEventListener("change", change))
   })
 
-  // Scrolls to a page once its row is mounted.
-  const scrollTo: ScrollToPage = (index, y) => {
-    const page = pages[index]
-    const target = props.pages[index]
-
-    if (!target) return
-
-    if (!scroller || !page || index >= mounted()) return void (pending.target = { index, y })
-
-    pending.target = undefined
-    scroller.scrollTo({ top: page.offsetTop + y * fit(width(), target.width) - padding })
-  }
+  // Scrolls to a page once the pane has a width and the page's row is mounted.
+  const scrollTo: ScrollToPage = (index, y) =>
+    dispatch({ type: "scroll.requested", index, y, rowMounted: rows.has(index) })
 
   onMount(() => props.onScrollTo?.(scrollTo))
-
-  // Mounts the rows a slice at a time, each slice sized to take about `sliceBudget`, so no one update builds hundreds
-  // of them; rows only ever join below the ones mounted, so nothing on screen moves.
-  createKeyed(
-    () => props.pages.length,
-    (total) => {
-      const state: Growth = { timer: undefined, slice: firstSlice }
-
-      const grow = () => {
-        if (mounted() >= total) return
-
-        const started = performance.now()
-        const before = mounted()
-
-        setMounted(Math.min(total, before + state.slice))
-
-        const each = (performance.now() - started) / (mounted() - before)
-
-        state.slice = Math.min(maxSlice, Math.max(1, Math.floor(sliceBudget / each)))
-
-        if (pending.target && pending.target.index < mounted()) scrollTo(pending.target.index, pending.target.y)
-
-        state.timer = setTimeout(grow)
-      }
-
-      state.timer = setTimeout(grow)
-      onCleanup(() => clearTimeout(state.timer))
-    },
-  )
 
   // One observer for every page. It paints a viewport ahead in both directions, so scrolling rarely reaches a blank
   // page. The column clips its pages, so the margin applies to it: an observer of the window would only see what shows.
@@ -162,34 +209,62 @@ export function OfficePages(props: {
     })
   }
 
-  const fit = (available: number, page: number) =>
-    Math.max(0, Math.min(props.maxScale, (available - padding * 2) / page))
+  const fit = (available: number, page: number) => pageFit(available, gutter(), zoom(), page)
 
   return (
-    <div ref={scroller} data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
-      <div class="flex flex-col items-center gap-4 py-6">
-        {/* Keyed by position: a replaced page keeps its row and canvas, and paints over its old bitmap. */}
-        <Index each={shown()}>
-          {(page, index) => (
-            <div class="flex shrink-0 flex-col items-center gap-3">
-              <OfficePage
-                ref={(element) => (pages[index] = element)}
-                watch={watch}
-                index={index}
-                page={page()}
-                scale={fit(width(), page().width)}
-                rasterScale={fit(settled(), page().width)}
-                ratio={ratio()}
-                paint={props.paint}
-                overlay={props.overlay}
-                text={props.text ?? false}
-                label={props.label(index)}
-              />
-              {props.footer?.(index)}
-            </div>
-          )}
-        </Index>
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scroller}
+        data-slot="artifact-stage"
+        data-document-surface-scrollport
+        class="relative min-h-0 flex-1 overflow-auto"
+        data-scrollable
+      >
+        <div
+          ref={column}
+          data-document-surface-inset
+          data-document-surface-column
+          class="flex w-max min-w-full flex-col items-center gap-4 pb-18"
+        >
+          {/* Keyed by position: a replaced page keeps its row and canvas, and paints over its old bitmap. */}
+          <Index each={shown()}>
+            {(page, index) => {
+              // A scroll that waits for this page runs once its row is in the column.
+              onMount(() => {
+                if (pagesPendingScrollIndex(untrack(pagesState)) === index) dispatch({ type: "row.mounted", index })
+              })
+              onCleanup(() => rows.delete(index))
+
+              return (
+                <div class="flex shrink-0 flex-col items-center gap-3">
+                  <OfficePage
+                    ref={(element) => rows.set(index, element)}
+                    watch={watch}
+                    index={index}
+                    page={page()}
+                    scale={fit(width(), page().width)}
+                    rasterScale={fit(settled(), page().width)}
+                    ratio={ratio()}
+                    paint={props.paint}
+                    overlay={props.overlay}
+                    text={props.text ?? false}
+                    label={props.label(index)}
+                  />
+                  {props.footer?.(index)}
+                </div>
+              )
+            }}
+          </Index>
+        </div>
       </div>
+      <PreviewControls
+        disabled={pagesControlsDisabled(pagesState())}
+        zoomInDisabled={pagesZoomInDisabled(pagesState())}
+        zoomOutDisabled={pagesZoomOutDisabled(pagesState())}
+        onZoomIn={() => dispatch({ type: "zoom.in" })}
+        onZoomOut={() => dispatch({ type: "zoom.out" })}
+        onFit={() => dispatch({ type: "zoom.fit" })}
+      />
     </div>
   )
 }
@@ -216,14 +291,14 @@ function OfficePage(props: {
   })
 
   return (
-    <div
+    <DocumentSurface
       ref={(element) => {
         frame = element
         props.ref(element)
       }}
       role={props.text ? "group" : undefined}
       aria-label={props.text ? props.label : undefined}
-      class="relative shrink-0 shadow-[var(--v2-elevation-raised)]"
+      class="shrink-0 overflow-hidden"
       style={{
         width: `${props.page.width * props.scale}px`,
         height: `${props.page.height * props.scale}px`,
@@ -252,7 +327,7 @@ function OfficePage(props: {
           />
         )}
       </Show>
-    </div>
+    </DocumentSurface>
   )
 }
 

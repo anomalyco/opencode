@@ -755,6 +755,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Мигрирање података {{current}}/{{total}}",
   "home.workspaceTip": "Покрените следећу сесију у новом радном простору да бисте задржали измене изолованим",
   "session.tab.add": "Додај картицу",
+  "session.tab.closeOthers": "Затвори остале картице",
   "session.queue.attachments.one": "Још {{count}} прилог",
   "session.queue.attachments.other": "Још {{count}} прилога",
   "settings.backToSettings": "Назад на подешавања",

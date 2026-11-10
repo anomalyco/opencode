@@ -9,7 +9,7 @@ type Row = { name: string; key: string; value: string | null }
 
 // Reads hit SQLite directly: they happen at mount time and a point lookup on the primary key
 // costs microseconds, so a second in-memory copy would only duplicate the renderer's cache.
-export function createStateStore(db: Database, input: { onError?: (error: unknown) => void } = {}) {
+export function createStateStore(db: Database, input: { onError?: (cause: unknown) => void } = {}) {
   // Prepared once; the flush loop then only binds values instead of rebuilding SQL per row.
   const byKey = and(eq(state.name, sql.placeholder("name")), eq(state.key, sql.placeholder("key")))
   const read = db.select({ value: state.value }).from(state).where(byKey).prepare()
@@ -83,6 +83,9 @@ export function createStateStore(db: Database, input: { onError?: (error: unknow
       return { items, revision }
     },
     update(name: string, insert: Record<string, string>, removed: readonly string[]) {
+      // A revision tells the renderer its rows are saved, so none is handed out once writes are refused.
+      if (writer.closed()) throw new Error("Write-behind buffer is closed")
+
       for (const [key, value] of Object.entries(insert)) set(name, key, value)
 
       for (const key of removed) unset(name, key)

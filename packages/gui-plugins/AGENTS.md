@@ -17,6 +17,7 @@ Built-in features of the desktop and web app, each behind the GUI plugin SDK, `@
 - The APIs the host always provides are context properties (`ctx.layout`, `ctx.sessions`, `ctx.storage`, `ctx.desktop`, …; in main `ctx.storage`, `ctx.windows`, `ctx.serverEndpoints`, …). `usePlugin<typeof definition>()` returns the same context in components. Registries and contracts stay tokens: `ctx.add(Registry, item)`, `ctx.provide(Contract, impl)`; main provides Ipcs with `ctx.provide(Ipc, impl)`.
 - Fonts follow the Fonts section of `packages/app/AGENTS.md`. Terminal-rendered output uses `ctx.appearance.font("mono")` (the terminal font); other UI uses the code and UI font CSS variables. Never bundle font files or write literal families, except for documents that carry their own fonts (Office, font previews).
 - Never import `@opencode/app`, `@opencode/desktop`, or `@/` paths. Import CSS with `?inline` and contribute it through `ctx.add(Style, css)`. No module-level state: keep state inside `setup`. `bun run lint` enforces these rules.
+- Never call `crypto.randomUUID()` directly in window code; use `uuid()` from `@opencode/util/uuid` so plain HTTP LAN origins keep working (see the Insecure Origins section of `packages/app/AGENTS.md`).
 - `bun run lint:changed` must pass before you finish: every file you add or edit has no oxlint problem at all, including the warn-level anti-slop rules (`unknown` parameters and returns, unchecked type assertions, widened types, unsafe dictionaries, missing spacing). Touching a file means leaving the whole file clean, older warnings included. Fix the code; suppress only with a `SAFETY:` comment that states a real checked invariant.
 
 ## SDK docs
@@ -81,6 +82,7 @@ Read [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-a
 - Don't destructure props; read `props.x` so the getter stays reactive (`splitProps` when you must). Call signals when passing them as JSX props. Use `<Show>` and `<For>`, not `&&` and `.map`, in JSX.
 - Use `createStore` for objects and collections, `createSignal` for single values.
 - Async data goes through `createLatest`, a resource, or a guarded promise that ignores stale results, under the Suspense rules below, never an effect that fetches and then sets.
+- Lifecycles follow the State Machines section of `packages/app/AGENTS.md`: one union, a pure `transition`, selectors for the UI, and a driver whose results carry attempt ids. Keep the machine state in the plugin's store, not in module state. Precedents: `src/terminal/machine.ts`, `src/wsl/machine.ts`, `src/updater/machine.ts`.
 
 ## Performance
 
@@ -91,7 +93,7 @@ Read [You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-a
   - Give a fallback the area's size when the area has fixed geometry, so nothing shifts; leave it empty otherwise.
   - Make a state change that may suspend inside `startTransition`, so the current content stays until the next is ready.
 - Return stable objects from `Panel.list` and reactive contributions, so the host never remounts a trigger or a panel.
-- Never add work to timeline rows. The session header slot is the only timeline surface.
+- Never add work to timeline rows. The session header slot is the only timeline surface, besides `CodeBlock` and `CodeBlockAction` content: the host renders it only for a complete fenced block of a language a plugin lists, and blocks of other languages cost a set lookup.
 
 ## Localization
 

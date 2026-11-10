@@ -65,7 +65,7 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 
 たとえば、組織がデフォルトで無効になっている MCP サーバーを提供している場合:
 
-```json title="Remote config from .well-known/opencode"
+```json title=".well-known/opencode からのリモート設定"
 {
   "mcp": {
     "jira": {

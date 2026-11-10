@@ -4,7 +4,7 @@ import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai/effect"
+import { HttpTimeout, type ProviderPackage } from "@opencode/ai/effect"
 import { isRecord } from "@opencode/util/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
@@ -42,7 +42,6 @@ export class LoadError extends Schema.TaggedError<LoadError>()("Provider.LoadErr
   package: Schema.String,
   cause: Schema.Defect(),
 }) {}
-export type ProviderPackage = ProviderPackageDefinition
 
 const packages = new Map<string, Promise<unknown>>()
 const builtins = new Map<string, () => Promise<unknown>>([
@@ -51,6 +50,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/alibaba/messages", () => import("@opencode/ai/providers/alibaba/messages")],
   ["@opencode/ai/providers/alibaba/responses", () => import("@opencode/ai/providers/alibaba/responses")],
   ["@opencode/ai/providers/alibaba/images", () => import("@opencode/ai/providers/alibaba/images")],
+  ["@opencode/ai/providers/alibaba/embeddings", () => import("@opencode/ai/providers/alibaba/embeddings")],
   ["@opencode/ai/providers/amazon-bedrock", () => import("@opencode/ai/providers/amazon-bedrock")],
   ["@opencode/ai/providers/amazon-bedrock/mantle", () => import("@opencode/ai/providers/amazon-bedrock/mantle")],
   [
@@ -65,13 +65,14 @@ const builtins = new Map<string, () => Promise<unknown>>([
     "@opencode/ai/providers/amazon-bedrock/mantle/responses",
     () => import("@opencode/ai/providers/amazon-bedrock/mantle/responses"),
   ],
-  ["@opencode/ai/providers/amazon-bedrock-mantle", () => import("@opencode/ai/providers/amazon-bedrock-mantle")],
   ["@opencode/ai/providers/anthropic", () => import("@opencode/ai/providers/anthropic")],
   ["@opencode/ai/providers/anthropic-compatible", () => import("@opencode/ai/providers/anthropic-compatible")],
   ["@opencode/ai/providers/azure", () => import("@opencode/ai/providers/azure")],
   ["@opencode/ai/providers/azure/chat", () => import("@opencode/ai/providers/azure/chat")],
   ["@opencode/ai/providers/azure/responses", () => import("@opencode/ai/providers/azure/responses")],
   ["@opencode/ai/providers/azure/images", () => import("@opencode/ai/providers/azure/images")],
+  ["@opencode/ai/providers/azure/embeddings", () => import("@opencode/ai/providers/azure/embeddings")],
+  ["@opencode/ai/providers/azure/messages", () => import("@opencode/ai/providers/azure/messages")],
   ["@opencode/ai/providers/baseten", () => import("@opencode/ai/providers/baseten")],
   ["@opencode/ai/providers/baseten/decisions", () => import("@opencode/ai/providers/baseten/decisions")],
   ["@opencode/ai/providers/cerebras", () => import("@opencode/ai/providers/cerebras")],
@@ -91,14 +92,20 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ],
   ["@opencode/ai/providers/cohere", () => import("@opencode/ai/providers/cohere")],
   ["@opencode/ai/providers/cohere/chat", () => import("@opencode/ai/providers/cohere/chat")],
+  ["@opencode/ai/providers/cohere/embeddings", () => import("@opencode/ai/providers/cohere/embeddings")],
   ["@opencode/ai/providers/deepinfra", () => import("@opencode/ai/providers/deepinfra")],
+  ["@opencode/ai/providers/deepinfra/embeddings", () => import("@opencode/ai/providers/deepinfra/embeddings")],
   ["@opencode/ai/providers/deepseek", () => import("@opencode/ai/providers/deepseek")],
   ["@opencode/ai/providers/digitalocean", () => import("@opencode/ai/providers/digitalocean")],
   ["@opencode/ai/providers/digitalocean/decisions", () => import("@opencode/ai/providers/digitalocean/decisions")],
+  ["@opencode/ai/providers/digitalocean/embeddings", () => import("@opencode/ai/providers/digitalocean/embeddings")],
   ["@opencode/ai/providers/digitalocean/images", () => import("@opencode/ai/providers/digitalocean/images")],
+  ["@opencode/ai/providers/digitalocean/responses", () => import("@opencode/ai/providers/digitalocean/responses")],
   ["@opencode/ai/providers/fireworks", () => import("@opencode/ai/providers/fireworks")],
+  ["@opencode/ai/providers/fireworks/embeddings", () => import("@opencode/ai/providers/fireworks/embeddings")],
   ["@opencode/ai/providers/google", () => import("@opencode/ai/providers/google")],
   ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
+  ["@opencode/ai/providers/google/embeddings", () => import("@opencode/ai/providers/google/embeddings")],
   ["@opencode/ai/providers/google/images", () => import("@opencode/ai/providers/google/images")],
   ["@opencode/ai/providers/google-vertex", () => import("@opencode/ai/providers/google-vertex")],
   ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
@@ -110,22 +117,18 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/google-vertex/messages", () => import("@opencode/ai/providers/google-vertex/messages")],
   ["@opencode/ai/providers/google-vertex/mistral", () => import("@opencode/ai/providers/google-vertex/mistral")],
   ["@opencode/ai/providers/google-vertex/responses", () => import("@opencode/ai/providers/google-vertex/responses")],
+  ["@opencode/ai/providers/google-vertex/embeddings", () => import("@opencode/ai/providers/google-vertex/embeddings")],
   ["@opencode/ai/providers/google-vertex/images", () => import("@opencode/ai/providers/google-vertex/images")],
-  ["@opencode/ai/providers/google-vertex-chat", () => import("@opencode/ai/providers/google-vertex-chat")],
-  [
-    "@opencode/ai/providers/google-vertex-interactions",
-    () => import("@opencode/ai/providers/google-vertex-interactions"),
-  ],
   ["@opencode/ai/providers/google-vertex-messages", () => import("@opencode/ai/providers/google-vertex-messages")],
-  ["@opencode/ai/providers/google-vertex-mistral", () => import("@opencode/ai/providers/google-vertex-mistral")],
-  ["@opencode/ai/providers/google-vertex-responses", () => import("@opencode/ai/providers/google-vertex-responses")],
   ["@opencode/ai/providers/groq", () => import("@opencode/ai/providers/groq")],
   ["@opencode/ai/providers/meta", () => import("@opencode/ai/providers/meta")],
   ["@opencode/ai/providers/meta/chat", () => import("@opencode/ai/providers/meta/chat")],
+  ["@opencode/ai/providers/meta/images", () => import("@opencode/ai/providers/meta/images")],
   ["@opencode/ai/providers/meta/messages", () => import("@opencode/ai/providers/meta/messages")],
   ["@opencode/ai/providers/meta/responses", () => import("@opencode/ai/providers/meta/responses")],
   ["@opencode/ai/providers/minimax", () => import("@opencode/ai/providers/minimax")],
   ["@opencode/ai/providers/minimax/chat", () => import("@opencode/ai/providers/minimax/chat")],
+  ["@opencode/ai/providers/minimax/images", () => import("@opencode/ai/providers/minimax/images")],
   ["@opencode/ai/providers/minimax/messages", () => import("@opencode/ai/providers/minimax/messages")],
   ["@opencode/ai/providers/minimax/responses", () => import("@opencode/ai/providers/minimax/responses")],
   ["@opencode/ai/providers/mistral", () => import("@opencode/ai/providers/mistral")],
@@ -137,6 +140,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/openai/chat", () => import("@opencode/ai/providers/openai/chat")],
   ["@opencode/ai/providers/openai/responses", () => import("@opencode/ai/providers/openai/responses")],
   ["@opencode/ai/providers/openai/images", () => import("@opencode/ai/providers/openai/images")],
+  ["@opencode/ai/providers/openai/embeddings", () => import("@opencode/ai/providers/openai/embeddings")],
   ["@opencode/ai/providers/openai-compatible", () => import("@opencode/ai/providers/openai-compatible")],
   [
     "@opencode/ai/providers/openai-compatible/responses",
@@ -144,16 +148,23 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ],
   ["@opencode/ai/providers/openai-compatible/images", () => import("@opencode/ai/providers/openai-compatible/images")],
   [
+    "@opencode/ai/providers/openai-compatible/embeddings",
+    () => import("@opencode/ai/providers/openai-compatible/embeddings"),
+  ],
+  [
     "@opencode/ai/providers/openai-compatible-responses",
     () => import("@opencode/ai/providers/openai-compatible-responses"),
   ],
   ["@opencode/ai/providers/opencode/decisions", () => import("@opencode/ai/providers/opencode/decisions")],
   ["@opencode/ai/providers/openrouter", () => import("@opencode/ai/providers/openrouter")],
   ["@opencode/ai/providers/openrouter/decisions", () => import("@opencode/ai/providers/openrouter/decisions")],
+  ["@opencode/ai/providers/openrouter/embeddings", () => import("@opencode/ai/providers/openrouter/embeddings")],
   ["@opencode/ai/providers/openrouter/images", () => import("@opencode/ai/providers/openrouter/images")],
+  ["@opencode/ai/providers/openrouter/responses", () => import("@opencode/ai/providers/openrouter/responses")],
   ["@opencode/ai/providers/togetherai", () => import("@opencode/ai/providers/togetherai")],
   ["@opencode/ai/providers/typesafe-ai/decisions", () => import("@opencode/ai/providers/typesafe-ai/decisions")],
   ["@opencode/ai/providers/venice", () => import("@opencode/ai/providers/venice")],
+  ["@opencode/ai/providers/venice/responses", () => import("@opencode/ai/providers/venice/responses")],
   ["@opencode/ai/providers/vercel-ai-gateway", () => import("@opencode/ai/providers/vercel-ai-gateway")],
   ["@opencode/ai/providers/vercel-ai-gateway/chat", () => import("@opencode/ai/providers/vercel-ai-gateway/chat")],
   [
@@ -169,6 +180,10 @@ const builtins = new Map<string, () => Promise<unknown>>([
     () => import("@opencode/ai/providers/vercel-ai-gateway/decisions"),
   ],
   ["@opencode/ai/providers/vercel-ai-gateway/images", () => import("@opencode/ai/providers/vercel-ai-gateway/images")],
+  [
+    "@opencode/ai/providers/vercel-ai-gateway/embeddings",
+    () => import("@opencode/ai/providers/vercel-ai-gateway/embeddings"),
+  ],
   ["@opencode/ai/providers/xai", () => import("@opencode/ai/providers/xai")],
   ["@opencode/ai/providers/xai/images", () => import("@opencode/ai/providers/xai/images")],
   ["@opencode/ai/providers/zai", () => import("@opencode/ai/providers/zai")],
@@ -529,7 +544,7 @@ const layer = Layer.effect(
         },
       )
     })
-    yield* bus.subscribe([Integration.Event.Updated, Credential.Event.Updated, Credential.Event.Switched]).pipe(
+    yield* bus.subscribe([Integration.Event.Updated, Credential.Event.Switched]).pipe(
       Stream.runForEach(() => notify),
       Effect.forkScoped({ startImmediately: true }),
     )
@@ -569,5 +584,5 @@ const importPackage = Effect.fn("Provider.importPackage")(function* (
       cause: new Error(`Provider package ${specifier} does not export model(modelID, settings)`),
     })
   }
-  return module as ProviderPackageDefinition
+  return module as ProviderPackage.Definition
 })

@@ -6,6 +6,8 @@ const durable = {
   type: "note" as const,
   origin: "example",
   label: "button#save",
+  title: "button#save",
+  subtitle: "Browser annotation",
   icon: "select-element",
   subject: 'the "button#save" element',
   href: "tab_00000000-0000-4000-8000-000000000000",

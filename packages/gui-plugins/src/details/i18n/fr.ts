@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Aucun plugin configuré",
   skills: "Compétences",
   "skills.empty": "Aucune compétence configurée",
-  lsp: "LSP",
-  "lsp.empty": "Aucun serveur LSP configuré",
   failed: "Échec",
   retry: "Réessayer",
   connecting: "Connexion…",

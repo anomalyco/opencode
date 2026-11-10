@@ -3,7 +3,7 @@
 # notarizes them in one submission, staples them, and only then builds opencode-desktop-mac-<arch>.{zip,dmg,app.tar.gz}
 # from the stapled apps. Dry runs sign ad-hoc and skip notarization. Dev and beta trade larger files for faster
 # packaging (zip and dmg at zlib level 1) and skip the .app.tar.gz, which only the retired Tauri updater feed read.
-# Notarization reads APPLE_API_KEY_CONTENT, APPLE_API_KEY_ID and APPLE_API_ISSUER.
+# Notarization reads APPLE_NOTARY_KEY (the .p8 contents), APPLE_NOTARY_KEY_ID and APPLE_NOTARY_ISSUER_ID.
 . "$(dirname "$0")/lib.sh"
 
 out=$1
@@ -60,9 +60,9 @@ done
 
 if ! dry_run; then
   key=$(mktemp)
-  printf '%s\n' "$APPLE_API_KEY_CONTENT" > "$key"
+  printf '%s\n' "$APPLE_NOTARY_KEY" > "$key"
   ditto -c -k --sequesterRsrc "$apps" "$apps.zip"
-  xcrun notarytool submit "$apps.zip" --key "$key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" \
+  xcrun notarytool submit "$apps.zip" --key "$key" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID" \
     --wait --timeout 60m --output-format json > "$apps.json"
   rm -f "$key"
   cat "$apps.json"

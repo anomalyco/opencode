@@ -62,8 +62,8 @@ describe("auth command", () => {
     }, requests)
 
     const result = await cli(["auth", "list", "--format", "json", "--server", server.url.toString()])
-    expect(requests).toContain("/api/model/default")
-    expect(requests.indexOf("/api/model/default")).toBeLessThan(requests.indexOf("/api/integration"))
+    expect(requests).toContain("/api/plugin")
+    expect(requests.indexOf("/api/plugin")).toBeLessThan(requests.indexOf("/api/integration"))
     const table = await cli(["auth", "list", "--server", server.url.toString()])
     expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
     expect({ exitCode: table.exitCode, stderr: table.stderr }).toEqual({ exitCode: 0, stderr: "" })
@@ -367,7 +367,9 @@ function authServer(fetch: (request: Request, url: URL) => Response | Promise<Re
       const url = new URL(request.url)
       requests?.push(url.pathname)
       if (url.pathname === "/api/info") return status()
-      if (url.pathname === "/api/model/default") return Response.json(located(null))
+      if (url.pathname === "/api/plugin") {
+        return Response.json(located([{ source: { type: "builtin" }, features: {}, state: { status: "active" } }]))
+      }
       return fetch(request, url)
     },
   })

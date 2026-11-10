@@ -65,7 +65,7 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 
 例如，如果您的組織提供了預設停用的 MCP 伺服器：
 
-```json title="Remote config from .well-known/opencode"
+```json title="來自 .well-known/opencode 的遠端設定"
 {
   "mcp": {
     "jira": {

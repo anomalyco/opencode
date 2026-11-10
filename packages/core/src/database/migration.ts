@@ -2,13 +2,15 @@ export * as DatabaseMigration from "./migration.js"
 
 import { sql } from "drizzle-orm"
 import { Effect } from "effect"
+import type { SqlClient } from "effect/sql"
 import { supportsForeignKeyToggle } from "#sqlite"
-import type { EffectDrizzleSqlite } from "./drizzle.js"
+import { EffectDrizzleSqlite } from "./drizzle.js"
 import { migrations } from "./migration.gen.js"
+import legacyCredentials from "./migration/20260805200742_import_legacy_credentials.js"
 import schema from "./schema.gen.js"
 import { Global } from "@opencode/util/global"
 
-type Database = EffectDrizzleSqlite.EffectSQLiteDatabase
+type Database = EffectDrizzleSqlite.EffectSQLiteDatabase & { readonly $client?: SqlClient.SqlClient }
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
 
 export type Migration = {
@@ -34,6 +36,7 @@ export function apply(db: Database) {
     yield* db.transaction((tx) =>
       Effect.gen(function* () {
         yield* schema.up(tx)
+        yield* legacyCredentials.up(tx)
         yield* tx.run(
           sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
         )
@@ -122,10 +125,13 @@ export function applyOnly(db: Database, input: Migration[]) {
           : Effect.gen(function* () {
               // Durable Object SQLite rejects the foreign_keys toggle; the closest
               // allowlisted relaxation is deferring enforcement to transaction commit.
-              const relaxForeignKeys = supportsForeignKeyToggle
+              const toggleForeignKeys =
+                supportsForeignKeyToggle &&
+                !(db.$client !== undefined && EffectDrizzleSqlite.managesTransactionsNatively(db.$client))
+              const relaxForeignKeys = toggleForeignKeys
                 ? db.run(sql`PRAGMA foreign_keys = OFF`)
                 : db.run(sql`PRAGMA defer_foreign_keys = ON`)
-              const restoreForeignKeys = supportsForeignKeyToggle
+              const restoreForeignKeys = toggleForeignKeys
                 ? Effect.asVoid(db.run(sql`PRAGMA foreign_keys = ON`))
                 : Effect.void
               yield* relaxForeignKeys

@@ -3,9 +3,15 @@ import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider } from "../src/runtime/i18n/language"
+import { createTimelineFollow } from "../src/session/timeline/follow"
 import { createTimelineVirtualizer } from "../src/session/timeline/virtualizer"
 
-export function mountTimelineVirtualizer(input: { count: number; rowHeight: number; immediate?: boolean }) {
+export function mountTimelineVirtualizer(input: {
+  count: number
+  rowHeight: number
+  immediate?: boolean
+  viewportHeight?: number
+}) {
   const host = document.createElement("main")
   host.dataset.testid = "timeline-virtualizer-fixture"
   host.dataset.scrolls = "0"
@@ -14,7 +20,8 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
   document.body.appendChild(host)
 
   function Fixture() {
-    const [state, setState] = createStore({ pinned: true, ready: false })
+    const [state, setState] = createStore({ ready: false, grown: false })
+    const follow = createTimelineFollow(() => "cold-reveal-fixture")
 
     const rows = Array.from(
       { length: input.count },
@@ -26,6 +33,7 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
     let viewport!: HTMLDivElement
     let content!: HTMLDivElement
     let container!: HTMLDivElement
+    let scrollToEnd = () => {}
 
     const timeline = createTimelineVirtualizer({
       sessionKey: () => "cold-reveal-fixture",
@@ -38,28 +46,29 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         messageLastRowIndex: () => indexes,
       },
       showHeader: () => false,
-      pinned: () => state.pinned,
+      follow,
       scroll: () => ({ overflow: false, jump: false }),
       setScrollRef: (element) => {
         if (!element) return
         viewport = element
         resize.observe(element, { box: "border-box" })
       },
-      setContentRef: (element) => {
-        content = element
-        reveal.observe(element, { attributes: true, attributeFilter: ["style"] })
+      onContentResize: () => {
+        if (content) return
+        content = host.querySelector<HTMLDivElement>("[data-timeline-virtual-content]")!
+        reveal.observe(content, { attributes: true, attributeFilter: ["style"] })
       },
-      onPin: () => setState("pinned", true),
-      onUnpin: () => setState("pinned", false),
       onScheduleScrollState: (element) => {
         host.dataset.scrolls = String(Number(host.dataset.scrolls) + 1)
         host.dataset.lastScrollTop = String(element.scrollTop)
       },
       onResumeScroll: () => {},
-      onSelectionInteraction: () => {},
       onUserScroll: () => {},
       onHistoryScroll: () => {},
       canRenderImmediately: () => input.immediate ?? false,
+      setScrollToEnd: (fn) => {
+        scrollToEnd = fn
+      },
     })
 
     const resize = new ResizeObserver((entries) => {
@@ -90,7 +99,7 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
     })
 
     return (
-      <div data-testid="timeline-controls" data-pinned={state.pinned}>
+      <div data-testid="timeline-controls" data-pinned={follow.following()} data-anchored={!!follow.anchor()}>
         <button type="button" onClick={() => setState("ready", true)}>
           Complete Markdown
         </button>
@@ -112,7 +121,22 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         >
           Reconnect ready rows
         </button>
-        <div ref={container} style={{ height: "180px", width: "400px" }}>
+        <button type="button" onClick={() => scrollToEnd()}>
+          Scroll to end
+        </button>
+        <button type="button" onClick={() => setState("grown", true)}>
+          Grow last row
+        </button>
+        {/* A tool inside a group of several, which names them all on the group, as a reveal anchors it. */}
+        <button
+          type="button"
+          onClick={() =>
+            follow.dispatch({ type: "anchor", anchor: { key: TimelineRow.key(rows[0]!), partID: "prt_grouped" } })
+          }
+        >
+          Anchor first row
+        </button>
+        <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
             deferred={() => false}
@@ -120,7 +144,10 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
               <div
                 data-component="markdown"
                 data-markdown-ready={state.ready ? "" : undefined}
-                style={{ height: `${input.rowHeight}px` }}
+                style={{
+                  height: `${input.rowHeight + (state.grown && row().userMessageID === `message-${input.count - 1}` ? 40 : 0)}px`,
+                }}
+                data-timeline-part-ids={row().userMessageID === "message-0" ? "prt_first,prt_grouped" : undefined}
               >
                 {row().userMessageID}
               </div>

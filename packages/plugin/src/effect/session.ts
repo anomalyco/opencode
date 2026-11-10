@@ -1,4 +1,4 @@
-import type { SessionApi } from "@opencode/client/effect/api"
+import type { ExperimentalSessionApi, SessionApi } from "@opencode/client/effect/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
@@ -25,6 +25,10 @@ export type SessionRequestOptions = Types.DeepMutable<GenerationOptionsFields> &
 export interface SessionRequest {
   readonly sessionID: Session.ID
   readonly model: Model.Ref
+  /**
+   * The instructions part keeps each source's text in `metadata.experimental.instructions` as `{ key, text }`. It is
+   * not updated when a hook edits `text`. Experimental.
+   */
   system: Array<SystemPart>
   messages: Array<Message>
   options: SessionRequestOptions
@@ -60,6 +64,19 @@ export interface SessionTitle extends SessionRequest {
  * hook identity but need to be told apart from the agent loop.
  */
 export type SessionRequestKind = "primary" | "compaction" | "title" | "generate"
+
+/**
+ * Runs whenever a Session resolves the model for a request, before anything is built for it. `model` starts as the
+ * Session's or agent's selection; change it to serve this request with another model from the same provider, including
+ * models hidden from the picker. The Session keeps its selection, and the request and its records use the new model.
+ * Router models such as GitHub Copilot's Auto use it. Experimental.
+ */
+export interface SessionModelResolve {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly kind: SessionRequestKind
+  model: Model.Ref
+}
 
 export interface SessionModelRequest {
   readonly sessionID: Session.ID
@@ -136,12 +153,55 @@ export interface SessionRetry {
   decision: SessionRetryDecision
 }
 
+/**
+ * Background work still running for the idle Session or one of its descendants. `sessionID` is
+ * the Session that owns the job: the idle Session itself, or a descendant such as a subagent child.
+ */
+export type SessionIdleBackground =
+  | {
+      readonly kind: "shell"
+      readonly sessionID: Session.ID
+      readonly shellID: string
+      readonly command: string
+    }
+  | {
+      readonly kind: "subagent"
+      readonly sessionID: Session.ID
+      readonly childSessionID: Session.ID
+      readonly agent: string
+      readonly description: string
+    }
+  | {
+      readonly kind: "image"
+      readonly sessionID: Session.ID
+      readonly path: string
+      readonly model: string
+    }
+
+/**
+ * Runs when a Session finishes model work and has no pending input, just before it goes idle.
+ * It does not run after interruption, failure, or control-only work such as a manual compaction.
+ * Input admitted by the hook, such as a synthetic message, runs in the same execution instead
+ * of the Session going idle.
+ *
+ * `background` lists work that is still running. When the Session's own shell or subagent finishes,
+ * its notice wakes the Session and the hook runs again, so a plugin that waits for that work can
+ * simply return. Work a descendant owns, such as a shell a subagent left running, wakes that
+ * descendant instead, so it is listed for information only. Notices admitted with `resume: false`,
+ * such as those recovered after a restart, wait for the next wake. Experimental.
+ */
+export interface SessionIdle {
+  readonly sessionID: Session.ID
+  readonly background: ReadonlyArray<SessionIdleBackground>
+}
+
 export interface SessionHooks {
   readonly prompt: SessionPrompt
   readonly context: SessionContext
   readonly compaction: SessionCompaction
   readonly generate: SessionGenerate
   readonly title: SessionTitle
+  readonly "experimental.model.resolve": SessionModelResolve
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
@@ -149,6 +209,7 @@ export interface SessionHooks {
   readonly "experimental.ws.send": SessionWebSocketSend
   readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
+  readonly "experimental.idle": SessionIdle
 }
 
 export type SessionDomain = Pick<
@@ -167,9 +228,8 @@ export type SessionDomain = Pick<
   | "interrupt"
   | "update"
   | "move"
-  | "wait"
   | "context"
-  | "instructions"
-> & {
-  readonly hook: ModelHooks<SessionHooks>
-}
+> &
+  Pick<ExperimentalSessionApi<unknown>, "wait" | "instructions"> & {
+    readonly hook: ModelHooks<SessionHooks>
+  }

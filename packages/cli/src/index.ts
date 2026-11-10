@@ -3,7 +3,7 @@
 import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Cause, Effect } from "effect"
-import { getErrorReported } from "effect/Runtime"
+import { defaultTeardown, getErrorReported } from "effect/Runtime"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
 import { Observability } from "@opencode/util/observability"
@@ -19,12 +19,27 @@ import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
 
+// Keep requests to the local service off any proxy. Bun reads lowercase `no_proxy` alone whenever it is set, so both
+// spellings get the same merged list.
+const noProxy = [
+  ...new Set(
+    [process.env.NO_PROXY, process.env.no_proxy, "127.0.0.1,localhost,::1"].flatMap((value) =>
+      (value ?? "").split(",").flatMap((entry) => entry.trim() || []),
+    ),
+  ),
+].join(",")
+
+process.env.NO_PROXY = noProxy
+process.env.no_proxy = noProxy
+
 ensurePluginRuntime()
 
 if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
   const { askpass } = await import("./ssh-askpass")
   process.exit(await Effect.runPromise(askpass.pipe(Effect.provide(NodeServices.layer))))
 }
+
+let terminated = false
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -87,6 +102,10 @@ Effect.gen(function* () {
   yield* Heap.listen
   yield* CpuProfile.listen
   yield* ShutdownDeadline.install()
+  // runMain reports every signal interruption as 130; remember a SIGTERM so the exit code is 143.
+  process.once("SIGTERM", () => {
+    terminated = true
+  })
   const runFork = Effect.runForkWith(yield* Effect.context<never>())
   const uncaughtException = (cause: Error, origin: "uncaughtException" | "unhandledRejection") => {
     runFork(Effect.logError("uncaught exception", { cause, origin }))
@@ -139,7 +158,6 @@ Effect.gen(function* () {
   ),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
-  Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),
   // runMain's default reporter logs the fatal cause to stdout. Write it to stderr instead: the
   // desktop and `Service.ensure` only capture stderr from `serve --service`, so this is the only
   // channel through which a startup failure's reason reaches the user.
@@ -150,5 +168,16 @@ Effect.gen(function* () {
       process.stderr.write(Cause.pretty(cause) + "\n")
     }),
   ),
-  NodeRuntime.runMain({ disableErrorReporting: true }),
+  NodeRuntime.runMain({
+    disableErrorReporting: true,
+    teardown: (exit) =>
+      defaultTeardown(exit, (code) => {
+        // Commands report failures through process.exitCode.
+        const status = code === 0 ? (process.exitCode ?? 0) : code === 130 && terminated ? 143 : code
+        // process.exit drops output still queued for a pipe; ending the streams waits for it.
+        void Promise.all(
+          [process.stdout, process.stderr].map((stream) => new Promise<void>((resolve) => stream.end(() => resolve()))),
+        ).then(() => process.exit(status))
+      }),
+  }),
 )

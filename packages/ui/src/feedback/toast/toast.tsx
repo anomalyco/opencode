@@ -2,58 +2,49 @@ import { Toaster, toast, type ToasterProps } from "solid-sonner"
 import { boundToastDescription } from "./description"
 import { isRTL } from "@kobalte/core/i18n"
 import type { ComponentProps, JSX } from "solid-js"
-import { createContext, onCleanup, onMount, splitProps, useContext } from "solid-js"
+import { createContext, onCleanup, splitProps, useContext } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useI18n } from "../../context/i18n"
 import "../../actions/button/button.css"
 import "./toast.css"
 import { prefersReducedMotion } from "../../motion"
+import {
+  createToastRegistryState,
+  selectToastOptions,
+  transitionToastRegistry,
+  type ToastRegistryEvent,
+  type ToastRegistryTransition,
+} from "./machine"
 
 export interface ToastRegionProps extends ToasterProps {}
 
 function ToastRegion(props: ToastRegionProps) {
   const i18n = useI18n()
   const [local, rest] = splitProps(props, ["class", "className", "style", "toastOptions", "swipeDirections"])
-  onMount(() => {
+
+  // The Portal's container holds the toast region whenever it exists. Watching the container, not the whole body,
+  // keeps every DOM change elsewhere in the page (each streamed delta, each mounted row) from scanning the document.
+  const observe = (container: HTMLDivElement) => {
+    // A modal dialog hides what's outside it from assistive tech. The region is in the Portal's own div, so that div,
+    // rather than the toaster, is what the dialog would hide.
+    container.setAttribute("data-kb-top-layer", "")
+
     const sync = () => {
-      document.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
+      container.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
         const hidden = element.dataset.visible === "false"
         element.inert = hidden
         element.tabIndex = hidden ? -1 : 0
       })
     }
 
-    let connected = false
-
-    const connect = () => {
-      const regions = document.querySelectorAll(".toast-v2-region")
-
-      if (!regions.length) return
-      observer.disconnect()
-      regions.forEach((region) => {
-        observer.observe(region, {
-          subtree: true,
-          childList: true,
-          attributes: true,
-          attributeFilter: ["data-visible"],
-        })
-      })
-      connected = true
-      sync()
-    }
-
-    const observer = new MutationObserver(() => {
-      if (!connected) connect()
-      else sync()
-    })
-
-    observer.observe(document.body, { subtree: true, childList: true })
-    queueMicrotask(connect)
+    const observer = new MutationObserver(sync)
+    observer.observe(container, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-visible"] })
+    sync()
     onCleanup(() => observer.disconnect())
-  })
+  }
 
   return (
-    <Portal>
+    <Portal ref={observe}>
       <Toaster
         position={isRTL(i18n.locale()) ? "bottom-left" : "bottom-right"}
         offset={isRTL(i18n.locale()) ? { left: 32, bottom: 48 } : { right: 32, bottom: 48 }}
@@ -147,8 +138,6 @@ export const Toast = Object.assign(ToastRoot, {
   CloseButton: ToastCloseButton,
 })
 
-let toastV2Id = 0
-
 export const toaster = {
   show(
     render: (props: { toastId: number }) => JSX.Element,
@@ -159,7 +148,8 @@ export const toaster = {
       resize?: () => void
     },
   ) {
-    const toastId = --toastV2Id
+    dispatchRegistry({ type: "custom.shown" })
+    const toastId = registry.nextId
     toast.custom((id) => render({ toastId: Number(id) }), {
       id: toastId,
       className: "toast-v2",
@@ -180,14 +170,9 @@ export const toaster = {
     return toastId
   },
   dismiss(toastId?: number) {
-    if (toastId === undefined) {
-      activeToastByKey.clear()
-      activeToastById.clear()
-    } else {
-      releaseToast(activeToastById.get(toastId))
-    }
+    dispatchRegistry({ type: "toast.dismissed", id: toastId })
 
-    return toast.dismiss(toastId)
+    return toastId
   },
 }
 
@@ -208,16 +193,23 @@ export interface ToastOptions {
   actions?: ToastAction[]
 }
 
-interface ActiveToast {
-  id: number
-  key: string
-  options: ToastOptions
-  actions?: JSX.Element
+let registry = createToastRegistryState<ToastOptions>()
+
+function dispatchRegistry(event: ToastRegistryEvent<ToastOptions>) {
+  applyRegistry(transitionToastRegistry(registry, event))
 }
 
-const activeToastByKey = new Map<string, ActiveToast>()
+function applyRegistry<T extends ToastRegistryTransition<ToastOptions>>(transition: T) {
+  registry = transition.state
+  transition.effects.forEach((effect) => {
+    if (effect.type === "sonner.publish") return publishToast(effect.id, effect.options)
 
-const activeToastById = new Map<number, ActiveToast>()
+    if (effect.type === "sonner.dismiss") return toast.dismiss(effect.id)
+    pulseToast(effect.id)
+  })
+
+  return transition
+}
 
 export function showToast(options: ToastOptions | string) {
   // SAFETY: `options` is declared `ToastOptions | string`; `typeof` separates the string shorthand from the object.
@@ -233,56 +225,48 @@ export function showToast(options: ToastOptions | string) {
     actions: opts.actions?.map((action) => [action.label, action.variant]),
   })
 
-  const active = activeToastByKey.get(key)
   const toasts = toast.getToasts()
 
-  if (active && toasts.at(-1)?.id === active.id) {
-    active.options = opts
-    publishToast(active)
-    pulseToast(active.id)
-
-    return active.id
-  }
-
-  if (active && toasts.some((item) => item.id === active.id)) toaster.dismiss(active.id)
-  releaseToast(active)
-
-  const entry: ActiveToast = { id: --toastV2Id, key, options: opts }
-  entry.actions = createToastActions(entry)
-  activeToastByKey.set(key, entry)
-  activeToastById.set(entry.id, entry)
-  publishToast(entry)
-
-  return entry.id
+  return applyRegistry(
+    transitionToastRegistry(registry, {
+      type: "toast.shown",
+      key,
+      options: opts,
+      liveIds: new Set(toasts.map((item) => item.id)),
+      topmostLiveId: toasts.at(-1)?.id,
+    }),
+  ).id
 }
 
-function publishToast(entry: ActiveToast) {
-  const release = () => releaseToast(entry)
-  toast(entry.options.title ?? "", {
-    id: entry.id,
-    description: entry.options.description,
+function publishToast(id: number, options: ToastOptions) {
+  // solid-sonner calls these as the toast starts to leave, 200ms before it drops the toast from `getToasts()`.
+  const release = () => void dispatchRegistry({ type: "toast.released", id })
+  // `toast.message` updates a toast with the same id in place; `toast()` would append a duplicate record.
+  toast.message(options.title ?? "", {
+    id,
+    description: options.description,
     // SAFETY: solid-sonner inserts `icon` as a JSX child, and Solid calls a function child under the toast's render
     // owner; solid-sonner's type omits function children.
-    icon: entry.options.icon as JSX.Element,
-    action: entry.actions,
+    icon: options.icon as JSX.Element,
+    action: createToastActions(id, options.actions),
     closeButton: true,
-    duration: entry.options.persistent ? Number.POSITIVE_INFINITY : entry.options.duration,
-    className: `toast-v2 toast-v2--${entry.options.variant ?? "default"}`,
-    testId: `toast-v2-${entry.id}`,
+    duration: options.persistent ? Number.POSITIVE_INFINITY : options.duration,
+    className: `toast-v2 toast-v2--${options.variant ?? "default"}`,
+    testId: `toast-v2-${id}`,
     unstyled: true,
     onDismiss: release,
     onAutoClose: release,
   })
 }
 
-function createToastActions(entry: ActiveToast) {
-  if (!entry.options.actions?.length) return undefined
+function createToastActions(id: number, actions: ToastAction[] | undefined) {
+  if (!actions?.length) return undefined
 
   return (
     <Toast.Actions>
       {/* Static map, not <For>: this JSX is created imperatively outside any Solid
           root, where a <For> computation would never be disposed. */}
-      {entry.options.actions.map((action, index) => (
+      {actions.map((action, index) => (
         <button
           type="button"
           data-component="button-v2"
@@ -290,10 +274,14 @@ function createToastActions(entry: ActiveToast) {
           data-size="small"
           data-action-variant={action.variant ?? "primary"}
           onClick={() => {
-            const onClick = entry.options.actions?.[index]?.onClick
+            // A toast that already closed, such as on a second click during its exit animation, runs nothing.
+            const options = selectToastOptions(registry, id)
+
+            if (!options) return
+            const onClick = options.actions?.[index]?.onClick
 
             if (onClick && onClick !== "dismiss") onClick()
-            toaster.dismiss(entry.id)
+            toaster.dismiss(id)
           }}
         >
           {action.label}
@@ -311,14 +299,6 @@ function pulseToast(toastId: number) {
     if (!element || prefersReducedMotion()) return
     element.animate([{ scale: 1 }, { scale: 1.025 }, { scale: 1 }], { duration: 160, easing: "ease-out" })
   })
-}
-
-function releaseToast(entry: ActiveToast | undefined) {
-  if (!entry) return
-
-  if (activeToastByKey.get(entry.key) === entry) activeToastByKey.delete(entry.key)
-
-  if (activeToastById.get(entry.id) === entry) activeToastById.delete(entry.id)
 }
 
 export interface ToastPromiseOptions<T, U = unknown> {

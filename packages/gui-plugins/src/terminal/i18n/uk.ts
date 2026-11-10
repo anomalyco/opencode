@@ -6,8 +6,5 @@ export default {
   loading: "Завантаження термінала…",
   "title.numbered": "Термінал {{number}}",
   close: "Закрити термінал",
-  "connectionLost.title": "З'єднання втрачено",
-  "connectionLost.abnormalClose": "WebSocket закрито аномально: {{code}}",
-  "connectionLost.description": "З'єднання з терміналом було перервано. Це може статися під час перезапуску сервера.",
   "tab.title": "Термінал",
 }

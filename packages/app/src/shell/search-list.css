@@ -115,10 +115,6 @@
   letter-spacing: -0.04px;
 }
 
-[data-component="dialog-v2"]:has(.mcp-dialog) [data-slot="dialog-container"] {
-  width: min(calc(100vw - 24px), 480px);
-}
-
 .mcp-dialog [data-slot="search-list-row"] {
   gap: 16px;
 }
@@ -128,7 +124,15 @@
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+}
+
+.mcp-dialog-status {
+  display: flex;
+  width: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
 }
 
 .mcp-dialog-name {
@@ -236,10 +240,130 @@
   grid-row: 2;
 }
 
+.fork-dialog [data-slot="search-list-search"] {
+  padding: 6px 6px 9px;
+
+  &::after {
+    bottom: 0;
+    border-color: var(--v2-border-border-muted);
+  }
+
+  [data-slot="text-input-v2-value"] {
+    gap: 8px;
+  }
+
+  [data-slot="text-input-v2-leading-icon"] {
+    padding-inline-start: 8px;
+  }
+}
+
+.fork-dialog-section {
+  display: flex;
+  min-height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 4px 14px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+
+  [data-slot="dialog-description"] {
+    margin: 0;
+  }
+}
+
+.fork-dialog .search-list-results {
+  gap: 2px;
+  padding-top: 0;
+}
+
+.fork-dialog [data-slot="search-list-row"] {
+  height: 28px;
+  padding-inline: 8px;
+}
+
+.fork-dialog .search-list-trailing {
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 639px), (hover: none) {
   .mcp-dialog [data-slot="search-list-row"] {
     height: auto;
     min-height: 44px;
     padding-block: 8px;
   }
+}
+
+/* A list dialog with a compact header and a bare search, as in the integration and manage models dialogs. */
+[data-component="dialog-v2"] [data-slot="dialog-container"] [data-slot="dialog-content"].search-dialog {
+  /* Trailing controls sit 10px from both the top and the end edge. */
+  [data-slot="dialog-header"] {
+    padding-block: 10px 6px;
+    padding-inline: 14px 10px;
+
+    [data-slot="dialog-close-button"] {
+      margin-top: 0;
+      margin-inline-end: 0;
+    }
+  }
+
+  [data-slot="dialog-title-group"] {
+    gap: 2px;
+  }
+
+  [data-slot="dialog-header-title"] {
+    flex: none;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+  }
+
+  [data-slot="dialog-title"] {
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="dialog-description"] {
+    font-size: 12px;
+    line-height: var(--line-height-base);
+  }
+}
+
+/* Like the new model picker's search: a bare field with a hairline across the whole dialog under it. */
+.search-dialog-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &::after {
+    height: 1px;
+    margin-inline: -6px;
+    background: var(--v2-border-border-muted);
+    content: "";
+    transform: scaleY(0.5);
+  }
+
+  [data-component="text-input-v2"],
+  [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
+    border-radius: 0;
+    outline: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  [data-slot="text-input-v2-value"] {
+    gap: 8px;
+  }
+}
+
+/* The hairline under a search-dialog header that has no search, across the whole dialog. */
+[data-slot="search-dialog-divider"] {
+  flex-shrink: 0;
+  height: 1px;
+  margin: 4px -6px 6px;
+  background: var(--v2-border-border-muted);
+  transform: scaleY(0.5);
 }

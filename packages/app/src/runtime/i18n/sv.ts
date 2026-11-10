@@ -36,6 +36,7 @@ export const dict = {
   "dialog.server.menu.remove": "Ta bort",
   "home.workspaceTip": "Starta nästa session i en ny arbetsyta för att hålla ändringar isolerade",
   "session.tab.add": "Lägg till flik",
+  "session.tab.closeOthers": "Stäng andra flikar",
   "session.queue.attachments.one": "Plus {{count}}-tillbehör",
   "session.queue.attachments.other": "Plus {{count}}-tillbehör",
   "settings.backToSettings": "Tillbaka till inställningarna",

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Effect, Exit, Layer, Result } from "effect"
 import { Config } from "@opencode/core/config"
@@ -10,10 +11,13 @@ import { Location } from "@opencode/core/location"
 import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
 import { Session } from "@opencode/core/session"
+import { Skill } from "@opencode/core/skill"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Global } from "@opencode/util/global"
 import { FileAccess } from "@opencode/core/file-access"
+import { hostEnvironmentLayer } from "./fixture/environment"
 import { location } from "./fixture/location"
+import { withTempDir } from "./fixture/tmpdir"
 import { Tool } from "@opencode/core/tool"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
@@ -34,7 +38,9 @@ const readToolNode = makeLocationNode({
     Image.node,
     Permission.node,
     SessionInstructions.node,
+    Skill.node,
     FSUtil.node,
+    Environment.node,
     Location.node,
   ],
 })
@@ -48,7 +54,7 @@ const readCalls: {
 }[] = []
 const listCalls: AbsolutePath[] = []
 let readDefect: unknown
-let directoryEntries: string[] = []
+let missingDirectories: string[] = []
 let directoryEntryDetails: Environment.DirEntry[] = []
 let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage | ReadToolFileSystem.ListPage = {
   type: "file",
@@ -65,6 +71,7 @@ const reader = Layer.succeed(
   ReadToolFileSystem.Service.of({
     list: (input) => {
       listCalls.push(input)
+      if (missingDirectories.includes(input)) return Effect.fail(new Environment.NotFound({ path: input }))
       return Effect.succeed(directoryEntryDetails)
     },
     read: (input, resource, page = {}) => {
@@ -95,20 +102,10 @@ const permission = permissionLayer({
             ),
       ),
     ),
+  allows: (input) => Effect.succeed(allow && !input.resources.some((resource) => resource === deniedResource)),
 })
 const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node)
-const testFileSystem = Layer.effect(
-  FSUtil.Service,
-  FSUtil.Service.use((fs) =>
-    Effect.succeed(
-      FSUtil.Service.of({
-        ...fs,
-        readDirectory: () => Effect.succeed(directoryEntries),
-      }),
-    ),
-  ),
-).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
@@ -118,12 +115,12 @@ const unavailableImage = Layer.mock(Image.Service, {
 })
 const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
-    AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode]), [
+    AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
+      Environment.node.replace(hostEnvironmentLayer),
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
-      FSUtil.node.replace(testFileSystem),
       Location.node.replace(locationLayer),
       Global.node.replace(Global.layerWith({ data: Global.Path.data })),
     ]),
@@ -132,6 +129,38 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
     imageLayer,
   )
 const it = testEffect(readLayer(imageLayer))
+// Real-file tests provide their own layer per temp folder.
+const live = testEffect(Layer.empty)
+// Reads through the real filesystem with the location at `directory`; returns the failure message.
+const readMissing = (directory: string, file: string) =>
+  Effect.gen(function* () {
+    const registry = yield* Tool.Service
+    const result = yield* executeTool(registry, {
+      sessionID,
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call-suggest", name: "read", input: { path: file } },
+    })
+    return result.error?.message
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
+          Environment.node.replace(hostEnvironmentLayer),
+          Permission.node.replace(permission),
+          Config.node.replace(config),
+          Image.node.replace(imageLayer),
+          Location.node.replace(
+            Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+          ),
+          Global.node.replace(Global.layerWith({ data: Global.Path.data })),
+        ]),
+        config,
+        imageLayer,
+      ),
+    ),
+  )
+const write = (file: string) =>
+  Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }).then(() => fs.writeFile(file, "x\n")))
 const itWithoutResizer = testEffect(readLayer(unavailableImage))
 const sessionID = Session.ID.make("ses_read_tool_test")
 
@@ -143,7 +172,7 @@ describe("ReadTool", () => {
     allow = true
     deniedResource = undefined
     readDefect = undefined
-    directoryEntries = []
+    missingDirectories = []
     directoryEntryDetails = []
     readResult = {
       type: "file",
@@ -653,25 +682,14 @@ describe("ReadTool", () => {
   it.effect("preserves actionable read failure messages", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
-      for (const [error, message] of [
-        [
-          new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10, lines: 3 }),
-          "Offset 10 is out of range for this file (3 lines)",
-        ],
-        [
-          new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" }),
-          "Path is not a file: socket",
-        ],
-      ] as const) {
-        readFailure = error
-        expect(
-          yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: { type: "tool-call", id: `call-${error._tag}`, name: "read", input: { path: "target" } },
-          }),
-        ).toEqual({ status: "error", error: { type: "unknown", message } })
-      }
+      readFailure = new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" })
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-path-kind", name: "read", input: { path: "target" } },
+        }),
+      ).toEqual({ status: "error", error: { type: "unknown", message: "Path is not a file: socket" } })
     }),
   )
 
@@ -714,13 +732,13 @@ describe("ReadTool", () => {
   it.effect("returns missing paths as model-visible tool failures", () =>
     Effect.gen(function* () {
       readFailure = new Environment.NotFound({ path: missingAbsolutePath })
-      directoryEntries = [
+      directoryEntryDetails = [
         "__missing_read_target__.txt.bak",
         "copy___missing_read_target__.txt",
         "old___missing_read_target__.txt",
         "other___missing_read_target__.txt",
         "unrelated.txt",
-      ]
+      ].map((name) => ({ name, type: "file" as const }))
       const registry = yield* Tool.Service
 
       expect(
@@ -733,7 +751,7 @@ describe("ReadTool", () => {
         status: "error",
         error: {
           type: "tool.execution",
-          message: `File not found: ${missingPath}\n\nDid you mean one of these?\n__missing_read_target__.txt.bak\ncopy___missing_read_target__.txt\nold___missing_read_target__.txt`,
+          message: `File not found: ${missingPath}\n\nDid you mean one of these?\n__missing_read_target__.txt.bak\nold___missing_read_target__.txt\ncopy___missing_read_target__.txt`,
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: [missingPath], save: ["*"] }])
@@ -744,6 +762,142 @@ describe("ReadTool", () => {
         },
       ])
     }),
+  )
+
+  it.effect("names the first missing folder and its nearest existing parent", () =>
+    Effect.gen(function* () {
+      const requested = "__missing_read_folder__/src/file.ts"
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), requested) })
+      missingDirectories = [
+        path.join(process.cwd(), "__missing_read_folder__", "src"),
+        path.join(process.cwd(), "__missing_read_folder__"),
+      ]
+      directoryEntryDetails = [
+        { name: "__missing_read_folder__-old", type: "directory" },
+        { name: "unrelated", type: "file" },
+      ]
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-missing-folder", name: "read", input: { path: requested } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: [
+            `File not found: ${requested}`,
+            `The folder ${path.join(process.cwd(), "__missing_read_folder__")} does not exist. The nearest folder that does is ${process.cwd()}.`,
+            `Did you mean one of these?\n${path.join(process.cwd(), "__missing_read_folder__-old")}`,
+          ].join("\n\n"),
+        },
+      })
+    }),
+  )
+
+  it.effect("trusts the environment, not this host, about which folders exist", () =>
+    Effect.gen(function* () {
+      const requested = path.join(process.cwd(), "__only_in_workspace__", "file.ts")
+      readFailure = new Environment.NotFound({ path: requested })
+      directoryEntryDetails = [{ name: "file.tsx", type: "file" }]
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-workspace-folder", name: "read", input: { path: requested } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: `File not found: ${requested}\n\nDid you mean one of these?\n${path.join(process.cwd(), "__only_in_workspace__", "file.tsx")}`,
+        },
+      })
+    }),
+  )
+
+  live.live("suggests close names from the same folder", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        for (const file of ["typo/config.ts", "typo/db.ts", "ext/config.yaml", "case/README.md"])
+          yield* write(path.join(tmp.path, file))
+        for (const file of ["short/db.ts", "short/io.ts", "short/api.ts", "short/build.ts"])
+          yield* write(path.join(tmp.path, file))
+
+        expect(yield* readMissing(tmp.path, "typo/conifg.ts")).toBe(
+          `File not found: typo/conifg.ts\n\nDid you mean one of these?\n${path.join("typo", "config.ts")}`,
+        )
+        expect(yield* readMissing(tmp.path, "ext/config.yml")).toBe(
+          `File not found: ext/config.yml\n\nDid you mean one of these?\n${path.join("ext", "config.yaml")}`,
+        )
+        expect(yield* readMissing(tmp.path, "short/ui.ts")).toBe("File not found: short/ui.ts")
+        // Case-insensitive filesystems, such as macOS by default, simply read the file.
+        expect([undefined, `File not found: case/readme.md\n\nDid you mean one of these?\n${path.join("case", "README.md")}`]).toContain(
+          yield* readMissing(tmp.path, "case/readme.md"),
+        )
+      }),
+    ),
+  )
+
+  it.effect("ranks same-folder suggestions and shows at most three", () =>
+    Effect.gen(function* () {
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), "config.ts") })
+      const registry = yield* Tool.Service
+      const read = () =>
+        executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-ranked", name: "read", input: { path: "config.ts" } },
+        }).pipe(Effect.map((result) => result.error?.message))
+
+      // Listed worst first: a typo, a containing name, the same stem, and the same name in another case.
+      directoryEntryDetails = ["confix.ts", "config.test.ts", "config.json", "Config.ts"].map((name) => ({
+        name,
+        type: "file" as const,
+      }))
+      expect(yield* read()).toBe(
+        "File not found: config.ts\n\nDid you mean one of these?\nConfig.ts\nconfig.json\nconfig.test.ts",
+      )
+      directoryEntryDetails = directoryEntryDetails.filter((entry) => entry.name !== "Config.ts")
+      expect(yield* read()).toBe(
+        "File not found: config.ts\n\nDid you mean one of these?\nconfig.json\nconfig.test.ts\nconfix.ts",
+      )
+    }),
+  )
+
+  live.live("suggests a path written from the parent of the location first", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const repo = path.join(tmp.path, "repo")
+        yield* write(path.join(repo, "src", "a.ts"))
+        const requested = path.join(tmp.path, "src", "a.ts")
+
+        expect(yield* readMissing(repo, requested)).toBe(
+          `File not found: ${requested}\n\nThe folder ${path.join(tmp.path, "src")} does not exist. The nearest folder that does is ${tmp.path}.\n\nDid you mean one of these?\n${path.join(repo, "src", "a.ts")}`,
+        )
+        yield* write(path.join(tmp.path, "src", "a.tsx"))
+        expect(yield* readMissing(repo, requested)).toBe(
+          `File not found: ${requested}\n\nDid you mean one of these?\n${path.join(repo, "src", "a.ts")}\n${path.join(tmp.path, "src", "a.tsx")}`,
+        )
+      }),
+    ),
+  )
+
+  live.live("suggests close folder names from the nearest existing folder", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        yield* write(path.join(tmp.path, "lib", "x.ts"))
+
+        expect(yield* readMissing(tmp.path, "libs/x.ts")).toBe(
+          `File not found: libs/x.ts\n\nThe folder ${path.join(tmp.path, "libs")} does not exist. The nearest folder that does is ${tmp.path}.\n\nDid you mean one of these?\n${path.join(tmp.path, "lib")}`,
+        )
+      }),
+    ),
   )
 
   it.effect("recovers a unique file whose non-breaking spaces differ", () =>
@@ -1008,6 +1162,174 @@ describe("ReadTool", () => {
       expect(readCalls).toEqual([
         { input: AbsolutePath.make(path.join(process.cwd(), "large.txt")), page: { offset: 2, limit: 1 } },
       ])
+    }),
+  )
+
+  it.effect("forwards a negative offset and shows the real line numbers and continuation", () =>
+    Effect.gen(function* () {
+      readResult = new ReadToolFileSystem.TextPage({
+        type: "text-page",
+        content: "nine\nten",
+        mime: "text/plain",
+        offset: 9,
+        truncated: true,
+        next: 11,
+      })
+      const registry = yield* Tool.Service
+
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-tail", name: "read", input: { path: "log.txt", offset: -5, limit: 2 } },
+      })
+      expect(result.status).toBe("completed")
+      if (result.status !== "completed") return
+      expect(result.content).toEqual([
+        {
+          type: "text",
+          text: "Read file log.txt, lines 9-10\n9: nine\n10: ten\n[Output truncated. Continue reading with offset: 11]",
+        },
+      ])
+      expect(readCalls).toEqual([
+        { input: AbsolutePath.make(path.join(process.cwd(), "log.txt")), page: { offset: -5, limit: 2 } },
+      ])
+    }),
+  )
+
+  it.effect("returns the negative directory offset error to the model", () =>
+    Effect.gen(function* () {
+      readFailure = new ReadToolFileSystem.DirectoryOffsetError({ resource: "src" })
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-dir-tail", name: "read", input: { path: "src", offset: -5 } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: { type: "unknown", message: "A negative offset only works for files, and src is a directory" },
+      })
+    }),
+  )
+
+  it.effect("reads virtual skill:// files and directories from Skill.Service without external_directory approval", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const registry = yield* Tool.Service
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* skills.transform((editor) =>
+            editor.add(
+              Skill.Info.make({
+                id: Skill.ID.make("guide"),
+                name: Skill.Name.make("Guide"),
+                description: "Guide",
+                path: AbsolutePath.make("skill://guide/SKILL.md"),
+                content: "# Guide\nRead references/style.md",
+              }),
+              {
+                "references/style.md": "Line 1\nLine 2",
+              },
+            ),
+          )
+          yield* skills.transform((editor) =>
+            editor.add(
+              Skill.Info.make({
+                id: Skill.ID.make("disk"),
+                name: Skill.Name.make("Disk"),
+                path: AbsolutePath.make("/somewhere/disk/SKILL.md"),
+                content: "Disk",
+              }),
+            ),
+          )
+
+          const file = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-skill-file",
+              name: "read",
+              input: { path: "skill://guide/references/style.md", offset: 2, limit: 1 },
+            },
+          })
+          expect(file).toMatchObject({
+            status: "completed",
+            content: [{ type: "text", text: "Read file skill://guide/references/style.md, lines 2-2\n2: Line 2" }],
+          })
+
+          const root = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: "call-skill-dir", name: "read", input: { path: "skill://guide/" } },
+          })
+          expect(root).toMatchObject({
+            status: "completed",
+            content: [
+              {
+                type: "text",
+                text: "Read directory skill://guide/, entries 1-2\nreferences/\nSKILL.md",
+              },
+            ],
+          })
+
+          for (const bad of [
+            "skill://",
+            "skill://guide/../SKILL.md",
+            "skill://guide/missing.md",
+            "skill://unknown",
+            "skill://disk/SKILL.md",
+          ]) {
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: `call-${bad}`, name: "read", input: { path: bad } },
+              }),
+            ).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: `File not found: ${bad}` },
+            })
+          }
+
+          expect(assertions).toMatchObject([
+            { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
+            { sessionID, action: "read", resources: ["skill://guide/references/style.md"], save: ["*"] },
+            { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
+            { sessionID, action: "read", resources: ["skill://guide"], save: ["*"] },
+            { sessionID, action: "skill", resources: ["guide"], save: ["guide"] },
+            { sessionID, action: "read", resources: ["skill://guide/missing.md"], save: ["*"] },
+          ])
+          expect(readCalls).toEqual([])
+
+          deniedResource = "guide"
+          expect(
+            yield* executeTool(registry, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-skill-denied",
+                name: "read",
+                input: { path: "skill://guide/SKILL.md" },
+              },
+            }),
+          ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: skill" } })
+
+          deniedResource = "skill://guide/SKILL.md"
+          for (const path of ["skill://guide/SKILL.md", "skill://guide/SKILL.md/"]) {
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: `call-skill-read-denied-${path}`, name: "read", input: { path } },
+              }),
+            ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
+          }
+        }),
+      )
     }),
   )
 })
