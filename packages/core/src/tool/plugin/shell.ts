@@ -212,7 +212,6 @@ export const reattach = Effect.fnUntraced(function* (input: {
   readonly shell: Shell.Interface
   readonly jobs: Job.Interface
   readonly sessions: Session.Interface
-  readonly watch: Shell.DaemonInterface["watch"]
   readonly sessionID: SessionSchema.ID
   readonly info: ShellSchema.Info
   // The job's existing durable row, if the previous server had backgrounded it.
@@ -236,7 +235,7 @@ export const reattach = Effect.fnUntraced(function* (input: {
         Effect.logWarning("failed to report a recovered shell command", { id: input.info.id, error }),
       ),
     )
-  yield* input.watch(notifying)
+  yield* input.shell.watch(notifying)
 })
 
 export const Plugin = {
@@ -247,7 +246,6 @@ export const Plugin = {
     const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
-    const daemon = yield* Shell.Daemon
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
@@ -291,7 +289,7 @@ export const Plugin = {
       shellID: string,
       command: string,
       settled: Deferred.Deferred<Output>,
-    ) => daemon.watch(notify(sessions, jobs, { sessionID, id, shellID, command, settled }))
+    ) => shell.watch(notify(sessions, jobs, { sessionID, id, shellID, command, settled }))
 
     // Stops the command of a call the user asked to stop, and fails the call with the output so far. The command
     // stays observable, output file included.

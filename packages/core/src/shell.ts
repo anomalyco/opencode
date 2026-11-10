@@ -109,8 +109,7 @@ type Run = {
   info: Info
   process: number
   toolCall?: ToolCall
-  // A call waits on it, until it moves to the background.
-  waited: boolean
+  // When a restart should stop it. Unset while a call waits on it: that call's timeout dies with this server.
   timeoutDeadline?: number
   stopReason?: StopReason
   // From the exit: newlines in the file, and why the daemon stopped writing it early.
@@ -173,6 +172,8 @@ export interface Interface {
   readonly byToolCall: (call: ToolCall) => Effect.Effect<Shell.Info | undefined>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
+  /** Runs `effect` until it ends or the server stops, outliving this Location (e.g. a job's completion notice). */
+  readonly watch: DaemonInterface["watch"]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
@@ -201,7 +202,8 @@ export const cleanup = Effect.fn("Shell.cleanup")(function* () {
       ),
     { concurrency: 8 },
   )
-  // Never starts the daemon. A command it still runs keeps its file; a finished one is forgotten before deletion.
+  // Never starts the daemon. A command it still runs keeps its file; a finished one whose file expired is forgotten
+  // below.
   const processes = new Map(
     (yield* pty.listPipes().pipe(Effect.orElseSucceed(() => []))).map((process) => [process.outputPath, process]),
   )
@@ -209,10 +211,6 @@ export const cleanup = Effect.fn("Shell.cleanup")(function* () {
     fs,
     files.flat().filter((file) => processes.get(file)?.lifecycle.status !== "running"),
     RETENTION,
-    (file) => {
-      const process = processes.get(file)
-      return process ? pty.terminatePipe(process.id).pipe(Effect.ignore) : Effect.void
-    },
   )
   // Finished processes whose file is gone, or that ended long ago, are of no use to any Location: forget them.
   const cutoff = Date.now() - Duration.toMillis(RETENTION)
@@ -300,7 +298,7 @@ const daemonLayer = Layer.effect(
         },
         metadata: run.info.metadata,
         toolCall: run.toolCall,
-        timeoutDeadline: run.waited ? undefined : run.timeoutDeadline,
+        timeoutDeadline: run.timeoutDeadline,
         stopReason: run.stopReason,
       })
 
@@ -396,8 +394,6 @@ const daemonLayer = Layer.effect(
         if (run.timeoutFiber) yield* Fiber.interrupt(run.timeoutFiber)
         run.timeoutFiber = undefined
         run.timeoutDeadline = duration === 0 ? undefined : Date.now() + duration
-        // Clearing the timeout is how a call moves its command to the background.
-        if (duration === 0) run.waited = false
         yield* store(run)
         if (duration !== 0) yield* arm(run, duration)
       })
@@ -454,8 +450,7 @@ const daemonLayer = Layer.effect(
           info: input.info,
           process: 0,
           toolCall: input.toolCall,
-          waited: input.waited,
-          timeoutDeadline: input.timeout > 0 ? input.info.time.started + input.timeout : undefined,
+          timeoutDeadline: !input.waited && input.timeout > 0 ? input.info.time.started + input.timeout : undefined,
           done: Deferred.makeUnsafe<Info, NotFoundError>(),
         }
         const created = yield* pty.createPipe({
@@ -526,8 +521,6 @@ const daemonLayer = Layer.effect(
             },
             process: process.id,
             toolCall: stored.toolCall,
-            // No call waits on it any more: whatever waited died with the previous server.
-            waited: false,
             timeoutDeadline: stored.timeoutDeadline,
             stopReason: stored.stopReason,
             ...(running ? {} : { outputLines: process.outputLines, outputError: process.outputError }),
@@ -1107,7 +1100,19 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, stop, byToolCall, output, remove })
+      return Service.of({
+        create,
+        list,
+        get,
+        wait,
+        result,
+        timeout,
+        stop,
+        byToolCall,
+        output,
+        remove,
+        watch: daemon.watch,
+      })
     }),
   )
 

@@ -166,7 +166,6 @@ const services = [
   SubagentJob.Service,
   SharedCache.Service,
   Shell.Service,
-  Shell.Daemon,
   ShellSelect.Service,
   Snapshot.Service,
   Skill.Service,

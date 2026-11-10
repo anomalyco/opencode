@@ -82,7 +82,6 @@ export const layer = (options?: Options) =>
       const sessions = yield* Session.Service
       const instances = yield* Instance.Service
       const db = (yield* Database.Service).db
-      const daemon = yield* Shell.Daemon
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
@@ -195,7 +194,6 @@ export const layer = (options?: Options) =>
           shell,
           jobs,
           sessions,
-          watch: daemon.watch,
           sessionID,
           info,
           notificationID,
