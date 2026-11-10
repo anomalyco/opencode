@@ -337,7 +337,6 @@ export const dict = {
   "session.new.project.search": "Ҷустуҷӯи лоиҳаҳо",
   "session.new.project.add": "Илова кардани лоиҳа",
   "session.new.workspace.runIn": "Иҷлосия дар",
-  "session.new.workspace.triggerLocal": "маҳаллӣ",
   "session.new.workspace.local": "Анбори маҳаллӣ",
   "session.new.git.none": "Не Git",
   "session.header.open.finder": "Ҷустуҷӯ",
