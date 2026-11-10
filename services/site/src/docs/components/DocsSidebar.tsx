@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js"
 import { Bracket } from "~/component/site/site-controls"
+import { useI18n } from "~/context/i18n"
 import type { DocsSet } from "../config"
 import { docsHref, type DocsNavGroup } from "../lib/navigation"
 
@@ -10,9 +11,10 @@ import { docsHref, type DocsNavGroup } from "../lib/navigation"
  */
 export function DocsNav(props: { set: DocsSet; section: string; groups: DocsNavGroup[]; currentSlug: string }) {
   // A group named after its section ("API" in the API docs) needs no title under the lockup.
+  const i18n = useI18n()
   const title = (group: DocsNavGroup) => (group.title === props.section ? undefined : group.title)
   return (
-    <nav data-component="docs-nav" aria-label="Documentation">
+    <nav data-component="docs-nav" aria-label={i18n.t("docs.navigation")}>
       <For each={props.groups}>
         {(group, index) => (
           <div data-slot="group">

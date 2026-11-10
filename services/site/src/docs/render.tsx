@@ -1,7 +1,7 @@
 import { renderToString } from "solid-js/web"
 import { docsSets, latestDocs, v1Docs, type DocsSet } from "./config"
 import { docsContent } from "./content"
-import { DocsDocument } from "./document"
+import { DocsDocument, docsI18n } from "./document"
 import type { DocsAssets } from "./layouts/DocsLayout"
 import { docsHref } from "./lib/navigation"
 import { latestHref, v1Href, v1Locales, v1Page, v1Section, v1Slug, type V1Locale } from "./lib/v1-navigation"
@@ -43,9 +43,15 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
   ))
 }
 
-/** A content page's Markdown twin, or undefined when it has none. */
+/**
+ * A content page's Markdown twin, or undefined when it has none. A V1 page's says under its title, in
+ * its language, that it's the V1 docs and where the latest are.
+ */
 export async function renderDocsMarkdown(set: DocsSet, slug: string) {
-  return (await docsContent.get(set.id)!.get(slug)?.())?.markdown
+  const markdown = (await docsContent.get(set.id)!.get(slug)?.())?.markdown
+  if (set.id !== "v1" || markdown === undefined) return markdown
+  const note = docsI18n(v1Page(slug).locale).t("docs.v1.markdownNote")
+  return markdown.replace(/\n\n/, `\n\n> ${note}\n\n`)
 }
 
 /** The V1 docs' English section, for their llms.txt. */
@@ -91,10 +97,7 @@ function anchor(slug: string, ids: Map<string, string[]>) {
   }
 }
 
-/** A V1 page in every language: there, or that language's intro where it has no such page. */
+/** A V1 page in every language. */
 function languages(page: string) {
-  return v1Locales.map((locale) => {
-    const slug = v1Slug(locale, page)
-    return { ...locale, href: docsHref(docsSlugs.v1.includes(slug) ? slug : v1Slug(locale, "index"), v1Docs) }
-  })
+  return v1Locales.map((locale) => ({ ...locale, href: docsHref(v1Slug(locale, page), v1Docs) }))
 }

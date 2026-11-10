@@ -17,14 +17,14 @@ type Directive = Parent & {
   attributes?: Record<string, string | null | undefined> | null
 }
 
-export default function remarkStarlight(options: { asides?: readonly string[] } = {}) {
+export default function remarkStarlight() {
   return (tree: Root) => {
     let tabs = 0
     visit(tree, (node, index, parent) => {
       if (!parent || index === undefined) return
       const type = node.type as string
       if (type === "mdxjsEsm") return esm(node as Esm, index, parent)
-      if (type === "containerDirective") return aside(node as unknown as Directive, options.asides)
+      if (type === "containerDirective") return aside(node as unknown as Directive)
       if (type === "leafDirective" || type === "textDirective")
         return restore(node as unknown as Directive, index, parent)
       if (node.type !== "mdxJsxFlowElement") return
@@ -53,13 +53,14 @@ function esm(node: Esm, index: number, parent: Parent) {
   return index
 }
 
-// An aside as the site's callout. Spanish pages also wrote :::consejo and :::nota.
-function aside(node: Directive, asides: readonly string[] | undefined) {
+// An aside as the site's callout, titled as written or else in the page's language (Callout.tsx).
+// Spanish pages also wrote :::consejo and :::nota.
+function aside(node: Directive) {
   const label = (node.children[0]?.data as { directiveLabel?: boolean } | undefined)?.directiveLabel
     ? node.children.shift()
     : undefined
   const type = ({ tip: "tip", consejo: "tip", caution: "caution", danger: "danger" } as const)[node.name] ?? "note"
-  const title = label ? text(label) : asides?.[["note", "tip", "caution"].indexOf(type)]
+  const title = label && text(label)
   Object.assign(node, {
     type: "mdxJsxFlowElement",
     name: "Callout",
@@ -101,18 +102,14 @@ function tabbed(node: MdxJsxFlowElement, id: string) {
 
 /**
  * Starlight's links, as the V1 docs wrote them: pages under /docs/ (or relative, `./providers`), in
- * English. They go to the page in the reader's language, or in English for a page only it has. Their
- * anchors are English too, which render.tsx moves to the heading in the same place on that page.
+ * English. They go to the page in the reader's language. Their anchors are English too, which
+ * render.tsx moves to the heading in the same place on that page.
  * Images under the app's assets are in /v1/docs/assets.
  */
-export function remarkStarlightLinks(options: { slug: string; slugs: readonly string[] }) {
+export function remarkStarlightLinks(options: { slug: string }) {
   const { locale } = v1Page(options.slug)
   // A Starlight page path (`providers`, `ja/agents`, or the intro's ``) as the reader's language's page.
-  const page = (path: string) => {
-    if (v1Docs.locales!.includes(path.split("/")[0])) return path
-    const localized = v1Slug(locale, path || "index")
-    return options.slugs.includes(localized) ? localized : path || "index"
-  }
+  const page = (path: string) => (v1Docs.locales!.includes(path.split("/")[0]) ? path : v1Slug(locale, path || "index"))
   const resolve = (url: string) => {
     const image = /^(?:\.\.\/)+assets\/(.+)$/.exec(url)
     if (image) return `${v1Docs.base}assets/${image[1]}`

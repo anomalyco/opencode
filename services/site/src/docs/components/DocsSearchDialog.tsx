@@ -1,4 +1,5 @@
 import { SearchIcon } from "~/component/site/icons"
+import { useI18n } from "~/context/i18n"
 import { searchLook } from "~/component/site/search-palette"
 import { siteSettingsDefaults } from "~/component/site/settings"
 import type { DocsSet } from "../config"
@@ -9,6 +10,7 @@ import type { DocsSet } from "../config"
  * just the field: the results list stays empty, so docs.css hides it and the field's divider.
  */
 export function DocsSearchDialog(props: { set: DocsSet }) {
+  const i18n = useI18n()
   const look = siteSettingsDefaults
   return (
     <div
@@ -23,7 +25,7 @@ export function DocsSearchDialog(props: { set: DocsSet }) {
       hidden
     >
       <div data-slot="backdrop" aria-hidden="true" />
-      <div data-slot="panel" role="dialog" aria-modal="true" aria-label="Search the docs">
+      <div data-slot="panel" role="dialog" aria-modal="true" aria-label={i18n.t("docs.search.dialog")}>
         <div data-slot="field">
           <SearchIcon />
           <input
@@ -33,8 +35,8 @@ export function DocsSearchDialog(props: { set: DocsSet }) {
             aria-haspopup="listbox"
             aria-controls="docs-search-results"
             aria-autocomplete="list"
-            aria-label="Search"
-            placeholder={props.set.id === "v1" ? "Search the V1 docs" : "Search the docs"}
+            aria-label={i18n.t("site.search.label")}
+            placeholder={i18n.t(props.set.id === "v1" ? "docs.search.v1" : "docs.search.dialog")}
             autocomplete="off"
             autocapitalize="off"
             spellcheck={false}
@@ -44,12 +46,17 @@ export function DocsSearchDialog(props: { set: DocsSet }) {
           <button type="button" data-slot="close" tabindex={-1}>
             <span data-slot="esc">
               <span aria-hidden="true">Esc</span>
-              <span data-slot="sr-only">Close search</span>
+              <span data-slot="sr-only">{i18n.t("site.search.close")}</span>
             </span>
-            <span data-slot="cancel">Cancel</span>
+            <span data-slot="cancel">{i18n.t("common.cancel")}</span>
           </button>
         </div>
-        <div data-slot="results" id="docs-search-results" role="listbox" aria-label="Results" />
+        <div
+          data-slot="results"
+          id="docs-search-results"
+          role="listbox"
+          aria-label={i18n.t("site.search.resultsLabel")}
+        />
       </div>
     </div>
   )

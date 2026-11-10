@@ -19,7 +19,7 @@ export function docsRoute(url: URL, accept: string, slugs: Record<DocsSet["id"],
   const file = path.endsWith(".md")
   const page = file ? path.slice(0, -3) : path
   const slug = page.replace(/^\/|\/$/g, "") || "index"
-  if (set.id === "v1" && !slugs.v1.includes(slug)) return v1Fallback(slug, file, url.search, slugs.v1)
+  if (set.id === "v1" && !slugs.v1.includes(slug)) return v1Fallback(slug, file, url.search)
   const target = moved.get(slug)
   if (target) return redirect(docsHref(target, latestDocs), 301)
   if (!slugs[set.id].includes(slug)) return redirect(`/v1/docs${path}${url.search}`, 302)
@@ -63,7 +63,7 @@ const aliases: Record<string, string> = {
 }
 
 /** A V1 address that isn't a page, as the V1 docs app answered it, or missing. */
-function v1Fallback(slug: string, file: boolean, search: string, slugs: readonly string[]) {
+function v1Fallback(slug: string, file: boolean, search: string) {
   const [first, ...rest] = slug.split("/")
   const named = first.toLowerCase()
   const locale = aliases[named] ?? (v1Docs.locales!.includes(named) ? named : undefined)
@@ -76,8 +76,6 @@ function v1Fallback(slug: string, file: boolean, search: string, slugs: readonly
   if (first === "s" && rest.length === 1) return redirect(`https://opncd.ai/share/${rest[0]}`, 301)
   // The config schemas the V1 app served beside its pages are the site's.
   if (slug === "config.json" || slug === "tui.json") return redirect(`/${slug}`, 301)
-  // Pages only in English (policies, references).
-  if (locale && slugs.includes(page)) return redirect(href(page), 302)
   return { type: "missing" as const }
 }
 

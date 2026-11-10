@@ -1,4 +1,5 @@
 import { For, type JSX } from "solid-js"
+import { useI18n } from "~/context/i18n"
 import { CodeTabs } from "./CodeTabs"
 import { SlotScope } from "./Slot"
 
@@ -7,10 +8,15 @@ import { SlotScope } from "./Slot"
 // a panel per tab from the `<Slot name="0">`, `<Slot name="1">`, … children. Both switch through
 // client.ts.
 export function Tabs(props: { id: string; tabs: string; children?: JSX.Element }) {
+  const i18n = useI18n()
   const tabs: { label: string; code?: string }[] = JSON.parse(props.tabs)
   if (tabs.every((tab) => tab.code !== undefined))
     return (
-      <CodeTabs id={props.id} label="Code examples" tabs={tabs.map((tab) => ({ label: tab.label, code: tab.code! }))} />
+      <CodeTabs
+        id={props.id}
+        label={i18n.t("docs.codeExamples")}
+        tabs={tabs.map((tab) => ({ label: tab.label, code: tab.code! }))}
+      />
     )
   return (
     <div data-component="plan-tabs" data-code-tabs>

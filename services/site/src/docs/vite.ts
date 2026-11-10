@@ -12,7 +12,6 @@ import { parse } from "yaml"
 import { docsSets, latestDocs, v1Docs, type DocsSet } from "./config"
 import { frontmatterSchema } from "./frontmatter"
 import { docsSlug } from "./lib/navigation"
-import { asideTitles, v1Page } from "./lib/v1-navigation"
 import recmaSolid from "./recma-solid"
 import rehypeHeadings from "./rehype-headings"
 import rehypeShiki from "./rehype-shiki"
@@ -87,8 +86,7 @@ function slugsOf(set: DocsSet) {
 // MDX as Astro's MDX integration compiled it (GitHub-flavoured Markdown, smart punctuation, Shiki,
 // heading ids), with the docs' own plugins, which wrap code in the site's CodeFrame and headings in
 // HeadingLink. The module also exports the page's frontmatter, its headings and its Markdown twin (`# Title` and the source, as the docs have always served it).
-// The V1 docs are Starlight's MDX (remark-starlight.ts), and their twins leave out its imports and
-// say which version they are.
+// The V1 docs are Starlight's MDX (remark-starlight.ts), and their twins leave out its imports.
 async function compileMdx(source: string, id: string, set: DocsSet) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
   const parsed = frontmatterSchema.safeParse(match ? parse(match[1]) : {})
@@ -122,17 +120,17 @@ function v1Plugins(id: string) {
     remarkGfm,
     remarkSmartypants,
     remarkDirective,
-    [remarkStarlight, { asides: asideTitles[v1Page(slug).locale.path] }],
-    [remarkStarlightLinks, { slug, slugs: slugsOf(v1Docs) }],
+    remarkStarlight,
+    [remarkStarlightLinks, { slug }],
   ] satisfies NonNullable<Parameters<typeof compile>[1]>["remarkPlugins"]
 }
 
-/** A V1 page's Markdown without its MDX imports and exports, after a line on which version it is. */
+/** A V1 page's Markdown without its MDX imports and exports. */
 function v1Markdown(body: string) {
   let fenced = false
   const lines = body.split("\n").filter((line) => {
     if (/^\s*(```|~~~)/.test(line)) fenced = !fenced
     return fenced || !/^(import|export) /.test(line)
   })
-  return `> These are the docs for OpenCode V1. The latest docs, for OpenCode V2, are at https://opencode.ai/docs/llms.txt.\n\n${lines.join("\n").trim()}`
+  return lines.join("\n").trim()
 }

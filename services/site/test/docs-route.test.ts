@@ -5,7 +5,19 @@ import { docsHostRedirect, docsRoute } from "../src/docs/route"
 // Slugs as `virtual:docs-pages` lists them (src/docs/vite.ts): content paths, plus the API reference.
 const slugs = {
   latest: ["index", "config", "cli", "cli/keybinds", "console/api/inference", "console/go", "console/models", "api"],
-  v1: ["index", "config", "ide", "policies", "ja", "ja/config", "ja/ide", "zh-cn/config", "pt-br", "nb/config"],
+  v1: [
+    "index",
+    "config",
+    "ide",
+    "policies",
+    "ja",
+    "ja/config",
+    "ja/ide",
+    "ja/policies",
+    "zh-cn/config",
+    "pt-br",
+    "nb/config",
+  ],
 }
 const route = (path: string, accept = "text/html") => docsRoute(new URL(path, "https://opencode.ai"), accept, slugs)
 
@@ -91,6 +103,7 @@ describe("V1 docs routes", () => {
     expect(route("/v1/docs/ide/")).toEqual(page("ide"))
     expect(route("/v1/docs/ja/")).toEqual(page("ja"))
     expect(route("/v1/docs/ja/config")).toEqual(page("ja/config"))
+    expect(route("/v1/docs/ja/policies/")).toEqual(page("ja/policies"))
     expect(route("/v1/docs.md")).toEqual(page("index", true))
     expect(route("/v1/docs/ja.md")).toEqual(page("ja", true))
     expect(route("/v1/docs/config/", "text/markdown")).toEqual(page("config", true))
@@ -106,8 +119,7 @@ describe("V1 docs routes", () => {
     moved("/v1/docs/uk/", "/v1/docs/")
   })
 
-  test("send English-only pages, Go and Zen, share links and the schemas where they live", () => {
-    moved("/v1/docs/ja/policies/", "/v1/docs/policies/", 302)
+  test("send Go and Zen, share links and the schemas where they live", () => {
     moved("/v1/docs/go", "/docs/console/go/")
     moved("/v1/docs/ja/zen/", "/docs/console/models/")
     moved("/v1/docs/s/abc123", "https://opncd.ai/share/abc123")

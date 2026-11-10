@@ -19,8 +19,11 @@ const $$ = <T extends Element = HTMLElement>(selector: string, root: ParentNode 
   ...root.querySelectorAll<T>(selector),
 ]
 const site = $("[data-site]")!
-// The page's docs set's base (DocsLayout.tsx), which search results and links start from.
+// The page's docs set's base, which search results and links start from, and what the page says in
+// its language, with {{params}} to fill in (DocsLayout.tsx).
 const base = site.dataset.docsBase!
+const strings: Record<string, string> = JSON.parse(site.dataset.strings!)
+const fill = (text: string, params: Record<string, string>) => text.replace(/\{\{(\w+)\}\}/g, (_, name) => params[name])
 const html = document.documentElement
 const on = <K extends keyof DocumentEventMap>(type: K, listener: (event: DocumentEventMap[K]) => void) =>
   document.addEventListener(type, listener)
@@ -34,12 +37,11 @@ const wait = (ms: number) => new Promise((done) => setTimeout(done, ms))
 // and the site share one choice.
 const themes = ["system", "light", "dark"] as const
 type Theme = (typeof themes)[number]
-const themeNames = { system: "System", light: "Light", dark: "Dark" }
 function showTheme(theme: Theme) {
   site.dataset.theme = theme
   const next = themes[(themes.indexOf(theme) + 1) % 3]
   const cycle = $('[data-component="theme-toggle"] [data-slot="cycle"]')
-  cycle?.setAttribute("aria-label", `${themeNames[theme]} theme. Switch to ${themeNames[next]}`)
+  cycle?.setAttribute("aria-label", fill(strings.cycle, { theme: strings[theme], next: strings[next] }))
   $$("[data-slot=icon]", cycle ?? undefined).forEach((icon, index) =>
     icon.toggleAttribute("data-current", index === themes.indexOf(theme)),
   )
@@ -53,7 +55,12 @@ showTheme((site.dataset.theme as Theme) ?? "system")
 
 // Copy with feedback in place (DESIGN.md): the button's data-state shows "Copied" or "Failed" for
 // 1.5s, and the live region after it says so.
-async function copied(button: HTMLElement, write: () => Promise<unknown>, message: string, failure = "Couldn't copy") {
+async function copied(
+  button: HTMLElement,
+  write: () => Promise<unknown>,
+  message: string,
+  failure = strings.copyFailed,
+) {
   const live = button.nextElementSibling?.matches("[aria-live]") ? button.nextElementSibling : undefined
   const run = String(Number(button.dataset.run ?? 0) + 1)
   button.dataset.run = run
@@ -84,19 +91,13 @@ on("click", (event) => {
   }
 
   const copy = target.closest<HTMLElement>("[data-code]")
-  if (copy)
-    return copied(
-      copy,
-      () => clipboard(copy.dataset.code ?? ""),
-      "Copied to clipboard",
-      "Couldn't copy. Select the code instead.",
-    )
+  if (copy) return copied(copy, () => clipboard(copy.dataset.code ?? ""), strings.copied, strings.codeFailed)
 
   const heading = target.closest<HTMLElement>("[data-heading-id]")
   if (heading) {
     const id = heading.dataset.headingId
     history.replaceState(history.state, "", `#${id}`)
-    return copied(heading, () => clipboard(`${location.origin}${location.pathname}#${id}`), "Link copied")
+    return copied(heading, () => clipboard(`${location.origin}${location.pathname}#${id}`), strings.linkCopied)
   }
 
   const markdown = target.closest<HTMLElement>("[data-copy-markdown]")
@@ -107,7 +108,7 @@ on("click", (event) => {
         fetch(location.pathname, { headers: { Accept: "text/markdown" } }).then((response) =>
           response.ok ? response.text().then(clipboard) : Promise.reject(),
         ),
-      "Copied the page as Markdown",
+      strings.markdownCopied,
     )
 
   const tab = target.closest<HTMLElement>("[data-code-tab], [data-plan-tab]")
@@ -425,7 +426,7 @@ let swappedAt = -Infinity
 function nameSection(title: string, animate: boolean) {
   const label = contentsBar && $("[data-slot=label]", contentsBar)
   if (!label) return
-  $("summary", contentsBar!)!.setAttribute("aria-label", `Contents: ${title}`)
+  $("summary", contentsBar!)!.setAttribute("aria-label", fill(strings.contents, { section: title }))
   const current = label.querySelector<HTMLElement>("[data-slot=word]:not([data-leaving])")!
   if (current.textContent === title) return
   const word = document.createElement("span")
@@ -601,8 +602,17 @@ input.addEventListener("input", async () => {
   if (query && !pages.length) {
     const empty = document.createElement("p")
     empty.dataset.slot = "empty"
-    empty.innerHTML = `<span></span>. Try a shorter word, or <a href="${base}">browse the docs</a>.`
-    empty.firstChild!.textContent = `No results for “${query}”`
+    // The sentence in the page's language, with the query and the link in their places, all as text.
+    const none = document.createElement("span")
+    none.textContent = fill(strings.noResults, { query })
+    const link = document.createElement("a")
+    link.href = base
+    link.textContent = strings.browse
+    empty.append(
+      ...strings.empty
+        .split(/(\{\{\w+\}\})/)
+        .map((part) => (part === "{{results}}" ? none : part === "{{link}}" ? link : part)),
+    )
     results.append(empty)
   }
   input.setAttribute("aria-expanded", String(!!query))
@@ -658,23 +668,17 @@ function choose(option: HTMLAnchorElement) {
 // service, then the live status (the site's /status.json). Asked for once the footer comes near, and
 // kept five minutes in sessionStorage, since every docs page is a full load.
 type Status = "operational" | "degraded" | "outage" | "unknown"
-const headlines = {
-  operational: "All systems operational",
-  degraded: "Degraded performance",
-  outage: "Service disruption",
-  unknown: "Status unavailable",
-}
 function showStatus(bars: Status[]) {
   const link = $("[data-component=status]")
   if (!link) return
   const current = bars.at(-1)!
   const normal = current === "operational"
   link.dataset.state = current
-  link.title = headlines[current]
+  link.title = strings[current]
   // As in the site's footer, "Normal" or else "Status"; screen readers hear the headline instead.
-  $("[data-slot=sr-only]", link)!.textContent = normal ? "Status: " : `Status: ${headlines[current]}`
+  $("[data-slot=sr-only]", link)!.textContent = strings.statusPrefix + (normal ? "" : strings[current])
   const text = $("[data-slot=status-text]", link)!
-  text.textContent = normal ? "Normal" : "Status"
+  text.textContent = normal ? strings.normal : strings.status
   if (normal) text.removeAttribute("aria-hidden")
   else text.setAttribute("aria-hidden", "true")
   $$("[data-slot=bars] > span", link).forEach((bar, index) => (bar.dataset.state = bars[index] ?? "unknown"))
