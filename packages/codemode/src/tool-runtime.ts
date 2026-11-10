@@ -212,68 +212,51 @@ export type SearchEntry = {
 
 type SearchField = "namespace" | "name" | "description" | "parameters" | "namespaceDescription"
 
-// BM25 over a tool's fields, with name matches worth the most, plus a preference for short names. Measured on
+// Standard field-weighted BM25 (k1 1.2, b 0.75) plus a preference for short names. Compared against other rankers on
 // model-written and real search queries over an ~11k-tool catalog (anomalyco/evals, dumber/evals/tool-search).
 const fieldWeights: Record<SearchField, number> = {
-  namespace: 1,
-  name: 1.5,
-  description: 0.5,
-  parameters: 0.1,
-  namespaceDescription: 0.2,
+  name: 3,
+  namespace: 2,
+  description: 1,
+  namespaceDescription: 0.4,
+  parameters: 0.3,
 }
 const searchFields = Object.keys(fieldWeights) as ReadonlyArray<SearchField>
 const k1 = 1.2
-const lengthNormalization = 0.9
+const lengthNormalization = 0.75
 /** score × (1 + brevityBoost / words in the tool name): "users" prefers `list_users` over `list_user_groups`. */
 const brevityBoost = 0.5
-/** A query word of 4+ letters that matches no indexed word matches the words it starts with, at this weight. */
+/** A query word of 4+ letters also matches longer words it starts with, at this weight: `term` → `terminal`. */
 const prefixWeight = 0.3
 
-const stopWords = new Set(
-  "a an the of for to in on at my our your their this that these those and or with by from is are be was were it its me i we us you please can could would should will do does how what which who whom whose when where why all any some each every there here into about via using use just also not no only".split(
-    " ",
-  ),
-)
-
+/** Words split at case changes and non-alphanumerics: `listUserGroups` → list, user, groups. */
 const splitWords = (text: string): Array<string> =>
   text
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((word) => word.length > 0)
 
-/** Light suffix stripping for plurals and common verb forms. */
+/** Plural endings only, applied the same everywhere: `settings` → `setting`, `statuses` → `status`, `vms` → `vm`. */
 const stem = (word: string) => {
-  // Three-letter plurals of short words: `vms` → `vm`, `ids` → `id`.
-  if (word.length === 3 && word.endsWith("s") && !word.endsWith("ss") && !word.endsWith("us") && !word.endsWith("is"))
-    return word.slice(0, -1)
-  if (word.length <= 3) return word
-  if (word.endsWith("ies") && word.length > 4) return word.slice(0, -3) + "y"
-  if (word.endsWith("sses")) return word.slice(0, -2)
-  if (word.endsWith("ches") || word.endsWith("shes") || word.endsWith("xes") || word.endsWith("zes"))
-    return word.slice(0, -2)
-  if (word.endsWith("ss") || word.endsWith("us") || word.endsWith("is")) return word
-  if (word.endsWith("s")) return word.slice(0, -1)
-  if (word.endsWith("ing") && word.length > 5) return word.slice(0, -3)
-  if (word.endsWith("ed") && word.length > 4) return word.slice(0, -2)
+  if (word.length > 4 && word.endsWith("ies")) return word.slice(0, -3) + "y"
+  if (word.length > 4 && /(?:ss|sh|ch|x|z|us)es$/.test(word)) return word.slice(0, -2)
+  if (word.length > 2 && word.endsWith("s") && !/(?:ss|us|is)$/.test(word)) return word.slice(0, -1)
   return word
 }
+
+/** Searchable words of a text: its split words, plus each camelCase word whole (`CronJob` → cron, job, cronjob). */
+const searchWords = (text: string) =>
+  splitWords(text)
+    .concat((text.match(/[A-Za-z0-9]*[a-z0-9][A-Z][A-Za-z0-9]*/g) ?? []).map((word) => word.toLowerCase()))
+    .map(stem)
 
 const fieldWords = (text: string, cache: Map<string, ReadonlyArray<string>>) => {
   const cached = cache.get(text)
   if (cached) return cached
-  const words = splitWords(text).map(stem)
+  const words = searchWords(text)
   cache.set(text, words)
   return words
-}
-const queryTerms = (query: string) => {
-  const words = splitWords(query)
-  // `tools.ns.name` and "tools to …" carry no signal beyond the other words.
-  const kept = words.filter((word) => word !== "tools" || words.length === 1)
-  const content = kept.filter((word) => !stopWords.has(word))
-  // A query of only stop words ("all", "use") searches for them rather than for nothing.
-  return (content.length > 0 ? content : kept).map(stem)
 }
 
 /** For each word, the tools containing it and their field-weighted, length-normalized term frequency. */
@@ -391,8 +374,8 @@ const buildWordIndex = (texts: ReadonlyArray<Readonly<Record<SearchField, Readon
   return { postings, documents: texts.length, words: [...postings.keys()].sort() }
 }
 
-/** Indexed words that start with a 4+ letter query word that matched nothing itself: `docum` → `document`. */
-const partialMatches = (words: WordIndex, term: string): Array<readonly [string, number]> => {
+/** Indexed words longer than a 4+ letter query word that start with it. */
+const prefixMatches = (words: WordIndex, term: string): Array<readonly [string, number]> => {
   if (term.length < 4) return []
   let low = 0
   let high = words.words.length
@@ -403,7 +386,7 @@ const partialMatches = (words: WordIndex, term: string): Array<readonly [string,
   }
   const matches: Array<readonly [string, number]> = []
   for (let i = low; i < words.words.length && words.words[i]!.startsWith(term); i++)
-    matches.push([words.words[i]!, prefixWeight])
+    if (words.words[i] !== term) matches.push([words.words[i]!, prefixWeight])
   return matches
 }
 
@@ -412,7 +395,7 @@ const rank = (
   query: string,
   index: ReadonlyArray<SearchEntry>,
 ): Array<SearchEntry> => {
-  const terms = queryTerms(query)
+  const terms = searchWords(query)
   if (terms.length === 0)
     return [...entries].sort((left, right) => compareText(left.description.path, right.description.path))
   const words = wordIndexFor(index)
@@ -421,9 +404,9 @@ const rank = (
   for (const term of terms) {
     // Each tool counts a query word once, through its best-scoring match.
     const best = new Map<number, number>()
-    const matches = words.postings.has(term) ? [[term, 1] as const] : partialMatches(words, term)
-    for (const [word, factor] of matches) {
-      const posting = words.postings.get(word)!
+    for (const [word, factor] of [[term, 1] as const, ...prefixMatches(words, term)]) {
+      const posting = words.postings.get(word)
+      if (!posting) continue
       const idf = Math.log(1 + (words.documents - posting.positions.length + 0.5) / (posting.positions.length + 0.5))
       for (let i = 0; i < posting.positions.length; i++) {
         const position = posting.positions[i]!
@@ -474,7 +457,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
           : scoped.find(
               (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
             )
-      const ranked = exact !== undefined ? [exact] : rank(scoped, query, searchIndex)
+      const ranked = exact !== undefined ? [exact] : rank(scoped, pathQuery, searchIndex)
       const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
         ...description,
         path: toolExpression(description.path),
