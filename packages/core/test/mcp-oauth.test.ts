@@ -42,7 +42,7 @@ const memoryCredentials = (initial: Credential.Info[]) => {
   const rows = new Map(initial.map((row) => [row.id, row]))
   const unused = () => Effect.die("unused credential method")
   const service = Credential.Service.of({
-    lock: unused,
+    refresh: unused,
     all: unused,
     create: unused,
     activate: unused,

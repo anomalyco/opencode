@@ -327,7 +327,7 @@ describe("OpencodePlugin", () => {
                   methodID: Integration.MethodID.make("device"),
                   access: "expired-access",
                   refresh: "old-refresh",
-                  expires: 0,
+                  expires: 1,
                   metadata: { server: server.url.origin, orgID: "org-a", orgName: "Alpha", custom: "preserved" },
                 }),
               })
@@ -1094,7 +1094,7 @@ describe("OpencodePlugin", () => {
               methodID: Integration.MethodID.make("device"),
               access: "expired",
               refresh: "revoked",
-              expires: 0,
+              expires: 1,
               metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
             }),
           })
