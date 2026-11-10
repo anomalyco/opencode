@@ -5560,9 +5560,55 @@ pub struct ModelSettings {
     pub extra: IndexMap<String, serde_json::Value>,
 }
 
+/// `Tool.FreeformFormat`
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ToolFreeformFormat {
+    Text,
+    Regex,
+    Lark,
+    Unknown(String),
+}
+
+impl ToolFreeformFormat {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Text => "text",
+            Self::Regex => "regex",
+            Self::Lark => "lark",
+            Self::Unknown(value) => value,
+        }
+    }
+}
+
+impl From<&str> for ToolFreeformFormat {
+    fn from(value: &str) -> Self {
+        match value {
+            "text" => Self::Text,
+            "regex" => Self::Regex,
+            "lark" => Self::Lark,
+            _ => Self::Unknown(value.to_owned()),
+        }
+    }
+}
+
+impl Serialize for ToolFreeformFormat {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ToolFreeformFormat {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from(value.as_str()))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelCapabilities {
     pub tools: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freeform: Option<Vec<ToolFreeformFormat>>,
     pub input: Vec<String>,
     pub output: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12349,6 +12395,8 @@ impl<'de> Deserialize<'de> for ConfigModelReasoning {
 pub struct ConfigModelCapabilities {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freeform: Option<Vec<ToolFreeformFormat>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
