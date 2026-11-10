@@ -490,3 +490,34 @@ test("customized vertical sidebar merges a project across servers and narrows it
   await menu.getByRole("menuitem", { name: "Reset filters" }).click()
   await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
 })
+
+test("deleting a session's tab in the customized sidebar removes it from the list too", async ({ page }) => {
+  const first = session({ id: "ses_delete_first", directory: directoryA, title: "Delete me" })
+
+  const second = session({ id: "ses_delete_second", directory: directoryA, title: "Keep me" })
+
+  await mockServers(page, {
+    [SERVER]: {
+      directory: directoryA,
+      project: project({ id: "proj_delete", directory: directoryA }),
+      provider: { all: [], connected: [], default: {} },
+      sessions: [first, second],
+      pageMessages: () => ({ items: [] }),
+    },
+  })
+  await seed(page, {
+    tabs: [first.id, second.id],
+    settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "customize" } },
+  })
+  await page.goto(sessionHref(first.id))
+  await expectSessionTitle(page, first.title)
+
+  const sidebar = page.locator('[data-slot="vertical-tabs"]')
+
+  await sidebar.locator("[data-titlebar-tab-title]", { hasText: first.title }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Delete session", exact: true }).click()
+  await expectSessionTitle(page, second.title)
+  // The session the app had loaded must not come back as a recent row, which would open a missing session.
+  await expect(sidebar.getByText(first.title)).toHaveCount(0)
+})
