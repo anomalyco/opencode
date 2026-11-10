@@ -53,10 +53,15 @@ const answered = (path: string, method: string) =>
  */
 export const staticPages: Middleware = async (_event, next) => {
   const event = getRequestEvent()
-  if (import.meta.env.DEV || !event || (event.request.method !== "GET" && event.request.method !== "HEAD"))
-    return next()
+  if (import.meta.env.DEV || !event) return next()
   const url = new URL(event.request.url)
   const path = strip(url.pathname)
+  // Pages only answer GET and HEAD. Another method on an address no API route or server function serves gets a
+  // 405, not the app's document, whose scripts production no longer ships.
+  if (event.request.method !== "GET" && event.request.method !== "HEAD")
+    return path.startsWith("/_server") || pages.some((route) => !route.page && matches(route.path, path))
+      ? next()
+      : new Response(null, { status: 405, headers: { Allow: "GET, HEAD" } })
   const pattern = staticPath(path) ?? (answered(path, event.request.method) ? undefined : "/*404")
   const load =
     pattern && pages.find((route) => route.page && route.path.replace(/(.)\/$/, "$1") === pattern)?.$component?.import
