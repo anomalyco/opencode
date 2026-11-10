@@ -27,15 +27,16 @@ fn routes(diff: Value) -> Vec<MemoryRoute> {
         "time": { "created": 1, "updated": 1 },
         "location": { "directory": DIRECTORY },
     });
+    let diff = if diff.is_array() { diff } else { json!([diff]) };
     vec![
         MemoryRoute::json("GET", "/api/location", 200, &location),
         MemoryRoute::json("GET", "/api/agent", 200, &list(json!([]))),
         MemoryRoute::json("GET", "/api/model", 200, &list(json!([]))),
         MemoryRoute::json("GET", "/api/session/ses_a", 200, &json!({ "data": session })),
         MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
-        MemoryRoute::json("GET", "/api/session/ses_a/diff", 200, &json!({ "data": [diff] })),
+        MemoryRoute::json("GET", "/api/session/ses_a/diff", 200, &json!({ "data": diff })),
         MemoryRoute::json("GET", "/api/vcs/base", 200, &list(Value::Null)),
-        MemoryRoute::json("GET", "/api/vcs/diff", 200, &list(json!([diff]))),
+        MemoryRoute::json("GET", "/api/vcs/diff", 200, &list(diff)),
         MemoryRoute::json("GET", "/api/session/:id/message", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/session/:id/inbox", 200, &json!({ "data": [] })),
         MemoryRoute::json("GET", "/api/session/:id/permission", 200, &json!({ "data": [] })),
@@ -58,6 +59,7 @@ fn mount(route: Route) -> Diffs {
     mount_with(route, diff, 140, 30)
 }
 
+/// Serves `diff`, one file or a list of them.
 fn mount_with(route: Route, diff: Value, width: u16, height: u16) -> Diffs {
     let memory = Memory::new(routes(diff));
     let config = json!({ "animations": false, "session": { "sidebar": "hide" }, "diffs": { "source": "turn" } });
@@ -173,6 +175,33 @@ fn the_file_tree_and_menu_are_freed_with_their_view() {
     h.tui.navigate(Route::Home);
     h.app.render();
     assert_eq!(Rc::strong_count(&marker), 1);
+}
+
+// Expected (carbon-dialogs-5): the file tree follows the selected file down and its `help` footer opens the help.
+#[test]
+fn the_file_tree_follows_the_selection_and_its_help_opens() {
+    let files: Vec<Value> = (0..35)
+        .map(|index| {
+            json!({
+                "file": format!("src/file_{index:02}.rs"), "patch": "@@ -1 +1 @@\n-old\n+new\n",
+                "additions": 1, "deletions": 1, "status": "modified",
+            })
+        })
+        .collect();
+    let h = mount_with(Route::Home, Value::Array(files), 120, 20);
+    h.wait_for("/project");
+    h.tui.keymap.dispatch("diff.open", None);
+    h.wait_for("≡ file_00.rs");
+    for _ in 0..25 {
+        h.dispatch("diff.next_file");
+    }
+    h.wait_for("≡ file_25.rs");
+    // Each step rebuilt the tree; it kept the offset it scrolled to.
+    assert!(!h.app.text().contains("≡ file_00.rs"), "{}", h.app.text());
+
+    let (x, y) = h.find(" help");
+    h.app.click(x + 1, y);
+    h.wait("the help did not open", || h.tui.dialogs.is_open());
 }
 
 // Expected (carbon-1): a plugin toggled in `/plugins` mounts the session again with its docked panel, which must not

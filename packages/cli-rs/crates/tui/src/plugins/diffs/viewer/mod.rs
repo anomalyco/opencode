@@ -288,7 +288,19 @@ pub struct Viewer {
     pub(super) turn_status: Cell<Option<opencode_store::SessionStatus>>,
     was_focused: Cell<bool>,
     passes: Cell<u32>,
+    tree_scroll: RefCell<Option<TreeScroll>>,
     this: Weak<Viewer>,
+}
+
+/// The file tree's scroll box, whose offset a rebuild keeps.
+struct TreeScroll {
+    scroll: ScrollBox,
+    /// The selected row and the row count it last scrolled for: the selection scrolls into view only when they
+    /// change, as TS's effect does.
+    mark: (Option<usize>, usize),
+    /// The offset and viewport height last known.
+    top: f64,
+    height: f64,
 }
 
 impl Viewer {
@@ -356,6 +368,7 @@ impl Viewer {
             turn_status: Cell::new(None),
             was_focused: Cell::new(false),
             passes: Cell::new(0),
+            tree_scroll: RefCell::default(),
             this: this.clone(),
         });
         viewer.install(tui);
