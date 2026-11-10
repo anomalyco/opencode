@@ -682,3 +682,21 @@ fn typescript_waits_for_the_rust_locks() {
     let written: Map<String, Value> = serde_json::from_str(&fs::read_to_string(&files[0]).unwrap()).unwrap();
     assert_eq!(written.get("mouse"), Some(&json!(false)));
 }
+
+/// `Global.layer` creates the config directory at startup, so the TS watcher sees a `cli.json` that
+/// appears later.
+#[test]
+fn watch_reloads_a_config_file_created_in_a_missing_directory() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = paths(home.path());
+    assert!(!paths.config.exists());
+    let (sender, changed) = std::sync::mpsc::channel();
+    let config = CliConfig::with_content(&paths, None);
+    let _watch = config
+        .watch(move || {
+            let _ = sender.send(());
+        })
+        .expect("watching a missing directory");
+    fs::write(config.path(), "{ \"mouse\": false }\n").unwrap();
+    changed.recv_timeout(Duration::from_secs(5)).unwrap();
+}
