@@ -145,6 +145,7 @@ const layer = Layer.effect(
             model.providerID = providerID
             const provider = input?.records.get(providerID)?.provider
             AISDKNative.rewrite(model, {
+              builtins: Provider.builtinPackages,
               specifier: model.package ?? provider?.package,
               providerID,
               canonical: model.canonical ?? provider?.canonical,
