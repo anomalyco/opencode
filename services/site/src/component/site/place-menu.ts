@@ -16,6 +16,11 @@ let anchors = 0
  * positioning keeps it in its box.
  */
 export function placeMenu(menu: HTMLElement) {
+  // A previous run leaves placement styles inline, including `position: fixed`; a fixed element
+  // has no offsetParent, so the guard below would bail before showPopover() on reopen. Clear them
+  // before measuring; a menu hidden with `hidden` still has no offsetParent and is still bailed on.
+  menu.removeAttribute("style")
+  menu.removeAttribute("data-side")
   const box = menu.offsetParent
   if (!(box instanceof HTMLElement)) return
   // Measured as laid out, not as drawn: the opening animation scales the menu from a corner.
