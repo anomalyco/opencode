@@ -47,6 +47,14 @@ const islands: {
     when: "near",
     load: () => import("./islands/download-list"),
   },
+  // The font page's typewriter, then its plates as they come near (one module, islands/font.tsx).
+  { selector: '[data-component="font-hero"]', when: "idle", load: () => import("./islands/font") },
+  {
+    selector: '[data-component="specimen"] > *, [data-plate="film"]',
+    when: "near",
+    load: () => import("./islands/font"),
+  },
+  { selector: '[data-component="arcade-404"]', when: "idle", load: () => import("./islands/arcade") },
 ]
 
 export function startIslands() {

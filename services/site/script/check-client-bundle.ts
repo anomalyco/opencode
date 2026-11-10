@@ -5,14 +5,11 @@
 // Also fails when server-only code reaches it: the Worker's cache, GitHub calls and the build-time
 // GitHub snapshot. Pages may import their modules for the queries, whose "use server" bodies the
 // browser build drops along with everything only those bodies read.
-// Last, it fails when a page's initial JavaScript (the entry and every chunk the page's route imports
-// statically, which the server modulepreloads) passes its budget below, gzipped. A static page
-// (src/static/routes.ts) loads the static pages' one script (src/client/entry.ts) instead, and has
-// its budget. Code a page needs only later belongs behind a dynamic import.
+// Last, it fails when the app's own scripts ship, or the one script every page loads passes its budget
+// below. Code a page needs only later belongs behind a dynamic import.
 // Run after `vite build`, optionally with the output directory: `bun script/check-client-bundle.ts .output`.
 import path from "node:path"
 import { Glob } from "bun"
-import { staticPath } from "../src/static/routes"
 
 const root = path.resolve(process.argv[2] ?? path.join(import.meta.dir, "..", ".output"), "public")
 // Strings only the tools' own code contains, as they survive minification.
@@ -63,68 +60,45 @@ console.log(
   `check-client-bundle: ${files.length} client files, no Settings, Design mode, device preview or server-only code`,
 )
 
-// Each page's budget in kB, gzipped: what it was when last measured, plus a kB of room. Lower a
-// budget when a page gets lighter; a page without one fails until it has one.
-const budgets: Record<string, number> = {
-  "static pages": 11.3,
-  "[...404].tsx": 104.3,
-  "devices.tsx": 57.1,
-  "font/index.tsx": 119,
-  "video-editor/index.tsx": 55.5,
-}
+// Production hydrates no page (src/static/render.tsx): every page loads the static pages' one script
+// (src/client/entry.ts, script/static-client.ts), whose islands and overlays load later. The app's
+// browser build is there for its stylesheets only, so none of its scripts may ship, and the script
+// may bring no router, no serialized data (seroval) and no hydration. Its budget in kB, gzipped, is
+// what it was when last measured, plus a kB of room; lower it when the script gets lighter.
+const budget = 11.6
 type Chunk = { file: string; imports?: string[] }
-const manifest: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
-const sizes = new Map<string, number>()
-const gzipped = async (file: string) => {
-  const known = sizes.get(file)
-  if (known !== undefined) return known
-  const size = Bun.gzipSync(await Bun.file(path.join(root, file)).bytes(), { level: 9 }).length
-  sizes.set(file, size)
-  return size
-}
-const closure = (key: string, seen = new Set<string>()): Set<string> => {
-  if (seen.has(key)) return seen
-  seen.add(key)
-  manifest[key].imports?.forEach((next) => closure(next, seen))
-  return seen
-}
-const entry = closure("src/entry-client.tsx")
-const kB = async (keys: Iterable<string>) =>
-  Math.round(
-    (await Promise.all([...keys].map((key) => gzipped(manifest[key].file)))).reduce((a, b) => a + b, 0) / 100,
-  ) / 10
-// The static pages' script, from its own build (script/static-client.ts): one file, whose islands and
-// overlays load later.
+const app: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
 const statics: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/static-manifest.json")).json()
+const own = new Set(Object.values(statics).map((chunk) => chunk.file))
+const shipped = (
+  await Promise.all(
+    Object.values(app)
+      .filter((chunk) => /\.m?js$/.test(chunk.file) && !own.has(chunk.file))
+      .map(async (chunk) => ((await Bun.file(path.join(root, chunk.file)).exists()) ? [chunk.file] : [])),
+  )
+).flat()
+if (shipped.length) {
+  console.error(`check-client-bundle: the app's scripts ship, though no page loads them:\n  ${shipped.join("\n  ")}`)
+  process.exit(1)
+}
 const script = statics["src/client/entry.ts"]
 if (script.imports?.length) {
   console.error(`check-client-bundle: the static pages' script imports ${script.imports.join(", ")}; keep it one file`)
   process.exit(1)
 }
-const staticScript = Math.round((await gzipped(script.file)) / 100) / 10
-const pages = await Promise.all(
-  Object.keys(manifest)
-    .filter((key) => key.startsWith("src/routes/") && key.includes("?pick=default"))
-    .map(async (key) => {
-      const route = key.slice("src/routes/".length).split("?")[0]
-      // The route file's address: brand/index.tsx is /brand, changelog/[tag].tsx is /changelog/:tag.
-      const address = `/${route.replace(/(^|\/)index\.tsx$|\.tsx$/, "").replace(/\[([^\]]+)\]/g, ":$1")}`
-      if (staticPath(address) === address) return { route, kB: staticScript, budget: budgets["static pages"] }
-      return { route, kB: await kB(new Set([...entry, ...closure(key)])), budget: budgets[route] }
-    }),
-)
-const over = pages.filter((page) => !(page.kB <= page.budget))
-if (over.length) {
-  console.error(
-    "check-client-bundle: initial JavaScript (gzipped) over its page's budget:\n  " +
-      over.map((page) => `${page.route}: ${page.kB} kB, budget ${page.budget ?? "none"}`).join("\n  "),
-  )
+const bytes = await Bun.file(path.join(root, script.file)).bytes()
+const text = new TextDecoder().decode(bytes)
+// As they survive minification: the router's scroll key, seroval's errors, hydration's global.
+const brought = ["solid-router", "Seroval", "_$HY"].filter((marker) => text.includes(marker))
+if (brought.length) {
+  console.error(`check-client-bundle: the static pages' script brings ${brought.join(", ")}`)
+  process.exit(1)
+}
+const kB = Math.round(Bun.gzipSync(bytes, { level: 9 }).length / 100) / 10
+if (!(kB <= budget)) {
+  console.error(`check-client-bundle: the static pages' script is ${kB} kB gzipped, over its budget of ${budget} kB`)
   process.exit(1)
 }
 console.log(
-  "check-client-bundle: initial JavaScript within budget (kB gzipped): " +
-    pages
-      .toSorted((a, b) => b.kB - a.kB)
-      .map((page) => `${page.route} ${page.kB}`)
-      .join(", "),
+  `check-client-bundle: the app ships no scripts; the static pages' script is ${kB} kB gzipped (budget ${budget})`,
 )
