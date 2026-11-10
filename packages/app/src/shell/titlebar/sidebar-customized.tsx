@@ -60,6 +60,39 @@ type Row = SidebarRow & {
   project: Project | undefined
 }
 
+type SectionFooter = { type: "group" | "row"; key: string }
+
+type SectionPlan = {
+  key: string
+  tabs: Tab[]
+  /** The key of the group the header shows. */
+  header: string | undefined
+  hideAvatars: boolean
+  footer: SectionFooter | undefined
+}
+
+function sameList<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
+  return a === b || (!!a && !!b && a.length === b.length && a.every((item, index) => item === b[index]))
+}
+
+function samePlans(a: SectionPlan[], b: SectionPlan[]) {
+  return (
+    a.length === b.length &&
+    a.every((plan, index) => {
+      const other = b[index]
+
+      return (
+        plan.key === other.key &&
+        plan.header === other.header &&
+        plan.hideAvatars === other.hideAvatars &&
+        plan.footer?.type === other.footer?.type &&
+        plan.footer?.key === other.footer?.key &&
+        sameList(plan.tabs, other.tabs)
+      )
+    })
+  )
+}
+
 export type SidebarStripGrouping = {
   sections: TabStripSection[]
   tabFooter: (tab: Tab) => JSX.Element | undefined
@@ -256,10 +289,9 @@ export function SidebarCustomized(props: {
 
   const result = createMemo(() => sidebarView(rows(), state()))
 
-  const visibleRows = () =>
-    result()
-      .groups.flatMap((group) => [group, ...(group.children ?? [])])
-      .flatMap((group) => group.rows)
+  const groups = createMemo(() => result().groups.flatMap((group) => [group, ...(group.children ?? [])]))
+
+  const visibleRows = () => groups().flatMap((group) => group.rows)
 
   // A project that spans servers takes its name and icon from the current server's copy when there is one.
   const projectLabels = createMemo(() => {
@@ -290,10 +322,15 @@ export function SidebarCustomized(props: {
     return servers.tag(row.conn)
   }
 
-  const groupOf = (key: string) =>
-    result()
-      .groups.flatMap((group) => [group, ...(group.children ?? [])])
-      .find((group) => group.rows.some((row) => row.key === key))
+  const rowByKey = createMemo(() => new Map(visibleRows().map((row) => [row.key, row])))
+
+  const groupByKey = createMemo(() => new Map(groups().map((group) => [group.key, group])))
+
+  const groupByRow = createMemo(
+    () => new Map(groups().flatMap((group) => group.rows.map((row) => [row.key, group] as const))),
+  )
+
+  const groupOf = (key: string) => groupByRow().get(key)
 
   // Every row whose top-level ancestor is an open tab renders under that tab; the rest render in the group's footer.
   const anchorOf = (row: Row, byKey: Map<string, Row>): Row => {
@@ -316,117 +353,184 @@ export function SidebarCustomized(props: {
   }
 
   // Rows outside a project group carry their project's avatar, as open tabs always do; subagents follow their parent.
-  const avatarOf = (row: Row, group: SidebarGroup<Row>) => {
-    if (group.kind === "project" || row.parentKey || !row.projectID) return
+  const avatarOf = (row: Row, group: SidebarGroup<Row> | undefined) => {
+    if (group?.kind === "project" || row.parentKey || !row.projectID) return
 
     return projectLabels().get(row.projectID) ?? row.project
   }
 
-  const sessionRow = (row: Row, group: SidebarGroup<Row>, byKey: Map<string, Row>) => (
-    <Show when={row.session && row.conn && { session: row.session, conn: row.conn }}>
-      {(item) => (
-        <ProjectSessionRow
-          server={ServerConnection.key(item().conn)}
-          session={item().session}
-          openTab={false}
-          active={row.active}
-          label={showLabel(row, group)}
-          depth={depthOf(row, byKey)}
-          project={avatarOf(row, group)}
-          onOpen={() => openSession(row)}
-        />
-      )}
-    </Show>
-  )
+  // Rows render from their key and read the live row, so a session update changes props in place instead of rebuilding them.
+  function SessionRowItem(rowProps: { rowKey: string; flat?: boolean }) {
+    const row = () => rowByKey().get(rowProps.rowKey)
+
+    const item = () => {
+      const value = row()
+
+      return value?.session && value.conn ? { row: value, session: value.session, conn: value.conn } : undefined
+    }
+
+    const group = () => groupOf(rowProps.rowKey)
+
+    return (
+      <Show when={item()}>
+        {(value) => (
+          <ProjectSessionRow
+            server={ServerConnection.key(value().conn)}
+            session={value().session}
+            openTab={false}
+            active={value().row.active}
+            label={showLabel(value().row, group())}
+            depth={rowProps.flat ? 0 : depthOf(value().row, rowByKey())}
+            project={avatarOf(value().row, group())}
+            onOpen={() => openSession(value().row)}
+          />
+        )}
+      </Show>
+    )
+  }
 
   // A collapsed group keeps the current session visible below its header.
-  const activeRecent = (group: SidebarGroup<Row>) => {
+  const activeRecent = (group: SidebarGroup<Row>): SectionFooter | undefined => {
     const row = group.rows.find((item) => item.active && !item.open)
 
-    if (!row) return
-
-    return sessionRow(row, group, new Map([[row.key, row]]))
+    return row ? { type: "row", key: row.key } : undefined
   }
 
-  const leafSection = (group: SidebarGroup<Row>): TabStripSection => {
-    const byKey = new Map(group.rows.map((row) => [row.key, row]))
+  function GroupFooter(footerProps: { groupKey: string }) {
+    const footer = createMemo(
+      () => {
+        const group = groupByKey().get(footerProps.groupKey)
 
-    const footerRows = group.rows.filter((row) => !anchorOf(row, byKey).open)
+        if (!group) return { keys: [], more: false, limit: 0, step: 0 }
 
-    const topLevel = footerRows.filter((row) => anchorOf(row, byKey) === row)
+        const footerRows = group.rows.filter((row) => !anchorOf(row, rowByKey()).open)
 
-    const step = group.kind === "all" ? RECENT_STEP_UNGROUPED : RECENT_STEP
+        const topLevel = footerRows.filter((row) => anchorOf(row, rowByKey()) === row)
 
-    const limit = local.limits[group.key] ?? step
+        const step = group.kind === "all" ? RECENT_STEP_UNGROUPED : RECENT_STEP
 
-    const shown = new Set(topLevel.slice(0, limit))
+        const limit = local.limits[group.key] ?? step
 
-    return {
-      key: group.key,
-      tabs: group.rows.flatMap((row) => (row.open && row.tab && (!group.collapsed || row.active) ? [row.tab] : [])),
-      header: group.kind === "all" ? undefined : <GroupHeader group={group} />,
-      hideAvatars: group.kind === "project",
-      footer: group.collapsed ? (
-        activeRecent(group)
-      ) : (
-        <>
-          <For each={footerRows.filter((row) => shown.has(anchorOf(row, byKey)))}>
-            {(row) => sessionRow(row, group, byKey)}
-          </For>
-          <Show when={topLevel.length > limit}>
-            <Button
-              variant="ghost-muted"
-              size="small"
-              class="ms-[23px] self-start"
-              onClick={() => setLocal("limits", group.key, limit + step)}
-            >
-              {language.t("sidebar.organize.showMore")}
-            </Button>
-          </Show>
-        </>
-      ),
-    }
+        const shown = new Set(topLevel.slice(0, limit))
+
+        return {
+          keys: footerRows.filter((row) => shown.has(anchorOf(row, rowByKey()))).map((row) => row.key),
+          more: topLevel.length > limit,
+          limit,
+          step,
+        }
+      },
+      undefined,
+      { equals: (a, b) => sameList(a.keys, b.keys) && a.more === b.more && a.limit === b.limit && a.step === b.step },
+    )
+
+    return (
+      <>
+        <For each={footer().keys}>{(key) => <SessionRowItem rowKey={key} />}</For>
+        <Show when={footer().more}>
+          <Button
+            variant="ghost-muted"
+            size="small"
+            class="ms-[23px] self-start"
+            onClick={() => setLocal("limits", footerProps.groupKey, footer().limit + footer().step)}
+          >
+            {language.t("sidebar.organize.showMore")}
+          </Button>
+        </Show>
+      </>
+    )
   }
+
+  const leafPlan = (group: SidebarGroup<Row>): SectionPlan => ({
+    key: group.key,
+    tabs: group.rows.flatMap((row) => (row.open && row.tab && (!group.collapsed || row.active) ? [row.tab] : [])),
+    header: group.kind === "all" ? undefined : group.key,
+    hideAvatars: group.kind === "project",
+    footer: group.collapsed ? activeRecent(group) : { type: "group", key: group.key },
+  })
+
+  // Only the shape of the sidebar lives here. Headers and footers read their data live, so a session update that
+  // leaves the shape alone keeps every header and row mounted, with its hover, focus, menus and dialogs.
+  const plans = createMemo(
+    () =>
+      result().groups.flatMap((group): SectionPlan[] => {
+        if (!group.children) return [leafPlan(group)]
+
+        // Server → Project keeps every row at one inset: the server reads as a section label above its projects.
+        if (!group.collapsed)
+          return [
+            { key: group.key, tabs: [], header: group.key, hideAvatars: false, footer: undefined },
+            ...group.children.map(leafPlan),
+          ]
+
+        const active = group.children.find((child) => child.rows.some((row) => row.active))
+
+        return [
+          {
+            key: group.key,
+            tabs: active ? active.rows.flatMap((row) => (row.active && row.open && row.tab ? [row.tab] : [])) : [],
+            header: group.key,
+            hideAvatars: false,
+            footer: active ? activeRecent(active) : undefined,
+          },
+        ]
+      }),
+    undefined,
+    { equals: samePlans },
+  )
 
   const sections = createMemo(() =>
-    result().groups.flatMap((group): TabStripSection[] => {
-      if (!group.children) return [leafSection(group)]
+    plans().map(
+      (plan): TabStripSection => ({
+        key: plan.key,
+        tabs: plan.tabs,
+        header: plan.header ? <GroupHeader groupKey={plan.header} /> : undefined,
+        hideAvatars: plan.hideAvatars,
+        footer:
+          plan.footer?.type === "group" ? (
+            <GroupFooter groupKey={plan.footer.key} />
+          ) : plan.footer ? (
+            <SessionRowItem rowKey={plan.footer.key} flat />
+          ) : undefined,
+      }),
+    ),
+  )
 
-      // Server → Project keeps every row at one inset: the server reads as a section label above its projects.
-      if (!group.collapsed)
-        return [{ key: group.key, tabs: [], header: <GroupHeader group={group} /> }, ...group.children.map(leafSection)]
+  // Row keys of the sessions that render under each open tab (its subagents).
+  const tabChildren = createMemo(
+    () => {
+      const out = new Map<string, string[]>()
 
-      const active = group.children.find((child) => child.rows.some((row) => row.active))
+      result().groups.forEach((parent) => {
+        if (parent.collapsed) return
 
-      return [
-        {
-          key: group.key,
-          tabs: active ? active.rows.flatMap((row) => (row.active && row.open && row.tab ? [row.tab] : [])) : [],
-          header: <GroupHeader group={group} />,
-          footer: active ? activeRecent(active) : undefined,
-        },
-      ]
-    }),
+        ;(parent.children ?? [parent]).forEach((group) => {
+          if (group.collapsed) return
+
+          group.rows.forEach((row) => {
+            const anchor = anchorOf(row, rowByKey())
+
+            if (anchor !== row && anchor.open) out.set(anchor.key, [...(out.get(anchor.key) ?? []), row.key])
+          })
+        })
+      })
+
+      return out
+    },
+    undefined,
+    { equals: (a, b) => a.size === b.size && [...a].every(([key, keys]) => sameList(keys, b.get(key))) },
   )
 
   const tabFooter = (tab: Tab) => {
     if (tab.type !== "session") return
-    const key = sessionRowKey(tab.server, tab.sessionId)
 
-    const group = groupOf(key)
+    const children = createMemo(() => tabChildren().get(sessionRowKey(tab.server, tab.sessionId)), undefined, {
+      equals: sameList,
+    })
 
-    if (!group) return
+    if (!children()) return
 
-    const parent = result().groups.find((item) => item.children?.includes(group))
-
-    if (group.collapsed || parent?.collapsed) return
-    const byKey = new Map(group.rows.map((row) => [row.key, row]))
-
-    const children = group.rows.filter((row) => row.key !== key && anchorOf(row, byKey).key === key)
-
-    if (children.length === 0) return
-
-    return <For each={children}>{(row) => sessionRow(row, group, byKey)}</For>
+    return <For each={children()}>{(key) => <SessionRowItem rowKey={key} />}</For>
   }
 
   const tabLabel = (tab: Tab) => {
@@ -437,7 +541,13 @@ export function SidebarCustomized(props: {
     return row ? showLabel(row, groupOf(key)) : undefined
   }
 
-  function GroupHeader(headerProps: { group: SidebarGroup<Row> }) {
+  function GroupHeader(headerProps: { groupKey: string }) {
+    return (
+      <Show when={groupByKey().get(headerProps.groupKey)}>{(group) => <GroupHeaderView group={group()} />}</Show>
+    )
+  }
+
+  function GroupHeaderView(headerProps: { group: SidebarGroup<Row> }) {
     const group = () => headerProps.group
 
     const section = () => !!group().children
