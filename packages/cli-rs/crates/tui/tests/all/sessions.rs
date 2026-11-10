@@ -72,7 +72,8 @@ fn fake(mode: Mode, now: f64, delete_status: u16) -> Fake {
             }
             ("GET", _) if path.starts_with("/api/session/") => {
                 let id = path.trim_start_matches("/api/session/");
-                match scoped().into_iter().find(|session| session["id"] == id) {
+                // An opened session reads itself; one the server lacks closes again (`index.tsx:350-370`).
+                match scoped().into_iter().chain(recent(now)).find(|session| session["id"] == id) {
                     Some(session) => (200, json!({ "data": session })),
                     None => support::not_found(),
                 }

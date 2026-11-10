@@ -193,11 +193,11 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
 
     if trimmed.is_empty() {
         // A blank Enter commits the selection, then steers the first queued prompt.
-        let weak = prompt.this.clone();
+        let (owner, weak) = (tui.weak(), prompt.this.clone());
         let entry = entry.clone();
         tui.app.spawn(async move { commit.run().await }, move |_, result| {
             if let Err(error) = result {
-                fail(&weak, "Failed to prepare session", &error, &entry);
+                fail(&owner, &weak, "Failed to prepare session", &error, &entry);
             } else if let Some(tui) = weak.upgrade().and_then(|prompt| prompt.tui.upgrade())
                 && let Some(session) = weak.upgrade().and_then(|prompt| prompt.session.clone())
             {
@@ -309,7 +309,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                         };
                         match result {
                             Ok(()) => send(&tui),
-                            Err(error) => fail(&weak, "Failed to commit revert", &error, &entry),
+                            Err(error) => fail(&owner, &weak, "Failed to commit revert", &error, &entry),
                         }
                     },
                 );
@@ -327,8 +327,12 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
 
     if created {
         prompt.staging.finish(prompt);
-        // Navigating replaces this prompt, so it runs after the key that submitted.
-        tui.app.defer(bind!(tui, |tui, _| tui.navigate(Route::Session { id: target })));
+        // Navigating replaces this prompt, so it runs after the key that submitted; not once creation failed.
+        tui.app.defer(bind!(tui, |tui, _| {
+            if tui.data.read(|state| state.session(&target).is_some()) {
+                tui.navigate(Route::Session { id: target.clone() });
+            }
+        }));
     }
     true
 }
@@ -374,10 +378,10 @@ impl Failure {
     fn check<T>(self, title: &str, result: Result<T, Error>) {
         let Err(error) = result else { return };
         let Some(session) = self.session else {
-            fail(&self.prompt, title, &error, &self.entry);
+            fail(&self.tui, &self.prompt, title, &error, &self.entry);
             return;
         };
-        // A failed new session goes back home with the prompt as home's draft (`recover`).
+        // A failed new session goes back home (`recover`, `prompt/index.tsx:1258-1277`).
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
@@ -387,22 +391,36 @@ impl Failure {
             tui.startup.restore_new_session_id(id);
         }
         tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
-        tui.prompt.drafts.save(None, Draft { prompt: self.entry, cursor: u32::MAX });
-        if tui.route() == (Route::Session { id: session }) {
+        // What was typed in the new session since, else its stashed draft, else the sent prompt, becomes home's draft.
+        let routed = tui.route() == (Route::Session { id: session.clone() });
+        let active =
+            tui.prompt.current.borrow().upgrade().filter(|inner| routed && inner.session.as_ref() == Some(&session));
+        let typed = active.as_ref().map(|inner| inner.snapshot()).filter(|prompt| prompt["text"] != "");
+        let draft = match typed {
+            Some(prompt) => Draft { prompt, cursor: u32::MAX },
+            None => tui.prompt.drafts.take(Some(&session)).unwrap_or(Draft { prompt: self.entry, cursor: u32::MAX }),
+        };
+        tui.prompt.drafts.save(None, draft);
+        if let Some(active) = active {
+            active.reset();
+        }
+        if crate::tabs::Tabs::enabled(&tui) {
+            crate::tabs::close(&tui, Some(&session.0));
+        } else if routed {
             tui.navigate(Route::Home);
         }
     }
 }
 
-/// Shows the error and restores the prompt unless something new was typed.
-fn fail(prompt: &std::rc::Weak<Inner>, title: &str, error: &Error, entry: &Value) {
-    let Some(prompt) = prompt.upgrade() else {
-        return;
-    };
-    let Some(tui) = prompt.tui.upgrade() else {
+/// Shows the error, also after the composer unmounted, and restores the prompt unless something new was typed.
+fn fail(tui: &std::rc::Weak<Tui>, prompt: &std::rc::Weak<Inner>, title: &str, error: &Error, entry: &Value) {
+    let Some(tui) = tui.upgrade() else {
         return;
     };
     tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
+    let Some(prompt) = prompt.upgrade() else {
+        return;
+    };
     if prompt.textarea.text().is_empty() {
         prompt.restore(entry.clone());
         prompt.textarea.set_cursor_offset(prompt.text_end());

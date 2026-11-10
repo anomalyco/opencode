@@ -112,7 +112,7 @@ impl Session {
         let frame = crate::frame::SessionFrame::new(tui, &id, &column);
         let sidebar = sidebar::mount(tui, &frame.root(), &id);
         let synced = (tui.data.session_sync(&id, true), tui.data.message_sync(&id));
-        load(tui, synced.0.clone());
+        missing(tui, &id, synced.0.clone());
         load(tui, synced.1.clone());
         // `restoreScrollPosition` waits for the first sync (`synced`, `rowsSynced`).
         let weak = Rc::downgrade(&scroll.0);
@@ -196,4 +196,40 @@ impl RouteView for Session {
 /// Awaits a store read; a failure shows as an error toast.
 pub(super) fn load(tui: &Tui, task: Task<()>) {
     tui.request(task, |_, ()| {});
+}
+
+/// Awaits the session's read (`routes/session/index.tsx:340-370`). A failure shows as an error toast; a session the
+/// server does not have closes its tab, or goes home with tabs off, while it is still open. A transport error keeps
+/// it: TS reads only while connected.
+fn missing(tui: &Tui, id: &SessionID, task: Task<()>) {
+    let id = id.clone();
+    tui.app.spawn(
+        task,
+        opencode_ui::bind!(tui, |tui, _, result| {
+            let message = match result {
+                Err(error) => {
+                    tui.toasts.error(error.to_string());
+                    if matches!(*error, opencode_api::error::Error::Transport(_)) {
+                        return;
+                    }
+                    None
+                }
+                Ok(()) if tui.data.read(|state| state.session(&id).is_none()) => {
+                    Some(format!("Session not found: {}", id.0))
+                }
+                Ok(()) => return,
+            };
+            if tui.route() != (crate::routes::Route::Session { id: id.clone() }) {
+                return;
+            }
+            if let Some(message) = message {
+                tui.toasts.error(message);
+            }
+            if crate::tabs::Tabs::enabled(&tui) {
+                crate::tabs::close(&tui, Some(&id.0));
+            } else {
+                tui.navigate(crate::routes::Route::Home);
+            }
+        }),
+    );
 }
