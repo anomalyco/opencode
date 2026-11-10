@@ -53,6 +53,12 @@ export default defineConfig({
       cloudflare: {
         nodeCompat: true,
       },
+      // The Worker's code in one file. Nitro bundles the server build's chunks again, and Rolldown
+      // could split code the pages share with the server entry into a chunk that imports the entry
+      // back, which workerd refuses to load (5 Nov: _ssr/ssr.mjs and ssr2.mjs, "Export 'ssr_exports'
+      // is not defined"). Every module ships in the one upload anyway, so splitting saves nothing.
+      // Here, not as Nitro's top-level inlineDynamicImports: the preset's rollupConfig overrides that.
+      rollupConfig: { output: { inlineDynamicImports: true } },
     }),
     notFoundInDev(),
     devOnlyCss(),
