@@ -8,6 +8,7 @@ use opencode_ui::keymap::{Bind, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::prelude::Container;
 use regex::Regex;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
@@ -68,6 +69,17 @@ impl State {
 /// The entries the filter keeps, then the tab's effect: center on the current session once per activation, keep the
 /// selection in range, and forget it when the tab hides.
 pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
+    // A hidden tab reads nothing: every store change syncs the composer, streamed text included.
+    if !inner.is_active(Tab::Subagents) {
+        let mut state = inner.subagents.borrow_mut();
+        state.entries.clear();
+        if state.was_active {
+            state.centered = None;
+            state.selected = 0;
+        }
+        state.was_active = false;
+        return;
+    }
     let filter = tui.composer.active.get();
     let entries = tui
         .data
@@ -83,14 +95,6 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
         .collect();
     let mut state = inner.subagents.borrow_mut();
     state.entries = entries;
-    if !inner.is_active(Tab::Subagents) {
-        if state.was_active {
-            state.centered = None;
-            state.selected = 0;
-        }
-        state.was_active = false;
-        return;
-    }
     if state.centered.as_ref() != Some(&inner.session) && !state.entries.is_empty() {
         let next = state.entries.iter().position(|entry| entry.current).unwrap_or(0);
         state.centered = Some(inner.session.clone());
@@ -281,18 +285,25 @@ fn family<'a>(sessions: &[&'a SessionInfo], id: &SessionID) -> Vec<(&'a SessionI
         seen.push(parent.id.clone());
         root = parent;
     }
+    // Each session's children in list order, so the walk does not scan every session per descendant.
+    let mut children: HashMap<&SessionID, Vec<&'a SessionInfo>> = HashMap::new();
+    for session in sessions {
+        if let Some(parent) = &session.parent_id {
+            children.entry(parent).or_default().push(*session);
+        }
+    }
     let mut out = Vec::new();
-    walk(sessions, &root.id, &[], &mut out);
+    walk(&children, &root.id, &[], &mut out);
     out
 }
 
 fn walk<'a>(
-    sessions: &[&'a SessionInfo],
+    children: &HashMap<&SessionID, Vec<&'a SessionInfo>>,
     parent: &SessionID,
     ancestors: &[bool],
     out: &mut Vec<(&'a SessionInfo, String)>,
 ) {
-    let group: Vec<_> = sessions.iter().filter(|session| session.parent_id.as_ref() == Some(parent)).collect();
+    let group = children.get(parent).map_or(&[][..], Vec::as_slice);
     for (index, session) in group.iter().enumerate() {
         let last = index == group.len() - 1;
         let prefix = if ancestors.is_empty() {
@@ -308,7 +319,7 @@ fn walk<'a>(
         }
         let mut next = ancestors.to_vec();
         next.push(last);
-        walk(sessions, &session.id, &next, out);
+        walk(children, &session.id, &next, out);
     }
 }
 
