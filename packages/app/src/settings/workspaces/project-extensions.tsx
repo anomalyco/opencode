@@ -470,6 +470,13 @@ export const ProjectSettingsExtensions: Component<{
                 <ExtensionCard>{mcpRows(projectMcpNames())}</ExtensionCard>
               </Show>
               <SharedSection count={globalMcpNames().length}>{mcpRows(globalMcpNames())}</SharedSection>
+              <Show when={sources.view().status === "error"}>
+                <ExtensionLoadFailed
+                  message={language.t("settings.extensions.sources.loadFailed")}
+                  retry={language.t("common.retry")}
+                  onRetry={sources.retry}
+                />
+              </Show>
             </div>
           </Tabs.Content>
 
@@ -512,6 +519,13 @@ export const ProjectSettingsExtensions: Component<{
                 <ExtensionCard>{skillRows(projectSkills())}</ExtensionCard>
               </Show>
               <SharedSection count={serverSkills().length}>{skillRows(serverSkills())}</SharedSection>
+              <Show when={sources.view().status === "error"}>
+                <ExtensionLoadFailed
+                  message={language.t("settings.extensions.sources.loadFailed")}
+                  retry={language.t("common.retry")}
+                  onRetry={sources.retry}
+                />
+              </Show>
             </div>
           </Tabs.Content>
           <Tabs.Content value="lsps">
