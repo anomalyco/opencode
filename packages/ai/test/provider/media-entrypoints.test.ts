@@ -432,6 +432,28 @@ const embeddings: ReadonlyArray<Case<EmbeddingModel>> = [
     headers: { authorization: null },
     provider: "azure",
   },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/embeddings")
+      return model("gemini-embedding-001", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents",
+    modelInURL: true,
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
+  },
+  {
+    name: "google-vertex",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google-vertex/embeddings")
+      return model("text-embedding-005", { ...shared, apiKey: "vertex-key" })
+    },
+    url: "https://aiplatform.googleapis.com/v1/publishers/google/models/text-embedding-005:predict",
+    modelInURL: true,
+    auth: ["x-goog-api-key", "vertex-key"],
+    provider: "google-vertex",
+  },
 ]
 
 describe("image entrypoints", () => {

@@ -443,8 +443,8 @@ The Gemini API sends up to 100 values per `batchEmbedContents` request, and Vert
 sends one request per value, four at a time, and needs project credentials: Vertex Express Mode API keys can't call
 `embedContent`. `gemini-embedding-2` runs in the `global`, `us` and `eu` Vertex locations. When a call
 is split into several requests, the vectors stay in value order, `usage.inputTokens` is their sum, and each request's
-metadata is listed in order under `providerMetadata.<provider>.responses`. Google has no `/embeddings` entry point yet;
-use `embeddingModel` from `@opencode/ai/providers/google` or `@opencode/ai/providers/google-vertex`.
+metadata is listed in order under `providerMetadata.<provider>.responses`. The package entry points are
+`@opencode/ai/providers/google/embeddings` and `@opencode/ai/providers/google-vertex/embeddings`.
 
 ## Alibaba Cloud Model Studio
 
