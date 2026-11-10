@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolMessage, ToolResultPart, Media, UserMessage } from "@opencode/ai/effect"
-import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { boundImages, latestMaxImages, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
@@ -197,7 +197,7 @@ describe("SessionModelRequest.boundImages", () => {
     const result = boundImages(messages)
 
     expect(result[0]).toBeInstanceOf(UserMessage)
-    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("image was removed"))])
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("was removed"))])
     expect(result[1]).toBe(text)
     expect(result[2]).not.toBe(messages[2])
     expect(result[2]?.content[0]).toMatchObject({ type: "text" })
@@ -225,9 +225,11 @@ describe("SessionModelRequest.boundImages", () => {
     const messages = [image("1.png"), image("2.png"), image("3.png"), image("4.png")]
     const result = boundImages(messages, 2)
 
-    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("image was removed"))])
-    expect(result[1]?.content).toEqual([Message.text(expect.stringContaining("image was removed"))])
-    expect(result[2]).toBe(messages[2])
+    // Hysteresis: going over the cap drops back to a lower target, so with cap 2 a fourth image
+    // prunes down to a single retained image instead of walking the cut one image at a time.
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining('"1.png" was removed'))])
+    expect(result[1]?.content).toEqual([Message.text(expect.stringContaining('"2.png" was removed'))])
+    expect(result[2]?.content).toEqual([Message.text(expect.stringContaining('"3.png" was removed'))])
     expect(result[3]).toBe(messages[3])
   })
 
@@ -249,6 +251,34 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages(messages))).toBe(6)
     // A count cap of 1 is tighter and drops seven.
     expect(removed(boundImages(messages, 1))).toBe(7)
+  })
+
+  test("prunes with hysteresis so the replaced prefix stays stable between prunes", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
+    const messages = Array.from({ length: 8 }, (_, i) => image(`${i + 1}.png`))
+    const removed = (result: ReturnType<typeof boundImages>) =>
+      result.filter((message) => message.content[0]?.type === "text").length
+
+    // At the cap nothing is pruned; crossing it drops back to the target (cap 4, target 2), and the
+    // replaced prefix then holds until the count crosses the cap again.
+    expect(removed(boundImages(messages.slice(0, 4), 4))).toBe(0)
+    expect(removed(boundImages(messages.slice(0, 5), 4))).toBe(3)
+    expect(removed(boundImages(messages.slice(0, 7), 4))).toBe(5)
+    expect(removed(boundImages(messages, 4))).toBe(6)
+  })
+
+  test("the newest document that sets max_images wins, regardless of other media fields", () => {
+    const entries = [
+      { type: "document", info: { media: { image: { max_images: 4 } } } },
+      { type: "directory" },
+      { type: "document", info: { media: { image: { max_width: 800 } } } },
+      { type: "document", info: { media: { image: { max_images: 6 } } } },
+    ]
+    expect(latestMaxImages(entries)).toBe(6)
+    // A later document without the field must not reset it to undefined.
+    const shadowed = [...entries.slice(0, 2), { type: "document", info: { media: { image: { max_width: 100 } } } }]
+    expect(latestMaxImages(shadowed)).toBe(4)
   })
 
   test("replaces images nested in tool results", () => {
