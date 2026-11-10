@@ -26,4 +26,5 @@ export const clientStrings = [
   "site.action.copiedThisCommand",
   "site.action.copy",
   "site.download.thisComputer",
+  "site.hexPromo.label",
 ] as const satisfies readonly Key[]
