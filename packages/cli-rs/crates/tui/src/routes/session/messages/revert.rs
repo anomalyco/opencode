@@ -79,14 +79,15 @@ impl Banner {
         &self.0.root
     }
 
-    /// `messages` is the whole list; the banner counts the user messages from the boundary on.
+    /// `messages` is the whole list; the banner counts the user messages from the boundary on. `width` is the
+    /// content width.
     pub fn update(
         &self,
-        tui: &Tui,
         session: &SessionID,
         revert: Option<(&str, &[FileDiffInfo])>,
         messages: &[SessionMessageInfo],
         redo: Option<String>,
+        width: usize,
     ) {
         *self.0.session.borrow_mut() = Some(session.clone());
         let Some((boundary, files)) = revert else {
@@ -100,8 +101,7 @@ impl Banner {
             .map_or(0, |start| {
                 messages[start..].iter().filter(|message| matches!(message, SessionMessageInfo::User(_))).count()
             });
-        let props =
-            Props { count, files: files.to_vec(), redo, width: usize::from(tui.app.size().0).saturating_sub(4) };
+        let props = Props { count, files: files.to_vec(), redo, width };
         self.0.root.visible(true);
         if self.0.rendered.borrow().as_ref() == Some(&props) {
             return;
