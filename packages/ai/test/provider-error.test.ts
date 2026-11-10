@@ -447,6 +447,22 @@ describe("provider error classification", () => {
     expect(isContextOverflow("Too many tokens")).toBe(true)
   })
 
+  test("keeps exhausted request rate limits retryable", () => {
+    const body = JSON.stringify({
+      error: { type: "rate_limit_exceeded", message: "User 10s request rate limit exhausted (3 of 3)." },
+    })
+    const error = new AIError({
+      reason: classifyProviderFailure({
+        message: providerErrorMessage(body),
+        status: 429,
+        rawBody: body,
+        retryAfterMs: 4000,
+      }),
+    })
+    expect(error.reason).toMatchObject({ _tag: "RateLimit", retryAfterMs: 4000 })
+    expect(isRetryable(error)).toBe(true)
+  })
+
   test("classifies 429 token throttles as retryable rate limits, not context overflow", () => {
     const bodies = [
       // Cerebras, captured live
