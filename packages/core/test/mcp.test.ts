@@ -1238,6 +1238,89 @@ test("reconnects and retries a tool call after the MCP session expires", async (
   )
 })
 
+testEffect(Layer.empty).live("retries concurrent tool calls after the MCP session expires", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.callTool({ server: "resources", name: "echo", args: { n: 0 } })
+      yield* Effect.promise(server.restart)
+
+      const results = yield* Effect.all(
+        [1, 2, 3, 4].map((n) => service.callTool({ server: "resources", name: "echo", args: { n } }).pipe(Effect.exit)),
+        { concurrency: "unbounded" },
+      )
+
+      expect(results.map(Exit.isSuccess)).toEqual([true, true, true, true])
+      expect(
+        server.state.toolCalls.map((call) => call.arguments).toSorted((a, b) => Number(a?.n) - Number(b?.n)),
+      ).toEqual([{ n: 0 }, { n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }])
+      expect(server.state.initializations).toBe(2)
+      expect((yield* service.callTool({ server: "resources", name: "echo", args: { n: 5 } })).isError).toBe(false)
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
+
+for (const disconnect of [false, true]) {
+  testEffect(Layer.empty).live(
+    disconnect
+      ? "disconnects tool calls retained during session recovery"
+      : "keeps an accepted tool call in flight while another call recovers its session",
+    () =>
+      Effect.gen(function* () {
+        const accepted = Promise.withResolvers<void>()
+        const release = Promise.withResolvers<void>()
+        let session: string | undefined
+        let executions = 0
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            if (request.method !== "POST") return
+            const body: unknown = await request.clone().json()
+            if (!isJSONRPCRequest(body) || body.method !== "tools/call" || !isRecord(body.params?.arguments)) return
+            if (body.params.arguments.n === 1) {
+              executions++
+              accepted.resolve()
+              await release.promise
+              return Response.json({
+                jsonrpc: "2.0",
+                id: body.id,
+                result: { content: [{ type: "text", text: "saved" }] },
+              })
+            }
+            if (body.params.arguments.n !== 2) return
+            if (request.headers.get("mcp-session-id") === session) {
+              await accepted.promise
+              await server.restart()
+              return Response.json(
+                { jsonrpc: "2.0", id: body.id, error: { code: -32000, message: "session not found" } },
+                { status: 404 },
+              )
+            }
+          },
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(() => release.resolve()))
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 0 } })
+          session = server.state.sessions[0]
+          const pending = yield* service
+            .callTool({ server: "resources", name: "echo", args: { n: 1 } })
+            .pipe(Effect.exit, Effect.forkScoped)
+          const result = yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } })
+          expect(result.isError).toBe(false)
+          if (disconnect) yield* service.disconnect("resources")
+          else release.resolve()
+          const original = yield* Fiber.join(pending)
+
+          expect(Exit.isSuccess(original)).toBe(!disconnect)
+          if (Exit.isSuccess(original)) expect(original.value.content).toEqual([{ type: "text", text: "saved" }])
+          expect(executions).toBe(1)
+          expect(server.state.initializations).toBe(2)
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+  )
+}
+
 describe.each([
   ["legacy", undefined],
   ["modern", "2026-07-28"],

@@ -101,6 +101,25 @@ export function make(input: Input): Connection {
     tools?: ReadonlyArray<McpClient.Tool>
     prompts?: ReadonlyArray<McpClient.Prompt>
   } = {}
+  const requests = new Map<McpClient.Connection, { count: number; scope?: Scope.Closeable }>()
+
+  const request = <A, E>(client: McpClient.Connection, run: (client: McpClient.Connection) => Effect.Effect<A, E>) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const active: { count: number; scope?: Scope.Closeable } = requests.get(client) ?? { count: 0 }
+        active.count++
+        requests.set(client, active)
+        return active
+      }),
+      () => run(client),
+      (active) =>
+        Effect.suspend(() => {
+          active.count--
+          if (active.count > 0) return Effect.void
+          requests.delete(client)
+          return active.scope ? Scope.close(active.scope, Exit.void) : Effect.void
+        }),
+    )
 
   // Runs a connection callback under the lock, dropping it if the connection is no longer the live
   // client, so late SDK callbacks cannot commit obsolete state.
@@ -132,7 +151,7 @@ export function make(input: Input): Connection {
     Effect.gen(function* () {
       if (state.client !== client) return
       yield* Effect.logInfo("mcp session expired, reconnecting", { server: input.name })
-      yield* stop
+      yield* stop(true)
       yield* start
     }).pipe(input.lock)
 
@@ -140,11 +159,12 @@ export function make(input: Input): Connection {
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
   ) =>
-    run(client).pipe(
+    request(client, run).pipe(
       Effect.catchIf(
         // The client module is loaded lazily, so match the tagged error by tag rather than class.
         (error) => "_tag" in error && error._tag === "MCP.SessionExpiredError",
-        (error) => recover(client).pipe(Effect.flatMap(() => (state.client ? run(state.client) : Effect.fail(error)))),
+        (error) =>
+          recover(client).pipe(Effect.flatMap(() => (state.client ? request(state.client, run) : Effect.fail(error)))),
       ),
     )
 
@@ -226,18 +246,34 @@ export function make(input: Input): Connection {
     ),
   )
 
-  const stop = Effect.gen(function* () {
-    const scope = state.scope
-    if (!scope) return
-    state.scope = undefined
-    state.client = undefined
-    state.tools = undefined
-    state.prompts = undefined
-    yield* Scope.close(scope, Exit.void)
-    yield* input.events.changed("tools")
-    yield* input.events.changed("resources")
-    yield* input.events.changed("prompts")
-  })
+  const stop = (drain = false) =>
+    Effect.gen(function* () {
+      if (!drain) {
+        yield* Effect.forEach(
+          [...requests.values()],
+          (active) => {
+            const scope = active.scope
+            active.scope = undefined
+            return scope ? Scope.close(scope, Exit.void) : Effect.void
+          },
+          { discard: true },
+        )
+      }
+      const scope = state.scope
+      if (!scope) return
+      const active = state.client && requests.get(state.client)
+      state.scope = undefined
+      state.client = undefined
+      state.tools = undefined
+      state.prompts = undefined
+      // Closing the SDK rejects every pending request with ConnectionClosed, hiding its own response.
+      // During recovery, let those requests settle so only explicit session-expiry responses are retried.
+      if (drain && active) active.scope = scope
+      else yield* Scope.close(scope, Exit.void)
+      yield* input.events.changed("tools")
+      yield* input.events.changed("resources")
+      yield* input.events.changed("prompts")
+    })
 
   return {
     get client() {
@@ -250,7 +286,7 @@ export function make(input: Input): Connection {
       return state.prompts
     },
     start,
-    stop,
+    stop: stop(),
     recovering,
     catalog: (client) =>
       recovering(client, (client) =>
