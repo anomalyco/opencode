@@ -735,3 +735,33 @@ fn a_theme_change_keeps_the_open_dialog_in_one_theme() {
 fn column(line: &str, needle: &str) -> u16 {
     line[..line.find(needle).unwrap()].chars().count() as u16
 }
+
+// Expected (r2 review, carbon-ui-7): a toast queued behind a hovered one updates `+N more` in the same surface (TS
+// keeps `ToastSurface` mounted), so a selection made on it stays; and the toast's width follows a resize, as TS
+// `useTerminalDimensions()` does.
+#[test]
+fn a_queued_toast_keeps_the_selection_and_a_resize_narrows_the_toast() {
+    let kit = kit(70, 12);
+    let toasts = toasts(&kit);
+    toasts.show(toast::ToastOptions::new(toast::Variant::Info, "copy this message"));
+    let screen = kit.app.render().text();
+    let (y, line) = screen.lines().enumerate().find(|(_, line)| line.contains("copy this message")).unwrap();
+    let x = line[..line.find("copy").unwrap()].chars().count() as u16;
+    kit.app.drag((x, y as u16), (x + 8, y as u16));
+    kit.app.render();
+    toasts.show(toast::ToastOptions::new(toast::Variant::Info, "second"));
+    assert!(kit.app.render().text().contains("+1 more"));
+    assert_eq!(kit.app.app().selected_text().as_deref(), Some("copy this"));
+
+    let message = "A sixty-column toast message that wraps at the narrow width";
+    let narrow = self::kit(40, 12);
+    let narrow_toasts = self::toasts(&narrow);
+    narrow_toasts.show(toast::ToastOptions::new(toast::Variant::Info, message));
+    let expected = narrow.app.render().text();
+    let kit = self::kit(80, 12);
+    let toasts = self::toasts(&kit);
+    toasts.show(toast::ToastOptions::new(toast::Variant::Info, message));
+    kit.app.render();
+    kit.app.resize(40, 12);
+    assert_eq!(kit.app.render().text(), expected);
+}
