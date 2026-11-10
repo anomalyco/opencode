@@ -7,6 +7,8 @@ export type ServerFiles = Readonly<{
   /** This machine's home directory, for `~/` paths, when the server runs here. */
   home?: string
   exists: (file: string, location: LocationRef) => Promise<boolean>
+  /** Whether the client is connected to the server; it changes when the client reconnects. */
+  connected: Accessor<boolean>
 }>
 
 /**
@@ -20,9 +22,10 @@ export function createSessionGallery(
   files?: ServerFiles,
 ) {
   // One check per file at a time. A file found stays found. A reply asks about each file it names once while it is
-  // shown, and again only when its check failed without an answer; an ask during another reply's check waits for it,
-  // then checks again if that found nothing, as when a reply plans an output that a later step renders.
-  const checks = new Map<string, { found: Signal<boolean>; queue: Promise<unknown> }>()
+  // shown and the client is connected, and again once the client reconnects when its check failed without an answer.
+  // Asks before a check starts share it. An ask while it runs waits for one more check, shared by every later ask,
+  // which checks again if that found nothing, as when a reply plans an output that a later step renders.
+  const checks = new Map<string, { found: Signal<boolean>; queue: Promise<unknown>; next?: Promise<boolean> }>()
   const media = mapArray(messages, (message) => {
     const asked = new Set<string>()
     const mentioned: MentionedFiles | undefined = files && {
@@ -31,11 +34,16 @@ export function createSessionGallery(
         const check = checks.get(file) ?? { found: createSignal(false), queue: Promise.resolve() }
         checks.set(file, check)
         const [found, setFound] = check.found
-        if (!found() && !asked.has(file)) {
+        if (!found() && files.connected() && !asked.has(file)) {
           asked.add(file)
-          check.queue = check.queue
-            .then(() => found() || files.exists(file, location))
-            .then(setFound, () => asked.delete(file))
+          if (!check.next) {
+            check.next = check.queue.then(() => {
+              check.next = undefined
+              return found() || files.exists(file, location)
+            })
+            check.queue = check.next.catch(() => {})
+          }
+          check.next.then(setFound, () => asked.delete(file))
         }
         return found()
       },
