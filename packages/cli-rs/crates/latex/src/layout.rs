@@ -75,20 +75,33 @@ impl Default for Options {
     }
 }
 
-pub fn layout(node: &Node, options: &Options) -> Layout {
+/// The cells one layout may allocate in all its intermediate blocks. The parser bounds the source, not the
+/// rectangles: a short ragged matrix pays for its longest row on every row. TS leaves such input to a `RangeError`,
+/// which `layoutLatex` turns into the source fallback.
+pub const MAX_CELLS: usize = 1 << 20;
+
+thread_local! {
+    /// The cells the running [`layout`] may still allocate; `None` once it ran out.
+    static BUDGET: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// Lays `node` out, or `None` when it needs more than [`MAX_CELLS`].
+pub fn layout(node: &Node, options: &Options) -> Option<Layout> {
     let context = Context {
         display: options.display,
         compact: options.compact_scripts,
         style: Style { color: options.color.clone(), ..Style::default() },
         variant: None,
     };
+    BUDGET.set(Some(MAX_CELLS));
     let block = layout_node(node, &context);
-    Layout {
+    BUDGET.take()?;
+    Some(Layout {
         width: block.width as usize,
         height: block.height as usize,
         baseline: block.baseline as usize,
         cells: block.cells,
-    }
+    })
 }
 
 #[derive(Clone)]
@@ -474,6 +487,12 @@ fn text_box(text: &str, style: &Style) -> Block {
 
 fn blank(width: i32, height: i32, baseline: i32) -> Block {
     let (width, height) = (width.max(0), height.max(1));
+    let left = BUDGET.get().and_then(|left| left.checked_sub(width as usize * height as usize));
+    BUDGET.set(left);
+    // Out of budget, the rest of the layout is thrown away: allocate nothing more.
+    if left.is_none() {
+        return Block { width: 0, height: 1, baseline: 0, cells: vec![Vec::new()] };
+    }
     Block { width, height, baseline: baseline.max(0), cells: vec![vec![None; width as usize]; height as usize] }
 }
 
