@@ -375,12 +375,12 @@ export function colorFormats(hex: string) {
 export type BadgeFont = "sans" | "mono" | "mono caps"
 const fontSuffix = (font: BadgeFont) => (font === "sans" ? "" : `-${font.replace(" ", "-")}`)
 
-/** A badge file at its stable URL in public/brand/badges. */
+/** A badge file at its stable URL in public/brand/badges (the size may be a template's "{{size}}"). */
 export function badgeFile(
   label: string,
   style: string,
   theme: string,
-  size: number,
+  size: number | string,
   extension: "svg" | "png",
   font: BadgeFont = "sans",
 ) {
@@ -402,7 +402,7 @@ export function badgeMarkdown(
   label: string,
   alt: string,
   style: string,
-  size: number,
+  size: number | string,
   font: BadgeFont = "sans",
   theme = "light",
 ) {

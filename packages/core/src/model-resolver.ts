@@ -544,9 +544,12 @@ export const layer = Layer.effect(
 )
 
 function hasConfiguredAuth(model: RuntimeInfo) {
-  return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
-    (value) => typeof value === "string" && value !== "",
-  )
+  return [
+    model.settings?.apiKey,
+    model.settings?.gatewayApiKey,
+    model.settings?.authToken,
+    model.settings?.accessToken,
+  ].some((value) => typeof value === "string" && value !== "")
 }
 
 const API_KEY_AUTH_PACKAGES: ReadonlySet<string> = new Set([

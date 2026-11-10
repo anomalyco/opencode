@@ -7,6 +7,7 @@ import { i18nSlices } from "./script/i18n-plugin"
 import { foldSettingsForProduction } from "./script/fold-settings"
 import { cssVariantsForProduction, devOnlyCss } from "./script/css-variants-plugin"
 import { stylesheetGroups } from "./script/stylesheet-groups"
+import { staticClient } from "./script/static-client"
 
 // Nitro's dev server drops any page the app renders with a 404 status and falls through to a bare
 // "Cannot GET". In development only, serve the not-found page's preview (/dev/404, which follows
@@ -53,11 +54,18 @@ export default defineConfig({
       cloudflare: {
         nodeCompat: true,
       },
+      // The Worker's code in one file. Nitro bundles the server build's chunks again, and Rolldown
+      // could split code the pages share with the server entry into a chunk that imports the entry
+      // back, which workerd refuses to load (5 Nov: _ssr/ssr.mjs and ssr2.mjs, "Export 'ssr_exports'
+      // is not defined"). Every module ships in the one upload anyway, so splitting saves nothing.
+      // Here, not as Nitro's top-level inlineDynamicImports: the preset's rollupConfig overrides that.
+      rollupConfig: { output: { inlineDynamicImports: true } },
     }),
     notFoundInDev(),
     devOnlyCss(),
     cssVariantsForProduction(),
     stylesheetGroups(),
+    staticClient(),
     docs(),
     i18nSlices(),
   ],

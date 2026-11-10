@@ -1,7 +1,7 @@
 import "./orb.css"
 import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { useI18n } from "~/context/i18n"
+import { useI18n } from "~/context/i18n-context"
 import { menuOpen, watchMenus } from "../menu-open"
 import { prefersSheet } from "../sheet"
 import type HexPanel from "./hex-panel"
