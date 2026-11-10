@@ -18,7 +18,7 @@ use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::select::{Choice, Detail, SelectOption, SelectProps, select};
-use opencode_ui::theme::ModeSetting;
+use opencode_ui::theme::{ModeSetting, Surface};
 use opentui::keymap::Disposer;
 use serde_json::{Map, Value};
 
@@ -745,6 +745,17 @@ pub fn palette_options(tui: &Tui) -> Vec<SelectOption<String>> {
 /// dialog.
 pub fn show(tui: &Tui, current: Option<&str>) {
     let current = current.and_then(|id| SETTINGS.iter().position(|setting| setting.id() == id)).unwrap_or(0);
+    open(tui, current, None);
+}
+
+/// The filter, selected setting and scroll offset of a settings dialog built again in a new theme.
+struct Restore {
+    filter: String,
+    selected: Option<usize>,
+    top: f64,
+}
+
+fn open(tui: &Tui, current: usize, restore: Option<Restore>) {
     let weak = tui.weak();
     tui.dialogs.replace(
         bind!(weak, |tui, cx| {
@@ -783,7 +794,31 @@ pub fn show(tui: &Tui, current: Option<&str>) {
                 TuiCommand::inline("right", step(1)).title("Next value").group("Settings"),
             ];
             let (view, handle) = select(cx, props);
-            refresh_on_change(&tui, Rc::downgrade(cx), move |tui| handle.set_options(options(tui)));
+            if let Some(restore) = &restore {
+                if !restore.filter.is_empty() {
+                    handle.set_filter(&restore.filter);
+                }
+                if let Some(selected) = &restore.selected {
+                    handle.restore(selected, restore.top);
+                }
+            }
+            let theme = cx.theme.clone();
+            let rebuild = Rc::new(Cell::new(false));
+            refresh_on_change(&tui, Rc::downgrade(cx), move |tui| {
+                handle.set_options(options(tui));
+                // TS restyles the open dialog in place (`useTheme()`); this one takes its colors when it is built,
+                // so it is built again, after the key that changed the theme.
+                if tui.page().surface(Surface::Dialog) == theme || rebuild.replace(true) {
+                    return;
+                }
+                let restore = Restore {
+                    filter: handle.filter(),
+                    selected: handle.selected().map(|option| option.value),
+                    top: handle.scroll_top(),
+                };
+                let selected = selected.get();
+                tui.app.defer(bind!(weak, |tui, _| open(&tui, selected, Some(restore))));
+            });
             view
         }, else opentui::prelude::View::new(&cx.app)),
         None,
