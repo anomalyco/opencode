@@ -32,6 +32,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::watch;
 
+use crate::footers::Requests;
 use crate::scrollback::{Commit, EntryKind, Phase, Source, ToolState};
 
 /// The owner of the forms that belong to no session (`sessionID: "global"`).
@@ -1448,11 +1449,14 @@ pub(crate) fn message_from_event(id: &str) -> String {
 pub enum Incoming {
     /// The stream (re)connected and the messages were listed.
     Hydrated {
+        /// The session listed, so a hydration that arrives after another session opened is dropped.
+        session: String,
         messages: Vec<SessionMessageInfo>,
         /// The sessions running now (`session.active`).
         active: Vec<String>,
         /// The session's pending prompts (`session.inbox.list`).
         inbox: Vec<SessionInboxUser>,
+        requests: Requests,
     },
     Event(Box<V2Event>),
     /// The stream dropped; it reconnects.
@@ -1503,22 +1507,36 @@ pub async fn inbox(client: &Client, session: &str) -> Vec<SessionInboxUser> {
         .collect()
 }
 
-/// What a hydration lists: the messages, the running sessions, and the pending prompts.
-pub type Hydration = (Vec<SessionMessageInfo>, Vec<String>, Vec<SessionInboxUser>);
+/// What a hydration lists: the messages, the running sessions, the pending prompts, and the pending requests.
+pub type Hydration = (Vec<SessionMessageInfo>, Vec<String>, Vec<SessionInboxUser>, Requests);
 
-/// Lists the messages, the running sessions, and the pending prompts, as a hydration does.
-pub async fn hydration(client: &Client, session: &str, limit: u32) -> Result<Hydration, String> {
-    let (messages, active, inbox) =
-        futures_util::future::join3(messages(client, session, limit), active(client), inbox(client, session)).await;
-    Ok((messages?, active, inbox))
+/// Lists the messages, the running sessions, the pending prompts, and the requests, as a hydration does. The
+/// requests are listed here, after the stream subscribed, so a request asked before the subscription is listed
+/// and one asked after it arrives as an event that applies after the list (`hydrate`).
+pub async fn hydration(client: &Client, session: &str, directory: &str, limit: u32) -> Result<Hydration, String> {
+    let (messages, active, inbox, requests) = futures_util::future::join4(
+        messages(client, session, limit),
+        active(client),
+        inbox(client, session),
+        crate::footers::requests(client, session, directory),
+    )
+    .await;
+    Ok((messages?, active, inbox, requests))
 }
 
 /// `connect`: subscribes, hydrates after `server.connected`, then forwards events. When the stream drops it finds
 /// the service again, which may have restarted on another port or password, and reconnects after 250 ms. Runs
 /// until `proxy` closes. `connected` is true from a hydration until the stream drops.
-pub async fn connect(client: Client, session: String, limit: u32, proxy: AppProxy, connected: watch::Sender<bool>) {
+pub async fn connect(
+    client: Client,
+    session: String,
+    directory: String,
+    limit: u32,
+    proxy: AppProxy,
+    connected: watch::Sender<bool>,
+) {
     loop {
-        let error = match stream(&client, &session, limit, &proxy, &connected).await {
+        let error = match stream(&client, &session, &directory, limit, &proxy, &connected).await {
             Ok(()) => return,
             Err(error) => error,
         };
@@ -1536,6 +1554,7 @@ pub async fn connect(client: Client, session: String, limit: u32, proxy: AppProx
 async fn stream(
     client: &Client,
     session: &str,
+    directory: &str,
     limit: u32,
     proxy: &AppProxy,
     connected: &watch::Sender<bool>,
@@ -1547,8 +1566,9 @@ async fn stream(
         _ => return Err("Event stream disconnected".into()),
     }
     // Events that arrive meanwhile wait in the stream, so they reach the UI after the hydration.
-    let (messages, active, inbox) = hydration(client, session, limit).await?;
-    if !post(proxy, Incoming::Hydrated { messages, active, inbox }).await {
+    let (messages, active, inbox, requests) = hydration(client, session, directory, limit).await?;
+    let hydrated = Incoming::Hydrated { session: session.to_owned(), messages, active, inbox, requests };
+    if !post(proxy, hydrated).await {
         return Ok(());
     }
     connected.send_replace(true);
@@ -1673,8 +1693,11 @@ mod tests {
         let app = opentui::testing::TestApp::new(10, 2);
         let proxy = app.app().proxy();
         let connected = watch::channel(false).0;
-        let _ = tokio::time::timeout(Duration::from_millis(600), connect(client, "ses_1".into(), 10, proxy, connected))
-            .await;
+        let _ = tokio::time::timeout(
+            Duration::from_millis(600),
+            connect(client, "ses_1".into(), "/".into(), 10, proxy, connected),
+        )
+        .await;
         assert!(down.0.load(std::sync::atomic::Ordering::SeqCst) >= 2);
     }
 
