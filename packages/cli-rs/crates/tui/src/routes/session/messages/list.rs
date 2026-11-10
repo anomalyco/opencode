@@ -168,7 +168,10 @@ impl Transcript {
             .basis(Length::Auto)
             .sticky(true)
             .sticky_start(ScrollEdge::Bottom)
-            .scrollbars(false);
+            .scrollbars(false)
+            // The rows are a plain column (no grow, auto margin, or percent height), so a frame lays out only the rows
+            // that changed.
+            .layout_mode(LayoutMode::List);
         let hint = Text::new(app, "Loading session history…").fg(theme.text.feedback.info.base).visible(false);
         // `index.tsx:1573`: one row under the transcript for the history and "Jump to latest" hints.
         let status = View::new(app).row().height(1).shrink(0.0).justify(Justify::End).child(&hint);
