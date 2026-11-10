@@ -113,7 +113,7 @@ export interface Interface {
   readonly check: () => Effect.Effect<CheckResult | undefined, Error>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
-  /** Explains how to update a copy that Volta, mise or Nix manages, which `method` leaves undetected. */
+  /** Explains how to update a copy that Volta or mise manages, which `method` leaves undetected. */
   readonly managed: (version?: string) => Effect.Effect<UpgradeError | undefined, Error>
   readonly latest: (method?: Method) => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
@@ -165,18 +165,16 @@ const make = Effect.gen(function* () {
   )
   // WinGet extracts portable packages into a directory named after the package identifier.
   const installedWinget = /[\\/]winget[\\/]packages[\\/]anomaly\.opencode_/i.test(executable)
-  // These tools use npm's package layout but keep their own record of the installed version, so updating the copy
-  // in place would leave that record stale. mise's npm backend installs into installs/npm-<name>/<version>; npm
-  // globals under a mise or asdf Node (installs/node/<version>) are ordinary npm installs.
+  // Volta packages (tools/image/packages) and mise's npm backend (installs/npm-<name>) keep their own record of the
+  // installed version, so updating the copy in place would leave it stale. npm globals under a Volta or mise Node
+  // (tools/image/node, installs/node) are ordinary npm installs.
   const installedOwner = !installedPackage
     ? undefined
     : /[\\/]tools[\\/]image[\\/]packages[\\/]/.test(executable)
-      ? ("Volta" as const)
+      ? { name: "Volta", command: "volta install " }
       : /[\\/]installs[\\/]npm-[^\\/]+[\\/]/.test(executable)
-        ? ("mise" as const)
-        : executable.startsWith("/nix/store/")
-          ? ("Nix" as const)
-          : undefined
+        ? { name: "mise", command: "mise use -g npm:" }
+        : undefined
   // npm keeps global packages in <prefix>/lib/node_modules on POSIX. The npm on PATH may belong to another Node
   // install (fnm, nvm, mise) or prefix, so target the prefix that owns the running binary. Windows uses
   // <prefix>\node_modules, which Bun and pnpm global installs share, so it keeps the npm on PATH.
@@ -407,31 +405,22 @@ const make = Effect.gen(function* () {
       ),
     )
 
-  const managedError = (target: string) => {
-    if (installedOwner === "Nix")
-      return new UpgradeError({
-        title: "OpenCode is managed by Nix",
-        detail: "This copy is in the read-only Nix store, so OpenCode can't update it.",
-        retry: "Update OpenCode through your Nix configuration.",
-      })
-    return new UpgradeError({
-      title: `OpenCode is managed by ${installedOwner}`,
-      detail: `This copy was installed with ${installedOwner}, which keeps its own record of the installed version, so OpenCode won't update it directly.`,
-      command: installedOwner === "Volta" ? `volta install ${target}` : `mise use -g npm:${target}`,
+  const managedError = (owner: { name: string; command: string }, target: string) =>
+    new UpgradeError({
+      title: `OpenCode is managed by ${owner.name}`,
+      detail: `This copy was installed with ${owner.name}, which keeps its own record of the installed version, so OpenCode won't update it directly.`,
+      command: `${owner.command}${target}`,
       retry: "Run the command above, then restart OpenCode.",
     })
-  }
 
-  const managedMessage = (error: UpgradeError) =>
-    `${error.title}. ${error.command ? `Update it with ${error.command}` : error.retry}`
+  const managedMessage = (error: UpgradeError) => `${error.title}. Update it with ${error.command}`
 
   const managed = Effect.fnUntraced(function* (input?: string) {
     if (!installedOwner) return
     if (input !== undefined && !parseReleaseVersion(input))
       return yield* Effect.fail(new Error(`Invalid version: ${input}`))
-    if (installedOwner === "Nix") return managedError("")
     const data = yield* release("npm")
-    return managedError(`${data.package}@${input?.trim().replace(/^v/, "") ?? data.version}`)
+    return managedError(installedOwner, `${data.package}@${input?.trim().replace(/^v/, "") ?? data.version}`)
   })
 
   const temporaryDirectory = (prefix: string) =>
@@ -682,7 +671,7 @@ const make = Effect.gen(function* () {
       if (action(OPENCODE_VERSION, data.version, "auto") === "none") return undefined
       return {
         type: "unavailable" as const,
-        message: managedMessage(managedError(`${data.package}@${data.version}`)),
+        message: managedMessage(managedError(installedOwner, `${data.package}@${data.version}`)),
       }
     }
     if (!detected)

@@ -264,18 +264,26 @@ it.live("npm upgrades fail when the running copy keeps its old version", () =>
 const managers = [
   {
     name: "Volta",
-    directory: ["volta", "tools", "image", "packages", "@opencode", "cli", ...npmGlobal],
+    label: "~/.volta",
+    directory: [".volta", "tools", "image", "packages", "@opencode", "cli", ...npmGlobal],
+    command: "volta install @opencode/cli",
+  },
+  {
+    name: "Volta",
+    label: "custom VOLTA_HOME",
+    directory: ["volta-home", "tools", "image", "packages", "@opencode", "cli", ...npmGlobal],
     command: "volta install @opencode/cli",
   },
   {
     name: "mise",
+    label: "mise npm backend",
     directory: ["mise", "installs", "npm-opencode-cli", "2.2.7", ...npmGlobal],
     command: "mise use -g npm:@opencode/cli",
   },
 ] as const
 
 managers.forEach((manager) => {
-  it.live(`${manager.name} installs print the ${manager.name} command instead of updating in place`, () =>
+  it.live(`${manager.label} installs print the ${manager.name} command instead of updating in place`, () =>
     Effect.gen(function* () {
       const test = yield* installed([...manager.directory], true)
       expect(yield* test.updater.method()).toBeUndefined()
@@ -295,15 +303,19 @@ managers.forEach((manager) => {
     }),
   )
 })
-
-it.live("npm globals under a mise Node stay npm installs", () =>
-  Effect.gen(function* () {
-    const test = yield* installed(["mise", "installs", "node", "24.22.2", ...npmGlobal])
-    expect(yield* test.updater.managed()).toBeUndefined()
-    yield* test.updater.method()
-    expect(test.commands).toHaveLength(5)
-  }),
-)
+;[
+  ["mise", "installs", "node", "24.22.2"],
+  [".volta", "tools", "image", "node", "22.23.4"],
+].forEach((node) => {
+  it.live(`npm globals under ${node.slice(0, 3).join("/")} stay npm installs`, () =>
+    Effect.gen(function* () {
+      const test = yield* installed([...node, ...npmGlobal])
+      expect(yield* test.updater.managed()).toBeUndefined()
+      yield* test.updater.method()
+      expect(test.commands).toHaveLength(5)
+    }),
+  )
+})
 
 it.live("vp force-installs a renamed V2 package that replaces the existing binary owner", () =>
   Effect.gen(function* () {
