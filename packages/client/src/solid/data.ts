@@ -504,7 +504,7 @@ export function createData(config: CreateDataInput) {
     insert(sessionID: string, item: SessionMessageInfo) {
       message.update(sessionID, (draft, index) => message.append(draft, index, item))
     },
-    // Streaming events target one assistant message and, within it, the latest part of a kind.
+    // Streaming events target one assistant message and a tool ID or per-kind ordinal within it.
     // A missing target means the row was never loaded or was evicted; the event is dropped.
     editAssistant(sessionID: string, messageID: string, fn: (assistant: SessionMessageAssistant) => void) {
       if (!messageIndex.get(sessionID)?.has(messageID)) return
@@ -522,18 +522,25 @@ export function createData(config: CreateDataInput) {
         if (tool) fn(tool)
       })
     },
-    editText(sessionID: string, messageID: string, fn: (text: SessionMessageAssistantText) => void) {
+    editText(sessionID: string, messageID: string, ordinal: number, fn: (text: SessionMessageAssistantText) => void) {
       message.editAssistant(sessionID, messageID, (assistant) => {
-        const text = assistant.content.findLast((item): item is SessionMessageAssistantText => item.type === "text")
+        const text = assistant.content.filter((item): item is SessionMessageAssistantText => item.type === "text")[
+          ordinal
+        ]
         if (text) fn(text)
       })
     },
-    editReasoning(sessionID: string, messageID: string, fn: (reasoning: SessionMessageAssistantReasoning) => void) {
+    editReasoning(
+      sessionID: string,
+      messageID: string,
+      ordinal: number,
+      fn: (reasoning: SessionMessageAssistantReasoning) => void,
+    ) {
       message.editAssistant(sessionID, messageID, (assistant) => {
-        const reasoning = assistant.content.findLast(
-          (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
-        )
-        if (reasoning) fn(reasoning)
+        const reasoning = assistant.content.filter(
+          (item): item is SessionMessageAssistantReasoning => item.type === "reasoning",
+        )[ordinal]
+        if (reasoning && !reasoning.time?.completed) fn(reasoning)
       })
     },
     activeAssistant(messages: SessionMessageInfo[]) {
@@ -1043,16 +1050,17 @@ export function createData(config: CreateDataInput) {
         return
       case "session.text.started":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          if (assistant.content.filter((part) => part.type === "text").length > event.data.ordinal) return
           assistant.content.push({ type: "text", text: "" })
         })
         return
       case "session.text.delta":
-        message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
+        message.editText(event.data.sessionID, event.data.assistantMessageID, event.data.ordinal, (text) => {
           text.text += event.data.delta
         })
         return
       case "session.text.ended":
-        message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
+        message.editText(event.data.sessionID, event.data.assistantMessageID, event.data.ordinal, (text) => {
           text.text = event.data.text
         })
         return
@@ -1122,6 +1130,7 @@ export function createData(config: CreateDataInput) {
         return
       case "session.reasoning.started":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          if (assistant.content.filter((part) => part.type === "reasoning").length > event.data.ordinal) return
           assistant.content.push({
             type: "reasoning",
             text: "",
@@ -1131,12 +1140,12 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.reasoning.delta":
-        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
+        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, event.data.ordinal, (reasoning) => {
           reasoning.text += event.data.delta
         })
         return
       case "session.reasoning.ended":
-        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, (reasoning) => {
+        message.editReasoning(event.data.sessionID, event.data.assistantMessageID, event.data.ordinal, (reasoning) => {
           reasoning.text = event.data.text
           reasoning.time = { created: reasoning.time?.created ?? event.created, completed: event.created }
           if (event.data.native !== undefined) reasoning.native = event.data.native

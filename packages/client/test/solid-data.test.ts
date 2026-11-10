@@ -2,7 +2,14 @@ import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
+import {
+  OpenCode,
+  type ModelInfo,
+  type OpenCodeEvent,
+  type Project,
+  type SessionInfo,
+  type SessionMessageInfo,
+} from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -1554,4 +1561,209 @@ async function wait(check: () => boolean) {
     if (Date.now() - started > 2_000) throw new Error("Timed out waiting for condition")
     await Bun.sleep(10)
   }
+}
+
+const sessionID = "ses_redelivery"
+const assistantMessageID = "msg_assistant"
+
+test.each(["text", "reasoning"] as const)("retains one %s part when its start is redelivered", async (kind) => {
+  using fixture = redeliveryFixture()
+  await fixture.data.session.message.sync(sessionID)
+  fixture.start()
+  const started = fixture.part(kind, "started", 0)
+  fixture.part(kind, "delta", 0, "first")
+  fixture.emit(started)
+  expect(fixture.assistant().content).toMatchObject([{ type: kind, text: "first" }])
+  expect(fixture.assistant().content).toHaveLength(1)
+})
+
+test.each(["text", "reasoning"] as const)(
+  "keeps %s settlement on its ordinal when an older end is replayed",
+  async (kind) => {
+    using fixture = redeliveryFixture()
+    await fixture.data.session.message.sync(sessionID)
+    fixture.start()
+    const started = fixture.part(kind, "started", 0)
+    const ended = fixture.part(kind, "ended", 0, "first")
+    const settled = structuredClone(fixture.assistant().content[0])
+    fixture.part(kind, "started", 1)
+    fixture.part(kind, "delta", 1, "second")
+    fixture.emit(started)
+    fixture.emit(ended)
+    expect(fixture.assistant().content).toMatchObject([
+      { type: kind, text: "first" },
+      { type: kind, text: "second" },
+    ])
+    expect(fixture.assistant().content[0]).toEqual(settled)
+    fixture.part(kind, "delta", 1, " continued")
+    fixture.part(kind, "ended", 1, "second continued")
+    expect(fixture.assistant().content.map((part) => (part.type === kind ? part.text : undefined))).toEqual([
+      "first",
+      "second continued",
+    ])
+  },
+)
+
+test("numbers text and reasoning independently across interleaved tool parts", async () => {
+  using fixture = redeliveryFixture()
+  await fixture.data.session.message.sync(sessionID)
+  fixture.start()
+  const text = fixture.part("text", "started", 0)
+  fixture.part("text", "ended", 0, "first text")
+  const reasoning = fixture.part("reasoning", "started", 0)
+  fixture.part("reasoning", "ended", 0, "first reasoning")
+  fixture.emit({
+    ...fixture.envelope(),
+    type: "session.tool.input.started",
+    data: { sessionID, assistantMessageID, id: "call_read", name: "read" },
+  })
+  fixture.part("text", "started", 1)
+  fixture.part("text", "ended", 1, "second text")
+  fixture.part("reasoning", "started", 1)
+  fixture.part("reasoning", "ended", 1, "second reasoning")
+  fixture.emit(text)
+  fixture.emit(reasoning)
+  expect(fixture.assistant().content).toMatchObject([
+    { type: "text", text: "first text" },
+    { type: "reasoning", text: "first reasoning" },
+    { type: "tool", id: "call_read", state: { status: "streaming" } },
+    { type: "text", text: "second text" },
+    { type: "reasoning", text: "second reasoning" },
+  ])
+})
+
+test("scopes started ordinals to each assistant and session", async () => {
+  using fixture = redeliveryFixture()
+  for (const [id, messageID] of [
+    [sessionID, assistantMessageID],
+    [sessionID, "msg_next"],
+    ["ses_other", "msg_other"],
+  ]) {
+    await fixture.data.session.message.sync(id)
+    fixture.start(id, messageID)
+    const started: OpenCodeEvent = {
+      ...fixture.envelope(id),
+      type: "session.text.started",
+      data: { sessionID: id, assistantMessageID: messageID, ordinal: 0 },
+    }
+    fixture.emit(started)
+    fixture.emit({
+      id: `evt_delta_${messageID}`,
+      created: 10,
+      type: "session.text.delta",
+      data: { sessionID: id, assistantMessageID: messageID, ordinal: 0, delta: messageID },
+    })
+    fixture.emit(started)
+    expect(fixture.assistant(id, messageID).content).toEqual([{ type: "text", text: messageID }])
+  }
+})
+
+test.each(["text", "reasoning"] as const)(
+  "recognizes hydrated %s parts after eviction and accepts the next block",
+  async (kind) => {
+    let history: SessionMessageInfo[] = []
+    using fixture = redeliveryFixture(() => history)
+    await fixture.data.session.message.sync(sessionID)
+    fixture.start()
+    const first = fixture.part(kind, "started", 0)
+    fixture.part(kind, "ended", 0, "settled")
+    const second = fixture.part(kind, "started", 1)
+    fixture.part(kind, "delta", 1, "streaming")
+    history = structuredClone([fixture.assistant()])
+    fixture.data.session.evict(sessionID)
+    expect(fixture.data.session.message.get(sessionID, assistantMessageID)).toBeUndefined()
+    await fixture.data.session.message.sync(sessionID)
+    fixture.emit(first)
+    fixture.emit(second)
+    fixture.part(kind, "delta", 1, " continued")
+    fixture.part(kind, "ended", 1, "streaming continued")
+    fixture.part(kind, "started", 2)
+    fixture.part(kind, "ended", 2, "new block")
+    expect(fixture.assistant().content).toMatchObject([
+      { type: kind, text: "settled" },
+      { type: kind, text: "streaming continued" },
+      { type: kind, text: "new block" },
+    ])
+    expect(fixture.assistant().content[0]).toEqual(history[0].type === "assistant" ? history[0].content[0] : undefined)
+  },
+)
+
+function redeliveryFixture(read: () => SessionMessageInfo[] = () => []) {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (new URL(request.url).pathname.endsWith("/message")) return Response.json({ data: read(), cursor: {} })
+      throw new Error(`Unexpected request: ${request.url}`)
+    },
+  })
+  let sequence = 0
+  return createRoot((dispose) => {
+    const data = createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    })
+    const envelope = (id = sessionID) => ({
+      id: `evt_${++sequence}`,
+      created: sequence,
+      durable: { aggregateID: id, seq: sequence, version: 1 as const },
+    })
+    const emit = (event: OpenCodeEvent) => {
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+      return event
+    }
+    return {
+      data,
+      envelope,
+      emit,
+      part(kind: "text" | "reasoning", stage: "started" | "delta" | "ended", ordinal: number, text = "") {
+        const event = envelope()
+        if (stage === "delta")
+          return emit({
+            id: event.id,
+            created: event.created,
+            type: `session.${kind}.delta`,
+            data: { sessionID, assistantMessageID, ordinal, delta: text },
+          })
+        if (stage === "ended")
+          return emit({
+            ...event,
+            type: `session.${kind}.ended`,
+            data: { sessionID, assistantMessageID, ordinal, text, native: { source: kind } },
+          })
+        return emit({
+          ...event,
+          type: `session.${kind}.started`,
+          data: { sessionID, assistantMessageID, ordinal, native: { source: kind } },
+        })
+      },
+      start(id = sessionID, messageID = assistantMessageID) {
+        emit({
+          ...envelope(id),
+          type: "session.step.started",
+          data: {
+            sessionID: id,
+            assistantMessageID: messageID,
+            agent: "build",
+            model: { providerID: "demo", id: "model" },
+            started: 0,
+          },
+        })
+      },
+      assistant(id = sessionID, messageID = assistantMessageID) {
+        const message = data.session.message.get(id, messageID)
+        if (message?.type !== "assistant") throw new Error("Assistant message not loaded")
+        return message
+      },
+      [Symbol.dispose]: dispose,
+    }
+  })
 }
