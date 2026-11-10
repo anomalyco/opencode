@@ -115,7 +115,8 @@ const until = (check: () => boolean) =>
     while (!check()) yield* Effect.sleep(5)
   })
 
-describe("shell commands across a graceful restart", () => {
+// Shell commands only run in the process daemon off Windows (pipe mode is Unix-only).
+describe.skipIf(process.platform === "win32")("shell commands across a graceful restart", () => {
   for (const finished of [false, true])
     it.live(
       `settles a foreground call ${finished ? "whose command finished during the restart" : "whose command still runs"} and resumes its session`,

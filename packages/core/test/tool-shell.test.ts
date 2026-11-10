@@ -231,6 +231,8 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 })
 
 const isWindows = process.platform === "win32"
+// Shell commands only run in the process daemon off Windows (pipe mode is Unix-only), so these cases have no daemon there.
+const daemonLive = isWindows ? fakeDaemonIt.live.skip : fakeDaemonIt.live
 
 // The process daemon keeps a finished command's zombie until the command is forgotten.
 const running = (pid: number) => {
@@ -1803,7 +1805,7 @@ describe("ShellTool", () => {
     }),
   )
 
-  fakeDaemonIt.live("keeps a background daemon command's job across a Location reload and reports how it ended", () =>
+  daemonLive("keeps a background daemon command's job across a Location reload and reports how it ended", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
         reset()
@@ -2336,7 +2338,7 @@ describe("ShellTool stopped", () => {
       }
     })
 
-  fakeDaemonIt.live("stops a command the user stopped while it was being created", () =>
+  daemonLive("stops a command the user stopped while it was being created", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -2361,7 +2363,7 @@ describe("ShellTool stopped", () => {
     }),
   )
 
-  fakeDaemonIt.live("stops a command the user stopped after its Location reloaded", () =>
+  daemonLive("stops a command the user stopped after its Location reloaded", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
         reset()
@@ -2400,7 +2402,7 @@ describe("ShellTool stopped", () => {
 
   for (const handoff of [false, true])
     for (const starting of [true, false])
-      fakeDaemonIt.live(
+      daemonLive(
         `${handoff ? "leaves a command running" : "stops a command"} when an interrupt ${handoff ? "during a handoff " : ""}cuts its call off while it ${starting ? "starts" : "runs"}`,
         () =>
           withTempDir((tmp) => {
@@ -2445,7 +2447,7 @@ describe("ShellTool stopped", () => {
           }),
       )
 
-  fakeDaemonIt.live("records which call waits on a daemon command, and keeps no timeout for a restart", () =>
+  daemonLive("records which call waits on a daemon command, and keeps no timeout for a restart", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
