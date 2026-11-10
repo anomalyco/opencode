@@ -5,6 +5,7 @@ import {
   AIClient,
   AIError,
   DecisionClient,
+  EmbeddingClient,
   Generation,
   ImageClient,
   LanguageModel,
@@ -87,6 +88,9 @@ describe("public exports", () => {
     expect(ai.decision.generate).toBeFunction()
     expect(DecisionClient.layer).toBeDefined()
     expect(DecisionClient.fetchLayer).toBeDefined()
+    expect(ai.embedding.generate).toBeFunction()
+    expect(EmbeddingClient.layer).toBeDefined()
+    expect(AI.ai.embedding.generate).toBeFunction()
   })
 
   test("both entry points export the raw event type", () => {
@@ -112,6 +116,8 @@ describe("public exports", () => {
         yield* VideoClient.Service
         yield* SpeechClient.Service
         yield* TranscriptionClient.Service
+        yield* DecisionClient.Service
+        yield* EmbeddingClient.Service
         yield* RequestExecutor.Service
       }).pipe(Effect.provide(AIClient.layerWith(counting))),
     )
@@ -128,6 +134,7 @@ describe("public exports", () => {
     const { OpenAICompatibleResponses } = await import("@opencode/ai/providers")
 
     expect(OpenAI.model).toBeFunction()
+    expect(OpenAI.embedding).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
     for (const provider of [Baseten, DeepSeek, Fireworks]) {

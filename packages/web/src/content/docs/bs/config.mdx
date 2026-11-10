@@ -65,7 +65,7 @@ Prvo se učitava udaljena konfiguracija koja služi kao osnovni sloj. Svi ostali
 
 Na primjer, ako vaša organizacija nudi MCP servere koji su po defaultu onemogućeni:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Udaljena konfiguracija iz .well-known/opencode"
 {
   "mcp": {
     "jira": {

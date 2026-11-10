@@ -28,8 +28,6 @@ declare module "sst" {
       "type": "sst.cloudflare.StaticSite"
       "url": string
     }
-    "ZenData": import("@cloudflare/workers-types").R2Bucket
-    "ZenDataNew": import("@cloudflare/workers-types").R2Bucket
   }
 }
 

@@ -6,11 +6,13 @@
 // GitHub snapshot. Pages may import their modules for the queries, whose "use server" bodies the
 // browser build drops along with everything only those bodies read.
 // Last, it fails when a page's initial JavaScript (the entry and every chunk the page's route imports
-// statically, which the server modulepreloads) passes its budget below, gzipped. Code a page needs
-// only later belongs behind a dynamic import.
+// statically, which the server modulepreloads) passes its budget below, gzipped. A static page
+// (src/static/routes.ts) loads the static pages' one script (src/client/entry.ts) instead, and has
+// its budget. Code a page needs only later belongs behind a dynamic import.
 // Run after `vite build`, optionally with the output directory: `bun script/check-client-bundle.ts .output`.
 import path from "node:path"
 import { Glob } from "bun"
+import { staticPath } from "../src/static/routes"
 
 const root = path.resolve(process.argv[2] ?? path.join(import.meta.dir, "..", ".output"), "public")
 // Strings only the tools' own code contains, as they survive minification.
@@ -64,26 +66,19 @@ console.log(
 // Each page's budget in kB, gzipped: what it was when last measured, plus a kB of room. Lower a
 // budget when a page gets lighter; a page without one fails until it has one.
 const budgets: Record<string, number> = {
-  "[...404].tsx": 104,
-  "brand/index.tsx": 107,
-  "changelog/[tag].tsx": 113,
-  "changelog/index.tsx": 112,
-  "desktop.tsx": 127.6,
-  "devices.tsx": 51,
-  "product/browse.tsx": 106,
-  "font/index.tsx": 121,
-  "ide.tsx": 127.6,
-  "index.tsx": 118,
-  "legal/index.tsx": 150,
-  "legal/privacy-policy/index.tsx": 140,
-  "legal/terms-of-service/index.tsx": 135,
-  "mini.tsx": 127.6,
-  "mobile.tsx": 127.6,
-  "press/index.tsx": 112,
-  "product/index.tsx": 114.7,
-  "sdk.tsx": 127.6,
-  "terminal.tsx": 127.6,
-  "video-editor/index.tsx": 49,
+  "static pages": 10.4,
+  "[...404].tsx": 102.9,
+  "desktop.tsx": 126.4,
+  "devices.tsx": 55.9,
+  "font/index.tsx": 119,
+  "ide.tsx": 126.4,
+  "index.tsx": 113.6,
+  "mini.tsx": 126.4,
+  "mobile.tsx": 126.4,
+  "product/index.tsx": 111.4,
+  "sdk.tsx": 126.4,
+  "terminal.tsx": 126.4,
+  "video-editor/index.tsx": 54.3,
 }
 type Chunk = { file: string; imports?: string[] }
 const manifest: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
@@ -102,20 +97,35 @@ const closure = (key: string, seen = new Set<string>()): Set<string> => {
   return seen
 }
 const entry = closure("src/entry-client.tsx")
+const kB = async (keys: Iterable<string>) =>
+  Math.round(
+    (await Promise.all([...keys].map((key) => gzipped(manifest[key].file)))).reduce((a, b) => a + b, 0) / 100,
+  ) / 10
+// The static pages' script, from its own build (script/static-client.ts): one file, whose islands and
+// overlays load later.
+const statics: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/static-manifest.json")).json()
+const script = statics["src/client/entry.ts"]
+if (script.imports?.length) {
+  console.error(`check-client-bundle: the static pages' script imports ${script.imports.join(", ")}; keep it one file`)
+  process.exit(1)
+}
+const staticScript = Math.round((await gzipped(script.file)) / 100) / 10
 const pages = await Promise.all(
   Object.keys(manifest)
     .filter((key) => key.startsWith("src/routes/") && key.includes("?pick=default"))
     .map(async (key) => {
-      const chunks = [...new Set([...entry, ...closure(key)])].map((chunk) => manifest[chunk].file)
-      const bytes = (await Promise.all(chunks.map(gzipped))).reduce((sum, size) => sum + size, 0)
-      return { route: key.slice("src/routes/".length).split("?")[0], kB: Math.round(bytes / 100) / 10 }
+      const route = key.slice("src/routes/".length).split("?")[0]
+      // The route file's address: brand/index.tsx is /brand, changelog/[tag].tsx is /changelog/:tag.
+      const address = `/${route.replace(/(^|\/)index\.tsx$|\.tsx$/, "").replace(/\[([^\]]+)\]/g, ":$1")}`
+      if (staticPath(address) === address) return { route, kB: staticScript, budget: budgets["static pages"] }
+      return { route, kB: await kB(new Set([...entry, ...closure(key)])), budget: budgets[route] }
     }),
 )
-const over = pages.filter((page) => !(page.kB <= budgets[page.route]))
+const over = pages.filter((page) => !(page.kB <= page.budget))
 if (over.length) {
   console.error(
     "check-client-bundle: initial JavaScript (gzipped) over its page's budget:\n  " +
-      over.map((page) => `${page.route}: ${page.kB} kB, budget ${budgets[page.route] ?? "none"}`).join("\n  "),
+      over.map((page) => `${page.route}: ${page.kB} kB, budget ${page.budget ?? "none"}`).join("\n  "),
   )
   process.exit(1)
 }

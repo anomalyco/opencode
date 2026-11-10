@@ -66,7 +66,7 @@ Remote config indlæses først og fungerer som basislaget. Alle andre konfigurat
 
 Hvis din organisation f.eks. leverer MCP-servere, der er deaktiveret som standard:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Remote config fra .well-known/opencode"
 {
   "mcp": {
     "jira": {

@@ -53,19 +53,6 @@ export function Plate(props: {
   )
 }
 
-/** True while `element` is near the viewport, so animations can pause offscreen. */
-export function useVisible(element: () => Element | undefined, margin = "200px 0px") {
-  const [visible, setVisible] = createSignal(false)
-  onMount(() => {
-    const target = element()
-    if (!target) return
-    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { rootMargin: margin })
-    observer.observe(target)
-    onCleanup(() => observer.disconnect())
-  })
-  return visible
-}
-
 /** Turns true once, the first time `element` scrolls into view: for entrance animations. */
 export function useSeen(element: () => Element | undefined) {
   const [seen, setSeen] = createSignal(false)

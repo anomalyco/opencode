@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream, Tracer } from "effect"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -1501,6 +1501,46 @@ describe("ShellTool", () => {
         )
       }),
     { timeout: 15_000 },
+  )
+
+  it.live("names the tool call and background on the spans of the shell it starts", () =>
+    withTempDir((tmp) => {
+      reset()
+      const spans: Tracer.NativeSpan[] = []
+      const tracer = Tracer.make({
+        span(options) {
+          const span = new Tracer.NativeSpan(options)
+          spans.push(span)
+          return span
+        },
+      })
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          yield* executeTool(registry, call({ command: bodyExitCommand }, "call-traced"))
+          yield* executeTool(registry, call({ command: helloCommand, background: true }, "call-traced-background"))
+        }),
+      ).pipe(
+        Effect.withTracer(tracer),
+        Effect.andThen(
+          Effect.sync(() => {
+            const attributes = (name: string, callID: string) =>
+              spans
+                .filter((span) => span.name === name && span.attributes.get("gen_ai.tool.call.id") === callID)
+                .map((span) => Object.fromEntries(span.attributes))
+            expect(attributes("Shell.create", "call-traced")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "opencode.shell.command": bodyExitCommand }),
+            ])
+            expect(attributes("Shell.create", "call-traced")[0]).not.toHaveProperty("opencode.shell.background")
+            expect(attributes("Shell.result", "call-traced")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "process.exit.code": 7 }),
+            ])
+            expect(attributes("Shell.create", "call-traced-background")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "opencode.shell.background": true }),
+            ])
+          }),
+        ),
+      )
+    }),
   )
 
   it.live("returns the shell id for a background command", () =>

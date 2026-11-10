@@ -66,7 +66,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ตัวอย่างเช่น หากองค์กรของคุณมีเซิร์ฟเวอร์ MCP ที่ถูกปิดใช้งานตามค่าเริ่มต้น:
 
-```json title="Remote config from .well-known/opencode"
+```json title="การกำหนดค่าระยะไกลจาก .well-known/opencode"
 {
   "mcp": {
     "jira": {

@@ -642,6 +642,16 @@ describe("ConfigProviderPlugin.Plugin", () => {
       },
     },
     {
+      name: "provider baseURL alongside api",
+      legacy: { api: "openai", options: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+      native: { settings: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+    },
+    {
+      name: "empty provider baseURL falls back to api",
+      legacy: { api: "http://127.0.0.1:4000/v1", options: { baseURL: "" }, models: { chat: {} } },
+      native: { settings: { baseURL: "http://127.0.0.1:4000/v1" }, models: { chat: {} } },
+    },
+    {
       name: "model package, limits, costs, and variant overrides",
       legacy: {
         npm: "@ai-sdk/openai",
@@ -752,6 +762,28 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(result.diagnostics).toEqual([])
       yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
       expect(yield* models.get(providerID, modelID)).toEqual(before)
+    }),
+  )
+
+  it.effect("keeps catalog capabilities that a migrated override omits", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("chat")
+      yield* providers.transform((editor) => {
+        editor.models.update(providerID, modelID, (model) => {
+          model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
+        })
+      })
+      const result = ConfigNormalize.normalize({ provider: { custom: { models: { chat: { tool_call: true } } } } })
+      if (result.type !== "normalized") throw new Error("Expected normalized config")
+      yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
+      expect((yield* models.get(providerID, modelID))?.capabilities).toEqual({
+        tools: true,
+        input: ["audio"],
+        output: ["audio"],
+      })
     }),
   )
 

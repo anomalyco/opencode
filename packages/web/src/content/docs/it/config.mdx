@@ -65,7 +65,7 @@ La configurazione remota viene caricata per prima e fa da livello base. Tutte le
 
 Per esempio, se la tua organizzazione fornisce server MCP disabilitati per impostazione predefinita:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Configurazione remota da .well-known/opencode"
 {
   "mcp": {
     "jira": {

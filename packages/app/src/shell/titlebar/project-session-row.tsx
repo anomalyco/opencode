@@ -16,6 +16,9 @@ import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { sessionLabel } from "@/session/title"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { createSessionRenamer } from "@/session/commands/rename-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { notifySessionTabsRemoved } from "./session-events"
 import {
   createSessionRenameDialogState,
@@ -45,24 +48,18 @@ export function ProjectSessionRow(props: {
 
   const ctx = () => global.serverCtx(props.server)
 
+  const exporter = createSessionExporter()
+
+  const rename = createSessionRenamer()
+
+  const exportTarget = () => ({ server: props.server, sessionID: props.session.id })
+
   const status = useSessionTabAvatarState(
     () => props.server,
     () => props.session.id,
     () => true,
     () => props.session,
   )
-
-  // Refreshes the title even when the dialog already stopped waiting, so a late save still shows.
-  const rename = async (title: string) => {
-    const current = ctx()
-
-    if (!current) throw new Error(language.t("common.requestFailed"))
-    await current.sdk.api.session.update({ sessionID: props.session.id, title })
-    current.data.session.remember({ ...(current.data.session.get(props.session.id) ?? props.session), title })
-    current.data.session.invalidate(props.session.id)
-    void current.data.session.sync(props.session.id).catch(() => undefined)
-    void queryClient.invalidateQueries({ queryKey: ["home-sessions", connection()], exact: true })
-  }
 
   function DeleteDialog() {
     const confirm = () => {
@@ -164,12 +161,26 @@ export function ProjectSessionRow(props: {
         >
           <Menu.Item
             disabled={!ctx()}
-            onSelect={() => dialog.show(() => <RenameDialog title={sessionLabel(props.session)} onRename={rename} />)}
+            onSelect={() =>
+              dialog.show(() => (
+                <RenameDialog
+                  title={sessionLabel(props.session)}
+                  onRename={(title) => rename(props.server, props.session, title)}
+                />
+              ))
+            }
           >
             {language.t("common.rename")}
           </Menu.Item>
+          <Menu.Item
+            disabled={!ctx() || exporter.exporting(exportTarget())}
+            onSelect={() => exporter.export(exportTarget())}
+          >
+            {language.t("common.export")}…
+          </Menu.Item>
+          <SessionReadMenuItem server={props.server} session={props.session} />
           <Menu.Separator />
-          <Menu.Item data-variant="critical" disabled={!ctx()} onSelect={() => dialog.show(() => <DeleteDialog />)}>
+          <Menu.Item disabled={!ctx()} onSelect={() => dialog.show(() => <DeleteDialog />)}>
             {language.t("common.delete")}…
           </Menu.Item>
         </Menu.Context.Content>
@@ -178,7 +189,7 @@ export function ProjectSessionRow(props: {
   )
 }
 
-function RenameDialog(props: { title: string; onRename: (title: string) => Promise<void> }) {
+export function RenameDialog(props: { title: string; onRename: (title: string) => Promise<void> }) {
   const language = useLanguage()
 
   const dialog = useDialog()

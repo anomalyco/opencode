@@ -17,9 +17,16 @@ import solid from "vite-plugin-solid"
 import { cssVariantsForProduction, devOnlyCss } from "../../../script/css-variants-plugin"
 import { foldSettingsForProduction } from "../../../script/fold-settings"
 import { config } from "../../config"
-import { base, files } from "../config"
+import { docsSets, latestDocs, v1Docs } from "../config"
 import { docsHref, docsMarkdownHref } from "../lib/navigation"
-import type { docsSlugs, renderDocsMarkdown, renderDocsPage, renderLlmsTxt, renderSitemap } from "../render"
+import type {
+  docsSlugs,
+  renderDocsMarkdown,
+  renderDocsPage,
+  renderLlmsTxt,
+  renderSitemap,
+  v1EnglishSection,
+} from "../render"
 import { docs } from "../vite"
 
 const args = parseArgs({ options: { out: { type: "string" } } })
@@ -31,6 +38,8 @@ const inputs = { stylesheet: "src/docs/styles/docs.css", script: "src/docs/clien
 // llms.txt and the sitemap list opencode.ai's URLs on dev.opencode.ai too, as the pages' canonical links do:
 // search engines must not take dev.opencode.ai's for the real ones (src/lib/noindex.ts).
 const site = new URL(config.baseUrl)
+// Every set's pages load the latest docs' stylesheet, script and fonts.
+const base = latestDocs.base
 
 await rm(cache, { recursive: true, force: true })
 
@@ -55,7 +64,9 @@ await build({
   },
 })
 await cp(path.join(cache, "client/_build"), path.join(output, base, "_build"), { recursive: true })
-const manifest: Record<string, { file: string }> = await Bun.file(path.join(cache, "client/.vite/manifest.json")).json()
+const manifest: Record<string, { file: string; dynamicImports?: string[] }> = await Bun.file(
+  path.join(cache, "client/.vite/manifest.json"),
+).json()
 const assets = {
   stylesheet: base + manifest[inputs.stylesheet].file,
   script: base + manifest[inputs.script].file,
@@ -88,25 +99,37 @@ const render = (await import(path.join(cache, "render/render.js"))) as {
   renderDocsMarkdown: typeof renderDocsMarkdown
   renderLlmsTxt: typeof renderLlmsTxt
   renderSitemap: typeof renderSitemap
+  v1EnglishSection: typeof v1EnglishSection
 }
 
 const write = (href: string, body: string) => Bun.write(path.join(output, href), body)
 // The files the server render emitted that pages link (the fonts they preload and declare), beside the
 // client build's; the render's own code stays in the cache.
 const emitted = new Set<string>()
+const images = new Set<string>()
 await Promise.all([
-  ...render.docsSlugs.map(async (slug) => {
-    const html = await render.renderDocsPage(slug, assets)
-    if (html === undefined) throw new Error(`docs: ${slug} did not render`)
-    for (const match of html.matchAll(/\/docs\/_build\/([^"')\s]+)/g)) emitted.add(match[1])
-    await write(`${docsHref(slug).replace(/\/?$/, "/")}index.html`, html)
-    const markdown = await render.renderDocsMarkdown(slug)
-    if (markdown !== undefined) await write(docsMarkdownHref(slug), markdown)
-  }),
+  ...docsSets.flatMap((set) =>
+    render.docsSlugs[set.id].map(async (slug) => {
+      const html = await render.renderDocsPage(set, slug, assets)
+      if (html === undefined) throw new Error(`docs: ${set.base}${slug} did not render`)
+      for (const match of html.matchAll(/\/docs\/_build\/([^"')\s]+)/g)) emitted.add(match[1])
+      for (const match of html.matchAll(/\/v1\/docs\/assets\/([^"')\s]+)/g)) images.add(match[1])
+      await write(`${docsHref(slug, set).replace(/\/?$/, "/")}index.html`, html)
+      const markdown = await render.renderDocsMarkdown(set, slug)
+      if (markdown !== undefined) await write(docsMarkdownHref(slug, set), markdown)
+    }),
+  ),
   write(`${base}llms.txt`, render.renderLlmsTxt(site)),
+  write(`${v1Docs.base}llms.txt`, render.renderLlmsTxt(site, v1Docs, [await render.v1EnglishSection()])),
+  // Only the latest docs are in the sitemap: the V1 docs are noindex.
   write(`${base}sitemap.xml`, render.renderSitemap(site)),
   // The logos, favicon and generated files the pages link (the site build has copied them already).
   cp(path.join(root, "public", base), path.join(output, base), { recursive: true }),
+  // The V1 docs' theme schema, from their Starlight app until it is retired.
+  Bun.write(
+    path.join(output, v1Docs.base, "theme.json"),
+    Bun.file(path.join(root, "../../packages/web/public/theme.json")),
+  ),
 ])
 
 await Promise.all(
@@ -115,30 +138,44 @@ await Promise.all(
     if (await source.exists()) await Bun.write(path.join(output, base, "_build", file), source)
   }),
 )
+// The images the V1 pages show, from their Starlight app's assets (remark-starlight.ts).
+await Promise.all(
+  [...images].map((file) =>
+    Bun.write(
+      path.join(output, v1Docs.base, "assets", file),
+      Bun.file(path.join(root, "../../packages/web/src/assets", file)),
+    ),
+  ),
+)
 
-const pagefind = path.join(output, base)
-await mkdir(pagefind, { recursive: true })
-// The phone Contents bar repeats the page's headings, and code headers and screen reader text
-// ("Copy", "Copied", "Opens in a new tab") aren't content, so they stay out of the index.
+// One search index per set, so each searches only its own pages. The phone Contents bar repeats the
+// page's headings, and code headers and screen reader text ("Copy", "Copied", "Opens in a new tab")
+// aren't content, so they stay out of the index.
 const exclude =
   "[data-component=contents-menu], [data-slot=code-head], [data-component=code-tabs] [data-slot=copy], [data-slot=sr-only]"
-await Bun.$`${path.join(root, "node_modules/.bin/pagefind")} --site ${pagefind} --exclude-selectors ${exclude}`.quiet()
+for (const set of docsSets) {
+  const pagefind = path.join(output, set.base)
+  await mkdir(pagefind, { recursive: true })
+  await Bun.$`${path.join(root, "node_modules/.bin/pagefind")} --site ${pagefind} --exclude-selectors ${exclude}`.quiet()
+}
 checkFileNames()
 await checkAssetPrefix()
 await Bun.$`bun ${path.join(import.meta.dir, "validate-links.ts")} ${output}`
-console.log(`docs: built ${render.docsSlugs.length} pages`)
+console.log(`docs: built ${Object.values(render.docsSlugs).flat().length} pages`)
 
 /**
  * Fails when the docs' first JavaScript or stylesheet outgrows its budget (gzipped): every docs
  * page loads both, and nothing else is render-blocking.
  */
 async function checkBudget() {
-  // The script carries the shared nav menus (packages/nav-menus: the logo menu with its inlined brand files, and the
-  // product menu), about 4 kB of it.
-  // The stylesheet carries the phone bars (the sticky section row and the Contents bar under it), about 0.3 kB.
-  const budgets = { [inputs.script]: 11 * 1024, [inputs.stylesheet]: 29 * 1024 }
+  // The shared nav menus (packages/nav-menus) are the script's one file of its own, loaded on first use (nav-intent.ts).
+  // The stylesheet carries the phone bars (the sticky section row and the Contents bar under it), about 0.3 kB,
+  // the V1 docs' notice and type for their languages, about 1 kB, and the fonts' faces (src/style/fonts.css), about 1.3 kB.
+  const budgets = { [inputs.script]: 8 * 1024, [inputs.stylesheet]: 30 * 1024 }
   const files = await Array.fromAsync(new Bun.Glob("_build/*.js").scan({ cwd: path.join(cache, "client") }))
-  if (files.length !== 1) throw new Error(`docs: the script split into ${files.length} files: ${files.join(", ")}`)
+  const lazy = manifest[inputs.script].dynamicImports?.length ?? 0
+  if (files.length !== 1 + lazy)
+    throw new Error(`docs: the script split into ${files.length} files: ${files.join(", ")}`)
   for (const [input, budget] of Object.entries(budgets)) {
     const file = manifest[input].file
     const size = Bun.gzipSync(await Bun.file(path.join(cache, "client", file)).bytes(), { level: 9 }).length
@@ -147,16 +184,22 @@ async function checkBudget() {
   }
 }
 
-/** Fails when a page's first path segment is the name of one of the docs' files, which it would hide. */
+/** Fails when a page's first path segment is the name of one of its set's files, which it would hide. */
 function checkFileNames() {
-  const taken = render.docsSlugs.filter((slug) => files.includes(slug.split("/")[0]))
+  const taken = docsSets.flatMap((set) =>
+    render.docsSlugs[set.id].filter((slug) => set.files.includes(slug.split("/")[0])).map((slug) => set.base + slug),
+  )
   if (taken.length) throw new Error(`docs: these pages use a name reserved for the docs' files: ${taken.join(", ")}`)
 }
 
-/** Fails when a docs page, or a stylesheet it links, loads a file from outside /docs. */
+/** Fails when a docs page, or a stylesheet it links, loads a file from outside the docs' sets. */
 async function checkAssetPrefix() {
   const origin = "https://opencode.local"
-  const pages = await Array.fromAsync(new Bun.Glob(`${base.slice(1)}**/*.html`).scan({ cwd: output }))
+  const pages = (
+    await Promise.all(
+      docsSets.map((set) => Array.fromAsync(new Bun.Glob(`${set.base.slice(1)}**/*.html`).scan({ cwd: output }))),
+    )
+  ).flat()
   const found = new Map<string, string>()
   for (const page of pages) {
     const html = await Bun.file(path.join(output, page)).text()
@@ -173,9 +216,9 @@ async function checkAssetPrefix() {
     for (const match of css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g))
       if (!match[1].startsWith("data:")) found.set(new URL(match[1], style).href, pathname)
   }
-  const outside = [...found].filter(([url]) => !url.startsWith(origin + base))
+  const outside = [...found].filter(([url]) => !docsSets.some((set) => url.startsWith(origin + set.base)))
   if (!outside.length) return
   throw new Error(
-    `docs: these files load from outside ${base}:\n${outside.map(([url, from]) => `  ${url.replace(origin, "")} (from ${from})`).join("\n")}`,
+    `docs: these files load from outside the docs:\n${outside.map(([url, from]) => `  ${url.replace(origin, "")} (from ${from})`).join("\n")}`,
   )
 }
