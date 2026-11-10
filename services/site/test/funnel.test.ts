@@ -4,6 +4,7 @@ import type { Element, Root } from "hast"
 // SolidStart's own file router, as in sitemap.test.ts: every page route the app serves.
 import { DEFAULT_EXTENSIONS } from "../node_modules/@solidjs/start/dist/config/constants.js"
 import { SolidStartServerFileRouter } from "../node_modules/@solidjs/start/dist/config/fs-router.js"
+import { latestDocs } from "~/docs/config"
 import { docsHref, docsSections } from "~/docs/lib/navigation"
 import rehypeShiki from "~/docs/rehype-shiki"
 import { downloadOf, surfaceOf, targetOf } from "~/lib/funnel-config"
@@ -65,7 +66,7 @@ describe("funnel config", () => {
     )
     expect(slugs.length).toBeGreaterThan(20)
     for (const slug of slugs) {
-      const path = docsHref(slug)
+      const path = docsHref(slug, latestDocs)
       expect(surfaceOf(strip(path))).toBe("www-docs")
       expect(targetOf(path)).toBe(slug === "index" ? "" : slug.split("/")[0])
     }

@@ -1,8 +1,8 @@
-import { base } from "../config"
+import { latestDocs } from "../config"
 import { docsSections } from "./navigation"
 
 export function renderLlmsTxt(site: URL) {
-  const root = new URL(base, site)
+  const root = new URL(latestDocs.base, site)
   const sections = docsSections.flatMap((section) => [
     `## ${section.title}`,
     "",

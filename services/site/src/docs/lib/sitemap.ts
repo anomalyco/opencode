@@ -1,9 +1,10 @@
+import { latestDocs } from "../config"
 import { docsHref, docsSections } from "./navigation"
 
 export function renderSitemap(site: URL) {
   const urls = new Set(
     docsSections.flatMap((section) =>
-      section.groups.flatMap((group) => group.items.map((item) => new URL(docsHref(item.slug), site).href)),
+      section.groups.flatMap((group) => group.items.map((item) => new URL(docsHref(item.slug, latestDocs), site).href)),
     ),
   )
 

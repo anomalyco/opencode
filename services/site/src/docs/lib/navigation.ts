@@ -1,4 +1,4 @@
-import { base } from "../config"
+import type { DocsSet } from "../config"
 
 export interface DocsNavItem {
   title: string
@@ -182,17 +182,17 @@ export const docsSections: DocsSection[] = [
 // Pages whose URL has no trailing slash. The slash form redirects to them (middleware.ts).
 const assetSlugs = new Set(["api"])
 
-export function docsHref(slug: string, anchor?: string) {
+export function docsHref(slug: string, set: DocsSet) {
   const path = slug === "index" ? "" : `${slug.replace(/\/index$/, "")}${assetSlugs.has(slug) ? "" : "/"}`
-  return `${base}${path}${anchor ? `#${anchor}` : ""}`
+  return `${set.base}${path}`
 }
 
 /**
  * The Markdown twin of a docs page: its URL without the trailing slash, plus `.md`. The intro's is
  * `/docs/index.md`, so it stays under the docs' prefix (middleware.ts also answers `/docs.md`).
  */
-export function docsMarkdownHref(slug: string) {
-  return slug === "index" ? `${base}index.md` : `${docsHref(slug).replace(/\/$/, "")}.md`
+export function docsMarkdownHref(slug: string, set: DocsSet) {
+  return slug === "index" ? `${set.base}index.md` : `${docsHref(slug, set).replace(/\/$/, "")}.md`
 }
 
 /** A content file's slug: its path under content/ without `.mdx` or a trailing `/index`. */

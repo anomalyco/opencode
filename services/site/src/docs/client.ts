@@ -4,7 +4,6 @@
 // menus, the phone menus, the Contents rail, search, the status bars and the funnel.
 import { Funnel } from "../lib/funnel"
 import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
-import { base } from "./config"
 import { fanMotion } from "../component/site/fan-motion"
 import { holdOpenMenu } from "../component/site/menu-hold"
 import { navMenusOnIntent } from "../component/site/nav-intent"
@@ -19,6 +18,8 @@ const $$ = <T extends Element = HTMLElement>(selector: string, root: ParentNode 
   ...root.querySelectorAll<T>(selector),
 ]
 const site = $("[data-site]")!
+// The page's docs set's base (DocsLayout.tsx), which search results and links start from.
+const base = site.dataset.docsBase!
 const html = document.documentElement
 const on = <K extends keyof DocumentEventMap>(type: K, listener: (event: DocumentEventMap[K]) => void) =>
   document.addEventListener(type, listener)
@@ -177,7 +178,9 @@ function enter(menu: HTMLElement) {
 }
 
 // The docs lockup (component/site/docs-lockup.tsx): the chevron opens the sections menu, where "Docs"
-// has its versions in a flyout beside it, or nested under it on phones and touch screens.
+// has its versions in a flyout beside it, or nested under it on phones and touch screens. An older
+// version adds a second menu, of the versions, so each dropdown in it opens on its own.
+const dropdown = '[data-component="docs-lockup"] [data-slot="dropdown"]'
 let lockup: HTMLElement | undefined
 let subTimer = 0
 const menuOf = (root: HTMLElement) => $("[data-slot=menu]", root)!
@@ -231,7 +234,7 @@ function closeLockup(refocus?: boolean) {
   $$("[aria-haspopup=menu]:not([role=menuitem], [data-nav-product])", root).forEach((button) =>
     button.setAttribute("aria-expanded", "false"),
   )
-  if (refocus) $("[data-slot=toggle]", root)?.focus()
+  if (refocus) ($("[data-slot=toggle]", root) ?? $("[data-slot=trigger]", root))?.focus()
 }
 
 function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
@@ -250,7 +253,7 @@ function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
 
 on("click", (event) => {
   const target = event.target as Element
-  const root = target.closest<HTMLElement>('[data-component="docs-lockup"]')
+  const root = target.closest<HTMLElement>(dropdown)
   if (!root) return
   if (target.closest("[data-slot=toggle], [data-slot=trigger]"))
     return lockup === root ? closeLockup() : openLockup(root)
@@ -273,7 +276,7 @@ on("keydown", (event) => {
     toggleSub(lockup, false)
     return $("[data-slot=parent] > [role=menuitem]", lockup)?.focus()
   }
-  const root = target.closest?.<HTMLElement>('[data-component="docs-lockup"]')
+  const root = target.closest?.<HTMLElement>(dropdown)
   if (!root) return
   if (target.matches("[data-slot=toggle], [data-slot=trigger]")) {
     if (key === "ArrowDown" || key === "Enter" || key === " ") openLockup(root, "current")

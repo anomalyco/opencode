@@ -12,12 +12,13 @@ import { CodeTabs } from "./components/CodeTabs"
 import { OpenApiReference } from "./components/OpenApiReference"
 import { PlanTabs } from "./components/PlanTabs"
 import { Slot } from "./components/Slot"
+import type { DocsSet } from "./config"
 import { docsFiles, type DocsModule } from "./content"
 import { DocsLayout, type DocsAssets } from "./layouts/DocsLayout"
 import { docsMarkdownHref } from "./lib/navigation"
 
-/** A docs page to render: a content page and its module, or the API reference (no module). */
-export type DocsRender = { slug: string; module?: DocsModule; assets: DocsAssets }
+/** A docs page to render: a set's content page and its module, or the API reference (no module). */
+export type DocsRender = { set: DocsSet; slug: string; module?: DocsModule; assets: DocsAssets }
 
 // CodeFrame, FileTree and HeadingLink are what rehype-shiki.ts and rehype-headings.ts put in the tree.
 const components = { Callout, Card, CardGroup, CodeBlock, CodeFrame, CodeTabs, FileTree, HeadingLink, PlanTabs, Slot }
@@ -43,14 +44,15 @@ export function DocsDocument(props: DocsRender) {
       <I18nContext.Provider value={english}>
         {module ? (
           <DocsLayout
+            set={props.set}
             title={module.frontmatter.title}
             description={module.frontmatter.description}
             currentSlug={props.slug}
             headings={module.frontmatter.tableOfContents === false ? [] : module.headings}
             noindex={module.frontmatter.noindex}
             assets={props.assets}
-            source={docsFiles.get(props.slug)}
-            markdown={docsMarkdownHref(props.slug)}
+            source={docsFiles.get(props.set.id)?.get(props.slug)}
+            markdown={docsMarkdownHref(props.slug, props.set)}
           >
             <module.default components={components} />
           </DocsLayout>
