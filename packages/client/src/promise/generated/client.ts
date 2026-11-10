@@ -91,6 +91,8 @@ import type {
   ExperimentalSessionImportOutput,
   ExperimentalSessionExportInput,
   ExperimentalSessionExportOutput,
+  ExperimentalSessionTurnInput,
+  ExperimentalSessionTurnOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -1092,6 +1094,17 @@ export function make(options: ClientOptions) {
               query: { sanitize: input["sanitize"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404, 500],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        turn: (input: ExperimentalSessionTurnInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionTurnOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/turn/${encodeURIComponent(input.inputID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
               empty: false,
             },
             requestOptions,
@@ -2699,6 +2712,8 @@ export function make(options: ClientOptions) {
       import: client.experimental.session.import,
       /** @deprecated Use `client.experimental.session.export`. Removed in the next minor. */
       export: client.experimental.session.export,
+      /** @deprecated Use `client.experimental.session.turn`. Removed in the next minor. */
+      turn: client.experimental.session.turn,
       /** @deprecated Use `client.experimental.session.skill`. Removed in the next minor. */
       skill: client.experimental.session.skill,
       /** @deprecated Use `client.experimental.session.wait`. Removed in the next minor. */

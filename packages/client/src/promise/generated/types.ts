@@ -591,6 +591,47 @@ export type SessionMessageIdle = {
   error?: SessionStructuredError
 }
 
+export type SessionTurnInfo =
+  | { sessionID: SessionID; inputID: SessionMessageID; status: "pending" }
+  | {
+      sessionID: SessionID
+      inputID: SessionMessageID
+      turnID: SessionMessageID
+      cost: MoneyUSD
+      tokens: TokenUsageInfo
+      assistantMessageID?: SessionMessageID
+      status: "running"
+    }
+  | {
+      sessionID: SessionID
+      inputID: SessionMessageID
+      turnID: SessionMessageID
+      cost: MoneyUSD
+      tokens: TokenUsageInfo
+      assistantMessageID?: SessionMessageID
+      status: "settled"
+    }
+  | {
+      sessionID: SessionID
+      inputID: SessionMessageID
+      turnID: SessionMessageID
+      cost: MoneyUSD
+      tokens: TokenUsageInfo
+      assistantMessageID?: SessionMessageID
+      status: "failed"
+      error: SessionStructuredError
+    }
+  | {
+      sessionID: SessionID
+      inputID: SessionMessageID
+      turnID: SessionMessageID
+      cost: MoneyUSD
+      tokens: TokenUsageInfo
+      assistantMessageID?: SessionMessageID
+      status: "interrupted"
+      reason: "user" | "superseded" | "inactivity" | "cancelled"
+    }
+
 export type FormNumberField = {
   key: string
   title?: string
@@ -1652,6 +1693,16 @@ export type SessionUsageRecorded = {
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
   data: { sessionID: SessionID; source: "title" | "compaction" | "generate"; cost: MoneyUSD; tokens: TokenUsageInfo }
+}
+
+export type SessionTurnSettled = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.turn.settled"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID }
 }
 
 export type LocationShutdown = {
@@ -2842,6 +2893,7 @@ export type SessionEventDurable =
   | SessionRevertCommitted
   | SessionUsageRecorded
   | SessionMessageContentUpdated
+  | SessionTurnSettled
 
 export type V2Event =
   | LocationShutdown
@@ -3858,6 +3910,10 @@ export type ExperimentalSessionImportOutput = { data: SessionInfo }["data"]
 export type ExperimentalSessionExportInput = { readonly sessionID: string; readonly sanitize?: boolean | undefined }
 
 export type ExperimentalSessionExportOutput = { data: SessionTransferData }["data"]
+
+export type ExperimentalSessionTurnInput = { readonly sessionID: string; readonly inputID: string }
+
+export type ExperimentalSessionTurnOutput = { data: SessionTurnInfo }["data"]
 
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: string
@@ -4880,6 +4936,12 @@ export type SessionExportInput = ExperimentalSessionExportInput
 
 /** @deprecated Use `ExperimentalSessionExportOutput`. Removed in the next minor. */
 export type SessionExportOutput = ExperimentalSessionExportOutput
+
+/** @deprecated Use `ExperimentalSessionTurnInput`. Removed in the next minor. */
+export type SessionTurnInput = ExperimentalSessionTurnInput
+
+/** @deprecated Use `ExperimentalSessionTurnOutput`. Removed in the next minor. */
+export type SessionTurnOutput = ExperimentalSessionTurnOutput
 
 /** @deprecated Use `ExperimentalSessionSkillInput`. Removed in the next minor. */
 export type SessionSkillInput = ExperimentalSessionSkillInput

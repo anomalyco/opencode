@@ -17,6 +17,7 @@ import type { Session } from "@opencode/schema/session"
 import type { CompactionPayload, MovePayload, SyntheticPayload } from "@opencode/schema/session-inbox"
 import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
+import type { SessionTurn } from "@opencode/schema/session-turn"
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 type SessionMessageData = DistributiveOmit<
@@ -81,6 +82,20 @@ export const SessionTable = sqliteTable(
       .on(table.time_suspended)
       .where(sql`${table.time_suspended} is not null`),
   ],
+)
+
+export const SessionTurnTable = sqliteTable(
+  "session_turn",
+  {
+    id: text().$type<SessionMessage.ID>().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    status: text().$type<SessionTurn.Info["status"]>().notNull(),
+    data: text({ mode: "json" }).$type<SessionTurn.Result>(),
+  },
+  (table) => [index("session_turn_session_status_idx").on(table.session_id, table.status)],
 )
 
 export const SessionMessageTable = sqliteTable(

@@ -45,6 +45,8 @@ import { Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
+import { SessionTurnStore } from "./session/turn.js"
+import type { SessionTurn } from "@opencode/schema/session-turn"
 import { InstructionState } from "./session/instruction-state.js"
 import { SessionGenerate } from "./session/generate.js"
 import { SessionCommand } from "./session/command.js"
@@ -176,6 +178,10 @@ export interface Interface {
    * unhandled compaction barriers.
    */
   readonly inbox: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInbox.Info[], NotFoundError>
+  readonly turn: (input: {
+    sessionID: SessionSchema.ID
+    inputID: SessionMessage.ID
+  }) => Effect.Effect<SessionTurn.Info | undefined, NotFoundError>
   /** Experimental: {@link Interface.inbox} with files stored in `blob` left as `media:` refs when the session's location enables `experimental.media_blob`. */
   readonly inboxWithRefs: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInbox.MediaInfo[], NotFoundError>
   readonly cancelInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
@@ -459,6 +465,10 @@ const layer = Layer.effect(
         })
       }),
       inbox: (sessionID) => sessions.forSession(sessionID).inbox(),
+      turn: Effect.fn("Session.turn")(function* (input) {
+        yield* result.get(input.sessionID)
+        return yield* SessionTurnStore.get(db, input)
+      }),
       inboxWithRefs: Effect.fn("Session.inboxWithRefs")(function* (sessionID) {
         const session = yield* result.get(sessionID)
         if (!(yield* mediaBlob(session))) return yield* result.inbox(sessionID)
