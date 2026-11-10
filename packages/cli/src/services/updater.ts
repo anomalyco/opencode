@@ -113,6 +113,8 @@ export interface Interface {
   readonly check: () => Effect.Effect<CheckResult | undefined, Error>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
+  /** Explains how to update a copy that Volta, mise or Nix manages, which `method` leaves undetected. */
+  readonly managed: (version?: string) => Effect.Effect<UpgradeError | undefined, Error>
   readonly latest: (method?: Method) => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
   readonly removal: (
@@ -163,16 +165,37 @@ const make = Effect.gen(function* () {
   )
   // WinGet extracts portable packages into a directory named after the package identifier.
   const installedWinget = /[\\/]winget[\\/]packages[\\/]anomaly\.opencode_/i.test(executable)
+  // These tools use npm's package layout but keep their own record of the installed version, so updating the copy
+  // in place would leave that record stale. mise's npm backend installs into installs/npm-<name>/<version>; npm
+  // globals under a mise or asdf Node (installs/node/<version>) are ordinary npm installs.
+  const installedOwner = !installedPackage
+    ? undefined
+    : /[\\/]tools[\\/]image[\\/]packages[\\/]/.test(executable)
+      ? ("Volta" as const)
+      : /[\\/]installs[\\/]npm-[^\\/]+[\\/]/.test(executable)
+        ? ("mise" as const)
+        : executable.startsWith("/nix/store/")
+          ? ("Nix" as const)
+          : undefined
   // npm keeps global packages in <prefix>/lib/node_modules on POSIX. The npm on PATH may belong to another Node
   // install (fnm, nvm, mise) or prefix, so target the prefix that owns the running binary. Windows uses
   // <prefix>\node_modules, which Bun and pnpm global installs share, so it keeps the npm on PATH.
+  const packageDirectory = path.dirname(path.dirname(executable))
+  const npmPackageDirectory = installedPackage ? path.join("/lib/node_modules", installedPackage) : undefined
   const npmPrefix =
-    installedPackage && process.platform !== "win32" ? /^(.+)\/lib\/node_modules\//.exec(executable)?.[1] : undefined
+    npmPackageDirectory &&
+    !installedOwner &&
+    process.platform !== "win32" &&
+    packageDirectory.endsWith(npmPackageDirectory)
+      ? packageDirectory.slice(0, -npmPackageDirectory.length) || undefined
+      : undefined
   const npmPrefixArgs = npmPrefix ? ["--prefix", npmPrefix] : []
-  const npm =
-    npmPrefix && (yield* fs.exists(path.join(npmPrefix, "bin", "npm")).pipe(Effect.orElseSucceed(() => false)))
-      ? path.join(npmPrefix, "bin", "npm")
-      : "npm"
+  const npmBin = npmPrefix ? path.join(npmPrefix, "bin") : undefined
+  const prefixNpm =
+    npmBin && (yield* fs.exists(path.join(npmBin, "npm")).pipe(Effect.orElseSucceed(() => false)))
+      ? path.join(npmBin, "npm")
+      : undefined
+  const npm = prefixNpm ?? "npm"
 
   const readPolicy = Effect.fnUntraced(function* () {
     const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -185,8 +208,14 @@ const make = Effect.gen(function* () {
   })
 
   const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "30 seconds") {
+    // The prefix's npm and the package's postinstall run `node` from PATH, which may be missing or belong to another
+    // Node install, so put the prefix's own node first.
+    const options =
+      command[0] === prefixNpm
+        ? { env: { PATH: [npmBin, process.env.PATH].filter(Boolean).join(path.delimiter) }, extendEnv: true }
+        : undefined
     return yield* appProcess
-      .run(ChildProcess.make(command[0], command.slice(1)), {
+      .run(ChildProcess.make(command[0], command.slice(1), options), {
         timeout,
         maxOutputBytes: 100_000,
         maxErrorBytes: 100_000,
@@ -228,7 +257,7 @@ const make = Effect.gen(function* () {
     if (executable === curlBinary) return "curl"
     if (installedFormula) return "brew"
     if (installedWinget) return "winget"
-    if (!installedPackage) return
+    if (!installedPackage || installedOwner) return
 
     const parts = executable.toLowerCase().split(path.sep).map((part) => part.replace(/^\./, ""))
     const checks: Array<{ method: Method; command: string[] }> = [
@@ -377,6 +406,33 @@ const make = Effect.gen(function* () {
         method === "winget" ? wingetVersion() : release(method).pipe(Effect.map((data) => data.version)),
       ),
     )
+
+  const managedError = (target: string) => {
+    if (installedOwner === "Nix")
+      return new UpgradeError({
+        title: "OpenCode is managed by Nix",
+        detail: "This copy is in the read-only Nix store, so OpenCode can't update it.",
+        retry: "Update OpenCode through your Nix configuration.",
+      })
+    return new UpgradeError({
+      title: `OpenCode is managed by ${installedOwner}`,
+      detail: `This copy was installed with ${installedOwner}, which keeps its own record of the installed version, so OpenCode won't update it directly.`,
+      command: installedOwner === "Volta" ? `volta install ${target}` : `mise use -g npm:${target}`,
+      retry: "Run the command above, then restart OpenCode.",
+    })
+  }
+
+  const managedMessage = (error: UpgradeError) =>
+    `${error.title}. ${error.command ? `Update it with ${error.command}` : error.retry}`
+
+  const managed = Effect.fnUntraced(function* (input?: string) {
+    if (!installedOwner) return
+    if (input !== undefined && !parseReleaseVersion(input))
+      return yield* Effect.fail(new Error(`Invalid version: ${input}`))
+    if (installedOwner === "Nix") return managedError("")
+    const data = yield* release("npm")
+    return managedError(`${data.package}@${input?.trim().replace(/^v/, "") ?? data.version}`)
+  })
 
   const temporaryDirectory = (prefix: string) =>
     Effect.acquireRelease(fs.makeTempDirectory({ directory: global.cache, prefix }), (directory) =>
@@ -545,7 +601,7 @@ const make = Effect.gen(function* () {
     // A package manager can succeed while updating a different copy, for example another prefix. pnpm keeps each
     // version in its own store directory, so the running copy never changes there.
     if (installedPackage !== packageName || !(method === "npm" || method === "bun" || method === "yarn")) return
-    const installed = yield* fs.readFileString(path.join(path.dirname(path.dirname(executable)), "package.json")).pipe(
+    const installed = yield* fs.readFileString(path.join(packageDirectory, "package.json")).pipe(
       Effect.map((text) => Option.getOrUndefined(decodeManifestVersion(text))?.version),
       Effect.orElseSucceed(() => undefined),
     )
@@ -603,12 +659,15 @@ const make = Effect.gen(function* () {
   })
 
   const apply = Effect.fn("cli.updater.apply")(function* (version: string) {
-    if (!(yield* install(version)))
-      return yield* Effect.fail(
-        new Error(
-          "Could not detect the installation method. Update with your package manager or download the latest release.",
-        ),
-      )
+    if (yield* install(version)) return
+    const error = yield* managed(version)
+    return yield* Effect.fail(
+      new Error(
+        error
+          ? managedMessage(error)
+          : "Could not detect the installation method. Update with your package manager or download the latest release.",
+      ),
+    )
   })
 
   const check = Effect.fn("cli.updater.check")(function* () {
@@ -618,6 +677,14 @@ const make = Effect.gen(function* () {
         message: "This build runs from a source checkout. Use an installed OpenCode release to check for updates.",
       }
     const detected = yield* method()
+    if (!detected && installedOwner) {
+      const data = yield* release("npm")
+      if (action(OPENCODE_VERSION, data.version, "auto") === "none") return undefined
+      return {
+        type: "unavailable" as const,
+        message: managedMessage(managedError(`${data.package}@${data.version}`)),
+      }
+    }
     if (!detected)
       return {
         type: "unavailable" as const,
@@ -648,7 +715,7 @@ const make = Effect.gen(function* () {
     Effect.catch((error) => Effect.logWarning("update check failed", { error }).pipe(Effect.as(undefined))),
   )
 
-  return Service.of({ run, check, apply, method, latest, upgrade, removal })
+  return Service.of({ run, check, apply, method, managed, latest, upgrade, removal })
 })
 
 export const layer = Layer.effect(Service, make)

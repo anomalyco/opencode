@@ -26,7 +26,10 @@ function fixture(
   failCleanup = false,
   releasePackage = name,
   formula?: string,
-  executableOverride?: (root: string, home: string) => Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem>,
+  executableOverride?: (
+    root: string,
+    home: string,
+  ) => Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem>,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -39,12 +42,12 @@ function fixture(
       ? yield* executableOverride(root, path.join(root, "home"))
       : formula
         ? path.join(root, "Cellar", formula, "2.0.20", "bin", "opencode")
-        : path.join(modules, "@opencode", "cli", "bin", "opencode")
+        : path.join(modules, ...name.split("/"), "bin", "opencode")
     yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
     yield* fs.writeFileString(executable, "binary")
     if (!formula && !executableOverride)
       yield* fs.writeFileString(
-        path.join(modules, "@opencode", "cli", "package.json"),
+        path.join(modules, ...name.split("/"), "package.json"),
         JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
       )
     const requests: string[] = []
@@ -84,7 +87,8 @@ function fixture(
       yield* fs.writeFileString(bash, "bash")
     }
     const commands: string[][] = []
-    const manifest = path.join(modules, "@opencode", "cli", "package.json")
+    const paths: Array<string | undefined> = []
+    const manifest = path.join(modules, ...name.split("/"), "package.json")
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
       Effect.provide(
@@ -118,6 +122,7 @@ function fixture(
               const args = command.args.map(String)
               const lookup = command.command === "git" && args[0] === "--exec-path"
               if (!lookup) commands.push([command.command, ...args])
+              if (!lookup) paths.push(command.options.env?.PATH?.toString())
               const result = lookup
                 ? { stdout: Buffer.from(`${path.join(git, "mingw64", "libexec", "git-core")}\n`) }
                 : respond({ command: command.command, args })
@@ -143,7 +148,7 @@ function fixture(
     const prefix = yield* fs.realPath(root)
     // Windows keeps the npm on PATH and its default prefix.
     const prefixArgs = process.platform === "win32" ? [] : ["--prefix", prefix]
-    return { updater, commands, requests, global, fs, executable, bash, prefix, prefixArgs }
+    return { updater, commands, paths, requests, global, fs, executable, bash, prefix, prefixArgs }
   })
 }
 
@@ -181,8 +186,8 @@ installs.forEach(({ method, command }) => {
   )
 })
 
-// Version managers such as fnm give each Node install its own prefix, while the npm on PATH may belong to another one.
-const stale = (npm: boolean) =>
+// Installs a 2.2.7 package at <root>/<directory>, optionally with an npm in <root>/bin.
+const installed = (directory: string[], npm = false) =>
   fixture(
     () => ({}),
     "@opencode/cli",
@@ -192,45 +197,111 @@ const stale = (npm: boolean) =>
     (root) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem
-        const modules = path.join(root, "lib", "node_modules")
-        yield* fs.makeDirectory(path.join(modules, "@opencode", "cli"), { recursive: true })
+        const pkg = path.join(root, ...directory)
+        yield* fs.makeDirectory(pkg, { recursive: true })
         yield* fs.writeFileString(
-          path.join(modules, "@opencode", "cli", "package.json"),
+          path.join(pkg, "package.json"),
           JSON.stringify({ name: "@opencode/cli", version: "2.2.7", bin: { opencode: "bin/opencode" } }),
         )
         if (npm) {
           yield* fs.makeDirectory(path.join(root, "bin"), { recursive: true })
           yield* fs.writeFileString(path.join(root, "bin", "npm"), "npm")
         }
-        return path.join(modules, "@opencode", "cli", "bin", "opencode")
+        return path.join(pkg, "bin", "opencode")
       }),
   )
+const npmGlobal = ["lib", "node_modules", "@opencode", "cli"]
 
-unix("npm runs from the prefix that owns the running binary", () =>
+// Version managers such as fnm give each Node install its own prefix, while the npm on PATH may belong to another one.
+unix("npm runs from the prefix that owns the running binary with that prefix's node first on PATH", () =>
   Effect.gen(function* () {
-    const test = yield* stale(true)
+    const test = yield* installed(npmGlobal, true)
+    const npm = path.join(test.prefix, "bin", "npm")
     yield* test.updater.method()
-    expect(test.commands[0]).toEqual([
-      path.join(test.prefix, "bin", "npm"),
-      "list",
-      "-g",
-      "--depth=0",
-      "--prefix",
-      test.prefix,
-      "@opencode/cli",
+    yield* test.updater.upgrade("npm", "2.2.7")
+    const removal = test.updater.removal("npm")
+    if (!removal) return yield* Effect.die("Expected npm removal command")
+    yield* removal.run
+    expect(test.commands[0]).toEqual([npm, "list", "-g", "--depth=0", "--prefix", test.prefix, "@opencode/cli"])
+    expect(test.commands.slice(5).map((command) => command.slice(0, 5))).toEqual([
+      [npm, "install", "--global", "--prefix", test.prefix],
+      [npm, "uninstall", "--global", "--prefix", test.prefix],
     ])
+    const first = path.join(test.prefix, "bin") + path.delimiter
+    expect(test.paths.map((value) => value?.startsWith(first) ?? false)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+    ])
+  }),
+)
+
+unix("npm only derives a prefix when the running package is that prefix's global package", () =>
+  Effect.gen(function* () {
+    const test = yield* installed(["lib", "node_modules", "wrapper", "node_modules", "@opencode", "cli"], true)
+    yield* test.updater.method()
+    expect(test.commands[0]).toEqual(["npm", "list", "-g", "--depth=0", "@opencode/cli"])
+    expect(test.paths[0]).toBeUndefined()
   }),
 )
 
 it.live("npm upgrades fail when the running copy keeps its old version", () =>
   Effect.gen(function* () {
-    const test = yield* stale(false)
+    const test = yield* installed(npmGlobal)
     const error = yield* test.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
     expect(test.commands).toHaveLength(1)
     expect(error).toBeInstanceOf(Updater.UpgradeError)
     expect(error.message).toBe(
       `npm reported success, but ${yield* test.fs.realPath(test.executable)} is still version 2.2.7.`,
     )
+  }),
+)
+
+const managers = [
+  {
+    name: "Volta",
+    directory: ["volta", "tools", "image", "packages", "@opencode", "cli", ...npmGlobal],
+    command: "volta install @opencode/cli",
+  },
+  {
+    name: "mise",
+    directory: ["mise", "installs", "npm-opencode-cli", "2.2.7", ...npmGlobal],
+    command: "mise use -g npm:@opencode/cli",
+  },
+] as const
+
+managers.forEach((manager) => {
+  it.live(`${manager.name} installs print the ${manager.name} command instead of updating in place`, () =>
+    Effect.gen(function* () {
+      const test = yield* installed([...manager.directory], true)
+      expect(yield* test.updater.method()).toBeUndefined()
+      const latest = yield* test.updater.managed()
+      const pinned = yield* test.updater.managed("v2.2.6")
+      expect(latest?.title).toBe(`OpenCode is managed by ${manager.name}`)
+      expect(latest?.command).toBe(`${manager.command}@2.3.4`)
+      expect(pinned?.command).toBe(`${manager.command}@2.2.6`)
+      const applied = yield* test.updater.apply("2.3.4").pipe(Effect.flip)
+      expect(applied.message).toBe(`OpenCode is managed by ${manager.name}. Update it with ${manager.command}@2.3.4`)
+      // An explicit --method keeps its existing command, and the version check reports the untouched copy.
+      const explicit = yield* test.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
+      expect(explicit.message).toContain("is still version 2.2.7")
+      expect(test.commands).toEqual([
+        ["npm", "install", "--global", "--allow-scripts=@opencode/cli", "--force", "@opencode/cli@2.3.4"],
+      ])
+    }),
+  )
+})
+
+it.live("npm globals under a mise Node stay npm installs", () =>
+  Effect.gen(function* () {
+    const test = yield* installed(["mise", "installs", "node", "24.22.2", ...npmGlobal])
+    expect(yield* test.updater.managed()).toBeUndefined()
+    yield* test.updater.method()
+    expect(test.commands).toHaveLength(5)
   }),
 )
 
