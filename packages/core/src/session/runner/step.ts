@@ -176,9 +176,12 @@ export const make = Effect.gen(function* () {
           return yield* Effect.failCause(stream.cause)
         if (publisher.hasStarted()) yield* publisher.streamed()
         if (streamInterrupted) yield* stopTools
-        const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
+        const fibers = toolRuns.map((run) => run.fiber)
+        const joined = yield* restore(Fiber.awaitAll(fibers)).pipe(Effect.exit)
         if (!streamInterrupted && Exit.isFailure(joined)) yield* stopTools
-        const tools = classifyToolExits(joined, toolRuns)
+        // Read each tool's exit once all have ended, so what they raised while stopping (a decline, a defect) counts.
+        const exits = Exit.isSuccess(joined) ? joined.value : yield* Fiber.awaitAll(fibers)
+        const tools = classifyToolExits(exits, toolRuns, Exit.hasInterrupts(joined))
 
         if (
           !publisher.record().outputStarted &&
@@ -328,10 +331,11 @@ const isInterruptedStream = (failure: AIError) => {
 
 /** Tool.Error settles in each fiber; only user declines remain in the typed error channel. */
 const classifyToolExits = (
-  settled: Exit.Exit<Array<Exit.Exit<void, Permission.DeclinedError | QuestionTool.CancelledError>>>,
+  exits: ReadonlyArray<Exit.Exit<void, Permission.DeclinedError | QuestionTool.CancelledError>>,
   runs: ReadonlyArray<{ readonly call: ToolCall }>,
+  // The step was interrupted while it waited for its tools.
+  interruptedWhileWaiting: boolean,
 ) => {
-  const exits = Exit.isSuccess(settled) ? settled.value : []
   const declines = exits.flatMap((exit, index) =>
     Exit.isFailure(exit)
       ? exit.cause.reasons.flatMap((reason) =>
@@ -339,9 +343,7 @@ const classifyToolExits = (
         )
       : [],
   )
-  const causes = Exit.isFailure(settled)
-    ? [settled.cause]
-    : exits.flatMap((exit) => (Exit.isFailure(exit) ? [exit.cause] : []))
+  const causes = exits.flatMap((exit) => (Exit.isFailure(exit) ? [exit.cause] : []))
   const failure = causes
     .flatMap((cause) => {
       if (Cause.hasInterrupts(cause)) return []
@@ -349,7 +351,7 @@ const classifyToolExits = (
       return reasons.length > 0 ? [Cause.fromReasons<never>(reasons)] : []
     })
     .at(0)
-  return { interrupted: causes.some(Cause.hasInterrupts), declines, failure }
+  return { interrupted: interruptedWhileWaiting || causes.some(Cause.hasInterrupts), declines, failure }
 }
 
 // How long a user's stop waits for the tools it asked to stop before interrupting them.
@@ -361,7 +363,7 @@ type Cancel = ReturnType<typeof makeCancel>
  * A tool call's `cancel`. `trigger` completes it, and reports whether the tool was awaiting it, so would stop on its
  * own; a tool that was not is interrupted instead.
  */
-export const makeCancel = () => {
+const makeCancel = () => {
   let listeners = 0
   let cancelled = false
   const gate = Deferred.makeUnsafe<void>()

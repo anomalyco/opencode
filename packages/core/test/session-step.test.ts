@@ -18,11 +18,12 @@ import { SessionStep } from "@opencode/core/session/runner/step"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Tool } from "@opencode/core/tool"
+import { Permission } from "@opencode/core/permission"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Money } from "@opencode/schema/money"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { asc, eq } from "drizzle-orm"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -231,7 +232,12 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
 
 // Interrupts an attempt running a tool that stops on `cancel` and one that never does, and returns how the step and
 // its calls were recorded.
-const stopTwoTools = (how: { reason: "user" | "shutdown"; locationClosed: boolean }) =>
+const stopTwoTools = (how: {
+  reason: "user" | "shutdown"
+  locationClosed: boolean
+  // What the cooperative tool does once asked to stop; by default it fails with its partial output.
+  stopped?: Effect.Effect<never, Permission.DeclinedError>
+}) =>
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const llm = yield* TestLLM.Test
@@ -269,6 +275,8 @@ const stopTwoTools = (how: { reason: "user" | "shutdown"; locationClosed: boolea
         LLMEvent.toolCall({ id: "call-stuck", name: "test", input: {} }),
       ),
     )
+    const stopped: Effect.Effect<never, Permission.DeclinedError | Tool.Error> =
+      how.stopped ?? Effect.fail(new Tool.Error({ message: "partial output", metadata: { interrupted: true } }))
     const listening = yield* Deferred.make<void>()
     const stuck = yield* Deferred.make<void>()
     let interrupted = false
@@ -289,9 +297,7 @@ const stopTwoTools = (how: { reason: "user" | "shutdown"; locationClosed: boolea
               ? // Like the shell tool: stops on `cancel` and fails with what it has.
                 Deferred.succeed(listening, undefined).pipe(
                   Effect.andThen(input.cancel ?? Effect.never),
-                  Effect.andThen(
-                    Effect.fail(new Tool.Error({ message: "partial output", metadata: { interrupted: true } })),
-                  ),
+                  Effect.andThen(stopped),
                 )
               : Deferred.succeed(stuck, undefined).pipe(
                   Effect.andThen(Effect.never),
@@ -351,6 +357,40 @@ for (const locationClosed of [false, true])
         })
       }),
   )
+
+// The provider stream has completed when the step is stopped, so the stop arrives while the step waits for its tools.
+it.live("classifies what a tool raises while the user's stop settles it: a decline", () =>
+  Effect.gen(function* () {
+    const { exit, data } = yield* stopTwoTools({
+      reason: "user",
+      locationClosed: false,
+      stopped: Effect.fail(new Permission.DeclinedError()),
+    })
+    expect(Exit.hasInterrupts(exit)).toBe(true)
+    expect(data).toMatchObject({
+      error: { type: "aborted", message: "Step interrupted" },
+      content: [
+        {
+          type: "tool",
+          id: "call-cooperative",
+          state: { status: "error", error: { type: "aborted", message: "The user declined this tool call" } },
+        },
+        {
+          type: "tool",
+          id: "call-stuck",
+          state: { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } },
+        },
+      ],
+    })
+  }),
+)
+
+it.live("classifies what a tool raises while the user's stop settles it: a defect", () =>
+  Effect.gen(function* () {
+    const { exit } = yield* stopTwoTools({ reason: "user", locationClosed: false, stopped: Effect.die("tool broke") })
+    expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true)
+  }),
+)
 
 it.live("interrupts every tool on a server shutdown", () =>
   Effect.gen(function* () {
