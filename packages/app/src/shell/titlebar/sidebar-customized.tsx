@@ -548,15 +548,16 @@ export function SidebarCustomized(props: {
       on ? [...new Set([...values, value])] : values.filter((item) => item !== value),
     )
 
+  // Row status is only worked out when it changes the view, so read the unread state directly.
+  const isUnread = (row: Row) =>
+    !!row.session && !!ctxOf(row.server)?.notification.session.unread(row.session.id, row.session)
+
   const markAllRead = () =>
     visibleRows().forEach((row) => {
-      if (row.session && row.status === "unread") ctxOf(row.server)?.notification.session.markViewed(row.session.id)
+      if (row.session && isUnread(row)) ctxOf(row.server)?.notification.session.markViewed(row.session.id)
     })
 
-  const anyUnread = () =>
-    visibleRows().some(
-      (row) => row.session && ctxOf(row.server)?.notification.session.unread(row.session.id, row.session),
-    )
+  const anyUnread = () => visibleRows().some(isUnread)
 
   const filterCount = () => local.filters.status.length + local.filters.server.length + local.filters.project.length
 
