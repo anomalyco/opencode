@@ -274,9 +274,6 @@ export function SidebarCustomized(props: {
 
   const result = createMemo(() => sidebarView(rows(), state()))
 
-  const allGroupKeys = () =>
-    result().groups.flatMap((group) => [group.key, ...(group.children ?? []).map((child) => child.key)])
-
   const visibleRows = () =>
     result()
       .groups.flatMap((group) => [group, ...(group.children ?? [])])
@@ -336,7 +333,7 @@ export function SidebarCustomized(props: {
     })
   }
 
-  const sessionRow = (row: Row, group: SidebarGroup<Row>, byKey: Map<string, Row>, base: number) => (
+  const sessionRow = (row: Row, group: SidebarGroup<Row>, byKey: Map<string, Row>) => (
     <Show when={row.session && row.conn && { session: row.session, conn: row.conn }}>
       {(item) => (
         <ProjectSessionRow
@@ -345,14 +342,14 @@ export function SidebarCustomized(props: {
           openTab={false}
           active={row.active}
           label={showLabel(row, group)}
-          depth={base + depthOf(row, byKey)}
+          depth={depthOf(row, byKey)}
           onOpen={() => openSession(row)}
         />
       )}
     </Show>
   )
 
-  const leafSection = (group: SidebarGroup<Row>, depth: number): TabStripSection => {
+  const leafSection = (group: SidebarGroup<Row>): TabStripSection => {
     const byKey = new Map(group.rows.map((row) => [row.key, row]))
 
     const footerRows = group.rows.filter((row) => !anchorOf(row, byKey).open)
@@ -365,13 +362,12 @@ export function SidebarCustomized(props: {
 
     return {
       key: group.key,
-      indent: depth ? depth * 14 : undefined,
       tabs: group.collapsed ? [] : group.rows.flatMap((row) => (row.open && row.tab ? [row.tab] : [])),
-      header: group.kind === "all" ? undefined : <GroupHeader group={group} depth={depth} />,
+      header: group.kind === "all" ? undefined : <GroupHeader group={group} />,
       footer: group.collapsed ? undefined : (
         <>
           <For each={footerRows.filter((row) => shown.has(anchorOf(row, byKey)))}>
-            {(row) => sessionRow(row, group, byKey, depth)}
+            {(row) => sessionRow(row, group, byKey)}
           </For>
           <Show when={topLevel.length > limit}>
             <Button
@@ -390,11 +386,12 @@ export function SidebarCustomized(props: {
 
   const sections = createMemo(() =>
     result().groups.flatMap((group): TabStripSection[] => {
-      if (!group.children) return [leafSection(group, 0)]
+      if (!group.children) return [leafSection(group)]
 
+      // Server → Project keeps every row at one inset: the server reads as a section label above its projects.
       return [
-        { key: group.key, tabs: [], header: <GroupHeader group={group} depth={0} /> },
-        ...(group.collapsed ? [] : group.children.map((child) => leafSection(child, 1))),
+        { key: group.key, tabs: [], header: <GroupHeader group={group} /> },
+        ...(group.collapsed ? [] : group.children.map(leafSection)),
       ]
     }),
   )
@@ -412,7 +409,7 @@ export function SidebarCustomized(props: {
 
     if (children.length === 0) return
 
-    return <For each={children}>{(row) => sessionRow(row, group, byKey, 0)}</For>
+    return <For each={children}>{(row) => sessionRow(row, group, byKey)}</For>
   }
 
   const tabLabel = (tab: Tab) => {
@@ -423,8 +420,10 @@ export function SidebarCustomized(props: {
     return row ? showLabel(row, groupOf(key)) : undefined
   }
 
-  function GroupHeader(headerProps: { group: SidebarGroup<Row>; depth: number }) {
+  function GroupHeader(headerProps: { group: SidebarGroup<Row> }) {
     const group = () => headerProps.group
+
+    const section = () => !!group().children
 
     const project = () => (group().kind === "project" ? projectLabels().get(group().id) : undefined)
 
@@ -472,13 +471,23 @@ export function SidebarCustomized(props: {
 
     return (
       <div
-        class="group/sidebar-group relative flex h-7 min-w-0 shrink-0 items-center rounded-[6px] pe-1 hover:bg-v2-overlay-simple-overlay-hover has-[:focus-visible]:bg-v2-overlay-simple-overlay-hover"
-        style={headerProps.depth ? { "padding-inline-start": `${headerProps.depth * 14}px` } : undefined}
+        class="group/sidebar-group relative flex min-w-0 shrink-0 items-center rounded-[6px] pe-1"
+        classList={{
+          "h-7 hover:bg-v2-overlay-simple-overlay-hover has-[:focus-visible]:bg-v2-overlay-simple-overlay-hover":
+            !section(),
+          "h-6 mt-2 first:mt-0": section(),
+        }}
         data-sidebar-group={group().key}
       >
         <button
           type="button"
-          class="flex h-full min-w-0 flex-1 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-2 text-start text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-muted [font-weight:440] group-hover/sidebar-group:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+          class="flex h-full min-w-0 flex-1 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-2 text-start leading-[var(--line-height-compact)] focus-visible:outline-none"
+          classList={{
+            "text-[13px] text-v2-text-text-muted [font-weight:440] group-hover/sidebar-group:text-v2-text-text-base focus-visible:text-v2-text-text-base":
+              !section(),
+            "text-[12px] font-medium text-v2-text-text-faint hover:text-v2-text-text-muted focus-visible:text-v2-text-text-muted":
+              section(),
+          }}
           aria-expanded={!group().collapsed}
           onClick={() => setView("collapsed", group().key, !view.collapsed[group().key])}
         >
@@ -559,19 +568,12 @@ export function SidebarCustomized(props: {
           state={state()}
           servers={serverOptions()}
           projects={projectOptions()}
-          canToggleAll={view.grouping !== "none" && allGroupKeys().length > 0}
-          allCollapsed={allGroupKeys().every((key) => view.collapsed[key])}
           canMarkRead={anyUnread()}
           onGrouping={(value) => setView("grouping", value)}
           onOrdering={(value) => setView("ordering", value)}
           onShow={(key, value) => setView("show", key, value)}
           onFilter={toggleFilter}
           onResetFilters={() => setLocal("filters", { status: [], server: [], project: [] })}
-          onToggleAll={() => {
-            const collapse = !allGroupKeys().every((key) => view.collapsed[key])
-
-            allGroupKeys().forEach((key) => setView("collapsed", key, collapse))
-          }}
           onMarkRead={markAllRead}
         />
         <IconButton

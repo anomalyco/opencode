@@ -23,20 +23,20 @@ export function SidebarViewMenu(props: {
   state: SidebarViewState
   servers: { key: string; label: string }[]
   projects: { id: string; label: string }[]
-  canToggleAll: boolean
-  allCollapsed: boolean
   canMarkRead: boolean
   onGrouping: (value: SidebarGrouping) => void
   onOrdering: (value: SidebarOrdering) => void
   onShow: (key: SidebarShowKey, value: boolean) => void
   onFilter: (kind: SidebarFilterKind, value: string, on: boolean) => void
   onResetFilters: () => void
-  onToggleAll: () => void
   onMarkRead: () => void
 }): JSX.Element {
   const language = useLanguage()
   const options = (kind: SidebarFilterKind) => filterOptions(kind, props, language.t)
   const active = () => filterCount(props.state)
+
+  // A server filter only narrows anything once more than one server is connected.
+  const filterKinds = () => FILTER_KINDS.filter((kind) => kind !== "server" || props.servers.length > 1)
 
   // Kobalte closes a submenu only when focus leaves it, and hovering a sibling trigger keeps focus in the parent
   // menu, so without this every submenu hovered stays open on top of the next.
@@ -151,46 +151,40 @@ export function SidebarViewMenu(props: {
             </Menu.Portal>
           </Menu.Sub>
           <Menu.Separator />
-          <Menu.Group>
-            <Menu.GroupLabel>{language.t("sidebar.view.filters")}</Menu.GroupLabel>
-            <For each={FILTER_KINDS}>
-              {(kind) => (
-                <Menu.Sub
-                  gutter={4}
-                  overflowPadding={16}
-                  overlap
-                  open={menu.sub === `filter:${kind}`}
-                  onOpenChange={(open) => toggleSub(`filter:${kind}`, open)}
-                >
-                  <SubTrigger label={language.t(`sidebar.view.filter.${kind}`)}>
-                    <Show when={props.state.filters[kind].length > 0}>{props.state.filters[kind].length}</Show>
-                  </SubTrigger>
-                  <Menu.Portal>
-                    <Menu.SubContent class="w-max min-w-[172px] max-w-[280px] !p-0">
-                      <MenuScroll class="max-h-[min(20rem,50dvh)]" viewportClass="p-0.5">
-                        <For each={options(kind)}>
-                          {(option) => (
-                            <Menu.CheckboxItem
-                              checked={selectedValues(props.state, kind).includes(option.value)}
-                              onChange={(on) => props.onFilter(kind, option.value, on)}
-                            >
-                              <span class="min-w-0 truncate">{option.label}</span>
-                            </Menu.CheckboxItem>
-                          )}
-                        </For>
-                      </MenuScroll>
-                    </Menu.SubContent>
-                  </Menu.Portal>
-                </Menu.Sub>
-              )}
-            </For>
-            <Menu.Item disabled={active() === 0} onSelect={() => props.onResetFilters()}>
-              {language.t("sidebar.view.resetFilters")}
-            </Menu.Item>
-          </Menu.Group>
+          <For each={filterKinds()}>
+            {(kind) => (
+              <Menu.Sub
+                gutter={4}
+                overflowPadding={16}
+                overlap
+                open={menu.sub === `filter:${kind}`}
+                onOpenChange={(open) => toggleSub(`filter:${kind}`, open)}
+              >
+                <SubTrigger label={language.t(`sidebar.view.filter.${kind}`)}>
+                  <Show when={props.state.filters[kind].length > 0}>{props.state.filters[kind].length}</Show>
+                </SubTrigger>
+                <Menu.Portal>
+                  <Menu.SubContent class="w-max min-w-[172px] max-w-[280px] !p-0">
+                    <MenuScroll class="max-h-[min(20rem,50dvh)]" viewportClass="p-0.5">
+                      <For each={options(kind)}>
+                        {(option) => (
+                          <Menu.CheckboxItem
+                            checked={selectedValues(props.state, kind).includes(option.value)}
+                            onChange={(on) => props.onFilter(kind, option.value, on)}
+                          >
+                            <span class="min-w-0 truncate">{option.label}</span>
+                          </Menu.CheckboxItem>
+                        )}
+                      </For>
+                    </MenuScroll>
+                  </Menu.SubContent>
+                </Menu.Portal>
+              </Menu.Sub>
+            )}
+          </For>
           <Menu.Separator />
-          <Menu.Item disabled={!props.canToggleAll} onSelect={() => props.onToggleAll()}>
-            {language.t(props.allCollapsed ? "sidebar.view.expandAll" : "sidebar.view.collapseAll")}
+          <Menu.Item disabled={active() === 0} onSelect={() => props.onResetFilters()}>
+            {language.t("sidebar.view.resetFilters")}
           </Menu.Item>
           <Menu.Item disabled={!props.canMarkRead} onSelect={() => props.onMarkRead()}>
             {language.t("sidebar.view.markAllRead")}

@@ -450,8 +450,6 @@ export type TabStripSection = {
   tabs: Tab[]
   header?: JSX.Element
   footer?: JSX.Element
-  /** Inline start inset of the section's tabs in px, for groups nested under another group. */
-  indent?: number
 }
 
 export function TitlebarTabStrip(props: {
@@ -917,16 +915,7 @@ export function TitlebarTabStrip(props: {
                   {(section) => (
                     <>
                       {section().header}
-                      <Show
-                        when={section().indent}
-                        fallback={<For each={section().tabs}>{(tab) => renderTab(tab, section().key)}</For>}
-                      >
-                        {(indent) => (
-                          <div class="flex flex-col" style={{ "padding-inline-start": `${indent()}px` }}>
-                            <For each={section().tabs}>{(tab) => renderTab(tab, section().key)}</For>
-                          </div>
-                        )}
-                      </Show>
+                      <For each={section().tabs}>{(tab) => renderTab(tab, section().key)}</For>
                       {section().footer}
                     </>
                   )}
