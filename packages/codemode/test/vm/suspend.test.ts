@@ -115,7 +115,7 @@ const idempotentManual = () => {
 }
 
 /** A durable tool over an in-memory job table that outlives any one run, as a subagent or job supervisor would. */
-const durableJobs = (options: { startGate?: Promise<void>; flat?: boolean } = {}) => {
+const durableJobs = (options: { startGate?: Promise<void> } = {}) => {
   const jobs = new Map<
     string,
     { input: number; result: ReturnType<typeof latch<number>>; cancelled: number; savedData: Array<unknown> }
@@ -126,7 +126,6 @@ const durableJobs = (options: { startGate?: Promise<void>; flat?: boolean } = {}
   const tool = Tool.make({
     description: "Runs a durable job",
     input: Value,
-    flat: options.flat,
     output: Value,
     execute: Tool.durable({
       start: (input, { key }) =>
@@ -830,9 +829,9 @@ describe("idempotent and durable tools", () => {
     })
   })
 
-  test.each([false, true])("a durable tool preserves input through suspend and resume (flat: %s)", async (flat) => {
+  test("a durable tool refuses suspend during start, allows it once started, and calls wait(data) on resume", async () => {
     const gate = latch()
-    const jobs = durableJobs({ startGate: gate.promise, flat })
+    const jobs = durableJobs({ startGate: gate.promise })
     const events: Array<string> = []
     const hooks: CodeMode.Hooks = {
       "tool.before": (call) => Effect.sync(() => void events.push(`before ${call.key}`)),
@@ -840,7 +839,7 @@ describe("idempotent and durable tools", () => {
     }
     const code = `
       const log = ["before"]
-      const a = await tools.job(${flat ? "41" : "{ value: 41 }"})
+      const a = await tools.job({ value: 41 })
       log.push("after " + a.value)
       return { log, total: a.value + 1 }`
     const run = background(

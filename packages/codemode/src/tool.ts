@@ -1,7 +1,6 @@
 import { Effect, Schema } from "effect"
 import type { Namespace } from "./namespace.js"
 import type { Tools } from "./tools.js"
-import { flatParameters } from "./tool-schema.js"
 
 /**
  * JSON Schema subset for model-visible signatures. CodeMode does not validate values against
@@ -97,7 +96,6 @@ export type Tool<R = never> = {
   readonly _tag: "CodeModeTool"
   readonly description: string
   readonly input: SchemaType
-  readonly parameters?: ReturnType<typeof flatParameters>
   readonly output: SchemaType | undefined
   readonly execute: (input: unknown, context?: ToolContext) => Effect.Effect<unknown, unknown, R>
   readonly mode?: Idempotent<unknown, unknown, R> | Durable<unknown, unknown, R> | undefined
@@ -111,8 +109,6 @@ type ResultType<S> = S extends undefined ? void : S extends Schema.Decoder<unkno
 export type Options<I extends SchemaType, O extends SchemaType | undefined, R = never> = {
   readonly description: string
   readonly input: I
-  /** Expose named top-level fields as positional arguments in schema order. The executor receives the object. */
-  readonly flat?: boolean
   readonly output?: O
   readonly execute:
     | ExecuteFn<InputType<I>, ResultType<O>, R>
@@ -176,7 +172,6 @@ export const make = <I extends SchemaType, const O extends SchemaType | undefine
     _tag: "CodeModeTool",
     description: options.description,
     input: options.input,
-    parameters: options.flat ? flatParameters(options.input) : undefined,
     output: options.output,
     ...(mode === undefined ? {} : { mode }),
     execute: (input, context = { key: crypto.randomUUID() }) => spec(input as InputType<I>, context),

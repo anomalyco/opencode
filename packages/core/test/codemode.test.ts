@@ -35,7 +35,7 @@ describe("CodeMode", () => {
             type: "tool",
             name: "echo",
             description: "Echo text",
-            signature: "tools.echo({\n  text: string,\n}): Promise<string>",
+            signature: "tools.echo(text: string): Promise<string>",
             pinned: true,
           },
           {

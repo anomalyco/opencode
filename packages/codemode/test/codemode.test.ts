@@ -5,128 +5,6 @@ import { CodeMode, Extension, Tool, toolError } from "./lib/index.js"
 const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
 
-test("flat parameters use encoded field types and keep named calls working", async () => {
-  const lookup = Tool.make({
-    description: "Look up an ID",
-    input: Schema.Struct({ id: Schema.NumberFromString.annotate({ identifier: "ID" }) }).annotate({
-      identifier: "Lookup",
-    }),
-    flat: true,
-    output: Schema.Number,
-    execute: ({ id }) => Effect.succeed(id + 1),
-  })
-  const runtime = CodeMode.make({ tools: { lookup } })
-  expect(runtime.catalog[0]?.signature).toBe("tools.lookup(id: string): Promise<number>")
-  expect(
-    await Effect.runPromise(runtime.execute('return [await tools.lookup("1"), await tools.lookup({id:"2"})]')),
-  ).toMatchObject({ ok: true, value: [2, 3] })
-})
-
-test("flat calls preserve field order, nested values, and optional slots", async () => {
-  const scan = Tool.make({
-    description: "Scan a directory",
-    flat: true,
-    input: Schema.Struct({
-      path: Schema.optionalKey(Schema.String),
-      options: Schema.Struct({ recursive: Schema.Boolean }),
-      tags: Schema.optionalKey(Schema.Array(Schema.String)),
-    }),
-    output: Schema.Json,
-    execute: (input) => Effect.succeed(input),
-  })
-  const runtime = CodeMode.make({ tools: { scan } })
-  const signature =
-    "tools.scan(path: string | undefined, options: { recursive: boolean }, tags?: Array<string>): Promise<unknown>"
-  expect(runtime.catalog[0]?.signature).toBe(signature)
-  const run = (code: string) => Effect.runPromise(runtime.execute(code))
-  expect(await run('return search({query:"scan"}).items[0].signature')).toMatchObject({ value: signature })
-  const options = { recursive: true }
-  expect(await run('return await tools.scan("src", {recursive:true}, ["ts"])')).toMatchObject({
-    ok: true,
-    value: { path: "src", options, tags: ["ts"] },
-  })
-  expect(await run("return await tools.scan(undefined, {recursive:true})")).toEqual({
-    ok: true,
-    value: { options },
-    toolCalls: [{ name: "scan" }],
-  })
-  expect(await run("return await tools.scan({options:{recursive:true}})")).toMatchObject({
-    ok: true,
-    value: { options },
-  })
-  expect(await run('return await tools.scan("src")')).toMatchObject({ ok: false, error: { kind: "InvalidToolInput" } })
-  expect(await run('return await tools.scan("src", {recursive:true}, [], 4)')).toMatchObject({
-    ok: false,
-    error: { kind: "InvalidToolInput" },
-    toolCalls: [],
-  })
-})
-
-test("a lone positional object is wrapped only when the named form does not fit", async () => {
-  const input = {
-    type: "object",
-    properties: { item: { type: "object" } },
-    required: ["item"],
-    additionalProperties: false,
-  }
-  const collect = Tool.make({
-    description: "Collect",
-    flat: true,
-    input,
-    output: {},
-    execute: (value) => Effect.succeed(value),
-  })
-  const runtime = CodeMode.make({ tools: { collect } })
-  const result = await Effect.runPromise(
-    runtime.execute(
-      `return [await tools.collect({value:1}), await tools.collect({item:{value:2}}), await tools.collect({item:3})]`,
-    ),
-  )
-  expect(result).toMatchObject({
-    ok: true,
-    value: [{ item: { value: 1 } }, { item: { value: 2 } }, { item: { item: 3 } }],
-  })
-})
-
-test("flat keeps a dictionary without declared fields on its object signature", async () => {
-  const count = Tool.make({
-    description: "Count keys",
-    input: Schema.Record(Schema.String, Schema.String),
-    output: Schema.Int,
-    flat: true,
-    execute: (input) => Effect.succeed(Object.keys(input).length),
-  })
-  const runtime = CodeMode.make({ tools: { count } })
-  expect(runtime.catalog[0]?.signature).toContain("[key: string]: string")
-  expect(await Effect.runPromise(runtime.execute('return await tools.count({one:"1",two:"2"})'))).toMatchObject({
-    ok: true,
-    value: 2,
-  })
-})
-
-test("flat binds non-identifier keys, optional falsey values and local references", async () => {
-  const save = Tool.make({
-    description: "Save a note",
-    flat: true,
-    input: {
-      $ref: "#/$defs/Save",
-      $defs: {
-        Save: { type: "object", properties: { "dry-run": { type: "boolean" }, default: { $ref: "#/$defs/Value" } } },
-        Value: { type: ["string", "null"] },
-      },
-    },
-    output: {},
-    execute: (value) => Effect.succeed(value),
-  })
-  const runtime = CodeMode.make({ tools: { save } })
-  expect(runtime.catalog[0]?.signature).toBe("tools.save(arg1?: boolean, arg2?: string | null): Promise<unknown>")
-  expect(
-    await Effect.runPromise(
-      runtime.execute('return [await tools.save(false, null), await tools.save(undefined, ""), await tools.save()]'),
-    ),
-  ).toMatchObject({ ok: true, value: [{ "dry-run": false, default: null }, { default: "" }, {}] })
-})
-
 class HostError extends Schema.TaggedError<HostError>()("HostError", {
   message: Schema.String,
 }) {}
@@ -817,7 +695,7 @@ describe("CodeMode schema flexibility", () => {
       {
         path: "users.lookup",
         description: "Look up a user",
-        signature: "tools.users.lookup({\n  login: string,\n}): Promise<{\n  login: string,\n  id: number,\n}>",
+        signature: "tools.users.lookup(login: string): Promise<{\n  login: string,\n  id: number,\n}>",
       },
     ])
 
@@ -833,7 +711,7 @@ describe("CodeMode schema flexibility", () => {
       execute: () => Effect.succeed("pong"),
     })
     const runtime = CodeMode.make({ tools: { net: { ping } } })
-    expect(runtime.catalog[0]?.signature).toBe("tools.net.ping({\n  host: string,\n}): Promise<void>")
+    expect(runtime.catalog[0]?.signature).toBe("tools.net.ping(host: string): Promise<void>")
 
     const result = await Effect.runPromise(runtime.execute(`return await tools.net.ping({ host: "example.test" })`))
     expect(result.ok).toBe(true)
@@ -890,7 +768,7 @@ describe("CodeMode public contract", () => {
       {
         path: "orders.lookup",
         description: "Look up an order by ID",
-        signature: "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
+        signature: "tools.orders.lookup(id: string): Promise<{\n  id: string,\n  status: string,\n}>",
       },
     ])
 
@@ -902,13 +780,29 @@ describe("CodeMode public contract", () => {
           {
             path: "tools.orders.lookup",
             description: "Look up an order by ID",
-            signature: "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
+            signature: "tools.orders.lookup(id: string): Promise<{\n  id: string,\n  status: string,\n}>",
           },
         ],
         remaining: 0,
         next: null,
       })
     }
+  })
+
+  test("a tool whose input is one required string takes that string directly", async () => {
+    const fetchPage = Tool.make({
+      description: "Fetch a page",
+      input: Schema.Struct({ url: Schema.String.annotate({ description: "Page URL" }) }),
+      output: Schema.String,
+      execute: ({ url }) => Effect.succeed(url),
+    })
+    const runtime = CodeMode.make({ tools: { fetchPage } })
+    expect(runtime.catalog[0]?.signature).toBe("tools.fetchPage(/** Page URL */ url: string): Promise<string>")
+    expect(
+      await Effect.runPromise(
+        runtime.execute('return [await tools.fetchPage("a"), await tools.fetchPage({ url: "b" })]'),
+      ),
+    ).toMatchObject({ ok: true, value: ["a", "b"], toolCalls: [{ name: "fetchPage" }, { name: "fetchPage" }] })
   })
 
   test("renders equivalent catalogs identically regardless of tool insertion order", () => {
@@ -944,7 +838,7 @@ describe("CodeMode public contract", () => {
       {
         path: "context7.resolve-library-id",
         description: "Resolve a library ID",
-        signature: 'tools.context7["resolve-library-id"]({\n  libraryName: string,\n}): Promise<string>',
+        signature: 'tools.context7["resolve-library-id"](libraryName: string): Promise<string>',
       },
     ])
 
@@ -956,7 +850,7 @@ describe("CodeMode public contract", () => {
           {
             path: 'tools.context7["resolve-library-id"]',
             description: "Resolve a library ID",
-            signature: 'tools.context7["resolve-library-id"]({\n  libraryName: string,\n}): Promise<string>',
+            signature: 'tools.context7["resolve-library-id"](libraryName: string): Promise<string>',
           },
         ],
         remaining: 0,
@@ -1009,12 +903,12 @@ describe("CodeMode public contract", () => {
         {
           path: "tools.thread.uploadFile",
           description: "Upload one readable local file to the current Discord thread",
-          signature: "tools.thread.uploadFile({\n  path: string,\n}): Promise<{\n  sent: boolean,\n}>",
+          signature: "tools.thread.uploadFile(path: string): Promise<{\n  sent: boolean,\n}>",
         },
         {
           path: "tools.thread.generateImage",
           description: "Generate an image and upload it to the current Discord thread",
-          signature: "tools.thread.generateImage({\n  prompt: string,\n}): Promise<{\n  sent: boolean,\n}>",
+          signature: "tools.thread.generateImage(prompt: string): Promise<{\n  sent: boolean,\n}>",
         },
       ],
       remaining: 0,
@@ -1102,7 +996,7 @@ describe("CodeMode public contract", () => {
             {
               path: "tools.many.tool13",
               description: "Numbered tool 13",
-              signature: "tools.many.tool13({\n  id: string,\n}): Promise<string>",
+              signature: "tools.many.tool13(id: string): Promise<string>",
             },
           ],
           remaining: 0,

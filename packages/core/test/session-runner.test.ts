@@ -2404,7 +2404,7 @@ describe("SessionRunnerLLM", () => {
     const updates = (request: LLMRequest | undefined) =>
       request ? systemTexts(request).filter((text) => text.startsWith("The Code Mode tool catalog has changed")) : []
     const signature = (name: string, index: number) =>
-      `  - tools.${name}.${name}_${index}({\n  id: string,\n}): Promise<string> // ${name} tool ${index}`
+      `  - tools.${name}.${name}_${index}(id: string): Promise<string> // ${name} tool ${index}`
 
     yield* register("alpha", 12)
     yield* s.runPrompt("First")
