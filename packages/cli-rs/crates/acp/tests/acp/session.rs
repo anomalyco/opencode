@@ -187,6 +187,8 @@ async fn converts_mcp_configs_and_deduplicates_registrations_per_session_and_con
         json!({ "name": "tools", "command": "bun", "args": ["server.ts"], "env": [{ "name": "TOKEN", "value": "x" }] });
     let mut changed = local.clone();
     changed["args"] = json!(["changed.ts"]);
+    // ACP v2 tags stdio servers; the SDK's stdio schema strips the tag.
+    changed["type"] = json!("stdio");
     let remote = json!({
         "type": "http", "name": "docs", "url": "https://example.com/mcp",
         "headers": [{ "name": "Authorization", "value": "Bearer x" }],
