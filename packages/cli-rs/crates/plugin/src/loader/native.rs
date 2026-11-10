@@ -32,7 +32,6 @@ use std::mem::{offset_of, size_of};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use opencode_plugin_abi::{
     self as abi, ABI_MAJOR, ABI_MINOR, Bytes, Fenced, HostApi, HostRequest, Line, Manifest, Owned, PluginApi,
@@ -152,15 +151,15 @@ struct Library {
 impl Library {
     /// Opens a library for a host of minor version `host_minor`.
     fn open(bytes: &[u8], host_minor: u32) -> Result<Self, String> {
-        static OPENED: AtomicUsize = AtomicUsize::new(0);
-        let dir = std::env::temp_dir().join(format!("opencode-rs-plugins-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-        let file = dir.join(format!("{}.{}", OPENED.fetch_add(1, Ordering::Relaxed), std::env::consts::DLL_EXTENSION));
+        // A directory this process creates, owner-only, so nobody else can place or swap the file it opens.
+        let dir =
+            opencode_util::temp::tempdir().map_err(|error| format!("{}: {error}", std::env::temp_dir().display()))?;
+        let file = dir.path().join(format!("plugin.{}", std::env::consts::DLL_EXTENSION));
         std::fs::write(&file, bytes).map_err(|error| format!("{}: {error}", file.display()))?;
         // SAFETY: loading runs the library's initializers; a plugin is code the user chose to run.
         let library = unsafe { dl::Library::open(&file) };
-        // The mapping stays after the file is gone (where the platform allows removing it).
-        let _ = std::fs::remove_file(&file);
+        // The mapping stays after the directory is gone (where the platform allows removing it).
+        drop(dir);
         let library = library.map_err(|error| format!("cannot load the library: {error}"))?;
         // SAFETY: `ENTRY` has type `EntryFn` in every plugin of this major version.
         let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }

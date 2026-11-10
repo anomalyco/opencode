@@ -1,4 +1,4 @@
-//! Temporary directories for tests and examples, as `tempfile`'s `tempdir()` and `TempDir` make them. A name is
+//! Temporary directories (for tests, examples, and staging native plugins), as `tempfile`'s `tempdir()` and `TempDir` make them. A name is
 //! unique without a random source: the process ID, a process-wide count and the time, retried if it exists.
 
 use std::io;

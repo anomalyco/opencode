@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -1386,4 +1387,17 @@ fn the_quick_start_plugin_loads_from_a_plugins_directory_and_runs() {
     host.app().root().add(&parent);
     host.app.render();
     assert!(host.app.text().contains("hello"), "{}", host.app.text());
+}
+
+// Expected (r2 review, bigboi-ui-1 and carbon-ui-2): a library is staged in a directory this process creates
+// itself, not at a name another user can claim first, and nothing is left behind.
+#[test]
+fn a_library_is_staged_in_a_directory_only_this_process_owns() {
+    let library = build("");
+    let claimed = std::env::temp_dir().join(format!("opencode-rs-plugins-{}", std::process::id()));
+    fs::write(&claimed, "").unwrap();
+    let inspected = Native.inspect(&library);
+    fs::remove_file(&claimed).unwrap();
+    assert_eq!(inspected.unwrap().minor, 4);
+    assert!(!claimed.exists());
 }
