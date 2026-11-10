@@ -17,6 +17,17 @@ export type Beat =
   | { kind: "user"; text: string }
   | { kind: "shell"; command: string; output: string; exit: number }
   | { kind: "goal"; objective: string }
+  /** A background subagent or shell reporting back, as the server delivers it. */
+  | {
+      kind: "report"
+      source: "subagent" | "shell"
+      state: "completed" | "error" | "cancelled"
+      description: string
+      agent?: string
+      /** The subagent's session or the shell that reports, which the timeline links to. */
+      childID?: string
+      shellID?: string
+    }
   | { kind: "model"; id: string }
   | { kind: "step" }
   | { kind: "think"; text: string }
@@ -38,6 +49,7 @@ const steps: Record<Beat["kind"], number> = {
   user: 1,
   shell: 2,
   goal: 1,
+  report: 1,
   model: 1,
   step: 0,
   think: 3,
@@ -613,6 +625,77 @@ const everyTool: Beat[] = [
   { kind: "idle" },
 ]
 
+// Subagents and shells the agent starts in the background, how they report back, and subagents it waits on.
+const backgroundWork: Beat[] = [
+  { kind: "user", text: "Review the theme code and check the docs while you keep the dev server running." },
+  {
+    kind: "tool",
+    name: "subagent",
+    input: { agent: "review", description: "Review the theme store", prompt: "Review it.", background: true },
+    output: "The subagent is working in the background.",
+    metadata: { sessionID: "session_child_store", status: "running" },
+  },
+  {
+    kind: "tool",
+    name: "subagent",
+    input: { agent: "explore", description: "Check the theme docs", prompt: "Check them.", background: true },
+    output: "The subagent is working in the background.",
+    metadata: { sessionID: "session_child_docs", status: "running" },
+  },
+  {
+    kind: "tool",
+    name: "shell",
+    input: { command: "bun run dev", description: "Start the dev server", background: true },
+    output: "Command moved to the background (shell ID: shell_dev).",
+    metadata: { shellID: "shell_dev", status: "running" },
+  },
+  { kind: "tool", name: "read", input: { path: "/workspace/src/theme/scheme.ts" }, output: schemeBefore },
+  { kind: "step" },
+  {
+    kind: "say",
+    text: "Two reviews are running in the background, and the dev server is up. I'll pick up their findings when they report back.",
+  },
+  { kind: "idle" },
+  {
+    kind: "report",
+    source: "subagent",
+    state: "completed",
+    description: "Review the theme store",
+    agent: "review",
+    childID: "session_child_store",
+  },
+  {
+    kind: "report",
+    source: "subagent",
+    state: "error",
+    description: "Check the theme docs",
+    agent: "explore",
+    childID: "session_child_docs",
+  },
+  {
+    kind: "say",
+    text: "The store review found nothing to change. The docs check failed, so I'll run both checks again and wait for them.",
+  },
+  {
+    kind: "tool",
+    name: "subagent",
+    input: { agent: "explore", description: "Check the theme docs", prompt: "Check them." },
+    output: "The docs describe the scheme setting correctly.",
+    metadata: { sessionID: "session_child_docs_again", status: "completed" },
+  },
+  {
+    kind: "tool",
+    name: "subagent",
+    input: { agent: "review", description: "Review the toggle", prompt: "Review it." },
+    output: "The toggle reads the scheme in an effect, which is right.",
+    metadata: { sessionID: "session_child_toggle", status: "completed" },
+  },
+  { kind: "step" },
+  { kind: "say", text: "Both checks pass: the docs are accurate and the toggle reads the scheme correctly." },
+  { kind: "idle" },
+  { kind: "report", source: "shell", state: "cancelled", description: "bun run dev", shellID: "shell_dev" },
+]
+
 const thinkingOnly: Beat[] = [
   { kind: "user", text: "Why does the timeline jump when a turn finishes?" },
   { kind: "think", text: "" },
@@ -663,6 +746,7 @@ const encryptedThinking: Beat[] = [
 export const scenarios = {
   "Feature work": featureWork,
   "Every tool": everyTool,
+  "Background work": backgroundWork,
   "Thinking only": thinkingOnly,
   "Thinking after tools": thinkingAfterTools,
   "Encrypted thinking": encryptedThinking,
@@ -748,6 +832,24 @@ export function replayScript(
         time: { created: at() },
       })
       state.busy = true
+    }
+
+    if (beat.kind === "report") {
+      closeStep()
+      messages.push({
+        id: id("msg_report"),
+        type: "synthetic",
+        text: `${beat.source} ${beat.state}: ${beat.description}`,
+        description: beat.description,
+        metadata: {
+          source: beat.source,
+          state: beat.state,
+          ...(beat.agent ? { agent: beat.agent } : {}),
+          ...(beat.childID ? { childID: beat.childID } : {}),
+          ...(beat.shellID ? { shellID: beat.shellID } : {}),
+        },
+        time: { created: at() },
+      })
     }
 
     if (beat.kind === "model") {
@@ -873,6 +975,7 @@ function caption(beat: Beat, done: boolean) {
   if (beat.kind === "user") return "You sent a message"
   if (beat.kind === "shell") return done ? `You ran ${beat.command}` : `Running ${beat.command}`
   if (beat.kind === "goal") return "You set a goal"
+  if (beat.kind === "report") return `${beat.source} ${beat.state}`
   if (beat.kind === "model") return "You switched models"
   if (beat.kind === "think") return done ? "Finished thinking" : "Thinking"
   if (beat.kind === "say") return done ? "Answered" : "Writing"

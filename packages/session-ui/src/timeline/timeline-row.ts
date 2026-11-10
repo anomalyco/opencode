@@ -18,7 +18,8 @@ export type PartGroup =
     }
   | {
       key: string
-      type: "file" | "read"
+      /** `events`: subagents and background shells in the Activity timeline, counted in one row. */
+      type: "file" | "read" | "events"
       refs: PartRef[]
     }
 
@@ -39,6 +40,12 @@ export namespace TimelineRow {
   export class Notice extends Data.TaggedClass("Notice")<{
     userMessageID: string
     messageID: string
+  }> {}
+
+  /** Background subagents and shells that finished one after another, counted in one row in the Activity timeline. */
+  export class BackgroundEvents extends Data.TaggedClass("BackgroundEvents")<{
+    userMessageID: string
+    messageIDs: readonly string[]
   }> {}
 
   export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
@@ -114,6 +121,7 @@ export namespace TimelineRow {
     | UserMessage
     | Shell
     | Notice
+    | BackgroundEvents
     | TurnDivider
     | AssistantPart
     | Thinking
@@ -129,6 +137,7 @@ export namespace TimelineRow {
     UserMessage: (row) => `user-message:${row.userMessageID}`,
     Shell: (row) => `shell:${row.messageID}`,
     Notice: (row) => `notice:${row.messageID}`,
+    BackgroundEvents: (row) => `background-events:${row.messageIDs[0]}`,
     TurnDivider: (row) => `turn-divider:${row.userMessageID}`,
     // Keyed by part identity alone: a page boundary can truncate the leading turn,
     // and its rows regroup under the real user message once older history loads.
@@ -152,6 +161,10 @@ export namespace TimelineRow {
     UserMessage: () => (other: TimelineRow) => Predicate.isTagged(other, "UserMessage"),
     Shell: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Shell") && other.messageID === row.messageID,
     Notice: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Notice") && other.messageID === row.messageID,
+    BackgroundEvents: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "BackgroundEvents") &&
+      other.messageIDs.length === row.messageIDs.length &&
+      other.messageIDs.every((id, index) => id === row.messageIDs[index]),
     TurnDivider: () => (other: TimelineRow) => Predicate.isTagged(other, "TurnDivider"),
     AssistantPart: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "AssistantPart") &&
@@ -212,6 +225,7 @@ export type TimelineRowMap = {
   UserMessage: { userMessageID: string }
   Shell: { userMessageID: string; messageID: string }
   Notice: { userMessageID: string; messageID: string }
+  BackgroundEvents: { userMessageID: string; messageIDs: readonly string[] }
   TurnDivider: { userMessageID: string }
   AssistantPart: {
     userMessageID: string

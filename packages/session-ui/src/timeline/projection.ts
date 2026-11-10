@@ -21,6 +21,7 @@ import {
   timelineTextShows,
 } from "./policy"
 import { errorInfo } from "./errors"
+import { noticeEvent, timelineEventTool } from "./events"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
@@ -468,16 +469,20 @@ export namespace Timeline {
       ),
     )
 
+    const grouped = groupMessages(
+      rows,
+      detail,
+      new Set(
+        messages.flatMap((message) => (timelineNoticePlacement(detail, message) === "separate" ? [message.id] : [])),
+      ),
+    )
+
     return {
       activeMessageID,
       turnPhaseByID,
-      rows: groupMessages(
-        rows,
-        detail,
-        new Set(
-          messages.flatMap((message) => (timelineNoticePlacement(detail, message) === "separate" ? [message.id] : [])),
-        ),
-      ),
+      rows: activity
+        ? mergeBackgroundEvents(grouped, new Map(messages.map((message) => [message.id, message])))
+        : grouped,
     }
   }
 
@@ -525,7 +530,7 @@ export namespace Timeline {
 
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, commentary, detail).forEach((group) => {
+        groupContent(items, commentary, detail, activity).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -931,13 +936,47 @@ function groupPartKey(ref: PartRef) {
   return `${ref.messageID}:${ref.partID}`
 }
 
+/**
+ * In the Activity timeline, background subagents and shells that report back one after another read as one row:
+ * "Finished 2 subagents". Anything else between them keeps them apart, so the order of events stays true.
+ */
+function mergeBackgroundEvents(
+  rows: TimelineRow.TimelineRow[],
+  messageByID: ReadonlyMap<string, SessionMessageInfo>,
+): TimelineRow.TimelineRow[] {
+  return rows.reduce<TimelineRow.TimelineRow[]>((result, row) => {
+    const message = Predicate.isTagged(row, "Notice") ? messageByID.get(row.messageID) : undefined
+
+    if (!Predicate.isTagged(row, "Notice") || !message || !noticeEvent(message)) {
+      result.push(row)
+
+      return result
+    }
+    const previous = result.at(-1)
+
+    if (Predicate.isTagged(previous, "BackgroundEvents") && previous.userMessageID === row.userMessageID) {
+      result[result.length - 1] = new TimelineRow.BackgroundEvents({
+        userMessageID: row.userMessageID,
+        messageIDs: [...previous.messageIDs, row.messageID],
+      })
+
+      return result
+    }
+
+    result.push(new TimelineRow.BackgroundEvents({ userMessageID: row.userMessageID, messageIDs: [row.messageID] }))
+
+    return result
+  }, [])
+}
+
 function groupContent(
   items: { messageID: string; partID: string; content: Content }[],
   commentary: ReadonlySet<Content>,
   detail: TimelineDetail,
+  activity = false,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file" | "read"; refs: PartRef[] } | undefined
+  let adjacent: { type: "context" | "file" | "read" | "events"; refs: PartRef[] } | undefined
 
   const flush = () => {
     const current = adjacent
@@ -957,7 +996,11 @@ function groupContent(
   }
 
   items.forEach((item) => {
-    const type = contentGroupType(item.content, commentary, detail)
+    // In the Activity timeline subagents and background shells read as events, counted together however they run.
+    const type =
+      activity && item.content.type === "tool" && timelineEventTool(item.content)
+        ? "events"
+        : contentGroupType(item.content, commentary, detail)
 
     if (type) {
       if (adjacent?.type !== type) flush()

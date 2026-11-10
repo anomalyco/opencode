@@ -201,6 +201,7 @@ function MessageTimelineView(
         Predicate.isTagged(row, "TurnDivider") ||
         Predicate.isTagged(row, "CompactionQueued") ||
         Predicate.isTagged(row, "Worked") ||
+        Predicate.isTagged(row, "BackgroundEvents") ||
         Predicate.isTagged(row, "Activity")
       )
         return true

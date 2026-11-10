@@ -53,6 +53,8 @@ import { timelineCategory, timelineDefaultOpen, timelineDiffOpen, timelineThinki
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { ActivityTimelineProvider } from "./activity-context"
 import { trackNestedRails } from "./nested-rail"
+import { TimelineEventRow } from "./event-row"
+import { noticeEvent, toolEvent } from "./events"
 import { Badge } from "@opencode/ui/badge"
 import { attached } from "../components/message-file"
 import { createReactiveTimelineProjection, Timeline, TimelineRow, unwrapErrorMessage, type PartRef } from "./projection"
@@ -416,6 +418,34 @@ export function createSessionTimelineRowRenderer(input: {
             onSizeChange={onSizeChange}
           />
         </div>
+      )
+    }
+
+    if (row().group.type === "events") {
+      const events = createMemo(() => {
+        const group = row().group
+
+        if (group.type !== "events") return []
+        const contents = indexGroupContents(group.refs)
+
+        return group.refs.flatMap((ref) => {
+          const content = contents.get(ref.messageID)?.get(ref.partID)
+          const event = content?.type === "tool" ? toolEvent(content) : undefined
+
+          return event ? [event] : []
+        })
+      })
+
+      return (
+        <TimelineEventRow
+          events={events()}
+          open={input.disclosure.value(`events:${row().group.key}`) === true}
+          onOpenChange={(open) => {
+            input.disclosure.set(`events:${row().group.key}`, open)
+            onSizeChange?.()
+          }}
+          onRevealShell={input.revealPart}
+        />
       )
     }
 
@@ -1122,6 +1152,41 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <Notice messageID={current().messageID} />
+        </Frame>
+      )
+    }
+
+    if (Predicate.isTagged(row(), "BackgroundEvents")) {
+      const current = () => {
+        const value = row()
+
+        if (!Predicate.isTagged(value, "BackgroundEvents")) throw new Error("Expected a background events timeline row")
+
+        return value
+      }
+
+      const events = createMemo(() =>
+        current().messageIDs.flatMap((id) => {
+          const message = input.projection.messageByID().get(id)
+          const event = message ? noticeEvent(message) : undefined
+
+          return event ? [event] : []
+        }),
+      )
+
+      return (
+        <Frame row={current()}>
+          <div data-slot="session-turn-message-container" class={`w-full pt-2 ${padding()}`}>
+            <TimelineEventRow
+              events={events()}
+              open={input.disclosure.value(`events:${current().messageIDs[0]}`) === true}
+              onOpenChange={(open) => {
+                input.disclosure.set(`events:${current().messageIDs[0]}`, open)
+                onSizeChange?.()
+              }}
+              onRevealShell={input.revealPart}
+            />
+          </div>
         </Frame>
       )
     }
