@@ -204,9 +204,16 @@ export const Plugin = {
       const result = yield* shell.result(info, { wait: INTERRUPT_WAIT })
       // The stopped job settles from the same exit; this only releases it.
       yield* jobs.cancel(jobID)
+      const stopped = ShellResult.interrupted(result)
       return yield* new ToolFailure({
-        message: ShellResult.interrupted(result),
-        metadata: { interrupted: true, truncated: result.capture?.truncated ?? false, shellID: info.id },
+        message: stopped.message,
+        // The notice ends the message; renderers show what precedes it as the output, like a finished call's.
+        metadata: {
+          interrupted: true,
+          truncated: result.capture?.truncated ?? false,
+          shellID: info.id,
+          notice: stopped.notice,
+        },
       })
     })
 

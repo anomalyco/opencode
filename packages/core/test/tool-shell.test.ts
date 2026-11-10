@@ -2135,8 +2135,7 @@ describe("ShellTool stopped", () => {
           expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "started")).exists())).toBe(false)
         }),
       )
-    }),
-  )
+    }))
 
   test("says once that a stopped command wrote nothing", () =>
     withTempDir((tmp) => {
@@ -2197,7 +2196,14 @@ describe("ShellTool stopped", () => {
             }),
           )
           const { shellID, result } = yield* stopCall(registry, "printf ready; sleep 60", "call-hooked", "cancel")
-          expect(seen).toEqual([{ interrupted: true, truncated: false, shellID }])
+          expect(seen).toEqual([
+            {
+              interrupted: true,
+              truncated: false,
+              shellID,
+              notice: expect.stringContaining("Command interrupted by the user"),
+            },
+          ])
           expect(result?.error?.message).toBe("rewritten by a plugin")
         }),
       )
