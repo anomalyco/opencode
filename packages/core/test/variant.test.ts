@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { Schema } from "effect"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Variant } from "@opencode/core/variant"
@@ -11,8 +12,41 @@ const model = (packageName: string, modelID: string, output?: number, providerID
   return Model.Info.make(result)
 }
 
+// Spelling assertions compare what the public schema exposes, which leaves out the internal effort label.
 const resolve = (input: Model.Info, supports: readonly Variant.Support[]) =>
-  Variant.resolve(input, supports).map((item) => ({ ...item, id: String(item.id) }))
+  Schema.encodeSync(Model.Info.fields.variants)(Variant.resolve(input, supports)).map((item) => ({
+    ...item,
+    id: String(item.id),
+  }))
+
+const labels = (input: Model.Info, supports: readonly Variant.Support[]) =>
+  Object.fromEntries(Variant.resolve(input, supports).map((item) => [item.id, Variant.effort(item)]))
+
+test("labels only variants that send a reasoning effort", () => {
+  // Thinking toggles and budgets carry no effort, whatever their names.
+  expect(
+    labels(model("@opencode/ai/providers/anthropic", "claude-haiku-5-5"), [
+      { type: "toggle" },
+      { type: "effort", values: ["none", "low", "max"] },
+    ]),
+  ).toEqual({ none: undefined, low: "low", max: "max" })
+  expect(
+    labels(model("@opencode/ai/providers/anthropic", "claude-haiku-4-5", 64_000), [{ type: "budget_tokens" }]),
+  ).toEqual({ high: undefined, max: undefined })
+  // `none` is a real effort where the provider takes it as one.
+  expect(
+    labels(model("@opencode/ai/providers/openai", "gpt-6"), [{ type: "effort", values: ["none", "high"] }]),
+  ).toEqual({ none: "none", high: "high" })
+  // Labels come from how the variant was built, not from a particular setting key.
+  expect(
+    labels(model("@opencode/ai/providers/google", "gemini-3.5-pro"), [{ type: "effort", values: ["low", "high"] }]),
+  ).toEqual({ low: "low", high: "high" })
+  expect(
+    labels(model("@opencode/ai/providers/amazon-bedrock", "anthropic.claude-opus-5"), [
+      { type: "effort", values: ["high"] },
+    ]),
+  ).toEqual({ high: "high" })
+})
 
 test("spells Messages variants for each provider", () => {
   expect(
@@ -553,9 +587,5 @@ test("reads models.dev v2 reasoning as variant support", () => {
   expect(Variant.supports({ supported: true })).toEqual([])
   expect(
     Variant.supports({ supported: true, toggle: true, effort: ["default", "low"], budget: { min: 1024, max: 8000 } }),
-  ).toEqual([
-    { type: "toggle" },
-    { type: "effort", values: ["low"] },
-    { type: "budget_tokens", min: 1024, max: 8000 },
-  ])
+  ).toEqual([{ type: "toggle" }, { type: "effort", values: ["low"] }, { type: "budget_tokens", min: 1024, max: 8000 }])
 })

@@ -1,7 +1,6 @@
 import {
   Media,
   Message,
-  ReasoningEfforts,
   ToolCallPart,
   ToolResultPart,
   type AssistantMessage,
@@ -10,6 +9,8 @@ import {
   type TextPart,
 } from "@opencode/ai/effect"
 import type { Model } from "@opencode/schema/model"
+import type { ModelResolver } from "../../model-resolver.js"
+import { Variant } from "../../variant.js"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
@@ -205,25 +206,28 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   return [Message.make({ id: message.id, role: "assistant", content: meaningful }), ...results]
 }
 
-const EFFORT_VARIANTS = new Set<string>(ReasoningEfforts)
+type ModelContext = Pick<ModelResolver.Resolved, "ref" | "variants">
 
-const variantEffort = (variant: Model.VariantID | undefined) => {
-  if (variant === undefined || variant === "default") return { effort: undefined }
-  return EFFORT_VARIANTS.has(variant) ? { effort: variant } : undefined
+// No variant means the model default effort; a variant that sets no effort, such as a thinking toggle, has none.
+const variantEffort = (model: ModelContext, id: Model.VariantID | undefined) => {
+  if (id === undefined || id === "default") return { effort: undefined }
+  const variant = model.variants.find((item) => item.id === id)
+  const effort = variant && Variant.effort(variant)
+  return effort === undefined ? undefined : { effort }
 }
 
-const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref): Message[] => {
+const modelSwitched = (message: SessionMessage.ModelSelected, model: ModelContext): Message[] => {
   const previous = message.previous
   if (previous === undefined) return []
-  const same = (ref: Model.Ref) => ref.providerID === model.providerID && ref.id === model.id
+  const same = (ref: Model.Ref) => ref.providerID === model.ref.providerID && ref.id === model.ref.id
   if (!same(message.model) || !same(previous)) return []
-  const to = variantEffort(message.model.variant)
-  const from = variantEffort(previous.variant)
+  const to = variantEffort(model, message.model.variant)
+  const from = variantEffort(model, previous.variant)
   if (to === undefined || from === undefined) return []
   return [Message.effort({ effort: to.effort, previous: from.effort })]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: ModelContext, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "idle":
@@ -269,7 +273,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         }),
       ]
     case "assistant":
-      return assistant(message, model, providerMetadataKey)
+      return assistant(message, model.ref, providerMetadataKey)
     case "compaction": {
       if (message.status !== "completed") return []
       // History selection only keeps native windows the target model can replay.
@@ -296,6 +300,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
 /** Translate projected Session history into canonical @opencode/ai context. */
 export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
-  model: Model.Ref,
-  providerMetadataKey: string = model.providerID,
+  model: ModelContext,
+  providerMetadataKey: string = model.ref.providerID,
 ) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))

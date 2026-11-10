@@ -43,8 +43,9 @@ export function rewrite<ID extends string>(
     const overlay = options(replacement, input.modelID, decode(variant.settings ?? {}))
     const headers = Provider.mergeHeaders(overlay.headers, variant.headers)
     const body = Provider.mergeOverlay(overlay.body, variant.body)
+    // Spread first to keep internal keys such as the variant's effort label.
     return {
-      id: variant.id,
+      ...variant,
       ...(variant.settings === undefined ? {} : { settings: overlay.settings }),
       ...(headers === undefined ? {} : { headers }),
       ...(body === undefined ? {} : { body }),

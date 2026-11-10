@@ -24,6 +24,27 @@ export function supports(reasoning: ConfigProvider.Reasoning): readonly Support[
 type Variants = Model.Info["variants"]
 type Overlay = Omit<Variants[number], "id">
 
+/**
+ * Internal label for the reasoning effort a built-in variant sends, so effort changes are recognized without guessing
+ * from names or setting keys. Toggles, budgets and configured variants have none. It is a plain key so it survives the
+ * catalog's `structuredClone` drafts; the Model schema doesn't declare it, so encoding drops it before the API and
+ * config can't set it. Variant logic is expected to move into @opencode/ai, and this label should move with it.
+ */
+type Labeled = Variants[number] & { readonly effort?: string }
+
+export const effort = (variant: Variants[number]) => (variant as Labeled).effort
+
+export const clearEffort = (variant: Variants[number]) => {
+  delete (variant as { effort?: string }).effort
+}
+
+/** A variant that sends `effort` as its reasoning effort. */
+export const effortVariant = (effort: string, overlay: Overlay): Labeled => ({ ...variant(effort, overlay), effort })
+
+// An effort spell returns `thinkingOff(...)` for a value that turns reasoning off rather than setting an effort.
+type Off = { readonly off: Overlay }
+const thinkingOff = (overlay: Overlay): Off => ({ off: overlay })
+
 type Protocol = (model: Model.Info, support: Support) => Variants
 
 export function resolve(model: Model.Info, supports: readonly Support[] = [{ type: "effort" }]): Variants {
@@ -46,8 +67,11 @@ const ALIBABA_THINKING_BUDGET_MAX = 64_000
 
 const variant = (id: string, overlay: Overlay): Variants[number] => ({ id: Model.VariantID.make(id), ...overlay })
 
-const efforts = (values: readonly string[], spell: (effort: string) => Overlay): Variants =>
-  values.map((effort) => variant(effort, spell(effort)))
+const efforts = (values: readonly string[], spell: (effort: string) => Overlay | Off): Variants =>
+  values.map((effort) => {
+    const spelled = spell(effort)
+    return "off" in spelled ? variant(effort, spelled.off) : effortVariant(effort, spelled)
+  })
 
 const toggle = (off: Overlay, on: Overlay): Variants => [variant("none", off), variant("thinking", on)]
 
@@ -135,7 +159,7 @@ const deepseekChat: Protocol = (_, support) => {
   switch (support.type) {
     case "effort":
       return efforts(support.values ?? ["low", "high", "max"], (effort) => {
-        if (effort === "none") return { body: { thinking: { type: "disabled" } } }
+        if (effort === "none") return thinkingOff({ body: { thinking: { type: "disabled" } } })
         return { settings: { reasoningEffort: effort }, body: { thinking: { type: "enabled" } } }
       })
     case "toggle":
@@ -159,7 +183,7 @@ const nvidiaChat: Protocol = (model, support) => {
     if (support.type !== "effort") return []
     return efforts(support.values ?? ["none", "high", "max"], (effort) =>
       effort === "none"
-        ? nvidiaTemplate({ thinking: false })
+        ? thinkingOff(nvidiaTemplate({ thinking: false }))
         : nvidiaTemplate({ thinking: true, reasoning_effort: effort }),
     )
   }
@@ -201,7 +225,7 @@ const workersAIChat: Protocol = (_, support) => {
   switch (support.type) {
     case "effort":
       return efforts(support.values ?? EFFORTS, (effort) =>
-        effort === "none" ? workersAITemplate(false) : { settings: { reasoningEffort: effort } },
+        effort === "none" ? thinkingOff(workersAITemplate(false)) : { settings: { reasoningEffort: effort } },
       )
     case "toggle":
       return toggle(workersAITemplate(false), workersAITemplate(true))
@@ -282,7 +306,7 @@ const alibabaChat: Protocol = (model, support) => {
       const hosted = id.includes("glm") || id.includes("deepseek")
       const values = support.values ?? (hosted ? ["high", "max"] : ["low", "medium", "xhigh"])
       return efforts(values, (effort) => {
-        if (effort === "none") return { settings: { enableThinking: false } }
+        if (effort === "none") return thinkingOff({ settings: { enableThinking: false } })
         return { settings: { enableThinking: true, reasoningEffort: effort } }
       })
     }
@@ -315,7 +339,7 @@ const zaiChat: Protocol = (model, support) => {
   }
   if (support.type !== "effort") return []
   return efforts(support.values ?? (latest ? ["low", "high", "max"] : ["high", "max"]), (value) => {
-    if (value === "none" || value === "minimal") return { settings: { thinking: { type: "disabled" } } }
+    if (value === "none" || value === "minimal") return thinkingOff({ settings: { thinking: { type: "disabled" } } })
     return {
       settings: { thinking: { type: "enabled", clear_thinking: false }, reasoningEffort: value },
     }
@@ -334,7 +358,7 @@ const anthropicMessages: Protocol = (model, support) => {
       const values = (support.values ?? defaults).filter((effort) => !info.always || effort !== "none")
       return efforts(values, (effort) =>
         effort === "none"
-          ? { settings: { thinking: { type: "disabled" } } }
+          ? thinkingOff({ settings: { thinking: { type: "disabled" } } })
           : { settings: { ...thinking.settings, effort } },
       )
     }
@@ -373,7 +397,7 @@ const alibabaMessages: Protocol = (model, support) => {
       const hosted = id.includes("glm") || id.includes("deepseek")
       const values = support.values ?? (hosted ? ["high", "max"] : ["low", "medium", "xhigh"])
       return efforts(values, (effort) => {
-        if (effort === "none") return { settings: { thinking: { type: "disabled" } } }
+        if (effort === "none") return thinkingOff({ settings: { thinking: { type: "disabled" } } })
         return { settings: { thinking: { type: "enabled" }, effort } }
       })
     }
@@ -394,12 +418,11 @@ const zaiMessages: Protocol = (model, support) => {
   const forced = id.includes("glm-5.3") || id.includes("glm-5-3") || id.includes("glm-5p3")
   switch (support.type) {
     case "effort":
-      return efforts(support.values ?? (forced ? ["low", "high", "max"] : ["high", "max"]), (effort) => ({
-        settings: {
-          thinking: { type: effort === "none" || effort === "minimal" ? "disabled" : "enabled" },
-          effort,
-        },
-      }))
+      return efforts(support.values ?? (forced ? ["low", "high", "max"] : ["high", "max"]), (effort) => {
+        const disabled = effort === "none" || effort === "minimal"
+        const overlay = { settings: { thinking: { type: disabled ? "disabled" : "enabled" }, effort } }
+        return disabled ? thinkingOff(overlay) : overlay
+      })
     case "toggle":
       return forced
         ? []
@@ -577,7 +600,9 @@ const gitlabAnthropic: Protocol = (model, support) => {
     case "effort": {
       if (info.manual) return gitlabAnthropic(model, { type: "budget_tokens", min: 1024 })
       const defaults = info.major === 4 && info.minor === 6 ? [...EFFORTS, "max"] : [...EFFORTS, "xhigh", "max"]
-      return efforts(support.values ?? defaults, (effort) => (effort === "none" ? disabled : adaptive(effort)))
+      return efforts(support.values ?? defaults, (effort) =>
+        effort === "none" ? thinkingOff(disabled) : adaptive(effort),
+      )
     }
     case "toggle": {
       if (info.always) return []
