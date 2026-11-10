@@ -8,7 +8,7 @@ use crate::support::{self, Fake, Harness, Log, deref_harness};
 use std::sync::Arc;
 use std::time::Duration;
 
-use opencode_local::cli_config::{Grouping, Info, Session};
+use opencode_local::cli_config::{Grouping, Info, Session, Verbosity};
 use opencode_tui::Deps;
 use opentui::prelude::Color;
 use serde_json::{Value, json};
@@ -83,10 +83,14 @@ deref_harness!(Tools);
 fn open(width: u16, height: u16, messages: Vec<Value>, permissions: Vec<Value>) -> Tools {
     let fake = fake(messages, permissions);
     let seen = fake.log();
-    // Each call in its own row: grouping is E.8's.
+    // Each call in its own row: grouping and verbosity are E.8's.
     let info = Info {
         animations: Some(false),
-        session: Some(Session { grouping: Some(Grouping::None), ..Session::default() }),
+        session: Some(Session {
+            grouping: Some(Grouping::None),
+            verbosity: Some(Verbosity::Medium),
+            ..Session::default()
+        }),
         ..Info::default()
     };
     let deps =
