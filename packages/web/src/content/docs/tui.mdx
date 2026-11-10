@@ -265,7 +265,10 @@ Check for a new version of OpenCode and install it. If a newer OpenCode 1 releas
 
 ## Editor setup
 
-Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
+Both the `/editor` and `/export` commands use the editor specified in your `VISUAL` or `EDITOR` environment variable.
+The editor is launched via the shell specified in the `SHELL` environment variable or the system shell.
+
+A temporary file is appended to the command, or `=FILE_OUT=` is replaced with the path enclosed in double quotes `"full path"`.
 
 <Tabs>
   <TabItem label="Linux/macOS">

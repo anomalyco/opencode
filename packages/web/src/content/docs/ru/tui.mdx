@@ -253,7 +253,10 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Настройка редактора
 
-Команды `/editor` и `/export` используют редактор, указанный в переменной среды `EDITOR`.
+Команды `/editor` и `/export` используют редактор, указанный в переменной среды `VISUAL` или `EDITOR`.
+Запуск редактора через shell, указанный в переменной среды `SHELL` или системный shell.
+
+Временной файл добавляется в конец команды или `=FILE_OUT=` заменяется на путь в двойных кавычках `"full path"`.
 
 <Tabs>
   <TabItem label="Linux/macOS">

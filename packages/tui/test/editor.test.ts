@@ -59,6 +59,19 @@ test("says which variable to set when no external editor is configured", async (
   expect(suspended).toBe(false)
 })
 
+test("writing the prompt to a temporary file", async () => {
+  delete process.env.VISUAL
+  process.env.EDITOR = "echo Hello, OpenCode! >> =FILE_OUT="
+  const renderer = {
+    suspend() {},
+    resume() {},
+    requestRender() {},
+    currentRenderBuffer: { clear() {} },
+  }
+
+  await expect(openEditor({ value: "original", renderer: renderer as never })).resolves.toContain("Hello, OpenCode!")
+})
+
 test("normalizes a single trailing editor newline for one-line prompts", () => {
   expect(normalizePromptContent("hello\n")).toBe("hello")
   expect(normalizePromptContent("hello\r\n")).toBe("hello")
