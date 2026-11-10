@@ -18,9 +18,10 @@ use super::Context;
 use crate::args::RootArgs;
 
 pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
+    // Unlike `run` and `mini`, TS changes directory only for an explicit one and ignores `PWD`.
     let directory = match &args.directory {
         Some(directory) => paths::enter(std::path::Path::new(directory))?,
-        None => paths::start_directory()?,
+        None => std::env::current_dir()?,
     };
     let paths = Paths::from_env()?;
     crate::panic::install();
