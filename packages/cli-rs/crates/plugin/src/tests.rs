@@ -622,3 +622,26 @@ fn a_replaced_drag_text_drops_its_handlers() {
     host.app.render();
     assert_eq!(Rc::strong_count(&held), start);
 }
+
+// Expected (r2 review, carbon-ui-6): as TS `context.tsx` restores the fallback, an external plugin whose setup fails
+// leaves the active built-in it would replace running, and its target reports the failure with "(previous version
+// still active)". A build that sets up replaces the built-in.
+#[test]
+fn a_failed_external_plugin_keeps_the_built_in_it_would_replace() {
+    let host = host();
+    let registry = Registry::define(vec![claiming("b", vec![Placement::append("home.footer")])], []);
+    registry.activate(&dynamic(&host));
+    let failing = Definition::fallible("b", |_| Err("ext setup failed".to_owned())).external("b.so", Rc::new(|| None));
+    assert_eq!(registry.load(&dynamic(&host), failing), Some(SetupFailed { error: "ext setup failed".into(), kept: false }));
+    let entries = registry.entries();
+    assert_eq!((entries[0].source, entries[0].status.clone()), (Source::Builtin, Status::Active));
+    assert_eq!(
+        (entries[1].target.as_deref(), entries[1].status.clone()),
+        (Some("b.so"), Status::Failed("ext setup failed (previous version still active)".to_owned()))
+    );
+    let working = claiming("b", vec![Placement::append("home.footer")]).external("b.so", Rc::new(|| None));
+    assert_eq!(registry.load(&dynamic(&host), working), None);
+    let entries = registry.entries();
+    assert_eq!(entries.len(), 1);
+    assert_eq!((entries[0].source, entries[0].status.clone()), (Source::External, Status::Active));
+}
