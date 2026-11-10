@@ -10,6 +10,7 @@ import { Tool } from "@opencode/core/tool"
 import { McpEventTools } from "@opencode/core/tool/plugin/mcp-events"
 import { Effect, Fiber, Layer, Option, PubSub, Stream } from "effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
+import { advance } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/tool"
@@ -71,6 +72,13 @@ const eventServer = Effect.fnUntraced(function* () {
       notify("notifications/events/terminated", id, { error: { code: -32024, message: "Forbidden" } }),
     close: (id: string | number) => Effect.promise(() => reply(id, {})),
   }
+})
+
+const stopped = (reason: string) => ({
+  sessionID,
+  description: "jobs job.finished watch stopped",
+  text: `Watching jobs job.finished stopped: ${reason}`,
+  metadata: { source: "mcp.event", server: "jobs", event: "job.finished" },
 })
 
 const until = (check: () => boolean) =>
@@ -156,56 +164,64 @@ describe("watch_mcp_event", () => {
     }),
   )
 
-  it.live("gives a replayed event the same message, follows closed streams from their cursor, and stops", () =>
+  it.live(
+    "gives a replayed event the same message, and stops when the session is deleted or the stream terminated",
+    () =>
+      Effect.gen(function* () {
+        const { state, wakes, watch, event, terminate, deleted } = yield* setup()
+        yield* watch({ server: "jobs", event: "job.finished", once: false })
+        yield* until(() => state.streams.length === 1)
+        const first = state.streams[0].id
+        yield* event(first, "e1", "c1")
+        yield* event(first, "e1", "c1")
+        yield* event(first, "e2", "c2")
+        yield* until(() => wakes.length === 3)
+        expect(wakes[1].id).toBe(wakes[0].id)
+        expect(wakes[2].id).not.toBe(wakes[0].id)
+
+        // Deleting the session cancels its stream.
+        yield* PubSub.publish(deleted, { type: "session.deleted", data: { sessionID } })
+        yield* until(() => state.cancelled.includes(first))
+
+        // A terminated stream ends the watch and wakes the session to say so, once.
+        yield* watch({ server: "jobs", event: "job.finished", once: false })
+        yield* until(() => state.streams.length === 2)
+        const second = state.streams[1].id
+        yield* terminate(second)
+        yield* event(second, "e3", "c3")
+        yield* until(() => wakes.length === 4)
+        yield* Effect.sleep("20 millis")
+        expect(wakes.slice(3)).toEqual([stopped("Forbidden")])
+        expect(state.streams).toHaveLength(2)
+      }),
+  )
+
+  it.effect("reopens a stream the server closes from the last cursor, until it closes it three times in a row", () =>
     Effect.gen(function* () {
-      const { state, wakes, watch, event, close, terminate, deleted } = yield* setup()
-      const stopped = (reason: string) => ({
-        sessionID,
-        description: "jobs job.finished watch stopped",
-        text: `Watching jobs job.finished stopped: ${reason}`,
-        metadata: { source: "mcp.event", server: "jobs", event: "job.finished" },
-      })
+      const { state, wakes, watch, event, close } = yield* setup()
+      const reopened = (count: number) => advance(() => state.streams.length === count)
       yield* watch({ server: "jobs", event: "job.finished", once: false })
-      yield* until(() => state.streams.length === 1)
-      const first = state.streams[0].id
-      yield* event(first, "e1", "c1")
-      yield* event(first, "e1", "c1")
-      yield* event(first, "e2", "c2")
+      yield* reopened(1)
+      yield* event(state.streams[0].id, "e1", "c1")
       // An event without a cursor keeps the last one.
-      yield* event(first, "e3")
-      yield* until(() => wakes.length === 4)
-      expect(wakes[1].id).toBe(wakes[0].id)
-      expect(wakes[2].id).not.toBe(wakes[0].id)
+      yield* event(state.streams[0].id, "e2")
+      yield* advance(() => wakes.length === 2)
+      yield* close(state.streams[0].id)
+      yield* reopened(2)
+      expect(state.streams[1].params).toMatchObject({ cursor: "c1" })
 
-      // The server ends the stream itself, as when it restarts in place: follow it from the last cursor, until
-      // it has closed it three times in a row without an event.
-      for (const index of [0, 1, 2, 3, 4, 5]) {
-        if (index === 3) yield* event(state.streams[3].id, "e4", "c4")
-        yield* close(state.streams[index].id)
-        yield* until(() => state.streams.length === index + 2)
-        expect(state.streams[index + 1].params).toMatchObject({ cursor: index < 3 ? "c2" : "c4" })
-      }
-      yield* close(state.streams[6].id)
-      yield* until(() => wakes.length === 6)
-      expect(wakes[5]).toEqual(stopped("the server kept closing the stream"))
-      expect(state.streams).toHaveLength(7)
-
-      // Deleting the session cancels its stream.
-      yield* watch({ server: "jobs", event: "job.finished", once: false })
-      yield* until(() => state.streams.length === 8)
-      yield* PubSub.publish(deleted, { type: "session.deleted", data: { sessionID } })
-      yield* until(() => state.cancelled.includes(state.streams[7].id))
-
-      // A terminated stream ends the watch and wakes the session to say so, once.
-      yield* watch({ server: "jobs", event: "job.finished", once: false })
-      yield* until(() => state.streams.length === 9)
-      const last = state.streams[8].id
-      yield* terminate(last)
-      yield* event(last, "e5", "c5")
-      yield* until(() => wakes.length === 7)
-      yield* Effect.sleep("20 millis")
-      expect(wakes.slice(6)).toEqual([stopped("Forbidden")])
-      expect(state.streams).toHaveLength(9)
+      // An event starts the count again: two more closes reopen, and the third in a row stops the watch.
+      yield* event(state.streams[1].id, "e3", "c3")
+      yield* advance(() => wakes.length === 3)
+      yield* close(state.streams[1].id)
+      yield* reopened(3)
+      yield* close(state.streams[2].id)
+      yield* reopened(4)
+      expect(state.streams[3].params).toMatchObject({ cursor: "c3" })
+      yield* close(state.streams[3].id)
+      yield* advance(() => wakes.length === 4)
+      expect(wakes[3]).toEqual(stopped("the server kept closing the stream"))
+      expect(state.streams).toHaveLength(4)
     }),
   )
 

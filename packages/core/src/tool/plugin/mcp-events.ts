@@ -102,7 +102,7 @@ export const Plugin = {
               let cursor: string | null | undefined = input.cursor
               let closes = 0
               // A server that closes the stream itself, as when it restarts in place, is followed from the last
-              // cursor, unless it keeps closing it without sending anything.
+              // cursor, until it closes it three times in a row without sending anything.
               const follow = (): ReturnType<typeof events.stream> =>
                 events
                   .stream({ name, arguments: input.arguments, cursor })
@@ -110,7 +110,7 @@ export const Plugin = {
                     Stream.concat(
                       Stream.unwrap(
                         Effect.suspend(() =>
-                          ++closes > 3
+                          ++closes >= 3
                             ? Effect.fail(new Error("the server kept closing the stream"))
                             : Effect.sleep("500 millis").pipe(Effect.as(follow())),
                         ),
