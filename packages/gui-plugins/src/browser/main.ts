@@ -11,6 +11,16 @@ import {
   type MainPaneEvent,
 } from "./main-machine"
 
+/**
+ * This window's provider state. The pill key is omitted until its embed exists: an explicit `undefined` fails the
+ * IPC state schema and drops the whole state, lock snapshot included.
+ */
+export function browserPaneState(locked: boolean, pill: string | undefined) {
+  if (!pill) return { locked }
+
+  return { locked, pill }
+}
+
 const setup: Plugin.MainSetup = (ctx) => {
   let paneState = createMainPaneState<Pane>()
   const pillEmbeds = new Map<number, string>()
@@ -87,7 +97,7 @@ const setup: Plugin.MainSetup = (ctx) => {
   }
 
   const provider = ctx.provide(BrowserPane, {
-    state: (window: number) => ({ locked: screenLock.locked(), pill: pillEmbeds.get(window) }),
+    state: (window: number) => browserPaneState(screenLock.locked(), pillEmbeds.get(window)),
     register: async (input, caller) => {
       // Refused before the pane loads, so a locked screen starts no browser.
       if (screenLock.locked()) throw new Error("browser.pane.locked")
