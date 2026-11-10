@@ -161,7 +161,7 @@ describe("sidebarView", () => {
     ])
   })
 
-  test("collapsed groups hide their open keys unless they hold the active row", () => {
+  test("collapsed groups hide their open keys but keep the active row", () => {
     const rows = [
       row({ key: "a1", server: "a", projectID: "p1", order: 0 }),
       row({ key: "a2", server: "a", projectID: "p2", order: 1 }),
@@ -180,11 +180,11 @@ describe("sidebarView", () => {
 
     expect(view.groups.map((group) => [group.key, group.collapsed, group.children?.length])).toEqual([
       ["server:a", false, 2],
-      ["server:b", false, 2],
+      ["server:b", true, 2],
       ["server:c", true, 1],
     ])
     expect(view.groups[0]?.children?.map((child) => child.collapsed)).toEqual([false, true])
-    expect(view.openKeys).toEqual(["a1", "b1", "b2"])
+    expect(view.openKeys).toEqual(["a1", "b2"])
 
     const flat = sidebarView(
       rows,
@@ -193,8 +193,8 @@ describe("sidebarView", () => {
 
     expect(flat.groups.map((group) => [group.key, group.collapsed])).toEqual([
       ["project:p1", true],
-      ["project:p2", false],
+      ["project:p2", true],
     ])
-    expect(flat.openKeys).toEqual(["a2", "b2"])
+    expect(flat.openKeys).toEqual(["b2"])
   })
 })

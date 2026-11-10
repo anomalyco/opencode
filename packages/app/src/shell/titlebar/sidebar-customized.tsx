@@ -349,6 +349,15 @@ export function SidebarCustomized(props: {
     </Show>
   )
 
+  // A collapsed group keeps the current session visible below its header.
+  const activeRecent = (group: SidebarGroup<Row>) => {
+    const row = group.rows.find((item) => item.active && !item.open)
+
+    if (!row) return
+
+    return sessionRow(row, group, new Map([[row.key, row]]))
+  }
+
   const leafSection = (group: SidebarGroup<Row>): TabStripSection => {
     const byKey = new Map(group.rows.map((row) => [row.key, row]))
 
@@ -362,9 +371,11 @@ export function SidebarCustomized(props: {
 
     return {
       key: group.key,
-      tabs: group.collapsed ? [] : group.rows.flatMap((row) => (row.open && row.tab ? [row.tab] : [])),
+      tabs: group.rows.flatMap((row) => (row.open && row.tab && (!group.collapsed || row.active) ? [row.tab] : [])),
       header: group.kind === "all" ? undefined : <GroupHeader group={group} />,
-      footer: group.collapsed ? undefined : (
+      footer: group.collapsed ? (
+        activeRecent(group)
+      ) : (
         <>
           <For each={footerRows.filter((row) => shown.has(anchorOf(row, byKey)))}>
             {(row) => sessionRow(row, group, byKey)}
@@ -389,9 +400,18 @@ export function SidebarCustomized(props: {
       if (!group.children) return [leafSection(group)]
 
       // Server → Project keeps every row at one inset: the server reads as a section label above its projects.
+      if (!group.collapsed)
+        return [{ key: group.key, tabs: [], header: <GroupHeader group={group} /> }, ...group.children.map(leafSection)]
+
+      const active = group.children.find((child) => child.rows.some((row) => row.active))
+
       return [
-        { key: group.key, tabs: [], header: <GroupHeader group={group} /> },
-        ...(group.collapsed ? [] : group.children.map(leafSection)),
+        {
+          key: group.key,
+          tabs: active ? active.rows.flatMap((row) => (row.active && row.open && row.tab ? [row.tab] : [])) : [],
+          header: <GroupHeader group={group} />,
+          footer: active ? activeRecent(active) : undefined,
+        },
       ]
     }),
   )
@@ -403,6 +423,10 @@ export function SidebarCustomized(props: {
     const group = groupOf(key)
 
     if (!group) return
+
+    const parent = result().groups.find((item) => item.children?.includes(group))
+
+    if (group.collapsed || parent?.collapsed) return
     const byKey = new Map(group.rows.map((row) => [row.key, row]))
 
     const children = group.rows.filter((row) => row.key !== key && anchorOf(row, byKey).key === key)

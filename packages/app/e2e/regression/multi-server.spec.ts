@@ -443,6 +443,16 @@ test("customized vertical sidebar merges a project across servers and narrows it
   await expect(sidebar.locator('[data-slot="tab-label"]')).toHaveCount(1)
   await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
 
+  // Collapsing the group that holds the current session keeps only that session below it.
+  const header = groups.first().locator("button[aria-expanded]")
+
+  await header.click()
+  await expect(header).toHaveAttribute("aria-expanded", "false")
+  await expect(titles).toHaveText([local.title])
+  await expect(sidebar.getByRole("button", { name: recent.title })).toHaveCount(0)
+  await header.click()
+  await expect(titles).toHaveText([local.title, remote.title])
+
   const menu = page.getByRole("menu")
 
   await page.getByRole("button", { name: "View options" }).click()
