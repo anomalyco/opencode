@@ -563,7 +563,7 @@ impl Writer {
         let image = commit
             .image
             .as_deref()
-            .and_then(crate::prompt::images::data_uri)
+            .and_then(opencode_ui::prompt_input::attach::data_uri)
             .and_then(|bytes| opentui::native::Image::decode(app.session().context(), &bytes).ok());
         let text = if image.is_some() { caption.clone() } else { format!("{caption}\nNo preview") };
         let (fg, attributes) = entry_look(commit, &self.theme);
