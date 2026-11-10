@@ -127,13 +127,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
-    label: "settings.timeline.row.newMessagesDivider.title",
-    description: "settings.timeline.row.newMessagesDivider.description",
-    target: "settings-new-messages-divider",
-    keywords: "unread new messages divider return session",
-  },
-  {
-    tab: "experimental",
     label: "settings.experimental.row.sidebarOrganize.title",
     target: "settings-sidebar-organize",
     description: "settings.experimental.row.sidebarOrganize.description",

@@ -502,12 +502,26 @@ describe("image and decision generation", () => {
               { label: "Actively blocking revenue" },
             ],
           },
-          { type: "predicate", name: "refund", instructions: "Is the customer asking for a refund?" },
+          {
+            type: "predicate",
+            name: "refund",
+            instructions: "Is the customer asking for a refund?",
+            criteria: { true: "They want money back.", false: "Anything else." },
+          },
         ],
       })
       expect(requests[0]).toMatchObject({
         url: "https://openrouter.ai/api/v1/systemone",
         headers: { authorization: "Bearer openrouter-key" },
+        body: {
+          questions: {
+            refund: {
+              type: "noul",
+              instructions: "Is the customer asking for a refund?",
+              criteria: { true: "They want money back.", false: "Anything else." },
+            },
+          },
+        },
       })
       expect(result.answers.map((answer) => [answer.name, answer.type])).toEqual([
         ["department", "choice"],

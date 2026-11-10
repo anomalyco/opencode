@@ -1,76 +1,132 @@
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
-import { type HomeProjectSelection, useLayout } from "@/shell/state/layout"
+import { useLayout } from "@/shell/state/layout"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { isServerFailed } from "@/runtime/server/health-machine"
+import { usePluginServers } from "@/runtime/plugin/servers"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
-import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
-import { createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { pathKey } from "@/workspaces/path-key"
 import { addProjects } from "./projects/add"
+import {
+  INITIAL_HOME_SELECTION_STATE,
+  sameHomeSelection,
+  selectHomeSelection,
+  transitionHomeSelection,
+  type HomeEnvSnapshot,
+  type HomeSelectionEffect,
+  type HomeSelectionEvent,
+} from "./machine"
 
 export function createHomeController() {
   const layout = useLayout()
   const global = useGlobal()
   const servers = useServers()
+  const pluginServers = usePluginServers()
   const sessions = createProjectSessionActions()
-  const selection = layout.home.selection
 
-  const focusedServer = createMemo<ServerConnection.Any | undefined>(
-    () => servers.visible.find((conn) => ServerConnection.key(conn) === selection().server) ?? servers.visible[0],
+  const env = createMemo(
+    (): HomeEnvSnapshot => ({
+      hydrated: layout.ready() && servers.hydrated() && pluginServers.ready(),
+      stored: { server: layout.home.selection().server, directory: layout.home.selection().directory },
+      servers: servers.visible.map((conn) => {
+        const key = ServerConnection.key(conn)
+        const ctx = global.serverCtx(key)
+
+        return {
+          key,
+          failed: isServerFailed(global.servers.health[key]),
+          connected: ctx?.sdk.connection.status() === "connected",
+          projectsReady: !!ctx?.sync.project.ready() && servers.projects.forServer(key).legacy() === undefined,
+          usedProjects: (ctx?.projects.used() ?? []).map((project) => ({ id: project.id, worktree: project.worktree })),
+        }
+      }),
+    }),
   )
+
+  // Seeded synchronously, so the first render already shows a listed server.
+  const initial = transitionHomeSelection(INITIAL_HOME_SELECTION_STATE, { type: "env.synced", env: untrack(env) })
+  const [machine, setMachine] = createSignal(initial.state)
+
+  const dispatch = (event: HomeSelectionEvent) => {
+    const result = transitionHomeSelection(untrack(machine), event)
+
+    if (result.state !== untrack(machine)) setMachine(result.state)
+    result.effects.forEach(run)
+  }
+
+  // A user action can follow a server change in the same update, before the effect below reports it.
+  const send = (event: HomeSelectionEvent) =>
+    untrack(() =>
+      batch(() => {
+        dispatch({ type: "env.synced", env: env() })
+        dispatch(event)
+      }),
+    )
+
+  function run(effect: HomeSelectionEffect) {
+    if (effect.type === "selection.persist") return layout.home.setSelection(effect.selection)
+
+    if (effect.type === "worktrees.refresh")
+      return void global.serverCtx(effect.server)?.sync.worktrees.refresh(effect.projectID)
+
+    const ctx = global.serverCtx(effect.server)
+
+    if (effect.type === "worktrees.list") {
+      // The inventory read never rejects; a failed read still asks the server to discover worktrees.
+      if (!ctx) return dispatch({ type: "worktrees.listed", attempt: effect.attempt })
+
+      return void ctx.sync.worktrees
+        .list(effect.projectID)
+        .then(() => dispatch({ type: "worktrees.listed", attempt: effect.attempt }))
+    }
+
+    if (!ctx) return dispatch({ type: "project.added", attempt: effect.attempt, project: undefined })
+
+    void addProjects(ctx, [...effect.directories]).then(
+      (project) =>
+        send({
+          type: "project.added",
+          attempt: effect.attempt,
+          project: project && { id: project.id, worktree: project.worktree },
+        }),
+      () => dispatch({ type: "project.added", attempt: effect.attempt, project: undefined }),
+    )
+  }
+
+  initial.effects.forEach(run)
+
+  createEffect(() => {
+    const current = env()
+    untrack(() => dispatch({ type: "env.synced", env: current }))
+  })
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  const selection = createMemo(() => selectHomeSelection(machine()), undefined, { equals: sameHomeSelection })
+
+  const focusedServer = createMemo(() => {
+    const key = selection().server
+
+    return key ? servers.visible.find((conn) => ServerConnection.key(conn) === key) : undefined
+  })
 
   const focusedServerCtx = useServerCtx(focusedServer)
   const focusedSync = () => focusedServerCtx()?.sync
   // Home lists the server's projects this client has used.
   const projects = createMemo(() => focusedServerCtx()?.projects.used() ?? [])
-  const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
+
+  const selectedProject = createMemo(() => {
+    const directory = selection().directory
+
+    return directory ? projects().find((project) => pathKey(project.worktree) === pathKey(directory)) : undefined
+  })
 
   const newSessionProject = createMemo(() => selectedProject() ?? focusedServerCtx()?.projects.last() ?? projects()[0])
-
-  createEffect(() => {
-    const list = servers.visible
-
-    if (list.some((conn) => ServerConnection.key(conn) === selection().server)) return
-    const conn = list[0]
-
-    if (conn) setSelection({ server: ServerConnection.key(conn) })
-  })
-  createEffect(() => {
-    const ctx = focusedServerCtx()
-    const id = selectedProject()?.id
-
-    if (!ctx || !id || ctx.sdk.connection.status() !== "connected") return
-    // Selecting a project is the demand for its worktree inventory: the session filter spans its worktrees.
-    void ctx.sync.worktrees.list(id).then(() => ctx.sync.worktrees.refresh(id))
-  })
-  createEffect(() => {
-    // The project list is empty until the server store hydrates and the server answers; clearing the restored
-    // selection against it would persist the loss.
-    if (!servers.hydrated()) return
-    const current = selection()
-    const directory = current.directory
-
-    if (!directory) return
-    const conn = servers.visible.find((conn) => ServerConnection.key(conn) === current.server)
-
-    if (!conn) return
-    const ctx = global.serverCtx(ServerConnection.key(conn))
-
-    if (!ctx?.sync.project.ready()) return
-
-    if (ctx.projects.used().some((project) => pathKey(project.worktree) === pathKey(directory))) return
-    setSelection({ server: current.server })
-  })
-
-  function setSelection(next: HomeProjectSelection) {
-    layout.home.setSelection(next)
-  }
 
   return {
     selection: {
       value: selection,
-      set: setSelection,
-      focusServer: (conn: ServerConnection.Any) => setSelection({ server: ServerConnection.key(conn) }),
+      focusServer: (conn: ServerConnection.Any) => send({ type: "server.focused", server: ServerConnection.key(conn) }),
     },
     server: {
       list: () => servers.visible,
@@ -86,29 +142,10 @@ export function createHomeController() {
       selected: selectedProject,
       newSession: newSessionProject,
       forServer: (conn: ServerConnection.Any) => global.serverCtx(ServerConnection.key(conn))?.projects.used() ?? [],
-      select: (conn: ServerConnection.Any, directory: string) => {
-        const key = ServerConnection.key(conn)
-
-        if (isServerFailed(global.servers.health[key])) return
-
-        if (
-          !global
-            .serverCtx(key)
-            ?.projects.used()
-            .some((project) => project.worktree === directory)
-        )
-          return
-        setSelection(toggleHomeProjectSelection(selection(), key, directory))
-      },
-      add: async (conn: ServerConnection.Any, directories: string[]) => {
-        const ctx = global.serverCtx(ServerConnection.key(conn))
-
-        if (!ctx) return
-        const project = await addProjects(ctx, directories)
-
-        if (!project) return
-        setSelection({ server: ServerConnection.key(conn), directory: project.worktree })
-      },
+      select: (conn: ServerConnection.Any, directory: string) =>
+        send({ type: "project.toggled", server: ServerConnection.key(conn), directory }),
+      add: (conn: ServerConnection.Any, directories: string[]) =>
+        send({ type: "project.add", server: ServerConnection.key(conn), directories }),
       openNewSession: () => {
         const conn = focusedServer()
         const project = newSessionProject()

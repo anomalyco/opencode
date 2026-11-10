@@ -142,7 +142,7 @@ stays visible; the renderer uploads the missing bytes again from the chunk text 
 normally, fresh ids on a store without WebCrypto), and publishes. This covers a chunk another
 tab collected, and an image the composer kept in its history long after its blob was
 collected. The desktop host additionally refreshes `touched_at` for every blob a written
-document references and collects only blobs unreferenced and untouched for `blobGrace`, so
+document references and collects only blobs unreferenced and untouched for `BLOB_GRACE_MS`, so
 repairs stay rare.
 `persisted()` hands the draft store the encoded document (`setDocument`) rather than
 a serialized string, so the store does not re-parse the full document to externalize

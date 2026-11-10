@@ -79,20 +79,6 @@ export const SettingsExperimental: Component = () => {
                 </Switch>
               </div>
             </SettingsRow>
-            <SettingsRow
-              title={language.t("settings.timeline.row.newMessagesDivider.title")}
-              description={language.t("settings.timeline.row.newMessagesDivider.description")}
-            >
-              <div data-action="settings-new-messages-divider">
-                <Switch
-                  checked={settings.general.newMessagesDivider()}
-                  onChange={settings.general.setNewMessagesDivider}
-                  hideLabel
-                >
-                  {language.t("settings.timeline.row.newMessagesDivider.title")}
-                </Switch>
-              </div>
-            </SettingsRow>
           </SettingsList>
         </div>
       </div>

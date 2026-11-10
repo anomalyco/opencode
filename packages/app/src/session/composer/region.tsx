@@ -14,7 +14,7 @@ import { setCursorPosition } from "@/composer/editor/dom"
 import { promptLength } from "@/composer/prompt-parts"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { showToast } from "@/shell/notifications/toast"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -243,7 +243,9 @@ export function createActiveSessionRegion(input: {
     setActiveMessage: input.timeline.actions.setActiveMessage,
   })
 
-  const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
+  const revertMessage: NonNullable<SessionUserActions["revert"]> = (target) =>
+    revert.to(target.messageID, target.sessionID)
+
   const fork = useSessionFork()
   const forkMessage: NonNullable<SessionUserActions["fork"]> = (target) => fork(target).then(() => undefined)
 
@@ -291,8 +293,12 @@ export function createActiveSessionRegion(input: {
     showToast({ title: language.t("common.requestFailed") })
   }
 
+  const handoffs = useServer().ctx.handoff
+
   const pendingSteer: TimelinePendingActions = {
-    status: (sessionID, messageID) => data.session.pending.status(sessionID, messageID),
+    // A prompt held for its Location's agents and models shows as sending until it has a server row.
+    status: (sessionID, messageID) =>
+      handoffs.held(sessionID, messageID) ? "sending" : data.session.pending.status(sessionID, messageID),
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox
         .update({ sessionID, inboxID: messageID, delivery: "queue" })
@@ -332,11 +338,11 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    // Submitting reads past the automatic unread marker. Keep a reader's own scroll or revealed tool in place.
+    // A reader far enough up to see the jump-to-latest button stays put; anyone closer is taken to the new prompt.
     onResponseSubmit: () => {
-      const anchor = input.timeline.follow.anchor()
+      const scroll = input.timeline.scroll
 
-      if (input.timeline.follow.following() || (anchor && !anchor.partID)) input.timeline.actions.resume()
+      if (input.timeline.follow.following() || !(scroll.overflow && scroll.jump)) input.timeline.actions.resume()
     },
     openParent,
     focusPrompt: () => focusPrompt(),
@@ -384,11 +390,7 @@ export function createActiveSessionRegion(input: {
 
         if (source.length) prompt.capture().quoteSource.add(contextItemKey(item), source)
 
-        if (anchor) {
-          prompt.capture().quoteSource.pend(contextItemKey(item))
-
-          return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
-        }
+        if (anchor) return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
 
         focusPrompt()
       },
@@ -427,14 +429,24 @@ export function ActiveSessionComposerRegion(props: {
   const openRoute = useOpenSessionRoute()
 
   // Only the server's LocationNotFoundError for the session's own Location replaces the composer.
-  const missing = createMemo(() => {
-    const ref = location().missing
-    const info = props.session.data.info()
+  // A refetched session info (on reconnect) must not remount the keyed view and close its open menu.
+  const missing = createMemo(
+    () => {
+      const ref = location().missing
+      const info = props.session.data.info()
 
-    if (!ref || !info || !sameDirectory(info.location.directory, ref.directory)) return
+      if (!ref || !info || !sameDirectory(info.location.directory, ref.directory)) return
 
-    return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
-  })
+      return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
+    },
+    undefined,
+    {
+      equals: (previous, next) =>
+        previous?.directory === next?.directory &&
+        previous?.sessionID === next?.sessionID &&
+        previous?.projectID === next?.projectID,
+    },
+  )
 
   // Subagents count while their session runs, or while their blocking call waits for its child session.
   const subagents = createMemo<SessionActivityItem[]>(() =>

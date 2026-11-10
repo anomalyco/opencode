@@ -4,7 +4,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { open } from "node:fs/promises"
 import path from "node:path"
-import { readStdin } from "../util/io"
+import { readStdin, readStdinIfReady } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
 import { createWorktreeLocation, parseSessionTargetModel, resolveSessionTarget } from "../session-target"
 import { toolInlineInfo } from "@opencode/tui/mini/tool"
@@ -30,25 +30,12 @@ export type RunCommandInput = {
   auto?: boolean
 }
 
-type FilePart = {
-  url: string
-  filename: string
-  mime: string
-}
+type FilePart = { text: string } | { attachment: { uri: string; name: string } }
 
 type Prepared = {
-  directory?: string
+  directory: string
   message: string
   files: FilePart[]
-}
-
-type ExecutionOptions = {
-  root?: string
-  directory?: string
-  useServerDirectory?: boolean
-  variant?: string
-  attached?: boolean
-  compatibility?: "v1"
 }
 
 class RunTargetError extends Error {
@@ -61,31 +48,34 @@ class RunTargetError extends Error {
 }
 
 const ATTACH_FILE_MAX_BYTES = 10 * 1024 * 1024
+const PIPED_INPUT_GRACE_MS = 1000
 
-export function runNonInteractive(input: RunCommandInput) {
-  return runNonInteractiveWithOptions(input, {})
+/** `signal` aborts on SIGINT or SIGTERM; the run then cancels its Session and background jobs and returns. */
+export function runNonInteractive(input: RunCommandInput, signal: AbortSignal) {
+  return run(input, signal).catch((error) => reportRunError(input, errorMessage(error)))
 }
 
-/** @internal Used only by the V1 command boundary. */
-export function runNonInteractiveWithOptions(input: RunCommandInput, options: ExecutionOptions) {
-  return run(input, options).catch((error) => reportRunError(input, errorMessage(error)))
-}
-
-async function run(input: RunCommandInput, options: ExecutionOptions) {
+async function run(input: RunCommandInput, signal: AbortSignal) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   if (input.worktree !== undefined && (input.continue || input.session))
     fail("--worktree starts a new session and cannot be combined with --continue or --session")
-  const root = options.root ?? process.env.PWD ?? process.cwd()
-  const local = localDirectory(root)
-  const directory = options.useServerDirectory ? undefined : (options.directory ?? local)
-  const message = mergeInput(formatMessage(input.message), process.stdin.isTTY ? undefined : await readStdin())
+  const root = process.env.PWD ?? process.cwd()
+  const directory = localDirectory(root)
+  const argument = input.message.join(" ") || undefined
+  // With a message argument, stdin is extra context: a shell pipe is read in full, but the open, silent
+  // stdin that spawn's default stdio gives a child must not hold the run.
+  const piped = process.stdin.isTTY
+    ? undefined
+    : argument
+      ? await readStdinIfReady(PIPED_INPUT_GRACE_MS)
+      : await readStdin()
+  const message = mergeInput(argument, piped)
   if (!message?.trim()) fail("You must provide a message")
-  const files = await Promise.all(input.file.map((file) => prepareFile(file, root, options)))
-  const prepared = { directory, message, files }
-  return execute(input, prepared, input.server.endpoint, options)
+  const files = await Promise.all(input.file.map((file) => prepareFile(file, root)))
+  return execute(input, { directory, message, files }, input.server.endpoint, signal)
 }
 
-async function execute(input: RunCommandInput, prepared: Prepared, endpoint: Endpoint, options: ExecutionOptions) {
+async function execute(input: RunCommandInput, prepared: Prepared, endpoint: Endpoint, signal: AbortSignal) {
   const client = OpenCode.make({
     baseUrl: endpoint.url,
     headers: Service.headers(endpoint),
@@ -93,7 +83,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     fetch: noTimeoutFetch,
   })
   const explicit = parseRunModel(input.model)
-  const location = prepared.directory ? { directory: prepared.directory } : undefined
+  const location = { directory: prepared.directory }
   const worktree =
     input.worktree === undefined
       ? undefined
@@ -115,23 +105,9 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     agent: input.agent,
     environment: input.server.service ? Env.session() : undefined,
     prepare: async (next) => {
-      const selected =
-        next.model ??
-        (options.variant
-          ? await client.model
-              .default({ location: { directory: next.location.directory } })
-              .then((result) => result.data)
-          : undefined)
-      const model = selected
-        ? {
-            providerID: selected.providerID,
-            id: selected.id,
-            variant: options.variant ?? ("variant" in selected ? selected.variant : undefined),
-          }
-        : undefined
-      if ((options.variant ?? explicit?.variant) && !model)
+      if (explicit?.variant && !next.model)
         throw new RunTargetError("Cannot select a variant before selecting a model", next.session?.id)
-      return { model, agent: next.agent }
+      return { model: next.model, agent: next.agent }
     },
   }).catch((error) => {
     if (!(error instanceof RunTargetError)) throw error
@@ -139,8 +115,6 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     return undefined
   })
   if (!target) return
-  const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
-  const variant = target.model?.variant
   const title =
     !target.resume && input.title !== undefined
       ? input.title || prepared.message.slice(0, 50) + (prepared.message.length > 50 ? "..." : "")
@@ -155,16 +129,15 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     client,
     sessionID: target.session.id,
     location: target.location,
-    message: prepared.message,
-    files: prepared.files,
+    message: [prepared.message, ...prepared.files.flatMap((file) => ("text" in file ? [file.text] : []))].join("\n\n"),
+    files: prepared.files.flatMap((file) => ("attachment" in file ? [file.attachment] : [])),
     agent: target.agent,
-    model,
-    variant,
+    model: target.model,
     thinking: input.thinking ?? false,
     format: input.format,
     auto: input.auto ?? false,
-    attached: options.attached ?? true,
-    compatibility: options.compatibility,
+    standalone: input.server.standalone ?? false,
+    signal,
     renderTool: (part) => renderTool(part, target.location.directory),
     renderToolError: (part) => renderToolError(part, target.location.directory),
   }).catch((error) => reportRunError(input, errorMessage(error), target.session.id))
@@ -174,11 +147,6 @@ export function mergeInput(message: string | undefined, piped: string | undefine
   if (!message) return piped || undefined
   if (!piped) return message
   return message + "\n" + piped
-}
-
-function formatMessage(message: string[]) {
-  const value = message.map((part) => (part.includes(" ") ? `"${part.replace(/"/g, '\\"')}"` : part)).join(" ")
-  return value || undefined
 }
 
 function localDirectory(root: string) {
@@ -199,13 +167,11 @@ export function parseRunModel(value?: string) {
   }
 }
 
-async function prepareFile(input: string, directory: string, options: ExecutionOptions): Promise<FilePart> {
+async function prepareFile(input: string, directory: string): Promise<FilePart> {
   const file = path.resolve(directory, input)
   const handle = await open(file, "r").catch(() => fail(`File not found: ${input}`))
   try {
     const stat = await handle.stat()
-    if (options.compatibility === "v1" && options.attached && stat.isDirectory())
-      fail(`Cannot attach local directory without a shared filesystem: ${input}`)
     if (!stat.isFile() || stat.size > ATTACH_FILE_MAX_BYTES)
       fail(`Cannot attach a directory, special file, or file larger than 10 MiB: ${input}`)
     const content = Buffer.alloc(Number(stat.size))
@@ -224,11 +190,9 @@ async function prepareFile(input: string, directory: string, options: ExecutionO
         : !isBinaryContent(bytes) && Buffer.from(text, "utf8").equals(bytes)
           ? "text/plain"
           : detected
-    return {
-      url: `data:${mime};base64,${bytes.toString("base64")}`,
-      filename: path.basename(file),
-      mime,
-    }
+    const name = path.basename(file)
+    if (mime === "text/plain") return { text: `<file name="${name}">\n${text}\n</file>` }
+    return { attachment: { uri: `data:${mime};base64,${bytes.toString("base64")}`, name } }
   } finally {
     await handle.close()
   }
@@ -261,7 +225,6 @@ async function renderToolError(part: SessionMessageAssistantTool, directory: str
   UI.println(UI.Style.TEXT_NORMAL + "✗", UI.Style.TEXT_NORMAL + `${info.title} failed`)
 }
 
-/** @internal Used by the V1 command boundary before a Session exists. */
 export function reportRunError(input: Pick<RunCommandInput, "format">, message: string, sessionID?: string) {
   process.exitCode = 1
   if (input.format === "json") {

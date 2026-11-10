@@ -2,6 +2,7 @@ import { getDirectory, getFilename } from "@opencode/util/path"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Dialog, DialogBody } from "@opencode/ui/dialog"
 import { Keybind } from "@opencode/ui/keybind"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { SearchHighlight, SearchList, type SearchListRow } from "@opencode/ui/search-list"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -9,6 +10,7 @@ import { formatKeybindParts } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useTabs } from "@/shell/tabs/tabs"
 import { ActivityRing } from "@opencode/ui/activity-ring"
+import { Loader } from "@opencode/ui/loader"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import type { ServerConnection } from "@/runtime/server/registry"
@@ -65,6 +67,8 @@ export function CommandPaletteView(props: {
   highlight: (item: CommandPaletteEntry | undefined) => void
   select: (item: CommandPaletteEntry | undefined) => void
   close: () => void
+  /** The row whose selection is still in progress, such as an archived session being restored. */
+  busyEntryID?: string
 }) {
   const language = useLanguage()
   const tabs = useTabs()
@@ -106,7 +110,15 @@ export function CommandPaletteView(props: {
           onSelect={props.select}
           onClose={props.close}
         >
-          {(item, row) => <PaletteRow row={row} item={item()} language={language} sessionOpen={sessionOpen(item())} />}
+          {(item, row) => (
+            <PaletteRow
+              row={row}
+              item={item()}
+              language={language}
+              sessionOpen={sessionOpen(item())}
+              busy={props.busyEntryID === item().id}
+            />
+          )}
         </SearchList>
       </DialogBody>
     </Dialog>
@@ -118,6 +130,7 @@ function PaletteRow(props: {
   item: CommandPaletteEntry
   language: ReturnType<typeof useLanguage>
   sessionOpen: boolean
+  busy: boolean
 }) {
   const session = () =>
     props.item.server && props.item.directory && props.item.sessionID
@@ -125,7 +138,13 @@ function PaletteRow(props: {
       : undefined
 
   return (
-    <button type="button" class="command-palette-row group" data-size="compact" {...props.row}>
+    <button
+      type="button"
+      class="command-palette-row group"
+      data-size="compact"
+      aria-busy={props.busy || undefined}
+      {...props.row}
+    >
       <Switch
         fallback={
           <div class="command-palette-row-main">
@@ -169,6 +188,7 @@ function PaletteRow(props: {
               sessionID={session().sessionID}
               language={props.language}
               sessionOpen={props.sessionOpen}
+              busy={props.busy}
             />
           )}
         </Match>
@@ -184,6 +204,7 @@ function PaletteSessionRow(props: {
   sessionID: string
   language: ReturnType<typeof useLanguage>
   sessionOpen: boolean
+  busy: boolean
 }) {
   const status = useSessionTabAvatarState(
     () => props.server,
@@ -226,24 +247,48 @@ function PaletteSessionRow(props: {
           </Show>
         </div>
       </div>
-      {/* The project avatar stays put; a working session shows its activity ring where its age would be. */}
-      <Show
-        when={status.loading()}
+      {/* The project avatar stays put; a working session shows its activity ring where its age would be, and a session
+      being restored a loader. */}
+      <Switch
         fallback={
           <Show when={props.item.updated}>
             {(updated) => (
-              <span class="command-palette-meta">
-                {getRelativeTime(new Date(updated()).toISOString(), props.language.t)}
-              </span>
+              <Tooltip
+                class="shrink-0"
+                placement="top"
+                value={new Intl.DateTimeFormat(props.language.intl(), {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                }).format(updated())}
+              >
+                <span class="command-palette-meta">
+                  {getRelativeTime(new Date(updated()).toISOString(), props.language.t, props.language.intl())}
+                </span>
+              </Tooltip>
             )}
           </Show>
         }
       >
-        <span class="command-palette-meta">
-          <span class="sr-only">{props.language.t("session.timeline.working")}</span>
-          <ActivityRing />
-        </span>
-      </Show>
+        <Match when={props.busy}>
+          <span class="command-palette-meta">
+            <Loader
+              class="size-3.5 shrink-0"
+              role="img"
+              aria-hidden="false"
+              aria-label={props.language.t("common.loading")}
+            />
+          </span>
+        </Match>
+        <Match when={status.loading()}>
+          <span class="command-palette-meta">
+            <span class="sr-only">{props.language.t("session.timeline.working")}</span>
+            <ActivityRing />
+          </span>
+        </Match>
+      </Switch>
     </>
   )
 }

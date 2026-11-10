@@ -7,20 +7,18 @@ import { PluginServerRow } from "@/servers/registry/plugin-row"
 import { AddServerMenu } from "@/servers/registry/add-menu"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
-import { isServerFailed, isServerUnauthorized } from "@/runtime/server/health-machine"
 import { useServerCollectionController } from "@/servers/registry/controller"
 import { DialogServer } from "@/servers/connect/dialog"
 import { SettingsList } from "@/settings/list"
 import { ShellSetting } from "@/settings/general/general"
 import { createServerShellController } from "@/settings/general/controllers"
 import type { SettingsServer } from "./inventory"
+import { serverPagesConnection, unauthorizedHttpServer } from "./machine"
 import "@/settings/settings.css"
 
 /** The only server's connection and preferences. */
 export const SettingsServerGeneral: Component<{ entry: SettingsServer; onAddServer: () => void }> = (props) => {
   const language = useLanguage()
-  const controller = useServerCollectionController()
-  const health = createMemo(() => controller.collection.health()[props.entry.key])
 
   return (
     <>
@@ -34,7 +32,7 @@ export const SettingsServerGeneral: Component<{ entry: SettingsServer; onAddServ
           </SettingsList>
         </section>
 
-        <Show when={props.entry.connection && !isServerFailed(health()) ? props.entry.connection : undefined} keyed>
+        <Show when={serverPagesConnection(props.entry.availability)} keyed>
           {(server) => (
             <section class="settings-section">
               <h3 class="settings-section-title">{language.t("settings.tab.preferences")}</h3>
@@ -58,7 +56,6 @@ export const SettingsServerList: Component<{
   onServerChange: (server: ServerConnection.Any) => void
 }> = (props) => {
   const language = useLanguage()
-  const controller = useServerCollectionController()
 
   return (
     <>
@@ -74,14 +71,7 @@ export const SettingsServerList: Component<{
             >
               <SettingsList>
                 <ServerConnectionRow entry={entry} onServerChange={props.onServerChange} />
-                <Show
-                  when={
-                    entry.connection && !isServerFailed(controller.collection.health()[entry.key])
-                      ? entry.connection
-                      : undefined
-                  }
-                  keyed
-                >
+                <Show when={serverPagesConnection(entry.availability)} keyed>
                   {(server) => (
                     <ServerShell
                       server={server}
@@ -116,7 +106,10 @@ function SettingsServersHeader(props: { title: string; onAddServer: () => void }
   )
 }
 
-function ServerConnectionRow(props: { entry: SettingsServer; onServerChange?: (server: ServerConnection.Any) => void }) {
+function ServerConnectionRow(props: {
+  entry: SettingsServer
+  onServerChange?: (server: ServerConnection.Any) => void
+}) {
   const dialog = useDialog()
   const language = useLanguage()
   const controller = useServerCollectionController()
@@ -124,10 +117,6 @@ function ServerConnectionRow(props: { entry: SettingsServer; onServerChange?: (s
 
   const edit = (server: ServerConnection.Http) =>
     void dialog.push(() => <DialogServer mode="edit" server={server} onSave={props.onServerChange} />)
-
-  // An HTTP server that rejects its saved credentials signs in again through the edit dialog.
-  const signedOut = (server: ServerConnection.Any) =>
-    server.type === "http" && isServerUnauthorized(health()) ? server : undefined
 
   return (
     <Show
@@ -149,7 +138,7 @@ function ServerConnectionRow(props: { entry: SettingsServer; onServerChange?: (s
                 </div>
               </div>
               <div class="settings-servers-actions">
-                <Show when={signedOut(server())}>
+                <Show when={unauthorizedHttpServer(props.entry.availability)}>
                   {(http) => (
                     <Button size="small" variant="neutral" onClick={() => edit(http())}>
                       {language.t("server.action.authenticate")}

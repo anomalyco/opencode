@@ -123,6 +123,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
         </DialogHeader>
       }
       footer={{ actions: { primary: copyActions() } }}
+      footerGap={0}
       legacyFooter={
         <DialogFooter
           actions={{

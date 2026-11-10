@@ -48,8 +48,8 @@ it.effect("Groq lowers its own options for custom catalog identities and endpoin
       }),
     )
     expect(model.route.endpoint.baseURL).toBe("https://gateway.example/v1")
-    expect(model.route.defaults.headers).toEqual({ "x-client": "test" })
-    expect(model.route.defaults.http?.body).toEqual({ custom: "value" })
+    expect(model.options?.headers).toEqual({ "x-client": "test" })
+    expect(model.options?.http?.body).toEqual({ custom: "value" })
     expect(compiled.body).toMatchObject({
       reasoning_effort: "default",
       reasoning_format: "parsed",

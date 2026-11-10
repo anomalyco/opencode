@@ -125,7 +125,6 @@ const generalSchema = Persistence.struct({
   }),
   showCustomAgents: Schema.Boolean,
   showTurnDiffs: Schema.Boolean,
-  newMessagesDivider: Schema.Boolean,
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
   // The "New icons" design experiment, off until it ships.
@@ -303,7 +302,6 @@ export const defaultSettings: Settings = {
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
     showTurnDiffs: false,
-    newMessagesDivider: true,
     backgroundActivity: "left",
     timelineWidth: "comfortable",
     newIcons: false,
@@ -404,13 +402,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showTurnDiffs: withFallback(() => store.general?.showTurnDiffs, defaultSettings.general.showTurnDiffs),
         setShowTurnDiffs(value: boolean) {
           setStore("general", "showTurnDiffs", value)
-        },
-        newMessagesDivider: withFallback(
-          () => store.general?.newMessagesDivider,
-          defaultSettings.general.newMessagesDivider,
-        ),
-        setNewMessagesDivider(value: boolean) {
-          setStore("general", "newMessagesDivider", value)
         },
         backgroundActivity: withFallback(
           () => store.general?.backgroundActivity,
