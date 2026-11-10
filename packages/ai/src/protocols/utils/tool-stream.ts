@@ -204,23 +204,12 @@ export const appendExisting = <K extends StreamKey>(
  * from state, and reject malformed local arguments without repairing them.
  * Missing keys are a no-op because some providers emit stop events for
  * non-tool content blocks.
- */
-export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K) =>
-  Effect.gen(function* () {
-    const tool = tools[key]
-    if (!tool) return { tools }
-    return {
-      tools: withoutTool(tools, key),
-      events: finishEvents(tool, yield* toolCall(route, tool)),
-    }
-  })
-
-/**
- * Finalize one pending tool call with an authoritative final input string.
+ *
+ * Pass `input` when the provider sends an authoritative final input string.
  * OpenAI Responses can send accumulated deltas and then repeat the completed
  * arguments on `response.output_item.done`; the final value wins.
  */
-export const finishWithInput = <K extends StreamKey>(route: string, tools: State<K>, key: K, input: string) =>
+export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K, input?: string) =>
   Effect.gen(function* () {
     const tool = tools[key]
     if (!tool) return { tools }

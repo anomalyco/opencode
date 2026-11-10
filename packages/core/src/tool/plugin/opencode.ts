@@ -6,7 +6,9 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Schema } from "effect"
+import { toolFailure } from "../runtime.js"
 import { FileAccess } from "../../file-access.js"
 import { Git } from "../../git.js"
 import { Permission } from "../../permission.js"
@@ -144,14 +146,26 @@ export const Plugin = {
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
+              const session = yield* ctx.session.get({ sessionID })
+              const directory = AbsolutePath.make(
+                FileAccess.resolvePath(session.location.directory, input.directory.trim()),
+              )
+              // The destination becomes the session's internal directory, so leaving the project
+              // needs the same approval as reaching outside it. The project's own worktrees don't.
+              const target = yield* access.resolve({ path: directory, kind: "directory" })
+              const worktrees = target.externalDirectory
+                ? yield* ctx.worktree.list({ projectID: ctx.location.project.id })
+                : []
+              if (!worktrees.some((worktree) => FSUtil.contains(worktree.directory, directory)))
+                yield* access.authorizeExternal([target], context)
               yield* ctx.session.move({
                 sessionID,
-                directory: input.directory,
+                directory,
                 delivery: "steer",
               })
               return {
-                output: { sessionID, directory: input.directory },
-                content: `Moved session ${sessionID} to ${input.directory}.`,
+                output: { sessionID, directory },
+                content: `Moved session ${sessionID} to ${directory}.`,
               }
             }).pipe(
               Effect.mapError(
@@ -200,9 +214,7 @@ export const Plugin = {
                 action: "edit",
                 resources: [target.resource],
                 save: ["*"],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               yield* ctx.worktree
                 .remove({
@@ -216,11 +228,7 @@ export const Plugin = {
                 content: `Removed worktree ${target.absolute}.`,
               }
             }).pipe(
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : new ToolFailure({ message: `Unable to remove worktree ${input.directory}`, error }),
-              ),
+              Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`)),
             ),
         })
         draft.add({

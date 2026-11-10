@@ -130,13 +130,13 @@ describe("AI promise client", () => {
     expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe("Hello world")
 
     const image = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
-    expect(image.image).toBeInstanceOf(Media.Asset)
-    expect(image.image.mediaType).toBe("image/png")
-    expect(await ai.run(image.image.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
+    expect(image.images[0]).toBeInstanceOf(Media.Asset)
+    expect(image.images[0].mediaType).toBe("image/png")
+    expect(await ai.run(image.images[0].bytes())).toEqual(Uint8Array.from([1, 2, 3]))
     const requested = await ai.image.generate(
       ai.image.request({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" }),
     )
-    expect(requested.image.mediaType).toBe("image/png")
+    expect(requested.images[0].mediaType).toBe("image/png")
 
     const deltas: Array<string> = []
     for await (const event of ai.stream(request)) {
@@ -468,6 +468,47 @@ describe("AI promise client", () => {
       expect.objectContaining({ tool_call_id: "call-3", content: "null" }),
     ])
     expect(events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["Hello", " world"])
+    await ai.dispose()
+  })
+
+  test("collects a stream and a loop into their final results", async () => {
+    const ai = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) =>
+            Effect.succeed(
+              input.respond(
+                JSON.parse(input.text).messages.some((message: { role: string }) => message.role === "tool")
+                  ? chatBody
+                  : sseEvents(
+                      toolCallChunk("call-1", "read_file", JSON.stringify({ path: "a.txt" })),
+                      finishChunk("tool_calls"),
+                    ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      ),
+    })
+    const read_file = AI.tool({
+      name: "read_file",
+      description: "Read a file.",
+      input: Schema.Struct({ path: Schema.String }),
+      execute: async () => "hello",
+    })
+    const model = openai.chat("gpt-4o-mini")
+
+    const looped = await ai.collect(ai.loop({ model, prompt: "Read the file.", tools: [read_file] }))
+    expect(looped.text).toBe("Hello world")
+    expect(looped.steps).toHaveLength(2)
+    expect(looped.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant"])
+    expect(looped.finishReason.normalized).toBe("stop")
+
+    const streamed = await ai.collect(ai.stream({ model, prompt: "Read the file." }))
+    expect(streamed.steps).toHaveLength(1)
+    expect(streamed.messages).toEqual([streamed.steps[0].message])
+    expect(streamed.finishReason.normalized).toBe("tool-calls")
     await ai.dispose()
   })
 

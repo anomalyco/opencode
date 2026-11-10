@@ -1,5 +1,6 @@
 import { Cause, type Context, Effect, Exit, Fiber } from "effect"
 import type { Diagnostic } from "../codemode.js"
+import { Interruption } from "./callback.js"
 import { locate, normalizeError } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { MAX_PENDING_PROMISES } from "./limits.js"
@@ -54,15 +55,6 @@ export class Yield {
 /** Block the current job on host work: no other job runs until it ends, as with a synchronous host call. */
 export class Host {
   constructor(readonly effect: Effect.Effect<unknown, unknown>) {}
-}
-
-/**
- * Host work that was interrupted on its own. It settles its promise like a rejection, but program code cannot catch
- * it: handlers, `catch`, and `finally` are skipped, an unobserved one is not reported, and one that reaches the
- * program's body interrupts the execution.
- */
-export class Interruption {
-  constructor(readonly cause: Cause.Cause<unknown>) {}
 }
 
 /** Let the host run; the current job continues before any other job. */
@@ -133,10 +125,6 @@ export const MAX_CALL_DEPTH = 10_000
 /** Interpreter steps between clock checks, and how long one slice may run before the host gets a turn. */
 const FUEL = 64
 const SLICE_MS = 1
-
-// Program values never have a `next` method of their own: an object's properties live in its property map.
-export const isEval = <A>(value: A | Eval<A>): value is Eval<A> =>
-  typeof value === "object" && value !== null && typeof (value as { readonly next?: unknown }).next === "function"
 
 /**
  * One execution's job queue. Program code runs only inside a job, one job at a time and each to completion, as in a

@@ -56,11 +56,14 @@
     }
   }
 
+  [data-slot="search-list-body"] > [data-component="menu-scroll"] {
+    flex: 1;
+  }
+
   /* Arrow keys scroll the active row clear of the sticky header. Rows fade out past the bottom edge while more follow. */
   [data-slot="search-list-scroll"] {
     min-height: 0;
     flex: 1;
-    overflow-y: auto;
     --search-list-edge: linear-gradient(
       to bottom,
       #000 calc(100% - 24px),
@@ -209,6 +212,7 @@
       box-shadow: var(--v2-elevation-floating);
     }
 
+    [data-slot="search-list-body"] > [data-component="menu-scroll"],
     [data-slot="search-list-scroll"] {
       flex: 0 1 auto;
     }

@@ -3,26 +3,29 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { OpenAIDecisions } from "../protocols/openai-decisions.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { XAIImages } from "../protocols/xai-images.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import type { Protocol } from "../route/protocol.js"
 import {
-  LLMRequest,
+  type LLMRequest,
   ModelID,
   ProviderID,
   ProviderMetadata,
   ReasoningEffort,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("vercel-ai-gateway")
 const baseURL = "https://ai-gateway.vercel.sh/v1"
@@ -99,7 +102,7 @@ export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
     readonly cacheAnchorItems?: number
   }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
@@ -137,13 +140,14 @@ const prepare = (api: "messages" | "responses" | "chat") =>
         if (effort === undefined) return { request, body: { providerOptions } }
         const enabled = effort !== "none"
         const thinking = request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" }
-        const next = LLMRequest.update(request, {
+        const next = {
+          ...request,
           providerOptions: {
             ...request.providerOptions,
             effort: enabled ? effort : undefined,
             thinking,
           },
-        })
+        }
         return { request: next, body: { providerOptions } }
       }
       case "responses":
@@ -172,7 +176,7 @@ const route = <Body, Event, State>(input: {
   readonly api: "messages" | "responses" | "chat"
   readonly path: string
   readonly framing: Framing.Definition<string>
-  readonly defaults?: RouteDefaultsInput
+  readonly options?: RequestOptions
 }) =>
   Route.make({
     id: input.id,
@@ -183,7 +187,7 @@ const route = <Body, Event, State>(input: {
     framing: input.framing,
     headers: ({ request }): Record<string, string> =>
       request.promptCacheKey ? { "x-session-affinity": request.promptCacheKey } : {},
-    defaults: input.defaults,
+    options: input.options,
   })
 
 const messagesRoute = route({
@@ -192,7 +196,7 @@ const messagesRoute = route({
   api: "messages",
   path: "/messages",
   framing: AnthropicMessages.framing,
-  defaults: { headers: { "anthropic-version": "2023-06-01" } },
+  options: { headers: { "anthropic-version": "2023-06-01" } },
 })
 const responsesRoute = route({
   id: "vercel-ai-gateway-responses",
@@ -200,7 +204,7 @@ const responsesRoute = route({
   api: "responses",
   path: "/responses",
   framing: Framing.sse,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 const chatRoute = route({
   id: "vercel-ai-gateway-chat",
@@ -221,12 +225,7 @@ const imageSizing: OpenAIImageSizing = (request) => {
 }
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const configured = {
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth: AuthOptions.bearer(input, ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"]),
-  }
+  const configured = bearerRouteDefaults(input, ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"], baseURL)
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(configured).model<ProviderOptionsInput>({
       id: modelID,
@@ -257,41 +256,46 @@ export const configure = (input: Config = {}) => {
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model({ id: modelID, providerOptions })
-  return { id, model, messages, responses, chat, image, decision, configure }
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    provider: id,
+    endpoint: { baseURL: configured.endpoint.baseURL },
+    auth: configured.auth,
+    headers: input.headers,
+    http: input.http,
+  })
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model({ id: modelID, providerOptions })
+  return { id, model, messages, responses, chat, image, decision, embedding, configure }
 }
 
 export const provider = configure()
 export const decision = provider.decision
+export const embedding = provider.embedding
 export const messages = provider.messages
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
 
 export const model: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
+  configure(toConfig(settings)).model(modelID)
 export const messagesModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).messages(modelID)
+  configure(toConfig(settings)).messages(modelID)
 export const responsesModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).responses(modelID)
+  configure(toConfig(settings)).responses(modelID)
 export const chatModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).chat(modelID)
+  configure(toConfig(settings)).chat(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
 export const decisionModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
 }
 
-function config({ apiKey, baseURL, headers, body, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 
 export * as VercelAIGateway from "./vercel-ai-gateway.js"

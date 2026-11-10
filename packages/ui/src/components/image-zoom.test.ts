@@ -86,11 +86,11 @@ describe("viewBox", () => {
   const natural = { width: 1600, height: 900 }
 
   test("shows the whole frame at fit", () => {
-    expect(viewBox(FIT_VIEW, size, natural)).toBe("none")
+    expect(viewBox(1, 0, 0, size, natural)).toBe("none")
   })
 
   test("shows the middle half at 2x, and more of the left once panned right", () => {
-    expect(viewBox({ scale: 2, x: 0, y: 0 }, size, natural)).toBe("inset(225px 400px 225px 400px)")
-    expect(viewBox({ scale: 2, x: 200, y: 0 }, size, natural)).toBe("inset(225px 600px 225px 200px)")
+    expect(viewBox(2, 0, 0, size, natural)).toBe("inset(225px 400px 225px 400px)")
+    expect(viewBox(2, 200, 0, size, natural)).toBe("inset(225px 600px 225px 200px)")
   })
 })

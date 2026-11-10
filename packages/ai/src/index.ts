@@ -1,6 +1,7 @@
 import { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect"
 import { AIClient } from "./ai-client.js"
 import { Decision, type DecisionModel, type DecisionQuestions, type DecisionRequestInput } from "./decision.js"
+import { Embedding, type EmbeddingModel, type EmbeddingRequestInput } from "./embedding.js"
 import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } from "./image.js"
 import { LLM } from "./llm.js"
@@ -20,18 +21,16 @@ import {
   type CompactionCheckpointResponse,
   type CompactionResponse,
   type LLMEvent,
-  type LLMRequest,
   type LLMResponse,
 } from "./schema/index.js"
 import type {
-  LoopInput,
   LoopObjectEvent,
   ObjectEvent,
-  ObjectInput,
   ObjectResponse,
   OutputSchema,
   OutputType,
-  RequestInput,
+  LLMLoopInput,
+  LLMRequestInput,
 } from "./llm.js"
 import { Speech, type SpeechModel, type SpeechRequest, type SpeechRequestInput } from "./speech.js"
 import {
@@ -47,8 +46,8 @@ import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } fro
 
 /**
  * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM, image, video, speech,
- * transcription and decision clients over a request executor; every method runs the corresponding Effect API and rethrows
- * `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
+ * transcription, decision and embedding clients over a request executor; every method runs the corresponding Effect API
+ * and rethrows `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
  */
 export interface Options {
   /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or `RequestExecutor.middleware(fn)` here. */
@@ -113,43 +112,44 @@ export const make = (options: Options = {}) => {
     )
 
   function generate<const Model extends LanguageModel, S extends OutputSchema>(
-    input: ObjectInput<S, Model>,
+    input: LLMRequestInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): Promise<ObjectResponse<OutputType<S>>>
   function generate<const Model extends LanguageModel>(
-    input: RequestInput<Model> | LLMRequest,
+    input: LLMRequestInput<Model>,
     options?: StreamOptions & RunOptions,
   ): Promise<LLMResponse>
-  function generate(
-    input: ObjectInput<OutputSchema> | RequestInput | LLMRequest,
-    options?: StreamOptions & RunOptions,
-  ) {
+  function generate(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
     return run(LLM.generate(input, options), options)
   }
 
   function stream<const Model extends LanguageModel, S extends OutputSchema>(
-    input: ObjectInput<S, Model>,
+    input: LLMRequestInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<ObjectEvent<OutputType<S>>>
   function stream<const Model extends LanguageModel>(
-    input: RequestInput<Model> | LLMRequest,
+    input: LLMRequestInput<Model>,
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LLMEvent>
-  function stream(input: ObjectInput<OutputSchema> | RequestInput | LLMRequest, options?: StreamOptions & RunOptions) {
+  function stream(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
     return iterate(LLM.stream(input, options), options)
   }
 
   function loop<const Model extends LanguageModel, S extends OutputSchema>(
-    input: LoopInput<Model> & { readonly schema: S },
+    input: LLMLoopInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LoopObjectEvent<OutputType<S>>>
   function loop<const Model extends LanguageModel>(
-    input: LoopInput<Model>,
+    input: LLMLoopInput<Model>,
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LLMEvent>
-  function loop(input: LoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
+  function loop(input: LLMLoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
     return iterate(LLM.loop(input, options), options)
   }
+
+  /** Read `events` from `stream` or `loop` to the end and fold them into the final result. */
+  const collect = <Event extends LLMEvent>(events: AsyncIterable<Event>, options?: RunOptions) =>
+    run(LLM.collect(Stream.fromAsyncIterable(events, (error) => error)), options)
 
   function compact(
     request: CheckpointRequest,
@@ -224,6 +224,7 @@ export const make = (options: Options = {}) => {
     stream,
     /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
     loop,
+    collect,
     /** Compact a Responses request: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
     compact,
     canCompact: LLM.canCompact,
@@ -248,6 +249,11 @@ export const make = (options: Options = {}) => {
         input: DecisionRequestInput<Model, Questions>,
         options?: RunOptions,
       ) => run(Decision.generate(input), options),
+    },
+    embedding: {
+      request: Embedding.request,
+      generate: <const Model extends EmbeddingModel>(input: EmbeddingRequestInput<Model>, options?: RunOptions) =>
+        run(Embedding.generate(input), options),
     },
     /** Experimental: may change without compatibility guarantees. */
     experimental: {
@@ -332,170 +338,4 @@ export const tool = <
 export const ai: Omit<Client, "dispose"> = make()
 
 export * as AI from "./index.js"
-export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
-export {
-  ProtocolID,
-  RouteID,
-  ModelID,
-  ProviderID,
-  ResponseID,
-  ContentBlockID,
-  ToolCallID,
-  JsonSchema,
-  ProviderOptions,
-  ProviderMetadata,
-  HttpTimeout,
-  RequestEncoding,
-  HttpOptions,
-  GenerationOptions,
-  LanguageModelDefaults,
-  ReasoningEfforts,
-  ReasoningEffort,
-  LanguageModelCompatibility,
-  LanguageModel,
-  LanguageModelSchema,
-  CacheTTL,
-  CacheHint,
-  CachePolicyObject,
-  CachePolicy,
-  MessageRole,
-  SystemPart,
-  TextPart,
-  MediaPart,
-  ToolResultValue,
-  ToolOutput,
-  ToolCallPart,
-  ToolResultPart,
-  ReasoningPart,
-  CompactionPart,
-  EffortPart,
-  ContentPart,
-  Message,
-  Freeform,
-  ToolDefinition,
-  ToolNamespace,
-  ToolEntry,
-  ToolChoice,
-  LLMRequest,
-  FinishReason,
-  Usage,
-  MediaUsage,
-  CompactionResponse,
-  CompactionCheckpointResponse,
-  StepStart,
-  TextStart,
-  TextDelta,
-  TextEnd,
-  ReasoningStart,
-  ReasoningDelta,
-  ReasoningEnd,
-  ToolInputStart,
-  ToolInputDelta,
-  ToolInputEnd,
-  ToolInputError,
-  ToolCall,
-  ToolResult,
-  ToolError,
-  FinishReasonDetails,
-  StepFinish,
-  Finish,
-  MediaEvent,
-  ProviderErrorEvent,
-  LLMEvent,
-  LLMResponse,
-  HttpContext,
-  HttpRateLimitDetails,
-  InvalidRequestError,
-  UnsupportedOperationError,
-  ProviderConfigurationError,
-  AuthenticationError,
-  RateLimitError,
-  QuotaExceededError,
-  ContentPolicyError,
-  ProviderInternalError,
-  TransportType,
-  TransportOperation,
-  TransportError,
-  InvalidProviderOutputError,
-  UnknownProviderError,
-  TimeoutError,
-  AIErrorReason,
-  AIError,
-} from "./schema/index.js"
-export type {
-  GenerationOptionsFields,
-  GenerationOptionsInput,
-  LanguageModelInput,
-  LanguageModelProviderOptions,
-  ToolDefinitionInput,
-  ToolNamespaceInput,
-  ToolNamespaceEntryInput,
-  ToolEntryInput,
-  UsageInput,
-} from "./schema/index.js"
-export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
-export type {
-  ImageModelOptions,
-  ImageOptions,
-  ImageRequestFor,
-  ImageRequestInput,
-  ImageResolution,
-  ImageRoute,
-} from "./image.js"
-export {
-  ChoiceAnswer,
-  ChoiceQuestion,
-  ChoiceValue,
-  DecisionAnswer,
-  DecisionJsonPart,
-  DecisionMediaPart,
-  DecisionModel,
-  DecisionModelCompatibility,
-  DecisionModelSchema,
-  DecisionPart,
-  DecisionQuestion,
-  DecisionRequest,
-  DecisionResponse,
-  DecisionTextPart,
-  DecisionUsage,
-  ErrorAnswer,
-  ErrorReason,
-  PredicateAnswer,
-  PredicateQuestion,
-  ScoreAnswer,
-  ScoreQuestion,
-} from "./decision.js"
-export type {
-  AnswerFor,
-  AnswersFor,
-  DecisionInput,
-  DecisionModelOptions,
-  DecisionOptions,
-  DecisionQuestions,
-  DecisionRequestFor,
-  DecisionRequestInput,
-  DecisionResponseFor,
-  DecisionModelRoute,
-} from "./decision.js"
-export { Media } from "./media.js"
-export type {
-  AwaitOptions as GenerationAwaitOptions,
-  Event as GenerationEvent,
-  Poll,
-  Route as GenerationRoute,
-  Snapshot as GenerationSnapshot,
-  Status as GenerationStatus,
-} from "./generation.js"
-export type {
-  ExecutableTool,
-  Tool,
-  ToolExecute,
-  ToolExecuteContext,
-  ToolInput,
-  ToolInputType,
-  ToolModelOutputInput,
-  ToolOptions,
-  ToolSchema,
-  ToolToModelOutput,
-} from "./tool.js"
-export type { LLM } from "./llm.js"
+export * from "./public.js"

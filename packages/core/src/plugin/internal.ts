@@ -3,11 +3,13 @@ export * as PluginInternal from "./internal.js"
 import { LLMClient } from "@opencode/ai/effect"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { httpClient } from "@opencode/util/effect/app-node-platform"
+import type { Generation } from "./service.js"
+import { httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Scope } from "effect"
-import { HttpClient } from "effect/http"
+import { FetchHttpClient, HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
+import { App } from "../app.js"
 import { Artifact } from "../artifact.js"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
@@ -39,6 +41,8 @@ import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
+import { FileWrite } from "../file-write.js"
+import { Flag } from "../flag.js"
 import { Formatter } from "../formatter.js"
 import { Generate } from "../generate.js"
 import { Form } from "../form.js"
@@ -116,6 +120,9 @@ import { WellKnownPlugin } from "../wellknown/plugin.js"
 
 const services = [
   Agent.Service,
+  // Activation clears the ambient context, so built-ins see the configured build channel only through this.
+  App.Service,
+  FetchHttpClient.Fetch,
   Artifact.Service,
   AppProcess.Service,
   Provider.Service,
@@ -127,6 +134,8 @@ const services = [
   Environment.Service,
   FileAccess.Service,
   FileMutation.Service,
+  FileWrite.Service,
+  Flag.Service,
   Formatter.Service,
   Generate.Service,
   LocationWatcherPolicy.Service,
@@ -173,6 +182,7 @@ export type Requirements = Context.Service.Identifier<(typeof services)[number]>
 
 export const requirements = LayerNode.group([
   Agent.node,
+  App.node,
   Artifact.node,
   AppProcess.node,
   Provider.node,
@@ -184,6 +194,8 @@ export const requirements = LayerNode.group([
   Environment.node,
   FileAccess.node,
   FileMutation.node,
+  FileWrite.node,
+  Flag.node,
   Formatter.node,
   Generate.node,
   LocationWatcherPolicy.node,
@@ -191,6 +203,7 @@ export const requirements = LayerNode.group([
   FSUtil.node,
   Global.node,
   httpClient,
+  httpFetch,
   Image.node,
   InstructionDiscovery.node,
   Integration.node,
@@ -300,10 +313,13 @@ export const list = Effect.fn("PluginInternal.list")(function* () {
   const context = Context.pick(...services)(yield* Effect.context<Requirements>())
   const resolve = (plugins: readonly InternalPlugin[]) =>
     plugins.map(
-      (plugin): Plugin => ({
-        id: plugin.id,
-        effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
-      }),
+      (plugin) =>
+        ({
+          id: plugin.id,
+          effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
+          revision: "internal",
+          source: { type: "builtin" },
+        }) satisfies Generation,
     )
   return {
     pre: resolve(pre),

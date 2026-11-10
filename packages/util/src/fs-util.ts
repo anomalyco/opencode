@@ -78,7 +78,7 @@ export namespace FSUtil {
         return info?.type === "File"
       })
 
-      const resolve = Effect.fn("FileSystem.resolve")(function* (input: string) {
+      const resolve = Effect.fnUntraced(function* (input: string) {
         const resolved = path.resolve(windowsPath(input))
         // Sandboxes deny reads outside granted paths; canonicalize what we can see.
         return yield* fs.realPath(resolved).pipe(

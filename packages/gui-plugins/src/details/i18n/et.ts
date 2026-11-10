@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Ühtegi pluginat pole seadistatud",
   skills: "Oskused",
   "skills.empty": "Oskusi pole konfigureeritud",
-  lsp: "LSP",
-  "lsp.empty": "LSP servereid pole konfigureeritud",
   failed: "Ebaõnnestunud",
   retry: "Proovi uuesti",
   connecting: "Ühendamine…",

@@ -13,6 +13,7 @@ export type Effect = typeof Effect.Type
  *   web search, MCP servers, or config an integration supplies come from no account (env keys, local config, the
  *   signed-out free tier).
  * - `mcp.use`, `skill.use`, `plugin.use`: resource is an MCP server name, skill ID, or plugin target.
+ * - `websearch.use`: resource is a web search provider ID, such as `opencode` or `exa`.
  */
 export const Action = Schema.Literals([
   "provider.use",
@@ -22,6 +23,7 @@ export const Action = Schema.Literals([
   "mcp.use",
   "skill.use",
   "plugin.use",
+  "websearch.use",
 ])
 export type Action = typeof Action.Type
 

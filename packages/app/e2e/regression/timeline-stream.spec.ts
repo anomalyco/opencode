@@ -1155,7 +1155,9 @@ test.describe("background shortcut", () => {
       const capsule = page.getByRole("button", { name: "1 shell", exact: true, includeHidden: true })
       const list = page.getByRole("menu", { name: "1 shell", exact: true })
       const closed = (await capsule.boundingBox())!
-      const inset = (await capsule.locator("svg").boundingBox())!.x - closed.x
+
+      const inset =
+        (await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox())!.x - closed.x
 
       await capsule.click()
       // Right placement shares the capsule's end edge and mirrors its inset there; centre placement shares its centre.
@@ -1336,7 +1338,7 @@ test.describe("background shortcut", () => {
     // The open menu hides the rest of the page from the accessibility tree, the capsule included.
     const capsule = page.getByRole("button", { name: "2 subagents · 1 shell", exact: true, includeHidden: true })
     const label = capsule.getByText("2 subagents · 1 shell", { exact: true })
-    const glyph = await capsule.locator("svg").boundingBox()
+    const glyph = await capsule.locator('[data-component="session-progress-indicator-v2"]').boundingBox()
     const text = await label.boundingBox()
     const inset = glyph!.x - (await capsule.boundingBox())!.x
 
@@ -1357,7 +1359,7 @@ test.describe("background shortcut", () => {
             const content = item.querySelector('[data-slot="menu-v2-item-content"]')
 
             return [
-              content?.querySelector(":scope > svg")?.getBoundingClientRect().left ?? NaN,
+              content?.querySelector(":scope > :first-child")?.getBoundingClientRect().left ?? NaN,
               content?.querySelector(":scope > span:not([data-slot])")?.getBoundingClientRect().left ?? NaN,
               item.querySelector('[data-slot="session-activity-elapsed"]')?.getBoundingClientRect().right ?? NaN,
             ]
@@ -1400,13 +1402,23 @@ test.describe("background shortcut", () => {
     await interrupt
     await expect(list).toBeVisible()
 
-    const kill = page.waitForRequest(
-      (request) => request.method() === "DELETE" && new URL(request.url()).pathname === "/api/shell/shell_backgrounded",
-    )
+    const kill = await holdRoute(page, /\/api\/shell\/shell_backgrounded(\?|$)/, { method: "DELETE" })
+    const shellRow = list.getByRole("menuitem", { name: /sleep 120/ })
 
-    await list.getByRole("menuitem", { name: /sleep 120/ }).hover()
+    await shellRow.hover()
     await page.keyboard.press("Delete")
-    await kill
+    await kill.arrived
+    // A second Delete, or a click on the row's stop button, while the first stop runs sends nothing more.
+    const stopping = shellRow.getByRole("button", { name: "Kill shell command", exact: true })
+    await expect(stopping).toHaveAttribute("aria-busy", "true")
+    await page.keyboard.press("Delete")
+    // aria-disabled leaves a real click through, which Playwright's actionability check would refuse.
+    await stopping.click({ force: true })
+    await expect(stopping).toHaveAttribute("aria-busy", "true")
+    expect(kill.requests).toHaveLength(1)
+    kill.release()
+    await expect(stopping).not.toHaveAttribute("aria-busy")
+    expect(kill.requests).toHaveLength(1)
     await page.keyboard.press("Escape")
     await expect(list).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")
@@ -2206,6 +2218,44 @@ test("a pending quote send hides mentions and keeps the comment read-only", asyn
   admission.release()
   await expect(popup).toHaveCount(0)
   await expect.poll(() => sent).toEqual(["queue"])
+})
+
+test("a double-clicked quote send sends once and keeps the popup open until it settles", async ({ page }) => {
+  const sent: string[] = []
+
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_quote_double", "Keep this quoted passage.")])],
+    onPrompt: (input) => void sent.push(String(input.body.delivery)),
+  })
+
+  const answer = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_quote_double")}"] [data-slot="text-part-body"]`,
+  )
+
+  await expect(answer).toHaveText("Keep this quoted passage.")
+  await selectQuoteText(answer)
+  await page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
+    .click()
+  const popup = page.locator('[data-component="composer-quote-comment"]')
+
+  const chip = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+
+  const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+
+  await popup.locator("textarea").fill("Only once")
+  const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
+
+  await popup.locator('[data-slot="line-comment-v2-submit"]').dblclick({ modifiers: [modifier] })
+  await admission.arrived
+  // A click on the quote's chip while the send is in flight leaves the popup and its pending send alone.
+  await chip.click()
+  await expect(popup.locator('[data-component="loader-v2"]')).toBeVisible()
+  admission.release()
+  await expect(popup).toHaveCount(0)
+  await expect.poll(() => sent.length).toBe(1)
+  expect(admission.requests).toHaveLength(1)
 })
 
 function selectQuoteText(target: Locator) {
@@ -3213,6 +3263,8 @@ test("opens an optional comment beside the quote action and skips it with Alt-cl
   await page.keyboard.press("Enter")
   await expect(comment).toHaveCount(0)
   await expect(chips.nth(0)).toContainText("Why first?")
+  // The editor takes focus back a frame after the comment closes, and its caret would replace the next selection.
+  await expect(editor).toBeFocused()
 
   await select("The second sentence to quote.")
   await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
@@ -3317,6 +3369,16 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await expect(more).not.toBeFocused()
   expect(await page.evaluate(() => !!document.activeElement?.closest('[data-component="timeline-quote"]'))).toBe(false)
   await expect(composer).toHaveCount(1)
+
+  // A press that turns into a native drag of the selection ends with dragend, and no pointerup follows.
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await expect(toolbar).toHaveCount(0)
+  await short.hover()
+  await page.mouse.down()
+  await page.evaluate(() => document.dispatchEvent(new Event("dragend")))
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  await page.mouse.up()
 })
 
 function pauseExitAnimations(locator: Locator) {

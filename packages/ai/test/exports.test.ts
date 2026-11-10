@@ -5,12 +5,16 @@ import {
   AIClient,
   AIError,
   DecisionClient,
+  EmbeddingClient,
   Generation,
   ImageClient,
   LanguageModel,
   LLMClient,
+  LLMEvent,
   Media,
+  RawEvent,
 } from "@opencode/ai/effect"
+import { AI } from "@opencode/ai"
 import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@opencode/ai/experimental"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import {
@@ -84,6 +88,16 @@ describe("public exports", () => {
     expect(ai.decision.generate).toBeFunction()
     expect(DecisionClient.layer).toBeDefined()
     expect(DecisionClient.fetchLayer).toBeDefined()
+    expect(ai.embedding.generate).toBeFunction()
+    expect(EmbeddingClient.layer).toBeDefined()
+    expect(AI.ai.embedding.generate).toBeFunction()
+  })
+
+  test("both entry points export the raw event type", () => {
+    const event: RawEvent = LLMEvent.raw({ data: { type: "ping" } })
+    const promiseEvent: AI.RawEvent = event
+    expect(RawEvent).toBe(AI.RawEvent)
+    expect(LLMEvent.is.raw(promiseEvent)).toBe(true)
   })
 
   test("AIClient.layerWith shares one executor across every client", async () => {
@@ -102,6 +116,8 @@ describe("public exports", () => {
         yield* VideoClient.Service
         yield* SpeechClient.Service
         yield* TranscriptionClient.Service
+        yield* DecisionClient.Service
+        yield* EmbeddingClient.Service
         yield* RequestExecutor.Service
       }).pipe(Effect.provide(AIClient.layerWith(counting))),
     )
@@ -118,6 +134,7 @@ describe("public exports", () => {
     const { OpenAICompatibleResponses } = await import("@opencode/ai/providers")
 
     expect(OpenAI.model).toBeFunction()
+    expect(OpenAI.embedding).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
     for (const provider of [Baseten, DeepSeek, Fireworks]) {

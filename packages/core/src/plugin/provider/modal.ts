@@ -6,6 +6,7 @@ import { ModalModels } from "../../modal/models.js"
 import { Provider } from "../../provider.js"
 import { SharedCache } from "../../shared-cache.js"
 import type { PluginInternal } from "../internal.js"
+import { activeCredential } from "./credential-settings.js"
 import { ProviderRefresh } from "./refresh.js"
 
 const providerID = Provider.ID.make("modal")
@@ -26,10 +27,7 @@ export const ModalPlugin = define({
       active: ctx.integration.connection.active("modal"),
       reload: ctx.provider.reload(),
       load: Effect.fn("ModalPlugin.load")(function* (_, options) {
-        const connection = yield* ctx.integration.connection.active("modal")
-        const credential = connection
-          ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-          : undefined
+        const { connection, credential } = yield* activeCredential(ctx, "modal")
         const apiKey = credential?.type === "key" ? credential.key : process.env.MODAL_PROXY_TOKEN
         const provider = yield* providers.get(providerID)
         const baseURL = typeof provider?.settings?.baseURL === "string" ? provider.settings.baseURL : undefined

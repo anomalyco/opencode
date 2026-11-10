@@ -1,6 +1,6 @@
 # @opencode/ai
 
-Schema-first APIs for text, images, and decisions, built with Effect. Video, speech, transcription, extraction, and
+Schema-first APIs for text, images, decisions, and embeddings, built with Effect. Video, speech, transcription, extraction, and
 realtime voice are [experimental](#experimental).
 
 `@opencode/ai` is the Promise API: one managed runtime behind the LLM and media methods, plus asset helpers. `ai.file`
@@ -16,7 +16,7 @@ const input = { model: openai.responses("gpt-4o-mini"), prompt: "Say hello." }
 const response = await ai.generate(input)
 console.log(response.text)
 const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
-await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
+await ai.write(generated.images[0], "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
 for await (const event of ai.stream(ai.request(input))) {
   // LLMEvent
 }
@@ -37,7 +37,7 @@ const program = Effect.gen(function* () {
     model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
     system: "You are concise.",
     prompt: "Say hello in one short sentence.",
-    generation: { maxTokens: 40 },
+    maxTokens: 40,
   })
   console.log(response.text)
 })
@@ -54,11 +54,16 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 ### Tool loop
 
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
-tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
+tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs (an error result when
+it fails). Each step ends with its own `step-finish`; one `finish` ends the loop, carrying the final step's reason
+and the usage summed across steps. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
 them. Tools are an array, sent in the order given so the provider can reuse its cached prompt prefix. Each tool has a
-`name`, and two tools with the same name fail the request. `tool` takes a plain `async` execute; a throw or rejection
-goes back to the model as an error result, and `signal` aborts when the loop is interrupted.
+`name`, and two tools with the same name fail the request. Tool arguments that are not valid JSON go back to the model
+as an error result so it can retry. A step that hits the output token limit ends the loop without running its tool
+calls, which may be cut off. A forced `toolChoice` applies to the first step only; later steps use `auto`. `tool` takes
+a plain `async` execute; a throw or rejection goes back to the model as an error result, and `signal` aborts when the
+loop is interrupted.
 `input` is an Effect Schema that decodes and types the arguments, or a raw JSON Schema object, such as an MCP tool's,
 whose arguments arrive as `unknown` (pair it with an optional JSON Schema `outputSchema`). `tool` from
 `@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
@@ -84,6 +89,17 @@ const events = ai.loop({
 for await (const event of events) {
   if (event.type === "text-delta") process.stdout.write(event.text)
 }
+```
+
+The terminal `finish` carries the final assistant `message` and `usage`. To skip the events, `ai.collect` folds a
+stream from `stream` or `loop` into one result: `text` of the final step, `steps` (one `LLMResponse` per call),
+`messages` (each step's assistant message and its tool results, ready to append to the next request), the total
+`usage`, `finishReason`, and `object` with `schema`.
+
+```ts
+const result = await ai.collect(ai.loop({ model, prompt: "Summarize package.json.", tools: { read_file } }))
+// Effect: const result = yield* ai.collect(ai.loop({ ... }))
+console.log(result.text, result.usage?.totalTokens)
 ```
 
 ### Freeform tools
@@ -118,18 +134,36 @@ const res = await ai.generate({ model, prompt: "Pick a city.", schema: Schema.St
 res.object.city
 ```
 
-`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the final step's `finish`. A
+`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the loop's `finish`. A
 decode failure is an `AIError` whose `partial` holds the response.
+
+### Errors
+
+Every failure is an `AIError`. `reason._tag` names the kind (`RateLimit`, `InvalidRequest`, `Transport`, ...), and
+getters read the common fields without digging into `reason` or the raw body:
+
+```ts
+try {
+  await ai.generate({ model, prompt: "Hi" })
+} catch (error) {
+  if (!(error instanceof AIError)) throw error
+  error.status // HTTP status, when the failure came from a response
+  error.code // provider error code such as "model_not_found", when known
+  error.isRetryable // whether sending the same request again may succeed
+  error.retryAfterMs // delay the provider asked for, when known
+}
+```
 
 ### Raw provider events
 
 Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and
 before the events parsed from that frame. `data` is the parsed JSON frame, so frames this package doesn't handle yet
-are visible too. Raw events are off by default, and `generate` ignores them. Translate a frame with a stream map:
+are visible too. Raw events are off by default, and `generate` ignores them. `RawEvent` is the event's type. Act on a
+frame with a stream map:
 
 ```ts
-import { Stream } from "effect"
-import { ai, LLMEvent } from "@opencode/ai/effect"
+import { Effect, Stream } from "effect"
+import { ai, AIError, ContentPolicyError } from "@opencode/ai/effect"
 
 const flagged = (data: unknown) =>
   typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
@@ -137,10 +171,10 @@ const flagged = (data: unknown) =>
 const events = ai
   .stream({ model, prompt: "Say hello.", includeRaw: true })
   .pipe(
-    Stream.map((event) =>
+    Stream.mapEffect((event) =>
       event.type === "raw" && flagged(event.data)
-        ? LLMEvent.providerError({ message: "Flagged by moderation" })
-        : event,
+        ? Effect.fail(new AIError({ reason: new ContentPolicyError({ message: "Flagged by moderation" }) }))
+        : Effect.succeed(event),
     ),
   )
 ```
@@ -192,7 +226,7 @@ const image = Effect.gen(function* () {
     resolution: "1K",
     providerOptions: { quality: "high" }, // typed per image model
   })
-  yield* Media.write(response.image, "./garden.png")
+  yield* Media.write(response.images[0], "./garden.png")
 })
 
 // `Media.file` / `Media.write` use the Effect `FileSystem` service; provide your platform's layer.
@@ -288,6 +322,8 @@ const [refund, department] = response.answers
 ```
 
 `input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Answers come back in question order.
+A `predicate` can say what counts as true and as false with `criteria: { true, false }`; hosts without a criteria field
+read them appended to the instructions.
 A question the host declines is `{ name, type: "error", reason, message? }`, with `reason` such as `"refusal"`; the
 other answers still come back.
 `response.usage` has `inputTokens`, `outputTokens`, `totalTokens` and the host's reported `cost` when it sends one;
@@ -320,6 +356,95 @@ CloudflareAIGateway.configure({ accountId }).decision("typesafe/jev")
 
 OpenAI and Vercel AI Gateway use OpenAI's `/v1/decisions` API. TypeSafe, OpenCode, OpenRouter, Baseten and
 DigitalOcean use System One (`/systemone`), and Cloudflare sends the System One body through `/ai/run`.
+
+## Embeddings
+
+Embedding models turn each value into a vector, returned in value order.
+
+```ts
+import { ai } from "@opencode/ai"
+import { OpenAI } from "@opencode/ai/providers"
+
+const response = await ai.embedding.generate({
+  model: OpenAI.configure().embedding("text-embedding-3-small"),
+  values: ["I was charged twice.", "How do I reset my password?"],
+  dimensions: 256,
+  inputType: "document",
+})
+const [charge, password] = response.embeddings
+```
+
+A string value is text; media values are an `Asset` (or bytes or a URL) for hosts that embed images or documents.
+`dimensions` asks models that can shorten their vectors for that length. `inputType` says whether the values are
+search queries or stored documents; hosts with no such field (OpenAI's `/embeddings` API) ignore it, and host-specific
+task types go in `providerOptions` (NVIDIA's `input_type: "passage"`). `response.usage.inputTokens` is the host's
+token count, and its raw usage stays in `providerMetadata`. Media values fail the call on hosts that only embed text.
+
+```ts
+import {
+  Alibaba,
+  Azure,
+  Cohere,
+  DeepInfra,
+  DigitalOcean,
+  Fireworks,
+  OpenAICompatible,
+  OpenRouter,
+  VercelAIGateway,
+} from "@opencode/ai/providers"
+
+OpenRouter.configure().embedding("openai/text-embedding-3-small")
+VercelAIGateway.configure().embedding("openai/text-embedding-3-small")
+Cohere.configure().embedding("embed-v4.0")
+DeepInfra.configure().embedding("BAAI/bge-m3")
+Fireworks.configure().embedding("nomic-ai/nomic-embed-text-v1.5")
+DigitalOcean.configure().embedding("bge-m3")
+Alibaba.configure({ region: "ap-southeast-1" }).embedding("text-embedding-v4")
+Azure.configure({ resourceName }).embedding("text-embedding-3-small")
+OpenAICompatible.configure({ provider: "nvidia", baseURL: "https://integrate.api.nvidia.com/v1" }).embedding(
+  "nvidia/nemotron-3.5-embed-1b",
+)
+```
+
+Every host here uses OpenAI's `/embeddings` API; Cohere through its compatibility API
+(`https://api.cohere.ai/compatibility/v1`). Package entry points are `@opencode/ai/providers/<provider>/embeddings`.
+
+Google embeds through `embedContent`, which also takes images, audio, video and PDFs on `gemini-embedding-2`. Each
+value is its own content and gets its own vector (several parts in one content would be averaged into one). `dimensions`
+is `outputDimensionality`, `inputType` becomes `taskType` `RETRIEVAL_QUERY` or `RETRIEVAL_DOCUMENT`, and `taskType` or
+`title` in `providerOptions` replace or add to it. `gemini-embedding-2` ignores task types; Google recommends writing the
+task into the text instead (`task: search result | query: …`, `title: none | text: …`).
+
+```ts
+import { Google, GoogleVertex } from "@opencode/ai/providers"
+
+const response = await ai.embedding.generate({
+  model: Google.configure().embedding("gemini-embedding-2"),
+  values: [await ai.file("./receipt.png"), "A receipt for two coffees."],
+  dimensions: 768,
+})
+
+GoogleVertex.configure({ project, location: "global" }).embedding("gemini-embedding-2")
+```
+
+`GoogleVertex.configure().embedding(id)` picks the API from the model id: `gemini-embedding-2*` uses `embedContent`,
+and every other model (`gemini-embedding-001`, `text-embedding-005`, `text-multilingual-embedding-002`) uses the
+text-only `:predict` API, which also works with Express Mode keys. On `:predict`, `inputType` and the `taskType` and
+`title` options go on each instance (`task_type`, `title`), and `dimensions`, `autoTruncate` and other options go under
+`parameters`.
+
+```ts
+GoogleVertex.configure({ apiKey }).embedding("text-embedding-005")
+GoogleVertex.configure({ apiKey }).embedding("gemini-embedding-001")
+```
+
+The Gemini API sends up to 100 values per `batchEmbedContents` request, and Vertex `:predict` up to 250 per request
+(one for `gemini-embedding-001`, as Google documents). Vertex `embedContent` takes one value per request, so a call
+sends one request per value, four at a time, and needs project credentials: Vertex Express Mode API keys can't call
+`embedContent`. `gemini-embedding-2` runs in the `global`, `us` and `eu` Vertex locations. When a call
+is split into several requests, the vectors stay in value order, `usage.inputTokens` is their sum, and each request's
+metadata is listed in order under `providerMetadata.<provider>.responses`. The package entry points are
+`@opencode/ai/providers/google/embeddings` and `@opencode/ai/providers/google-vertex/embeddings`.
 
 ## Alibaba Cloud Model Studio
 
@@ -375,7 +500,7 @@ shared host; the entry above follows the base URL table. Dedicated hosts can be 
   Replay complete `response.message` values to retain `reasoning_content` separately from answer text.
   Qwen 3.8 defaults to preserving thinking; older models have different defaults.
   Additional options include `toolStream`, `parallelToolCalls`, `repetitionPenalty`, `responseFormat`,
-  `enableSearch`, and native `searchOptions`. `generation.topK` lowers to `top_k`.
+  `enableSearch`, and native `searchOptions`. `topK` lowers to `top_k`.
   `clearThinking` is a hosted GLM control, and `thinking.type` is available for hosted MiniMax models.
 - **Messages:** `effort` → `output_config.effort`. `thinking.type` accepts enabled/disabled with an
   optional `budgetTokens` (or native `budget_tokens`). `outputConfig.format` accepts a JSON schema.
@@ -544,7 +669,7 @@ const request = ai.request({
   model: minimax.model("MiniMax-M3"), // also minimax.messages("MiniMax-M3")
   prompt: "What is 173 multiplied by 219?",
   providerOptions: { thinking: { type: "adaptive" } },
-  generation: { maxTokens: 1536 },
+  maxTokens: 1536,
 })
 
 const response = await Effect.runPromise(ai.generate(request).pipe(Effect.provide(AIClient.layer)))
@@ -582,7 +707,7 @@ const request = ai.request({
   model: meta.responses("muse-spark-1.3"), // meta.model(...) also selects Responses
   prompt: "What is 173 multiplied by 219? Reply with the integer.",
   providerOptions: { reasoningEffort: "low" },
-  generation: { maxTokens: 1024 },
+  maxTokens: 1024,
 })
 ```
 
@@ -604,7 +729,7 @@ Responses and Chat support only `toolChoice: "auto"` (the default). Messages als
 its documented forced `"any"` choice currently returns HTTP 400. Messages defaults to adaptive thinking
 with `display: "omitted"`, preserving encrypted `redacted_thinking` in `response.message`. Use
 `providerOptions: { effort: "low" }` for depth or `thinking: { type: "enabled", budgetTokens: 1024 }`
-for budget compatibility (with `generation.maxTokens > 1024`).
+for budget compatibility (with `maxTokens > 1024`).
 
 Add `tools: [Meta.webSearch()]` to a Spark Responses or Messages request for hosted web search.
 Responses exposes hosted results and URL citations in text-part `providerMetadata.meta.annotations`.
@@ -710,6 +835,20 @@ edits endpoint, so input images go to `/images/generations` as `input_references
 asset into owned bytes before the provider URL expires. Construct assets with `Media.bytes`, `Media.base64`,
 `Media.url`, `Media.ref(provider, id)`, `Media.fromDataUrl`, or `Media.file(path)`.
 
+File inputs (message `media` parts, image `images`, decision `media` parts) also take plain data: a `Uint8Array`,
+`ArrayBuffer`, `URL`, or a string holding a data URL, an http(s) URL or base64. Bytes and base64 are sniffed from
+magic bytes; pass `mediaType` when that fails:
+
+```ts
+ai.request({
+  model,
+  prompt: [
+    { type: "text", text: "Summarize this report" },
+    { type: "media", media: pdfBase64, mediaType: "application/pdf" },
+  ],
+})
+```
+
 Pass ordered image inputs to the same method for editing, composition, or image-conditioned generation:
 
 ```ts
@@ -731,8 +870,8 @@ const composed = Effect.gen(function* () {
 
 `Media.ref(provider, id)` represents provider file handles such as OpenAI file IDs or Gemini Files URIs; routes
 only forward refs that belong to their own provider (OpenAI, xAI, and Gemini images accept them). No shipped route
-returns a ref yet, and `asset.bytes()` / `materialize()` on a ref fail by design. Raw strings are not accepted as
-image inputs, avoiding ambiguity between base64, URLs, and provider IDs. Empty or omitted `images` uses text-to-image generation; a
+returns a ref yet, and `asset.bytes()` / `materialize()` on a ref fail by design. Empty or omitted `images` uses
+text-to-image generation; a
 non-empty array selects the provider's edit behavior (see the table above for routes that limit the count). OpenAI
 uses multipart for byte/data-URL edits and its JSON reference body for URL or file-ID edits. Inpainting is a
 provider option on the routes that support it (OpenAI):
@@ -896,9 +1035,10 @@ The hosted result is represented as a provider-executed tool call and a tool res
 
 Everything below is exported from `@opencode/ai/effect` unless noted.
 
-- **`ai.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
+- **`ai.request({...})`** — build a provider-neutral `LLMRequest`, a plain object. Accepts ergonomic inputs (`system: string`, `prompt: string`) and normalizes them into `system`, `messages` and `tools` arrays. Edit it with a spread, or pass the edited object back to `ai.request`.
 - **`ai.generate` / `ai.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`ai.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
+- **`ai.collect`** — fold a stream from `ai.stream` or `ai.loop` into its final result (`text`, `steps`, `messages`, `usage`).
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
@@ -907,8 +1047,9 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
+- **`ai.embedding.request` / `ai.embedding.generate`** — one vector per text or media value, with optional `dimensions` and `inputType`; `EmbeddingClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer? })` builds a client over a custom executor. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
+- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image`, `decision` and `embedding` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer? })` builds a client over a custom executor. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
 - **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Video`, `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
 
 ## Experimental
@@ -1273,9 +1414,7 @@ Prefer this operation, where supported, when the application owns compaction pol
 ```ts
 const compacted = Effect.gen(function* () {
   const result = yield* ai.compact(request)
-  const next = LLMRequest.update(request, {
-    messages: result.replacement,
-  })
+  const next = { ...request, messages: result.replacement }
   return yield* ai.generate(next)
 })
 ```
@@ -1335,7 +1474,7 @@ Enable OpenAI compaction with typed provider options:
 
 ```ts
 import { Effect } from "effect"
-import { ai, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
+import { ai, LLMClient, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const request = ai.request({
@@ -1347,9 +1486,7 @@ const request = ai.request({
 })
 const continued = Effect.gen(function* () {
   const response = yield* LLMClient.generate(request)
-  return LLMRequest.update(request, {
-    messages: [...request.messages, response.message, Message.user("Continue")],
-  })
+  return { ...request, messages: [...request.messages, response.message, Message.user("Continue")] }
 })
 ```
 
@@ -1575,7 +1712,7 @@ Additional provider entrypoints include:
 
 Request options in order of stability:
 
-1. **`generation`** — portable knobs (`maxTokens`, `temperature`, `topP`, `topK`, penalties, seed, stop).
+1. **Portable knobs** — `maxTokens`, `temperature`, `topP`, `topK`, `frequencyPenalty`, `presencePenalty`, `seed` and `stop`, at the top level of a text request. `GENERATION_KEYS` lists them.
 2. **`promptCacheKey`** — stable cache affinity lowered by every protocol that supports it.
 3. **`providerOptions: { ... }`** — flat options inferred from the selected model (OpenAI `store`, Anthropic `thinking`, Gemini `thinkingConfig`, OpenRouter routing).
 4. **`http: { body, headers, query }`** — last-resort serializable overlays merged into the final HTTP request. Reach for this only when a stable typed path doesn't yet exist.

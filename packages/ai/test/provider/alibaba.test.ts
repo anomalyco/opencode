@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { ai, Auth, LLMClient, LLMRequest, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
+import { ai, Auth, LLMClient, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -163,7 +163,8 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
           model: provider.chat("qwen3.7-plus"),
           prompt: "Hello",
           tools: [tool],
-          generation: { maxTokens: 1234, topK: 20 },
+          maxTokens: 1234,
+          topK: 20,
           providerOptions: {
             enableThinking,
             thinkingBudget: 512,
@@ -234,7 +235,7 @@ it.effect("Alibaba fits explicit thinking budgets to half the output limit", () 
         ai.request({
           model: provider.chat("qwen3.7-plus"),
           prompt: "hi",
-          ...(maxTokens === undefined ? {} : { generation: { maxTokens } }),
+          ...(maxTokens === undefined ? {} : { maxTokens }),
           providerOptions: { enableThinking: true, thinkingBudget: 131_071 },
         }),
       ).pipe(Effect.map((prepared) => prepared.body.thinking_budget))
@@ -242,7 +243,7 @@ it.effect("Alibaba fits explicit thinking budgets to half the output limit", () 
       ai.request({
         model: provider.messages("qwen3.7-plus"),
         prompt: "hi",
-        generation: { maxTokens: 32_000 },
+        maxTokens: 32_000,
         providerOptions: { thinking: { type: "enabled", budgetTokens: 131_071 } },
       }),
     )
@@ -357,9 +358,7 @@ it.effect("Alibaba Responses lowers hosted tools and named selection using HTTP 
       { type: "code_interpreter" },
       { type: "function", name: "lookup" },
     ])
-    const named = yield* compileRequest(
-      LLMRequest.update(request, { tools: [tool], toolChoice: { type: "tool", name: "lookup" } }),
-    )
+    const named = yield* compileRequest({ ...request, tools: [tool], toolChoice: { type: "tool", name: "lookup" } })
     expect(named.body.tool_choice).toEqual({
       type: "allowed_tools",
       mode: "required",
@@ -375,9 +374,10 @@ it.effect("Alibaba Responses lowers hosted tools and named selection using HTTP 
         input: { urls: ["https://example.com"], goal: "Read the page" },
       },
     ])
-    const replay = yield* compileRequest(
-      LLMRequest.update(request, { messages: [...request.messages, response.message, Message.user("Continue")] }),
-    )
+    const replay = yield* compileRequest({
+      ...request,
+      messages: [...request.messages, response.message, Message.user("Continue")],
+    })
     expect(replay.body.input).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

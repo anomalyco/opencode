@@ -816,6 +816,10 @@
   border-bottom: 0.5px solid var(--v2-border-border-base);
 }
 
+[data-component="settings-row"][data-align="start"] {
+  align-items: flex-start;
+}
+
 [data-component="settings-row"]:last-child {
   border-bottom: none;
 }
