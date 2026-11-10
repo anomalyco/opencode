@@ -126,17 +126,11 @@ describe("Npm.sanitize", () => {
 })
 
 describe("Npm.resolveNpmBin", () => {
-  test("never hands pacote a script from inside the compiled binary", () => {
-    expect(Npm.resolveNpmBin({ npm_execpath: "/$bunfs/bin/npm-cli.js" }, () => true, true)).toBe("npm")
-    expect(
-      Npm.resolveNpmBin({ npm_execpath: "/usr/lib/node_modules/npm/bin/npm-cli.js" }, () => true, true),
-    ).toBe("/usr/lib/node_modules/npm/bin/npm-cli.js")
-    // A script path is only usable when the current runtime can run one: pacote spawns
-    // process.execPath with it, and the compiled binary is not that runtime.
-    expect(
-      Npm.resolveNpmBin({ npm_execpath: "/usr/lib/node_modules/npm/bin/npm-cli.js" }, () => true, false),
-    ).toBe("npm")
-    expect(Npm.resolveNpmBin({}, () => false, true)).toBe("npm")
+  test("never hands pacote a script from inside a compiled binary", () => {
+    // pacote spawns process.execPath when the name ends in .js, and in both compiled
+    // distributions - the Bun binary and the Node single-executable build - that is
+    // opencode itself, which runs its own entry point and ignores the argument.
+    expect(Npm.resolveNpmBin()).toBe("npm")
   })
 })
 

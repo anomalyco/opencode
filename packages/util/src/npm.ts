@@ -2,7 +2,6 @@ export * as Npm from "./npm.js"
 
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
-import { existsSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util.js"
@@ -62,31 +61,15 @@ export function npmOnPath() {
 }
 
 /**
- * Whether `process.execPath` can run a JavaScript file. A compiled Bun binary cannot: it
- * starts its own entrypoint and ignores the script argument, which is exactly what made
- * the Git preparation fail. `process.versions.node` is not a usable test — Bun reports it
- * too, compiled or not.
+ * pacote builds a Git dependency by running `npm install` inside it and takes the binary
+ * from `npmBin`. When that name ends in `.js`, it spawns `process.execPath` with the script
+ * as the argument — and in every compiled distribution `process.execPath` is opencode
+ * itself: the Bun binary and the Node single-executable build both run their own entry
+ * point and ignore the argument. That is what made `git dep preparation failed` fire for
+ * every Git plugin with a build step. Handing pacote the bare name lets the system npm do
+ * the work, and `npmOnPath()` turns a missing npm into a readable error.
  */
-export function scriptCapable() {
-  if (typeof Bun !== "undefined") return Bun.embeddedFiles.length === 0
-  return !!process.versions?.node
-}
-
-export function resolveNpmBin(
-  env: NodeJS.ProcessEnv = process.env,
-  exists: (file: string) => boolean = existsSync,
-  node: boolean = scriptCapable(),
-) {
-  // pacote builds a Git dependency by running `npm install` inside it, and takes the
-  // binary from `npmBin`: when the name ends in `.js` it spawns `process.execPath`
-  // with that script as the argument. In the compiled binary `npm_execpath` points
-  // into Bun's embedded filesystem, so the child was opencode itself — which runs its
-  // own CLI and never that script — and every Git plugin with a build step died with
-  // "git dep preparation failed". Only trust a path that exists outside the bundle.
-  // pacote spawns `process.execPath` with this script, so a `.js` path is only usable when
-  // that executable can run one.
-  const exec = env.npm_execpath
-  if (node && exec && exec.endsWith(".js") && !exec.includes("$bunfs") && exists(exec)) return exec
+export function resolveNpmBin() {
   return "npm"
 }
 
