@@ -462,6 +462,15 @@
   }
 }
 
+/* Under a project header the avatar slot stays empty, so titles line up with the header's, until shortcut numbers show. */
+[data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: hidden;
+}
+
+[data-shortcut-hints] [data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: visible;
+}
+
 /* Holding the mod key slides each tab's initial out as its shortcut number rises in. */
 [data-titlebar-tab]
   :is(
@@ -494,7 +503,9 @@
   filter: none;
 }
 
-[data-shortcut-hints] [data-titlebar-tab] [data-slot="project-avatar-initial"]:has(~ [data-slot="project-avatar-label"]),
+[data-shortcut-hints]
+  [data-titlebar-tab]
+  [data-slot="project-avatar-initial"]:has(~ [data-slot="project-avatar-label"]),
 [data-shortcut-hints] [data-titlebar-tab] [data-slot="tab-icon-face"]:has(~ [data-slot="tab-shortcut-face"]) {
   opacity: 0;
   transform: translateY(-6px);

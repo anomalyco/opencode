@@ -81,6 +81,7 @@ function SessionTabSlot(
     group?: string
     footer?: JSX.Element
     label?: string
+    hideAvatar?: boolean
     active: boolean
     orientation: "horizontal" | "vertical"
     session: SessionInfo | undefined
@@ -145,6 +146,7 @@ function SessionTabSlot(
         loading={props.loading}
         shortcut={props.shortcut}
         label={props.label}
+        hideAvatar={props.hideAvatar}
         fallbackTitle={props.fallbackTitle}
         fallbackDirectory={props.fallbackDirectory}
         onRememberTitle={props.onRememberTitle}
@@ -172,6 +174,7 @@ function SessionTabEntry(
     group?: string
     footer?: JSX.Element
     label?: string
+    hideAvatar?: boolean
     active: boolean
     highlightActive?: boolean
     orientation: "horizontal" | "vertical"
@@ -346,6 +349,7 @@ function SessionTabEntry(
         group={props.group}
         footer={props.footer}
         label={props.label}
+        hideAvatar={props.hideAvatar}
         active={props.active && props.highlightActive !== false}
         orientation={props.orientation}
         session={session()}
@@ -450,6 +454,8 @@ export type TabStripSection = {
   tabs: Tab[]
   header?: JSX.Element
   footer?: JSX.Element
+  /** The header already names the project, so session tabs leave out their project avatar. */
+  hideAvatars?: boolean
 }
 
 export function TitlebarTabStrip(props: {
@@ -746,8 +752,10 @@ export function TitlebarTabStrip(props: {
     if (next) props.onNavigate(next)
   }
 
-  function renderTab(tab: Tab, group?: string) {
+  function renderTab(tab: Tab, section?: TabStripSection) {
     const id = tabKey(tab)
+
+    const group = section?.key
     let ref!: HTMLDivElement
     const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
 
@@ -785,6 +793,7 @@ export function TitlebarTabStrip(props: {
           group={group}
           footer={footer()}
           label={label()}
+          hideAvatar={section?.hideAvatars}
           active={props.currentTab === tab}
           highlightActive={props.highlightActive}
           orientation={vertical() ? "vertical" : "horizontal"}
@@ -915,7 +924,7 @@ export function TitlebarTabStrip(props: {
                   {(section) => (
                     <>
                       {section().header}
-                      <For each={section().tabs}>{(tab) => renderTab(tab, section().key)}</For>
+                      <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
                       {section().footer}
                     </>
                   )}

@@ -391,6 +391,7 @@ export function SidebarCustomized(props: {
       key: group.key,
       tabs: group.rows.flatMap((row) => (row.open && row.tab && (!group.collapsed || row.active) ? [row.tab] : [])),
       header: group.kind === "all" ? undefined : <GroupHeader group={group} />,
+      hideAvatars: group.kind === "project",
       footer: group.collapsed ? (
         activeRecent(group)
       ) : (
