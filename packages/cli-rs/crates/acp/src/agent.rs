@@ -173,13 +173,7 @@ fn setup(params: &Value, with_session: bool, mcp_required: bool) -> Result<Setup
         cwd,
         session_id,
         additional_directories: strings(params.get("additionalDirectories")),
-        mcp_servers: mcp
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter(|server| mcp_server(server))
-            .cloned()
-            .collect(),
+        mcp_servers: mcp.and_then(Value::as_array).into_iter().flatten().filter_map(mcp_server).collect(),
     })
 }
 
@@ -194,20 +188,28 @@ fn pairs(value: &Value, key: &str) -> bool {
         .is_some_and(|items| items.iter().all(|item| is_string(item, "name") && is_string(item, "value")))
 }
 
-/// Whether `server` parses as one of the SDK's MCP server variants.
-fn mcp_server(server: &Value) -> bool {
+/// `server` as the SDK parses it into one of its MCP server variants (`zMcpServer`). The stdio variant has no
+/// `type`, so the SDK strips a `"type": "stdio"` tag.
+fn mcp_server(server: &Value) -> Option<Value> {
     if !is_string(server, "name") {
-        return false;
+        return None;
     }
-    match server.get("type").and_then(Value::as_str) {
+    let tagged = match server.get("type").and_then(Value::as_str) {
         Some("http" | "sse") => is_string(server, "url") && pairs(server, "headers"),
         Some("acp") => is_string(server, "serverId"),
-        _ => {
-            is_string(server, "command")
-                && server.get("args").and_then(Value::as_array).is_some_and(|args| args.iter().all(Value::is_string))
-                && pairs(server, "env")
-        }
+        _ => false,
+    };
+    if tagged {
+        return Some(server.clone());
     }
+    let stdio = is_string(server, "command")
+        && server.get("args").and_then(Value::as_array).is_some_and(|args| args.iter().all(Value::is_string))
+        && pairs(server, "env");
+    stdio.then(|| {
+        let mut server = server.clone();
+        server.as_object_mut().map(|object| object.remove("type"));
+        server
+    })
 }
 
 fn config_value(params: &Value) -> Result<Value, RpcError> {
