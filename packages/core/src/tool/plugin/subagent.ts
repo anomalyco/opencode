@@ -233,7 +233,7 @@ export const Plugin = {
 
               const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
                 Effect.onInterrupt(() =>
-                  Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
+                  Effect.all([sessions.interrupt(child.id, { parentID: context.sessionID }), jobs.cancel(child.id)], {
                     discard: true,
                   }),
                 ),

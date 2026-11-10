@@ -20,6 +20,8 @@ export interface Coordinator<Key, E, Reason = never> {
    * interrupted.
    */
   readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<boolean>
+  /** Reads the active execution's recorded reason while its interruption cleanup runs. */
+  readonly interruptionReason: (key: Key) => Effect.Effect<Reason | undefined>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
@@ -170,5 +172,13 @@ export const make = <Key, E, Reason = never>(options: {
         return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(awaitIdle(key)))
       })
 
-    return { active: Effect.sync(() => new Set(executions.keys())), isActive, run, wake, interrupt, awaitIdle }
+    return {
+      active: Effect.sync(() => new Set(executions.keys())),
+      isActive,
+      run,
+      wake,
+      interrupt,
+      interruptionReason: (key) => Effect.sync(() => executions.get(key)?.interruptionReason),
+      awaitIdle,
+    }
   })
