@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/share",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy:dev": "cf deploy --mode dev",
+    "deploy:production": "cf deploy --mode production",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@tsconfig/node22": "catalog:",
+    "@typescript/native": "catalog:",
+    "cf": "1.0.0-beta.12",
+    "wrangler": "4.156.2"
+  }
+}

@@ -70,6 +70,7 @@
     "./search-list": "./src/forms/search-list/search-list.tsx",
     "./segmented-control": "./src/navigation/segmented-control/segmented-control.tsx",
     "./select": "./src/forms/select/select.tsx",
+    "./select.css": "./src/forms/select/select.css",
     "./split-button": "./src/actions/split-button/split-button.tsx",
     "./switch": "./src/forms/switch/switch.tsx",
     "./tab-state-indicator": "./src/navigation/tab-state-indicator.tsx",

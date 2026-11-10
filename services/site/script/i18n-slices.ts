@@ -117,7 +117,8 @@ const shellRoots = [path.join(src, "entry-client.tsx"), path.join(src, "app.tsx"
 const routes = [...new Bun.Glob("routes/**/*.tsx").scanSync(src)]
   .map((file) => path.join(src, file))
   .filter((file) => /export default/.test(readFileSync(file, "utf8")))
-const client = closure([...shellRoots, ...routes], true)
+// The static pages' script (src/client/entry.ts) too, so what its islands and overlays load is a boundary.
+const client = closure([...shellRoots, ...routes, path.join(src, "client/entry.ts")], true)
 // Lazy boundaries: the page routes and every module the client loads with import(), even one that is
 // also imported statically elsewhere (an import() can still be the first to load it). The development
 // loader's imports of the source files, in src/i18n, don't count.

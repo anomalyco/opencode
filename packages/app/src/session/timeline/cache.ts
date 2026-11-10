@@ -131,6 +131,9 @@ export function createTimelineCache(
                 get agents() {
                   return agents()
                 },
+                get copyAlwaysVisible() {
+                  return data.copyAlwaysVisible
+                },
                 get backgroundCompaction() {
                   return backgroundCompaction()
                 },

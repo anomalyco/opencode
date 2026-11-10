@@ -1796,6 +1796,7 @@
       width: 1.25rem;
       height: 1.25rem;
       background: currentColor;
+      mask-image: var(--logo);
       mask-size: contain;
       mask-repeat: no-repeat;
       mask-position: center;
@@ -1806,9 +1807,16 @@
       height: calc(var(--height) * var(--logo-size));
       translate: 0 calc(var(--shift) * var(--logo-size));
       background: currentColor;
+      mask-image: var(--logo);
       mask-size: contain;
       mask-repeat: no-repeat;
       mask-position: center;
+    }
+
+    /* Until the grid is near the screen (data-near, ToolGrid), its logos stay empty masks, so their
+       SVGs don't load with the page. */
+    &:not([data-near]) :is([data-slot="icon"], [data-slot="wordmark"]) {
+      mask-image: linear-gradient(transparent 0 0);
     }
 
     /* The typed name stays as the tile's accessible text. */

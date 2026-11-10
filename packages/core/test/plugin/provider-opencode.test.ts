@@ -327,7 +327,7 @@ describe("OpencodePlugin", () => {
                   methodID: Integration.MethodID.make("device"),
                   access: "expired-access",
                   refresh: "old-refresh",
-                  expires: 0,
+                  expires: 1,
                   metadata: { server: server.url.origin, orgID: "org-a", orgName: "Alpha", custom: "preserved" },
                 }),
               })
@@ -366,7 +366,7 @@ describe("OpencodePlugin", () => {
               ])
               // The refresh and every Console fetch say which OpenCode is asking.
               expect(agents).toEqual(requests.map(() => "opencode/beta/1.2.3/test"))
-            }).pipe(Effect.provideService(App.Metadata, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
+            }).pipe(Effect.provideService(App.Service, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
           ({ server }) => Effect.promise(() => server.stop(true)),
         ),
     )
@@ -1094,7 +1094,7 @@ describe("OpencodePlugin", () => {
               methodID: Integration.MethodID.make("device"),
               access: "expired",
               refresh: "revoked",
-              expires: 0,
+              expires: 1,
               metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
             }),
           })

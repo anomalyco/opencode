@@ -102,6 +102,8 @@ b3b147cdb22ec2117d539c18490c7103adaa088a13600852b5a5363f667ee051  186628  /brand
 8998172a4ff22a6b292da18c87a21998728bc86f94b3828e536298ca6b00da54  149085  /brand/badges/opencode-works-with.zip
 140f2c17fa7235f2199a3db22f1eda3eccbfb8ce98da39ee7b1e3e9eb9387846  6801928  /font/film/opencode-font-film-v3-1080p.mp4
 c0d7932b3c2f5d27368e2039e580c169ac94802b8317260e5e679551c41e8461  6300093  /font/film/opencode-font-film-v3-4x5.mp4
+a8d0f5bc1395a756affd9cff1cd0db46e97fba0c1d72508d0e665c62a8a92c2d  146992  /media/card-loops/mobile-orb-75.720.av1.a8d0f5bc.mp4
+a82f1012a18962731b12ee4b07da137a8a89165b3aef838705c43d75d186ef90  336142  /media/card-loops/mobile-orb-75.720.hevc.a82f1012.mp4
 927d3f29a862b2af9853d2ba951f29e4ff381e0c5f1b08c7d8b34cd62b7128e2  2818872  /opencode-brand-assets.zip
 0f1d6dfc747f2d88650b2073bb04cd41380241adfa4de3e2f070bdc4bb367579  272426  /press/anomaly/anomaly-logo.zip
 9cba0d1d2108c8af4e22cc54cafcd8532101d6bbd2809ac18dd26ff1aaf615b3  5999115  /press-media/zips/opencode-desktop-media.zip

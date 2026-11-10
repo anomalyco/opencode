@@ -1,14 +1,3 @@
-/* The orb's inset from the window's bottom inline-end corner and its tap target, on the site root so the
-   footer (below) can keep the wordmark clear of it. */
-[data-site] {
-  --voice-edge: 1rem;
-  --voice-orb: 4.5rem;
-
-  @media (max-width: 40rem) {
-    --voice-edge: 0.75rem;
-  }
-}
-
 [data-component="voice-mode"] {
   /* Hex's Dot scope at the top of the window, the link to Hex over it, and the caption line under it. */
   [data-slot="top"] {
@@ -440,66 +429,6 @@
     }
   }
 
-  /* The orb, alone in the bottom-right corner. Its canvas reaches past the button so the shadow
-     has room to fade out. */
-  [data-slot="orb"] {
-    position: fixed;
-    inset-inline-end: calc(var(--page-offset, 0px) + var(--voice-edge) + env(safe-area-inset-right, 0px));
-    bottom: calc(var(--voice-edge) + var(--voice-lift, 0px) + env(safe-area-inset-bottom, 0px));
-    z-index: 60;
-    width: var(--voice-orb);
-    height: var(--voice-orb);
-    padding: 0;
-    border: 0;
-    border-radius: 50%;
-    background: none;
-    cursor: pointer;
-    opacity: 0;
-    scale: 0.6;
-    visibility: hidden;
-    transition:
-      opacity 200ms ease,
-      scale 320ms cubic-bezier(0.34, 1.4, 0.64, 1),
-      bottom 300ms var(--ease-out),
-      visibility 0s 320ms;
-
-    canvas {
-      position: absolute;
-      inset: -2rem;
-      display: block;
-      width: calc(100% + 4rem);
-      height: calc(100% + 4rem);
-      max-width: none;
-      pointer-events: none;
-    }
-
-    &[data-shown] {
-      opacity: 1;
-      scale: 1;
-      visibility: visible;
-      transition:
-        opacity 200ms ease,
-        scale 320ms cubic-bezier(0.34, 1.4, 0.64, 1),
-        bottom 300ms var(--ease-out),
-        visibility 0s;
-    }
-
-    &:focus-visible {
-      outline: 1px solid var(--link);
-      outline-offset: -4px;
-    }
-
-    @media (hover: hover) and (pointer: fine) {
-      &[data-shown]:hover {
-        scale: 1.04;
-      }
-    }
-
-    &[data-shown]:active {
-      scale: 0.97;
-    }
-  }
-
   [data-slot="sr-only"] {
     position: absolute;
     width: 1px;
@@ -509,51 +438,15 @@
     white-space: nowrap;
   }
 
-  [data-slot="orb-icon"] {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 16px;
-    height: 16px;
-    translate: -50% -50%;
-    color: #fff;
-    opacity: 0;
-    pointer-events: none;
-    filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
-    transition: opacity 150ms ease;
-  }
-
-  /* Idle and paused, the voice icon always shows; listening or speaking, hover or keyboard focus
-     shows pause. The orb itself never dims. */
-  [data-slot="orb"][data-resting] [data-slot="orb-icon"],
-  [data-slot="orb"][data-active]:focus-visible [data-slot="orb-icon"] {
-    opacity: 1;
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    [data-slot="orb"][data-active]:hover [data-slot="orb-icon"] {
-      opacity: 1;
-    }
-  }
-
-  [data-slot="orb"][data-active]:active [data-slot="orb-icon"] {
-    opacity: 1;
-  }
-
   @media (max-width: 40rem) {
-    /* Phones: the same 72px tap target, a bigger circle (70px live, about 53px at rest, set in
-       voice-mode.tsx) and a bigger icon. */
+    /* Phones: a bigger circle (70px live, about 53px at rest, set in voice-mode.tsx); the orb itself is
+       in orb.css. */
     [data-slot="popover"] {
       --voice-circle: 70px;
 
       &[data-explainer] {
         --voice-circle: 53.2px;
       }
-    }
-
-    [data-slot="orb-icon"] {
-      width: 20px;
-      height: 20px;
     }
 
     /* The conversation is a bottom sheet, edge to edge (the site's phone pages run to the edges too),
@@ -580,10 +473,6 @@
       &[data-hidden] {
         translate: 0 100%;
       }
-    }
-
-    [data-slot="orb"] {
-      z-index: 61;
     }
   }
 
@@ -614,50 +503,10 @@
       }
     }
 
-    [data-slot="orb-icon"] {
-      transition: none;
-    }
-
     [data-slot="caption"],
     [data-slot="caption"][data-shown] {
       translate: none;
     }
-
-    [data-slot="orb"],
-    [data-slot="orb"][data-shown] {
-      scale: 1;
-    }
-
-    @media (hover: hover) and (pointer: fine) {
-      [data-slot="orb"][data-shown]:hover {
-        scale: 1;
-      }
-    }
-  }
-}
-
-/* Settings › Letters prompt › bar: while the bar is on screen, the orb (and its pop-up) float above it. */
-[data-site][data-letters-bar] [data-component="voice-mode"] {
-  --voice-lift: var(--letters-bar-height);
-}
-
-/* The orb sits in the bottom-right corner; the search hint moves left of it while it shows. */
-[data-site]:has([data-component="voice-mode"] [data-slot="orb"][data-shown]) {
-  /* Phones and tablets, where the wordmark is the last thing on the page and the orb would sit over it:
-     at the end of the page it ends 1rem above the orb's tap target (its bottom inset and size, about
-     6rem; the footer's own padding already holds the safe area). Wider, the orb sits beside the
-     wordmark, which stays aligned with the copyright line, so the footer keeps its own spacing. */
-  @media (max-width: 60rem) {
-    [data-component="site-footer"] [data-slot="main"] {
-      padding-bottom: calc(var(--voice-edge) + var(--voice-orb) + 1rem);
-    }
-  }
-
-  --search-hint-right: calc(1rem + 5rem + env(safe-area-inset-right, 0px));
-
-  /* Settings › Footer › columns: the status, language and theme at the bar's right end. */
-  [data-component="site-footer"] [data-slot="bar"] {
-    padding-inline-end: 5rem;
   }
 }
 
@@ -694,45 +543,9 @@
   }
 }
 
-/* The Hex promo (hex-promo.tsx, voice mode off): the resting orb drawn in CSS (no canvas), the same
-   black circle, keyline and soft layered shadow as voice mode's, and voice mode's Hex section as the
-   pop-up, without the divider above it. */
+/* The Hex promo's pop-up (hex-panel.tsx, voice mode off; its orb is in orb.css): voice mode's Hex
+   section, without the divider above it. */
 [data-component="voice-mode"][data-promo] {
-  [data-slot="disc"] {
-    --disc: 39.52px;
-    --shadow: var(--voice-orb-shadow, 0.5);
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: var(--disc);
-    height: var(--disc);
-    translate: -50% -50%;
-    border-radius: 50%;
-    background: light-dark(#000, #0f0f0f);
-    box-shadow:
-      inset 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.14)),
-      0 1px 2px light-dark(rgb(0 0 0 / calc(0.12 * var(--shadow))), rgb(0 0 0 / calc(0.7 * var(--shadow)))),
-      0 2px 5px light-dark(rgb(0 0 0 / calc(0.12 * var(--shadow))), rgb(0 0 0 / calc(0.6 * var(--shadow)))),
-      0 6px 14px light-dark(rgb(0 0 0 / calc(0.14 * var(--shadow))), rgb(0 0 0 / 0)),
-      0 12px 28px light-dark(rgb(0 0 0 / calc(0.1 * var(--shadow))), rgb(0 0 0 / 0));
-    transition:
-      width 240ms cubic-bezier(0.34, 1.4, 0.64, 1),
-      height 240ms cubic-bezier(0.34, 1.4, 0.64, 1);
-
-    @media (max-width: 40rem) {
-      --disc: 53.2px;
-    }
-  }
-
-  /* Open: the orb takes its active size, as voice mode's does while it listens. */
-  [data-slot="orb"][data-open] [data-slot="disc"] {
-    --disc: 52px;
-
-    @media (max-width: 40rem) {
-      --disc: 70px;
-    }
-  }
-
   [data-slot="hex-sell"]::before {
     display: none;
   }
@@ -839,40 +652,5 @@
         color: var(--text-strong);
       }
     }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    [data-slot="disc"] {
-      transition: none;
-    }
-  }
-}
-
-/* While any other menu, sheet or Contents menu is open (menu-open.ts), the Hex promo's orb fades out
-   and leaves the tab order (visibility), so it never covers the menu's items. */
-[data-component="voice-mode"][data-promo] [data-slot="orb"][data-shown] {
-  transition:
-    opacity 150ms ease,
-    scale 320ms cubic-bezier(0.34, 1.4, 0.64, 1),
-    bottom 300ms var(--ease-out),
-    visibility 0s;
-}
-
-html[data-menu-open] [data-component="voice-mode"][data-promo] [data-slot="orb"][data-shown] {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity 150ms ease,
-    visibility 0s 150ms;
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="voice-mode"][data-promo] [data-slot="orb"][data-shown] {
-    transition: none;
   }
 }

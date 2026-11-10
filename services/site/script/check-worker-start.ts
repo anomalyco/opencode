@@ -20,9 +20,23 @@ const root = path.resolve(import.meta.dir, "..")
 // location. The docs page is asked for as a browser asks and, at a second URL, as an agent asks (its
 // Markdown twin, src/docs/middleware.ts). The docs' old /v2 address and a V1 docs path redirect. The
 // last three are files the Worker serves, or the assets layer before it (_headers). Every answer
-// carries the stage's headers (src/lib/noindex.ts): dev's noindex, none in production.
-const pages: { path: string; status?: number; accept?: string; location?: string }[] = [
+// carries the stage's headers (src/lib/noindex.ts): dev's noindex, none in production. The V1 docs'
+// pages are noindex in both. The static pages (src/static/routes.ts) must come back as plain HTML: no
+// hydration keys, no serialized data, and their own script rather than the app's.
+const pages: {
+  path: string
+  status?: number
+  accept?: string
+  location?: string
+  noindex?: boolean
+  static?: boolean
+}[] = [
   { path: "/", status: 200 },
+  { path: "/legal", status: 200, static: true },
+  { path: "/ja/legal/privacy-policy", status: 200, static: true },
+  { path: "/brand", status: 200, static: true },
+  { path: "/ar/press", status: 200, static: true },
+  { path: "/changelog", status: 200, static: true },
   { path: "/ja", status: 200 },
   { path: "/desktop", status: 200 },
   { path: "/check-worker-start-404", status: 404 },
@@ -30,6 +44,11 @@ const pages: { path: string; status?: number; accept?: string; location?: string
   { path: "/docs/config/", status: 200, accept: "text/markdown" },
   { path: "/v2/docs/config/", status: 301, location: "/docs/config/" },
   { path: "/docs/ja/", status: 302, location: "/v1/docs/ja/" },
+  { path: "/v1/docs/ja/", status: 200, noindex: true },
+  { path: "/v1/docs/ar/config/", status: 200, noindex: true },
+  { path: "/v1/docs/config/", status: 200, accept: "text/markdown", noindex: true },
+  { path: "/v1/docs/zh/config/", status: 301, location: "/v1/docs/zh-cn/config/" },
+  { path: "/v1/docs/s/abc123", status: 301, location: "https://opncd.ai/share/abc123" },
   { path: "/robots.txt", status: 200 },
   { path: "/docs/llms.txt", status: 200 },
   { path: "/favicon.svg", status: 200 },
@@ -100,15 +119,25 @@ const results = await Promise.resolve()
         redirect: "manual",
       })
         .then(async (response) => {
-          await response.arrayBuffer()
+          const body = await response.text()
           return {
             status: response.status,
             location: response.headers.get("location") ?? undefined,
             robots: response.headers.get("x-robots-tag") ?? undefined,
+            hydrated: /data-hk=|_\$HY|\$R\[|entry-client-/.test(body),
+            scripted: /<script type="module" src="\/_build\/assets\/entry-[\w-]+\.js">/.test(body),
           }
         })
-        .catch(() => ({ status: 0, location: undefined, robots: undefined }))
-      answers.push({ ...page, actual: actual.status, actualLocation: actual.location, actualRobots: actual.robots })
+        .catch(() => ({ status: 0, location: undefined, robots: undefined, hydrated: false, scripted: false }))
+      answers.push({
+        ...page,
+        actual: actual.status,
+        actualLocation: actual.location,
+        actualRobots: actual.robots,
+        robots: robots ?? (page.noindex ? "noindex" : undefined),
+        hydrated: actual.hydrated,
+        scripted: actual.scripted,
+      })
     }
     return answers
   })
@@ -124,13 +153,18 @@ const failures = results
     (result) =>
       (result.status ? result.actual !== result.status : result.actual === 0 || result.actual >= 500) ||
       result.actualLocation !== result.location ||
-      result.actualRobots !== robots,
+      result.actualRobots !== result.robots ||
+      (result.static && (result.hydrated || !result.scripted)),
   )
   .map(
     (result) =>
       `${result.path} answered ${result.actual || "nothing"}${result.status ? `, not ${result.status}` : ""}` +
       (result.actualLocation !== result.location ? ` to ${result.actualLocation}, not ${result.location}` : "") +
-      (result.actualRobots !== robots ? ` with X-Robots-Tag ${result.actualRobots ?? "absent"} in ${stage}` : ""),
+      (result.actualRobots !== result.robots
+        ? ` with X-Robots-Tag ${result.actualRobots ?? "absent"} in ${stage}`
+        : "") +
+      (result.static && result.hydrated ? " with the hydrated app's markup, not as a static page" : "") +
+      (result.static && !result.scripted ? " without the static pages' script" : ""),
   )
 if (failures.length || errors.length) {
   console.error(`check-worker-start: FAILED\n${[...errors, ...failures].map((line) => `  ${line}`).join("\n")}`)
