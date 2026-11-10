@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
+import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -18,7 +19,9 @@ import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
-const it = testEffect(PluginTestLayer)
+const withFlags = (overrides: string) => testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
+const it = withFlags("console_watches")
+const released = withFlags("-console_watches")
 
 type Synthetic = Parameters<PluginContext.Context["session"]["synthetic"]>[0]
 type WatchEvent = ReturnType<typeof watchEvent>
@@ -263,6 +266,17 @@ describe("OpencodePlugin event watches", () => {
         expect(yield* watchTools).toEqual([])
         expect(console.state.opens).toBe(0)
         expect(console.state.requests.filter((request) => request.path.startsWith("/api/event-watches"))).toEqual([])
+      }),
+    ),
+  )
+
+  released.effect("stays dormant without the console_watches flag, even when the Console advertises event watches", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        yield* start(console)
+        yield* Effect.promise(() => Bun.sleep(100))
+        expect(yield* watchTools).toEqual([])
+        expect(console.state.opens).toBe(0)
       }),
     ),
   )

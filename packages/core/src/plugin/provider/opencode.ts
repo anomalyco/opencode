@@ -20,6 +20,7 @@ import { ConfigProviderPlugin } from "../../config/plugin/provider.js"
 import { SkillFile } from "../../config/plugin/skill-file.js"
 import { ConsoleAccess } from "../../console-access.js"
 import { Credential } from "../../credential.js"
+import { Flag } from "../../flag.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -179,6 +180,7 @@ export const OpencodePlugin = define<
   | HttpClient.HttpClient
   | Bus.Service
   | Config.Service
+  | Flag.Service
   | InstructionDiscovery.Service
   | SharedCache.Service
   | Skill.Service
@@ -192,6 +194,7 @@ export const OpencodePlugin = define<
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const config = yield* Config.Service
+    const flags = yield* Flag.Service
     const discovery = yield* InstructionDiscovery.Service
     const skills = yield* Skill.Service
     const cache = yield* SharedCache.Service
@@ -331,9 +334,11 @@ export const OpencodePlugin = define<
       // content.
       const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
       yield* syncInstructionsAndSkills(next, allowed)
-      yield* syncWatches(allowed && next.remote?.watches === true ? next.connection : undefined)
+      const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
+      yield* syncWatches(watching ? next.connection : undefined)
     })
-    // Watching starts when the Console's config says the workspace has event watches, and stops when it no longer does.
+    // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
+    // and stops when either no longer holds.
     const syncWatches = Effect.fnUntraced(
       function* (connection: ActiveConnection) {
         const credential = connection && (yield* ctx.integration.connection.resolve(connection))
