@@ -39,6 +39,8 @@ pub use core::with_keys;
 pub use select::{Choice, multiselect, select};
 pub use spinner::spinner;
 pub use style::*;
+#[cfg(test)]
+pub use term::Key;
 pub use term::{Keys, Press};
 pub use text::{password, text};
 
