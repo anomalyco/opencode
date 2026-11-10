@@ -2,6 +2,7 @@ import { expect } from "bun:test"
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { mkdir, stat, writeFile } from "node:fs/promises"
+import net from "node:net"
 import path from "node:path"
 import { Effect } from "effect"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
@@ -263,6 +264,74 @@ it.live("stops a discovered inherited daemon when adoption fails", () =>
     expect(shutdowns).toBe(1)
   }),
 )
+
+it.live("claims the replacement daemon instead of keeping the previous owner", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const owners: Record<string, net.Socket[]> = { first: [], second: [] }
+    let rotated = false
+    yield* listen(
+      path.join(directory, "first.sock"),
+      (_socket, request) => {
+        if (rotated) return { type: "error", message: "authentication failed" }
+        if (request.op === "ping") return { ...pong, instance_id: "first" }
+        return { type: "terminals", terminals: [] }
+      },
+      (socket) => owners.first.push(socket),
+    )
+    yield* listen(
+      path.join(directory, "second.sock"),
+      (_socket, request) => {
+        if (request.op === "ping") return { ...pong, instance_id: "second" }
+        return { type: "terminals", terminals: [] }
+      },
+      (socket) => owners.second.push(socket),
+    )
+    yield* Effect.promise(() => writeRegistration(directory, path.join(directory, "first.sock"), "first"))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+    yield* daemon.request({ op: "list" })
+
+    rotated = true
+    yield* Effect.promise(() => writeRegistration(directory, path.join(directory, "second.sock"), "second"))
+    yield* daemon.request({ op: "list" })
+
+    expect(owners.second).toHaveLength(1)
+    yield* closed(owners.first[0])
+  }),
+)
+
+it.live("releases the owner connection after shutdown", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const owners: net.Socket[] = []
+    let stopped = false
+    yield* listen(
+      path.join(directory, "daemon.sock"),
+      (_socket, request) => {
+        if (stopped) return { type: "error", message: "stopped" }
+        if (request.op === "ping") return pong
+        if (request.op === "shutdown") stopped = true
+        return { type: "ok" }
+      },
+      (socket) => owners.push(socket),
+    )
+    yield* Effect.promise(() => writeRegistration(directory, path.join(directory, "daemon.sock")))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+    yield* daemon.request({ op: "list" })
+
+    expect(yield* daemon.shutdown).toEqual({ type: "ok" })
+    yield* closed(owners[0])
+  }),
+)
+
+function closed(socket: net.Socket | undefined) {
+  if (!socket) return Effect.die(new Error("Expected an owner connection"))
+  if (socket.destroyed) return Effect.void
+  // Bounds only the failure case; the client closes its end synchronously.
+  return Effect.promise(() => new Promise((resolve) => socket.once("close", resolve))).pipe(
+    Effect.timeoutOrElse({ duration: "2 seconds", orElse: () => Effect.die(new Error("Owner connection stayed open")) }),
+  )
+}
 
 function temporaryRuntime() {
   return Effect.gen(function* () {
