@@ -13,6 +13,7 @@ import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
+import { SubagentMetadata } from "../../session/subagent-metadata.js"
 
 export const name = "subagent"
 
@@ -44,6 +45,10 @@ export const Input = Schema.Struct({
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
+  }),
+  notify: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Send you a `<subagent>` message each time this subagent goes idle. Defaults to true for new subagents. On follow-ups (sessionID), keeps the subagent's current setting unless you pass it.",
   }),
 })
 
@@ -171,9 +176,13 @@ export const Plugin = {
               if (existing !== undefined) {
                 const switched = existing.agent !== agent.id
                 const model = override ?? (switched ? agent.model : undefined)
+                // Omitted notify keeps the child's current link state; only an explicit value writes.
+                const metadata =
+                  input.notify === undefined ? undefined : SubagentMetadata.update(existing.metadata, input.notify)
                 yield* Effect.all([
                   switched ? sessions.switchAgent({ sessionID: existing.id, agent: agent.id }) : Effect.void,
                   model === undefined ? Effect.void : sessions.switchModel({ sessionID: existing.id, model }),
+                  metadata === undefined ? Effect.void : sessions.setMetadata({ sessionID: existing.id, metadata }),
                 ]).pipe(
                   Effect.mapError(
                     (error) => new ToolFailure({ message: `Failed to switch subagent session: ${existing.id}`, error }),
@@ -190,6 +199,7 @@ export const Plugin = {
                     title: input.description,
                     agent: agent.id,
                     model,
+                    metadata: SubagentMetadata.withNotify(parent.metadata, input.notify !== false),
                   })
                   .pipe(
                     Effect.mapError(
@@ -198,10 +208,13 @@ export const Plugin = {
                   ))
 
               const background = input.background === true
+              // A child that is not draining yet must be admitted without waking: the job's resume
+              // owns the start, so the period cannot run before its boundary is registered.
+              const running =
+                existing !== undefined &&
+                ((yield* sessions.active).has(existing.id) || (yield* jobs.get(existing.id))?.status === "running")
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              // Standard prompt admission outside the job: Job.start joining a running child skips
-              // its run effect, and the default wake starts an idle child or steers a running one.
               yield* sessions
                 .prompt({
                   sessionID: child.id,
@@ -209,7 +222,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
+                  ...(running ? {} : { resume: false }),
                 })
                 .pipe(
                   Effect.mapError(
@@ -224,12 +237,9 @@ export const Plugin = {
                 agent: agent.name,
                 description: input.description,
               }
-              yield* subagents.start(recovery)
+              yield* subagents.start(recovery, { background })
 
-              if (background) {
-                yield* subagents.background(recovery)
-                return backgroundResult(child.id)
-              }
+              if (background) return backgroundResult(child.id)
 
               const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
                 Effect.onInterrupt(() =>
@@ -238,17 +248,24 @@ export const Plugin = {
                   }),
                 ),
               )
-              if (result?.type === "backgrounded") {
-                yield* subagents.notify(recovery, result.info.started_at)
-                return backgroundResult(child.id)
-              }
+              if (result?.type === "backgrounded") return backgroundResult(child.id)
               // Failure surfaces keep the sessionID visible so the model can continue the child.
               if (result?.info.status === "error")
                 return yield* new ToolFailure({
-                  message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
+                  message: SubagentCompletion.formatBody(
+                    `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
+                    child.id,
+                    yield* subagents.outstanding(child.id),
+                  ),
                 })
               if (result?.info.status === "cancelled")
-                return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
+                return yield* new ToolFailure({
+                  message: SubagentCompletion.formatBody(
+                    `Subagent cancelled (sessionID: ${child.id})`,
+                    child.id,
+                    yield* subagents.outstanding(child.id),
+                  ),
+                })
               return {
                 sessionID: child.id,
                 status: "completed" as const,
