@@ -58,7 +58,11 @@ fn fake(session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Fake {
                 (200, json!({ "data": { "messageID": body["messageID"] } }))
             }
             ("DELETE", p) if p == format!("{base}/revert") => (204, Value::Null),
-            ("POST", p) if p == format!("{base}/revert/commit") => (204, Value::Null),
+            // Slow enough that the reader can leave the session before it answers.
+            ("POST", p) if p == format!("{base}/revert/commit") => {
+                std::thread::sleep(Duration::from_millis(300));
+                (204, Value::Null)
+            }
             ("DELETE", p) if p.starts_with(&format!("{base}/inbox/")) => (204, Value::Null),
             _ => support::base(seen, LOCATION),
         }
@@ -410,6 +414,22 @@ fn a_prompt_commits_a_staged_revert_before_it_is_sent() {
         .unwrap_or_else(|| panic!("no commit: {writes:?}"));
     let prompt = writes.iter().position(|write| write.contains("/prompt")).unwrap();
     assert!(commit < prompt, "{writes:?}");
+}
+
+// The accepted submit keeps its target after the composer unmounts (`prompt/index.tsx:1281,1341-1380`): leaving the
+// session while the revert commits still sends the replacement.
+#[test]
+fn leaving_the_session_while_the_revert_commits_still_sends_the_prompt() {
+    let kit = Kit::new(session("ses_a", json!({ "revert": { "messageID": "msg_03" } })), turns(), vec![]);
+    kit.wait_for("1 message reverted");
+    kit.wait_for("Model M");
+    kit.app.type_text("Try again");
+    kit.app.press("return");
+    let committing = kit.app.wait_until(WAIT, || kit.writes().iter().any(|write| write.contains("/revert/commit")));
+    assert!(committing, "{:?}", kit.writes());
+    kit.tui.navigate(Route::Home);
+    let found = kit.app.wait_until(WAIT, || kit.writes().iter().any(|write| write.contains("/prompt")));
+    assert!(found, "{:?}", kit.writes());
 }
 
 #[test]
