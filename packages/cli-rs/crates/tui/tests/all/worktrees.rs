@@ -157,6 +157,18 @@ fn picking_a_worktree_goes_home_there() {
 }
 
 #[test]
+fn going_home_from_home_works_in_the_new_location() {
+    let setup = Setup::new(Route::Home, &[]);
+    let location = || opencode_tui::features::location::current(&setup.tui).map(|location| location.directory);
+    assert_eq!(location().as_deref(), Some(DIRECTORY));
+    opencode_tui::features::location::navigate_home(&setup.tui, Some(opencode_store::Location::new("/project-spike")));
+    assert_eq!(location().as_deref(), Some("/project-spike"));
+    // A remount (a theme change) keeps it.
+    setup.tui.navigate(Route::Home);
+    assert_eq!(location().as_deref(), Some("/project-spike"));
+}
+
+#[test]
 fn a_new_worktree_is_staged_on_home_and_created_by_the_first_submit() {
     let setup = Setup::new(Route::Home, &[]);
     let screen = setup.open_worktrees();

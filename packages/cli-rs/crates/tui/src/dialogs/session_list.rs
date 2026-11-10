@@ -587,7 +587,7 @@ async fn read(client: &Client, input: &SessionListInput) -> Option<Vec<SessionIn
     client.session_list(input).await.map(|response| response.data).ok()
 }
 
-/// `pickerLocation()`: the open session's location, else the default location.
+/// `pickerLocation()`: the open session's location, else the active location, else the default location.
 fn picker_directory(tui: &Tui) -> String {
     let session = match tui.route() {
         Route::Session { id } => {
@@ -595,7 +595,7 @@ fn picker_directory(tui: &Tui) -> String {
         }
         _ => None,
     };
-    session.unwrap_or_else(|| tui.directory.clone())
+    session.unwrap_or_else(|| crate::features::location::active(tui).directory)
 }
 
 /// `prefs.allProjects` from the `session-list` storage key.

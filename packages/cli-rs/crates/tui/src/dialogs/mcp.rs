@@ -23,7 +23,6 @@ use std::rc::{Rc, Weak};
 use super::error_details;
 use super::session_list::dialog_theme;
 use crate::app::Tui;
-use crate::routes::Route;
 
 /// Registers `mcp.list` (`/mcps`) and its binding as `app.tsx:158,967-975` do. With a server's name as its input
 /// (the sidebar's MCP section), it opens on that server, and on its error when it failed.
@@ -59,7 +58,8 @@ pub fn show(tui: &Tui) {
 pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
     let mcp = Rc::new(Mcp {
         tui: tui.weak(),
-        location: current_location(tui),
+        // `location.ref ?? data.location.default()`.
+        location: crate::features::location::active(tui),
         loading: RefCell::new(HashSet::new()),
         select: RefCell::new(None),
         seen: Cell::new(tui.data.read(|state| state.revision())),
@@ -336,18 +336,6 @@ impl Mcp {
             None,
             DialogOptions::default()
         )));
-    }
-}
-
-/// `location.ref ?? data.location.default()`: the session's location on a session route.
-fn current_location(tui: &Tui) -> Location {
-    let session = match tui.route() {
-        Route::Session { id } => tui.data.read(|state| state.session(&id).cloned()),
-        _ => None,
-    };
-    match session {
-        Some(session) => Location::new(session.location.directory.0),
-        None => tui.data.read(|state| state.default_location().clone()),
     }
 }
 

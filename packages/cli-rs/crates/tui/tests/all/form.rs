@@ -295,6 +295,49 @@ fn a_global_form_shows_over_home_and_replies_with_its_directory() {
     harness.wait_gone("MCP server needs a token");
 }
 
+#[test]
+fn home_shows_and_answers_the_global_form_of_its_own_location() {
+    let sent: Arc<Mutex<Vec<Sent>>> = Arc::default();
+    let fake = {
+        let sent = Arc::clone(&sent);
+        Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+            ("GET", "/api/form") => {
+                let directory = match seen.param("location[directory]") {
+                    value if value.is_empty() => "/project".to_owned(),
+                    value => value,
+                };
+                let title = format!("{directory} needs a token");
+                let fields = json!([{ "key": "token", "type": "string", "title": "Token" }]);
+                (200, support::list(&directory, json!([form("global", "frm_g", &title, fields)])))
+            }
+            ("POST", path) if path.contains("/form/") => {
+                let directory = seen.header("x-opencode-directory");
+                sent.lock().unwrap().push(Sent {
+                    method: "POST",
+                    path: path.to_owned(),
+                    body: seen.body.clone(),
+                    directory,
+                });
+                (204, Value::Null)
+            }
+            _ => support::base(seen, "/project"),
+        })
+    };
+    let harness = Forms { harness: support::mount(100, 30, support::deps(Arc::new(fake))), sent };
+    harness.wait_for("/project needs a token");
+    opencode_tui::features::location::navigate_home(&harness.tui, Some(opencode_store::Location::new("/other")));
+    harness.wait_for("/other needs a token");
+    assert!(!harness.app.text().contains("/project needs a token"), "{}", harness.app.text());
+    harness.app.type_text("abc");
+    harness.app.press("enter");
+    harness.wait_for("enter submit");
+    harness.app.press("enter");
+    assert_eq!(
+        harness.sent(1),
+        [Sent { directory: Some("%2Fother".into()), ..reply("global", "frm_g", json!({ "token": "abc" })) }]
+    );
+}
+
 fn fields(value: Value) -> Vec<FormField> {
     serde_json::from_value(value).unwrap()
 }
