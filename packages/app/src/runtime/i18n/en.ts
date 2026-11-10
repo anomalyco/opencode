@@ -891,7 +891,6 @@ export const dict = {
   "sidebar.view.project.none": "No project",
   "sidebar.view.other": "Other",
   "sidebar.view.resetFilters": "Reset filters",
-  "sidebar.view.removeFilter": "Remove filter: {{label}}",
   "sidebar.view.markAllRead": "Mark all as read",
   "sidebar.view.noMatch": "No other sessions match",
   "settings.plugins.reload": "Reload",

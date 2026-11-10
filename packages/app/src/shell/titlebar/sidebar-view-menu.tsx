@@ -57,19 +57,7 @@ export function SidebarViewMenu(props: {
         variant="ghost-muted"
         size="small"
         aria-label={language.t("sidebar.view.options")}
-        icon={
-          <span class="relative inline-flex">
-            <Icon name="outline-sliders" size="small" />
-            <Show when={active() > 0}>
-              <span
-                aria-hidden="true"
-                class="pointer-events-none absolute -top-1.5 -end-2 min-w-3 rounded-full bg-v2-background-bg-accent px-[3px] text-center text-[9px] leading-3 font-medium tabular-nums text-v2-text-text-contrast"
-              >
-                {active()}
-              </span>
-            </Show>
-          </span>
-        }
+        icon={<Icon name="outline-sliders" size="small" />}
       />
       <Menu.Portal>
         <Menu.Content class="min-w-[200px]">
@@ -197,46 +185,6 @@ export function SidebarViewMenu(props: {
         </Menu.Content>
       </Menu.Portal>
     </Menu>
-  )
-}
-
-export function SidebarFilterChips(props: {
-  state: SidebarViewState
-  servers: { key: string; label: string }[]
-  projects: { id: string; label: string }[]
-  onRemove: (kind: SidebarFilterKind, value: string) => void
-}): JSX.Element {
-  const language = useLanguage()
-
-  const chips = () =>
-    FILTER_KINDS.flatMap((kind) => {
-      const labels = new Map(filterOptions(kind, props, language.t).map((option) => [option.value, option.label]))
-
-      return selectedValues(props.state, kind).map((value) => ({
-        kind,
-        value,
-        label: labels.get(value) ?? value,
-      }))
-    })
-
-  return (
-    <Show when={chips().length > 0}>
-      <div class="flex flex-wrap gap-1 px-2 pt-0.5 pb-1.5">
-        <For each={chips()}>
-          {(chip) => (
-            <button
-              type="button"
-              class="flex h-4 max-w-full min-w-0 items-center gap-0.5 rounded-[4px] bg-v2-overlay-simple-overlay-hover ps-1.5 pe-0.5 text-[11px] leading-4 text-v2-text-text-muted hover:text-v2-text-text-base"
-              aria-label={language.t("sidebar.view.removeFilter", { label: chip.label })}
-              onClick={() => props.onRemove(chip.kind, chip.value)}
-            >
-              <span class="min-w-0 truncate">{chip.label}</span>
-              <Icon name="xmark-small" size="small" class="shrink-0" />
-            </button>
-          )}
-        </For>
-      </div>
-    </Show>
   )
 }
 

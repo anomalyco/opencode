@@ -484,6 +484,7 @@ test("customized vertical sidebar merges a project across servers and narrows it
   await page.keyboard.press("Escape")
   await expect(titles).toHaveText([local.title, remote.title])
   await expect(sidebar.getByRole("button", { name: recent.title })).toHaveCount(0)
-  await page.getByRole("button", { name: /^Remove filter/ }).click()
+  await page.getByRole("button", { name: "View options" }).click()
+  await menu.getByRole("menuitem", { name: "Reset filters" }).click()
   await expect(sidebar.getByRole("button", { name: recent.title })).toBeVisible()
 })

@@ -23,7 +23,7 @@ import { ProjectSessionRow } from "./project-session-row"
 import { createSidebarActivityListener } from "./sidebar-organized"
 import { mergeSidebarSessions } from "./sidebar-sessions"
 import type { TabStripSection } from "./tab-strip"
-import { SidebarFilterChips, SidebarViewMenu } from "./sidebar-view-menu"
+import { SidebarViewMenu } from "./sidebar-view-menu"
 import {
   SIDEBAR_GROUPINGS,
   SIDEBAR_ORDERINGS,
@@ -614,12 +614,6 @@ export function SidebarCustomized(props: {
           onClick={props.onNewSession}
         />
       </div>
-      <SidebarFilterChips
-        state={state()}
-        servers={serverOptions()}
-        projects={projectOptions()}
-        onRemove={(kind, value) => toggleFilter(kind, value, false)}
-      />
       <div class="flex min-h-0 flex-1 flex-col" classList={{ hidden: !local.open }}>
         {props.children({ sections: sections(), tabFooter, tabLabel })}
         <Show when={filterCount() > 0 && !visibleRows().some((row) => !row.active)}>
