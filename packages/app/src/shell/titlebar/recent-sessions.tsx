@@ -11,9 +11,8 @@ import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
-import { displayName } from "@opencode/ui/project-avatar"
 import { Schema } from "effect"
-import { createEffect, createMemo, createSignal, onCleanup, Show, startTransition } from "solid-js"
+import { createEffect, createMemo, onCleanup, Show, startTransition } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { arrayMove } from "@/runtime/array-move"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -29,7 +28,6 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
-import { getRelativeTime } from "@/shell/time"
 import { RenameDialog } from "./project-session-row"
 import {
   addPin,
@@ -86,8 +84,6 @@ export function RecentSessions() {
   const [pages, setPages] = createStore<Record<string, RecentPageState>>({})
 
   const [hydration, setHydration] = createStore<Record<string, Hydration>>({})
-
-  const [clock, setClock] = createSignal(Date.now())
 
   const controllers = new Map<AbortController, string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -262,10 +258,8 @@ export function RecentSessions() {
     dispatch(item, { type: "load", kind, attempt: ++attempt })
   }
 
-  const ticker = setInterval(() => setClock(Date.now()), 60_000)
   onCleanup(() => {
     disposed = true
-    clearInterval(ticker)
     controllers.forEach((_, controller) => controller.abort())
     hydrationControllers.forEach((controller) => controller.abort())
     timers.forEach((timer) => clearTimeout(timer))
@@ -556,7 +550,8 @@ export function RecentSessions() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
-  const reorderPinned = (nextVisible: readonly string[]) => {    const visible = pinned().map((item) => item.key)
+  const reorderPinned = (nextVisible: readonly string[]) => {
+    const visible = pinned().map((item) => item.key)
     setState("pins", reorderPins(state.pins, visible, nextVisible))
   }
 
@@ -688,21 +683,11 @@ export function RecentSessions() {
       )
   }
 
-  const serverTag = (item: RecentSession) => {
-    if (servers.visible.length < 2) return
-
-    const conn = servers.visible.find((entry) => ServerConnection.key(entry) === item.server)
-
-    return conn ? servers.tag(conn) : undefined
-  }
-
   const row = (item: () => RecentSession, index?: () => number) => {
     const props = {
       item,
       selected: () => selected(item()),
       pinned: index !== undefined,
-      serverTag: () => serverTag(item()),
-      now: clock,
       canMoveUp: () => index !== undefined && index() > 0,
       canMoveDown: () => index !== undefined && index() < pinned().length - 1,
       onOpen: () => open(item()),
@@ -833,8 +818,6 @@ type RecentSessionRowProps = {
   item: () => RecentSession
   selected: () => boolean
   pinned: boolean
-  serverTag: () => string | undefined
-  now: () => number
   canMoveUp: () => boolean
   canMoveDown: () => boolean
   onOpen: () => void
@@ -882,14 +865,6 @@ function RecentSessionRow(props: RecentSessionRowProps) {
 
   const title = () => sessionTabTitle(item().session.title, language.t("session.tab.session"))
 
-  const age = () =>
-    getRelativeTime(
-      new Date(item().session.time.updated ?? item().session.time.created).toISOString(),
-      language.t,
-      language.intl(),
-      props.now(),
-    )
-
   return (
     <Menu.Context modal={false}>
       <Menu.Context.Trigger
@@ -898,45 +873,24 @@ function RecentSessionRow(props: RecentSessionRowProps) {
         data-slot="sidebar-recent-item"
         data-state={props.selected() ? "active" : undefined}
         aria-current={props.selected() ? "page" : undefined}
-        class="group flex min-h-9 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
+        class="group relative flex h-7 w-full min-w-0 shrink-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 text-start text-[13px] leading-4 font-medium text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[state=active]:bg-v2-overlay-simple-overlay-pressed data-[state=active]:text-v2-text-text-base"
         onClick={props.onOpen}
       >
-        <span class="flex size-4 shrink-0 items-center justify-center">
+        <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
           <SessionTabAvatarView
             project={project()}
             directory={item().session.location.directory}
             unread={false}
           />
         </span>
-        <span class="flex min-w-0 flex-1 flex-col justify-center">
-          <span
-            dir="auto"
-            class="min-w-0 truncate text-[13px] leading-[var(--line-height-compact)] font-medium tracking-[-0.04px] text-v2-text-text-base"
-          >
-            {title()}
-          </span>
-          <span class="flex min-w-0 items-center gap-1.5 overflow-hidden text-[12px] leading-4 text-v2-text-text-faint">
-            <span dir="auto" class="min-w-0 truncate">
-              {displayName(project() ?? { worktree: item().session.location.directory })}
-            </span>
-            <Show when={props.serverTag()}>
-              {(tag) => (
-                <span class="max-w-24 shrink-0 truncate rounded-[3px] bg-v2-background-bg-layer-02 px-1 text-[11px] leading-4 text-v2-text-text-muted">
-                  {tag()}
-                </span>
-              )}
-            </Show>
-          </span>
+        <span dir="auto" class="min-w-0 flex-1 truncate">
+          {title()}
         </span>
-        <span class="flex shrink-0 items-center gap-1.5 text-[12px] leading-4 tabular-nums text-v2-text-text-faint">
-          <Show when={status.loading()}>
-            <ActivityRing width={14} height={14} class="shrink-0" />
-          </Show>
-          <Show when={!status.loading() && status.unread() && !props.selected()}>
-            <span class="size-1.5 rounded-full bg-v2-text-text-base" aria-hidden="true" />
-          </Show>
-          <span class="whitespace-nowrap">{age()}</span>
-        </span>
+        <Show when={status.loading()}>
+          <span class="flex size-4 shrink-0 items-center justify-center">
+            <ActivityRing width={14} height={14} />
+          </span>
+        </Show>
       </Menu.Context.Trigger>
       <Menu.Context.Portal>
         <Menu.Context.Content
