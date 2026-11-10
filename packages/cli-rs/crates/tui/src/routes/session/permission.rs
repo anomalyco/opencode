@@ -47,6 +47,7 @@ struct Inner {
     /// Requests answered by `autoaccept`.
     approved: RefCell<HashSet<PermissionID>>,
     resize: Cell<Option<HandlerId>>,
+    settings: RefCell<Option<Disposer>>,
 }
 
 #[derive(Default)]
@@ -104,7 +105,17 @@ impl Permission {
             synced: RefCell::default(),
             approved: RefCell::default(),
             resize: Cell::new(None),
+            settings: RefCell::default(),
         });
+        // Turning `autoaccept` on answers the shown request and hides it; the route syncs the prompt back in.
+        let weak = Rc::downgrade(&inner);
+        *inner.settings.borrow_mut() = Some(tui.settings.subscribe(move |tui| {
+            if tui.config().permissions == Permissions::Autoaccept
+                && weak.upgrade().is_some_and(|inner| inner.prompted.borrow().request.is_some())
+            {
+                tui.app.defer(bind!(tui.weak(), |tui, _| tui.sync_view()));
+            }
+        }));
         let weak = Rc::downgrade(&inner);
         inner.resize.set(Some(tui.app.on_resize(move |_, _, _| {
             if let Some(inner) = weak.upgrade()
@@ -145,6 +156,11 @@ impl Permission {
             }
         }
         if tui.config().permissions == Permissions::Autoaccept {
+            // `prompted` is empty in this mode (`index.tsx:208-215`): a request shown before it began goes.
+            if inner.prompted.borrow().request.is_some() {
+                *inner.prompted.borrow_mut() = Prompted::default();
+                inner.stage_changed();
+            }
             inner.auto_approve(tui, &requests);
             return;
         }

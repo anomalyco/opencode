@@ -213,6 +213,23 @@ fn autoaccept_replies_once_to_each_request_without_prompting() {
     assert!(!screen.contains("Permission required"), "{screen}");
 }
 
+// `index.tsx:208-215`: in autoaccept the prompted list is empty, so a request already shown goes when the mode
+// turns on, and the session prompt comes back.
+#[test]
+fn turning_on_autoaccept_answers_and_hides_the_shown_request() {
+    let harness = mount(
+        Fixture { root: vec![request("per_1", "ses_root", "shell", &["ls"], &[])], ..Fixture::default() },
+        Permissions::Prompt,
+    );
+    harness.wait_for("Permission required");
+    opencode_tui::dialogs::settings::update(&harness.tui, |draft| {
+        opencode_tui::dialogs::settings::set_path(draft, &["session", "permissions"], json!("autoaccept"))
+    });
+    assert_eq!(harness.replies(1), [reply("per_1", "ses_root", json!({ "decision": "once" }))]);
+    let screen = harness.wait_for("╹▀");
+    assert!(!screen.contains("Permission required"), "{screen}");
+}
+
 #[test]
 fn presentation_matches_the_typescript_rules() {
     let path = |value: &str| value.replace("/project/", "");
