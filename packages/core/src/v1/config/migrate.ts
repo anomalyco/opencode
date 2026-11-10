@@ -1,6 +1,7 @@
 export * as ConfigMigrateV1 from "./migrate.js"
 
 import { ConfigAgent } from "@opencode/schema/config/agent"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { ConfigModel } from "@opencode/schema/config/model"
 import { Option, Schema } from "effect"
 import { ConfigAgentV1 } from "./agent.js"
@@ -82,7 +83,7 @@ export function migrateMcpTimeout(timeout: number) {
 }
 
 // A per-server object sets each phase on its own; a bare number still bounds all three.
-function migrateMcpServerTimeout(timeout: number | ConfigMCPV1.Timeout) {
+function migrateMcpServerTimeout(timeout: number | ConfigMCP.Timeout) {
   return typeof timeout === "number" ? migrateMcpTimeout(timeout) : timeout
 }
 
