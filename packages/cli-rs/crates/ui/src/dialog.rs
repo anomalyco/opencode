@@ -297,13 +297,13 @@ impl Dialogs {
             .justify(if centered { Justify::Center } else { Justify::Start })
             .padding_edge(Edge::Top, if centered { 0.0 } else { f32::from(height) / 4.0 })
             .visible(open);
-        self.0.panel.width(self.0.size.get().width()).max_width(i32::from(width) - 2).bg(self
-            .0
-            .theme
-            .borrow()
-            .surface(Surface::Dialog)
-            .background
-            .base);
+        // The open dialog drew its rows in the theme it was built in, so the panel keeps that background until the
+        // dialog is built again.
+        let background = match self.0.stack.borrow().last() {
+            Some(entry) => entry.cx.theme.background.base,
+            None => self.0.theme.borrow().surface(Surface::Dialog).background.base,
+        };
+        self.0.panel.width(self.0.size.get().width()).max_width(i32::from(width) - 2).bg(background);
     }
 
     pub fn is_open(&self) -> bool {

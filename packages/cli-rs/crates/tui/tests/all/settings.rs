@@ -363,3 +363,25 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     app.type_text("mouse capture");
     assert_eq!(footer(&app, "Mouse"), "off");
 }
+
+// Expected (r2 review, carbon-ui-3): the open settings dialog takes the theme that changing the color mode chose, as
+// TS `useTheme()` restyles it in place; it keeps the setting selected and the filter typed.
+#[test]
+fn changing_the_color_mode_restyles_the_open_settings_dialog() {
+    let app = TestApp::new(80, 30);
+    let tui = support::mount_empty(&app, support::component_info(json!({})), None);
+    settings::show(&tui, Some("theme.mode"));
+    app.type_text("color mode");
+    app.press("right");
+    assert_eq!(tui.theme.borrow().mode(), opencode_ui::theme::ThemeMode::Light);
+    let theme = tui.page().surface(opencode_ui::theme::Surface::Dialog);
+    let screen = app.render();
+    let y = (0..screen.height).find(|&y| screen.row(y).contains("color mode")).expect("the filter stays");
+    let x = column(&screen.row(y), "color mode") as u32;
+    let cell = screen.cell(x, y).unwrap();
+    assert_eq!((cell.fg, cell.bg), (theme.text.formfield.base, theme.background.formfield.focused));
+    let y = (0..screen.height).find(|&y| screen.row(y).contains("Color mode")).unwrap();
+    let x = column(&screen.row(y), "Color mode") as u32;
+    assert_eq!(screen.cell(x, y).unwrap().bg, theme.background.action.primary.focused);
+    assert_eq!(footer(&app, "Color mode"), "light");
+}

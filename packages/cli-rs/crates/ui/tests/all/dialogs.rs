@@ -712,3 +712,26 @@ fn multi_line_titles_scroll_by_the_rows_they_draw() {
     let screen = kit.app.render().text();
     assert!(screen.contains('…'), "{screen}");
 }
+
+// Expected (r2 review, carbon-ui-3): a theme set while a dialog is open does not repaint the panel under rows drawn
+// in the old theme; the next dialog opens in the new one.
+#[test]
+fn a_theme_change_keeps_the_open_dialog_in_one_theme() {
+    let kit = kit(72, 30);
+    open_models(&kit);
+    let light = Catalog::default().load("opencode", ThemeMode::Light).unwrap().theme;
+    kit.dialogs.set_theme(light.clone());
+    let background = |kit: &Kit| {
+        let screen = kit.app.render();
+        let y = (0..screen.height).find(|&y| screen.row(y).contains("Select model")).unwrap();
+        screen.cell(column(&screen.row(y), "Select model") as u32, y).unwrap().bg
+    };
+    assert_eq!(background(&kit), theme().surface(opencode_ui::theme::Surface::Dialog).background.base);
+    kit.dialogs.clear();
+    open_models(&kit);
+    assert_eq!(background(&kit), light.surface(opencode_ui::theme::Surface::Dialog).background.base);
+}
+
+fn column(line: &str, needle: &str) -> u16 {
+    line[..line.find(needle).unwrap()].chars().count() as u16
+}
