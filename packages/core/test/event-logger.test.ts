@@ -11,11 +11,13 @@ import { Provider } from "@opencode/schema/provider"
 import { Command } from "@opencode/schema/command"
 import { Config } from "@opencode/schema/config"
 import { McpEvent } from "@opencode/schema/mcp-event"
+import { SessionEvent } from "@opencode/schema/session-event"
+import { SessionID } from "@opencode/schema/session-id"
 
 const UnlistedUpdated = Bus.ephemeral({ type: "test.updated", schema: {} })
 
 describe("EventLogger", () => {
-  test("logs explicitly listed updated events", async () => {
+  test("logs explicitly listed lifecycle events", async () => {
     const output = new Array<ReturnType<typeof Logger.formatStructured.log>>()
     const logger = Logger.map(Logger.formatStructured, (entry) => {
       output.push(entry)
@@ -28,6 +30,7 @@ describe("EventLogger", () => {
       yield* bus.publish(Model.Event.Updated, {})
       yield* bus.publish(Command.Event.Updated, {})
       yield* bus.publish(Config.Event.Updated, {})
+      yield* bus.publish(SessionEvent.Deleted, { sessionID: SessionID.make("ses_event_logger") })
       yield* bus.publish(McpEvent.StatusChanged, { server: "example" })
       yield* bus.publish(UnlistedUpdated, {})
     }).pipe(
@@ -45,6 +48,7 @@ describe("EventLogger", () => {
       ["event", { event: expect.objectContaining({ type: "model.updated" }) }],
       ["event", { event: expect.objectContaining({ type: "command.updated" }) }],
       ["event", { event: expect.objectContaining({ type: "config.updated" }) }],
+      ["event", { event: expect.objectContaining({ type: "session.deleted" }) }],
     ])
   })
 })
