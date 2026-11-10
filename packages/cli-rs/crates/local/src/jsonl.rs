@@ -48,14 +48,11 @@ fn body<'a>(entries: impl Iterator<Item = &'a Value>) -> String {
     entries.map(|entry| jsonc::stringify(entry) + "\n").collect()
 }
 
-fn append_text(file: &Path, text: &str) {
-    let append = || -> io::Result<()> {
-        if let Some(dir) = file.parent() {
-            fs::create_dir_all(dir)?;
-        }
-        fs::OpenOptions::new().create(true).append(true).open(file)?.write_all(text.as_bytes())
-    };
-    let _ = append();
+fn append_text(file: &Path, text: &str) -> io::Result<()> {
+    if let Some(dir) = file.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::OpenOptions::new().create(true).append(true).open(file)?.write_all(text.as_bytes())
 }
 
 /// `parsePromptHistory`.
@@ -134,7 +131,7 @@ pub fn save_history(state: &Path, entry: &Value) -> Result<(), lock::Error> {
         let text = fs::read_to_string(&file).unwrap_or_default();
         let repeat = lines(&text).filter(is_prompt).last().is_some_and(|previous| jsonc::stringify(&previous) == line);
         if !repeat {
-            append_text(&file, &(line.clone() + "\n"));
+            append_text(&file, &(line.clone() + "\n"))?;
         }
         Ok(())
     })
@@ -171,7 +168,7 @@ fn rewrite(file: &Path, change: impl FnOnce(&str) -> Option<String>) -> io::Resu
         old.read_to_end(&mut late)?;
     }
     if !late.is_empty() {
-        append_text(file, &String::from_utf8_lossy(&late));
+        append_text(file, &String::from_utf8_lossy(&late))?;
     }
     Ok(())
 }
@@ -257,10 +254,7 @@ pub fn stash_entry(prompt: Value, now: i64) -> Value {
 /// [`Stash::load`] and the next delete keep the newest 50.
 pub fn save_stash(state: &Path, entry: &Value) -> Result<(), lock::Error> {
     let file = stash_file(state);
-    with_lock(state, &file, || {
-        append_text(&file, &(jsonc::stringify(entry) + "\n"));
-        Ok(())
-    })
+    with_lock(state, &file, || append_text(&file, &(jsonc::stringify(entry) + "\n")))
 }
 
 /// `pop` and `remove`'s write, under the lock: rereads the file and drops the newest line equal to
@@ -387,7 +381,7 @@ pub fn save_frecency(state: &Path, cwd: &Path, path: &str, now: i64) -> Result<(
             .and_then(|entry| visit(&entry))
             .map_or(0.0, |visit| visit.frequency);
         let visit = Visit { frequency: frequency + 1.0, last_open: now as f64 };
-        append_text(&file, &(line(&path, &visit) + "\n"));
+        append_text(&file, &(line(&path, &visit) + "\n"))?;
         Ok(visit)
     })?;
     Ok((path, visit))
@@ -462,7 +456,7 @@ mod tests {
         save_history(state.path(), &prompt("a")).unwrap();
         save_history(state.path(), &prompt("a")).unwrap();
         // The TypeScript TUI appends without the lock.
-        append_text(&file, "{\"text\":\"ts\",\"pasted\":[]}\n");
+        append_text(&file, "{\"text\":\"ts\",\"pasted\":[]}\n").unwrap();
         for index in 0..49 {
             save_history(state.path(), &prompt(&index.to_string())).unwrap();
         }
@@ -478,6 +472,17 @@ mod tests {
         let before = fs::metadata(&file).unwrap().modified().unwrap();
         History::load(state.path());
         assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
+    }
+
+    #[test]
+    fn a_failed_append_is_an_error() {
+        let state = opencode_util::temp::tempdir().unwrap();
+        for name in ["prompt-stash.jsonl", "prompt-history.jsonl", "frecency.jsonl"] {
+            fs::create_dir(state.path().join(name)).unwrap();
+        }
+        assert!(save_stash(state.path(), &stash_entry(prompt("a"), 1)).is_err());
+        assert!(save_history(state.path(), &prompt("a")).is_err());
+        assert!(save_frecency(state.path(), Path::new("/w"), "a", 1).is_err());
     }
 
     #[test]
@@ -503,7 +508,8 @@ mod tests {
             &format!(
                 "{{\"prompt\":{{\"text\":\"{text}\",\"files\":[],\"agents\":[],\"skills\":[],\"pasted\":[]}},\"timestamp\":{timestamp}}}\n"
             ),
-        );
+        )
+        .unwrap();
     }
 
     fn stash_texts(file: &Path) -> Vec<String> {
@@ -555,7 +561,8 @@ mod tests {
         append_text(
             &file,
             "{\"path\":\"/w/from_ts.rs\",\"frequency\":1,\"lastOpen\":5000}\n{\"path\":\"/w/f0.rs\",\"frequency\":20,\"lastOpen\":5001}\n",
-        );
+        )
+        .unwrap();
         frecency.update("new.rs", 6000);
         let latest = |path: &str| {
             parse_frecency(&fs::read_to_string(&file).unwrap()).into_iter().find(|entry| entry["path"] == path)
