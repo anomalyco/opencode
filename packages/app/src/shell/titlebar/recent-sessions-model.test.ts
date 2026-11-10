@@ -111,6 +111,7 @@ test("pins keep their order, leave Recent, and hide archived sessions without dr
   const result = partitionRecentSessions({
     items: [a, b, c],
     endpoints: new Map(),
+    open: new Set(),
     pins: [b.key, a.key],
     resolvePin: () => undefined,
     archived: (key) => archived.has(key),
@@ -135,16 +136,43 @@ test("opening a sidecar pin excludes its HTTP alias while keeping a different se
     mergeRecentSessions(ServerConnection.key(conn), [greeting], conn === sidecar ? [{ ...greeting }] : []),
   )
 
-  const result = partitionRecentSessions({
-    items,
+  const options = {
     endpoints: recentSessionEndpoints(connections, ownUrl),
-    pins: addPin([], items[0].key),
     resolvePin: () => undefined,
     archived: () => false,
-  })
+  }
+
+  const open = new Set([items[1].key])
+  const result = partitionRecentSessions({ ...options, items, pins: addPin([], items[0].key), open })
 
   expect(result.pinned.map((row) => row.server)).toEqual(["sidecar"])
   expect(result.recent.map((row) => row.server)).toEqual(["http://localhost:4097"])
+
+  for (const order of [items, items.toReversed()]) {
+    const rows = partitionRecentSessions({ ...options, items: order, pins: [], open: new Set([items[0].key]) })
+    expect(rows.recent.map((row) => row.key)).toEqual([items[2].key, items[0].key])
+    const closed = partitionRecentSessions({ ...options, items: order, pins: [], open: new Set() })
+    expect(closed.recent.map((row) => row.key)).toEqual([items[1].key, items[2].key])
+  }
+})
+
+test("different sessions with the same title on one server remain independently pinnable", () => {
+  const items = mergeRecentSessions("sidecar", [
+    session("ses_first", 20, { title: "Greeting" }),
+    session("ses_second", 10, { title: "Greeting" }),
+  ], [])
+
+  const result = partitionRecentSessions({
+    items,
+    endpoints: new Map(),
+    pins: [items[0].key],
+    open: new Set(),
+    archived: () => false,
+    resolvePin: () => undefined,
+  })
+
+  expect(result.pinned.map((row) => row.session.id)).toEqual(["ses_first"])
+  expect(result.recent.map((row) => row.session.id)).toEqual(["ses_second"])
 })
 
 test("pins resolve hydrated sessions and unresolved pins stay hidden", () => {
@@ -155,6 +183,7 @@ test("pins resolve hydrated sessions and unresolved pins stay hidden", () => {
   const result = partitionRecentSessions({
     items: [known],
     endpoints: new Map(),
+    open: new Set(),
     pins: [hydrated.key, missing, known.key],
     resolvePin: (key) => (key === hydrated.key ? hydrated : undefined),
     archived: () => false,

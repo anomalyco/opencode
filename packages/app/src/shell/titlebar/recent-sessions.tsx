@@ -40,7 +40,6 @@ import {
   recentSessionKey,
   removePin,
   reorderPins,
-  sortRecentSessions,
   splitRecentSessionKey,
   transitionRecentPage,
   type RecentPageEffect,
@@ -327,17 +326,15 @@ export function RecentSessions() {
   })
 
   const items = createMemo(() =>
-    sortRecentSessions(
-      connections().flatMap((item) => {
-        const fetched = pages[item.server]
+    connections().flatMap((item) => {
+      const fetched = pages[item.server]
 
-        return mergeRecentSessions(
-          item.server,
-          fetched ? item.ctx.data.session.apply(fetched.sessions) : [],
-          item.ctx.data.session.list(),
-        )
-      }),
-    ),
+      return mergeRecentSessions(
+        item.server,
+        fetched ? item.ctx.data.session.apply(fetched.sessions) : [],
+        item.ctx.data.session.list(),
+      )
+    }),
   )
 
   const hydratedItems = createMemo(() => {
@@ -448,11 +445,16 @@ export function RecentSessions() {
 
   const endpoints = createMemo(() => recentSessionEndpoints(servers.visible, servers.ownUrl()))
 
+  const openSessions = createMemo(() =>
+    new Set(tabs.store.flatMap((tab) => tab.type === "session" ? [recentSessionKey(tab.server, tab.sessionId)] : [])),
+  )
+
   const partition = createMemo(() =>
     partitionRecentSessions({
       items: items(),
       pins: state.pins,
       endpoints: endpoints(),
+      open: openSessions(),
       resolvePin: (key) => hydratedItems().get(key),
       archived,
     }),
@@ -587,11 +589,14 @@ export function RecentSessions() {
   const selected = (item: RecentSession) => {
     const route = layout.route()
 
-    if (route.type !== "session" || route.server !== item.server) return false
+    if (route.type !== "session") return false
+    const scope = endpoints()
+
+    if ((scope.get(route.server) ?? route.server) !== (scope.get(item.server) ?? item.server)) return false
 
     return (
       route.sessionId === item.session.id ||
-      ctxOf(item)?.data.session.root(route.sessionId) === item.session.id
+      global.serverCtx(route.server)?.data.session.root(route.sessionId) === item.session.id
     )
   }
 

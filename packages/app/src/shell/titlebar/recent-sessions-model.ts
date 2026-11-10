@@ -330,10 +330,16 @@ export function partitionRecentSessions(input: {
   items: readonly RecentSession[]
   pins: readonly string[]
   endpoints: ReadonlyMap<string, string>
+  open: ReadonlySet<string>
   resolvePin: (key: string) => RecentSession | undefined
   archived: (key: string) => boolean
 }) {
   const byKey = new Map(input.items.map((item) => [item.key, item] as const))
+
+  const identity = (item: RecentSession) =>
+    recentSessionKey(input.endpoints.get(item.server) ?? item.server, item.session.id)
+
+  const pinnedSessions = new Set<string>()
 
   const pinned = input.pins.flatMap((key): RecentSession[] => {
     if (input.archived(key)) return []
@@ -341,15 +347,35 @@ export function partitionRecentSessions(input: {
 
     if (!item || item.session.time.archived !== undefined) return []
 
+    const id = identity(item)
+
+    if (pinnedSessions.has(id)) return []
+    pinnedSessions.add(id)
+
     return [item]
   })
 
-  const identity = (item: RecentSession) => recentSessionKey(input.endpoints.get(item.server) ?? item.server, item.session.id)
   const pinnedKeys = new Set(input.pins)
-  const pinnedSessions = new Set(pinned.map(identity))
+  const recent = new Map<string, RecentSession>()
 
-  return {
-    pinned,
-    recent: input.items.filter((item) => !pinnedKeys.has(item.key) && !pinnedSessions.has(identity(item))),
+  // Opening a row should reuse an existing tab. Otherwise prefer a stable route regardless of fetch order.
+  for (const item of input.items) {
+    const id = identity(item)
+
+    if (pinnedKeys.has(item.key) || pinnedSessions.has(id)) continue
+
+    const previous = recent.get(id)
+
+    if (!previous) {
+      recent.set(id, item)
+      continue
+    }
+
+    const open = input.open.has(item.key)
+    const previousOpen = input.open.has(previous.key)
+
+    if (open !== previousOpen ? open : item.key < previous.key) recent.set(id, item)
   }
+
+  return { pinned, recent: sortRecentSessions([...recent.values()]) }
 }
