@@ -221,6 +221,11 @@ fn animations_off() -> Value {
     json!({ "animations": false })
 }
 
+/// Medium verbosity draws tool groups; low, the default, folds them into one summary.
+fn medium_verbosity() -> Value {
+    json!({ "animations": false, "session": { "verbosity": "medium" } })
+}
+
 use support::session_route;
 
 impl Harness {
@@ -372,7 +377,7 @@ fn startup_agent_and_model_reach_the_selection() {
 
 #[test]
 fn an_opened_group_stays_open_when_the_session_shows_again() {
-    let h = mount(session_route("ses_g"), Args::default(), animations_off());
+    let h = mount(session_route("ses_g"), Args::default(), medium_verbosity());
     h.wait_for("Explored");
     // A closed group shows its header only.
     assert!(!h.app.text().contains("Reading file"), "{}", h.app.text());
@@ -389,7 +394,7 @@ fn an_opened_group_stays_open_when_the_session_shows_again() {
 
 #[test]
 fn a_tool_waiting_on_a_permission_shows_outside_its_closed_group() {
-    let h = mount(session_route("ses_p"), Args::default(), animations_off());
+    let h = mount(session_route("ses_p"), Args::default(), medium_verbosity());
     // `partitionPending`: the header counts the finished read only, and the blocked one shows below it.
     h.wait_for("Explored: 1 read");
     let screen = h.app.text();

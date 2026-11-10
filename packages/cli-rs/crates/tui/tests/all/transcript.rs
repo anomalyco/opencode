@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use opencode_api::generated::V2Event;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Bounded, Debug, Info, Scroll, Session, TurnTokens, Visibility};
+use opencode_local::cli_config::{Bounded, Debug, Info, Scroll, Session, TurnTokens, Verbosity, Visibility};
 use opencode_tui::Deps;
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
@@ -114,6 +114,11 @@ impl View {
     }
 }
 
+/// Medium verbosity draws each reasoning block; low, the default, folds them into one summary.
+fn medium() -> Session {
+    Session { verbosity: Some(Verbosity::Medium), ..Session::default() }
+}
+
 fn event(kind: &str, seq: u64, data: Value) -> Value {
     json!({
         "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
@@ -146,7 +151,7 @@ fn user_markdown_reasoning_and_footer_render_as_the_typescript_rows() {
         debug: Some(Debug { turn_tokens: Some(TurnTokens::Enabled(true)), ..Debug::default() }),
         ..Info::default()
     };
-    let h = open(80, 30, "ses_r", messages, info);
+    let h = open(80, 30, "ses_r", messages, Info { session: Some(medium()), ..info });
     let screen = h.wait_for("The parser drops");
 
     // The user message on its raised surface, behind the agent bar, with its chips.
@@ -176,8 +181,7 @@ fn user_markdown_reasoning_and_footer_render_as_the_typescript_rows() {
     assert!(expanded.contains("- Thought · 1.5s"), "{expanded}");
 
     // `session.toggle.thinking` shows every block open.
-    let shown =
-        Info { session: Some(Session { thinking: Some(Visibility::Show), ..Session::default() }), ..Info::default() };
+    let shown = Info { session: Some(Session { thinking: Some(Visibility::Show), ..medium() }), ..Info::default() };
     let messages = vec![assistant(
         "msg_2",
         1500,
@@ -200,7 +204,7 @@ fn config_changes_reach_the_transcript_without_a_restart() {
         json!([{ "type": "reasoning", "text": "Plan the fix.", "time": { "created": 1500, "completed": 3000 } }]),
         Some(4000),
     )];
-    let h = open(80, 20, "ses_r", messages, Info::default());
+    let h = open(80, 20, "ses_r", messages, Info { session: Some(medium()), ..Info::default() });
     let screen = h.wait_for("+ Thought");
     assert!(!screen.contains("Plan the fix."), "{screen}");
     assert!(screen.contains("tok/s"), "{screen}");
@@ -227,7 +231,7 @@ fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
             None,
         ),
     ];
-    let h = open(80, 20, "ses_s", messages, Info::default());
+    let h = open(80, 20, "ses_s", messages, Info { session: Some(medium()), ..Info::default() });
     let screen = h.wait_for("Thinking");
     // Reasoning that is not done shows the spinner's label.
     assert!(screen.contains("Thinking"), "{screen}");

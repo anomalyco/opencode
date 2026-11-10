@@ -312,7 +312,13 @@ fn message_navigation_aligns_messages_with_the_top() {
 
 #[test]
 fn groups_open_on_click_and_follow_grouping_and_verbosity() {
-    let h = open(turns(3), Info::default());
+    // Low, the default, folds a turn's calls into one activity summary.
+    let screen = open(turns(3), Info::default()).app.text();
+    assert!(screen.contains("+ 2 reads") && !screen.contains("Explored"), "{screen}");
+
+    let medium =
+        Info { session: Some(Session { verbosity: Some(Verbosity::Medium), ..Session::default() }), ..Info::default() };
+    let h = open(turns(3), medium);
     let screen = h.app.text();
     assert!(screen.contains("→ Explored: 2 reads"), "{screen}");
     // E.7a's read row.

@@ -107,7 +107,7 @@ const messages = [
 
 export default defineApp({
   height: 70,
-  config: { session: { grouping: "none" } },
+  config: { session: { grouping: "none", verbosity: "medium" } },
   args: { sessionID: "ses_blocks" },
   routes: [
     { path: "/api/session/ses_blocks", json: { data: session("ses_blocks", "Fix the lexer", { updated: 2 }) } },

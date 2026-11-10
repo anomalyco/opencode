@@ -17,7 +17,7 @@ const event = (type: string, data: Record<string, unknown>, durable = true) => (
 
 export default defineApp({
   height: 30,
-  config: { experimental: { "new-designs": true } },
+  config: { experimental: { "new-designs": true }, session: { verbosity: "medium" } },
   args: { sessionID: id },
   routes: [
     { path: `/api/session/${id}`, json: { data: session(id, "Run echo", { updated: 2 }) } },

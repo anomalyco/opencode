@@ -16,6 +16,7 @@ use opentui::prelude::*;
 use opentui::widget::{MacOsScroll, ScrollAcceleration};
 use serde_json::Value;
 
+use super::grouping::DEFAULT_VERBOSITY;
 use super::messages::list::{ScrollAnchor, Transcript};
 use crate::app::Tui;
 use crate::dialogs::settings;
@@ -209,7 +210,7 @@ impl Inner {
         let info = tui.settings.info();
         let session = info.session.unwrap_or_default();
         let grouping = session.grouping != Some(Grouping::None);
-        let verbosity = session.verbosity.unwrap_or(Verbosity::Medium);
+        let verbosity = session.verbosity.unwrap_or(DEFAULT_VERBOSITY);
         let commands = vec![
             command("session.page.up", "Page up", |inner, tui| inner.move_by(tui, -inner.height() / 2.0)),
             command("session.page.down", "Page down", |inner, tui| inner.move_by(tui, inner.height() / 2.0)),
@@ -234,7 +235,7 @@ impl Inner {
             ),
             command("session.verbosity.cycle", &format!("Verbosity: {}", titlecase(verbosity.as_str())), |_, tui| {
                 let current =
-                    tui.settings.info().session.and_then(|session| session.verbosity).unwrap_or(Verbosity::Medium);
+                    tui.settings.info().session.and_then(|session| session.verbosity).unwrap_or(DEFAULT_VERBOSITY);
                 let next = match current {
                     Verbosity::Low => "medium",
                     Verbosity::Medium => "high",

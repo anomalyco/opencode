@@ -224,7 +224,7 @@ pub const SETTINGS: &[Setting] = &[
         "Session",
         &["session", "verbosity"],
         "How much tool activity is shown in the chat",
-        S("medium"),
+        S("low"),
         &[S("low"), S("medium"), S("high")],
         &[],
         &["detail", "activity", "summary", "transcript"],

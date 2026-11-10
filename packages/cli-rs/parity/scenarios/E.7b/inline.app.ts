@@ -86,7 +86,7 @@ const messages = [
 
 export default defineApp({
   height: 40,
-  config: { session: { grouping: "none" } },
+  config: { session: { grouping: "none", verbosity: "medium" } },
   args: { sessionID: "ses_tools" },
   routes: [
     { path: "/api/session/ses_tools", json: { data: session("ses_tools", "Look around", { updated: 2 }) } },
