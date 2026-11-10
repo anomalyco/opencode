@@ -926,7 +926,7 @@ Earlier work
     ])
   })
 
-  test("keeps finished reasoning and settled hosted tools from a failed stream", () => {
+  test("retries a failed stream from its last local call that ran", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -966,15 +966,65 @@ Earlier work
               }),
               time: { created, completed: created, ran: created },
             }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "local-ran",
+              name: "read",
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { path: "README.md" },
+                content: [{ type: "text", text: "Hello" }],
+              }),
+              time: { created, completed: created, ran: created },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "hosted-after-local",
+              name: "web_search",
+              executed: true,
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: { query: "Later" },
+                error: { type: "tool.result-missing", message: "Provider did not return a tool result" },
+              }),
+              time: { created, completed: created, ran: created },
+            }),
           ],
           finish: "error",
           error: { type: "unknown", message: "Step interrupted" },
+          time: { created, completed: created },
+        }),
+        // Hosted calls alone are provider-side reads the retry can redo, so the request never ends on an
+        // assistant reply.
+        SessionMessage.Assistant.make({
+          id: id("assistant-failed-hosted-only"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "hosted-only",
+              name: "web_search",
+              executed: true,
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { query: "Effect" },
+                content: [{ type: "text", text: '{"found":true}' }],
+              }),
+              time: { created, completed: created, ran: created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "provider.unknown", message: "Stream dropped" },
           time: { created, completed: created },
         }),
       ],
       model,
     )
 
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
+    expect(messages[1]?.content).toMatchObject([{ type: "tool-result", id: "local-ran" }])
     expect(messages[0]?.content).toEqual([
       {
         type: "reasoning",
@@ -1021,6 +1071,7 @@ Earlier work
         cache: undefined,
         providerMetadata: { provider: { itemId: "hosted_failed" } },
       },
+      { type: "tool-call", id: "local-ran", name: "read", input: { path: "README.md" } },
     ])
   })
 
