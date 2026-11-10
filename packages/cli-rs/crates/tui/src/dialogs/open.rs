@@ -25,7 +25,9 @@ use unicode_width::UnicodeWidthStr;
 
 use super::session_list::{attention, basename, dialog_theme, now_ms, project_name, running, status_gutter, title};
 use crate::app::Tui;
+use crate::features::events::Handled;
 use crate::routes::Route;
+use crate::routes::session::form::quiet;
 
 /// `DialogOpenKey`.
 pub const KEY: &str = "open";
@@ -35,6 +37,22 @@ const RECENT_LIMIT: usize = 8;
 thread_local! {
     /// `openSessions` in `app.tsx:555`: the last recent read, shown at once when the dialog reopens.
     static RECENT: RefCell<Vec<SessionInfo>> = const { RefCell::new(Vec::new()) };
+    /// The open dialog, for `worktree.updated`.
+    static OPEN: RefCell<Weak<Open>> = const { RefCell::new(Weak::new()) };
+}
+
+/// `worktree.updated` of the project whose worktrees show reads them again (`dialog-open.tsx:135-139`).
+pub(crate) fn event(event: &Handled) {
+    let Handled::WorktreeUpdated(event) = event else {
+        return;
+    };
+    let Some(open) = OPEN.with(|open| open.borrow().upgrade()) else {
+        return;
+    };
+    // The select goes when the dialog closes.
+    if open.select.borrow().is_some() && open.worktree_project().as_ref() == Some(&event.data.project_id) {
+        open.load_worktrees(event.data.project_id.clone());
+    }
 }
 
 /// What a row opens.
@@ -87,7 +105,9 @@ pub fn show(tui: &Tui) {
         prompt: RefCell::new(None),
         footer: View::new(&tui.app),
     });
+    OPEN.with(|slot| *slot.borrow_mut() = Rc::downgrade(&open));
     open.build(Selection { view: OpenView::Projects, filter: String::new(), selected: None });
+    open.sync_attention();
     open.load();
 }
 
@@ -292,9 +312,38 @@ impl Open {
                     }
                     state.location = location.ok();
                 }
+                open.sync_attention();
                 open.refresh();
             }),
         );
+    }
+
+    /// Reads the requests of running sessions and the root sessions that wait on one, so their rows show and sort
+    /// by attention (`dialog-open.tsx:178-196`).
+    fn sync_attention(&self) {
+        let Some(tui) = self.tui() else { return };
+        let state = self.state.borrow();
+        let known: HashSet<&SessionID> = state.sessions.iter().map(|session| &session.id).collect();
+        let (active, roots) = tui.data.read(|store| {
+            let active: Vec<SessionID> = store.active_sessions().into_iter().cloned().collect();
+            let waiting = store.permission_sessions().into_iter().cloned();
+            let forms = store.form_sessions().into_iter().map(|id| SessionID(id.to_owned()));
+            let recent = if state.recent == Some(true) { active.clone() } else { Vec::new() };
+            let roots: HashSet<SessionID> = waiting
+                .chain(forms)
+                .chain(recent)
+                .map(|id| store.root(&id))
+                .filter(|root| !known.contains(root) && store.session(root).is_none())
+                .collect();
+            (active, roots)
+        });
+        for id in &active {
+            quiet(&tui, tui.data.permission_sync(id));
+            quiet(&tui, tui.data.form_sync(&id.0, None));
+        }
+        for root in roots {
+            quiet(&tui, tui.data.session_sync(&root, false));
+        }
     }
 
     /// `matched`: reads the session an exact `ses_` ID names.
