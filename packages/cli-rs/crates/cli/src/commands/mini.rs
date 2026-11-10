@@ -50,6 +50,9 @@ pub fn run(context: &Context, args: &MiniArgs) -> error::Result<()> {
         Default::default()
     });
     let mini = config.mini.clone().unwrap_or_default();
+    // TS logs an uncaught error of any command instead of printing it (`index.ts:110-117`); a panic printed on a
+    // worker thread would scroll the split footer out of step.
+    crate::panic::install();
     // The TUI's tasks need a multi-threaded runtime: `App::runtime` uses the one it runs inside.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
