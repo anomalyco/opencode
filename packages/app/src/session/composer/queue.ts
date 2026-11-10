@@ -476,6 +476,7 @@ export function createSessionQueue(input: {
     undo: (id: string) => dispatch({ type: "undo.requested", id, mode: input.draft.mode.current() }),
     edit,
     reorder: (inboxIDs: string[]) => dispatch({ type: "reorder.requested", inboxIDs, reverted: reverted() }),
+    first: (id: string) => dispatch({ type: "first.requested", id, reverted: reverted() }),
   }
 }
 

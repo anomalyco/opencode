@@ -309,6 +309,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
       return (alternate ? queue.alternate() : queue.delivery()) ?? "steer"
     },
+    queueFirst: (inboxID) => options?.queue?.first(inboxID),
     notify: {
       missingSelection: () =>
         showToast({
