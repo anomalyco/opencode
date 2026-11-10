@@ -811,7 +811,7 @@ pub struct Registry {
     /// Targets that are not loaded, with their status ([`Status::Skipped`] or [`Status::Failed`]).
     unloaded: RefCell<Vec<(String, Status)>>,
     /// The `plugins` targets, in order, which also enable and disable external plugins as they load.
-    directives: Vec<String>,
+    directives: RefCell<Vec<String>>,
     activations: Cell<u64>,
     /// The slot paths mounted now, which claims resolve against.
     live: Rc<slot::Live>,
@@ -828,7 +828,6 @@ impl Registry {
     pub(crate) fn define<'a>(builtins: Vec<Definition>, targets: impl IntoIterator<Item = &'a str>) -> Self {
         let mut plugins: Vec<Plugin> =
             builtins.into_iter().map(|definition| Plugin::new(definition, Source::Builtin, true)).collect();
-        let mut skipped = Vec::new();
         let directives: Vec<String> = targets.into_iter().map(str::to_owned).collect();
         for target in directives.iter().map(String::as_str) {
             if let Some(selector) = target.strip_prefix('-') {
@@ -838,23 +837,52 @@ impl Registry {
                     .for_each(|plugin| plugin.enabled = false);
                 continue;
             }
-            let mut selected = plugins.iter_mut().filter(|plugin| matches(target, &plugin.definition.id)).peekable();
-            let named = selected.peek().is_some();
-            selected.for_each(|plugin| plugin.enabled = true);
-            if named || target == "*" || target.ends_with(".*") || target.starts_with("opencode.") {
-                continue;
-            }
-            if !skipped.iter().any(|(known, _)| known == target) {
-                skipped.push((target.to_owned(), Status::Skipped(SKIPPED.to_owned())));
-            }
+            plugins
+                .iter_mut()
+                .filter(|plugin| matches(target, &plugin.definition.id))
+                .for_each(|plugin| plugin.enabled = true);
         }
+        let skipped =
+            unnamed(&plugins, &directives).into_iter().map(|target| (target, Status::Skipped(SKIPPED.to_owned())));
         Self {
             plugins: RefCell::new(plugins),
-            unloaded: RefCell::new(skipped),
-            directives,
+            unloaded: RefCell::new(skipped.collect()),
+            directives: RefCell::new(directives),
             activations: Cell::new(0),
             live: Rc::default(),
         }
+    }
+
+    /// Applies the `plugins` entries of a changed `cli.json`, as TS reconciles on `config.data.plugins`: the
+    /// directives enable and disable the plugins again, over the plugin manager's toggles as in TS. Returns the
+    /// entries that name no plugin, for the loader; a new one is listed as skipped until the loader takes it.
+    pub fn set_targets<'a>(&self, host: &Rc<dyn Host>, targets: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+        *self.directives.borrow_mut() = targets.into_iter().map(str::to_owned).collect();
+        let configured = unnamed(&self.plugins.borrow(), &self.directives.borrow());
+        for target in &configured {
+            let listed = self.unloaded.borrow().iter().any(|(known, _)| known == target);
+            if !listed && !self.loaded(target) {
+                self.set_unloaded(target, Some(Status::Skipped(SKIPPED.to_owned())));
+            }
+        }
+        let toggles: Vec<(String, bool)> = self
+            .plugins
+            .borrow()
+            .iter()
+            .filter(|plugin| plugin.source != Source::Added)
+            .filter_map(|plugin| {
+                let id = &plugin.definition.id;
+                let enabled = self.enabled(plugin.definition.target().unwrap_or_default(), id);
+                (plugin.enabled != enabled).then(|| (id.clone(), enabled))
+            })
+            .collect();
+        if !toggles.is_empty() {
+            for (id, enabled) in toggles {
+                self.set_active(host, &id, enabled);
+            }
+            host.remount();
+        }
+        configured
     }
 
     /// Adds an enabled plugin after the others; [`Registry::activate`] starts it.
@@ -973,11 +1001,12 @@ impl Registry {
         Some(SetupFailed { error, kept: false })
     }
 
-    /// Whether external plugin `id` from `target` starts enabled: like TS, the directives after the plugin's own entry
-    /// (all of them, for a discovered plugin) decide.
+    /// Whether plugin `id` from `target` is enabled: like TS, the directives after the plugin's own entry (all of
+    /// them, for a built-in or a discovered plugin) decide.
     fn enabled(&self, target: &str, id: &str) -> bool {
-        let after = self.directives.iter().position(|directive| *directive == target).map_or(0, |index| index + 1);
-        self.directives[after..].iter().fold(true, |enabled, directive| match directive.strip_prefix('-') {
+        let directives = self.directives.borrow();
+        let after = directives.iter().position(|directive| *directive == target).map_or(0, |index| index + 1);
+        directives[after..].iter().fold(true, |enabled, directive| match directive.strip_prefix('-') {
             Some(selector) if matches(selector, id) => false,
             None if matches(directive, id) => true,
             _ => enabled,
@@ -1408,6 +1437,21 @@ fn resolve(live: &slot::Live, claims: &[Placement]) -> slot::Resolution {
     let paths = live.paths();
     let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
     slot::resolve(&paths, claims)
+}
+
+/// The `plugins` targets that name no plugin, in order: TypeScript plugins, or native builds for the loader.
+fn unnamed(plugins: &[Plugin], directives: &[String]) -> Vec<String> {
+    let mut unnamed: Vec<String> = Vec::new();
+    for target in directives.iter().filter(|target| !target.starts_with('-')) {
+        let named = plugins.iter().any(|plugin| matches(target, &plugin.definition.id));
+        if named || target == "*" || target.ends_with(".*") || target.starts_with("opencode.") {
+            continue;
+        }
+        if !unnamed.contains(target) {
+            unnamed.push(target.clone());
+        }
+    }
+    unnamed
 }
 
 /// Whether a `plugins` selector names plugin `id`: itself, `*`, or a `prefix.*` it starts with.

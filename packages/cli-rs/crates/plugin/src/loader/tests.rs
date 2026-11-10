@@ -212,6 +212,8 @@ struct Fake {
     loads: Cell<usize>,
     /// Active instances: setup adds one, deactivation removes it.
     active: Rc<Cell<i32>>,
+    /// The options of each load.
+    options: RefCell<Vec<Option<String>>>,
 }
 
 impl Backend for Fake {
@@ -219,7 +221,7 @@ impl Backend for Fake {
         self.loads.set(self.loads.get() + 1);
         let text = String::from_utf8_lossy(library).into_owned();
         let id = text.strip_prefix("id=").ok_or(text.clone())?.trim().to_owned();
-        assert_eq!(options, None);
+        self.options.borrow_mut().push(options.map(str::to_owned));
         let active = self.active.clone();
         let definition = Definition::new(id, move |setup| {
             active.set(active.get() + 1);
@@ -570,4 +572,41 @@ fn only_a_target_without_a_native_build_is_logged_as_skipped() {
         .cloned()
         .collect();
     assert_eq!(skipped, [format!("plugin {typescript} skipped: {SKIPPED}")]);
+}
+
+// Expected (r2 review, bigboi-ui-5): changed `plugins` entries apply while running, as TS reconciles on
+// `config.data.plugins`: changed options load the build again with them, a removed entry unloads, and the directives
+// enable and disable plugins again.
+#[test]
+fn changed_plugin_entries_reconcile_while_running() {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let config = root.path().join("config");
+    let file = root.path().join(format!("extra.{}", std::env::consts::DLL_EXTENSION));
+    write(&file, "id=extra");
+    let target = file.to_string_lossy().into_owned();
+    let host = host();
+    let registry = Registry::define(vec![Definition::new("b", |_| {})], [target.as_str()]);
+    registry.activate(&dynamic(&host));
+    let fake = Rc::new(Fake::default());
+    let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
+    let loader = Loader::new(fake.clone() as Rc<dyn Backend>, config, root.path().to_path_buf(), configured);
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert_eq!(fake.active.get(), 1);
+    let status = |id: &str| registry.entries().into_iter().find(|entry| entry.id == id).map(|entry| entry.status);
+
+    let options = Some(r#"{"a":1}"#.to_owned());
+    assert_eq!(registry.set_targets(&dynamic(&host), [target.as_str()]), std::slice::from_ref(&target));
+    loader.set_configured(vec![Configured { target: target.clone(), options: options.clone() }]);
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert_eq!(fake.options.borrow().last(), Some(&options));
+    assert_eq!((fake.active.get(), status("extra")), (1, Some(Status::Active)));
+
+    assert!(registry.set_targets(&dynamic(&host), ["-b"]).is_empty());
+    loader.set_configured(Vec::new());
+    assert!(loader.reconcile(&dynamic(&host), &registry));
+    assert_eq!((fake.active.get(), status("extra")), (0, None));
+    assert_eq!(status("b"), Some(Status::Inactive));
+
+    registry.set_targets(&dynamic(&host), []);
+    assert_eq!(status("b"), Some(Status::Active));
 }
