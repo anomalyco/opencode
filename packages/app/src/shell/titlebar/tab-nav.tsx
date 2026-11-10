@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type Ref } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX, type Ref } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -61,8 +61,15 @@ function TabCloseMenuItems(props: TabCloseActions & { orientation?: "horizontal"
   )
 }
 
+type SessionTabActions = TabCloseActions & {
+  /** Shows the optimistic title, or the one to restore when its save fails. */
+  onRememberTitle: (sessionID: string, title: string | undefined) => void
+  onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<void>
+  onDelete: () => void
+}
+
 export function TabNavItem(
-  props: TabCloseActions & {
+  props: (SessionTabActions | { menu: () => JSX.Element }) & {
     ref?: Ref<HTMLDivElement>
     href: string
     server: ServerConnection.Key
@@ -78,10 +85,6 @@ export function TabNavItem(
     hideAvatar?: boolean
     fallbackTitle?: string
     fallbackDirectory?: string
-    /** Shows a title at once: the optimistic one, or the one to restore when its save fails. */
-    onRememberTitle: (sessionID: string, title: string | undefined) => void
-    onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<void>
-    onDelete: () => void
     onNavigate: () => void
     active?: boolean
     suppressNavigation?: boolean
@@ -92,6 +95,7 @@ export function TabNavItem(
   },
 ) {
   const language = useLanguage()
+  const actions = "onClose" in props ? props : undefined
   const [renameState, setRenameState] = createSignal(INITIAL_TAB_RENAME_STATE)
   const editing = () => isTabRenaming(renameState())
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
@@ -104,7 +108,7 @@ export function TabNavItem(
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    props.onClose()
+    actions?.onClose()
   }
 
   const servers = useServers()
@@ -271,9 +275,10 @@ export function TabNavItem(
       return
     }
 
-    if (effect.type === "session.remember") return props.onRememberTitle(effect.sessionID, effect.title)
+    if (effect.type === "session.remember") return actions?.onRememberTitle(effect.sessionID, effect.title)
 
     if (effect.type === "save.start") {
+      if (!actions) return
       const attempt = effect.attempt
       const controller = new AbortController()
 
@@ -283,7 +288,7 @@ export function TabNavItem(
       )
 
       saves.set(attempt, { controller, timer })
-      void props.onSaveTitle(effect.sessionID, effect.title, controller.signal).then(
+      void actions.onSaveTitle(effect.sessionID, effect.title, controller.signal).then(
         () => {
           clearSave(attempt)
           dispatchRename({ type: "save.succeeded", attempt, title: effect.title })
@@ -418,7 +423,7 @@ export function TabNavItem(
         event.stopPropagation()
       }}
       onAuxClick={(event) => {
-        if (event.button !== MIDDLE_MOUSE_BUTTON) return
+        if (event.button !== MIDDLE_MOUSE_BUTTON || !actions) return
         closeTab(event)
       }}
     >
@@ -432,6 +437,7 @@ export function TabNavItem(
         aria-expanded={selectTabMenuOpen(renameState())}
         data-slot="tab-link"
         data-titlebar-tab-link
+        aria-current={props.active ? "page" : undefined}
         href={props.href}
         draggable={false}
         onDragStart={(event) => {
@@ -440,7 +446,7 @@ export function TabNavItem(
         }}
         onMouseDown={(event) => {
           // Navigate on mousedown to shave the press-release delay off tab switches.
-          if (event.button !== 0) return
+          if (event.button !== 0 || !actions) return
 
           if (editing()) return
 
@@ -450,8 +456,8 @@ export function TabNavItem(
         onClick={(event) => {
           event.preventDefault()
 
-          // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
-          if (event.detail > 0) return
+          // Tabs switch on press. A list row waits for a click so beginning a drag doesn't open the session.
+          if (event.detail > 0 && actions) return
 
           if (editing()) return
 
@@ -495,6 +501,7 @@ export function TabNavItem(
           }}
           contenteditable={editing() ? "plaintext-only" : undefined}
           onDblClick={(event) => {
+            if (!actions) return
             event.preventDefault()
             event.stopPropagation()
             startRename("pointer")
@@ -536,25 +543,27 @@ export function TabNavItem(
         )}
       </Show>
 
-      <div data-slot="tab-close">
+      <div data-slot="tab-close" classList={{ "pointer-events-none": !actions }}>
         <span data-slot="tab-status" aria-hidden="true">
           <ActivityRing data-mark="busy" />
           <span data-mark="attention" data-slot="tab-status-dot" />
           <span data-mark="unread" data-slot="tab-status-dot" />
           <span data-mark="failed" data-slot="tab-status-dot" />
         </span>
-        <IconButton
-          size="small"
-          variant="ghost-muted"
-          class="hover-reveal relative z-10"
-          onPointerDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-          onClick={closeTab}
-          icon={<Icon name="xmark-small" />}
-          aria-label={language.t("common.closeTab")}
-        />
+        <Show when={actions}>
+          <IconButton
+            size="small"
+            variant="ghost-muted"
+            class="hover-reveal relative z-10"
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={closeTab}
+            icon={<Icon name="xmark-small" />}
+            aria-label={language.t("common.closeTab")}
+          />
+        </Show>
       </div>
     </div>
   )
@@ -597,31 +606,35 @@ export function TabNavItem(
             armAfter(current.attempt, 1)
           }}
         >
-          <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
-            {language.t("common.rename")}
-          </Menu.Item>
-          <Menu.Item
-            disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}
-            onSelect={() => {
-              const session = props.session
+          {"menu" in props ? props.menu() : (
+            <>
+              <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
+                {language.t("common.rename")}
+              </Menu.Item>
+              <Menu.Item
+                disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}
+                onSelect={() => {
+                  const session = props.session
 
-              if (session) exporter.export({ server: props.server, sessionID: session.id })
-            }}
-          >
-            {language.t("common.export")}…
-          </Menu.Item>
-          <SessionReadMenuItem server={props.server} session={props.session} />
-          <Menu.Separator />
-          <TabCloseMenuItems
-            orientation={props.orientation}
-            onClose={props.onClose}
-            onCloseOthers={props.onCloseOthers}
-            onCloseAfter={props.onCloseAfter}
-          />
-          <Menu.Separator />
-          <Menu.Item disabled={!props.session} onSelect={props.onDelete}>
-            {language.t("common.delete")}…
-          </Menu.Item>
+                  if (session) exporter.export({ server: props.server, sessionID: session.id })
+                }}
+              >
+                {language.t("common.export")}…
+              </Menu.Item>
+              <SessionReadMenuItem server={props.server} session={props.session} />
+              <Menu.Separator />
+              <TabCloseMenuItems
+                orientation={props.orientation}
+                onClose={props.onClose}
+                onCloseOthers={props.onCloseOthers}
+                onCloseAfter={props.onCloseAfter}
+              />
+              <Menu.Separator />
+              <Menu.Item disabled={!props.session} onSelect={props.onDelete}>
+                {language.t("common.delete")}…
+              </Menu.Item>
+            </>
+          )}
         </Menu.Context.Content>
       </Menu.Context.Portal>
     </Menu.Context>

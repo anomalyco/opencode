@@ -817,6 +817,13 @@ export const dict = {
   "sidebar.inbox.elapsed.days.one": "{{count}}d",
   "sidebar.inbox.elapsed.days.other": "{{count}}d",
   "sidebar.inbox.time.now": "now",
+  "sidebar.recent.pinned": "Pinned",
+  "sidebar.recent.section.recent": "Recent",
+  "sidebar.recent.empty": "No recent sessions",
+  "sidebar.recent.pin": "Pin",
+  "sidebar.recent.unpin": "Unpin",
+  "sidebar.recent.moveUp": "Move up",
+  "sidebar.recent.moveDown": "Move down",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.clearNotifications": "Clear notifications",
 
@@ -852,7 +859,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
-    "Group side tabs by project or show one list. Only applies to side tabs.",
+    "Choose how sessions are listed in the sidebar. Only applies to side tabs.",
+  "settings.experimental.sidebarOrganize.recent": "Recent",
   "settings.experimental.sidebarOrganize.projects": "Projects",
   "settings.experimental.sidebarOrganize.list": "One list",
   "settings.experimental.sidebarOrganize.customize": "Customize",
