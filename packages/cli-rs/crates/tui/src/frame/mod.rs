@@ -253,6 +253,13 @@ pub(crate) fn wake(tui: &Tui) {
 fn tick(tui: &Tui) {
     let frame = &tui.frame;
     let animations = opencode_ui::motion::enabled(tui.config().info.animations);
+    let (visible, vertical) = (visible(tui), vertical(tui));
+    if !visible || vertical {
+        strip::forget(&frame.strip);
+    }
+    if !visible || !vertical {
+        rail::forget(&frame.rail);
+    }
     strip::set_animations(&frame.strip, animations);
     rail::set_animations(&frame.rail, animations);
     if frame.ticking.get() || !(strip::animating(&frame.strip) || rail::animating(&frame.rail)) {
