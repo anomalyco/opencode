@@ -21,7 +21,7 @@ import {
   type LegalNode,
 } from "~/lib/legal"
 import { legalSummaries } from "~/lib/legal/summaries"
-import { AnalyticsChoice } from "./analytics-choice"
+import { analyticsChoice } from "./analytics-choice"
 import { CheckIcon, Chevron, CopyIcon, DownloadIcon, ExternalArrow, NewTab } from "./icons"
 import { copySelection } from "~/lib/clipboard"
 import { architectLabelCases, architectRules, legalHistoryViews, legalPrintStyles, siteSettings } from "./settings"
@@ -683,12 +683,15 @@ function LegalBody(props: {
 }) {
   if (typeof props.node === "string") return props.node
   const node = props.node
-  // Shown in the browser only; a static page's script renders it into this host (src/client/islands/legal.ts).
+  // Shown in the browser only, rendered into this host (analytics-choice.ts); a static page's script
+  // renders it from src/client/islands/legal.ts.
   if (node[0] === "analytics-choice")
-    return staticRender() ? (
-      <div data-slot="analytics-choice-host" style={{ display: "contents" }} />
-    ) : (
-      <AnalyticsChoice />
+    return (
+      <div
+        data-slot="analytics-choice-host"
+        style={{ display: "contents" }}
+        ref={(host) => onMount(() => analyticsChoice(host))}
+      />
     )
   if (published(node)) return <LegalElement node={node} anchors={props.anchors} />
   // A note to the legal reviewers in a draft: shown only with Settings › Legal review notes.

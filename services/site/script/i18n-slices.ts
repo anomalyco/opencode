@@ -1,11 +1,11 @@
 // Splits the translations by where the browser needs them, for the static pages' script
 // (script/static-client.ts, i18nSlices). The source files stay as they are (src/i18n/<locale>.ts,
-// src/i18n/content/<locale>.ts); this reads them and the app's import graph and works out, for each
+// src/i18n/content/<locale>.ts); this reads them and the script's import graph and works out, for each
 // locale:
 //
-// - the shell slice: the dictionary keys and page copy the code every page loads can show
-//   (entry-client.tsx and app.tsx with their static imports), and what most page routes show;
-// - one slice per lazy boundary, a module the browser loads on demand (each island and overlay, any
+// - the shell slice: the dictionary keys and page copy the script every page loads can show
+//   (src/client/entry.ts with its static imports), and what most page routes show;
+// - one slice per lazy boundary, a module the script loads on demand (each island and overlay, any
 //   module only ever loaded with import()): what its static imports can show, minus the shell;
 // - the full file: everything any client code can show, for switching to the language in place.
 //
@@ -114,30 +114,31 @@ function closure(roots: string[], dynamic = false) {
 const gather = (files: Iterable<string>, field: "keys" | "areas") =>
   new Set([...files].flatMap((file) => [...scan(file)[field]]))
 
-const shellRoots = [path.join(src, "entry-client.tsx"), path.join(src, "app.tsx")]
 const routes = [...new Bun.Glob("routes/**/*.tsx").scanSync(src)]
   .map((file) => path.join(src, file))
   .filter((file) => /export default/.test(readFileSync(file, "utf8")))
-// The static pages' script (src/client/entry.ts) too, so what its islands and overlays load is a boundary.
-const client = closure([...shellRoots, ...routes, path.join(src, "client/entry.ts")], true)
-// Lazy boundaries: every module the static pages' script loads with import(), even one that is also
-// imported statically elsewhere (an import() can still be the first to load it). The development
-// loader's imports of the source files, in src/i18n, don't count, and nothing loads a page route in
-// the browser in production (the development server keeps the source files whole).
+// The static pages' script, the only code production's browser runs (the development server keeps
+// the source files whole).
+const entry = path.join(src, "client/entry.ts")
+const client = closure([entry], true)
+// Lazy boundaries: every module the script loads with import(), even one that is also imported
+// statically elsewhere (an import() can still be the first to load it). The development loader's
+// imports of the source files, in src/i18n, don't count.
 const boundaries = [
   ...new Set(
     [...client].flatMap((file) => scan(file).dynamic).filter((file) => !file.startsWith(path.join(src, "i18n"))),
   ),
 ].toSorted()
 
-// The shell: what the code every page loads can show, plus what most page routes show (the site's
-// header, footer and search), so it loads once rather than with each page. A page that doesn't show
-// those (the 404 arcade) loads a few kilobytes it doesn't need.
-const shell = closure(shellRoots)
+// The shell: what the script every page loads can show, plus what of most page routes (the site's
+// header, footer and search) the script can show too, so it loads once rather than with each page. A
+// page that doesn't show those (the 404 arcade) loads a few kilobytes it doesn't need.
+const shell = closure([entry])
 const most = (field: "keys" | "areas") => {
+  const shown = gather(client, field)
   const counts = new Map<string, number>()
   routes.forEach((file) => gather(closure([file]), field).forEach((item) => counts.set(item, (counts.get(item) ?? 0) + 1)))
-  return [...counts].filter(([, count]) => count > routes.length / 2).map(([item]) => item)
+  return [...counts].filter(([item, count]) => count > routes.length / 2 && shown.has(item)).map(([item]) => item)
 }
 const shellKeys = new Set([...gather(shell, "keys"), ...most("keys")])
 const shellAreas = new Set([...gather(shell, "areas"), ...most("areas")])
