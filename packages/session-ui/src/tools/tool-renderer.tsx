@@ -2929,15 +2929,31 @@ ToolRegistry.register({
                             </Show>
                             <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
                           </div>
-                          <Show when={activity() && file().type === "update"}>
-                            <DiffChanges
-                              appearance="standard"
-                              changes={{ additions: file().additions, deletions: file().deletions }}
-                            />
+                          {/* The Activity timeline says what happened to the file beside its name, in the change colors. */}
+                          <Show when={activity()}>
+                            <Switch>
+                              <Match when={file().type === "add"}>
+                                <span data-component="diff-changes" data-appearance="standard">
+                                  <span data-slot="diff-changes-additions">{i18n.t("ui.patch.action.created")}</span>
+                                </span>
+                              </Match>
+                              <Match when={file().type === "delete"}>
+                                <span data-component="diff-changes" data-appearance="standard">
+                                  <span data-slot="diff-changes-deletions">{i18n.t("ui.patch.action.deleted")}</span>
+                                </span>
+                              </Match>
+                              <Match when={true}>
+                                <DiffChanges
+                                  appearance="standard"
+                                  changes={{ additions: file().additions, deletions: file().deletions }}
+                                />
+                              </Match>
+                            </Switch>
                           </Show>
                         </div>
                         <div data-slot="apply-patch-trigger-actions">
                           <Switch>
+                            <Match when={activity()}>{null}</Match>
                             <Match when={file().type === "add"}>
                               <span data-slot="apply-patch-change" data-type="added">
                                 {i18n.t("ui.patch.action.created")}
