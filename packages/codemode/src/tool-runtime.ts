@@ -202,16 +202,17 @@ export type Prepared<R = never> = {
 
 export type SearchEntry = {
   readonly description: ToolDescription
-  /** Term counts per field, for BM25F ranking. */
-  readonly fields: Readonly<Record<SearchField, SearchFieldIndex>>
-  /** Words in the tool's own name (the last path segment); shorter names are preferred for vague queries. */
+  /** Position in the full search index, for scoring through the word index. */
+  readonly position: number
+  /** Stemmed words per field; stop words are kept for field length and skipped when indexing. */
+  readonly fields: Readonly<Record<SearchField, ReadonlyArray<string>>>
+  /** Words in the tool's own name (the last path segment). */
   readonly nameLength: number
 }
 
 type SearchField = "namespace" | "name" | "description" | "parameters" | "namespaceDescription"
-type SearchFieldIndex = { readonly terms: ReadonlyMap<string, number>; readonly length: number }
 
-// Name-weighted BM25 over the tool's namespace, name, description and parameters. Weights and constants were tuned on
+// BM25 over a tool's fields, with name matches worth the most, plus a preference for short names. Measured on
 // model-written and real search queries over an ~11k-tool catalog (anomalyco/evals, dumber/evals/tool-search).
 const fieldWeights: Record<SearchField, number> = {
   namespace: 1,
@@ -223,12 +224,10 @@ const fieldWeights: Record<SearchField, number> = {
 const searchFields = Object.keys(fieldWeights) as ReadonlyArray<SearchField>
 const k1 = 1.2
 const lengthNormalization = 0.9
-/** Index words that start with a query word of 4+ letters count at this weight: `schedul` finds `schedules`. */
-const prefixWeight = 0.3
-/** score × (matched query words / query words) ^ coverageExponent. */
-const coverageExponent = 0.5
-/** score × (1 + brevityBoost / words in the tool name): "instance" prefers `get_instance` over `list_instance_backups`. */
+/** score × (1 + brevityBoost / words in the tool name): "users" prefers `list_users` over `list_user_groups`. */
 const brevityBoost = 0.5
+/** A query word of 4+ letters that matches no indexed word matches the words it starts with, at this weight. */
+const prefixWeight = 0.3
 
 const stopWords = new Set(
   "a an the of for to in on at my our your their this that these those and or with by from is are be was were it its me i we us you please can could would should will do does how what which who whom whose when where why all any some each every there here into about via using use just also not no only".split(
@@ -236,7 +235,7 @@ const stopWords = new Set(
   ),
 )
 
-const tokenize = (text: string): Array<string> =>
+const splitWords = (text: string): Array<string> =>
   text
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
@@ -249,91 +248,112 @@ const stem = (word: string) => {
   if (word.length <= 3) return word
   if (word.endsWith("ies") && word.length > 4) return word.slice(0, -3) + "y"
   if (word.endsWith("sses")) return word.slice(0, -2)
-  if (["ches", "shes", "xes", "zes"].some((suffix) => word.endsWith(suffix))) return word.slice(0, -2)
-  if (["ss", "us", "is"].some((suffix) => word.endsWith(suffix))) return word
+  if (word.endsWith("ches") || word.endsWith("shes") || word.endsWith("xes") || word.endsWith("zes"))
+    return word.slice(0, -2)
+  if (word.endsWith("ss") || word.endsWith("us") || word.endsWith("is")) return word
   if (word.endsWith("s")) return word.slice(0, -1)
   if (word.endsWith("ing") && word.length > 5) return word.slice(0, -3)
   if (word.endsWith("ed") && word.length > 4) return word.slice(0, -2)
   return word
 }
 
-const fieldIndex = (words: ReadonlyArray<string>): SearchFieldIndex => {
-  const terms = new Map<string, number>()
-  for (const word of words) if (!stopWords.has(word)) terms.set(stem(word), (terms.get(stem(word)) ?? 0) + 1)
-  return { terms, length: words.length }
-}
-
-type SearchStats = {
-  readonly documents: number
-  readonly frequency: ReadonlyMap<string, number>
-  readonly averageLength: Readonly<Record<SearchField, number>>
-  readonly byPrefix: ReadonlyMap<string, ReadonlyArray<string>>
-}
-
-// Ranking uses statistics of the whole index even when a namespace narrows the candidates.
-const statsCache = new WeakMap<ReadonlyArray<SearchEntry>, SearchStats>()
-const statsFor = (index: ReadonlyArray<SearchEntry>): SearchStats => {
-  const cached = statsCache.get(index)
+const fieldWords = (text: string, cache: Map<string, ReadonlyArray<string>>) => {
+  const cached = cache.get(text)
   if (cached) return cached
-  const frequency = new Map<string, number>()
-  for (const entry of index)
-    for (const term of new Set(searchFields.flatMap((field) => [...entry.fields[field].terms.keys()])))
-      frequency.set(term, (frequency.get(term) ?? 0) + 1)
-  const stats: SearchStats = {
-    documents: index.length,
-    frequency,
-    averageLength: Object.fromEntries(
-      searchFields.map((field) => [
-        field,
-        index.reduce((sum, entry) => sum + entry.fields[field].length, 0) / index.length || 1,
-      ]),
-    ) as Record<SearchField, number>,
-    byPrefix: Map.groupBy(frequency.keys(), (term) => term.slice(0, 3)),
+  const words = splitWords(text).map((word) => (stopWords.has(word) ? "" : stem(word)))
+  cache.set(text, words)
+  return words
+}
+const queryTerms = (query: string) => {
+  const words = splitWords(query)
+  // `tools.ns.name` and "tools to …" carry no signal beyond the other words.
+  return words.filter((word) => !stopWords.has(word) && (word !== "tools" || words.length === 1)).map(stem)
+}
+
+/** For each word, the tools containing it and their field-weighted, length-normalized term frequency. */
+type WordIndex = {
+  readonly postings: ReadonlyMap<string, { readonly positions: Array<number>; readonly weights: Array<number> }>
+  readonly documents: number
+  /** Sorted indexed words, for partial-word matching. */
+  readonly words: ReadonlyArray<string>
+}
+
+// Built once per search index on the first query.
+const wordIndexes = new WeakMap<ReadonlyArray<SearchEntry>, WordIndex>()
+const wordIndexFor = (index: ReadonlyArray<SearchEntry>): WordIndex => {
+  const cached = wordIndexes.get(index)
+  if (cached) return cached
+  const averageLength = Object.fromEntries(
+    searchFields.map((field) => [
+      field,
+      index.reduce((sum, entry) => sum + entry.fields[field].length, 0) / index.length || 1,
+    ]),
+  ) as Record<SearchField, number>
+  const postings = new Map<string, { positions: Array<number>; weights: Array<number> }>()
+  const weights = new Map<string, number>()
+  for (const entry of index) {
+    weights.clear()
+    for (const field of searchFields) {
+      const words = entry.fields[field]
+      const weight =
+        fieldWeights[field] / (1 - lengthNormalization + (lengthNormalization * words.length) / averageLength[field])
+      for (const word of words) if (word) weights.set(word, (weights.get(word) ?? 0) + weight)
+    }
+    for (const [word, weight] of weights) {
+      let posting = postings.get(word)
+      if (!posting) postings.set(word, (posting = { positions: [], weights: [] }))
+      posting.positions.push(entry.position)
+      posting.weights.push(weight)
+    }
   }
-  statsCache.set(index, stats)
-  return stats
+  const built = { postings, documents: index.length, words: [...postings.keys()].sort() }
+  wordIndexes.set(index, built)
+  return built
+}
+
+/** Indexed words that start with a 4+ letter query word that matched nothing itself: `docum` → `document`. */
+const partialMatches = (words: WordIndex, term: string): Array<readonly [string, number]> => {
+  if (term.length < 4) return []
+  let low = 0
+  let high = words.words.length
+  while (low < high) {
+    const middle = (low + high) >> 1
+    if (words.words[middle]! < term) low = middle + 1
+    else high = middle
+  }
+  const matches: Array<readonly [string, number]> = []
+  for (let i = low; i < words.words.length && words.words[i]!.startsWith(term); i++) matches.push([words.words[i]!, prefixWeight])
+  return matches
 }
 
 const rank = (
   entries: ReadonlyArray<SearchEntry>,
   query: string,
-  stats: SearchStats,
+  index: ReadonlyArray<SearchEntry>,
 ): Array<SearchEntry> => {
-  const words = tokenize(query).filter((word) => !stopWords.has(word))
-  if (words.length === 0) return [...entries].sort((left, right) => compareText(left.description.path, right.description.path))
-  const groups = words.map((word) => {
-    const term = stem(word)
-    const prefixed =
-      word.length < 4
-        ? []
-        : (stats.byPrefix.get(term.slice(0, 3)) ?? []).filter((other) => other !== term && other.startsWith(term))
-    return new Map([[term, 1], ...prefixed.map((other) => [other, prefixWeight] as const)])
-  })
-  const idf = (term: string) => {
-    const containing = stats.frequency.get(term) ?? 0
-    return Math.log(1 + (stats.documents - containing + 0.5) / (containing + 0.5))
+  const terms = queryTerms(query)
+  if (terms.length === 0) return [...entries].sort((left, right) => compareText(left.description.path, right.description.path))
+  const words = wordIndexFor(index)
+  const allowed = entries === index ? undefined : new Set(entries.map((entry) => entry.position))
+  const scores = new Map<number, number>()
+  for (const term of terms) {
+    // Each tool counts a query word once, through its best-scoring match.
+    const best = new Map<number, number>()
+    const matches = words.postings.has(term) ? [[term, 1] as const] : partialMatches(words, term)
+    for (const [word, factor] of matches) {
+      const posting = words.postings.get(word)!
+      const idf = Math.log(1 + (words.documents - posting.positions.length + 0.5) / (posting.positions.length + 0.5))
+      posting.positions.forEach((position, i) => {
+        if (allowed && !allowed.has(position)) return
+        const weight = posting.weights[i]!
+        const score = (factor * idf * weight * (k1 + 1)) / (weight + k1)
+        if (score > (best.get(position) ?? 0)) best.set(position, score)
+      })
+    }
+    for (const [position, score] of best) scores.set(position, (scores.get(position) ?? 0) + score)
   }
-  return entries
-    .flatMap((entry) => {
-      const best = groups.map((terms) =>
-        Math.max(
-          0,
-          ...[...terms].map(([term, weight]) => {
-            const weighted = searchFields.reduce((sum, field) => {
-              const count = entry.fields[field].terms.get(term)
-              if (!count) return sum
-              const length = 1 - lengthNormalization + (lengthNormalization * entry.fields[field].length) / stats.averageLength[field]
-              return sum + (fieldWeights[field] * count) / length
-            }, 0)
-            return weighted === 0 ? 0 : weight * idf(term) * ((weighted * (k1 + 1)) / (weighted + k1))
-          }),
-        ),
-      )
-      const total = best.reduce((sum, value) => sum + value, 0)
-      if (total === 0) return []
-      const coverage = Math.pow(best.filter((value) => value > 0).length / groups.length, coverageExponent)
-      return [{ entry, score: total * coverage * (1 + brevityBoost / Math.max(1, entry.nameLength)) }]
-    })
+  return [...scores]
+    .map(([position, score]) => ({ entry: index[position]!, score: score * (1 + brevityBoost / Math.max(1, index[position]!.nameLength)) }))
     .sort(
       (left, right) =>
         right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
@@ -368,10 +388,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
           : scoped.find(
               (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
             )
-      const stats = statsFor(searchIndex)
-      const found = exact !== undefined ? [exact] : rank(scoped, query, stats)
-      // A namespace that has nothing for the query is usually a wrong guess; search every namespace instead.
-      const ranked = found.length === 0 && scoped !== searchIndex && trimmed !== "" ? rank(searchIndex, query, stats) : found
+      const ranked = exact !== undefined ? [exact] : rank(scoped, query, searchIndex)
       const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
         ...description,
         path: toolExpression(description.path),
@@ -391,21 +408,27 @@ export const searchSignature = (() => {
   return `search(${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
-const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => {
+// Descriptions repeat across tools (an `account_id` parameter on thousands of endpoints); `cache` splits each text once.
+const toSearchEntry = <R>(
+  visible: VisibleTool<R>,
+  position: number,
+  cache: Map<string, ReadonlyArray<string>>,
+): SearchEntry => {
   const segments = visible.path.split(".")
-  const name = tokenize(segments.at(-1) ?? "")
+  const words = (text: string) => fieldWords(text, cache)
   return {
     description: describeTool(visible),
+    position,
     fields: {
-      namespace: fieldIndex(segments.slice(0, -1).flatMap(tokenize)),
-      name: fieldIndex(name),
-      description: fieldIndex(tokenize(visible.tool.description)),
-      parameters: fieldIndex(
-        inputProperties(visible.tool).flatMap(({ name, description }) => tokenize(`${name} ${description ?? ""}`)),
+      namespace: segments.slice(0, -1).flatMap(words),
+      name: words(segments.at(-1) ?? ""),
+      description: words(visible.tool.description),
+      parameters: inputProperties(visible.tool).flatMap((property) =>
+        words(property.name).concat(words(property.description ?? "")),
       ),
-      namespaceDescription: fieldIndex(visible.namespaces.flatMap((namespace) => tokenize(namespace.description ?? ""))),
+      namespaceDescription: visible.namespaces.flatMap((namespace) => words(namespace.description ?? "")),
     },
-    nameLength: name.length,
+    nameLength: splitWords(segments.at(-1) ?? "").length,
   }
 }
 
@@ -421,9 +444,11 @@ export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
     get searchIndex() {
       // Executing known tools only needs the trie. Render discovery when it is actually read,
       // ordering after canonical-path collisions settle so instruction bytes stay deterministic.
-      return (searchIndex ??= flattenTools(root)
+      if (searchIndex) return searchIndex
+      const words = new Map<string, ReadonlyArray<string>>()
+      return (searchIndex = flattenTools(root)
         .sort((left, right) => compareText(left.path, right.path))
-        .map(toSearchEntry))
+        .map((visible, position) => toSearchEntry(visible, position, words)))
     },
   }
 }
@@ -449,7 +474,7 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
     const closest = rank(
       ns ? index.filter((entry) => entry.description.path.startsWith(`${ns}.`)) : index,
       ns ? segments.slice(1).join(" ") : name,
-      statsFor(index),
+      index,
     )[0]
     throw new ToolRuntimeError(
       "UnknownTool",

@@ -1096,7 +1096,7 @@ describe("CodeMode public contract", () => {
     }
   })
 
-  test("search ranks by rare words, prefers short names and falls back from an empty namespace", async () => {
+  test("search ranks by rare words, prefers short names and matches partial words", async () => {
     const simple = (description: string) =>
       Tool.make({
         description,
@@ -1125,10 +1125,10 @@ describe("CodeMode public contract", () => {
     expect((await paths({ query: "list gmail labels" }))[0]).toBe("tools.gmail.list_labels")
     // Both match "users"; the shorter, more general name wins.
     expect((await paths({ query: "users", namespace: "slack" }))[0]).toBe("tools.slack.list_users")
-    // A word prefix of 4+ letters finds the longer word.
-    expect(await paths({ query: "schedul" })).toStrictEqual(["tools.slack.get_schedules"])
-    // A namespace guess with nothing for the query searches every namespace.
-    expect(await paths({ query: "labels", namespace: "slack" })).toStrictEqual(["tools.gmail.list_labels"])
+    // A partial word of 4+ letters that matches nothing whole finds the words it starts with.
+    expect(await paths({ query: "schedu" })).toStrictEqual(["tools.slack.get_schedules"])
+    // A namespace filter is a hard filter.
+    expect(await paths({ query: "labels", namespace: "slack" })).toStrictEqual([])
   })
 
   test("a plural query term matches singular-only tool text", async () => {
