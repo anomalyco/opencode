@@ -1094,7 +1094,8 @@ impl Transcript {
                 }
                 output
             }
-            V2Event::PermissionAsked(_)
+            V2Event::SessionInboxDeliveryChanged(_)
+            | V2Event::PermissionAsked(_)
             | V2Event::PermissionReplied(_)
             | V2Event::FormCreated(_)
             | V2Event::FormReplied(_)
@@ -1263,6 +1264,7 @@ pub(crate) fn session_of(event: &V2Event) -> Option<&str> {
         V2Event::SessionInboxEnqueued(event) => event.data.session_id.as_str(),
         V2Event::SessionInboxDelivered(event) => event.data.session_id.as_str(),
         V2Event::SessionInboxCancelled(event) => event.data.session_id.as_str(),
+        V2Event::SessionInboxDeliveryChanged(event) => event.data.session_id.as_str(),
         V2Event::SessionStepStarted(event) => event.data.session_id.as_str(),
         V2Event::SessionTextDelta(event) => event.data.session_id.as_str(),
         V2Event::SessionTextEnded(event) => event.data.session_id.as_str(),
@@ -1674,6 +1676,9 @@ mod tests {
         let form = event("form.cancelled", json!({ "sessionID": "global", "id": "frm_1" }));
         let global = transcript.event(&form);
         assert_eq!((global.footer, global.subagents.len()), (vec![form], 0));
+        // A pending prompt moved between queue and steer updates the footer (`stream-v2.transport.ts:1080-1085`).
+        let changed = event("session.inbox.delivery.changed", json!({ "inboxID": "msg_p", "delivery": "steer" }));
+        assert_eq!(transcript.event(&changed).footer, [changed]);
     }
 
     #[test]
