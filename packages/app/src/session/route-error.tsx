@@ -9,12 +9,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { isSessionNotFoundError } from "@/runtime/server/errors"
 import { ServerUnavailablePanel } from "./server-unavailable-panel"
 
-export function SessionErrorFallback(props: {
-  error: unknown
-  sessionID?: string
-  serverKey?: ServerConnection.Key
-  onRetry?: () => void
-}) {
+export function SessionErrorFallback(props: { error: unknown; sessionID?: string; serverKey?: ServerConnection.Key }) {
   const activeServer = useServer()
   const tabs = useTabs()
 
@@ -30,7 +25,7 @@ export function SessionErrorFallback(props: {
     >
       <Show
         when={props.sessionID && isSessionNotFoundError(props.error, props.sessionID) ? props.sessionID : undefined}
-        fallback={<ErrorPage error={props.error} onRetry={props.onRetry} />}
+        fallback={<ErrorPage error={props.error} />}
       >
         {(sessionID) => (
           <SessionNotFoundPanel sessionID={sessionID()} serverKey={props.serverKey ?? activeServer.key} />

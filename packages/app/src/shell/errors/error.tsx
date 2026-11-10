@@ -427,7 +427,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           hideLabel
         />
         <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
-          <Button size="large" onClick={() => (props.onRetry ? props.onRetry() : platform.restart())}>
+          <Button size="large" onClick={props.onRetry ?? platform.restart}>
             {language.t(
               props.onRetry
                 ? "common.retry"
@@ -436,6 +436,12 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
                   : "error.page.action.restart",
             )}
           </Button>
+          {/* A retried failure still needs the full reload as an escape hatch. */}
+          <Show when={props.onRetry}>
+            <Button size="large" variant="ghost" onClick={platform.restart}>
+              {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
+            </Button>
+          </Show>
           <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
             <Button
               size="large"
