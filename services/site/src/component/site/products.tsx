@@ -68,6 +68,9 @@ import {
   VideoSources,
 } from "./media"
 import { inlineKey } from "~/lib/direction"
+import { staticRender } from "~/lib/static-render"
+import { cardVideo } from "./card-video"
+import { markCard, onScreen, showHeroPoster, travel, type CardTiming } from "./card-morph"
 
 export { installs, products, sdkSnippet, type ProductSlug } from "./product-data"
 
@@ -152,7 +155,7 @@ function shrink(slug: PageSlug, page: CardPage, saved: Scroll | undefined, go: (
   // moves: the pages only crossfade.
   const hero = document.querySelector('[data-component="product-hero"]')?.getBoundingClientRect()
   const morph = !prefersReducedMotion() && !!hero && onScreen(hero)
-  markCardTransition(morph ? "shrink" : "fade")
+  markCard(morph ? "shrink" : "fade", cardTiming())
   const media = pageMedia(siteSettings.productVideos, slug, "portrait", document.documentElement.dataset.locale)
   const poster = media?.still ?? media?.poster
   let card: HTMLElement | undefined
@@ -184,7 +187,7 @@ function shrink(slug: PageSlug, page: CardPage, saved: Scroll | undefined, go: (
     if (bounds && (box.left < bounds.left - 1 || box.right > bounds.right + 1)) return
     card = found
     card.style.viewTransitionName = "product-hero"
-    if (hero) travel(hero, box, siteSettings.cardShrinkDuration)
+    if (hero) travel(hero, box, siteSettings.cardShrinkDuration, cardTiming())
   })
   const fallback = setTimeout(() => {
     transition.skipTransition()
@@ -292,7 +295,7 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
       data-phone-content={siteSettings.phoneCardContent}
       aria-label={i18n.t("site.products.label")}
     >
-      <style>{carouselCss()}</style>
+      {/* The home page writes carouselCss() ahead of its hero, which the cards' width sizes too. */}
       {/* On the home page the cards' resting frames are the largest things above the fold: fetched with
           the page, so each card shows its frame at first paint instead of its tone. */}
       <Show when={!props.exclude}>
@@ -336,6 +339,7 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
                 onClick={(event) => grow(event, navigate, track?.getBoundingClientRect())}
                 onPointerEnter={() => heroPoster(product.slug)}
                 onFocus={() => heroPoster(product.slug)}
+                {...heroPosterSets(product.slug)}
               >
                 <Show when={"isNew" in product && product.isNew}>
                   <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
@@ -423,7 +427,7 @@ function grow(event: MouseEvent & { currentTarget: HTMLAnchorElement }, navigate
   // case the router reuses it for the new product.
   const leaving = document.querySelector<HTMLElement>('[data-component="product-hero"]')
   if (leaving) leaving.style.viewTransitionName = "none"
-  markCardTransition(morph ? "grow" : "fade")
+  markCard(morph ? "grow" : "fade", cardTiming())
   // Load the hero's poster first (hovering the card already started it), so the card grows into
   // a picture rather than a black box.
   const poster = heroPoster(slug)
@@ -446,7 +450,8 @@ function grow(event: MouseEvent & { currentTarget: HTMLAnchorElement }, navigate
       elementReady(`[data-component="product-hero"][data-product="${slug}"]`),
       poster ? imageReady(poster, stillSizes.hero) : undefined,
     ])
-    if (hero && morph) travel(from, hero.getBoundingClientRect(), siteSettings.cardGrowDuration)
+    showHeroPoster()
+    if (hero && morph) travel(from, hero.getBoundingClientRect(), siteSettings.cardGrowDuration, cardTiming())
   })
   const fallback = setTimeout(() => {
     transition.skipTransition()
@@ -454,8 +459,6 @@ function grow(event: MouseEvent & { currentTarget: HTMLAnchorElement }, navigate
   }, 400)
   current = transition
   void transition.finished.finally(() => {
-    // Keep the poster showing (no flash back to black) while the hero's video loads.
-    document.querySelector('[data-component="product-hero"] video')?.setAttribute("data-loaded", "")
     // A back step during the grow starts the next transition, which owns the page from then on.
     if (current === transition) delete document.documentElement.dataset.cardGrow
   })
@@ -506,6 +509,7 @@ export function ProductGrid() {
                 onClick={(event) => grow(event, navigate)}
                 onPointerEnter={() => heroPoster(product.slug)}
                 onFocus={() => heroPoster(product.slug)}
+                {...heroPosterSets(product.slug)}
               >
                 <Show when={"isNew" in product && product.isNew}>
                   <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
@@ -577,14 +581,8 @@ export function carouselCss() {
 }
 
 /**
- * A card video that rests on its first frame. On hover or focus it plays from that frame, so the
- * still turns into motion without a jump. On leave it either plays back to the start quickly
- * ("hover · reverse") or the still fades back over it ("hover · fade"). "autoplay" plays all the
- * time. Reduced motion keeps the still.
- *
- * With `loop`, the card rests on that short idle loop instead of a still: it shows its first frame
- * (`still`) until the page has loaded, then plays while the card is on screen, crossfades to the
- * product video on hover and back on leave. Reduced motion and Save-Data keep the first frame.
+ * A card video that rests on its first frame, or with `loop` on that short idle loop, and plays on
+ * hover (card-video.ts, which the static pages' script runs on this markup too).
  */
 export function CardVideo(props: {
   src: string
@@ -606,242 +604,51 @@ export function CardVideo(props: {
   const [seen, setSeen] = createSignal(false)
   // The still fades in over the black card once it has loaded, instead of popping in.
   const [loaded, setLoaded] = createSignal(false)
-  // Phones and tablets (no hover, or a mobile platform, as in the device preview): the card plays its
-  // hover video, the sizzle reel, by itself a while after it comes into view (see onMount).
+  // Phones and tablets: the card plays its hover video, the sizzle reel, by itself (card-video.ts).
   const [sizzle, setSizzle] = createSignal(false)
   // On those, the sizzle loads its metadata once the card is near and the rest once it is in view.
   const [near, setNear] = createSignal(false)
   let video: HTMLVideoElement | undefined
   let idle: HTMLVideoElement | undefined
   let poster: HTMLImageElement | undefined
-  let frame = 0
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let active = false
-  let visible = false
 
   const mode = () => siteSettings.cardVideo
-  // Settings › Card hover: "match" keeps the short swap for hover videos that start on the loop's
-  // framing; "fade" (default) crossfades from the loop to the video's start over 150ms; "cut" swaps instantly.
   const matching = () => Boolean(props.matchesLoop) && siteSettings.cardHover === "match"
   const loopMode = () => {
     if (sizzle()) return "sizzle"
     if (props.demo) return siteSettings.cardHover === "cut" ? "cut" : "demo"
     return matching() ? "match" : siteSettings.cardHover === "match" ? "crossfade" : siteSettings.cardHover
   }
-  const fade = () => {
-    if (sizzle()) return 400
-    if (props.demo) return siteSettings.cardHover === "cut" ? 0 : 320
-    if (matching()) return 120
-    if (props.loop && siteSettings.cardHover === "cut") return 0
-    if (props.loop && siteSettings.cardHover === "fade") return 150
-    return 300
-  }
-  // Settings › Card loop speed, for the carousel cards only (the ones with a loop). A new source
-  // resets playbackRate to defaultPlaybackRate, so both are set, again on load. The hover videos are
-  // cut to hold each shot for its length, so they always play at 1×.
-  const speed = () => {
-    if (!props.loop) return
-    for (const [element, rate] of [
-      [video, 1],
-      [idle, siteSettings.cardLoopSpeed],
-    ] as const) {
-      if (!element) continue
-      element.defaultPlaybackRate = rate
-      element.playbackRate = rate
-    }
-  }
-  createEffect(speed)
-
-  // Reduced motion and Save-Data keep a card on its still: no resting loop and no sizzle.
-  const cover = () =>
-    prefersReducedMotion() ||
-    (navigator as typeof window.navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
-
-  // The idle loop plays only while the card is on screen and resting, and only once the page has
-  // loaded (ready), so it never competes with the stills: it starts from the frame the still shows.
-  let ready = false
-  const rest = () => {
-    if (!idle) return
-    if (ready && visible && !active && mode() !== "autoplay" && !cover()) {
-      void idle.play().catch(() => {})
-      return
-    }
-    idle.pause()
-  }
-  const stop = () => {
-    cancelAnimationFrame(frame)
-    clearTimeout(timer)
-  }
-
-  // Marks the card as active (hovered, focused or in view on touch) so CSS can bring back colour.
-  const mark = (on: boolean) => video?.closest('[data-slot="media"]')?.toggleAttribute("data-active", on)
-
-  const enter = () => {
-    mark(true)
-    if (!video || mode() === "autoplay" || prefersReducedMotion()) return
-    active = true
-    stop()
-    // Hide the still once the video is actually playing, so a slow load never flashes black.
-    void video
-      .play()
-      .then(() => {
-        if (!active || !video) return
-        const show = () => {
-          if (!active) return
-          // The demo is a different animation: the loop stops on the frame it was showing.
-          if (props.demo) idle?.pause()
-          setStill(false)
-          // Pause the idle loop once the product video has faded in over it.
-          setTimeout(rest, fade())
-        }
-        // Fade only once the first frame is on screen, so the crossfade never shows black.
-        if (matching() || !("requestVideoFrameCallback" in video)) return show()
-        video.requestVideoFrameCallback(show)
-      })
-      .catch(() => {})
-  }
-
-  const leave = () => {
-    mark(false)
-    if (!video || mode() === "autoplay" || !active) return
-    active = false
-    stop()
-    video.pause()
-    // A separate still is not the first frame, so it always fades back over the video. With "cut" or
-    // "fade" the resting loop comes straight back instead of the video rewinding into it.
-    if (mode() === "hover · fade" || props.still || (props.loop && siteSettings.cardHover !== "match")) {
-      setStill(true)
-      rest()
-      timer = setTimeout(() => {
-        if (video) video.currentTime = 0
-      }, fade())
-      return
-    }
-    // Seek backwards to the first frame with an ease-out, faster than it played: at most 0.8s.
-    const from = video.currentTime
-    const duration = Math.min(800, Math.max(250, from * 250))
-    const start = performance.now()
-    const step = (now: number) => {
-      if (!video) return
-      const progress = Math.min(1, (now - start) / duration)
-      if (!video.seeking) video.currentTime = from * (1 - (1 - (1 - progress) ** 3))
-      if (progress < 1) {
-        frame = requestAnimationFrame(step)
-        return
-      }
-      video.currentTime = 0
-      setStill(true)
-    }
-    frame = requestAnimationFrame(step)
-  }
 
   onMount(() => {
     rescueMedia(video)
     rescueMedia(idle)
-    if (mode() === "autoplay" && !prefersReducedMotion()) {
-      setStill(false)
-      void video?.play().catch(() => {})
-    }
-    // The loop may have loaded before hydration attached onLoadedData.
-    if (idle && idle.readyState >= 2) setLoaded(true)
     if (poster?.complete && poster.naturalWidth > 0) poster.setAttribute("data-loaded", "")
     const media = video?.closest<HTMLElement>('[data-slot="media"]')
-    // A hover clip downloads only once the card itself is pointed at or focused (preload="none" until
-    // then; the still shows meanwhile and the clip fades in once a frame of it is decoded). Not on
-    // phones, where the sizzle loads by itself when its card is in view, nor with reduced motion.
-    const want = () => !sizzle() && !prefersReducedMotion() && setSeen(true)
-    // A tap also fires pointerenter and pointerleave; touch plays by visibility instead (below).
-    const pointerEnter = (event: PointerEvent) => {
-      if (event.pointerType === "touch") return
-      want()
-      enter()
-    }
-    const focus = () => {
-      want()
-      enter()
-    }
-    // While the card's menu is open (data-menu-open, ProductAction) the card stays as hovered: the
-    // pointer moving from the media into the menu doesn't end it; closing the menu does, unless
-    // the pointer is back on the media.
-    const card = media?.closest<HTMLElement>('[data-component="product-card"]')
-    const pointerLeave = (event: PointerEvent) =>
-      event.pointerType !== "touch" && !card?.hasAttribute("data-menu-open") && leave()
-    const menuClose = () => {
-      if (!media?.matches(":hover") && document.activeElement !== media) leave()
-    }
-    card?.addEventListener("menuclose", menuClose)
-    media?.addEventListener("pointerenter", pointerEnter)
-    media?.addEventListener("pointerleave", pointerLeave)
-    media?.addEventListener("focus", focus)
-    media?.addEventListener("blur", leave)
-
-    // Touch screens and mobile platforms have no hover: once most of the card is on screen
-    // (scrolling the page or swiping the carousel), it rests on its cover for 2s, then crossfades
-    // into the sizzle reel once a frame of it is decoded (as soon as one is, if that takes longer).
-    // Leaving pauses the sizzle where it is and coming back resumes it, unless the card was away
-    // for over 30s: then it starts again from the cover. Reduced motion and Save-Data keep the cover.
-    setSizzle(window.matchMedia("(hover: none), (pointer: coarse)").matches || isMobile(detectPlatform()))
-    let wait: ReturnType<typeof setTimeout> | undefined
-    let away = 0
-    // Back to the cover with the sizzle rewound, without a fade (the card is off screen).
-    const reset = () => {
-      active = false
+    if (!media) return
+    // Again whenever Settings changes how it plays (Design mode), from the still.
+    createEffect(() => {
       setStill(true)
-      if (video) video.currentTime = 0
-      rest()
-    }
-    const inView = () => {
-      mark(true)
-      if (!video || mode() === "autoplay" || cover()) return
-      // The sizzle (megabytes) buffers once the page has loaded, so on a slow phone it doesn't share
-      // the connection with the card stills and scripts; the 2s wait below hides the difference.
-      afterLoad(() => setSeen(true))
-      if (active && performance.now() - away < 30_000) return void video.play().catch(() => {})
-      if (active) reset()
-      clearTimeout(wait)
-      wait = setTimeout(enter, 2000)
-    }
-    const outOfView = () => {
-      mark(false)
-      clearTimeout(wait)
-      away = performance.now()
-      video?.pause()
-    }
-    const view = new IntersectionObserver(
-      ([entry]) => {
-        visible = entry.isIntersecting
-        rest()
-        if (!sizzle()) return
-        if (entry.intersectionRatio >= 0.6) inView()
-        if (entry.intersectionRatio < 0.6) outOfView()
-      },
-      { threshold: [0, 0.6, 1] },
-    )
-    if (media) view.observe(media)
-    // On phones the sizzle's metadata loads a screen ahead of the card scrolling into view.
-    const ahead = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && sizzle()) setNear(!cover())
-      },
-      { rootMargin: "100% 50%" },
-    )
-    if (media) ahead.observe(media)
-    const start = () => {
-      ready = true
-      rest()
-    }
-    afterLoad(start)
-    onCleanup(() => {
-      window.removeEventListener("load", start)
-      view.disconnect()
-      ahead.disconnect()
-      clearTimeout(wait)
-      stop()
-      media?.removeEventListener("pointerenter", pointerEnter)
-      media?.removeEventListener("pointerleave", pointerLeave)
-      card?.removeEventListener("menuclose", menuClose)
-      media?.removeEventListener("focus", focus)
-      media?.removeEventListener("blur", leave)
+      onCleanup(
+        cardVideo(
+          media,
+          {
+            mode: mode(),
+            hover: siteSettings.cardHover,
+            loopSpeed: siteSettings.cardLoopSpeed,
+            demo: props.demo,
+            matchesLoop: props.matchesLoop,
+            still: !!props.still,
+            mobile: isMobile(detectPlatform()),
+          },
+          {
+            still: setStill,
+            preload: (level) => (level === "auto" ? setSeen(true) : setNear(true)),
+            sizzle: () => setSizzle(true),
+            loaded: () => setLoaded(true),
+          },
+        ),
+      )
     })
   })
 
@@ -864,10 +671,12 @@ export function CardVideo(props: {
             : posterFile(props.poster)
         }
         data-set={props.set ? "" : undefined}
+        // For the static pages' script (card-video.ts).
+        data-demo={props.demo ? "" : undefined}
+        data-matches-loop={props.matchesLoop ? "" : undefined}
         muted
         loop
         playsinline
-        onLoadedMetadata={speed}
         preload={seen() ? "auto" : near() ? "metadata" : "none"}
       >
         <VideoSources src={props.src} video={() => video} />
@@ -887,7 +696,6 @@ export function CardVideo(props: {
             data-mode={props.still ? "crossfade" : mode()}
             data-hidden={still() ? undefined : ""}
             data-loaded={loaded() ? "" : undefined}
-            onLoad={() => setLoaded(true)}
           />
         }
       >
@@ -923,8 +731,6 @@ export function CardVideo(props: {
               data-mode={loopMode()}
               data-hidden={still() ? undefined : ""}
               data-loaded={loaded() ? "" : undefined}
-              onLoadedMetadata={speed}
-              onLoadedData={() => setLoaded(true)}
               aria-hidden="true"
               muted
               loop
@@ -1032,7 +838,8 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
   })
 
   // The whole row copies its command; embedded browsers that block the Clipboard API get the old copy
-  // command instead.
+  // command instead. On a static page, src/client/islands/product-action.ts copies (and finds this
+  // computer's build), and src/client/menus.ts opens the menus and sheets.
   const copy = (item: { id: string; command: string }) => {
     const done = () => {
       setCopied(item.id)
@@ -1056,6 +863,8 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
             : language.route("/desktop#download")
       }
       data-component="site-button"
+      // The static pages' script points it at this computer's exact build (detectDesktopDownload).
+      data-desktop-download
     >
       <Show when={os()}>{(value) => <PlatformIcon platform={value()} />}</Show>
       {/* One text node with the OS inside, so its leading space survives the button's flex layout;
@@ -1180,9 +989,10 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
               Download
               <Chevron />
             </button>
-            <Show when={open()}>
+            <Show when={open() || staticRender()}>
               <div
                 data-slot="menu"
+                hidden={!open()}
                 id={menuID}
                 role="menu"
                 aria-label={i18n.t("site.action.desktopDownloads")}
@@ -1213,9 +1023,10 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                 >
                   <Chevron />
                 </button>
-                <Show when={open()}>
+                <Show when={open() || staticRender()}>
                   <div
                     data-slot="menu"
+                    hidden={!open()}
                     id={menuID}
                     role="menu"
                     aria-label={i18n.t("site.action.desktopDownloads")}
@@ -1254,9 +1065,10 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
               >
                 <Chevron />
               </button>
-              <Show when={open()}>
+              <Show when={open() || staticRender()}>
                 <div
                   data-slot="menu"
+                  hidden={!open()}
                   id={menuID}
                   role="menu"
                   aria-label={i18n.t("site.action.mobileApps")}
@@ -1319,20 +1131,25 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
               ref={trigger}
               type="button"
               data-component="site-button"
+              aria-haspopup="menu"
               aria-expanded={open() ? "true" : "false"}
               aria-controls={menuID}
-              onClick={() => {
-                if (openSheet()) return
-                setOpen(!open())
-                const panel = menu?.querySelector<HTMLElement>('[data-slot="menu"]')
-                if (panel) placeMenu(panel)
-              }}
+              onClick={toggle}
             >
               {props.slug === "mobile" ? i18n.t("download.action.download") : i18n.t("download.action.install")}
               <Chevron />
             </button>
-            <Show when={open()}>
-              <div data-slot="menu" id={menuID}>
+            <Show when={open() || staticRender()}>
+              <div
+                data-slot="menu"
+                id={menuID}
+                role="menu"
+                aria-label={
+                  props.slug === "mobile" ? i18n.t("site.action.mobileApps") : i18n.t("site.action.installCommands")
+                }
+                hidden={!open()}
+                onKeyDown={moveFocus}
+              >
                 <Show
                   when={props.slug !== "mobile"}
                   fallback={
@@ -1341,6 +1158,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                         <a
                           href={store.href}
                           data-slot="store"
+                          role="menuitem"
                           {...betaLink(
                             store,
                             i18n.t("site.newTab", { label: i18n.t("site.action.storeBeta", { os: store.device }) }),
@@ -1357,6 +1175,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                       <button
                         type="button"
                         data-slot="install"
+                        role="menuitem"
                         data-copied={copied() === item.id ? "" : undefined}
                         data-funnel-copy="terminal"
                         data-funnel-method={item.id}
@@ -1381,9 +1200,12 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
           </div>
         </Match>
       </Switch>
-      <Show when={sheet() && sheetMenu()}>
+      {/* A static page has the menu, hidden, and this sheet in its markup, as SiteMenu does: the script
+          opens whichever fits the device (src/client/menus.ts). */}
+      <Show when={(sheet() || staticRender()) && sheetMenu()}>
         {(kind) => (
           <Sheet
+            id={`${menuID}-sheet`}
             name="product"
             label={
               kind() === "builds"
@@ -1592,62 +1414,37 @@ function heroPoster(slug: PageSlug) {
   return poster
 }
 
+/**
+ * On a static page, the product page hero's poster for each theme as a srcset (AVIF, else WebP), so
+ * its script loads the one the page will show from the first hover (src/client/card-morph.ts).
+ */
+function heroPosterSets(slug: PageSlug) {
+  if (!staticRender()) return {}
+  const media = pageMedia(siteSettings.productVideos, slug, "landscape")
+  const set = (poster: string | undefined) => {
+    const sources = poster ? imageSources(poster) : undefined
+    return sources && (sources.avif ?? sources.webp ?? sources.src)
+  }
+  return {
+    "data-hero-light": set(media?.themes?.light.poster ?? media?.poster),
+    "data-hero-dark": set(media?.themes?.dark.poster ?? media?.poster),
+  }
+}
+
+/** Settings › Card to page's timing (card-morph.ts). */
+export function cardTiming(): CardTiming {
+  return {
+    grow: siteSettings.cardGrowDuration,
+    shrink: siteSettings.cardShrinkDuration,
+    easing: cardEasingCurves[siteSettings.cardEasing],
+    pageFade: siteSettings.cardPageFade,
+    pageDelay: siteSettings.cardPageDelay,
+    imageFade: siteSettings.cardImageFade,
+  }
+}
+
 // Each image decodes once: a click after the hover finds it ready instead of decoding it again.
 const decoded = new Map<string, Promise<unknown>>()
-
-/**
- * Sets how long the box takes from how far it travels: the set duration for a trip of half the
- * window's diagonal or more, down to three quarters of it for a short one, so a small move doesn't
- * drift. Runs before the transition animates, which reads the value when it starts.
- */
-function travel(from: DOMRect, to: DOMRect, duration: number) {
-  const distance = Math.max(
-    Math.hypot(to.left - from.left, to.top - from.top),
-    Math.hypot(to.right - from.right, to.bottom - from.bottom),
-  )
-  const scale = Math.min(1, Math.max(0.75, distance / (0.5 * Math.hypot(window.innerWidth, window.innerHeight))))
-  const root = document.documentElement
-  const scaled = Math.round(duration * scale)
-  root.style.setProperty("--card-duration", `${scaled}ms`)
-  if (root.dataset.cardGrow !== "shrink") return
-  root.style.setProperty("--card-page-fade", `${Math.min(siteSettings.cardPageFade, scaled)}ms`)
-  root.style.setProperty("--card-image-fade", `${Math.min(siteSettings.cardImageFade, scaled)}ms`)
-}
-
-/**
- * Marks the page as changing between a card and its product page ("fade" when reduced motion keeps
- * the box still), and sets the timing from Settings › Card to page for the ::view-transition styles
- * in product-page.css.
- */
-function markCardTransition(direction: "grow" | "shrink" | "fade") {
-  const root = document.documentElement
-  root.dataset.cardGrow = direction
-  // Going back, nothing may outlast the shrink: the page and image fades fit inside it and the new
-  // page fades in at once, so the transition ends when the box lands.
-  const shrinking = direction === "shrink"
-  const duration = shrinking ? siteSettings.cardShrinkDuration : siteSettings.cardGrowDuration
-  root.style.setProperty("--card-duration", `${duration}ms`)
-  root.style.setProperty("--card-easing", cardEasingCurves[siteSettings.cardEasing])
-  root.style.setProperty(
-    "--card-page-fade",
-    `${shrinking ? Math.min(siteSettings.cardPageFade, duration) : siteSettings.cardPageFade}ms`,
-  )
-  root.style.setProperty("--card-page-delay", `${shrinking ? 0 : siteSettings.cardPageDelay}ms`)
-  root.style.setProperty(
-    "--card-image-fade",
-    `${shrinking ? Math.min(siteSettings.cardImageFade, duration) : siteSettings.cardImageFade}ms`,
-  )
-}
-
-/** True when at least half of the box is inside the window (and inside `clip`, if given). */
-function onScreen(box: DOMRect, clip?: DOMRect) {
-  const left = Math.max(box.left, 0, clip?.left ?? 0)
-  const right = Math.min(box.right, window.innerWidth, clip?.right ?? Infinity)
-  const top = Math.max(box.top, 0, clip?.top ?? 0)
-  const bottom = Math.min(box.bottom, window.innerHeight, clip?.bottom ?? Infinity)
-  const visible = Math.max(0, right - left) * Math.max(0, bottom - top)
-  return box.width > 0 && box.height > 0 && visible >= (box.width * box.height) / 2
-}
 
 /** Resolves once an image (the copy a <picture> with `sizes` picks) has loaded and decoded, or after 400ms. */
 function imageReady(src: string, sizes: string) {
@@ -1659,12 +1456,6 @@ function imageReady(src: string, sizes: string) {
     )
   }
   return Promise.race([decoded.get(src), new Promise((resolve) => setTimeout(resolve, 400))])
-}
-
-/** Runs `run` once the page's load event has fired (now, if it already has). */
-function afterLoad(run: () => void) {
-  if (document.readyState === "complete") return run()
-  window.addEventListener("load", run, { once: true })
 }
 
 /** A beta store link's attributes: a new tab, and its name (one that says "TestFlight beta"). */

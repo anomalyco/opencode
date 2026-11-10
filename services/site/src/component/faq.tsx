@@ -6,7 +6,8 @@ import { createEffect, createSignal, createUniqueId, on, ParentProps, Show } fro
  * so search engines and readers without JavaScript have it, and find-in-page opens it. `open` and
  * `onOpenChange` make it controlled, for "one open at a time"; `heading` puts the button in an h3, for
  * rows that are section headings. The answer animates its height (faq-open and faq-close in site.css,
- * from --kb-collapsible-content-height) and stays shown until the closing animation ends.
+ * from --kb-collapsible-content-height) and stays shown until the closing animation ends. On a
+ * static page, src/client/faq.ts opens and closes it.
  */
 export function Faq(
   props: ParentProps & {

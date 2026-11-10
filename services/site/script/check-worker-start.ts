@@ -31,14 +31,15 @@ const pages: {
   noindex?: boolean
   static?: boolean
 }[] = [
-  { path: "/", status: 200 },
+  { path: "/", status: 200, static: true },
   { path: "/legal", status: 200, static: true },
   { path: "/ja/legal/privacy-policy", status: 200, static: true },
   { path: "/brand", status: 200, static: true },
   { path: "/ar/press", status: 200, static: true },
   { path: "/changelog", status: 200, static: true },
-  { path: "/ja", status: 200 },
-  { path: "/desktop", status: 200 },
+  { path: "/ja", status: 200, static: true },
+  { path: "/desktop", status: 200, static: true },
+  { path: "/ar/product", status: 200, static: true },
   { path: "/check-worker-start-404", status: 404 },
   { path: "/docs/", status: 200 },
   { path: "/docs/config/", status: 200, accept: "text/markdown" },

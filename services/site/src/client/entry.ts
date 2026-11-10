@@ -8,9 +8,11 @@ import type { SearchVia } from "~/component/site/search"
 import { markdownShortcut } from "~/component/site/markdown-key"
 import { revealHandedOff } from "~/component/site/search-reveal"
 import { startTooltips } from "~/component/site/tooltips"
+import { inlineKey } from "~/lib/direction"
 import { $, $$, on, site, target } from "./dom"
 import { startContents } from "./contents"
 import { startCopy } from "./copy"
+import { startFaq } from "./faq"
 import { startFrame } from "./footer"
 import { startIslands } from "./islands"
 import { closeMenus, startMenus } from "./menus"
@@ -22,6 +24,7 @@ Funnel.start(() => import("~/lib/funnel-config").then((module) => module.funnelC
 startTheme()
 startMenus()
 startCopy()
+startFaq()
 startContents()
 startFrame()
 const tip = $('[data-component="tooltip"]')
@@ -107,6 +110,17 @@ on("keydown", (event) => {
   location.assign(link.href)
 })
 on("keydown", (event) => event.key === "Escape" && !event.defaultPrevented && closeMenus())
+// A product page's previous and next links (product-page.tsx): the left and right arrow keys follow
+// them, unless focus is somewhere that uses those keys itself, or a menu, sheet or dialog is open.
+on("keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.defaultPrevented) return
+  const busy =
+    'input, textarea, select, [contenteditable], [role="tablist"], [data-slot="track"], [data-slot="menu"], [popover], dialog'
+  if (target(event).closest(busy) || $(":popover-open, dialog[open]")) return
+  const link = $$<HTMLAnchorElement>('[data-component="product-cycle"] a')[inlineKey(event) === "ArrowLeft" ? 0 : 1]
+  if (link) location.assign(link.href)
+})
 // The skip link moves focus to the content, leaving the address as it is.
 on("click", (event) => {
   if (!target(event).closest('[data-component="skip-link"]')) return

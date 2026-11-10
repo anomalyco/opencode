@@ -3,14 +3,12 @@ import "./index.css"
 import "~/component/site/hero-title.css"
 import { rollsByCharacter, titleCells } from "~/component/site/hero-title"
 import { Title, Meta } from "@solidjs/meta"
-import { createAsync } from "@solidjs/router"
 import {
   createEffect,
   createMemo,
   createSignal,
   createUniqueId,
   For,
-  Index,
   lazy,
   on,
   onCleanup,
@@ -23,7 +21,8 @@ import {
 import { ConsoleField } from "~/component/site/console-field"
 import { ChevronRight, ExternalArrow } from "~/component/site/icons"
 import { LogoWall } from "~/component/site/logo-wall"
-import { createWash, revealMotion, washStartTime, washStep } from "~/component/site/reveal"
+import { revealMotion, washStartTime, washStep } from "~/component/site/reveal"
+import { createWash } from "~/component/site/use-wash"
 import { OpenSourceFork } from "~/component/site/open-source-fork"
 import { OpenSourceProof } from "~/component/site/open-source-proof"
 import { ConsoleWidget } from "~/component/site/console-widget"
@@ -63,8 +62,10 @@ import { useLanguage } from "~/context/language"
 import { homeContent, linkPhrases } from "~/lib/home-content"
 import { tag } from "~/lib/language"
 import { repoStats, type RepoStats } from "~/lib/github"
+import { pageData } from "~/lib/page-data"
 import { inlineKey } from "~/lib/direction"
 import { copyOnClick } from "~/lib/clipboard"
+import { spinReel } from "~/component/site/slot-stat"
 
 // Settings › Hero text and Stats pick these in development; production shows the static title and
 // the slot stats, so the rolling chunk isn't built.
@@ -85,7 +86,7 @@ export default function Home() {
   useHomeOrder()
   const [statsVisible, setStatsVisible] = createSignal(false)
   // Live repo numbers (lib/github.ts), streamed in under the config's numbers.
-  const repo = createAsync(() => repoStats())
+  const repo = pageData(() => repoStats())
 
   const heroVariant = () => siteSettings.hero
   // Console layout "block" is the whole section, so it sets the panel option and the name on the
@@ -105,11 +106,11 @@ export default function Home() {
   const subtitleParts = () => designCopy("home.hero.subtitle", content().hero.subtitle.join("\n")).split("\n")
 
   // The open source numbers start as they approach the window (a fifth of a window early), so they
-  // are already spinning when they come into view; the avatars' wash follows once the wall itself is
-  // in view, never before the numbers. Already on screen at load, they start 300ms after the page's
-  // code runs. With reduced motion the numbers simply show. The stats render twice when the live
-  // numbers stream in after the page (first with the config's numbers), so a second one joins a
-  // start already set.
+  // are already spinning when they come into view; the avatars' wash follows once the wall itself
+  // is in view, never before the numbers (on a static page, src/client/islands/home.ts). Already on
+  // screen at load, they start 300ms after the page's code runs. With reduced motion the numbers
+  // simply show. The stats render twice when the live numbers stream in after the page (first with
+  // the config's numbers), so a second one joins a start already set.
   const [openSourceStart, setOpenSourceStart] = createSignal<number>()
   const observeStats = (element: HTMLDListElement) => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return setStatsVisible(true)
@@ -231,7 +232,8 @@ export default function Home() {
           card width): here, ahead of the hero, as the carousel's own copy of these rules only arrives
           with the carousel, and the hero would otherwise resize once it has painted. */}
       <style>{carouselCss()}</style>
-      <Announcement />
+      {/* Production keeps the announcement off (Settings › Announcement), so only development renders it. */}
+      {import.meta.env.DEV && <Announcement />}
       <section
         data-component="hero"
         data-section="hero"
@@ -269,11 +271,9 @@ export default function Home() {
         </Show>
       </section>
 
-      {/* The carousel's frame until the carousel itself has streamed in (products.tsx). */}
-      <ProductCarouselSkeleton />
-      {/* Before first paint: where the carousel's cards start on the page, so on phones a card runs
-          down to the bottom of the small viewport (products.css) and never past it. Again on resize. */}
-      <script innerHTML={cardTopScript} />
+      {/* The carousel's frame until the carousel itself has streamed in (products.tsx), on the
+          development server: production renders the page in one piece (src/static/render.tsx). */}
+      {import.meta.env.DEV && <ProductCarouselSkeleton />}
 
       <Show when={siteSettings.logoWall !== "off"}>
         <Show when={siteSettings.logoLayout === "section"} fallback={logoWall()}>
@@ -303,6 +303,10 @@ export default function Home() {
           </Show>
         }
       />
+      {/* Before first paint: where the carousel's cards (or its skeleton's) start on the page, so on
+          phones a card runs down to the bottom of the small viewport (products.css) and never past
+          it. Again on resize. */}
+      <script innerHTML={cardTopScript} />
 
       <section
         data-component="block"
@@ -870,49 +874,21 @@ function SlotStat(props: { value: string; start?: number; stat: number }) {
 }
 
 function SlotDigit(props: { digit: number; start?: number; place: number; stat: number }) {
-  // The reel's cells are added when it first spins and stay; only a spinning reel shows more than the
-  // first (index.css). Removing them as each digit landed, a frame apart, restyled the whole page in
-  // each of those frames (every :has() rule re-checks a removal), right while it scrolled.
-  const [reel, setReel] = createSignal([props.digit])
-  const [spinning, setSpinning] = createSignal(false)
   let strip: HTMLSpanElement | undefined
   createEffect(
     on(
       () => props.start,
       (start) => {
         if (start === undefined || !strip) return
-        // More turns for later digits, so the right of the number spins faster and lands last.
-        const turns = 14 + props.place * 5 + props.stat * 3
-        const digits = [
-          props.digit,
-          ...Array.from({ length: turns }, () => Math.floor(Math.random() * 10)),
-          props.digit,
-        ]
-        setReel(digits)
-        setSpinning(true)
-        const line = strip.parentElement?.getBoundingClientRect().height ?? 0
-        const animation = strip.animate(
-          [{ transform: "translateY(0)" }, { transform: `translateY(${-(digits.length - 1) * line}px)` }],
-          {
-            duration: 1100,
-            delay: Math.max(0, start - performance.now()) + props.stat * 120 + props.place * 70,
-            easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-            fill: "both",
-          },
-        )
-        animation.onfinish = () => {
-          setReel((cells) => cells.with(0, props.digit))
-          setSpinning(false)
-          animation.cancel()
-        }
-        onCleanup(() => animation.cancel())
+        onCleanup(spinReel(strip, props.digit, props.place, props.stat, start))
       },
     ),
   )
+  // spinReel fills the strip with the reel's cells.
   return (
-    <span data-slot="reel" aria-hidden="true" data-spinning={spinning() ? "" : undefined}>
+    <span data-slot="reel" aria-hidden="true">
       <span data-slot="strip" ref={strip}>
-        <Index each={reel()}>{(digit) => <span>{digit()}</span>}</Index>
+        <span>{props.digit}</span>
       </span>
     </span>
   )
@@ -1321,7 +1297,7 @@ function BringYourOwnSubs() {
 /**
  * "Bring your own tools": a tile per service. With Settings › Tools animation on, the tiles arrive
  * in the shared entrance wash (reveal.ts), diagonally from the top left, the first time the grid
- * scrolls into view. Off by default.
+ * scrolls into view. Off by default. On a static page, src/client/islands/home.ts plays the wash.
  */
 function ToolGrid(props: {
   items: readonly {

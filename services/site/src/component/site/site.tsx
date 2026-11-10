@@ -32,7 +32,7 @@ import { LanguageSheet } from "~/component/language-sheet"
 import { useI18n } from "~/context/i18n"
 import type { Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
-import { strip } from "~/lib/language"
+import { LOCALES, strip } from "~/lib/language"
 import { brandAssets } from "~/lib/media"
 import { installConsoleStub } from "~/lib/console-stub"
 import { status, type ServiceStatus } from "~/lib/status"
@@ -145,7 +145,12 @@ const speculationRules = JSON.stringify({
               "{/:locale}?/:page(product|ide|mini|font)",
               "{/:locale}?/product/*",
               "{/:locale}?/extensions/*",
-              ...(import.meta.env.DEV ? [] : staticPaths.map((path) => `{/:locale}?${path}`)),
+              // The home page is "/" and "/ja", not "/ja/".
+              ...(import.meta.env.DEV
+                ? []
+                : staticPaths.flatMap((path) =>
+                    path === "/" ? ["/", `/:locale(${LOCALES.join("|")})`] : [`{/:locale}?${path}`],
+                  )),
               "/docs{/*}?",
               "/data{/*}?",
             ],

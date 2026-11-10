@@ -2,7 +2,6 @@ import "./products-arrows.css"
 import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useI18n } from "~/context/i18n"
 import { CarouselArrows } from "./carousel-arrows"
-import { prefersReducedMotion } from "./media"
 
 /**
  * The products carousel's previous and next, for a mouse, whose wheel can't scroll the cards
@@ -29,7 +28,7 @@ export default function ProductsArrows(props: { track: HTMLElement }) {
     const cards = Math.max(1, Math.floor(track.clientWidth / step))
     track.scrollBy({
       left: direction * (style.direction === "rtl" ? -1 : 1) * step * cards,
-      behavior: prefersReducedMotion() ? "instant" : "smooth",
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
     })
   }
   onMount(() => {

@@ -68,12 +68,7 @@ export function posterFile(src: string) {
   return imageSources(src).src
 }
 
-/** The display sizes the stills are made for, as `sizes` values. */
-export const stillSizes = {
-  card: "(max-width: 40rem) 90vw, 342px",
-  hero: "(min-width: 90rem) 1344px, 100vw",
-  clip: "(max-width: 40rem) 90vw, 385px",
-}
+export { stillSizes } from "./still-sizes"
 
 /**
  * Loads a still the way a <picture> on the page would pick it (AVIF where the browser decodes it,

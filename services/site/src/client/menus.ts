@@ -129,25 +129,31 @@ function languagePicker() {
   )
 }
 
-// The site's dropdowns (site-menu.tsx): the trigger opens its menu where it fits (placeMenu), or the
-// bottom sheet on touch phones. Arrow keys, Home and End move between rows; Escape and a click outside
-// close it, Escape giving focus back to the trigger; opened from the keyboard, focus moves to the
-// first row.
+// The site's dropdowns (site-menu.tsx, and a product's download and install menus, ProductAction):
+// the trigger opens its menu where it fits (placeMenu), or the bottom sheet on touch phones. Arrow
+// keys, Home and End move between rows; Escape and a click outside close it, Escape giving focus back
+// to the trigger; opened from the keyboard, focus moves to the first row. While a product card's menu
+// is open the card keeps its hover state (data-menu-open, card-video.ts).
 function siteMenus() {
   const set = (root: HTMLElement, open: boolean) => {
     const menu = $('[data-slot="menu"]', root)
     if (!menu || (menu.hidden === true) === !open) return
     menu.hidden = !open
-    $('[data-slot="trigger"]', root)?.setAttribute("aria-expanded", String(open))
+    $(":scope > button", root)?.setAttribute("aria-expanded", String(open))
     if (open) placeMenu(menu)
+    const card = root.closest('[data-component="product-card"]')
+    card?.toggleAttribute("data-menu-open", open)
+    if (!open) card?.dispatchEvent(new Event("menuclose"))
   }
   const roots = () => $$('[data-component="site-menu"]')
   onCloseMenus(() => roots().forEach((root) => set(root, false)))
   on("click", (event) => {
-    const trigger = target(event).closest<HTMLElement>('[data-component="site-menu"] > [data-slot="trigger"]')
+    const trigger = target(event).closest<HTMLElement>('[data-component="site-menu"] > button')
     const root = trigger?.parentElement
     if (!trigger || !root) return
-    const sheet = $('[data-component="sheet"]', root)
+    // Its sheet: inside, or beside it with the menu's id (ProductAction's).
+    const sheet =
+      $('[data-component="sheet"]', root) ?? document.getElementById(`${trigger.getAttribute("aria-controls")}-sheet`)
     if (sheet && prefersSheet()) return openSheet(sheet, trigger)
     const open = $('[data-slot="menu"]', root)?.hidden === true
     if (open) closeMenus()
@@ -160,7 +166,7 @@ function siteMenus() {
     if (!root) return
     if (event.key === "Escape") {
       set(root, false)
-      return $('[data-slot="trigger"]', root)?.focus()
+      return $(":scope > button", root)?.focus()
     }
     const rows = $$('[role="menuitem"]', root)
     const at = rows.indexOf(document.activeElement as HTMLElement)
@@ -180,7 +186,8 @@ const sheets = new WeakMap<HTMLElement, Promise<SheetControl>>()
 let motion: Promise<typeof import("~/component/site/sheet-motion")> | undefined
 const loadMotion = () => (motion ??= import("~/component/site/sheet-motion"))
 on("pointerdown", (event) => {
-  if (prefersSheet() && target(event).closest('[data-slot="trigger"]')) void loadMotion()
+  if (prefersSheet() && target(event).closest('[data-slot="trigger"], [data-component="site-menu"] > button'))
+    void loadMotion()
 })
 
 function openSheet(root: HTMLElement, trigger: HTMLElement) {
