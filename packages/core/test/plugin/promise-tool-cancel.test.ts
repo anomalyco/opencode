@@ -57,6 +57,18 @@ const register = Effect.fn(function* (started: Deferred.Deferred<AbortSignal | u
             }),
         })
         editor.add({
+          name: "resolves",
+          description: "Resolves with what it has once stopped",
+          input: empty,
+          options: { codemode: false },
+          execute: (_input, context) =>
+            new Promise<{ content: string }>((resolve) => {
+              const signal = context.signal
+              signal.addEventListener("abort", () => resolve({ content: "partial result" }), { once: true })
+              report(signal)
+            }),
+        })
+        editor.add({
           name: "deaf",
           description: "Never reads its signal",
           input: empty,
@@ -106,9 +118,11 @@ const stop = Effect.fn(function* (
   const started = yield* Deferred.make<AbortSignal | undefined>()
   yield* register(started)
   const failures: SessionEvent.Tool.Failed["data"][] = []
+  const successes: SessionEvent.Tool.Success["data"][] = []
   yield* bus.listen((event) =>
     Effect.sync(() => {
       if (event.type === SessionEvent.Tool.Failed.type) failures.push(event.data as SessionEvent.Tool.Failed["data"])
+      if (event.type === SessionEvent.Tool.Success.type) successes.push(event.data as SessionEvent.Tool.Success["data"])
     }),
   )
   const steps = yield* SessionStep.make.pipe(
@@ -156,6 +170,7 @@ const stop = Effect.fn(function* (
     exit: yield* Fiber.await(attempt),
     elapsed: Date.now() - startedAt,
     failures,
+    successes,
     requests: (yield* llm.requests()).length,
     signal,
   }
@@ -185,6 +200,23 @@ describe("Promise tool cooperative stop", () => {
     }),
   )
 
+  it.live("records the result of a tool that read its signal and resolved with what it had when stopped", () =>
+    Effect.gen(function* () {
+      const { exit, failures, successes, requests, signal } = yield* stop(
+        LLMEvent.toolCall({ id: "call-resolves", name: "resolves", input: {} }),
+        "user",
+      )
+      // The call keeps its result, but the step still ends interrupted, without another model request.
+      expect(Exit.hasInterrupts(exit)).toBe(true)
+      expect(requests).toBe(1)
+      expect(signal?.aborted).toBe(true)
+      expect(failures).toEqual([])
+      expect(successes).toMatchObject([
+        { id: "call-resolves", content: [{ type: "text", text: expect.stringContaining("partial result") }] },
+      ])
+    }),
+  )
+
   it.live("interrupts a tool that never read its signal at once", () =>
     Effect.gen(function* () {
       const { exit, elapsed, failures, requests } = yield* stop(
@@ -207,7 +239,8 @@ describe("Promise tool cooperative stop", () => {
         // The stop waits for a tool that read its signal, on the clock; this one never settles.
         (interrupting) =>
           Effect.gen(function* () {
-            yield* Effect.promise(() => Bun.sleep(50))
+            // Let the stop reach the tool; with the clock held, it is still waiting for it.
+            for (let turn = 0; turn < 20; turn++) yield* Effect.yieldNow
             expect(interrupting.pollUnsafe()).toBeUndefined()
             yield* TestClock.adjust("5 seconds")
           }),

@@ -698,7 +698,8 @@ const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
       const stopped = new AbortController()
       const finished = new AbortController()
       const signal = AbortSignal.any([interrupted, stopped.signal])
-      const cancel = context.cancel
+      // `cancel` stays out of the promise context; promise tools stop through `signal`.
+      const { cancel, ...rest } = context
       let listening = false
       const listen = () => {
         if (listening || !cancel) return
@@ -710,7 +711,7 @@ const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
       }
       return Promise.resolve(
         tool.execute(input, {
-          ...context,
+          ...rest,
           get signal() {
             listen()
             return signal
