@@ -21,7 +21,7 @@ import {
   Suspense,
 } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
-import { interFaces, interLatin } from "./inter-fonts"
+import { interLatin } from "./inter-fonts"
 import { AgentIcon, Bracket, PersonIcon, ThemeCycle } from "./site-controls"
 import logoLight from "../../asset/brand/opencode-logo-light.svg"
 import logoDark from "../../asset/brand/opencode-logo-dark.svg"
@@ -56,8 +56,6 @@ import {
   removeNavItem,
   sortableNav,
 } from "./nav-order"
-// The Markdown view's styles load with the page: they also hide the page while the view loads.
-import "./markdown-view.css"
 import { monoFontChoice, monoFontLatin } from "./mono-fonts"
 import { NavVersions } from "./nav-versions"
 import { closeAllMenus, closeMenusOnLinks, onCloseMenus, takeMenuNavigation } from "./menu-open"
@@ -69,8 +67,7 @@ import { SiteSearch } from "./search"
 import { navMenusOnIntent } from "./nav-intent"
 import { preloadTouchedLinks } from "./preload-touched"
 import { adoptVoice, dropVoice } from "./voice/host"
-// The logo menu's other styles (Settings › Logo menu: list, cards) and the shared nav menus in the site's colours.
-import "./logo-fan.css"
+// The shared nav menus in the site's colours.
 import "./nav-menus.css"
 import { logoVariantSvgs } from "./logo-variants"
 import { AnomalyLogo, Logo, LogoIcon, Wordmark } from "./marks"
@@ -1295,10 +1292,6 @@ export function Site(props: {
           (siteSettings.spacer === "dither gradient" ? ditherGradientRule(siteSettings, "") : "")
         }
       />
-      {/* A plain style element, which hydration keeps: the meta <Style> is inserted again on
-          hydration, and the new faces then miss font-display: optional's window, so the page
-          swaps to the fallback font and reflows. */}
-      <style innerHTML={interFaces} />
       {/* Fetched with the page, so Inter is ready for the first paint instead of arriving inside
           font-display: optional's short wait and reflowing the text (CLS). Only the Latin file:
           most pages need nothing else. */}

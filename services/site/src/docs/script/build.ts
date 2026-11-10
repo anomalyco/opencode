@@ -170,7 +170,7 @@ console.log(`docs: built ${Object.values(render.docsSlugs).flat().length} pages`
 async function checkBudget() {
   // The shared nav menus (packages/nav-menus) are the script's one file of its own, loaded on first use (nav-intent.ts).
   // The stylesheet carries the phone bars (the sticky section row and the Contents bar under it), about 0.3 kB,
-  // and the V1 docs' notice and type for their languages, about 1 kB.
+  // the V1 docs' notice and type for their languages, about 1 kB, and the fonts' faces (src/style/fonts.css), about 1.3 kB.
   const budgets = { [inputs.script]: 8 * 1024, [inputs.stylesheet]: 30 * 1024 }
   const files = await Array.fromAsync(new Bun.Glob("_build/*.js").scan({ cwd: path.join(cache, "client") }))
   const lazy = manifest[inputs.script].dynamicImports?.length ?? 0

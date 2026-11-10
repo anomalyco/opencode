@@ -6,7 +6,7 @@ import { useLanguage } from "~/context/language"
 /**
  * Server only: preloads the page's strings in its language (the locale's table, which holds the
  * shell's, and the page route's slice), so they arrive with the page's scripts rather than after
- * them. Written like Vite's own preloads, so lib/one-stylesheet.ts gives them the same priority. The
+ * them. Written like Vite's own preloads, so lib/head-links.ts gives them the same priority. The
  * client build writes where each file went (script/i18n-plugin.ts); the development server has none.
  * Called inside a component (AppMeta) rather than rendered as one, so the component tree, and the ids
  * Solid derives from it, stay as they were.

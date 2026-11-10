@@ -3,10 +3,10 @@ import { DocsLockup, docsSectionName, type DocsVersion } from "~/component/site/
 import { DocsVersionNotice } from "~/component/site/docs-version-notice"
 import { GitHubLink } from "~/component/site/github-link"
 import { Chevron, NewTab, SearchIcon } from "~/component/site/icons"
-import { interFaces, interLatin } from "~/component/site/inter-fonts"
+import { interLatin } from "~/component/site/inter-fonts"
 import { LogoIcon } from "~/component/site/marks"
 import { Bracket } from "~/component/site/site-controls"
-import { monoFontFaces, monoFontLatin } from "~/component/site/mono-fonts"
+import { monoFontLatin } from "~/component/site/mono-fonts"
 import { OnThisPage } from "~/component/site/on-this-page"
 import { defaultRootAttributes, themeScript } from "~/component/site/preload-settings"
 import { config } from "~/config"
@@ -127,7 +127,6 @@ export function DocsLayout(props: {
         <title>{`${props.title} | OpenCode${props.set.id === "v1" ? " V1" : ""}`}</title>
         <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin="anonymous" />
         <link rel="preload" href={monoFontLatin} as="font" type="font/woff2" crossorigin="anonymous" />
-        <style innerHTML={`${interFaces}\n${monoFontFaces}`} />
         <link rel="stylesheet" href={props.assets.stylesheet} />
       </head>
       <body>

@@ -26,6 +26,7 @@ import { copySelection } from "~/lib/clipboard"
 import { architectLabelCases, architectRules, legalHistoryViews, legalPrintStyles, siteSettings } from "./settings"
 import { resolvePattern } from "~/lib/legal/cover-pattern"
 import { LegalPrint, LegalReferences, legalReferences, useLegalReference } from "./legal-print"
+import printStylesheet from "./legal-print.css?url"
 import {
   architectLayout,
   coverConcepts,
@@ -211,6 +212,8 @@ export function LegalDocument(props: { document: LegalDocumentContent }) {
         <Meta name="robots" content="noindex, nofollow" />
       </Show>
       <Link rel="alternate" type="application/rss+xml" title={feedTitle} href={feed} />
+      {/* The print styles load beside the page without holding up its first paint. */}
+      <Link rel="stylesheet" href={printStylesheet} media="print" />
       {/* The legal pages are English at every locale URL, so the trail uses their English URLs. */}
       <JsonLd
         data={breadcrumbData([

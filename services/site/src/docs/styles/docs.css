@@ -2,6 +2,7 @@
    docs components (docs-variants.css), and below them the base rules for the docs' own parts (the
    section nav, the article, the aside, the API cards). script/build.ts builds it under /docs/_build
    with the site's production CSS plugins, so only the chosen docs options ship. */
+@import "../../style/fonts.css";
 @import "../../style/index.css";
 @import "../../component/site/site.css";
 @import "../../component/site/rtl.css";

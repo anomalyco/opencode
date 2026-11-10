@@ -6,6 +6,7 @@ import { docs } from "./src/docs/vite"
 import { i18nSlices } from "./script/i18n-plugin"
 import { foldSettingsForProduction } from "./script/fold-settings"
 import { cssVariantsForProduction, devOnlyCss } from "./script/css-variants-plugin"
+import { stylesheetGroups } from "./script/stylesheet-groups"
 
 // Nitro's dev server drops any page the app renders with a 404 status and falls through to a bare
 // "Cannot GET". In development only, serve the not-found page's preview (/dev/404, which follows
@@ -56,6 +57,7 @@ export default defineConfig({
     notFoundInDev(),
     devOnlyCss(),
     cssVariantsForProduction(),
+    stylesheetGroups(),
     docs(),
     i18nSlices(),
   ],
