@@ -33,9 +33,8 @@ function fixture(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
     const execPath = process.execPath
-    // npm's global layout: <prefix>/lib/node_modules, or <prefix>\node_modules on Windows.
-    const modules =
-      process.platform === "win32" ? path.join(root, "node_modules") : path.join(root, "lib", "node_modules")
+    // npm's global layout on POSIX.
+    const modules = path.join(root, "lib", "node_modules")
     const executable = executableOverride
       ? yield* executableOverride(root, path.join(root, "home"))
       : formula
@@ -141,7 +140,10 @@ function fixture(
         }),
       ),
     )
-    return { updater, commands, requests, global, fs, executable, bash, prefix: yield* fs.realPath(root) }
+    const prefix = yield* fs.realPath(root)
+    // Windows keeps the npm on PATH and its default prefix.
+    const prefixArgs = process.platform === "win32" ? [] : ["--prefix", prefix]
+    return { updater, commands, requests, global, fs, executable, bash, prefix, prefixArgs }
   })
 }
 
@@ -151,12 +153,11 @@ const unix = process.platform === "win32" ? it.live.skip : it.live
 const installs = [
   {
     method: "npm",
-    command: (prefix: string) => [
+    command: (prefixArgs: string[]) => [
       "npm",
       "install",
       "--global",
-      "--prefix",
-      prefix,
+      ...prefixArgs,
       "--allow-scripts=@opencode/cli",
       "--force",
       "@opencode/cli@2.3.4-beta.1",
@@ -175,7 +176,7 @@ installs.forEach(({ method, command }) => {
     Effect.gen(function* () {
       const test = yield* fixture()
       yield* test.updater.upgrade(method, "v2.3.4-beta.1")
-      expect(test.commands).toEqual([command(test.prefix)])
+      expect(test.commands).toEqual([command(test.prefixArgs)])
     }),
   )
 })
@@ -191,8 +192,7 @@ const stale = (npm: boolean) =>
     (root) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem
-        const modules =
-          process.platform === "win32" ? path.join(root, "node_modules") : path.join(root, "lib", "node_modules")
+        const modules = path.join(root, "lib", "node_modules")
         yield* fs.makeDirectory(path.join(modules, "@opencode", "cli"), { recursive: true })
         yield* fs.writeFileString(
           path.join(modules, "@opencode", "cli", "package.json"),
@@ -355,7 +355,7 @@ it.live("install failures expose stderr and process errors do not report success
       }))
       expect(yield* test.updater.method()).toBe(method)
       expect(test.commands).toEqual([
-        ["npm", "list", "-g", "--depth=0", "--prefix", test.prefix, "@opencode/cli"],
+        ["npm", "list", "-g", "--depth=0", ...test.prefixArgs, "@opencode/cli"],
         ["pnpm", "list", "-g", "--depth=0", "@opencode/cli"],
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
@@ -662,7 +662,7 @@ if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-no
       yield* test.updater.upgrade("pnpm", "v2.3.4")
       yield* test.updater.upgrade("vp", "v2.3.4")
       expect(test.commands).toEqual([
-        ["npm", "list", "-g", "--depth=0", "--prefix", test.prefix, "@opencode/cli-node"],
+        ["npm", "list", "-g", "--depth=0", ...test.prefixArgs, "@opencode/cli-node"],
         ["pnpm", "list", "-g", "--depth=0", "@opencode/cli-node"],
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
@@ -671,8 +671,7 @@ if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-no
           "npm",
           "install",
           "--global",
-          "--prefix",
-          test.prefix,
+          ...test.prefixArgs,
           "--allow-scripts=@opencode/cli-node",
           "@opencode/cli-node@2.3.4",
         ],

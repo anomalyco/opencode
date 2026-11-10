@@ -163,16 +163,14 @@ const make = Effect.gen(function* () {
   )
   // WinGet extracts portable packages into a directory named after the package identifier.
   const installedWinget = /[\\/]winget[\\/]packages[\\/]anomaly\.opencode_/i.test(executable)
-  // npm keeps global packages in <prefix>/lib/node_modules (<prefix>\node_modules on Windows). The npm on PATH may
-  // belong to another Node install (fnm, nvm, mise) or prefix, so target the prefix that owns the running binary.
-  const npmPrefix = installedPackage
-    ? (process.platform === "win32" ? /^(.+)\\node_modules\\/ : /^(.+)\/lib\/node_modules\//).exec(executable)?.[1]
-    : undefined
+  // npm keeps global packages in <prefix>/lib/node_modules on POSIX. The npm on PATH may belong to another Node
+  // install (fnm, nvm, mise) or prefix, so target the prefix that owns the running binary. Windows uses
+  // <prefix>\node_modules, which Bun and pnpm global installs share, so it keeps the npm on PATH.
+  const npmPrefix =
+    installedPackage && process.platform !== "win32" ? /^(.+)\/lib\/node_modules\//.exec(executable)?.[1] : undefined
   const npmPrefixArgs = npmPrefix ? ["--prefix", npmPrefix] : []
   const npm =
-    npmPrefix &&
-    process.platform !== "win32" &&
-    (yield* fs.exists(path.join(npmPrefix, "bin", "npm")).pipe(Effect.orElseSucceed(() => false)))
+    npmPrefix && (yield* fs.exists(path.join(npmPrefix, "bin", "npm")).pipe(Effect.orElseSucceed(() => false)))
       ? path.join(npmPrefix, "bin", "npm")
       : "npm"
 
