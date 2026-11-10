@@ -50,7 +50,7 @@ export const Plugin = define({
         ConfigProvider.Info,
         {
           readonly providerID: string
-          readonly models: ReadonlyMap<string, { readonly inherit: boolean; readonly base?: Model.Info }>
+          readonly models: ReadonlyMap<string, Definition>
         }
       >(),
     }
@@ -59,13 +59,18 @@ export const Plugin = define({
       for (const [id, item] of configuredProviders(loaded.entries)) {
         const providerID = id
         const { current, source, changed } = overlayProvider(providers, providerID, item)
-        const definitions = new Map<string, { readonly inherit: boolean; readonly base?: Model.Info }>()
+        const definitions = new Map<string, Definition>()
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const base = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)
           const inherit = changed || !current?.models.has(id)
           // Bind the source at this point in the provider fold. Later source edits/removal
           // and its credential availability must not change an already-defined alias.
-          definitions.set(id, { inherit, base: base && structuredClone(base) })
+          definitions.set(id, {
+            inherit,
+            base: base && structuredClone(base),
+            // The package the base's variants are spelled for: its own, or the one it inherits from its provider.
+            basePackage: base?.package ?? source?.provider.package,
+          })
           if (!inherit) continue
           providers.models.update(providerID, id, (model) => {
             if (base) Object.assign(model, structuredClone(base))
@@ -117,10 +122,11 @@ export const Plugin = define({
           )
           // Inherited variants are spelled for the base model's package, so a package override needs fresh ones.
           // A base without variants has no reasoning support to respell.
+          const providerPackage = models.provider.get(providerID)?.provider.package
           const repackaged =
             source?.base !== undefined &&
             source.base.variants.length > 0 &&
-            models.get(providerID, id)?.package !== source.base.package
+            (models.get(providerID, id)?.package ?? providerPackage) !== source.basePackage
           if (
             config.variants === undefined &&
             config.capabilities?.reasoning === undefined &&
@@ -140,6 +146,8 @@ export const Plugin = define({
     })
   }),
 })
+
+type Definition = { readonly inherit: boolean; readonly base?: Model.Info; readonly basePackage?: string }
 
 // Integration documents are left out: their providers authenticate with the integration's connection, so they add no
 // integration or method, and the integration's own plugin applies them earlier in the provider chain (`integrate`).

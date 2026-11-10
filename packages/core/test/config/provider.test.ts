@@ -919,6 +919,43 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("respells inherited variants when a canonical provider changes the package", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const google = Provider.ID.make("google")
+      const modelID = Model.ID.make("gemini-4-argon")
+      yield* providers.transform((editor) => {
+        editor.update(google, (provider) => {
+          provider.package = "@opencode/ai/providers/google"
+        })
+        editor.models.update(google, modelID, (model) => {
+          model.variants = [{ id: Model.VariantID.make("high"), settings: { thinkingConfig: { thinkingLevel: "high" } } }]
+        })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              "google-ix": {
+                canonical: "google",
+                package: "@opencode/ai/providers/google/interactions",
+                models: { [modelID]: {} },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const model = required(yield* models.get(Provider.ID.make("google-ix"), modelID))
+      expect(model.variants.find((variant) => variant.id === "high")).toEqual({
+        id: Model.VariantID.make("high"),
+        settings: { thinkingLevel: "high", thinkingSummaries: "auto" },
+      })
+    }),
+  )
+
   it.effect("keeps a moved catalog model without reasoning variants free of variants", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
