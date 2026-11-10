@@ -342,6 +342,16 @@ fn plugin_manager_matches_typescript() {
     assert_dialog(&app, "E.18b/plugins-internal", "Plugins");
 }
 
+#[test]
+fn plugin_manager_reads_the_active_location() {
+    let app = TestApp::new(100, 30);
+    let (mounted, _) = plugin_manager(&app, json!({}));
+    opencode_tui::features::location::navigate_home(&mounted.tui, Some(opencode_store::Location::new("/tmp/other")));
+    opencode_tui::dialogs::plugins::show(&mounted.tui);
+    app.wait_until(WAIT, || mounted.requests("/api/plugin").len() == 2);
+    assert_eq!(mounted.requests("/api/plugin")[1], "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fother");
+}
+
 // Expected: the plugin manager and the diff viewer are host entries among the built-ins in TS order. Disabling the
 // viewer takes `diff.open` away; enabling it brings it back, and its route shows the viewer, not the missing route.
 #[test]

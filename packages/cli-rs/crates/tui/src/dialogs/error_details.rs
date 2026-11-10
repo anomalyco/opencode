@@ -12,7 +12,6 @@ use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::prelude::*;
 
 use crate::app::Tui;
-use crate::routes::Route;
 
 /// `DialogErrorDetails` props.
 pub struct Props {
@@ -58,11 +57,16 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
             let prompt = prompt.clone();
             tui.app.defer(bind!(tui, |tui, _| {
                 tui.dialogs.clear();
-                // `route.navigate({ type: "home", prompt })`: the new home prompt takes the text.
-                tui.navigate(Route::Home);
-                if let Some(textarea) = tui.textarea.borrow().as_ref() {
-                    textarea.set_text(&prompt);
-                    textarea.set_cursor_offset(u32::MAX);
+                // `route.navigate({ type: "home", location: location.ref, prompt })`: the new home prompt is replaced by
+                // the text, as `composer.set` replaces a restored draft.
+                let location = crate::features::location::current(&tui);
+                crate::features::location::navigate_home(&tui, location);
+                let composer = tui.prompt.current.borrow().upgrade();
+                if let Some(composer) = composer {
+                    let mut value = opencode_local::jsonl::empty_prompt();
+                    value["text"] = serde_json::Value::String(prompt);
+                    composer.restore(value);
+                    composer.textarea.set_cursor_offset(u32::MAX);
                 }
             }));
         }))

@@ -318,6 +318,22 @@ fn open_dialog_matches_typescript() {
 }
 
 #[test]
+fn session_list_and_open_read_the_home_location_not_the_launch_directory() {
+    let kit = Kit::new(Mode::List);
+    opencode_tui::features::location::navigate_home(&kit.tui, Some(opencode_store::Location::new("/tmp/other")));
+    kit.clear_log();
+    kit.open_list();
+    kit.wait_gone("Loading");
+    assert_eq!(kit.dialog_reads()[0], "/api/location?location%5Bdirectory%5D=%2Ftmp%2Fother");
+    kit.app.press("escape");
+    kit.clear_log();
+    kit.app.press("ctrl+o");
+    kit.wait_gone("Refreshing");
+    let reads = kit.dialog_reads();
+    assert!(reads.contains(&"/api/location?location%5Bdirectory%5D=%2Ftmp%2Fother".to_owned()), "{reads:?}");
+}
+
+#[test]
 fn session_list_reads_the_scoped_list_then_all_projects_and_saves_the_scope() {
     let kit = Kit::new(Mode::List);
     kit.clear_log();
