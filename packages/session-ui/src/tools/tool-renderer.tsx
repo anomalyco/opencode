@@ -264,6 +264,7 @@ export function taskAgentName(raw: string | undefined, list?: readonly { name: s
 
 const webSearchProviderNames = new Map([
   ["tinyfish", "TinyFish"],
+  ["youcom", "You.com"],
   ["opencode", "OpenCode"],
 ])
 
