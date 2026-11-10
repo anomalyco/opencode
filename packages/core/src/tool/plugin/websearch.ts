@@ -68,8 +68,8 @@ export const Plugin = {
                       Effect.gen(function* () {
                         if (yield* websearch.default()) return
                         const providers = (yield* ctx.websearch.providers()).data
-                        const defaultProvider = providers[0]
-                        if (!defaultProvider) return yield* new WebSearch.ProviderRequiredError()
+                        const randomProviders = yield* websearch.randomProviders()
+                        if (!providers[0]) return yield* new WebSearch.ProviderRequiredError()
                         const response = yield* forms.ask({
                           sessionID: context.sessionID,
                           title: "Web Search",
@@ -82,10 +82,14 @@ export const Plugin = {
                               required: true,
                               custom: false,
                               options: [
-                                {
-                                  value: "allow",
-                                  label: `Allow search via ${providers.map((provider) => provider.name).join(", ")}`,
-                                },
+                                ...(randomProviders.length
+                                  ? [
+                                      {
+                                        value: "allow",
+                                        label: `Allow search via ${randomProviders.map((provider) => provider.name).join(", ")}`,
+                                      },
+                                    ]
+                                  : []),
                                 {
                                   value: "choose",
                                   label: "Choose another provider",

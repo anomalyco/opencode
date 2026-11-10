@@ -45,7 +45,6 @@ describe("built-in web search providers", () => {
     WebSearchFirecrawl.Plugin,
     WebSearchTavily.Plugin,
     WebSearchTinyFish.Plugin,
-    WebSearchYouCom.Plugin,
   ].forEach((plugin) => {
     it.effect(`releases rate-limited HTTP requests for ${plugin.id} before caching their errors`, () =>
       Effect.gen(function* () {
@@ -439,6 +438,52 @@ describe("built-in web search providers", () => {
         },
       })
       expect(requests[0]?.headers.authorization).toBeUndefined()
+    }),
+  )
+
+  it.effect("releases rate-limited You.com HTTP requests", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture("Rate limited", 429)
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchYouCom.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      expect(
+        yield* websearch.query({ query: "limited", providerID: WebSearch.ID.make("youcom") }).pipe(Effect.flip),
+      ).toBeInstanceOf(WebSearch.RequestError)
+      expect(signals).toHaveLength(1)
+      expect(signals[0]?.aborted).toBe(true)
+    }),
+  )
+
+  it.effect("keeps You.com out of random selection but runs it when chosen", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      const context = host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) })
+      yield* WebSearchYouCom.Plugin.effect(context)
+
+      expect(yield* websearch.providers()).toContainEqual({ id: WebSearch.ID.make("youcom"), name: "You.com" })
+      yield* websearch.select("random")
+      expect((yield* websearch.query({ query: "random" }).pipe(Effect.flip))._tag).toBe("WebSearch.ProviderRequired")
+      expect(requests).toHaveLength(0)
+
+      yield* WebSearchExa.Plugin.effect(context)
+      expect((yield* websearch.query({ query: "random" })).providerID).toBe(WebSearch.ID.make("exa"))
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "{}" }],
+            structuredContent: { results: { web: [{ url: "https://effect.website" }] }, metadata: {} },
+          },
+        }),
+      )
+      yield* websearch.select(WebSearch.ID.make("youcom"))
+      expect((yield* websearch.query({ query: "chosen" })).providerID).toBe(WebSearch.ID.make("youcom"))
+      expect(requests[0]?.url).toBe(WebSearchYouCom.keylessEndpoint)
     }),
   )
 
