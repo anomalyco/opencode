@@ -518,6 +518,18 @@ fn pair_links_skip_server_urls_with_non_ascii_hosts() {
     assert_eq!(value.localhost, None);
 }
 
+#[test]
+fn integration_links_open_only_on_the_web() {
+    let app = TestApp::new(80, 24);
+    let tui = support::mount_empty(&app, Info::default(), None);
+    let capture = opencode_tui::features::links::testing::capture();
+    let open = tui.local.open_url.borrow().clone();
+    assert!(open("file:///etc/passwd").is_err());
+    assert!(open("-a Calculator").is_err());
+    assert_eq!(open("https://example.com/?a=1&b=%PATH%"), Ok(()));
+    assert_eq!(*capture.0.opened.borrow(), ["https://example.com/?a=1&b=%PATH%"]);
+}
+
 // Highlights --------------------------------------------------------------------------------------------------
 
 fn release_highlights() -> Vec<Highlight> {
