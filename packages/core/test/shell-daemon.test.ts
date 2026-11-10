@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { existsSync, readdirSync, realpathSync } from "node:fs"
 import { mkdir, rm, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { Effect, Layer } from "effect"
+import { Context, Effect, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { PersistentPty } from "@opencode/core/persistent-pty"
@@ -11,6 +11,7 @@ import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
+import { Bus } from "@opencode/core/bus"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -403,7 +404,40 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  test("the sweep keeps a running command's file and forgets a finished one before deleting its file", () =>
+  test("finishes taking a Location's commands back even if the call that started it is interrupted", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      const created = yield* env.withShell(env.directory, (shell) =>
+        shell.create({ shell: "/bin/sh", command: "running" }),
+      )
+      // A new server, whose first request for the Location is interrupted while the daemon is slow to list.
+      const server = Context.get(
+        yield* Layer.build(
+          AppNodeBuilder.build(LayerNode.group([Shell.daemonNode, Bus.node]), [
+            Global.node.replace(env.global),
+            PersistentPty.node.replace(Layer.succeed(PersistentPty.Service, env.pty)),
+          ]),
+        ),
+        Shell.Daemon,
+      )
+      const place = location(Location.Ref.make({ directory: AbsolutePath.make(env.directory) }))
+      let release = () => {}
+      env.daemon.holdList.until = new Promise<void>((resolve) => (release = resolve))
+      const lists = () => env.daemon.ops.filter((op) => op === "list").length
+      const before = lists()
+      const first = yield* server.at(place).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* until(() => lists() > before)
+      const interrupting = yield* Fiber.interrupt(first).pipe(Effect.forkChild({ startImmediately: true }))
+      env.daemon.holdList.until = undefined
+      release()
+      yield* Fiber.join(interrupting)
+      // Recovery ran to the end, and is not run again.
+      const runs = yield* server.at(place)
+      expect(runs.list().map((run) => run.info.id)).toEqual([created.id])
+      expect(lists()).toBe(before + 1)
+    }))
+
+  test("the sweep keeps a running command's file, and deletes a finished one's file and forgets it", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       const ids = yield* env.withShell(env.directory, (shell) =>
