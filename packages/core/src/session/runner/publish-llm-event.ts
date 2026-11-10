@@ -287,11 +287,12 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     readonly name: string
     readonly providerExecuted?: boolean
   }) {
-    if (tools.has(event.id)) {
-      // A repeated content_block_start for an already-open id is a provider glitch, not a fatal
-      // stream error: keep the existing call and let the following deltas continue into it.
+    const existing = tools.get(event.id)
+    if (existing) {
+      if (existing.name !== event.name || !toolInput.has(event.id))
+        return yield* Effect.die(new Error(`Duplicate tool input start: ${event.id}`))
       yield* Effect.logWarning(`Ignoring duplicate tool input start: ${event.id}`)
-      return tools.get(event.id)!
+      return existing
     }
     yield* startAssistant()
     const tool: ToolState = {
