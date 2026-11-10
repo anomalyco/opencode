@@ -407,6 +407,22 @@ export function Session(props: {
     })
   }
 
+  // The selected message is the navigation base only until the reader scrolls. A pending first jump
+  // is cancelled the same way a wheel scroll did before. Clearing the message lets the next jump fall
+  // back to scrollTop; keep the slack until removing it cannot clamp the viewport.
+  const releaseNavigation = () => {
+    if (firstJump()) return clearMessageNavigation()
+    setNavigationMessage(undefined)
+    if (!navigationSlack()) return
+
+    afterLayout(() => {
+      if (navigationMessage() || !navigationSlack() || !scroll || scroll.isDestroyed) return
+      const max = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+      const naturalMax = Math.max(0, max - navigationSlack())
+      if (scroll.scrollTop <= naturalMax || scroll.scrollTop >= max - 1) setNavigationSlack(0)
+    })
+  }
+
   // Pin an existing row before publication. Total height also counts streamed output below the
   // reader, which must not move their viewport when it arrives alongside the older rows.
   const pinAbove = () => {
@@ -1529,6 +1545,19 @@ export function Session(props: {
                   props.scrollRef?.(r)
                   scroll.verticalScrollBar.on("change", updateAwayFromBottom)
                 }}
+                onMouseDown={(event) => {
+                  // A scrollbar press does not produce onMouseScroll, so release here too.
+                  if (event.button !== 0) return
+                  const bar = scroll.verticalScrollBar
+                  if (
+                    bar.visible &&
+                    event.x >= bar.x &&
+                    event.x < bar.x + bar.width &&
+                    event.y >= bar.y &&
+                    event.y < bar.y + bar.height
+                  )
+                    releaseNavigation()
+                }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
                 }}
@@ -1546,6 +1575,8 @@ export function Session(props: {
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
                   if (firstJump()) clearMessageNavigation()
+                  else if (event.scroll?.direction === "up" || event.scroll?.direction === "down")
+                    releaseNavigation()
                   if (event.scroll?.direction === "up" && revealOlderRows()) return
                   if (event.scroll?.direction === "down" && revealNewerRows()) return
                   updateAwayFromBottom()
