@@ -63,6 +63,7 @@ const KEYS = [
       ["r", "Reset zoom"],
       ["drag", "Pan a zoomed picture"],
       ["i", "Details"],
+      ["c", "Copy path"],
       ["?", "Keys"],
     ],
   },
@@ -288,6 +289,7 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
         zoom((_, view) => ({ ...view, zoom: target }), target === 1 ? "Fit" : target === fill ? "Fill" : "Actual size")
       }),
       command("i", "Media details", () => setInfo((value) => !value)),
+      command("c", "Copy path", () => (mediaPath(current()) ? fileActions.copy() : flash(() => "No file to copy"))),
       command("?,shift+?,shift+/", "Keys", () => {
         setKeyScroll(0)
         setKeys((value) => !value)

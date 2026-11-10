@@ -69,13 +69,18 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
   }
   let contexts: ReturnType<typeof probe> | undefined
   const [mounted, setMounted] = createSignal(true)
+  const copied: string[] = []
+  const clipboard = {
+    read: async () => undefined,
+    write: async (text: string) => void copied.push(text),
+  }
   function Probe() {
     contexts = probe()
     return null
   }
   const app = await testRender(
     () => (
-      <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
+      <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }} clipboard={clipboard}>
         <ConfigProvider config={createTuiResolvedConfig(info)} service={service}>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
             <Keymap.Provider>
@@ -127,6 +132,8 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
     press,
     find,
     directory: path.join(temporary.path, "media"),
+    /** The text written to the clipboard, oldest first. */
+    copied,
     /** Unmounts the media provider and everything inside it. */
     unmount: () => setMounted(false),
     setRichMedia: (enabled: boolean) =>
