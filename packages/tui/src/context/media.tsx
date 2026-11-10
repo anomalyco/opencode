@@ -49,6 +49,7 @@ function init(directory: string) {
   const [pip, setPip] = createSignal<MediaPipRequest>()
   const [shown, setShown] = createSignal<ReadonlySet<string>>(new Set(), { equals: sameKeys })
   const [open, setOpen] = createSignal<ReadonlySet<string>>(new Set(), { equals: sameKeys })
+  const [durations, setDurations] = createSignal<ReadonlyMap<string, number>>(new Map())
   const read = () => {
     const resolution = renderer.resolution
     const protocol = resolveImageRenderProtocol("auto", renderer.capabilities, resolution !== null)
@@ -231,6 +232,12 @@ function init(directory: string) {
      * scrolling back and forth opens no player again. Under the viewer, tiles only keep the players they had.
      */
     posterOpen: (key: string) => open().has(key),
+    /** The duration of a video some player has opened, so a filmstrip card can show it without a decoder of its own. */
+    duration: (item: MediaItem) => durations().get(item.path ?? item.uri),
+    noteDuration(item: MediaItem, seconds: number) {
+      const key = item.path ?? item.uri
+      if (durations().get(key) !== seconds) setDurations((value) => new Map(value).set(key, seconds))
+    },
     pip,
     openPip: (item: MediaItem, playback?: MediaPlayback) => setPip({ item, ...playback }),
     closePip: () => setPip(undefined),

@@ -199,10 +199,18 @@ async function openNamedVideo(app: App, name: string) {
     .filter((tile) => tile.y > y)
     .toSorted((a, b) => a.y - b.y)[0]!
   await app.mockMouse.click(tile.x + 1, tile.y + 1)
-  const header = await app.waitForFrame((frame) => frame.includes("2 / 4"))
-  expect(header.split("\n")[0]).toContain(name)
+  await app.waitForFrame((frame) => frame.includes("Video 2 of 4"))
+  await expectViewerShows(app, name)
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("2 / 4"))
+  await app.waitForFrame((frame) => !frame.includes("Video 2 of 4"))
+}
+
+/** The viewer's details name `name`; closing them leaves the viewer open. */
+async function expectViewerShows(app: App, name: string) {
+  app.mockInput.pressKey("i")
+  await app.waitForFrame((frame) => frame.includes(`Name        ${name}`))
+  app.mockInput.pressEscape()
+  await app.waitForFrame((frame) => !frame.includes(`Name        ${name}`))
 }
 
 test("against a remote server, media shows as tiles that open the viewer, and a pasted video drafts as its path", async () => {
@@ -226,19 +234,19 @@ test("against a remote server, media shows as tiles that open the viewer, and a 
   // "+3 more" opens the first hidden tool file, which is the user's video again, where it first appears. The open
   // viewer keeps keys from the prompt.
   await app.click("+3 more")
-  const repeated = await app.waitForFrame((frame) => frame.includes("1 / 4"))
-  expect(repeated.split("\n")[0]).toContain("clip.mp4")
+  await app.waitForFrame((frame) => frame.includes("Video 1 of 4"))
+  await expectViewerShows(app, "clip.mp4")
   await app.mockInput.typeText("abc")
   expect(app.composer()).toBe("")
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("1 / 4"))
+  await app.waitForFrame((frame) => !frame.includes("Video 1 of 4"))
 
   // The palette opens it at the newest item. The palette gives focus back on a timer, which the prompt must refuse.
   await app.palette("View media")
-  await app.waitForFrame((frame) => frame.includes("4 / 4"))
+  await app.waitForFrame((frame) => frame.includes("4 of 4"))
   expect(app.textarea()?.focusable).toBe(false)
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("4 / 4"))
+  await app.waitForFrame((frame) => !frame.includes("4 of 4"))
 
   // The draft plays the pasted file itself, which pasting did not read, and attaching an image keeps its tile.
   app.mockInput.pasteBracketedText(videoFixture)
@@ -281,8 +289,7 @@ test("against a remote server, media shows as tiles that open the viewer, and a 
   app.mockInput.pasteBracketedText(imageFixture)
   await app.until(() => app.composer().includes("[Image 1]"))
   await app.palette("View media attachments")
-  const viewer = await app.waitForFrame((frame) => frame.split("\n")[0]!.includes("image.png"))
-  expect(viewer.split("\n")[0]).not.toContain(" / ")
+  await app.waitForFrame((frame) => frame.includes("Image 1 of 1"))
   app.mockInput.pressEscape()
 
   // Nor does the server get the uri, which would name this terminal's file.
