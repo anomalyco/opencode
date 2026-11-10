@@ -95,6 +95,7 @@ import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns, useRichMedia } from "../../config"
 import { useMedia } from "../../context/media"
 import { serverFileExists } from "../../component/media/file"
+import { viewerMedia } from "../../component/media/model"
 import { useMediaSources } from "../../component/media/source"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
@@ -1440,7 +1441,8 @@ export function Session(props: {
       enabled: gallery().length > 0,
       run: () => {
         dialog.clear()
-        media.openViewer(gallery(), gallery().length - 1)
+        const view = viewerMedia(gallery())
+        media.openViewer(view.items, view.index)
       },
     },
     {

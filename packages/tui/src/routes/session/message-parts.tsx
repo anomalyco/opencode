@@ -6,7 +6,7 @@ import type {
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
 } from "@opencode/client"
-import type { MediaItem } from "../../component/media/model"
+import { viewerMedia, type MediaItem } from "../../component/media/model"
 import { MediaStrip } from "../../component/media/strip"
 import { Spinner } from "../../component/spinner"
 import { useMedia } from "../../context/media"
@@ -224,7 +224,10 @@ export function SessionMedia(props: { match: (item: MediaItem) => boolean; paddi
           // The left border of a user message takes one more cell.
           width={ctx.width - paddingLeft() - 3}
           height={Math.max(4, Math.min(8, Math.floor(ctx.terminal.height / 4)))}
-          onOpen={(index) => media.openViewer(gallery(), gallery().indexOf(items()[index]!))}
+          onOpen={(index) => {
+            const view = viewerMedia(gallery(), items()[index])
+            media.openViewer(view.items, view.index)
+          }}
         />
       </box>
     </Show>

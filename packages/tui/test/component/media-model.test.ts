@@ -1,6 +1,13 @@
 import type { SessionMessageInfo, SessionMessageToolStateCompleted } from "@opencode/client"
 import { expect, test } from "bun:test"
-import { collectSessionMedia, isPlayableVideo, mediaKind, mentionedVideos } from "../../src/component/media/model"
+import {
+  collectSessionMedia,
+  isPlayableVideo,
+  mediaKind,
+  mentionedVideos,
+  viewerMedia,
+  type MediaItem,
+} from "../../src/component/media/model"
 import { formatDuration, posterTime } from "../../src/component/media/tile"
 import {
   actualZoom,
@@ -193,6 +200,23 @@ test("collects the existing videos a finished reply names, in order with its too
   expect(asked).toEqual(["/work/gone.mp4", "/work/out/a.mp4", "/work/b.mp4", "/work/c\\d.mp4"])
   // Without existence checks, text adds nothing.
   expect(collectSessionMedia([reply("done", 2)], location).map((item) => item.id)).toEqual(["done:tool:call:0"])
+})
+
+test("the viewer shows each file once, at its first appearance", () => {
+  const video = (id: string, uri: string): MediaItem => ({ id, kind: "video", mime: "video/mp4", uri })
+  // The user attaches a clip; a reply names the same file, encoded differently and with a Location.
+  const attached = video("user:file:0", "file:///work/my%20clip.mp4")
+  const image: MediaItem = { id: "tool:0", kind: "image", mime: "image/png", uri: "media:abc" }
+  const named = { ...video("reply:text:0:0", "file:///work/my clip.mp4"), location: { directory: "/work" } }
+  const other = video("reply:text:0:1", "file:///work/out/test.mp4")
+  const again = { ...image, id: "tool:1" }
+  const gallery = [attached, image, named, other, again]
+
+  expect(viewerMedia(gallery, named)).toEqual({ items: [attached, image, other], index: 0 })
+  expect(viewerMedia(gallery, other).index).toBe(2)
+  expect(viewerMedia(gallery, again).index).toBe(1)
+  // Without an item, the viewer opens at the newest.
+  expect(viewerMedia(gallery).index).toBe(2)
 })
 
 test.each([

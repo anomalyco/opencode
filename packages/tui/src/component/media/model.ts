@@ -229,6 +229,33 @@ function fileURL(file: string) {
   return url.href
 }
 
+/**
+ * The viewer's items: each file once, at its first appearance, as when a reply names the video the user attached.
+ * `index` is where `item`'s file sits, or the last item without one.
+ */
+export function viewerMedia(items: readonly MediaItem[], item?: MediaItem) {
+  const seen = new Map<string, number>()
+  const unique = items.filter((entry) => {
+    const key = mediaSource(entry)
+    if (seen.has(key)) return false
+    seen.set(key, seen.size)
+    return true
+  })
+  return { items: unique, index: item ? (seen.get(mediaSource(item)) ?? 0) : unique.length - 1 }
+}
+
+// A file: URL names a path on the session's server whatever Location or encoding it came with; other URIs, such as
+// media: refs and data: URIs, name their content.
+function mediaSource(item: MediaItem) {
+  if (!/^file:/i.test(item.uri)) return item.uri
+  const pathname = URL.parse(item.uri)?.pathname ?? item.uri
+  try {
+    return decodeURIComponent(pathname)
+  } catch {
+    return pathname
+  }
+}
+
 function item(id: string, mime: string, uri: string, name?: string): MediaItem[] {
   const kind = mediaKind(mime, name)
   return kind === "other" ? [] : [{ id, kind, mime, uri, ...(name ? { name } : {}) }]
