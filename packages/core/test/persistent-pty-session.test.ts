@@ -122,6 +122,34 @@ describe.skipIf(process.platform === "win32")("PersistentPty pipe processes", ()
     metadata: { id: "sh_test", command: "echo hi" },
   }
 
+  it.live("knows a handoff is prepared until a shutdown or until its ticket expires", () =>
+    Effect.gen(function* () {
+      const daemon = yield* fakeDaemon()
+      yield* Effect.gen(function* () {
+        const pty = yield* PersistentPty.Service
+        expect(pty.handoffPrepared()).toBe(false)
+        yield* pty.createPipe(input)
+        expect(yield* pty.handoff()).not.toBeNull()
+        expect(pty.handoffPrepared()).toBe(true)
+        // Abandoned by a shutdown.
+        yield* pty.shutdown()
+        expect(pty.handoffPrepared()).toBe(false)
+      }).pipe(Effect.provide(layer(daemon)))
+
+      // Abandoned by letting the ticket expire.
+      const expiring = yield* fakeDaemon()
+      expiring.handoffTTL.ms = 50
+      yield* Effect.gen(function* () {
+        const pty = yield* PersistentPty.Service
+        yield* pty.createPipe(input)
+        expect(yield* pty.handoff()).not.toBeNull()
+        expect(pty.handoffPrepared()).toBe(true)
+        yield* Effect.sleep(80)
+        expect(pty.handoffPrepared()).toBe(false)
+      }).pipe(Effect.provide(layer(expiring)))
+    }),
+  )
+
   it.live("creates, inspects, signals and waits for a pipe process", () =>
     Effect.gen(function* () {
       const daemon = yield* fakeDaemon()
