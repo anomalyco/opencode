@@ -11,7 +11,7 @@ import { appendText } from "../src/util/persistence"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
 import { waitForHighlightedFrame } from "./fixture/frame"
-import { descendants, imageFixture, videoFixture } from "./fixture/media"
+import { descendants, imageFixture, showsHeader, videoFixture } from "./fixture/media"
 import { directory, json } from "./fixture/tui-client"
 
 const videoBase64 = Buffer.from(await Bun.file(videoFixture).arrayBuffer()).toString("base64")
@@ -199,18 +199,9 @@ async function openNamedVideo(app: App, name: string) {
     .filter((tile) => tile.y > y)
     .toSorted((a, b) => a.y - b.y)[0]!
   await app.mockMouse.click(tile.x + 1, tile.y + 1)
-  await app.waitForFrame((frame) => frame.includes("Video 2 of 4"))
-  await expectViewerShows(app, name)
+  await app.waitForFrame((frame) => showsHeader(frame, name, "2 of 4"))
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("Video 2 of 4"))
-}
-
-/** The viewer's details name `name`; closing them leaves the viewer open. */
-async function expectViewerShows(app: App, name: string) {
-  app.mockInput.pressKey("i")
-  await app.waitForFrame((frame) => frame.includes(`Name        ${name}`))
-  app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes(`Name        ${name}`))
+  await app.waitForFrame((frame) => !showsHeader(frame, name, "2 of 4"))
 }
 
 test("against a remote server, media shows as tiles that open the viewer, and a pasted video drafts as its path", async () => {
@@ -234,12 +225,11 @@ test("against a remote server, media shows as tiles that open the viewer, and a 
   // "+3 more" opens the first hidden tool file, which is the user's video again, where it first appears. The open
   // viewer keeps keys from the prompt.
   await app.click("+3 more")
-  await app.waitForFrame((frame) => frame.includes("Video 1 of 4"))
-  await expectViewerShows(app, "clip.mp4")
+  await app.waitForFrame((frame) => showsHeader(frame, "clip.mp4", "1 of 4"))
   await app.mockInput.typeText("abc")
   expect(app.composer()).toBe("")
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("Video 1 of 4"))
+  await app.waitForFrame((frame) => !showsHeader(frame, "clip.mp4", "1 of 4"))
 
   // The palette opens it at the newest item. The palette gives focus back on a timer, which the prompt must refuse.
   await app.palette("View media")
@@ -289,7 +279,9 @@ test("against a remote server, media shows as tiles that open the viewer, and a 
   app.mockInput.pasteBracketedText(imageFixture)
   await app.until(() => app.composer().includes("[Image 1]"))
   await app.palette("View media attachments")
-  await app.waitForFrame((frame) => frame.includes("Image 1 of 1"))
+  // The oversize toast still covers the header's right side; a viewer of one item has no filmstrip, at 60 rows.
+  await app.waitForFrame((frame) => frame.split("\n").some((line) => line.trim().startsWith("image.png")))
+  expect(app.renderer.root.findDescendantById("media-viewer-filmstrip")).toBeUndefined()
   app.mockInput.pressEscape()
 
   // Nor does the server get the uri, which would name this terminal's file.

@@ -25,6 +25,21 @@ export const imageFixture = path.join(import.meta.dir, "media", "image.png")
 export function video(id: string, item?: Partial<MediaItem>): MediaItem {
   return { id, kind: "video", mime: "video/mp4", uri: "", name: `${id}.mp4`, path: videoFixture, ...item }
 }
+/** The viewer's header, its top line, as in `clip.mp4 … 2 of 4  esc`. A toast can cover its right end. */
+export function header(frame: string) {
+  return (
+    frame
+      .split("\n")
+      .find((line) => line.trim() !== "")
+      ?.trim() ?? ""
+  )
+}
+
+/** Whether the viewer's header in `frame` names `name` and shows `position`. */
+export function showsHeader(frame: string, name: string, position: string) {
+  return header(frame).startsWith(name) && header(frame).endsWith(`${position}  esc`)
+}
+
 export function image(id: string, item?: Partial<MediaItem>): MediaItem {
   return video(id, { kind: "image", mime: "image/png", name: `${id}.png`, path: imageFixture, ...item })
 }

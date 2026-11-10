@@ -427,13 +427,27 @@ function MediaViewer(props: { request: MediaViewerRequest }) {
         paddingRight={2}
         flexDirection="row"
         justifyContent="space-between"
+        gap={2}
       >
-        <text attributes={newDesigns() ? undefined : TextAttributes.BOLD} fg={header.text.base} selectable={false}>
-          {`${KIND[current().kind]} ${index() + 1} of ${items.length}`}
+        <text
+          attributes={newDesigns() ? undefined : TextAttributes.BOLD}
+          fg={header.text.base}
+          wrapMode="none"
+          truncate
+          flexShrink={1}
+          selectable={false}
+        >
+          {/* A pasted file's name can be its whole path; the details show that. */}
+          {current().name?.split(/[\\/]/).at(-1) || KIND[current().kind]}
         </text>
-        <text fg={header.text.muted} flexShrink={0} selectable={false} {...closeClick}>
-          esc
-        </text>
+        <box flexDirection="row" gap={2} flexShrink={0}>
+          <text fg={header.text.muted} selectable={false}>
+            {`${index() + 1} of ${items.length}`}
+          </text>
+          <text fg={header.text.muted} selectable={false} {...closeClick}>
+            esc
+          </text>
+        </box>
       </box>
       <box
         id="media-viewer-stage"
