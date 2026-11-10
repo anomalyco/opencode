@@ -16,6 +16,8 @@ import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
 const cacheKey = "models-dev:v2:catalog"
+// local-only: fetching needs an explicit URL; tests stand in a mocked default host.
+const mirror = "https://models.opencode.ai"
 const metaKey = `${cacheKey}:meta`
 
 test("normalizes permissive interleaved values to compatibility", () => {
@@ -201,7 +203,7 @@ const makeMockKV = (cache: MockCache) =>
     remove: (key) => Effect.sync(() => cache.values.delete(key)).pipe(Effect.asVoid),
   })
 
-const buildLayer = (state: Ref.Ref<MockState>, cache: MockCache, options: ModelsDev.Options = { fetch: false }) =>
+const buildLayer = (state: Ref.Ref<MockState>, cache: MockCache, options: ModelsDev.Options = { url: mirror, fetch: false }) =>
   // Layer.fresh is required because the ModelsDev implementation is a module-level Layer constant,
   // and Effect.provide uses a process-global MemoMap by default — without fresh,
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
@@ -749,7 +751,7 @@ describe("ModelsDev Service", () => {
       const cache = makeCache()
       writeCacheText(cache, "{")
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
-      const context = yield* Layer.build(buildLayer(state, cache, { fetch: true, snapshot: false }))
+      const context = yield* Layer.build(buildLayer(state, cache, { url: mirror, fetch: true, snapshot: false }))
       const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context))
       expect(result).toEqual(fixture2Snapshot)
       expect(cache.values.get(cacheKey)).toMatchObject({
@@ -767,7 +769,7 @@ describe("ModelsDev Service", () => {
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
       const layer = Layer.fresh(
         AppNodeBuilder.build(ModelsDev.node, [
-          ModelsDev.node.replace(ModelsDev.configured({ fetch: true, snapshot: false })),
+          ModelsDev.node.replace(ModelsDev.configured({ url: mirror, fetch: true, snapshot: false })),
           LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
           KV.node.replace(makeFailingWriteKV(cache)),
         ]),
@@ -780,16 +782,19 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.live("uses the default models URL when the configured URL is empty", () =>
+  // local-only: without a configured URL the catalog never reaches models.opencode.ai.
+  it.live("never fetches or refreshes without a configured URL", () =>
     Effect.gen(function* () {
       const cache = makeCache()
       const state = yield* Ref.make(initialState)
-      yield* ModelsDev.Service.use((service) => service.get()).pipe(
-        Effect.provide(buildLayer(state, cache, { url: "", fetch: true, snapshot: false })),
-      )
-      expect((yield* Ref.get(state)).calls[0]?.url).toBe(
-        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image",
-      )
+      const result = yield* ModelsDev.Service.use((service) =>
+        Effect.gen(function* () {
+          yield* service.refresh(true)
+          return yield* service.get()
+        }),
+      ).pipe(Effect.provide(buildLayer(state, cache, { url: "", fetch: true, snapshot: false })))
+      expect(result).toEqual([])
+      expect((yield* Ref.get(state)).calls).toEqual([])
     }),
   )
 
@@ -802,7 +807,7 @@ describe("ModelsDev Service", () => {
         return yield* Effect.all([svc.get(), svc.get(), svc.get(), svc.get(), svc.get()], {
           concurrency: "unbounded",
         })
-      }).pipe(Effect.provide(buildLayer(state, cache, { fetch: true, snapshot: false })))
+      }).pipe(Effect.provide(buildLayer(state, cache, { url: mirror, fetch: true, snapshot: false })))
       for (const result of results) expect(result).toEqual(fixtureSnapshot)
       expect((yield* Ref.get(state)).calls.length).toBe(1)
     }),

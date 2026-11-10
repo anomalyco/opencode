@@ -544,7 +544,9 @@ export const layer = (options?: Options) =>
       )
 
       const source = options?.url || defaultSource
-      const fetch = options?.fetch ?? true
+      // local-only: only fetch from an explicitly configured mirror (OPENCODE_MODELS_URL), never
+      // from models.opencode.ai, so a process started without the offline env vars stays offline.
+      const fetch = (options?.fetch ?? true) && !!options?.url
       const userAgent = App.useragent(app)
       const key = cacheKey(source)
       const metaKey = `${key}:meta`
@@ -658,6 +660,8 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+        // local-only: without a configured mirror there is nothing to refresh from.
+        if (!options?.url) return
         yield* lock
           .withPermit(
             Effect.gen(function* () {

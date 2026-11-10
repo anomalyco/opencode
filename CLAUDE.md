@@ -32,7 +32,7 @@ Die Regeln in `AGENTS.md` (Upstream) gelten weiterhin; dieser Abschnitt ergänzt
 
 | Bereich | Fundstelle | Hinweis |
 | --- | --- | --- |
-| Modellkatalog | `packages/core/src/models-dev.ts` (`defaultSource = https://models.opencode.ai`) | Gebündelter Snapshot `packages/core/src/models-dev/snapshot.txt` existiert; `OPENCODE_MODELS_PATH` / `OPENCODE_DISABLE_MODELS_FETCH` werden bereits ausgewertet → lokal als Default machen |
+| ✅ Modellkatalog | `packages/core/src/models-dev.ts` (`defaultSource = https://models.opencode.ai`) | **erledigt:** Abruf/Refresh nur noch, wenn `OPENCODE_MODELS_URL` gesetzt ist (lokaler Mirror); sonst gebündelter Snapshot bzw. `OPENCODE_MODELS_PATH`. Gilt auch ohne `OPENCODE_DISABLE_MODELS_FETCH` (z. B. Hintergrund-Server) |
 | Auto-Update / Upgrade | `packages/cli/src/services/updater.ts` (opencode.ai, formulae.brew.sh, Install-Script per curl) | `OPENCODE_DISABLE_AUTOUPDATE` existiert → Update-Mechanismus standardmäßig aus |
 | Console / Konto | `packages/core/src/console-access.ts` (`https://opencode.ai/console`) | deaktivieren |
 | Web-Tools | `packages/core/src/tool/plugin/webfetch.ts`, `websearch.ts` | abschalten oder auf lokale Quellen beschränken |
