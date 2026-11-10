@@ -543,3 +543,22 @@ fn a_panic_turns_the_fences_already_drawn_back_into_code() {
     h.wait_for("hello plugin");
     h.wait_gone("SAMPLE v1 HELLO PLUGIN");
 }
+
+// Expected (r2 review, bigboi-ui-5): a `plugins` change in `cli.json` reconciles the plugins while the TUI runs, as
+// TS does on `config.data.plugins`: a directive disables a running native plugin and a later change enables it again.
+#[test]
+fn a_plugins_change_in_cli_json_reconciles_while_running() {
+    let h = open(Route::Home, "", &build(""));
+    h.wait_for("sample plugin v1: home.footer");
+    let plugins = |value: Value| {
+        opencode_tui::dialogs::settings::update(&h.tui, move |config| {
+            opencode_tui::dialogs::settings::set_path(config, &["plugins"], value)
+        })
+    };
+    plugins(json!(["-sample"]));
+    assert_eq!(h.status(), opencode_plugin::Status::Inactive);
+    assert!(!h.app.render().text().contains("sample plugin v1"));
+    plugins(json!([]));
+    assert_eq!(h.status(), opencode_plugin::Status::Active);
+    h.wait_for("sample plugin v1: home.footer");
+}
