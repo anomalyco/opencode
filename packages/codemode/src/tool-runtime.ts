@@ -435,7 +435,8 @@ const toSearchEntry = <R>(visible: VisibleTool<R>, position: number): SearchEntr
       namespace: segments.slice(0, -1),
       name: [name],
       description: [visible.tool.description],
-      parameters: inputProperties(visible.tool).flatMap((property) => [property.name, property.description ?? ""]),
+      // Parameter names only: their descriptions are half of all words and didn't improve ranking.
+      parameters: inputProperties(visible.tool).map((property) => property.name),
       namespaceDescription: visible.namespaces.map((namespace) => namespace.description ?? ""),
     }),
     nameLength: splitWords(name).length,
