@@ -860,10 +860,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
-    "Group side tabs by project or show one list. Only applies to side tabs.",
-  "settings.experimental.row.recentSessions.title": "Recent sessions",
-  "settings.experimental.row.recentSessions.description":
-    "Replaces the left sidebar with pinned and recent sessions from every server. Not shown with top tabs.",
+    "Choose how sessions are listed in the sidebar. Only applies to side tabs.",
+  "settings.experimental.sidebarOrganize.recent": "Recent",
   "settings.experimental.sidebarOrganize.projects": "Projects",
   "settings.experimental.sidebarOrganize.list": "One list",
   "settings.experimental.sidebarOrganize.customize": "Customize",

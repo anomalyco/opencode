@@ -98,7 +98,6 @@ describe("settings schema", () => {
         newIcons: false,
         foldUserMessages: false,
         newQuestionUI: false,
-        recentSessions: false,
         sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
@@ -127,6 +126,15 @@ describe("settings schema", () => {
         interfaceEnabled: true,
       },
     })
+  })
+
+  test.each(["list", "projects", "recent"])("round trips saved side-tab organization %s", (mode) => {
+    const settings = decode({ general: { sidebarOrganize: mode } })
+    expect(decode(encode(settings)).general.sidebarOrganize).toBe(mode)
+  })
+
+  test("the retired Recent sessions switch does not opt into Recent organization", () => {
+    expect(decode({ general: { recentSessions: true } }).general.sidebarOrganize).toBe("list")
   })
 
   test("defaults invalid preferences locally while retaining valid siblings", () => {
