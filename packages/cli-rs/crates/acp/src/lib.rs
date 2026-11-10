@@ -117,7 +117,7 @@ async fn serve_stdio(
                 "incoming message exceeded the {} MiB limit",
                 limit / 1024 / 1024
             )),
-            Closed::Eof | Closed::Read(_) | Closed::Write(_) => None,
+            Closed::Eof | Closed::Batch | Closed::Read(_) | Closed::Write(_) => None,
         }),
         exited = server.wait() => Ok(Some(format!(
             "server exited unexpectedly ({})",
