@@ -128,6 +128,7 @@ pub fn run(input: Input) -> error::Result<()> {
         initial: RefCell::new(input.initial_input.clone()),
         waiting: RefCell::new(Vec::new()),
         stream: RefCell::new(None),
+        settle_after: RefCell::new(None),
         connected: RefCell::new(tokio::sync::watch::channel(false).1),
         resize: Cell::new(None),
         height_pending: Cell::new(false),
@@ -259,6 +260,8 @@ struct Mini {
     /// Prompts submitted before the session was ready.
     waiting: RefCell<Vec<RunPrompt>>,
     stream: RefCell<Option<tokio::task::JoinHandle<()>>>,
+    /// A settle that waits for the follow-up prompts to be admitted (`await admissions`).
+    settle_after: RefCell<Option<(String, std::time::Instant)>>,
     /// Whether the stream is connected, for a session wait that retries (`waitUntilConnected`).
     connected: RefCell<tokio::sync::watch::Receiver<bool>>,
     resize: Cell<Option<TimerId>>,
@@ -1048,7 +1051,7 @@ impl Mini {
                 let mini = self.clone();
                 self.app.defer(move |cx| mini.close(cx));
             }
-            Submitted::Admit(prompt, delivery) => self.admit(prompt, delivery),
+            Submitted::Admit => self.admit_next(),
             Submitted::Queued { first } => {
                 if first {
                     self.prompt.set_first(false);
@@ -1178,28 +1181,34 @@ impl Mini {
                     crate::prompt::api::admit(&client, &session.id, &prompt, delivery).await
                 }
             },
-            move |cx, result| match result {
-                Ok(()) if command => {
-                    mini.turn_summary(cx, started);
-                    mini.finish(cx);
-                }
-                Ok(()) => {
-                    mini.pending(&id, delivery, &sent);
-                    let output = mini
-                        .transcript
-                        .borrow_mut()
-                        .as_mut()
-                        .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files()))
-                        .unwrap_or_default();
-                    mini.output(cx, output);
-                    mini.settle(&session.id, started);
-                }
-                Err(error) => {
-                    if let Some(transcript) = mini.transcript.borrow_mut().as_mut() {
-                        transcript.end_wait();
+            move |cx, result| {
+                // The prompts submitted meanwhile follow this one to the server (`admission.resolve`). This runs
+                // before `finish`, which may start the next turn.
+                mini.queue.borrow_mut().first_admitted();
+                mini.admit_next();
+                match result {
+                    Ok(()) if command => {
+                        mini.turn_summary(cx, started);
+                        mini.finish(cx);
                     }
-                    mini.prompt_error(cx, &id, error);
-                    mini.finish(cx);
+                    Ok(()) => {
+                        mini.pending(&id, delivery, &sent);
+                        let output = mini
+                            .transcript
+                            .borrow_mut()
+                            .as_mut()
+                            .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files()))
+                            .unwrap_or_default();
+                        mini.output(cx, output);
+                        mini.settle(&session.id, started);
+                    }
+                    Err(error) => {
+                        if let Some(transcript) = mini.transcript.borrow_mut().as_mut() {
+                            transcript.end_wait();
+                        }
+                        mini.prompt_error(cx, &id, error);
+                        mini.finish(cx);
+                    }
                 }
             },
         );
@@ -1255,9 +1264,21 @@ impl Mini {
         }
     }
 
-    /// A prompt submitted while an ordinary turn runs goes to the inbox at once (`input.admit`).
-    fn admit(self: &Rc<Self>, prompt: RunPrompt, delivery: Delivery) {
+    /// Prompts submitted while an ordinary turn runs go to the inbox (`input.admit`) in the order they were
+    /// submitted: after the turn's own prompt, one at a time. Once the last is admitted, a settle that waited for
+    /// them runs.
+    fn admit_next(self: &Rc<Self>) {
+        let next = self.queue.borrow_mut().next_admission();
+        let Some((prompt, delivery)) = next else {
+            if self.queue.borrow().admissions_idle()
+                && let Some((session, started)) = self.settle_after.take()
+            {
+                self.settle(&session, started);
+            }
+            return;
+        };
         let Some(session) = self.session.borrow().clone() else {
+            self.queue.borrow_mut().admission_done();
             return;
         };
         let id = prompt.message_id.clone().unwrap_or_default();
@@ -1275,21 +1296,26 @@ impl Mini {
                 }
                 crate::prompt::api::admit(&client, &session.id, &prompt, delivery).await
             },
-            move |cx, result| match result {
-                Ok(()) => {
-                    // `session.command` answers without the inbox item; its event adds it.
-                    if !command {
-                        mini.pending(&id, delivery, &sent);
+            move |cx, result| {
+                mini.queue.borrow_mut().admission_done();
+                match result {
+                    Ok(()) => {
+                        // `session.command` answers without the inbox item; its event adds it.
+                        if !command {
+                            mini.pending(&id, delivery, &sent);
+                        }
+                        let output = mini
+                            .transcript
+                            .borrow_mut()
+                            .as_mut()
+                            .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files()))
+                            .unwrap_or_default();
+                        mini.output(cx, output);
                     }
-                    let output = mini
-                        .transcript
-                        .borrow_mut()
-                        .as_mut()
-                        .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files()))
-                        .unwrap_or_default();
-                    mini.output(cx, output);
+                    // A failed follow-up does not hold back the ones after it.
+                    Err(error) => mini.prompt_error(cx, &id, error),
                 }
-                Err(error) => mini.prompt_error(cx, &id, error),
+                mini.admit_next();
             },
         );
     }
@@ -1408,8 +1434,13 @@ impl Mini {
                     Err(error) => log::warn!("mini settle failed: {error}"),
                 }
                 mini.output(cx, output);
+                // Prompts admitted meanwhile: once every one reached the server, settle once more.
                 if mini.queue.borrow_mut().take_admissions() {
-                    mini.settle(&session, started);
+                    if mini.queue.borrow().admissions_idle() {
+                        mini.settle(&session, started);
+                    } else {
+                        mini.settle_after.replace(Some((session, started)));
+                    }
                     return;
                 }
                 let error = mini.transcript.borrow_mut().as_mut().and_then(Transcript::end_wait);
