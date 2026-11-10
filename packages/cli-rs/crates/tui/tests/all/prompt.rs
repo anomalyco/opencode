@@ -24,6 +24,8 @@ struct Fixture {
     seen: Seen,
     created: Arc<Mutex<Vec<String>>>,
     catalog: Arc<AtomicBool>,
+    /// The create answers 400 after its delay.
+    reject: Arc<AtomicBool>,
 }
 
 fn missing(id: &str) -> (u16, Value) {
@@ -92,12 +94,16 @@ impl Transport for Fixture {
             _ => support::not_found(),
         };
         let catalog = ["/api/agent", "/api/model"].contains(&path.as_str()).then(|| self.catalog.clone());
+        let reject = self.reject.load(Ordering::SeqCst);
         Box::pin(async move {
             while catalog.as_ref().is_some_and(|catalog| !catalog.load(Ordering::SeqCst)) {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
             if let Some((created, id)) = created {
                 tokio::time::sleep(Duration::from_millis(200)).await;
+                if reject {
+                    return Ok(support::respond(400, &json!({ "_tag": "BadRequest", "message": "Bad location" })));
+                }
                 created.lock().unwrap().push(id);
             }
             Ok(support::respond(status, &body))
@@ -114,6 +120,7 @@ struct Setup {
     seen: Seen,
     /// Lets the agent and model reads answer.
     catalog: Arc<AtomicBool>,
+    reject: Arc<AtomicBool>,
     _home: opencode_util::temp::TempDir,
 }
 
@@ -137,13 +144,15 @@ impl Setup {
     fn build(route: Route, home: opencode_util::temp::TempDir, catalog: bool) -> Self {
         let seen = Seen::default();
         let catalog = Arc::new(AtomicBool::new(catalog));
-        let fixture = Fixture { seen: seen.clone(), created: Arc::default(), catalog: catalog.clone() };
+        let reject = Arc::new(AtomicBool::new(false));
+        let fixture =
+            Fixture { seen: seen.clone(), created: Arc::default(), catalog: catalog.clone(), reject: reject.clone() };
         let deps = Deps {
             roots: support::roots(support::paths(home.path()), "latest"),
             route,
             ..support::deps(Arc::new(fixture))
         };
-        Self { harness: support::mount(90, 24, deps), seen, catalog, _home: home }
+        Self { harness: support::mount(90, 24, deps), seen, catalog, reject, _home: home }
     }
 
     /// Waits for the catalog, which shows the agent and model under the prompt.
@@ -405,6 +414,40 @@ fn home_prompt_creates_a_session_and_opens_it() {
     // The new session reads nothing before its create lands, so no "Session not found" toast.
     let toast = setup.app.wait_until(Duration::from_millis(500), || setup.app.text().contains("not found"));
     assert!(!toast, "{}", setup.app.text());
+}
+
+// `recover` (`prompt/index.tsx:1258-1277`): a failed create goes home with what was typed in the new session since,
+// and its tab closes.
+#[test]
+fn a_failed_create_goes_home_with_the_newer_text_and_closes_its_tab() {
+    let setup = Setup::new(Route::Home);
+    setup.reject.store(true, Ordering::SeqCst);
+    setup.ready();
+    setup.app.type_text("First try");
+    setup.app.press("return");
+    let created = setup.wait_request("POST", "/api/session", 1);
+    let id = SessionID(created[0]["id"].as_str().unwrap().to_owned());
+    let opened = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Session { id: id.clone() });
+    assert!(opened, "{:?}", setup.tui.route());
+    setup.app.type_text("follow up");
+    setup.wait_for("Creating a session failed");
+    let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
+    assert!(home, "{:?}", setup.tui.route());
+    let text = || setup.tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default();
+    assert!(setup.app.wait_until(WAIT, || text() == "follow up"), "{:?}", text());
+    let tabs = setup.tui.tabs.tabs(&setup.tui);
+    assert!(tabs.iter().all(|tab| tab.session_id != id.0), "{tabs:?}");
+}
+
+// `routes/session/index.tsx:350-370`: a session the server does not have closes its tab instead of staying blank.
+#[test]
+fn a_missing_session_closes_its_tab() {
+    let setup = Setup::new(support::session_route("ses_gone"));
+    setup.wait_for("Session not found: ses_gone");
+    let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
+    assert!(home, "{:?}", setup.tui.route());
+    let tabs = setup.tui.tabs.tabs(&setup.tui);
+    assert!(tabs.iter().all(|tab| tab.session_id != "ses_gone"), "{tabs:?}");
 }
 
 #[test]
