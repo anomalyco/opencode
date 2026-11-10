@@ -100,6 +100,52 @@ describe("history reconciliation", () => {
     expect(text.some((entry) => entry.includes("The value is now B."))).toBe(true)
   })
 
+  test("consecutive keyed updates at one boundary are caught up together, in order", () => {
+    const synced = [...past, user("Start"), assistant("First answer")]
+    const saved = { claudeSessionID: "claude-a", history: Fingerprint.groups(synced) }
+    // Two instruction updates land at the same step boundary before the next question arrives.
+    const raw: LanguageModelV3Prompt = [
+      ...synced,
+      { role: "system", content: "The value is now B." },
+      { role: "system", content: "Also keep answers terse." },
+      user("What is the value?"),
+    ]
+    const lifted = ConvertToClaudeMessage.liftInstructionUpdates(raw)
+    const decision = SyncDecision.decide(lifted, saved)
+    expect(decision).toEqual({ kind: "continue", start: 4 })
+    const text = CatchUp.content(lifted, decision.start)
+      .filter((block) => block.type === "text")
+      .map((block) => (block as { text: string }).text)
+      .join("\n")
+    // Both updates reach Claude, in the order OpenCode appended them, ahead of the question.
+    const first = text.indexOf("The value is now B.")
+    const second = text.indexOf("Also keep answers terse.")
+    expect(first).toBeGreaterThanOrEqual(0)
+    expect(second).toBeGreaterThan(first)
+    expect(text).toContain("What is the value?")
+  })
+
+  test("an update synced on an earlier turn is not resent with the next question", () => {
+    // The update already rode along on the previous request, so it sits inside the saved checkpoint.
+    const synced = ConvertToClaudeMessage.liftInstructionUpdates([
+      ...past,
+      user("Start"),
+      assistant("First answer"),
+      { role: "system", content: "The value is now B." },
+      user("What is the value?"),
+      assistant("It is B."),
+    ])
+    const saved = { claudeSessionID: "claude-a", history: Fingerprint.groups(synced) }
+    // A fresh question arrives with no new instruction update behind it.
+    const next = ConvertToClaudeMessage.liftInstructionUpdates([...synced, user("And the value before that?")])
+    const decision = SyncDecision.decide(next, saved)
+    // Only the new question is outstanding; the stale update stays below the checkpoint.
+    expect(decision).toEqual({ kind: "continue", start: next.length - 1 })
+    const text = JSON.stringify(CatchUp.content(next, decision.start))
+    expect(text).toContain("And the value before that?")
+    expect(text).not.toContain("The value is now B.")
+  })
+
   test("ignores thinking, metadata and reordered user notes, but notices changed visible text", () => {
     const original: LanguageModelV3Prompt = [user("Plan reminder"), ...past]
     const changed: LanguageModelV3Prompt = [

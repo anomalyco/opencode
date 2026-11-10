@@ -107,6 +107,30 @@ describe("Claude conversions", () => {
     expect(ConvertToClaudeMessage.liftInstructionUpdates(prompt)).toEqual(prompt)
   })
 
+  test("lifts several consecutive instruction updates and keeps the leading system prompt", () => {
+    const prompt: LanguageModelV3Prompt = [
+      { role: "system", content: "Base prompt" },
+      { role: "system", content: "Initial instructions" },
+      { role: "user", content: [{ type: "text", text: "Hi" }] },
+      { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+      { role: "system", content: "The value is now B." },
+      { role: "system", content: "Keep answers terse." },
+      { role: "user", content: [{ type: "text", text: "What is the value?" }] },
+    ]
+    const lifted = ConvertToClaudeMessage.liftInstructionUpdates(prompt)
+    const first = "<system-reminder>\nThe value is now B.\n</system-reminder>"
+    const second = "<system-reminder>\nKeep answers terse.\n</system-reminder>"
+    // The two leading system messages are the prompt and stay put; each later one becomes its own user turn.
+    expect(lifted.slice(0, 2)).toEqual([
+      { role: "system", content: "Base prompt" },
+      { role: "system", content: "Initial instructions" },
+    ])
+    expect(lifted[4]).toEqual({ role: "user", content: [{ type: "text", text: first }] })
+    expect(lifted[5]).toEqual({ role: "user", content: [{ type: "text", text: second }] })
+    // Neither update leaks into the utility system prompt.
+    expect(ClaudeSystemPrompt.utility(lifted)).toBe("Base prompt\n\nInitial instructions")
+  })
+
   test("preserves byte/base64/URL image and PDF attachments", () => {
     const bytes = new Uint8Array([1, 2, 3])
     const blocks = ConvertToClaudeMessage.content([
