@@ -72,6 +72,10 @@ export function TabNavItem(
     attention: boolean
     loading: boolean
     shortcut?: number
+    /** A faint trailing label, such as the tab's server. */
+    label?: string
+    /** Hides the project avatar under a header that already names the project; shortcut hints still show. */
+    hideAvatar?: boolean
     fallbackTitle?: string
     fallbackDirectory?: string
     /** Shows a title at once: the optimistic one, or the one to restore when its save fails. */
@@ -401,6 +405,7 @@ export function TabNavItem(
       data-orientation={props.orientation ?? "horizontal"}
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
+      data-avatar={props.hideAvatar ? "hidden" : undefined}
       class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 [container-type:inline-size]"
       classList={{ invisible: props.hidden }}
       data-active={props.active}
@@ -520,6 +525,16 @@ export function TabNavItem(
           }}
         />
       </Menu.Context.Trigger>
+      <Show when={props.label}>
+        {(label) => (
+          <span
+            data-slot="tab-label"
+            class="me-7 max-w-[40%] shrink-0 truncate text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
+          >
+            {label()}
+          </span>
+        )}
+      </Show>
 
       <div data-slot="tab-close">
         <span data-slot="tab-status" aria-hidden="true">
@@ -619,6 +634,8 @@ export function DraftTabItem(
     href: string
     title: string
     shortcut?: number
+    /** A faint trailing label, such as the tab's server. */
+    label?: string
     active?: boolean
     onNavigate: () => void
     suppressNavigation?: boolean
@@ -724,6 +741,16 @@ export function DraftTabItem(
             {props.title}
           </span>
         </Menu.Context.Trigger>
+        <Show when={props.label}>
+          {(label) => (
+            <span
+              data-slot="tab-label"
+              class="me-7 max-w-[40%] shrink-0 truncate text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
+            >
+              {label()}
+            </span>
+          )}
+        </Show>
         <div data-slot="tab-close">
           <IconButton
             size="small"

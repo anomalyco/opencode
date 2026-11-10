@@ -462,6 +462,15 @@
   }
 }
 
+/* Under a project header the avatar is left out, but shortcut numbers still show in its slot. */
+[data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: hidden;
+}
+
+[data-shortcut-hints] [data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: visible;
+}
+
 /* Holding the mod key slides each tab's initial out as its shortcut number rises in. */
 [data-titlebar-tab]
   :is(

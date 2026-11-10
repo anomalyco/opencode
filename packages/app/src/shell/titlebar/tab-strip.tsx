@@ -4,12 +4,14 @@ import {
   createMemo,
   createSignal,
   For,
+  type JSX,
   onCleanup,
   onMount,
   Show,
   untrack,
 } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { Key } from "@solid-primitives/keyed"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
@@ -76,6 +78,10 @@ function SessionTabSlot(
     tab: SessionTab
     id: string
     index: number
+    group?: string
+    footer?: JSX.Element
+    label?: string
+    hideAvatar?: boolean
     active: boolean
     orientation: "horizontal" | "vertical"
     session: SessionInfo | undefined
@@ -100,6 +106,13 @@ function SessionTabSlot(
     get index() {
       return props.index
     },
+    // Rows only sort among rows of the same group, so a drag never crosses into another section.
+    get type() {
+      return props.group
+    },
+    get accept() {
+      return props.group
+    },
   })
 
   let ref!: HTMLDivElement
@@ -115,6 +128,7 @@ function SessionTabSlot(
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
         "w-full shrink-0": props.orientation === "vertical",
+        "flex-col": !!props.footer,
       }}
       onPointerEnter={() => props.onIntent(true)}
       onPointerLeave={() => props.onIntent(false)}
@@ -131,6 +145,8 @@ function SessionTabSlot(
         attention={props.attention}
         loading={props.loading}
         shortcut={props.shortcut}
+        label={props.label}
+        hideAvatar={props.hideAvatar}
         fallbackTitle={props.fallbackTitle}
         fallbackDirectory={props.fallbackDirectory}
         onRememberTitle={props.onRememberTitle}
@@ -144,6 +160,7 @@ function SessionTabSlot(
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
       />
+      {props.footer}
     </div>
   )
 }
@@ -154,6 +171,10 @@ function SessionTabEntry(
     currentTab?: Tab
     id: string
     index: number
+    group?: string
+    footer?: JSX.Element
+    label?: string
+    hideAvatar?: boolean
     active: boolean
     highlightActive?: boolean
     orientation: "horizontal" | "vertical"
@@ -325,6 +346,10 @@ function SessionTabEntry(
         tab={props.tab}
         id={props.id}
         index={props.index}
+        group={props.group}
+        footer={props.footer}
+        label={props.label}
+        hideAvatar={props.hideAvatar}
         active={props.active && props.highlightActive !== false}
         orientation={props.orientation}
         session={session()}
@@ -360,6 +385,9 @@ function DraftTabSlot(
     tab: Extract<Tab, { type: "draft" }>
     id: string
     index: number
+    group?: string
+    footer?: JSX.Element
+    label?: string
     active: boolean
     orientation: "horizontal" | "vertical"
     title: string
@@ -373,6 +401,13 @@ function DraftTabSlot(
     },
     get index() {
       return props.index
+    },
+    // Rows only sort among rows of the same group, so a drag never crosses into another section.
+    get type() {
+      return props.group
+    },
+    get accept() {
+      return props.group
     },
   })
 
@@ -389,6 +424,7 @@ function DraftTabSlot(
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
         "w-full shrink-0": props.orientation === "vertical",
+        "flex-col": !!props.footer,
       }}
     >
       <DraftTabItem
@@ -398,6 +434,7 @@ function DraftTabSlot(
         href={tabHref(props.tab)}
         title={props.title}
         shortcut={props.shortcut}
+        label={props.label}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         onCloseOthers={props.onCloseOthers}
@@ -406,14 +443,31 @@ function DraftTabSlot(
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
       />
+      {props.footer}
     </div>
   )
+}
+
+export type TabStripSection = {
+  key: string
+  /** Open tabs shown in this section, in display order. */
+  tabs: Tab[]
+  header?: JSX.Element
+  footer?: JSX.Element
+  /** The header already names the project, so session tabs leave out their project avatar. */
+  hideAvatars?: boolean
 }
 
 export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
   highlightActive?: boolean
   tabs: Tab[]
+  /** Vertical only: groups the rendered tabs under headers. Tabs in no section stay open but are not shown. */
+  sections?: TabStripSection[]
+  /** Vertical only: extra content rendered right after a tab row (e.g. its subagent sessions). */
+  tabFooter?: (tab: Tab) => JSX.Element | undefined
+  /** Vertical only: a faint trailing label on a tab row (e.g. its server). */
+  tabLabel?: (tab: Tab) => string | undefined
   currentTab: Tab | undefined
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
@@ -425,6 +479,14 @@ export function TitlebarTabStrip(props: {
   const command = useCommand()
   const appTabs = useTabs()
   const vertical = () => props.orientation === "vertical"
+  const sections = () => (vertical() ? props.sections : undefined)
+
+  const displayTabs = createMemo(() => sections()?.flatMap((section) => section.tabs) ?? props.tabs)
+
+  const sectionOf = createMemo(
+    () => new Map(sections()?.flatMap((section) => section.tabs.map((tab) => [tabKey(tab), section.key] as const))),
+  )
+
   let listRef!: HTMLDivElement
   let scrollRef!: HTMLDivElement
   // Each vertical edge feathers by as much as there is left to scroll past it, so it appears and leaves without a jump.
@@ -551,7 +613,7 @@ export function TitlebarTabStrip(props: {
   })
 
   const visibleTabs = createMemo(() =>
-    props.tabs.filter((tab) => tab.type === "draft" || !!views().get(tabKey(tab))?.visible),
+    displayTabs().filter((tab) => tab.type === "draft" || !!views().get(tabKey(tab))?.visible),
   )
 
   const visibleTabIds = () => visibleTabs().map(tabKey)
@@ -690,6 +752,89 @@ export function TitlebarTabStrip(props: {
     if (next) props.onNavigate(next)
   }
 
+  function renderTab(tab: Tab, section?: TabStripSection) {
+    const id = tabKey(tab)
+
+    const group = section?.key
+    let ref!: HTMLDivElement
+    const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
+
+    const others = () => visibleTabs().filter((item) => tabKey(item) !== id)
+
+    const after = () => visibleTabs().slice(visibleIndex() + 1)
+
+    const closeOthers = () => props.onCloseTabs(others(), tab)
+
+    const closeAfter = () => props.onCloseTabs(after(), tab)
+
+    const element = () => ref
+    tabRefs.set(id, element)
+    onCleanup(() => {
+      if (tabRefs.get(id) === element) tabRefs.delete(id)
+    })
+
+    const serverCtx = useServerCtx(() => {
+      if (tab.type !== "session") return
+
+      return global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
+    })
+
+    const footer = createMemo(() => (vertical() ? props.tabFooter?.(tab) : undefined))
+
+    const label = () => (vertical() ? props.tabLabel?.(tab) : undefined)
+
+    if (tab.type === "session") {
+      return (
+        <SessionTabEntry
+          tab={tab}
+          currentTab={props.currentTab}
+          id={id}
+          index={visibleIndex()}
+          group={group}
+          footer={footer()}
+          label={label()}
+          hideAvatar={section?.hideAvatars}
+          active={props.currentTab === tab}
+          highlightActive={props.highlightActive}
+          orientation={vertical() ? "vertical" : "horizontal"}
+          serverCtx={serverCtx()}
+          view={views().get(id) ?? hiddenTabView}
+          shortcut={shortcut(visibleIndex())}
+          onUnreadChange={(value) => setUnread(id, value)}
+          onNavigate={(element) => {
+            ref = element
+            props.onNavigate(tab, element)
+          }}
+          onClose={() => props.onClose(tab)}
+          onCloseOthers={others().length ? closeOthers : undefined}
+          onCloseAfter={after().length ? closeAfter : undefined}
+        />
+      )
+    }
+
+    return (
+      <DraftTabSlot
+        tab={tab}
+        id={id}
+        index={visibleIndex()}
+        group={group}
+        footer={footer()}
+        label={label()}
+        active={props.currentTab === tab && props.highlightActive !== false}
+        orientation={vertical() ? "vertical" : "horizontal"}
+        title={language.t("session.tab.session")}
+        shortcut={shortcut(visibleIndex())}
+        onNavigate={(element) => {
+          ref = element
+          props.onNavigate(tab, element)
+        }}
+        onClose={() => props.onClose(tab)}
+        onCloseOthers={others().length ? closeOthers : undefined}
+        onCloseAfter={after().length ? closeAfter : undefined}
+      />
+    )
+  }
+
   return (
     <div
       data-slot={vertical() ? "vertical-tabs" : "titlebar-tabs"}
@@ -758,15 +903,12 @@ export function TitlebarTabStrip(props: {
 
             const { initialIndex, index } = source
 
-            if (initialIndex !== index) {
-              props.onReorder(
-                mergeVisibleTabOrder(
-                  props.tabs.map(tabKey),
-                  current,
-                  arrayMove(current, source.initialIndex, source.index),
-                ),
-              )
-            }
+            if (initialIndex === index) return
+            const next = arrayMove(current, initialIndex, index)
+
+            // Sections are contiguous, so a move within one keeps every position's section.
+            if (sections() && next.some((key, i) => sectionOf().get(key) !== sectionOf().get(current[i]))) return
+            props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), current, next))
           }}
         >
           <div
@@ -776,77 +918,19 @@ export function TitlebarTabStrip(props: {
             classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
             ref={listRef}
           >
-            <For each={props.tabs}>
-              {(tab) => {
-                const id = tabKey(tab)
-                let ref!: HTMLDivElement
-                const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
-
-                const others = () => visibleTabs().filter((item) => tabKey(item) !== id)
-
-                const after = () => visibleTabs().slice(visibleIndex() + 1)
-
-                const closeOthers = () => props.onCloseTabs(others(), tab)
-
-                const closeAfter = () => props.onCloseTabs(after(), tab)
-
-                const element = () => ref
-                tabRefs.set(id, element)
-                onCleanup(() => {
-                  if (tabRefs.get(id) === element) tabRefs.delete(id)
-                })
-
-                const serverCtx = useServerCtx(() => {
-                  if (tab.type !== "session") return
-
-                  return global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
-                })
-
-                if (tab.type === "session") {
-                  return (
-                    <SessionTabEntry
-                      tab={tab}
-                      currentTab={props.currentTab}
-                      id={id}
-                      index={visibleIndex()}
-                      active={props.currentTab === tab}
-                      highlightActive={props.highlightActive}
-                      orientation={vertical() ? "vertical" : "horizontal"}
-                      serverCtx={serverCtx()}
-                      view={views().get(id) ?? hiddenTabView}
-                      shortcut={shortcut(visibleIndex())}
-                      onUnreadChange={(value) => setUnread(id, value)}
-                      onNavigate={(element) => {
-                        ref = element
-                        props.onNavigate(tab, element)
-                      }}
-                      onClose={() => props.onClose(tab)}
-                      onCloseOthers={others().length ? closeOthers : undefined}
-                      onCloseAfter={after().length ? closeAfter : undefined}
-                    />
-                  )
-                }
-
-                return (
-                  <DraftTabSlot
-                    tab={tab}
-                    id={id}
-                    index={visibleIndex()}
-                    active={props.currentTab === tab && props.highlightActive !== false}
-                    orientation={vertical() ? "vertical" : "horizontal"}
-                    title={language.t("session.tab.session")}
-                    shortcut={shortcut(visibleIndex())}
-                    onNavigate={(element) => {
-                      ref = element
-                      props.onNavigate(tab, element)
-                    }}
-                    onClose={() => props.onClose(tab)}
-                    onCloseOthers={others().length ? closeOthers : undefined}
-                    onCloseAfter={after().length ? closeAfter : undefined}
-                  />
-                )
-              }}
-            </For>
+            <Show when={sections()} fallback={<For each={props.tabs}>{(tab) => renderTab(tab)}</For>}>
+              {(list) => (
+                <Key each={list()} by={(section) => section.key}>
+                  {(section) => (
+                    <>
+                      {section().header}
+                      <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
+                      {section().footer}
+                    </>
+                  )}
+                </Key>
+              )}
+            </Show>
           </div>
         </DragDropProvider>
       </div>
