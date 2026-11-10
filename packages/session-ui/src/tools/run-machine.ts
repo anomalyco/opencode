@@ -123,12 +123,15 @@ function sameShellRun(a: ShellRunState, b: ShellRunState) {
 export function stoppedShell(tool: {
   readonly tool: string
   readonly status?: string
-  readonly metadata: { readonly interrupted?: unknown; readonly notice?: unknown }
+  readonly metadata: { readonly interrupted?: boolean; readonly notice?: string }
   readonly error?: string
 }) {
   if (tool.tool !== "shell" || tool.status !== "error" || tool.metadata.interrupted !== true) return undefined
+
   const notice = tool.metadata.notice
-  if (typeof notice !== "string" || !notice || !tool.error?.endsWith(notice)) return undefined
+
+  if (!notice || !tool.error?.endsWith(notice)) return undefined
+
   return { output: tool.error.slice(0, -notice.length).replace(/\n+$/, ""), notice }
 }
 

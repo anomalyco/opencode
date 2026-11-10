@@ -181,6 +181,7 @@ describe("transitionSubagentRun", () => {
 
 describe("stoppedShell", () => {
   const notice = "[full output saved to /tmp/sh_1.out]\n\nCommand interrupted by the user (shell ID: sh_1)."
+
   const stopped = {
     tool: "shell",
     status: "error",

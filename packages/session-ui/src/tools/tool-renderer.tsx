@@ -163,6 +163,8 @@ const toolMetadata = Schema.decodeUnknownSync(
     shellID: optional(Schema.String),
     status: optional(Schema.String),
     background: optional(Schema.Boolean),
+    interrupted: optional(Schema.Boolean),
+    notice: optional(Schema.String),
     count: optional(Schema.Finite),
     matches: optional(Schema.Finite),
     files: optional(Schema.Array(Schema.Unknown)),
@@ -1365,7 +1367,7 @@ export function ToolDisplay(
 
   const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
   const error = createMemo(() => toolDisplayError(props))
-  const stopped = createMemo(() => stoppedShell(props))
+  const stopped = createMemo(() => stoppedShell({ ...props, metadata: toolMetadata(props.metadata) }))
   const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
 
   return (
