@@ -191,11 +191,19 @@ impl Inner {
                 .enabled(self.condition(move |inner| inner.open.get() && inner.active.get() == tab))
                 .priority(1)
         };
-        let child_first = TuiCommand::new("session.child.first", run(Inner::toggle))
-            .title("Toggle subagent picker")
-            .group("Session")
-            .bind(Bind::Off)
-            .palette();
+        let child_first = TuiCommand::new(
+            "session.child.first",
+            bind!(self, |inner, tab: Option<&str>, _: Option<&KeyEvent>| {
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
+                inner.toggle(&tui, tab);
+            }),
+        )
+        .title("Toggle subagent picker")
+        .group("Session")
+        .bind(Bind::Off)
+        .palette();
         let layers = [
             KeymapLayer::new(vec![
                 TuiCommand::inline("left", run(|inner, tui| inner.switch(tui, -1)))
@@ -229,9 +237,15 @@ impl Inner {
         Condition::when(move || weak.upgrade().is_some_and(|inner| check(&inner)))
     }
 
-    /// `session.child.first`.
-    fn toggle(self: &Rc<Self>, tui: &Tui) {
-        if self.open.get() || self.child.get() {
+    /// `session.child.first`: opens on the named tab (the prompt footer names one), else toggles the subagent picker.
+    fn toggle(self: &Rc<Self>, tui: &Tui, tab: Option<&str>) {
+        if let Some(tab) = tab.and_then(|tab| match tab {
+            "subagents" => Some(Tab::Subagents),
+            "shell" => Some(Tab::Shell),
+            _ => None,
+        }) {
+            self.show(tui, Some(tab));
+        } else if self.open.get() || self.child.get() {
             self.requested.set(false);
             self.refresh(tui);
         } else {
@@ -335,6 +349,18 @@ impl Inner {
                 if active {
                     label.bold();
                 }
+                let (weak, tab) = (Rc::downgrade(self), *tab);
+                label.on_mouse(move |_, event| {
+                    if !matches!(event.kind, MouseEventKind::Up(_)) {
+                        return;
+                    }
+                    let Some(inner) = weak.upgrade() else { return };
+                    let Some(tui) = inner.tui.upgrade() else {
+                        return;
+                    };
+                    inner.active.set(tab);
+                    inner.redraw_later(&tui);
+                });
                 labels.add(&label);
             }
             self.header.add(&labels);
