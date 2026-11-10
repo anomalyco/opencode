@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
+import { resolveServerList, ServerConnection } from "@/runtime/server/registry"
 import {
   addPin,
   dedupePins,
@@ -7,6 +8,7 @@ import {
   RECENT_PAGE_TIMEOUT_MS,
   mergeRecentSessions,
   partitionRecentSessions,
+  recentSessionEndpoints,
   recentSessionKey,
   removePin,
   reorderPins,
@@ -108,6 +110,7 @@ test("pins keep their order, leave Recent, and hide archived sessions without dr
 
   const result = partitionRecentSessions({
     items: [a, b, c],
+    endpoints: new Map(),
     pins: [b.key, a.key],
     resolvePin: () => undefined,
     archived: (key) => archived.has(key),
@@ -117,6 +120,33 @@ test("pins keep their order, leave Recent, and hide archived sessions without dr
   expect(result.recent).toEqual([c])
 })
 
+test("opening a sidecar pin excludes its HTTP alias while keeping a different server's session", () => {
+  const ownUrl = "http://127.0.0.1:4096"
+  const sidecar = { type: "sidecar", variant: "base", http: { url: ownUrl } } as const
+
+  const connections = resolveServerList({
+    props: [sidecar],
+    stored: ["http://localhost:4096", "http://localhost:4097"].map((url) => ({ type: "http", http: { url } })),
+  })
+
+  const greeting = session("ses_greeting", 10, { title: "Greeting" })
+
+  const items = connections.flatMap((conn) =>
+    mergeRecentSessions(ServerConnection.key(conn), [greeting], conn === sidecar ? [{ ...greeting }] : []),
+  )
+
+  const result = partitionRecentSessions({
+    items,
+    endpoints: recentSessionEndpoints(connections, ownUrl),
+    pins: addPin([], items[0].key),
+    resolvePin: () => undefined,
+    archived: () => false,
+  })
+
+  expect(result.pinned.map((row) => row.server)).toEqual(["sidecar"])
+  expect(result.recent.map((row) => row.server)).toEqual(["http://localhost:4097"])
+})
+
 test("pins resolve hydrated sessions and unresolved pins stay hidden", () => {
   const known = item("server", session("ses_known", 10))
   const hydrated = item("server", session("ses_hydrated", 1))
@@ -124,6 +154,7 @@ test("pins resolve hydrated sessions and unresolved pins stay hidden", () => {
 
   const result = partitionRecentSessions({
     items: [known],
+    endpoints: new Map(),
     pins: [hydrated.key, missing, known.key],
     resolvePin: (key) => (key === hydrated.key ? hydrated : undefined),
     archived: () => false,

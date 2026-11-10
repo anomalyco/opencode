@@ -38,6 +38,7 @@ import {
   recentPageFailed,
   recentPageHasMore,
   recentPageLoaded,
+  recentSessionEndpoints,
   recentSessionKey,
   removePin,
   reorderPins,
@@ -446,10 +447,13 @@ export function RecentSessions() {
     return value.session.time.archived !== undefined
   }
 
+  const endpoints = createMemo(() => recentSessionEndpoints(servers.visible, servers.ownUrl()))
+
   const partition = createMemo(() =>
     partitionRecentSessions({
       items: items(),
       pins: state.pins,
+      endpoints: endpoints(),
       resolvePin: (key) => hydratedItems().get(key),
       archived,
     }),

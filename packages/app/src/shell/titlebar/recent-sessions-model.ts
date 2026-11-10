@@ -1,4 +1,5 @@
 import type { SessionInfo } from "@opencode/client/promise"
+import { ServerConnection } from "@/runtime/server/registry"
 
 const separator = "\u0000"
 
@@ -14,6 +15,18 @@ export type RecentSession = {
 
 export function recentSessionKey(server: string, sessionID: string) {
   return `${server}${separator}${sessionID}`
+}
+
+// Tabs and saved pins address a connection. For display, two routes to the same endpoint refer to one session.
+export function recentSessionEndpoints(connections: readonly ServerConnection.Any[], ownUrl: string | undefined) {
+  return new Map<string, string>(
+    connections.map((conn) => {
+      const key = ServerConnection.key(conn)
+      const endpoint = ServerConnection.local(conn, ownUrl) ? "sidecar" : ServerConnection.http(conn)?.url
+
+      return [key, endpoint ?? key]
+    }),
+  )
 }
 
 export function splitRecentSessionKey(key: string) {
@@ -316,6 +329,7 @@ export function mergeRecentSessions(
 export function partitionRecentSessions(input: {
   items: readonly RecentSession[]
   pins: readonly string[]
+  endpoints: ReadonlyMap<string, string>
   resolvePin: (key: string) => RecentSession | undefined
   archived: (key: string) => boolean
 }) {
@@ -330,7 +344,12 @@ export function partitionRecentSessions(input: {
     return [item]
   })
 
-  const pinnedKeys = new Set([...input.pins, ...pinned.map((item) => item.key)])
+  const identity = (item: RecentSession) => recentSessionKey(input.endpoints.get(item.server) ?? item.server, item.session.id)
+  const pinnedKeys = new Set(input.pins)
+  const pinnedSessions = new Set(pinned.map(identity))
 
-  return { pinned, recent: input.items.filter((item) => !pinnedKeys.has(item.key)) }
+  return {
+    pinned,
+    recent: input.items.filter((item) => !pinnedKeys.has(item.key) && !pinnedSessions.has(identity(item))),
+  }
 }
