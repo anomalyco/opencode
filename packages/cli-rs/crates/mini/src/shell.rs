@@ -785,7 +785,13 @@ impl Mini {
                     output
                 }
                 Incoming::Event(event) => {
-                    self.trace("recv.event", serde_json::to_value(&event).unwrap_or_default());
+                    // The server sends every session's events; the trace keeps only this session's, as TS does.
+                    if self.input.trace.is_some() {
+                        let value = serde_json::to_value(&event).unwrap_or_default();
+                        if own_event(&value, &transcript.session_id) {
+                            self.trace("recv.event", value);
+                        }
+                    }
                     transcript.event(&event)
                 }
                 Incoming::Disconnected(error) => {
@@ -1934,6 +1940,13 @@ impl Mini {
     }
 }
 
+/// Whether an event's `sessionID(event)` names `session` (`stream-v2.transport.ts:180-183,1048-1053`).
+fn own_event(event: &Value, session: &str) -> bool {
+    let data = &event["data"];
+    let source = if event["type"] == "form.created" { &data["form"]["sessionID"] } else { &data["sessionID"] };
+    source.as_str() == Some(session)
+}
+
 /// `footerPromptLayout` and `applyHeight` for the composer: padding rows in a tall terminal, the textarea, and the
 /// status row, leaving one transcript row.
 pub fn prompt_height(terminal: u16, rows: u16) -> u16 {
@@ -1994,6 +2007,16 @@ fn capitalize(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_trace_keeps_only_this_sessions_events() {
+        let event = |kind: &str, data: Value| json!({ "type": kind, "data": data });
+        assert!(own_event(&event("session.text.delta", json!({ "sessionID": "ses_1" })), "ses_1"));
+        assert!(!own_event(&event("session.text.delta", json!({ "sessionID": "ses_2" })), "ses_1"));
+        assert!(own_event(&event("form.created", json!({ "form": { "sessionID": "ses_1" } })), "ses_1"));
+        assert!(!own_event(&event("form.created", json!({ "form": { "sessionID": "global" } })), "ses_1"));
+        assert!(!own_event(&event("model.updated", json!({})), "ses_1"));
+    }
 
     #[test]
     fn the_footer_is_padded_in_tall_terminals() {
