@@ -66,17 +66,16 @@ export interface SessionTitle extends SessionRequest {
 export type SessionRequestKind = "primary" | "compaction" | "title" | "generate"
 
 /**
- * Runs whenever a Session resolves the model for a request, before anything is built for it. Set `target` to serve
- * this request with another model from the same provider, including models hidden from the picker; the Session keeps
- * its selection, and the request and its records use the target. Router models such as GitHub Copilot's Auto use it.
- * Experimental.
+ * Runs whenever a Session resolves the model for a request, before anything is built for it. `model` starts as the
+ * Session's or agent's selection; change it to serve this request with another model from the same provider, including
+ * models hidden from the picker. The Session keeps its selection, and the request and its records use the new model.
+ * Router models such as GitHub Copilot's Auto use it. Experimental.
  */
 export interface SessionModelResolve {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly kind: SessionRequestKind
-  readonly model: Model.Ref
-  target?: Model.Ref
+  model: Model.Ref
 }
 
 export interface SessionModelRequest {

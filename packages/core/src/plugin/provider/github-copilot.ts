@@ -370,7 +370,7 @@ export const GithubCopilotPlugin = define({
           if (!current) return
           for (const [id, route] of routes) if (route.until <= now) routes.delete(id)
           routes.set(evt.sessionID, current)
-          evt.target = Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make(current.model) })
+          evt.model = Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make(current.model) })
         }),
       { providerID: Provider.ID.githubCopilot },
     )

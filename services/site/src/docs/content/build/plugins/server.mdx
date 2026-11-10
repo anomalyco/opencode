@@ -1469,17 +1469,18 @@ Generation options depend on the selected protocol and model:
 
 #### Model resolve
 
-Experimental. Runs whenever a Session resolves the model for a request, before anything is built for it. Set `target` to
-serve this request with another model from the same provider, including one hidden from the model picker. The Session
-keeps its selected model; the request and the assistant message use the target. `kind` says which request is resolving,
-so a router can skip titles or route again after compaction. A target from another provider fails as unavailable.
+Experimental. Runs whenever a Session resolves the model for a request, before anything is built for it. `model` starts
+as the selected model; change it to serve this request with another model from the same provider, including one hidden
+from the model picker. The Session keeps its selected model; the request and the assistant message use the new one.
+`kind` says which request is resolving, so a router can skip titles or route again after compaction. A model from
+another provider fails as unavailable.
 
 ```ts
 await ctx.session.hook(
   "experimental.model.resolve",
   (event) => {
     if (event.model.id === "auto" && event.kind !== "title")
-      event.target = { providerID: event.model.providerID, id: pick(event.sessionID) }
+      event.model = { providerID: event.model.providerID, id: pick(event.sessionID) }
   },
   { providerID: "acme" },
 )
@@ -1626,8 +1627,7 @@ interface SessionModelResolveHook {
   readonly sessionID: string
   readonly agent: string
   readonly kind: "primary" | "compaction" | "title" | "generate"
-  readonly model: { providerID: string; id: string; variant?: string }
-  target?: { providerID: string; id: string; variant?: string }
+  model: { providerID: string; id: string; variant?: string }
 }
 
 interface SessionWebSocketHandshakeHook {

@@ -689,7 +689,7 @@ describe("GithubCopilotPlugin", () => {
             kind,
             model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("auto") }),
           })
-          .pipe(Effect.map((event) => event.target && String(event.target.id)))
+          .pipe(Effect.map((event) => (event.model.id === "auto" ? undefined : String(event.model.id))))
       const token = (model: string) =>
         hooks
           .trigger("session", "model.request", {
