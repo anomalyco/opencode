@@ -1152,6 +1152,16 @@ describe("CodeMode public contract", () => {
     expect((await paths({ query: "users", namespace: "slack" }))[0]).toBe("tools.slack.list_users")
     // A partial word of 4+ letters that matches nothing whole finds the words it starts with.
     expect(await paths({ query: "schedu" })).toStrictEqual(["tools.slack.get_schedules"])
+    // Short plurals and stop-word-only queries still match.
+    const short = CodeMode.make({
+      tools: { cloud: { describe_vm: simple("Describe a virtual machine"), list_all_issues: simple("List issues") } },
+    })
+    const top = async (query: string) => {
+      const result = await Effect.runPromise(short.execute(`return search(${JSON.stringify({ query })})`))
+      return result.ok ? (result.value as { items: Array<{ path: string }> }).items.map((item) => item.path) : []
+    }
+    expect((await top("vms"))[0]).toBe("tools.cloud.describe_vm")
+    expect(await top("all")).toStrictEqual(["tools.cloud.list_all_issues"])
     // A namespace filter is a hard filter.
     expect(await paths({ query: "labels", namespace: "slack" })).toStrictEqual([])
   })

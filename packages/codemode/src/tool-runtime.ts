@@ -245,6 +245,9 @@ const splitWords = (text: string): Array<string> =>
 
 /** Light suffix stripping for plurals and common verb forms. */
 const stem = (word: string) => {
+  // Three-letter plurals of short words: `vms` → `vm`, `ids` → `id`.
+  if (word.length === 3 && word.endsWith("s") && !word.endsWith("ss") && !word.endsWith("us") && !word.endsWith("is"))
+    return word.slice(0, -1)
   if (word.length <= 3) return word
   if (word.endsWith("ies") && word.length > 4) return word.slice(0, -3) + "y"
   if (word.endsWith("sses")) return word.slice(0, -2)
@@ -260,14 +263,17 @@ const stem = (word: string) => {
 const fieldWords = (text: string, cache: Map<string, ReadonlyArray<string>>) => {
   const cached = cache.get(text)
   if (cached) return cached
-  const words = splitWords(text).map((word) => (stopWords.has(word) ? "" : stem(word)))
+  const words = splitWords(text).map(stem)
   cache.set(text, words)
   return words
 }
 const queryTerms = (query: string) => {
   const words = splitWords(query)
   // `tools.ns.name` and "tools to …" carry no signal beyond the other words.
-  return words.filter((word) => !stopWords.has(word) && (word !== "tools" || words.length === 1)).map(stem)
+  const kept = words.filter((word) => word !== "tools" || words.length === 1)
+  const content = kept.filter((word) => !stopWords.has(word))
+  // A query of only stop words ("all", "use") searches for them rather than for nothing.
+  return (content.length > 0 ? content : kept).map(stem)
 }
 
 /** For each word, the tools containing it and their field-weighted, length-normalized term frequency. */
@@ -367,7 +373,7 @@ const buildWordIndex = (texts: ReadonlyArray<Readonly<Record<SearchField, Readon
       const weight =
         fieldWeights[field] /
         (1 - lengthNormalization + (lengthNormalization * entry[field].length) / averageLength[field])
-      for (const word of entry[field]) if (word) weights.set(word, (weights.get(word) ?? 0) + weight)
+      for (const word of entry[field]) weights.set(word, (weights.get(word) ?? 0) + weight)
     }
     for (const [word, weight] of weights) {
       let posting = building.get(word)
