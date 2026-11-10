@@ -26,13 +26,15 @@ export function listen(
         // A client may close its end (an interrupted wait) just before a reply is written.
         socket.on("error", () => {})
         socket.once("close", () => sockets.delete(socket))
+        // The ownership connection stays open for later requests, such as handoff preparation, like the real daemon's.
+        let owner = false
         const serve = (): Promise<void> =>
           readRequest(socket).then((envelope) => {
             const owning = envelope.request.op === "own"
+            if (owning) owner = true
             const response = owning ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
             if (response) socket.write(frame(response))
-            // The ownership connection stays open for later requests, such as handoff preparation.
-            if (owning) return serve()
+            if (owner) return serve()
           })
         void serve().catch(() => socket.destroy())
       })

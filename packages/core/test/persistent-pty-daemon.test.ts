@@ -329,7 +329,8 @@ if (process.platform !== "win32")
       expect(first.kind).toBe("protocol")
       const second = yield* daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip)
       expect(second.kind).toBe("protocol")
-      expect(Date.now() - started).toBeLessThan(2_000)
+      // Well under the 5 s spawn timeout: the daemon was not waited on again.
+      expect(Date.now() - started).toBeLessThan(4_000)
       const count = yield* Effect.promise(() => Bun.file(spawns).text())
       expect(count.trim().split("\n")).toHaveLength(1)
     }),

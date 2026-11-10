@@ -249,3 +249,25 @@ const layer = (daemon: { readonly options: PersistentPty.Options }) =>
       offlineModels,
     ],
   )
+
+describe.skipIf(process.platform === "win32")("PersistentPty handoff", () => {
+  it.live("prepares a handoff more than once on the same owner connection", () =>
+    Effect.gen(function* () {
+      const daemon = yield* fakeDaemon()
+      yield* Effect.gen(function* () {
+        const pty = yield* PersistentPty.Service
+        yield* pty.createPipe({
+          program: "/bin/sh",
+          args: ["-c", "echo hi"],
+          cwd: "/tmp",
+          env: {},
+          groupID: "proj_test",
+          outputPath: "/tmp/sh_handoff.out",
+          metadata: {},
+        })
+        expect(yield* pty.handoff()).toMatchObject({ ticket: "next" })
+        expect(yield* pty.handoff()).toMatchObject({ ticket: "next" })
+      }).pipe(Effect.provide(layer(daemon)))
+    }),
+  )
+})
