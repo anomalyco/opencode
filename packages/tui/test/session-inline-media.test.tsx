@@ -385,7 +385,8 @@ test("with rich media off, the old image previews stay, and restored videos stil
   const localized = [{ ...files[0], path: webm }, files[1]]
   expect(composer?.current.files).toEqual(localized)
   app.mockInput.pressKey("c", { ctrl: true })
-  expect((await app.saved()).files).toEqual(localized)
+  // The image the server reads itself is saved as this server's file.
+  expect((await app.saved()).files).toEqual([localized[0], { ...files[1], server: expect.stringMatching(/^http:/) }])
 
   // Popping the entry that names the old kept video restarts its grace window, so pruning keeps it.
   await app.palette("Stash pop")
@@ -393,4 +394,38 @@ test("with rich media off, the old image previews stay, and restored videos stil
   await appendText(app.stash, "")
   await prunePromptMedia(temporary.path)
   expect(await Bun.file(kept).exists()).toBe(true)
+})
+
+test("with rich media on, previews are on unless turned off, as Settings shows", async () => {
+  await using temporary = await tmpdir()
+  const files = [{ uri: imageURI, name: "held.png", mention: { start: 5, end: 14, text: "[Image 1]" } }]
+  await using app = await openSession(
+    { ...richMedia, session: { image_preview: false } },
+    { state: temporary.path, stash: [{ text: "Look [Image 1]", files }] },
+  )
+
+  // The composer previews its image by default; the transcript's tiles are off.
+  await app.palette("Stash pop")
+  await app.waitForFrame(() => app.composer() === "Look [Image 1]")
+  await app.until(() => app.images().length === 1)
+  expect(app.videos()).toEqual([])
+
+  // The setting's row in the Settings dialog, with its value.
+  const setting = async (title: string) => {
+    await app.palette(title)
+    const value = new RegExp(`${title} +(on|off) `)
+    return value.exec(await app.waitForFrame((frame) => frame.includes("change ←/→") && value.test(frame)))![1]
+  }
+  expect(await setting("Image previews")).toBe("on")
+  // Turned off, the composer's preview goes.
+  app.mockInput.pressArrow("right")
+  await app.until(() => app.images().length === 0)
+  app.mockInput.pressEscape()
+  await app.waitForFrame((frame) => !frame.includes("change ←/→"))
+  expect(await setting("Transcript images")).toBe("off")
+
+  // Turned on, the transcript's tiles show.
+  app.mockInput.pressArrow("right")
+  await app.until(() => app.images().length === transcriptTiles.images)
+  expect(app.config().session?.image_preview).toBe(true)
 })

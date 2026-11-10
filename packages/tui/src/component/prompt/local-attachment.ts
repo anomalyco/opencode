@@ -100,24 +100,29 @@ export async function oversizedPastedVideo(text: string, platform: string) {
   }
 }
 
-type KeptFile = { uri: string; path?: string; name?: string; recalled?: boolean }
+type KeptFile = { uri: string; path?: string; name?: string; server?: string }
 
 /**
  * Whether sending reads `file` here: a `file://` file with a local path, which a draft, history, or the stash kept. A
- * remote server never gets a `file://` uri history or the stash recalled without a path, which may name a file on
- * another machine, so there that file is left out.
+ * remote server gets a `file://` uri history or the stash recalled without a path only when it is the `server` the uri
+ * came from: one from another server, or from an entry that did not record it, may name a file on another machine, so
+ * there that file is left out.
  */
-export function isKeptAttachment(file: KeptFile, localServer: boolean) {
+export function isKeptAttachment(file: KeptFile, localServer: boolean, server: string) {
   if (!file.uri.startsWith("file:")) return false
-  return !!file.path || (!localServer && !!file.recalled)
+  return !!file.path || (!localServer && file.server !== undefined && file.server !== server)
 }
 
 // Reads again the files a draft, history, or the stash kept as local paths. `unreadable` names the ones left out.
 // The paste cap for videos does not apply: a restored video may be as large as core accepts.
-export async function readKeptAttachments<T extends KeptFile>(files: readonly T[], localServer: boolean) {
+export async function readKeptAttachments<T extends KeptFile>(
+  files: readonly T[],
+  localServer: boolean,
+  server: string,
+) {
   const read = await Promise.all(
     files.map(async (file) => {
-      if (!isKeptAttachment(file, localServer)) return file
+      if (!isKeptAttachment(file, localServer, server)) return file
       const name = file.name ?? path.basename(file.path ?? file.uri)
       if (!file.path) return name
       const content = await readFileBounded(file.path, MAX_LOCAL_ATTACHMENT_BYTES).catch(() => undefined)
@@ -136,12 +141,12 @@ export async function readKeptAttachments<T extends KeptFile>(files: readonly T[
 
 // Keep the captured bytes: a local server may not have the terminal's access to the source file. A file under
 // `keptDirectory` is the TUI's own copy of a restored video, not a source, so it goes without one.
-export function promptFilesForServer<T extends { uri: string; path?: string; recalled?: boolean }>(
+export function promptFilesForServer<T extends KeptFile>(
   files: readonly T[] | undefined,
   localServer: boolean,
   keptDirectory: string,
 ) {
-  return files?.map(({ path: file, recalled: _, ...rest }) =>
+  return files?.map(({ path: file, server: _, ...rest }) =>
     file && localServer && path.dirname(file) !== keptDirectory
       ? { ...rest, source: { type: "uri" as const, uri: pathToFileURL(file).href } }
       : rest,

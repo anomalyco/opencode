@@ -130,6 +130,9 @@ function DiffViewerVideo(props: { file: string; location: LocationRef | undefine
     // The server's paths follow its own OS, which need not be this machine's.
     const flavor = pathFlavor(location.directory)
     const file = flavor.join(location.directory, props.file)
+    // A remote server is never asked to read a UNC path, as in a session under `\\wsl.localhost`, which names another
+    // host.
+    if (!environment.localServer && file.startsWith("\\\\")) return
     const uri = pathToFileURL(file, { windows: flavor === path.win32 }).href
     return { id: file, kind: "video", mime: mediaMime(file) ?? "video/mp4", uri, name: flavor.basename(file), location }
   })

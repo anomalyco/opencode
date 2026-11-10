@@ -95,6 +95,18 @@ test("collects session media in transcript order with stable ids", () => {
   expect(
     collectSessionMedia([...messages, { id: "next", type: "user", time, text: "more" }], { directory: "/work" }),
   ).toEqual(items)
+
+  // A remote server's generated image is read through the session's Location, so one saved outside it, as in the
+  // server's temporary directory, is left out.
+  const saved = [...messages, generated("tmp", "/tmp/opencode/cat.png")]
+  const generatedIDs = (localServer: boolean, location?: { directory: string }) =>
+    collectSessionMedia(saved, location, undefined, localServer)
+      .map((item) => item.id)
+      .filter((id) => id.endsWith(":generated"))
+  expect(generatedIDs(true, { directory: "/work" })).toEqual(["posix:generated", "windows:generated", "tmp:generated"])
+  expect(generatedIDs(false, { directory: "/work" })).toEqual(["posix:generated"])
+  expect(generatedIDs(false, { directory: "C:\\work" })).toEqual(["windows:generated"])
+  expect(generatedIDs(false)).toEqual([])
 })
 
 test.each([
@@ -209,7 +221,17 @@ test.each([
   ["/home/me/Pictures/shot.png", undefined, "data:image/png;base64,AAAA", "shot.png", undefined],
   ["C:\\Users\\me\\clip.mp4", "C:\\Users\\me\\clip.mp4", "", "clip.mp4", "C:\\Users\\me\\clip.mp4"],
   [undefined, undefined, "file:///work/my%20clip.mp4", "Video", "/work/my clip.mp4"],
-  [undefined, undefined, "file:///C:/work/clip.mp4", "Video", "C:/work/clip.mp4"],
+  [undefined, undefined, "file:///C:/work/clip.mp4", "Video", "C:\\work\\clip.mp4"],
+  [
+    "\\\\wsl.localhost\\Ubuntu\\a.mp4",
+    undefined,
+    "file://wsl.localhost/Ubuntu/my%20a.mp4",
+    "a.mp4",
+    "\\\\wsl.localhost\\Ubuntu\\my a.mp4",
+  ],
+  // On a POSIX server, a backslash is part of a name.
+  ["/work/out/a\\cat.mp4", undefined, "file:///work/out/a%5Ccat.mp4", "a\\cat.mp4", "/work/out/a\\cat.mp4"],
+  ["a\\cat.mp4", undefined, "file://localhost/work/a.mp4", "a\\cat.mp4", "/work/a.mp4"],
   ["clip.mp4", undefined, "media:abc", "clip.mp4", undefined],
 ] as const)("%p shows as %p", (name, path, uri, shown, file) => {
   const item: MediaItem = { id: "item", kind: "video", mime: "video/mp4", uri, name, path }
@@ -218,20 +240,53 @@ test.each([
 })
 
 test("the viewer shows each file once, at its first appearance", () => {
-  const video = (id: string, uri: string): MediaItem => ({ id, kind: "video", mime: "video/mp4", uri })
-  // The user attaches a clip; a reply names the same file, encoded differently and with a Location.
-  const attached = video("user:file:0", "file:///work/my%20clip.mp4")
-  const image: MediaItem = { id: "tool:0", kind: "image", mime: "image/png", uri: "media:abc" }
-  const named = { ...video("reply:text:0:0", "file:///work/my clip.mp4"), location: { directory: "/work" } }
-  const other = video("reply:text:0:1", "file:///work/out/test.mp4")
-  const again = { ...image, id: "tool:1" }
-  const gallery = [attached, image, named, other, again]
+  // The user attaches a clip the server read from its file; a reply names the same file, encoded differently, and a
+  // tool shows the same image twice.
+  const source = { type: "uri" as const, uri: "file:///work/my%20clip.mp4" }
+  const clip = { data: "AAAA", mime: "video/mp4", name: "my clip.mp4", source }
+  const content: SessionMessageToolStateCompleted["content"] = [
+    { type: "file", uri: `media:${"a".repeat(64)}`, mime: "image/png" },
+  ]
+  const tool = (id: string) => ({
+    type: "tool" as const,
+    id,
+    name: "read",
+    time,
+    state: { status: "completed" as const, input: {}, content },
+  })
+  const messages: SessionMessageInfo[] = [
+    { id: "user", type: "user", time, text: "[Video 1]", files: [clip] },
+    {
+      id: "reply",
+      type: "assistant",
+      time: { created: 1, completed: 2 },
+      agent: "build",
+      model: { id: "m", providerID: "p" },
+      content: [tool("a"), { type: "text", text: "Saved [it](</work/my clip.mp4>) and out/test.mp4" }, tool("b")],
+    },
+  ]
+  const gallery = collectSessionMedia(messages, { directory: "/work" }, { exists: () => true })
+  const [attached, image, named, other, again] = gallery
+  expect(gallery.map((item) => item.id)).toEqual([
+    "user:file:0",
+    "reply:tool:a:0",
+    "reply:text:0:0",
+    "reply:text:0:1",
+    "reply:tool:b:0",
+  ])
+  expect(attached).toMatchObject({ uri: "data:video/mp4;base64,AAAA", source: source.uri })
+  expect(mediaPath(attached!)).toBe("/work/my clip.mp4")
 
   expect(viewerMedia(gallery, named)).toEqual({ items: [attached, image, other], index: 0 })
   expect(viewerMedia(gallery, other).index).toBe(2)
   expect(viewerMedia(gallery, again).index).toBe(1)
   // Without an item, the viewer opens at the newest.
   expect(viewerMedia(gallery).index).toBe(2)
+
+  // A Windows server's drive letter may come in either case.
+  const drive = (id: string, uri: string): MediaItem => ({ id, kind: "video", mime: "video/mp4", uri })
+  const windows = [drive("a", "file:///C:/work/a.mp4"), drive("b", "file:///c:/work/a.mp4")]
+  expect(viewerMedia(windows).items).toEqual(windows.slice(0, 1))
 })
 
 test.each([

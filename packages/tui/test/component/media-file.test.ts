@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test"
-import { readdir } from "node:fs/promises"
+import { mkdir, readdir, stat, utimes } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   createMediaFiles,
+  MEDIA_FILE_LIMITS,
+  pruneMediaFiles,
   resolveImageSource,
   resolveVideoFile,
   serverFileExists,
@@ -38,6 +40,31 @@ test("media files are written once, atomically, under their content hash", async
   expect(await readdir(temporary.path)).toEqual([`${sha256}.mp4`])
 })
 
+test("media files unused for a week go, then the least recently used until the rest fit, and a hit is a use", async () => {
+  await using temporary = await tmpdir()
+  const day = 24 * 60 * 60 * 1000
+  // Written oldest first, so the directory's order is not the order of use.
+  const files = { unused: 8, "stale.mp4.0.tmp": 2, oldest: 3, older: 2, new: 0, "writing.mp4.1.tmp": 0 }
+  for (const [name, days] of Object.entries(files)) {
+    const file = path.join(temporary.path, name)
+    await Bun.write(file, "0123456789")
+    const time = new Date(Date.now() - days * day)
+    await utimes(file, time, time)
+  }
+  await mkdir(path.join(temporary.path, "directory"))
+  await pruneMediaFiles(temporary.path, { ...MEDIA_FILE_LIMITS, bytes: Infinity })
+  const left = ["directory", "new", "older", "oldest", "writing.mp4.1.tmp"]
+  expect((await readdir(temporary.path)).toSorted()).toEqual(left)
+  const media = createMediaFiles(temporary.path, { ...MEDIA_FILE_LIMITS, bytes: 20 })
+  await media.pruned
+  expect((await readdir(temporary.path)).toSorted()).toEqual(left.filter((name) => name !== "oldest"))
+  expect(MEDIA_FILE_LIMITS).toEqual({ unusedMs: 7 * day, bytes: 2 * 1024 ** 3, temporaryMs: day })
+
+  const older = path.join(temporary.path, "older")
+  expect(await media.ensure("older", "", () => Promise.reject(new Error("offline")))).toBe(older)
+  expect(Date.now() - (await stat(older)).mtimeMs).toBeLessThan(day)
+})
+
 test("file uris play in place on a local server and are read through a remote one, whatever its OS", async () => {
   await using temporary = await tmpdir()
   const reads: unknown[] = []
@@ -56,6 +83,7 @@ test("file uris play in place on a local server and are read through a remote on
   const windows = { directory: "C:\\work" }
   const posix = { directory: "/work" }
   const data = "data:image/png;base64,AAAA"
+  const gone = pathToFileURL(path.join(temporary.path, "gone.mp4")).href
   const at = (extension: string) => path.join(temporary.path, sha256 + extension)
   const resolve = (item: Parameters<typeof resolveImageSource>[0], sources = remote) =>
     item.kind === "video" ? resolveVideoFile(item, sources) : resolveImageSource(item, sources)
@@ -66,6 +94,11 @@ test("file uris play in place on a local server and are read through a remote on
     [video("local", { uri, path: undefined }), local, videoFixture],
     [image("local", { uri: pathToFileURL(imageFixture).href, path: undefined }), local, imageFixture],
     [image("data", { uri: data, path: undefined }), remote, data],
+    // A sent attachment plays the file a local server read it from, or its copy once that is gone or on a remote one.
+    [video("sent", { uri: `media:${sha256}`, path: undefined, source: uri }), local, videoFixture],
+    [video("sent", { uri: `media:${sha256}`, path: undefined, source: gone }), local, at(".mp4")],
+    [image("sent", { uri: data, path: undefined, source: pathToFileURL(imageFixture).href }), remote, data],
+    [image("sent", { uri: data, path: undefined, source: "file://host/share/a.png" }), local, data],
     [image("gone", { uri: data, path: path.join(temporary.path, "gone.png") }), remote, data],
     [video("remote", { uri, path: undefined, location: fixtures }), remote, at(".mp4")],
     [image("windows", { uri: "file:///C:/work/out/a%20b.png", path: undefined, location: windows }), remote, bytes],

@@ -64,6 +64,7 @@ test("shares checks of a named file, and checks it again after a reconnect only 
     }
     const [connected, setConnected] = createSignal(true)
     const gallery = createSessionGallery(messages, () => ({ directory: "/work" }), {
+      localServer: false,
       connected,
       exists: (file) => {
         const answer = Promise.withResolvers<boolean>()
@@ -115,5 +116,93 @@ test("shares checks of a named file, and checks it again after a reconnect only 
       "done:text:0:0",
     ])
     dispose()
+  })
+})
+
+test("a remote server's gallery leaves out a generated image saved outside the session's Location", () => {
+  const notice: SessionMessageInfo = {
+    type: "synthetic",
+    id: "generated",
+    time: { created: 0 },
+    text: "Image request finished. Saved image: /tmp/opencode/cat.png (provider/model).",
+    metadata: { source: "experimental_image_generate", state: "completed", path: "/tmp/opencode/cat" },
+  }
+  createRoot((dispose) => {
+    const gallery = (localServer: boolean) =>
+      createSessionGallery(
+        () => [notice],
+        () => ({ directory: "/work" }),
+        {
+          localServer,
+          connected: () => true,
+          exists: async () => false,
+        },
+      )
+    expect(gallery(true)().map((item) => item.id)).toEqual(["generated:generated"])
+    expect(gallery(false)()).toEqual([])
+    dispose()
+  })
+})
+
+test("checks again after a delay that doubles to a minute when a check fails without an answer, until disposed", async () => {
+  const checks: { file: string; answer: PromiseWithResolvers<boolean> }[] = []
+  const timers: { delay: number; run: () => void; cancelled: boolean }[] = []
+  const fail = async (index: number) => {
+    checks[index]!.answer.reject(new Error("unavailable"))
+    await settle()
+  }
+  const retry = async () => {
+    timers.at(-1)!.run()
+    await settle()
+  }
+
+  await createRoot(async (dispose) => {
+    const [messages, setMessages] = createSignal([reply("saved", "Saved out.mp4")])
+    const [connected, setConnected] = createSignal(true)
+    const gallery = createSessionGallery(messages, () => ({ directory: "/work" }), {
+      localServer: false,
+      connected,
+      exists: (file) => {
+        const answer = Promise.withResolvers<boolean>()
+        checks.push({ file, answer })
+        return answer.promise
+      },
+      schedule: (run, delay) => {
+        const timer = { delay, run, cancelled: false }
+        timers.push(timer)
+        return () => (timer.cancelled = true)
+      },
+    })
+    await settle()
+    for (const _ of Array.from({ length: 6 })) {
+      await fail(checks.length - 1)
+      await retry()
+    }
+    expect(timers.map((timer) => timer.delay)).toEqual([5_000, 10_000, 20_000, 40_000, 60_000, 60_000])
+    expect(checks).toHaveLength(7)
+
+    // A check that fails after a quick reconnect, which asked nothing while it ran, is retried too.
+    setConnected(false)
+    setConnected(true)
+    await settle()
+    expect(checks).toHaveLength(7)
+    await fail(6)
+    await retry()
+    expect(checks).toHaveLength(8)
+
+    // An answer that the file is missing is final.
+    checks[7]!.answer.resolve(false)
+    await settle()
+    expect(timers).toHaveLength(7)
+    expect(gallery()).toEqual([])
+
+    // Disposing cancels a pending retry.
+    setMessages([...messages(), reply("next", "Saved b.mp4")])
+    await settle()
+    await fail(8)
+    expect(timers).toHaveLength(8)
+    expect(timers.at(-1)!.cancelled).toBe(false)
+    dispose()
+    expect(timers.at(-1)!.cancelled).toBe(true)
   })
 })

@@ -70,6 +70,16 @@ test("a remote Windows server's working-tree video shows a placeholder and is re
   expect(reads).toEqual([])
 })
 
+test("a remote server's working-tree video under a UNC directory is never read", async () => {
+  const reads: string[] = []
+  const directory = "\\\\wsl.localhost\\Ubuntu\\repo"
+  await using setup = await renderVideo({ file: "clip.mp4", directory, localServer: false, reads })
+  await setup.app.renderOnce()
+  expect(setup.frame()).toContain("Could not load video")
+  expect(setup.frame()).not.toContain("Click to load")
+  expect(reads).toEqual([])
+})
+
 test.each([
   { width: 40, height: 16, mode: "dark" as const },
   { width: 120, height: 40, mode: "light" as const },
