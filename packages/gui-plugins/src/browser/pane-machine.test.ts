@@ -150,15 +150,23 @@ describe("binding close reason", () => {
     expect(transitionBinding(closed, { type: "pane.disposed" })).toEqual({ state: closed, effects: [] })
   })
 
-  test("an unavailable server keeps an attached binding's pages and rejects a connecting one", () => {
+  test("an unavailable server suspends an attached binding and rejects a connecting one", () => {
     const restore = { tabs: [tab(tabA, dashboard)], focusedTabID: tabA }
-    const suspended = play(attached(restore), on({ type: "attachment.ended", outcome: "unavailable" }))
-    expect(closeEvents(suspended.effects)).toEqual([
-      { state: { tabs: [tab(tabA, dashboard, "", 1)], focusedTabID: tabA }, error: "browser.pane.disconnected" },
-    ])
-    expect(suspended.effects.map((effect) => effect.type)).not.toContain("remove-restore")
-    expect(suspended.effects.map((effect) => effect.type)).not.toContain("release-pages")
-    expect(suspended.effects.map((effect) => effect.type)).not.toContain("release-record")
+
+    // Live pages must not turn idle eviction into a reconnect that boots the evicted location again.
+    for (const event of [
+      { type: "attachment.ended", outcome: "unavailable" } as const,
+      { type: "attachment.ended", outcome: "unavailable", keep: true } as const,
+    ]) {
+      const suspended = play(attached(restore), on(event))
+
+      expect(closeEvents(suspended.effects)).toEqual([
+        { state: { tabs: [tab(tabA, dashboard, "", 1)], focusedTabID: tabA }, error: "browser.pane.suspended" },
+      ])
+      expect(suspended.effects.map((effect) => effect.type)).not.toContain("remove-restore")
+      expect(suspended.effects.map((effect) => effect.type)).not.toContain("release-pages")
+      expect(suspended.effects.map((effect) => effect.type)).not.toContain("release-record")
+    }
 
     const connecting = play(
       createPaneState(),

@@ -785,7 +785,7 @@ export default function SessionBrowserPane(props: {
             <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t("failed.description")}</div>
           </div>
         </Show>
-        <Show when={suspended() && !locked()}>
+        <Show when={suspended() && !locked() && !embed()}>
           <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
             {plugin.t("suspended")}
           </p>

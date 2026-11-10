@@ -296,12 +296,12 @@ function closeReason(state: ActiveBinding, event: BindingEvent): PaneCloseReason
   if (event.outcome === "unsupported") return "browser.pane.unsupported"
 
   // A retry of a session whose pages are still alive keeps them, even though this attempt never reached the server.
-  if (event.keep) return "browser.pane.disconnected"
+  if (event.keep && state.status !== "attached") return "browser.pane.disconnected"
 
-  // A server that drops an attachment it accepted, as on idle eviction or a lost connection, keeps the session's live
-  // pages. One that never accepted it has no browser plugin.
+  // A server that drops an attachment it accepted, as on idle eviction, suspends it without a retry timer. One that
+  // never accepted it has no browser plugin.
   if (event.outcome === "unavailable")
-    return state.status === "attached" ? "browser.pane.disconnected" : "browser.pane.unsupported"
+    return state.status === "attached" ? "browser.pane.suspended" : "browser.pane.unsupported"
 
   // The stream ended after the server accepted the binding: the connection went away, not the window.
   return state.status === "attached" ? "browser.pane.disconnected" : "browser.pane.registration.closed"

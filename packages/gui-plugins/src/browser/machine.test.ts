@@ -420,11 +420,21 @@ describe("browser pane machine", () => {
     expect(sent.effects[2]).toMatchObject({ attempt: attempt(sent.state) })
   })
 
-  test("idle suspension keeps the tabs, never retries, and ignores the closed binding's late events", () => {
+  test("idle suspension keeps the tabs and their live pages, never retries, and ignores the closed binding's late events", () => {
     const start = ready()
-    const suspended = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.suspended"))
+
+    const embedded = transition(start, {
+      type: "pane.embed",
+      sessionKey: key,
+      attempt: attempt(start),
+      tabID: tabA,
+      embed: "e1",
+    }).state
+
+    const suspended = transition(embedded, paneState(embedded, inventory(tab(tabA)), "browser.pane.suspended"))
     expect(types(suspended.effects)).toEqual(["close-registration"])
     expect(phase(suspended.state)).toEqual({ status: "suspended", reason: "idle" })
+    expect(attachment(suspended.state)?.embeds).toEqual({ [tabA]: "e1" })
     expect(transition(suspended.state, { type: "ipc.changed", ipc: active }).state).toBe(suspended.state)
 
     const woken = replay(

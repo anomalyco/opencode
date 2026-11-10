@@ -924,13 +924,12 @@ function paneState(
   if (event.error === "browser.pane.registration.closed") return backoff(state, key, attachment, phase)
 
   // Idle eviction has no retry timer: a user or Session execution wakes it on demand. A locked screen's ends at unlock.
+  // Both keep the live-page embeds: main keeps the pages, and the next registration adopts them.
   if (event.error === "browser.pane.suspended" || event.error === "browser.pane.locked") {
     const browser = event.state ?? attachment.browser
     const mirrored = event.state ? mirror(key, attachment.strip, browser, false) : undefined
     const reason = event.error === "browser.pane.locked" ? "locked" : "idle"
-
-    const next =
-      event.error === "browser.pane.locked" ? hold(attachment, reason, browser) : suspend(attachment, reason, browser)
+    const next = hold(attachment, reason, browser)
 
     return put(state, key, { ...next, strip: mirrored?.strip ?? attachment.strip }, [
       ...stop(key, phase),
