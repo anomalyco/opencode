@@ -20,6 +20,14 @@ export type LocalModel = {
   readonly context?: number | null
 }
 
+/**
+ * Provider IDs whose inventory a local discovery plugin owns. Populated by `createLocalProviderPlugin` at module
+ * load, so generic discovery (for example OpenAI-compatible limit probing) can leave these providers to their
+ * dedicated plugin instead of hitting their servers a second time.
+ */
+const ownedProviderIDs = new Set<string>()
+export const localProviderIDs: ReadonlySet<string> = ownedProviderIDs
+
 export type LocalDiscoveryClient = ReturnType<typeof createClient>
 
 export function createLocalProviderPlugin<Discovered>(input: {
@@ -34,6 +42,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
   const discovery = new Map<string, { checked: number; apiKey?: string; models?: readonly Discovered[] }>()
   const discoveryLock = Semaphore.makeUnsafe(1)
   const suffix = input.stripPathSuffix ?? /\/v1$/
+  ownedProviderIDs.add(input.providerID)
 
   return function make(origin?: string, interval: Duration.Input = "30 seconds") {
     return define({
