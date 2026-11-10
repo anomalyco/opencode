@@ -52,12 +52,12 @@ const sha = (await $`git rev-parse ${ref}^{commit}`.cwd(root).text()).trim()
 const base = path.join(tmpdir(), "opencode-timeline-compare")
 
 // One reused worktree for every base, checked out fresh each run. The renderer story is copied in, so remove it first:
-// a base that has the file itself would refuse a checkout over an untracked copy.
+// a base that has the file itself would refuse a checkout over an untracked copy. Hooks stay off: the repo's
+// post-checkout hook needs husky's install, which the base may not have yet, and fails a checkout that succeeded.
 const reused = existsSync(base)
 
 if (reused) {
   await rm(path.join(base, renderer), { force: true })
-  // The repo's hooks expect a husky install the base worktree never runs, and the compare needs none of them.
   await $`git -c core.hooksPath=/dev/null checkout --detach --force ${sha}`.cwd(base).quiet()
 }
 
@@ -80,15 +80,26 @@ if (!existsSync(marker) || (await Bun.file(marker).text()) !== lock) {
 await cp(path.join(root, renderer), path.join(base, renderer))
 watch(path.join(root, renderer), () => void cp(path.join(root, renderer), path.join(base, renderer)))
 
-const serve = (cwd: string, port: number, label: string) =>
-  Bun.spawn(["bun", "x", "vite", "--port", String(port), "--strictPort"], {
+const serve = (cwd: string, port: number, label: string) => {
+  const server = Bun.spawn(["bun", "x", "vite", "--port", String(port), "--strictPort"], {
     cwd: path.join(cwd, "packages/stories"),
     stdout: "ignore",
     stderr: "pipe",
-    onExit: (_, code) => {
-      if (code) console.error(`The ${label} stories server stopped (exit ${code}).`)
-    },
   })
+
+  // Say why a server stopped. A base whose install is incomplete fails here, in Vite's dependency scan.
+  void Promise.all([new Response(server.stderr).text(), server.exited]).then(([log, code]) => {
+    if (!code) return
+    console.error(
+      `The ${label} stories server stopped (exit ${code}):\n${log.trim().split("\n").slice(-20).join("\n")}`,
+    )
+    console.error(
+      `If it names a missing file in node_modules, reinstall there: rm -rf ${path.join(cwd, "node_modules")}`,
+    )
+  })
+
+  return server
+}
 
 const servers = [serve(root, headPort, "head"), serve(base, basePort, "base")]
 
