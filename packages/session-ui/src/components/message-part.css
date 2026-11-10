@@ -1926,22 +1926,6 @@
   [data-slot="user-message-text"] {
     background: var(--v2-background-bg-layer-02);
     color: var(--v2-text-text-base);
-
-    .markdown-session-link {
-      padding: 0;
-      text-align: start;
-      background: none;
-      box-shadow: none;
-      color: inherit;
-      text-decoration: underline;
-      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
-      text-underline-offset: 2px;
-
-      &:hover {
-        color: inherit;
-        text-decoration-color: currentColor;
-      }
-    }
   }
 
   [data-slot="user-message-comments"] {
