@@ -67,7 +67,7 @@ pub fn refresh(tui: &Tui) {
 pub fn show(tui: &Tui) {
     let manager = Rc::new(Manager {
         tui: tui.weak(),
-        directory: tui.data.read(|state| state.default_location().directory.clone()),
+        directory: crate::features::location::active(tui).directory,
         server: RefCell::new(None),
         locked: Cell::new(false),
         checking: Cell::new(false),
