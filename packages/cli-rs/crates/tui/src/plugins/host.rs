@@ -21,7 +21,7 @@ use opencode_local::storage::Storage;
 use opencode_plugin::abi;
 use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Configured, Loader};
-use opencode_plugin::node::{assign, refill, theme_color};
+use opencode_plugin::node::{abi_mode, assign, refill, theme_color};
 use opencode_plugin::{Builtin, Definition, Host, Registry, RouteMount, SlotInput, SlotMount, Status};
 use opencode_store::location::{Catalog, Location, LocationData};
 use opencode_store::{Changes, State};
@@ -471,10 +471,7 @@ impl Reader<'_> {
 
 impl abi::Read for Reader<'_> {
     fn theme_mode(&self) -> abi::ThemeMode {
-        match self.tui.theme.borrow().mode() {
-            ThemeMode::Light => abi::ThemeMode::Light,
-            _ => abi::ThemeMode::Dark,
-        }
+        abi_mode(self.tui.theme.borrow().mode())
     }
 
     fn color(&self, token: &str) -> Option<abi::Rgba> {
