@@ -132,6 +132,8 @@ export const create = (
                     ...context,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
+                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
+                    cancel: undefined,
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )

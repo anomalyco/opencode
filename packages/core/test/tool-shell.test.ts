@@ -41,6 +41,7 @@ import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { tmpdir, tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -1483,6 +1484,8 @@ describe("ShellTool", () => {
             expect((yield* shell.get(id)).status).toBe("running")
             const jobs = yield* Job.Service
             expect(yield* jobs.cancel(id)).toMatchObject({ id, status: "cancelled" })
+            // Cancelling stops the command and keeps it, output file included.
+            expect((yield* shell.wait(id)).status).toBe("killed")
             expect(yield* shell.list()).toEqual([])
           }),
         true,
@@ -2053,4 +2056,147 @@ describe("ShellTool", () => {
       )
     }),
   )
+})
+
+describe("ShellTool stopped", () => {
+  // Runs a foreground call the way a session step does, then stops it as the user does (through `cancel`), or
+  // interrupts it as a server shutdown does.
+  const stopCall = (
+    registry: Tool.Interface,
+    command: string,
+    id: string,
+    how: "cancel" | "interrupt",
+    waitForOutput = true,
+  ) =>
+    Effect.gen(function* () {
+      const shell = yield* Shell.Service
+      const cancel = yield* Deferred.make<void>()
+      const started = yield* Deferred.make<string>()
+      const fiber = yield* executeTool(registry, {
+        ...call({ command }, id),
+        progress: (update) =>
+          typeof update.shellID === "string"
+            ? Deferred.succeed(started, update.shellID).pipe(Effect.asVoid)
+            : Effect.void,
+        cancel: Deferred.await(cancel),
+      }).pipe(Effect.forkChild({ startImmediately: true }))
+      const shellID = ID.make(yield* Deferred.await(started))
+      while (waitForOutput && (yield* shell.output(shellID, { cursor: Number.MAX_SAFE_INTEGER })).size === 0)
+        yield* Effect.sleep(Duration.millis(10))
+      if (how === "cancel") yield* Deferred.succeed(cancel, undefined)
+      if (how === "interrupt") yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+      return { shellID, exit, result: Exit.isSuccess(exit) ? exit.value : undefined }
+    })
+
+  const test = isWindows ? it.live.skip : it.live
+
+  test("stops a command the user stopped, keeps its file and fails the call with the tail, file and shell ID", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const jobs = yield* Job.Service
+          const { shellID, result } = yield* stopCall(
+            registry,
+            "printf 'first\\nsecond\\n'; sleep 60",
+            "call-stopped",
+            "cancel",
+          )
+          const info = yield* shell.get(shellID)
+          expect(info.status).toBe("killed")
+          expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe("first\nsecond\n")
+          expect(result).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: `first\nsecond\n\n[full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
+            },
+          })
+          expect((yield* jobs.get(shellID))?.status).not.toBe("running")
+        }),
+      )
+    }))
+
+  test("says once that a stopped command wrote nothing", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const { shellID, result } = yield* stopCall(registry, "sleep 60", "call-silent", "cancel", false)
+          const info = yield* shell.get(shellID)
+          expect(result?.error?.message).toBe(
+            `[no output; output file: ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
+          )
+        }),
+      )
+    }))
+
+  test(
+    "settles a stopped call without waiting for a command that ignores SIGTERM",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const started = Date.now()
+            const { shellID, result } = yield* stopCall(
+              registry,
+              "trap '' TERM; printf 'kept\\n'; while :; do sleep 1; done",
+              "call-stubborn",
+              "cancel",
+            )
+            // Bounded by the short wait, not by the 3 s grace before SIGKILL.
+            expect(Date.now() - started).toBeLessThan(2_500)
+            const info = yield* shell.get(shellID)
+            expect(result?.error?.message).toBe(
+              `kept\n\n[full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}); it is still being stopped.`,
+            )
+            // The stop still ends it.
+            expect((yield* shell.wait(shellID)).status).toBe("killed")
+          }),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
+  test("lets an execute.after hook replace a stopped call's failure", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const hooks = yield* PluginHooks.Service
+          const seen: unknown[] = []
+          yield* hooks.register("tool", "execute.after", (event) =>
+            Effect.sync(() => {
+              if (event.status !== "error") return
+              seen.push(event.error.metadata)
+              event.error = new Tool.Error({ message: "rewritten by a plugin" })
+            }),
+          )
+          const { shellID, result } = yield* stopCall(registry, "printf ready; sleep 60", "call-hooked", "cancel")
+          expect(seen).toEqual([{ interrupted: true, truncated: false, shellID }])
+          expect(result?.error?.message).toBe("rewritten by a plugin")
+        }),
+      )
+    }))
+
+  test("leaves a call a shutdown interrupted to the step", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const { shellID, exit } = yield* stopCall(registry, "printf ready; sleep 60", "call-teardown", "interrupt")
+          expect(Exit.hasInterrupts(exit)).toBe(true)
+          // The job is cancelled as before, which stops the command; its file stays.
+          const info = yield* shell.wait(shellID)
+          expect(info.status).toBe("killed")
+          expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe("ready")
+        }),
+      )
+    }))
 })

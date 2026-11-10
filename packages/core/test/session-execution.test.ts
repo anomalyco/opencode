@@ -142,6 +142,28 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("tells the drain once the user stopped it", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_interruption_user")
+      yield* seedSessions(database, [sessionID])
+      const draining = yield* Deferred.make<(() => string | undefined) | undefined>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Deferred.succeed(draining, input.interruption).pipe(Effect.andThen(Effect.never)),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      const reason = yield* Deferred.await(draining)
+      // Teardown interrupts without a reason, so only a user's stop reads as one.
+      expect(reason?.()).toBeUndefined()
+      yield* execution.interrupt(sessionID)
+      expect(reason?.()).toBe("user")
+      yield* execution.awaitIdle(sessionID)
+    }),
+  )
+
   it.effect("reports an idle interrupt as a no-op", () =>
     Effect.gen(function* () {
       const sessionID = Session.ID.make("ses_idle_cancel")

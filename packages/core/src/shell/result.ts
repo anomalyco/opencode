@@ -28,6 +28,21 @@ export function output(result: Result): Output {
   }
 }
 
+// What the model gets for a command stopped because the user interrupted its call: the output so far, where the
+// full output is, and the shell ID, even when the output fits (which `output` leaves unsaid).
+export function interrupted(result: Result) {
+  const capture = result.capture
+  const saved = !capture
+    ? unavailable.output
+    : capture.truncated
+      ? capture.output
+      : capture.output === "(no output)"
+        ? `[no output; output file: ${result.info.file}]`
+        : `${capture.output.replace(/\n$/, "")}\n\n[full output saved to ${result.info.file}]`
+  const stopping = result.info.status === "running" ? "; it is still being stopped" : ""
+  return `${saved}\n\nCommand interrupted by the user (shell ID: ${result.info.id})${stopping}.`
+}
+
 export function notice(output: Pick<Output, "exit" | "signal" | "timeout">, timeout?: number) {
   if (output.timeout)
     return `Command timed out${timeout ? ` after ${timeout / 1_000} seconds` : ""}. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: ${exitCode(output)}`
