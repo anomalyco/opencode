@@ -74,7 +74,6 @@ export function MediaViewer(props: { request: MediaViewerRequest }) {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
-  const header = theme.surface("dialog")
   const newDesigns = useNewDesigns()
   const closeClick = createMediaClick(media.closeViewer)
   // The name opens a menu to copy the file's path, and to open its folder when the file is on this machine.
@@ -107,13 +106,13 @@ export function MediaViewer(props: { request: MediaViewerRequest }) {
   let start: Partial<MediaViewerRequest> = props.request
   const transport = createMemo(on(index, () => createTransport(start)))
   let stageBox: BoxRenderable | undefined
-  let keyList: BoxRenderable | undefined
+  const [keyListHeight, setKeyListHeight] = createSignal(0)
   const [keyScroll, setKeyScroll] = createSignal(0)
-  // The rows of the keys list that a short terminal cuts off, out of the panel's height less its border and padding.
-  const scrollKeys = (rows: number) => {
-    const overflow = (keyList?.height ?? 0) - (keyList?.parent?.height ?? 0) + 2 + (roomy() ? 1 : 0)
-    setKeyScroll((value) => Math.max(0, Math.min(overflow, value + rows)))
-  }
+  // The rows of the keys list that a short terminal cuts off: the panel fits the terminal less a row above and below,
+  // and has a border and, when roomy, a padding row. Read against it, so a taller terminal shows more.
+  const keyOverflow = () => Math.max(0, keyListHeight() - dimensions().height + 4 + (roomy() ? 1 : 0))
+  const keyOffset = () => Math.min(keyScroll(), keyOverflow())
+  const scrollKeys = (rows: number) => setKeyScroll(Math.max(0, Math.min(keyOverflow(), keyOffset() + rows)))
 
   const current = () => items[index()]!
   const failure = createMemo(() => error() ?? unsupported(current()))
@@ -333,7 +332,7 @@ export function MediaViewer(props: { request: MediaViewerRequest }) {
     const area = layout()
     const bytes = item.path ? Bun.file(item.path).size : 0
     const rows = [
-      ["Name", mediaName(item)],
+      ["Name", Locale.truncateMiddle(mediaName(item), 40)],
       ["Type", item.mime || item.kind],
       ["Resolution", facts() ? `${facts()!.width}×${facts()!.height}` : "…"],
       item.kind === "video" && ["Duration", metadata() ? formatDuration(metadata()!.duration) : "…"],
@@ -443,7 +442,7 @@ export function MediaViewer(props: { request: MediaViewerRequest }) {
             (newDesigns() ? TextAttributes.NONE : TextAttributes.BOLD) |
             (fileActions.hovered() && mediaPath(current()) ? TextAttributes.UNDERLINE : TextAttributes.NONE)
           }
-          fg={header.text.base}
+          fg={theme.text.base}
           wrapMode="none"
           truncate
           flexShrink={1}
@@ -455,10 +454,10 @@ export function MediaViewer(props: { request: MediaViewerRequest }) {
           {mediaName(current())}
         </text>
         <box flexDirection="row" gap={2} flexShrink={0}>
-          <text fg={header.text.muted} selectable={false}>
+          <text fg={theme.text.muted} selectable={false}>
             {`${index() + 1} of ${items.length}`}
           </text>
-          <text fg={header.text.muted} selectable={false} {...closeClick}>
+          <text fg={theme.text.muted} selectable={false} {...closeClick}>
             esc
           </text>
         </box>
@@ -570,6 +569,9 @@ export function MediaViewer(props: { request: MediaViewerRequest }) {
             top={0}
             right={2}
             zIndex={5}
+            maxWidth={Math.max(4, stage().width - 4)}
+            maxHeight={stage().height}
+            overflow="hidden"
             border
             borderStyle="rounded"
             borderColor={theme.border.base}
@@ -582,7 +584,7 @@ export function MediaViewer(props: { request: MediaViewerRequest }) {
           >
             <For each={infoRows()}>
               {(row) => (
-                <text wrapMode="none" selectable={false}>
+                <text wrapMode="none" truncate flexShrink={0} selectable={false}>
                   <span style={{ fg: theme.text.muted }}>{row[0]!.padEnd(12)}</span>
                   <span style={{ fg: theme.text.base }}>{row[1]}</span>
                 </text>
@@ -659,8 +661,10 @@ export function MediaViewer(props: { request: MediaViewerRequest }) {
           >
             {/* A short terminal scrolls the list with the up and down keys or the wheel. */}
             <box
-              ref={(element: BoxRenderable) => (keyList = element)}
-              marginTop={-keyScroll()}
+              onSizeChange={function (this: BoxRenderable) {
+                setKeyListHeight(this.height)
+              }}
+              marginTop={-keyOffset()}
               flexShrink={0}
               flexDirection="row"
               flexWrap="wrap"

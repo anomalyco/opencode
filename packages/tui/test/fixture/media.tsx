@@ -8,7 +8,7 @@ import type { MediaItem } from "../../src/component/media/model"
 import { ConfigProvider, useConfig, type Info } from "../../src/config"
 import { Keymap } from "../../src/context/keymap"
 import { MediaHost, MediaProvider, useMedia } from "../../src/context/media"
-import { ThemeProvider } from "../../src/context/theme"
+import { ThemeProvider, useTheme, useThemes, type ThemeSource } from "../../src/context/theme"
 import { DialogProvider, useDialog } from "../../src/ui/dialog"
 import { Toast, ToastProvider, useToast } from "../../src/ui/toast"
 import { emptyThemeSource, tmpdir } from "./fixture"
@@ -49,14 +49,21 @@ const probe = () => ({
   dialog: useDialog(),
   toast: useToast(),
   config: useConfig(),
+  theme: useTheme(),
+  themes: useThemes(),
 })
 
 /**
  * Renders `view` inside the media provider and host, which shows the real viewer and PiP, toasts, and what they need.
  * The `clock` drives the renderer's timers, such as the seek bar's; playback follows the wall clock regardless, so a
- * test that needs a playing video at a time seeks it there.
+ * test that needs a playing video at a time seeks it there. `themes` offers themes besides the built-in ones.
  */
-export async function renderMedia(view: () => JSX.Element, richMedia = false, clock?: Clock) {
+export async function renderMedia(
+  view: () => JSX.Element,
+  richMedia = false,
+  clock?: Clock,
+  themes: ThemeSource = emptyThemeSource,
+) {
   const temporary = await tmpdir()
   const info: Info = { experimental: { rich_media: richMedia } }
   const service = {
@@ -81,7 +88,7 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
     () => (
       <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }} clipboard={clipboard}>
         <ConfigProvider config={createTuiResolvedConfig(info)} service={service}>
-          <ThemeProvider mode="dark" source={emptyThemeSource}>
+          <ThemeProvider mode="dark" source={themes}>
             <Keymap.Provider>
               <ToastProvider>
                 <DialogProvider>
@@ -126,6 +133,8 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
     keymap: () => contexts!.keymap,
     dialog: () => contexts!.dialog,
     toast: () => contexts!.toast,
+    theme: () => contexts!.theme,
+    themes: () => contexts!.themes,
     app,
     until,
     press,
