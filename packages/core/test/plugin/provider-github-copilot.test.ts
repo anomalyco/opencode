@@ -21,7 +21,6 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
-import { Flag } from "@opencode/core/flag"
 import { advance, drain } from "../lib/clock"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { testEffect } from "../lib/effect"
@@ -174,6 +173,7 @@ describe("GithubCopilotPlugin", () => {
       expect(requests).toEqual([
         "https://api.github.com/copilot_internal/user",
         "https://api.business.githubcopilot.com/models",
+        "https://api.business.githubcopilot.com/meta",
       ])
       expect(required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5"))).settings).toMatchObject({
         baseURL: "https://api.business.githubcopilot.com",
@@ -196,7 +196,7 @@ describe("GithubCopilotPlugin", () => {
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, failing))
       yield* advance(() => requests.some((url) => url.endsWith("/models")))
 
-      expect(requests.at(-1)).toBe("https://api.individual.githubcopilot.com/models")
+      expect(requests).toContain("https://api.individual.githubcopilot.com/models")
     }),
   )
 
@@ -642,6 +642,7 @@ describe("GithubCopilotPlugin", () => {
         Effect.gen(function* () {
           if (request.url.endsWith("/copilot_internal/user"))
             return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
+          if (request.url.endsWith("/meta")) return HttpClientResponse.fromWeb(request, Response.json({}))
           if (request.url.endsWith("/models")) {
             state.listed = true
             return HttpClientResponse.fromWeb(
@@ -671,10 +672,7 @@ describe("GithubCopilotPlugin", () => {
         }),
       )
       yield* connect({ apiEndpoint: "https://copilot.test" })
-      yield* addPlugin().pipe(
-        Effect.provideService(HttpClient.HttpClient, api),
-        Effect.provide(Flag.testLayer([], { overrides: "-copilot_auto_tiers" })),
-      )
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
       const models = yield* Model.Service
       yield* advance(() => state.listed)
       yield* drain
@@ -818,10 +816,7 @@ describe("GithubCopilotPlugin", () => {
         }),
       )
       yield* connect({ apiEndpoint: "https://copilot.test" })
-      yield* addPlugin().pipe(
-        Effect.provideService(HttpClient.HttpClient, api),
-        Effect.provide(Flag.testLayer([], { overrides: "copilot_auto_tiers" })),
-      )
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
       yield* advance(() => state.listed)
       yield* drain
       const models = yield* Model.Service
@@ -859,6 +854,8 @@ describe("GithubCopilotPlugin", () => {
       expect(picks.at(-1)).toMatchObject({ tier: "intelligence" })
       yield* resolve()
       expect(picks.at(-1)).toEqual({ prompt: "" })
+      yield* resolve("default")
+      expect(picks).toHaveLength(3)
       const rejected = yield* resolve("balance").pipe(Effect.exit)
       expect(String(rejected)).toContain("not enabled for this account")
       expect(picks).toHaveLength(3)

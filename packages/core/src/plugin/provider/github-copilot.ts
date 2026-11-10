@@ -5,7 +5,6 @@ import { Clock, Effect, Option, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
-import { Flag } from "../../flag.js"
 import { CopilotModels } from "../../github-copilot/models.js"
 import { App } from "../../app.js"
 import { Integration } from "../../integration.js"
@@ -171,7 +170,6 @@ export const GithubCopilotPlugin = define({
     const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
     const outbound = yield* FetchHttpClient.Fetch
-    const flags = yield* Flag.Service
     // Each Session keeps the model Copilot's Auto router picked until its token nears expiry, the Session is compacted,
     // or the account changes. The token unlocks the pick and its Auto discount; Copilot rejects it for any other model.
     const routes = new Map<
@@ -248,20 +246,18 @@ export const GithubCopilotPlugin = define({
             ),
           })
           .pipe(Effect.orElseSucceed(() => undefined))
-        const tiers = (yield* flags.enabled("copilot_auto_tiers"))
-          ? yield* cache
-              .get({
-                key: `${modelsKey(connection, url, headers)}:tiers`,
-                ...options,
-                load: CopilotModels.loadTiers(http, url, {
-                  ...headers,
-                  Authorization: `Bearer ${credential.refresh}`,
-                  "User-Agent": App.useragent(ctx.app),
-                  "X-GitHub-Api-Version": apiVersion,
-                }).pipe(Effect.timeout("5 seconds")),
-              })
-              .pipe(Effect.orElseSucceed(() => []))
-          : []
+        const tiers = yield* cache
+          .get({
+            key: `${modelsKey(connection, url, headers)}:tiers`,
+            ...options,
+            load: CopilotModels.loadTiers(http, url, {
+              ...headers,
+              Authorization: `Bearer ${credential.refresh}`,
+              "User-Agent": App.useragent(ctx.app),
+              "X-GitHub-Api-Version": apiVersion,
+            }).pipe(Effect.timeout("5 seconds")),
+          })
+          .pipe(Effect.orElseSucceed(() => []))
         return { connection, value: { baseURL: url, token: credential.refresh, models, tiers, connection } }
       }),
     })
@@ -390,7 +386,7 @@ export const GithubCopilotPlugin = define({
         Effect.gen(function* () {
           // Titles use Copilot's utility model, so they never route.
           if (evt.model.id !== CopilotModels.auto || evt.kind === "title") return
-          const tier = evt.model.variant
+          const tier = evt.model.variant === "default" ? undefined : evt.model.variant
           if (tier && !discovered.current.tiers?.includes(tier))
             return yield* Effect.die(new Error(`Copilot Auto tier '${tier}' is not enabled for this account`))
           const now = yield* Clock.currentTimeMillis
