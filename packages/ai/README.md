@@ -16,7 +16,7 @@ const input = { model: openai.responses("gpt-4o-mini"), prompt: "Say hello." }
 const response = await ai.generate(input)
 console.log(response.text)
 const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
-await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
+await ai.write(generated.images[0], "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
 for await (const event of ai.stream(ai.request(input))) {
   // LLMEvent
 }
@@ -226,7 +226,7 @@ const image = Effect.gen(function* () {
     resolution: "1K",
     providerOptions: { quality: "high" }, // typed per image model
   })
-  yield* Media.write(response.image, "./garden.png")
+  yield* Media.write(response.images[0], "./garden.png")
 })
 
 // `Media.file` / `Media.write` use the Effect `FileSystem` service; provide your platform's layer.
