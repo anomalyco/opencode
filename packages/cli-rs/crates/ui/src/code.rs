@@ -17,14 +17,16 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
     let feedback = &theme.text.feedback;
     let fg = |color: Color| Style::new().fg(color);
     let categorical = theme.categorical();
+    // The page color: dark in dark mode, light in light mode. A transparent page (the system theme) falls back
+    // to the selected-row text.
+    let paste = if theme.background.base.a == 255 { theme.background.base } else { theme.text.action.primary.focused };
     let rules = [
         (&["default"][..], fg(theme.text.base)),
         (&["prompt"], fg(theme.accent().step(200))),
         (&["extmark.file"], fg(feedback.warning.base).bold()),
         (&["extmark.agent"], fg(categorical[0].step(200)).bold()),
         (&["extmark.skill"], fg(categorical.get(1).unwrap_or(&categorical[0]).step(200)).bold()),
-        // V1 migration preserves its selected/inverse foreground in this action state.
-        (&["extmark.paste"], fg(theme.text.action.primary.focused).bg(feedback.warning.base).bold()),
+        (&["extmark.paste"], fg(paste).bg(feedback.warning.base).bold()),
         (&["comment", "comment.documentation"], fg(syntax.comment).italic()),
         (&["string", "symbol", "character.special", "character"], fg(syntax.string)),
         (&["number", "boolean", "constant", "float"], fg(syntax.number)),
