@@ -186,6 +186,7 @@ impl TuiCommand {
 }
 
 /// A layer as features declare it (TS `KeymapLayer`).
+#[derive(Clone)]
 pub struct KeymapLayer<T> {
     /// The input mode the layer needs; `None` is [`BASE_MODE`], and [`GLOBAL_MODE`] opts out.
     pub mode: Option<String>,
@@ -270,6 +271,12 @@ pub struct Pending {
 /// The command `dispatch` runs and its input.
 type Invocation = (String, Option<String>);
 
+struct Registered<T> {
+    id: u64,
+    layer: KeymapLayer<T>,
+    engine: Disposer,
+}
+
 struct ModeEntry {
     id: u64,
     mode: String,
@@ -279,7 +286,11 @@ struct ModeEntry {
 /// The TUI's keymap: the engine with OpenCode's addons, config, layers, and modes.
 pub struct TuiKeymap<T> {
     keymap: Keymap<T>,
-    keybinds: Rc<Keybinds<T>>,
+    keybinds: RefCell<Rc<Keybinds<T>>>,
+    /// Every live layer from [`Self::layer`], as declared, and its registration: new keybinds register each again,
+    /// as `createLayer` reads the configured bindings reactively.
+    layers: Rc<RefCell<Vec<Registered<T>>>>,
+    next_layer: Cell<u64>,
     leader: Option<TimedLeader<T>>,
     /// The timeout `leader` was built with, and the configured one now ([`Self::set_leader_timeout`]).
     leader_timeouts: (Duration, Cell<Duration>),
@@ -324,7 +335,9 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         let format = format_options(leader_key.as_ref());
         let tui = Self {
             keymap,
-            keybinds: Rc::new(keybinds),
+            keybinds: RefCell::new(Rc::new(keybinds)),
+            layers: Rc::default(),
+            next_layer: Cell::new(0),
             leader,
             leader_timeouts: (options.leader_timeout, Cell::new(options.leader_timeout)),
             leader_stroke,
@@ -343,8 +356,28 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         &self.keymap
     }
 
-    pub fn keybinds(&self) -> &Keybinds<T> {
-        &self.keybinds
+    pub fn keybinds(&self) -> Rc<Keybinds<T>> {
+        self.keybinds.borrow().clone()
+    }
+
+    /// Takes new keybinds and binds every live layer again with them. The leader and the textarea's edit bindings
+    /// keep the keys they started with, as TS reads those once.
+    pub fn set_keybinds(&self, keybinds: Keybinds<T>) {
+        *self.keybinds.borrow_mut() = Rc::new(keybinds);
+        let layers: Vec<(u64, KeymapLayer<T>)> =
+            self.layers.borrow().iter().map(|registered| (registered.id, registered.layer.clone())).collect();
+        // The replaced registrations drop last: a layer's handlers may own disposers of other layers.
+        let mut replaced = Vec::new();
+        for (id, layer) in layers {
+            let Ok(engine) = self.compile(layer) else { continue };
+            let engine = self.keymap.register_layer(engine);
+            let mut registered = self.layers.borrow_mut();
+            match registered.iter_mut().find(|registered| registered.id == id) {
+                Some(registered) => replaced.push(std::mem::replace(&mut registered.engine, engine)),
+                None => replaced.push(engine),
+            }
+        }
+        drop(replaced);
     }
 
     /// Passes a key to the keymap. Skip the focused widget's own handling when the result stops propagation.
@@ -404,6 +437,25 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     }
 
     pub fn layer(&self, layer: KeymapLayer<T>) -> Result<Disposer, String> {
+        let engine = self.keymap.register_layer(self.compile(layer.clone())?);
+        let id = self.next_layer.get();
+        self.next_layer.set(id + 1);
+        self.layers.borrow_mut().push(Registered { id, layer, engine });
+        let layers = Rc::downgrade(&self.layers);
+        Ok(Disposer::new(move || {
+            let Some(layers) = layers.upgrade() else { return };
+            // Dropped after the borrow ends, as `set_keybinds` drops what it replaced.
+            let removed = {
+                let mut layers = layers.borrow_mut();
+                layers.iter().position(|registered| registered.id == id).map(|index| layers.remove(index))
+            };
+            drop(removed);
+        }))
+    }
+
+    /// The engine layer of a declared one, with its commands' configured bindings.
+    fn compile(&self, layer: KeymapLayer<T>) -> Result<Layer<T>, String> {
+        let keybinds = self.keybinds();
         let mut commands = Vec::new();
         let mut bindings = Vec::new();
         let mut named = Vec::new();
@@ -442,7 +494,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             if matches!(command.bind, Bind::Off) {
                 continue;
             }
-            let configured = self.keybinds.get(id);
+            let configured = keybinds.get(id);
             if !configured.is_empty() {
                 bindings.extend(configured.iter().cloned());
                 continue;
@@ -451,7 +503,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
                 bindings.push(Binding::new(key.as_str()).cmd(id.as_str()));
             }
         }
-        bindings.extend(layer.bindings.iter().flat_map(|id| self.keybinds.get(id).iter().cloned()));
+        bindings.extend(layer.bindings.iter().flat_map(|id| keybinds.get(id).iter().cloned()));
         let mut engine =
             Layer::new().priority(layer.priority).enabled(layer.enabled).commands(commands).bindings(bindings);
         engine.target = layer.target;
@@ -459,7 +511,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             Some(GLOBAL_MODE) => {}
             mode => engine = engine.require(MODE_KEY, mode.unwrap_or(BASE_MODE)),
         }
-        Ok(self.keymap.register_layer(engine))
+        Ok(engine)
     }
 
     fn named_command(&self, id: &str, command: TuiCommand) -> Command<T> {
