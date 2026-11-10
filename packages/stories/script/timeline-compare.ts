@@ -57,10 +57,11 @@ const reused = existsSync(base)
 
 if (reused) {
   await rm(path.join(base, renderer), { force: true })
-  await $`git checkout --detach --force ${sha}`.cwd(base).quiet()
+  // The repo's hooks expect a husky install the base worktree never runs, and the compare needs none of them.
+  await $`git -c core.hooksPath=/dev/null checkout --detach --force ${sha}`.cwd(base).quiet()
 }
 
-if (!reused) await $`git worktree add --detach ${base} ${sha}`.cwd(root).quiet()
+if (!reused) await $`git -c core.hooksPath=/dev/null worktree add --detach ${base} ${sha}`.cwd(root).quiet()
 
 // Install only when the base's lockfile changed since the last run.
 const lock = createHash("sha256")
