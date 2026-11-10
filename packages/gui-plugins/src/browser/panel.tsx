@@ -82,8 +82,10 @@ export default function SessionBrowserPane(props: {
   const suspended = () => props.model.suspended(props.session)
   const command = (action: Browser.Action) => props.model.command(props.session, action)
   const profile = plugin.use(BrowserProfile)
-  // The pane offers to import sign-ins until the user imports or declines once.
-  const offering = () => !plugin.stores.preferences.value.welcomed
+  // The pane offers to import sign-ins until the user imports or declines once, and keeps the offer's confirmation of
+  // an import until the user closes it.
+  const [confirming, setConfirming] = createSignal(false)
+  const offering = () => !plugin.stores.preferences.value.welcomed || confirming()
 
   const extensions = () => {
     const current = profile()
@@ -233,9 +235,11 @@ export default function SessionBrowserPane(props: {
   // than on blur: a click elsewhere, such as a recent page, may have blurred the field already.
   const go = (url: string) => dispatchAddress({ type: "navigated", url, epoch: epoch() })
 
-  // Loads the page again with the cookies an import brought, so a signed-out site opens signed in.
-  const reloadPage = () => {
+  // Cookies came in: the offer stays to say so, and the page loads again with them, so a signed-out site opens signed
+  // in.
+  const imported = () => {
     const tab = state()
+    setConfirming(true)
 
     if (tab && address()) command({ type: "reload", tabID: tab.id })
   }
@@ -782,7 +786,7 @@ export default function SessionBrowserPane(props: {
       </Show>
       {/* Above a page, where a signed-out site is the reason to import; the new tab page shows the offer as a card. */}
       <Show when={offering() && !empty() && !suspended()}>
-        <SignInOffer variant="bar" imported={reloadPage} />
+        <SignInOffer variant="bar" imported={imported} closed={() => setConfirming(false)} />
       </Show>
       <embeds.View
         id={embed()}
@@ -797,7 +801,7 @@ export default function SessionBrowserPane(props: {
         <Show when={empty() && !failed() && !suspended()}>
           <div dir="auto" class="size-full overflow-y-auto">
             <Show when={offering()}>
-              <SignInOffer variant="card" imported={reloadPage} />
+              <SignInOffer variant="card" imported={imported} closed={() => setConfirming(false)} />
             </Show>
             <Show
               when={recent().length > 0}
