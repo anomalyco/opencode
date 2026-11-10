@@ -146,6 +146,9 @@ fn first_ref(nodes: &[Node]) -> Option<(&str, Option<&Part>)> {
     })
 }
 
+/// `defaultVerbosity`: the transcript detail when `session.verbosity` is unset.
+pub const DEFAULT_VERBOSITY: Verbosity = Verbosity::Low;
+
 /// The grouping settings a view reads: `session.grouping`, `session.verbosity`, and which groups the
 /// reader opened (`sessionTabs.groupExpanded`, kept for this view).
 pub struct Settings {
@@ -160,7 +163,7 @@ impl Settings {
     pub fn new(info: &Info) -> Rc<Self> {
         let settings = Rc::new(Self {
             grouping: Cell::new(true),
-            verbosity: Cell::new(Verbosity::Medium),
+            verbosity: Cell::new(DEFAULT_VERBOSITY),
             expanded: RefCell::default(),
             refresh: RefCell::default(),
         });
@@ -172,7 +175,7 @@ impl Settings {
     pub fn read(&self, info: &Info) -> bool {
         let session = info.session.as_ref();
         let grouping = session.and_then(|session| session.grouping) != Some(Grouping::None);
-        let verbosity = session.and_then(|session| session.verbosity).unwrap_or(Verbosity::Medium);
+        let verbosity = session.and_then(|session| session.verbosity).unwrap_or(DEFAULT_VERBOSITY);
         let grouping = self.grouping.replace(grouping) != grouping;
         let verbosity = self.verbosity.replace(verbosity) != verbosity;
         grouping || verbosity

@@ -16,7 +16,7 @@ const parser = [
 
 export default defineSim({
   height: 40,
-  config: { session: { grouping: "none" } },
+  config: { session: { grouping: "none", verbosity: "medium" } },
   files: { "src/parser.rs": parser },
   model: [
     {

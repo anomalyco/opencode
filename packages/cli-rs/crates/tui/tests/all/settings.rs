@@ -143,10 +143,11 @@ fn left_and_right_cycle_values_and_numbers_step_within_bounds() {
     // Three values wrap both ways.
     settings::show(&tui, Some("session.verbosity"));
     app.type_text("verbosity");
-    assert_eq!(footer(&app, "Verbosity"), "medium");
-    app.press("left");
+    assert_eq!(footer(&app, "Verbosity"), "low");
     app.press("left");
     assert_eq!(footer(&app, "Verbosity"), "high");
+    app.press("right");
+    assert_eq!(footer(&app, "Verbosity"), "low");
 
     // Numbers step and clamp; the bound is not written again.
     settings::show(&tui, None);

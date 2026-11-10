@@ -7,6 +7,9 @@
     "experimental": {
       "new-designs": true
     },
+    "session": {
+      "verbosity": "medium"
+    },
     "animations": false
   },
   "args": {
