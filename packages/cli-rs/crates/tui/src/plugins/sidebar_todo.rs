@@ -10,6 +10,7 @@ use opencode_api::generated::{
 use opencode_plugin::abi::{self, Changed, Click, Command, Layout, Node, Placement, Render, Span};
 use opencode_plugin::slot;
 use opencode_store::MessageExt;
+use opencode_ui::tool_info::{Todo, TodoStatus, parse_todos, todo_marker};
 use serde_json::{Value, json};
 
 pub fn plugin() -> abi::Plugin {
@@ -38,7 +39,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         if !last.update(read, changed, fresh) && !fresh {
             return Render::Keep;
         }
-        let list = parse(last.input.as_ref());
+        let list = last.input.as_ref().map(parse_todos).unwrap_or_default();
         if list.is_empty() {
             return Render::Hide;
         }
@@ -85,20 +86,6 @@ impl Last {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Status {
-    Pending,
-    InProgress,
-    Completed,
-    Cancelled,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Todo {
-    pub content: String,
-    pub status: Status,
-}
-
 fn view(list: &[Todo], open: bool) -> Node {
     let foldable = list.len() > 2;
     let mut header = Vec::new();
@@ -107,7 +94,8 @@ fn view(list: &[Todo], open: bool) -> Node {
     }
     let mut title = vec![Span::new("Todo").fg("text.base").bold()];
     if foldable && !open {
-        let remaining = list.iter().filter(|item| matches!(item.status, Status::Pending | Status::InProgress)).count();
+        let remaining =
+            list.iter().filter(|item| matches!(item.status, TodoStatus::Pending | TodoStatus::InProgress)).count();
         title.push(Span::new(format!(" ({remaining} remaining)")).fg("text.muted"));
     }
     header.push(Node::text(title));
@@ -125,25 +113,17 @@ fn view(list: &[Todo], open: bool) -> Node {
 /// `TodoItem`: the marker and the wrapped content, colored by status.
 fn item(todo: &Todo) -> Node {
     let color = match todo.status {
-        Status::InProgress => "text.feedback.warning.base",
-        Status::Cancelled => "text.faint",
+        TodoStatus::InProgress => "text.feedback.warning.base",
+        TodoStatus::Cancelled => "text.faint",
         _ => "text.muted",
     };
-    let content = Span { strikethrough: todo.status == Status::Cancelled, ..Span::new(todo.content.clone()) };
+    let content = Span { strikethrough: todo.status == TodoStatus::Cancelled, ..Span::new(todo.content.clone()) };
     Node::row(vec![
-        Node::text([Span::new(format!("{} ", marker(todo.status)))]).fg(color).layout(Layout::default().shrink(false)),
+        Node::text([Span::new(format!("{} ", todo_marker(todo.status, false)))])
+            .fg(color)
+            .layout(Layout::default().shrink(false)),
         Node::text([content]).fg(color).layout(Layout::default().grow()),
     ])
-}
-
-/// `todoMarker`.
-pub fn marker(status: Status) -> &'static str {
-    match status {
-        Status::Completed => "[✓]",
-        Status::InProgress => "[•]",
-        Status::Cancelled => "[-]",
-        Status::Pending => "[ ]",
-    }
 }
 
 /// `sessionTodos`: the input of the latest completed `todowrite` call before `boundary`.
@@ -165,47 +145,4 @@ fn todo_input<'a>(messages: &'a [SessionMessageInfo], boundary: Option<&str>) ->
             },
             _ => None,
         })
-}
-
-/// `parseTodos`: entries with non-empty content; an unknown status reads as pending.
-fn parse(value: Option<&Value>) -> Vec<Todo> {
-    let Some(Value::Array(items)) = value else {
-        return Vec::new();
-    };
-    items
-        .iter()
-        .filter_map(|item| {
-            let content = item.get("content")?.as_str().filter(|text| !text.is_empty())?;
-            let status = match item.get("status").and_then(Value::as_str) {
-                Some("in_progress") => Status::InProgress,
-                Some("completed") => Status::Completed,
-                Some("cancelled") => Status::Cancelled,
-                _ => Status::Pending,
-            };
-            Some(Todo { content: content.to_owned(), status })
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn parses_like_parse_todos() {
-        let value = json!([
-            { "content": "a", "status": "completed" },
-            { "content": "", "status": "pending" },
-            { "content": "b", "status": "weird" },
-            { "status": "pending" },
-            { "content": "c", "status": "in_progress" },
-        ]);
-        let list = parse(Some(&value));
-        assert_eq!(
-            list.iter().map(|todo| (todo.content.as_str(), todo.status)).collect::<Vec<_>>(),
-            [("a", Status::Completed), ("b", Status::Pending), ("c", Status::InProgress)]
-        );
-        assert!(parse(Some(&json!({}))).is_empty());
-    }
 }
