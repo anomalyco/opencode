@@ -79,11 +79,8 @@ export function createOfficeWorker<M extends Methods, T>(options: {
   const start = (attempt: number, bytes: Uint8Array, timeoutMs: number) => {
     const controller = new AbortController()
     const worker = options.createWorker()
-    const client = createWorkerClient<M>(worker)
-    const crashed = () => dispatch({ type: "worker.crashed", attempt })
+    const client = createWorkerClient<M>(worker, { onCrash: () => dispatch({ type: "worker.crashed", attempt }) })
 
-    worker.addEventListener("error", crashed)
-    worker.addEventListener("messageerror", crashed)
     runs.set(attempt, {
       controller,
       close: () => client.close(),
@@ -109,8 +106,10 @@ export function createOfficeWorker<M extends Methods, T>(options: {
 
     runs.delete(attempt)
     clearTimeout(entry.timer)
-    entry.controller.abort()
+    // Closing first rejects the pending calls and detaches their abort listeners, so the abort posts no cancel to the
+    // terminated worker.
     entry.close()
+    entry.controller.abort()
   }
 
   createKeyed(options.bytes, (bytes) => dispatch({ type: "bytes.changed", bytes }))

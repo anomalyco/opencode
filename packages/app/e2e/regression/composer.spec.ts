@@ -115,6 +115,34 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
   expect(prompts[1]?.text).toBe("@home now")
 })
 
+test("closing the @ menu aborts its session search", async ({ page }) => {
+  const view = await openSession(page, {
+    name: "SessionMentionAbort",
+    findFiles: () => [],
+    sessions: [{ id: "ses_mention_abort_source", title: "Review the plan" }],
+    seed: { tabs: ["ses_mention_abort_source"] },
+  })
+
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+  const search = await holdRoute(page, /\/api\/session\?.*search=auth(&|$)/)
+
+  try {
+    await view.editor.pressSequentially("@auth")
+    const request = await search.arrived
+
+    const failed = page.waitForEvent("requestfailed", {
+      predicate: (candidate) => candidate === request,
+      timeout: 10_000,
+    })
+
+    await view.editor.press("Escape")
+    await expect(suggestions).toBeHidden()
+    expect((await failed).failure()?.errorText).toBe("net::ERR_ABORTED")
+  } finally {
+    search.release()
+  }
+})
+
 test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
   page,
   context,
@@ -1343,6 +1371,13 @@ test("/reload reloads the server's configuration once and reports it", async ({ 
   await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
   await editor.press("Enter")
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeVisible()
+  // A second /reload while the first runs joins it: no second request and no second toast.
+  await expect(editor).toBeEmpty()
+  await editor.fill("/reload")
+  await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+  await expect(editor).toBeEmpty()
+  await expect(page.getByText("Reloading configuration…", { exact: true })).toHaveCount(1)
   reloaded.resolve()
   await expect(page.getByText("Configuration reloaded", { exact: true })).toBeVisible()
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeHidden()
@@ -1473,6 +1508,33 @@ for (const row of [
     await expect(scroll).toHaveText("Enter shell command… git status")
   })
 }
+
+test("a sent shell command returns the composer to prompt mode, and ! enters shell mode again", async ({ page }) => {
+  const { editor } = await openSession(page, {
+    name: "ShellSend",
+    sessions: [{ id: "ses_shell_send", title: "Shell send" }],
+  })
+
+  const scroll = page.locator('[data-component="composer-scroll"]')
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+  await editor.pressSequentially("git status")
+
+  const sent = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/ses_shell_send/shell"),
+  )
+
+  await editor.press("Enter")
+  expect((await sent).postDataJSON()).toMatchObject({ command: "git status" })
+  await expect(editor).toBeEmpty()
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await expect(page.getByRole("button", { name: /^Exit/ })).toHaveCount(0)
+
+  // The editor reads the draft's mode, so it agrees with the draft the send reset.
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+})
 
 test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
   const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })

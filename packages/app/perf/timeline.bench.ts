@@ -19,37 +19,40 @@ const drag = "drag the review's edge"
 
 // The divider between the session and the side panel, read once the review is open. The session panel keeps at least
 // 400px, the side panel 320px and the 8px gap.
+const handle = '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]'
+
 let divider: Divider | undefined
 
 export default bench({
+  // The session a case's launch loads: the edits alone, the history beside the review, or the history. Cases with the
+  // same one share a launch.
+  setupKey: (ctx) => (ctx.case === "expand an edit" ? "edits" : ctx.case === drag ? "review" : "history"),
+
   targets: {
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      prepare: async ({ case: name, playwright, mock, url }) => ({
-        ...(await mockTimelineSession(cached(playwright.page, mock), {
-          server: new URL(url).origin,
+      prepare: async (ctx) =>
+        mockTimelineSession(cached(ctx), {
+          server: new URL(ctx.url).origin,
           // The edits alone, so the case measures the diff, not the history around it.
-          historyTurns: name === "expand an edit" ? 0 : 120,
-          collapsedEdits: name === "expand an edit",
-          tools: name === "expand an edit" ? await editTools() : undefined,
-          vcsDiff: name === drag ? reviewDiffs() : undefined,
-        })),
-        mouse: playwright.page.mouse,
-      }),
+          historyTurns: ctx.setupKey === "edits" ? 0 : 120,
+          collapsedEdits: ctx.setupKey === "edits",
+          tools: ctx.setupKey === "edits" ? await editTools() : undefined,
+          vcsDiff: ctx.setupKey === "review" ? reviewDiffs() : undefined,
+        }),
       url: ({ prepared }) => prepared.path,
     }),
   },
 
-  async setup({ case: name, page }) {
+  async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
     await page.waitFor(composer)
 
-    if (name === drag) {
+    if (setupKey === "review") {
       await openReview(page)
       await page.idle()
       divider = await page.eval(measureDivider, {
-        selector: '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]',
         panel: '[data-slot="session-chat-panel"]',
         row: "[data-pane-row]",
         min: 400,
@@ -118,7 +121,7 @@ export default bench({
     [drag]: {
       primary: "frames.dropped.pct",
       metrics: ["main.work", "main.layout", "main.style", "main.script", "frames.interval.p95"],
-      run: ({ prepared }) => dragDivider(prepared.mouse, divider!),
+      run: ({ page }) => dragDivider(page, handle, divider!),
       reset: ({ page }) => page.idle(),
     },
   },

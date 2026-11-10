@@ -33,6 +33,7 @@ export const emptyWellknownNode = makeGlobalNode({
       remove: () => Effect.die("unused Wellknown.remove"),
       resolve: () => Effect.die("unused Wellknown.resolve"),
       cached: () => Effect.succeed([]),
+      clearCached: () => Effect.void,
     }),
   ),
   deps: [],

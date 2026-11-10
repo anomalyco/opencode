@@ -3,7 +3,9 @@ import { createKeyed, type IpcClient } from "@opencode/plugin/gui"
 import type { Ssh, SshConfig, SshHttp, SshItem } from "./contract"
 import {
   createSshWindowState,
-  selectSshAnswered,
+  selectSshActiveAttempt,
+  selectSshAnsweredPrompt,
+  selectSshCanOffer,
   selectSshCanOpenDialog,
   selectSshError,
   selectSshPending,
@@ -27,7 +29,10 @@ export function createSshController(input: {
   /** Resolves once this window's state includes `revision`, the main side goes away, or `signal` aborts. */
   refresh: (revision: number, signal: AbortSignal) => Promise<void>
   error: () => void
+  /** The routed path; each change starts a new visit, on which a cover offers authentication once per server. */
+  path?: Accessor<string>
 }) {
+  const path = input.path ?? (() => "")
   // The machine state is immutable; each transition replaces it whole.
   const [machine, setMachine] = createSignal(createSshWindowState())
   // Aborts the wait for an admitted attempt's state, per server.
@@ -152,12 +157,34 @@ export function createSshController(input: {
     { equals: (previous, next) => previous.ipcActive === next.ipcActive && previous.items === next.items },
   )
 
+  // Follows the router: routing another page or tab starts a new visit.
+  createKeyed(
+    () => ({ path: path() }),
+    (route) => dispatch({ type: "visit.changed", path: route.path }),
+    { equals: (previous, next) => previous.path === next.path },
+  )
+
   return {
     item,
     submitting: (id: string) => selectSshSubmitting(machine(), id),
     error: (id: string) => selectSshError(machine(), id),
-    answered: (id: string) => selectSshAnswered(machine(), id, item(id)),
+    answeredPrompt: (id: string) => selectSshAnsweredPrompt(machine(), id),
+    activeAttempt: (id: string) => selectSshActiveAttempt(machine(), id),
     pending: (id: string) => selectSshPending(machine(), id, item(id)),
+    cover: {
+      /** The server's cover may offer authentication on this visit. */
+      canOffer: (id: string, dialogActive: boolean) =>
+        selectSshCanOffer(machine(), id, path(), dialogActive, !!input.api(), item(id)),
+      offer: (id: string, dialogActive: boolean) =>
+        dispatch({
+          type: "cover.offered",
+          id,
+          path: untrack(path),
+          dialogActive,
+          ipcActive: !!untrack(input.api),
+          item: current(id),
+        }),
+    },
     dialog: {
       /** The attempt whose prompt needs a dialog of its own. */
       next: () => selectSshPromptTarget(machine(), input.items()),

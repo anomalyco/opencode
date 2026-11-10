@@ -65,7 +65,7 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 Например, если ваша организация предоставляет серверы MCP, которые по умолчанию отключены:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Удаленная конфигурация из .well-known/opencode"
 {
   "mcp": {
     "jira": {

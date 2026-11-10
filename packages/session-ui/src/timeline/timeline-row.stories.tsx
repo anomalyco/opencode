@@ -1,4 +1,9 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import type {
+  PromptAttachment,
+  SessionMessageAssistant,
+  SessionMessageInfo,
+  SessionMessageUser,
+} from "@opencode/client/promise"
 import { createMemo, For, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
@@ -63,7 +68,7 @@ export const ResponseSpeed = {
   render: (args: { measured: boolean; steered: boolean }) => (
     <CurrentSessionTimelineStory
       title="Response speed"
-      description="Hover the response, then its metadata line to reveal tokens per second across both model steps."
+      description="Hover the response to reveal tokens per second across both model steps."
       width="720px"
       document={{
         sessionID: CURRENT_SESSION_ID,
@@ -876,6 +881,53 @@ const UserMessageLinks = {
   ),
 }
 
+const storyChart = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120"><rect width="160" height="120" fill="#f3f4f6"/><path d="M16 96h128" stroke="#9ca3af"/><rect x="28" y="56" width="20" height="40" fill="#009fff"/><rect x="60" y="36" width="20" height="60" fill="#009fff"/><rect x="92" y="68" width="20" height="28" fill="#009fff"/><rect x="124" y="24" width="12" height="72" fill="#009fff"/></svg>',
+)}`
+
+const flakyMedia = `media:${"a".repeat(64)}`
+
+const mediaFiles: PromptAttachment[] = [
+  { mime: "image/svg+xml", name: "flaky.svg", source: { type: "inline" }, uri: flakyMedia },
+  { mime: "image/svg+xml", name: "ready.svg", source: { type: "inline" }, uri: `media:${"b".repeat(64)}` },
+]
+
+const MediaAttachmentRetry = {
+  render: () => {
+    // The first read of `flakyMedia` fails, as an offline server would; a retry reads it.
+    const failed = new Set<string>()
+
+    return (
+      <CurrentSessionTimelineStory
+        title="Prompt with unreadable media"
+        description="A stored image that fails to load shows a failed tile; clicking it reads the image again."
+        readMedia={(uri) => {
+          if (uri !== flakyMedia || failed.has(uri)) return Promise.resolve(storyChart)
+          failed.add(uri)
+
+          return Promise.reject(new Error("offline"))
+        }}
+        document={{
+          ...thinkingDocument,
+          status: { type: "idle" },
+          messages: [
+            {
+              id: "msg_story_media_user",
+              type: "user",
+              text: "Compare these charts",
+              agents: [],
+              // SAFETY: stored files reach the timeline as `media:` refs, a variant the generated message type does not list.
+              files: mediaFiles as SessionMessageUser["files"],
+              time: { created: 1_735_689_633_000 },
+            },
+          ],
+        }}
+        width="620px"
+      />
+    )
+  },
+}
+
 const conversationScenarios = {
   reasoning: AgentReasoning,
   hidden: WorkingWithoutReasoningDetails,
@@ -887,6 +939,91 @@ const conversationScenarios = {
   models: AliasedModelNotices,
   attachments: RichUserAttachments,
   links: UserMessageLinks,
+  media: MediaAttachmentRetry,
+}
+
+/**
+ * A stack of three prompts arriving, a prompt sent with another model that stands alone, then two steers waiting behind
+ * the running turn. Send next adds the next prompt; Deliver next delivers the oldest steer.
+ */
+export const PromptRuns = {
+  render: () => {
+    const start = Date.now() - 10 * 60_000
+
+    const prompt = (id: string, text: string, minute: number, variant?: string) => ({
+      id,
+      type: "user" as const,
+      text,
+      time: { created: start + minute * 60_000 },
+      metadata: {
+        agent: "build",
+        model: { providerID: "anthropic", id: "claude-opus-5-5", variant: variant ?? "high" },
+      },
+    })
+
+    const prompts = [
+      prompt("msg_end_0", "You don't need to update the tests yet", 0),
+      prompt("msg_end_1", "just play this back against the old fixture first", 1),
+      prompt("msg_end_2", "So that we can see what actually changed", 2),
+      prompt("msg_end_3", "Now try it with max effort", 5, "max"),
+      prompt("msg_end_4", "Also check the retry path", 7, "max"),
+      prompt("msg_end_5", "And rebase on beta first", 8, "max"),
+    ]
+
+    const steers = ["msg_end_4", "msg_end_5"]
+
+    const [state, setState] = createStore<{ count: number; delivered: string[]; removed: string[] }>({
+      count: 1,
+      delivered: [],
+      removed: [],
+    })
+
+    const session = createMemo(
+      (): SessionDocument => ({
+        sessionID: CURRENT_SESSION_ID,
+        messages: prompts.slice(0, state.count).filter((message) => !state.removed.includes(message.id)),
+        status: { type: "busy" },
+        diffs: [],
+      }),
+    )
+
+    const take = async (input: { messageID: string }) => setState("removed", (ids) => [...ids, input.messageID])
+
+    const actions = {
+      revert: () => {},
+      fork: () => {},
+      pending: {
+        status: (messageID: string) =>
+          steers.includes(messageID) && !state.delivered.includes(messageID) ? ("steering" as const) : undefined,
+        queue: take,
+        remove: take,
+      },
+    }
+
+    const deliverNext = () => {
+      const next = steers.find((id) => !state.delivered.includes(id) && !state.removed.includes(id))
+
+      if (next) setState("delivered", (ids) => [...ids, next])
+    }
+
+    return (
+      <section class="mx-auto flex w-full max-w-[760px] flex-col gap-4 p-6 pb-0">
+        <div class="flex gap-2">
+          <button type="button" onClick={() => setState("count", (value) => Math.min(value + 1, prompts.length))}>
+            Send next
+          </button>
+          <button type="button" onClick={deliverNext}>
+            Deliver next
+          </button>
+        </div>
+        {/* Room above, as in a real session, so menus open upward. */}
+        <div class="h-56" />
+        <CurrentSessionProviders document={session()}>
+          <SessionTimeline document={session()} actions={actions} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
 }
 
 export const Conversation = {

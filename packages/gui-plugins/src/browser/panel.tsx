@@ -12,8 +12,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, createSignal, For, on, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal, For, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createKeyed,
@@ -23,9 +22,19 @@ import {
   type MountedSession,
   type SessionScreen,
 } from "@opencode/plugin/gui"
-import { addressParts, connection, loopback, resolveAddress, searches } from "./address"
+import { addressParts, connection, loopback } from "./address"
+import {
+  ADDRESS_HINT_MAX_LENGTH,
+  addressSuggestions,
+  addressView,
+  initialAddressState,
+  nextAddressEpoch,
+  transitionAddress,
+  type AddressEpoch,
+  type AddressEvent,
+} from "./address-machine"
 import { commentNote, pageNote } from "./comment"
-import { bare, completes, highlight, suggest, type Visit } from "./history"
+import { bare, highlight, type Visit } from "./history"
 import type { Model } from "./model"
 import {
   capturesEscape,
@@ -47,29 +56,6 @@ import {
   type SiteEffect,
   type SiteEvent,
 } from "./site-machine"
-
-type PaneState = {
-  /** The address field's text while the user edits it, and the submitted address it keeps afterwards. */
-  address: string
-  editing: boolean
-  /**
-   * The report counts when an address was submitted; the next URL change, finished load or rejection shows the
-   * page's URL.
-   */
-  kept: { followed: number; rejected: number } | undefined
-  /** The movement count at a submit; the next reported movement ends the submitted navigation. */
-  navigating: number | undefined
-  /** The user typed since focusing the address field; suggestions follow typing, not a focused URL. */
-  typed: boolean
-  /** The suggestion Enter opens; -1 opens the typed text. */
-  active: number
-  /** Escape closed the suggestions; typing opens them again. */
-  dismissed: boolean
-  size: { width: number; height: number }
-}
-
-/** Suggestions the address field lists, and pages the new tab page lists. */
-const SUGGESTIONS = 5
 
 const RECENT = 5
 
@@ -98,63 +84,39 @@ export default function SessionBrowserPane(props: {
     return tab ? props.model.page(props.session, tab.id) : undefined
   }
 
-  const [store, setStore] = createStore<PaneState>({
-    address: "",
-    editing: false,
-    kept: undefined,
-    navigating: undefined,
-    typed: false,
-    active: -1,
-    dismissed: false,
-    size: { width: 0, height: 0 },
-  })
-
+  const [addressState, setAddressState] = createSignal(initialAddressState)
+  const [size, setSize] = createSignal({ width: 0, height: 0 })
   const [overlay, setOverlay] = createSignal(initialOverlayState)
 
-  // Finished loads, counted. A submitted address that lands on the URL the page already had (say "example.com" on
-  // https://example.com/) changes no URL, only this.
-  const settled = createMemo(
-    on(
-      () => !!state()?.loading,
-      (loading, previous, count: number = 0) => (previous && !loading ? count + 1 : count),
-    ),
+  // The page's reports, counted; a submitted address in the field ends at the next one.
+  const epoch = createMemo((previous: AddressEpoch | undefined) =>
+    nextAddressEpoch(previous, {
+      tabID: state()?.id,
+      url: address(),
+      loading: !!state()?.loading,
+      generation: state()?.generation ?? 0,
+      error: props.model.error(props.session),
+    }),
   )
 
-  // Page reports, counted: a count moves on every report, even one that repeats a value. Tab switches, URL changes and
-  // finished loads:
-  const followed = createMemo(
-    on([() => state()?.id, address, settled], (_input, _previous, count: number = 0) => count + 1),
-  )
+  // Suggestions follow what the user typed; a focused address is not a query.
+  const suggestions = createMemo(() => addressSuggestions(addressState(), props.model.visits()))
+  const addressBar = createMemo(() => addressView(addressState(), epoch(), suggestions()))
 
-  // Rejections: a blocked or rejected request leaves the page where it was.
-  const rejected = createMemo(
-    on(
-      () => props.model.error(props.session),
-      (error, _previous, count: number = 0) => (error ? count + 1 : count),
-    ),
-  )
+  const dispatchAddress = (event: AddressEvent, domEvent?: Event) => {
+    const next = transitionAddress(untrack(addressState), event)
+    setAddressState(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "select-input") return input?.select()
 
-  // Any reported movement, including a rejected or blocked request. A command clearing the last error is not one.
-  const moved = createMemo(
-    on(
-      [() => state()?.id, () => state()?.generation, () => state()?.loading, rejected],
-      (_input, _previous, count: number = 0) => count + 1,
-    ),
-  )
+      if (effect.type === "blur-input") return input?.blur()
 
-  // A submitted navigation the browser has not reported yet; keeps the empty state hidden meanwhile.
-  const navigating = () => store.navigating === moved()
-
-  // The address field: the user's text while editing, and a submitted address until the page reports a URL change or a
-  // rejection; otherwise the page's URL.
-  const field = () => {
-    if (store.editing) return store.address
-    const kept = store.kept
-
-    return kept?.followed === followed() && kept.rejected === rejected() ? store.address : address()
+      if (effect.type === "prevent-default") return domEvent?.preventDefault()
+      command({ type: "navigate", tabID: effect.tabID, url: effect.url })
+    })
   }
 
-  const empty = () => !address() && !state()?.loading && !navigating()
+  const empty = () => !address() && !state()?.loading && !addressBar().navigating
   // The desktop page hides blank and loading documents itself; only hide here
   // while the pane shows its own empty or failed state over the embed.
   const shown = () => visible() && !empty() && !failed()
@@ -229,16 +191,8 @@ export default function SessionBrowserPane(props: {
   }
 
   // The address field always shows the whole URL; at rest it draws the host emphasized.
-  const parts = () => addressParts(field())
-  const site = () => !!field() && !store.editing
-
-  // Suggestions follow what the user typed; a focused address is not a query.
-  const suggestions = createMemo(() =>
-    store.editing && store.typed ? suggest(props.model.visits(), store.address, SUGGESTIONS) : [],
-  )
-
-  const listed = () => suggestions().length > 0 && !store.dismissed
-  const chosen = () => (listed() ? suggestions()[store.active] : undefined)
+  const parts = () => addressParts(addressBar().field)
+  const site = () => !!addressBar().field && !addressBar().editing
   const recent = () => props.model.visits().slice(0, RECENT)
 
   // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the
@@ -262,34 +216,9 @@ export default function SessionBrowserPane(props: {
     input?.select()
   }
 
-  // Navigates the tab and keeps the submitted address in the field until the page reports where it went; a blank page
-  // keeps the field empty. Ends editing here rather than on blur: a click elsewhere, such as a recent page, may have
-  // blurred the field already.
-  const go = (url: string) => {
-    const tab = state()
-
-    if (!tab) return
-    setStore({
-      editing: false,
-      typed: false,
-      active: -1,
-      address: url === "about:blank" ? "" : url,
-      navigating: moved(),
-      kept: { followed: followed(), rejected: rejected() },
-    })
-    command({ type: "navigate", tabID: tab.id, url })
-    input?.blur()
-  }
-
-  const step = (by: number) => {
-    const count = suggestions().length
-
-    if (!count) return
-    setStore({
-      dismissed: false,
-      active: store.active + by < -1 ? count - 1 : ((store.active + by + 1) % (count + 1)) - 1,
-    })
-  }
+  // Navigates the tab and keeps the address in the field until the page reports where it went. Ends editing here rather
+  // than on blur: a click elsewhere, such as a recent page, may have blurred the field already.
+  const go = (url: string) => dispatchAddress({ type: "navigated", url, epoch: epoch() })
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
   const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
@@ -327,23 +256,23 @@ export default function SessionBrowserPane(props: {
 
     if (!rect) return
     const gap = 8
-    const width = Math.max(0, Math.min(320, store.size.width - gap * 2))
+    const width = Math.max(0, Math.min(320, size().width - gap * 2))
     // The editor scrolls rather than growing past the surface, so its actions stay reachable.
-    const surfaceHeight = Math.max(0, store.size.height - gap * 2)
+    const surfaceHeight = Math.max(0, size().height - gap * 2)
     // Pick the opening side from its first measurement, then grow upward from that bottom edge.
     const initialHeight = Math.min(comment()?.editorInitialHeight || 80, surfaceHeight)
-    const left = Math.min(Math.max(gap, rect.x), Math.max(gap, store.size.width - width - gap))
+    const left = Math.min(Math.max(gap, rect.x), Math.max(gap, size().width - width - gap))
     const below = rect.y + rect.height + gap
     const above = rect.y - gap - initialHeight
 
     const openingTop =
-      below + initialHeight <= store.size.height - gap
+      below + initialHeight <= size().height - gap
         ? below
         : above >= gap
           ? above
-          : Math.max(gap, store.size.height - initialHeight - gap)
+          : Math.max(gap, size().height - initialHeight - gap)
 
-    const bottom = Math.min(openingTop + initialHeight, store.size.height - gap)
+    const bottom = Math.min(openingTop + initialHeight, size().height - gap)
     const maxHeight = Math.max(0, bottom - gap)
     const height = Math.min(comment()?.editorHeight || initialHeight, maxHeight)
     const top = Math.max(gap, bottom - height)
@@ -444,7 +373,7 @@ export default function SessionBrowserPane(props: {
   )
   createResizeObserver(
     () => box,
-    (rect) => setStore("size", { width: rect.width, height: rect.height }),
+    (rect) => setSize({ width: rect.width, height: rect.height }),
   )
 
   // A restored tab has no page until the pane first shows it.
@@ -524,7 +453,7 @@ export default function SessionBrowserPane(props: {
           </Tooltip>
         </div>
         <Popover
-          open={store.editing && listed()}
+          open={addressBar().listed}
           anchorRef={() => anchor}
           placement="bottom-start"
           gutter={4}
@@ -536,9 +465,9 @@ export default function SessionBrowserPane(props: {
             ref={anchor}
             dir="ltr"
             data-component="browser-address"
-            data-editing={store.editing ? "" : undefined}
+            data-editing={addressBar().editing ? "" : undefined}
             data-site={site() ? "" : undefined}
-            data-address={store.editing && !store.typed && field() ? "" : undefined}
+            data-address={addressBar().editing && !addressBar().typed && addressBar().field ? "" : undefined}
             onPointerDown={(event) => {
               // The whole field focuses the input, as the site button and page actions handle their own clicks.
               if (event.target === event.currentTarget) {
@@ -548,13 +477,7 @@ export default function SessionBrowserPane(props: {
             }}
             onSubmit={(event) => {
               event.preventDefault()
-              const picked = chosen()
-              const text = field().trim()
-
-              if (picked) return go(picked.url)
-
-              if (text || failed()) return go(resolveAddress(text))
-              input?.blur()
+              dispatchAddress({ type: "submitted", epoch: epoch(), visits: props.model.visits(), failed: failed() })
             }}
           >
             {/* Editing shows the icon of the page Enter would open: the page's own, or the chosen suggestion's. */}
@@ -562,7 +485,13 @@ export default function SessionBrowserPane(props: {
               when={site()}
               fallback={
                 <PageIcon
-                  icon={store.editing && field() ? (store.typed ? chosen()?.icon : page()?.icon) : undefined}
+                  icon={
+                    addressBar().editing && addressBar().field
+                      ? addressBar().typed
+                        ? addressBar().chosen?.icon
+                        : page()?.icon
+                      : undefined
+                  }
                   class="text-v2-icon-icon-muted"
                 />
               }
@@ -591,60 +520,44 @@ export default function SessionBrowserPane(props: {
                 data-slot="browser-address-input"
                 role="combobox"
                 aria-autocomplete="list"
-                aria-expanded={store.editing && listed()}
-                aria-controls={listed() ? "browser-suggestions" : undefined}
-                aria-activedescendant={chosen() ? `browser-suggestion-${store.active}` : undefined}
+                aria-expanded={addressBar().listed}
+                aria-controls={addressBar().listed ? "browser-suggestions" : undefined}
+                aria-activedescendant={addressBar().chosen ? `browser-suggestion-${addressBar().active}` : undefined}
                 spellcheck={false}
                 autocomplete="off"
-                value={field()}
+                value={addressBar().field}
                 disabled={!state()}
                 placeholder={plugin.t("address.search")}
                 aria-label={plugin.t("address.label")}
-                onFocus={(event) => {
-                  setStore({ editing: true, address: field(), typed: false, active: -1, dismissed: false })
-                  event.currentTarget.select()
-                }}
+                onFocus={() => dispatchAddress({ type: "focused", epoch: epoch() })}
                 // Leaving the field without submitting cancels the edit; a submit already ended it. Focus that leaves
                 // for the page or another window keeps the field as the document's focus, so the window's return would
                 // focus it again and start an edit under the returning click, such as one on the site button.
                 onBlur={(event) => {
-                  if (store.editing) setStore({ editing: false, typed: false, active: -1, kept: undefined })
+                  dispatchAddress({ type: "blurred", epoch: epoch() })
 
                   if (!document.hasFocus()) event.currentTarget.blur()
                 }}
-                onInput={(event) => {
-                  const value = event.currentTarget.value
-                  const first = suggest(props.model.visits(), value, 1)[0]
-
-                  // Typing completes the first suggestion, as a search would; deleting never does.
-                  const complete =
-                    !!first && !event.inputType.startsWith("delete") && (completes(first, value) || searches(value))
-
-                  setStore({ address: value, typed: true, dismissed: false, active: complete ? 0 : -1 })
-                }}
+                onInput={(event) =>
+                  dispatchAddress({
+                    type: "input.changed",
+                    value: event.currentTarget.value,
+                    deleting: event.inputType.startsWith("delete"),
+                    visits: props.model.visits(),
+                  })
+                }
                 onKeyDown={(event) => {
                   // Keys during IME composition pick and cancel candidates, not suggestions. Safari can report the
                   // composition-confirming keydown with isComposing false but keyCode 229.
                   if (event.isComposing || event.keyCode === 229) return
 
-                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                    if (!suggestions().length) return
-                    event.preventDefault()
-                    step(event.key === "ArrowDown" ? 1 : -1)
-
-                    return
-                  }
-
-                  if (event.key !== "Escape") return
-                  event.preventDefault()
-
-                  if (listed()) return setStore({ dismissed: true, active: -1 })
-                  event.currentTarget.blur()
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Escape")
+                    dispatchAddress({ type: "key.pressed", key: event.key, visits: props.model.visits() }, event)
                 }}
               />
               {/* At rest, draw the whole URL over the input's hidden text with its host emphasized. While editing, the
                   input shows its own text so selection and the caret need no mirror. */}
-              <Show when={!store.editing && field()}>
+              <Show when={!addressBar().editing && addressBar().field}>
                 <div aria-hidden="true" data-slot="browser-address-display">
                   <span data-slot="browser-address-url" data-host={parts().host ? "" : undefined}>
                     <span data-slot="browser-address-muted">{parts().scheme}</span>
@@ -655,10 +568,14 @@ export default function SessionBrowserPane(props: {
               </Show>
               {/* The suggestion Enter opens, after the typed text. Long text scrolls the input, which a mirror cannot
                   follow, so only a short query shows it. */}
-              <Show when={store.editing && store.address.length <= 48 && chosen()}>
+              <Show
+                when={
+                  addressBar().editing && addressBar().query.length <= ADDRESS_HINT_MAX_LENGTH && addressBar().chosen
+                }
+              >
                 {(visit) => (
                   <div aria-hidden="true" data-slot="browser-address-hint">
-                    <span class="invisible shrink-0">{store.address}</span>
+                    <span class="invisible shrink-0">{addressBar().query}</span>
                     <span class="ms-1.5 min-w-0 truncate">{`- ${bare(visit().url)}`}</span>
                   </div>
                 )}
@@ -717,8 +634,8 @@ export default function SessionBrowserPane(props: {
                   {(visit, index) => (
                     <PageRow
                       visit={visit}
-                      query={store.address}
-                      option={{ id: `browser-suggestion-${index()}`, selected: index() === store.active }}
+                      query={addressBar().query}
+                      option={{ id: `browser-suggestion-${index()}`, selected: index() === addressBar().active }}
                       onClick={() => go(visit.url)}
                     />
                   )}
@@ -976,8 +893,8 @@ export default function SessionBrowserPane(props: {
                 data-prevent-autofocus
                 class="absolute end-2 top-2 flex flex-col overflow-hidden rounded-[6px] shadow-[var(--v2-elevation-raised)]"
                 style={{
-                  width: `${Math.max(0, Math.min(400, store.size.width - 16))}px`,
-                  "max-height": `${Math.max(0, store.size.height - 16)}px`,
+                  width: `${Math.max(0, Math.min(400, size().width - 16))}px`,
+                  "max-height": `${Math.max(0, size().height - 16)}px`,
                 }}
               >
                 <MenuScroll class="min-h-0">

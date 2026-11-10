@@ -241,7 +241,7 @@ const generateFake = Effect.gen(function* () {
 })
 
 // 8. Image generation uses the same facade and the same request/generate shape.
-// `response.image` is a `Media.Asset`: bytes decode lazily and are cached, and
+// `response.images[0]` is a `Media.Asset`: bytes decode lazily and are cached, and
 // `Media.write` persists them through the Effect `FileSystem`.
 const generateImage = Effect.gen(function* () {
   const response = yield* ai.image.generate({
@@ -253,10 +253,10 @@ const generateImage = Effect.gen(function* () {
   })
 
   console.log("\n== image ==")
-  console.log("media type:", response.image.mediaType)
-  console.log("bytes:", (yield* response.image.bytes()).byteLength)
+  console.log("media type:", response.images[0].mediaType)
+  console.log("bytes:", (yield* response.images[0].bytes()).byteLength)
   console.log("usage", Formatter.formatJson(response.usage, { space: 2 }))
-  yield* Media.write(response.image, "tutorial-image.jpg").pipe(Effect.provide(NodeFileSystem.layer))
+  yield* Media.write(response.images[0], "tutorial-image.jpg").pipe(Effect.provide(NodeFileSystem.layer))
 })
 
 // Provide every modality client and the HTTP request executor once with

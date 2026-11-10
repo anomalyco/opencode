@@ -150,6 +150,31 @@ test("the project menu loads changes on demand and opens review", async ({ page 
   await expect(page.locator("#review-panel")).toBeVisible()
 })
 
+// A failed load used to read "No changes", a clean working tree the server never reported.
+test("the project menu shows a failed changes load and loads again in place", async ({ page }) => {
+  await openSession(page, {
+    name: "ProjectChangesFailure",
+    vcsDiff: [fileDiff("README.md", { additions: 7, deletions: 3 })],
+  })
+  const changes = { failing: true }
+  await page.route(/\/api\/vcs\/diff\?/, (route) => {
+    if (!changes.failing) return route.fallback()
+
+    return route.fulfill({ status: 500, headers: cors, json: {} })
+  })
+  await page.locator('[data-slot="session-location-trigger"]').click()
+  const menu = page.locator('[data-slot="session-location-card"]')
+  const failed = menu.getByRole("menuitem", { name: /^Couldn't load changes.*Retry$/ })
+  await expect(failed).toBeVisible()
+  await expect(menu.getByRole("menuitem", { name: "No changes", exact: true })).toHaveCount(0)
+  await page.screenshot({ path: test.info().outputPath("project-menu-changes-failed.png"), animations: "disabled" })
+
+  changes.failing = false
+  await failed.click()
+  await expect(menu).toBeVisible()
+  await expect(menu.getByRole("menuitem", { name: /1 Changed file/ })).toContainText("+7")
+})
+
 test("a session in a worktree subfolder names its worktree and lists cached worktrees at once", async ({ page }) => {
   const root = "C:/OpenCode/SmokeWorktrees"
   await mockStressTimeline(page, {
@@ -555,6 +580,26 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
   ]) {
     await expectRefreshKeeps(page, service.name, service.path, service.item)
   }
+
+  // A refresh that fails keeps the list it had, with its footer and its row's count.
+  state.fail = true
+
+  const failed = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/plugin" && response.status() === 500,
+  )
+
+  await page.keyboard.press("Escape")
+  await expect(menu("Skills")).toBeHidden()
+  await open("Plugins")
+  await failed
+  await expect(menu("Plugins")).toHaveAttribute("aria-busy", "false")
+  await expect(menu("Plugins").getByText("supermemory", { exact: true })).toBeVisible()
+  await expect(menu("Plugins").getByText("Configuration file")).toBeVisible()
+  await expect(menu("Plugins").getByRole("alert")).toHaveCount(0)
+  await expect(
+    summary.getByRole("button", { name: "Plugins", exact: true }).locator(".session-service-count"),
+  ).toHaveText("2")
+  state.fail = false
 
   state.extra = true
   await expectRefreshKeeps(page, "Plugins", "/api/plugin", "supermemory")

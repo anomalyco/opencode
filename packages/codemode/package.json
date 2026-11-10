@@ -24,7 +24,10 @@
     "pack": "bun run script/pack.ts",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test && CODEMODE_ENGINE=vm bun test",
+    "test:legacy": "bun test",
+    "test:vm": "CODEMODE_ENGINE=vm bun test",
+    "test:roundtrip": "CODEMODE_ENGINE=vm CODEMODE_ROUNDTRIP=1 bun test"
   },
   "dependencies": {
     "acorn": "8.15.0",

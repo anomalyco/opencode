@@ -1,5 +1,4 @@
 import { Button } from "@opencode/ui/button"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
 import { Show } from "solid-js"
@@ -7,30 +6,16 @@ import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { sshName } from "./name"
 import type { SshController } from "./state"
 
-/** The visit to a routed tab in which authentication was offered. Shared by the window's covers. */
-export type SshOffer = { visit: object | undefined }
-
-export function SshCover(props: { id: string; visit: object; ssh: SshController; offer: SshOffer }) {
+export function SshCover(props: { id: string; ssh: SshController }) {
   const plugin = usePlugin()
-  const dialog = useDialog()
   const item = () => props.ssh.item(props.id)
 
-  // Offer authentication once per visit to a tab. Cancelling must not immediately reopen the prompt, and a sign-in
-  // requested again after the server was ready (a new cover) shows the Authenticate button without a dialog.
-  // Background hosts never open a dialog here. A new object for each change, so every change is considered.
+  // Offer authentication once per server and visit to a tab. Cancelling must not immediately reopen the prompt, and a
+  // sign-in requested again after the server was ready (a new cover) shows the Authenticate button without a dialog.
+  // Background hosts never open a dialog here.
   createKeyed(
-    () => {
-      const current = item()
-
-      if (current?.stage !== "authentication" || current.authenticatingElsewhere || dialog.active) return
-
-      return { config: current.config, visit: props.visit }
-    },
-    (offer) => {
-      if (props.offer.visit === offer.visit) return
-      props.offer.visit = offer.visit
-      props.ssh.connect(offer.config)
-    },
+    () => props.ssh.cover.canOffer(props.id, plugin.dialogs.active()),
+    () => props.ssh.cover.offer(props.id, plugin.dialogs.active()),
   )
 
   return (

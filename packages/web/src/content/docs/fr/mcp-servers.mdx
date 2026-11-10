@@ -23,7 +23,7 @@ Certains serveurs MCP, comme le serveur GitHub MCP, ont tendance à ajouter beau
 
 ## Activation
 
-Vous pouvez définir des serveurs MCP dans votre [OpenCode Config](https://opencode.ai/docs/config/) sous `mcp`. Ajoutez chaque MCP avec un nom unique. Vous pouvez faire référence à ce MCP par son nom lorsque vous demandez le LLM.
+Vous pouvez définir des serveurs MCP dans votre [OpenCode Config](/docs/config/) sous `mcp`. Ajoutez chaque MCP avec un nom unique. Vous pouvez faire référence à ce MCP par son nom lorsque vous demandez le LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {

@@ -23,7 +23,7 @@ Alcuni server MCP, come il server MCP di GitHub, tendono ad aggiungere molti tok
 
 ## Abilita
 
-Puoi definire server MCP nella tua [OpenCode Config](https://opencode.ai/docs/config/) sotto `mcp`. Aggiungi ogni MCP con un nome univoco. Puoi riferirti a quell'MCP per nome quando fai prompt all'LLM.
+Puoi definire server MCP nella tua [OpenCode Config](/docs/config/) sotto `mcp`. Aggiungi ogni MCP con un nome univoco. Puoi riferirti a quell'MCP per nome quando fai prompt all'LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {

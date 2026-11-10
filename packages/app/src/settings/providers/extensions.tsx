@@ -1,5 +1,5 @@
 import type { McpServer } from "@opencode/client/promise"
-import { Component, For, Show, createEffect, createMemo, createResource, type JSX } from "solid-js"
+import { Component, For, Show, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
@@ -17,6 +17,7 @@ import { ExtensionPlugins } from "@/runtime/plugin/extension-plugins"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
+import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
 import type { SettingsView } from "@/settings/surface"
 import "@/settings/settings.css"
 import "@/shell/search-list.css"
@@ -63,15 +64,22 @@ export const SettingsExtensions: Component<{
   const toggle = (item: McpServer, enabled: boolean) =>
     mcp.dispatch({ type: "toggle.requested", name: item.name, enabled, status: item.status.status })
 
-  const [pluginList] = createResource(
-    () => serverSdk.connection.status() === "connected",
-    () =>
-      serverSdk.api.plugin
-        .list()
-        .then((result) => result.data)
-        .catch(() => []),
-    { initialValue: [] },
+  const plugins = createExtensionLoad({
+    key: () => serverSdk.scope,
+    task: (_, signal) => serverSdk.api.plugin.list(undefined, { signal }).then((result) => result.data),
+  })
+
+  onCleanup(
+    serverSdk.event.on("plugin.updated", (event) => {
+      if (!event.location) plugins.invalidate()
+    }),
   )
+
+  const pluginList = createMemo(() => {
+    const current = plugins.view()
+
+    return current.status === "ready" ? current.value : undefined
+  })
 
   // The desktop window runs the GUIs of its own server's plugins, so only that server's rows control them.
   const own = () => !!platform.plugins && ServerConnection.builtin(serverSdk.server)
@@ -196,7 +204,20 @@ export const SettingsExtensions: Component<{
                   {language.t("settings.extensions.manageConfig")}
                 </span>
               </div>
-              <ExtensionPlugins plugins={pluginList.latest ?? []} own={own()} />
+              {/* The desktop's own server also lists the plugins main runs, so its rows stay while the list loads. */}
+              <Show when={own() || pluginList()}>
+                <ExtensionPlugins plugins={pluginList() ?? []} own={own()} />
+              </Show>
+              <Show when={plugins.view().status === "loading" && !own()}>
+                <p class="project-settings-extension-empty-description">{language.t("common.loading")}</p>
+              </Show>
+              <Show when={plugins.view().status === "error"}>
+                <ExtensionLoadFailed
+                  message={language.t("settings.extensions.plugins.loadFailed")}
+                  retry={language.t("common.retry")}
+                  onRetry={plugins.retry}
+                />
+              </Show>
             </div>
           </Tabs.Content>
 
@@ -206,7 +227,7 @@ export const SettingsExtensions: Component<{
                 <span class="settings-extension-heading text-13-medium">
                   {language.t("settings.extensions.availableAll")}
                 </span>
-                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/v2/docs/skills">
+                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/docs/skills">
                   {language.t("settings.extensions.addSkills")}
                 </ExternalLink>
               </div>
