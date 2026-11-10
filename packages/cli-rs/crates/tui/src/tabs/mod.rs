@@ -87,6 +87,7 @@ pub struct Tabs {
     writes: Cell<u64>,
     /// Writes not in `tabs.json` yet, in the order they were made, with their revisions.
     pending: Arc<Mutex<Vec<(u64, Write)>>>,
+    writer: std::cell::OnceCell<opencode_local::serial::Serial>,
     history: RefCell<History>,
     closed: RefCell<Vec<Closed>>,
     /// Closed tabs that a write still in flight must not bring back (`cancelledTabs`).
@@ -579,12 +580,12 @@ fn select_index(tui: &Tui, index: usize) {
     }
 }
 
-/// Applies `mutation` to the scope in memory now, and to `tabs.json` under the storage lock on a blocking
-/// thread. The written file then replaces the memory copy, unless a newer write was sent meanwhile.
+/// Applies `mutation` to the scope in memory now, and to `tabs.json` under the storage lock on one worker
+/// thread, so the writes land in the order they were made. The written file then replaces the memory copy,
+/// unless a newer write was sent meanwhile.
 ///
-/// Blocking tasks can run in any order, so each one writes every pending mutation, in the order they were
-/// made, while it holds the queue: a title that lands just after its tab opened must not reach the file
-/// before the tab does.
+/// Each job writes every pending mutation at once. The queue is held only to take them: a job waiting on
+/// another client's lock must not block the UI thread that queues the next one.
 fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let mutation: Mutation = Arc::new(mutation);
     let cwd = tui.tabs.cwd.borrow().clone();
@@ -609,15 +610,14 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     }
     let pending = tui.tabs.pending.clone();
     let proxy = tui.app.proxy();
-    tui.app.runtime().spawn_blocking(move || {
-        let Ok(mut pending) = pending.lock() else {
+    tui.tabs.writer.get_or_init(|| opencode_local::serial::Serial::new("tabs")).run(move || {
+        let Ok(batch) = pending.lock().map(|mut pending| std::mem::take(&mut *pending)) else {
             return;
         };
-        // An earlier task already wrote this one.
-        let Some(&(revision, _)) = pending.last() else {
+        // An earlier job already wrote this one.
+        let Some(&(revision, _)) = batch.last() else {
             return;
         };
-        let batch = std::mem::take(&mut *pending);
         let result = storage.update("tabs", &serde_json::json!({}), |value| {
             let mut file: Persisted = serde_json::from_value(value.clone()).unwrap_or_default();
             for (_, write) in &batch {

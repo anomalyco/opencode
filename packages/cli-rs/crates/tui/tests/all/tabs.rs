@@ -144,6 +144,33 @@ fn clear_closes_the_tab_and_goes_home() {
     assert!(screen.lines().next().unwrap().contains("Fix the parser"), "{screen}");
 }
 
+// Another client holding `tabs.json`'s lock delays the writes, not the UI thread that queues them
+// (`context/storage.tsx` returns a pending promise).
+#[test]
+fn a_held_tabs_lock_does_not_block_the_ui() {
+    let h = mount(100, json!({ "animations": false }));
+    h.wait_file("tabs", |file| !file.is_null());
+    let file = h.state.join(CHANNEL).join("tui").join("tabs.json");
+    let locks = h.state.join(CHANNEL).join("locks");
+    let lock = opencode_local::lock::acquire(&locks, &file.to_string_lossy(), &Default::default()).unwrap();
+    let releaser = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        lock.release().unwrap();
+    });
+    let started = std::time::Instant::now();
+    h.tui.navigate(support::session_route("ses_b"));
+    // The first write now waits on the lock; give it time to start.
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    opencode_tui::tabs::reorder(&h.tui, "ses_b", 0);
+    let elapsed = started.elapsed();
+    assert!(elapsed < std::time::Duration::from_secs(1), "the UI waited {elapsed:?} for the lock");
+    releaser.join().unwrap();
+    h.wait_file("tabs", |file| {
+        file["cwd"][cwd()]["tabs"]
+            == json!([{ "sessionID": "ses_b", "title": "Write the docs" }, { "sessionID": "ses_a", "title": "Fix the parser" }])
+    });
+}
+
 // `TabPulse` unmounts with its tab: closing a busy tab leaves no pulse that keeps the frame ticking.
 #[test]
 fn a_closed_busy_tab_stops_the_pulse_ticks() {
