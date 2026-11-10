@@ -2449,6 +2449,49 @@ describe("SessionRunnerLLM", () => {
     expect(updates(s.requests.at(-1))).toEqual([])
   })
 
+  scenario("narrates a session-scoped tool only to its session", function* (s) {
+    const registry = yield* Tool.Service
+    const register = (name: string, scoped?: Session.ID) =>
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        yield* registry
+          .transform((editor) =>
+            editor.add({
+              name,
+              sessionID: scoped,
+              options: { namespace: name },
+              description: `${name} tool`,
+              input: Schema.Struct({ id: Schema.String }),
+              output: Schema.String,
+              execute: () => Effect.succeed({ output: "ok" }),
+            }),
+          )
+          .pipe(Scope.provide(scope))
+        return scope
+      })
+    const updates = (request: LLMRequest | undefined) =>
+      request ? systemTexts(request).filter((text) => text.startsWith("The Code Mode tool catalog has changed")) : []
+
+    yield* register("base")
+    yield* s.runPrompt("First")
+    yield* register("elsewhere", otherSessionID)
+    yield* s.runPrompt("Second")
+    expect(systemTexts(s.requests.at(-1)!).join("\n")).not.toContain("elsewhere")
+    expect(updates(s.requests.at(-1))).toEqual([])
+
+    const own = yield* register("phone", sessionID)
+    yield* s.runPrompt("Third")
+    expect(updates(s.requests.at(-1))).toEqual([
+      "The Code Mode tool catalog has changed.\n\nNew tools are available:\n- phone (1 tool)\n  - tools.phone.phone({\n  id: string,\n}): Promise<string> // phone tool",
+    ])
+
+    yield* Scope.close(own, Exit.void)
+    yield* s.runPrompt("Fourth")
+    expect(updates(s.requests.at(-1)).at(-1)).toBe(
+      "The Code Mode tool catalog has changed.\n\nThe following tool namespaces are no longer available and must not be used: `phone`.",
+    )
+  })
+
   scenario("moves the epoch at compaction and narrates later changes", function* (s) {
     yield* s.runPrompt("First")
     s.systemBaseline = "Changed before compaction"

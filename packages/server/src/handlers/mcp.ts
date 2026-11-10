@@ -2,7 +2,8 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Mcp } from "@opencode/core/mcp/index"
 import { PtyTicket } from "@opencode/core/pty/ticket"
-import { ForbiddenError, McpServerNotFoundError } from "@opencode/protocol/errors"
+import { Session } from "@opencode/core/session"
+import { ForbiddenError, McpServerNotFoundError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "@opencode/protocol/groups/pty"
 import { Effect, Queue } from "effect"
 import { HttpServerResponse } from "effect/http"
@@ -11,6 +12,7 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { locationErrors, requestRef, response } from "../location"
+import { missingSession } from "./session-error"
 import { holdLocation, type Outbound, runPtySocket } from "./pty-socket"
 
 const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
@@ -21,6 +23,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
     const locations = yield* LocationServiceMap.Service
     const cors = yield* CorsConfig
     const tickets = yield* PtyTicket.Service
+    const sessions = yield* Session.Service
 
     return handlers
       .handle(
@@ -107,6 +110,19 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
           )
             return HttpServerResponse.empty({ status: 403 })
 
+          const sessionID = ctx.query.sessionID
+          if (sessionID !== undefined) {
+            const session = yield* sessions
+              .get(sessionID)
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+            const location = LocationServiceMap.canonical(session.location)
+            if (location.directory !== ref.directory || location.workspaceID !== ref.workspaceID)
+              return yield* new SessionNotFoundError({
+                sessionID,
+                message: `Session ${sessionID} does not belong to this location`,
+              })
+          }
+
           return yield* Effect.gen(function* () {
             const mcp = yield* Mcp.Service
             const { McpSocketClient } = yield* Effect.promise(() => import("@opencode/core/mcp/socket-client"))
@@ -124,7 +140,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
             })
             const decoder = new TextDecoder()
             // The attachment lives in this scope, so it ends with the socket.
-            yield* mcp.attach(name, transport).pipe(
+            yield* mcp.attach(name, transport, sessionID).pipe(
               Effect.tap(() =>
                 Effect.sync(() => {
                   state.attached = true

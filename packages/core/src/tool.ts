@@ -25,17 +25,22 @@ export class RegistrationError extends Schema.TaggedError<RegistrationError>()("
   message: Schema.String,
 }) {}
 
+/** A tool with `sessionID` is visible only to that session's snapshots and checks. */
+export type Scoped = Tool.Info & { readonly sessionID?: SessionSchema.ID }
+
+type Registered = Scoped & { readonly id: string }
+
 export interface Editor {
-  readonly list: () => readonly (Tool.Info & { readonly id: string })[]
-  readonly get: (id: string) => (Tool.Info & { readonly id: string }) | undefined
+  readonly list: () => readonly Registered[]
+  readonly get: (id: string) => Registered | undefined
   readonly namespace: (namespace: Tool.Namespace) => void
-  readonly add: (tool: Tool.Info) => void
+  readonly add: (tool: Scoped) => void
   readonly update: (id: string, update: (tool: Types.Mutable<Tool.Info>) => void) => void
   readonly remove: (id: string) => void
 }
 
 type Data = {
-  tools: Map<string, Tool.Info & { readonly id: string }>
+  tools: Map<string, Registered>
   // Converted once at registration; schemas cannot change without re-registering the tool.
   definitions: Map<string, ToolDefinition>
   namespaces: Map<string, Tool.Namespace>
@@ -43,8 +48,9 @@ type Data = {
 }
 
 export interface Interface extends State.Transformable<Editor> {
-  readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  readonly list: () => Effect.Effect<ReadonlyArray<Registered>>
+  /** Leaves out tools scoped to a session other than `sessionID`, or every scoped tool without one. */
+  readonly snapshot: (permissions?: Permission.Ruleset, sessionID?: SessionSchema.ID) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
@@ -253,12 +259,13 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
+      snapshot: Effect.fn("Tool.snapshot")((permissions, sessionID) =>
         Effect.sync(() => {
           const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
           for (const [name, tool] of data.tools) {
+            if (tool.sessionID !== undefined && tool.sessionID !== sessionID) continue
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
@@ -342,6 +349,7 @@ const layer = Layer.effect(
           Array.from(data.tools).filter(
             ([name, tool]) =>
               tool.options?.codemode !== false &&
+              (tool.sessionID === undefined || tool.sessionID === input.context.sessionID) &&
               allowed.has(CodeModeTool.qualifiedName(tool)) &&
               !whollyDisabled(tool.options?.permission ?? name, input.permissions),
           ),
@@ -369,7 +377,7 @@ const layer = Layer.effect(
 )
 
 /** Store a valid tool under its effective name, or record why it was skipped. */
-function commit(editor: Data, id: string, input: Tool.Info & { readonly id: string }) {
+function commit(editor: Data, id: string, input: Registered) {
   // JavaScript plugins may leave out `input` for a tool that takes none.
   const tool = input.input === undefined || input.input === null ? { ...input, input: {} } : input
   const registered = register(tool)

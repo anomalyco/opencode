@@ -7895,6 +7895,19 @@
             "required": true
           },
           {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.ID"
+                }
+              ],
+              "description": "Scope the client's tools to this session of the location: other sessions neither see nor can call them."
+            },
+            "required": false
+          },
+          {
             "name": "ticket",
             "in": "query",
             "schema": {
@@ -7946,17 +7959,24 @@
             }
           },
           "404": {
-            "description": "LocationNotFoundError",
+            "description": "LocationNotFoundError | SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
           }
         },
-        "description": "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
+        "description": "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open, to every session of the location or only to `sessionID`. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
         "summary": "Attach client MCP server",
         "x-websocket": true
       }

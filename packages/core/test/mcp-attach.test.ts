@@ -21,7 +21,7 @@ import { hostEnvironmentLayer } from "./fixture/environment"
 import { tempLocationLayer } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
-import { executeTool, toolIdentity } from "./lib/tool"
+import { codeModeListings, executeTool, toolIdentity } from "./lib/tool"
 
 // Attached clients are never OAuth integrations.
 const unused = () => Effect.die("unused integration service")
@@ -146,6 +146,65 @@ it.live("attaches a client MCP server and routes its tools with the session", ()
     expect(result.status).toBe("completed")
     expect(result.output?.output).toBe("tui:open_terminal")
     expect(client.sessions).toEqual(["ses_attached"])
+  }),
+)
+
+it.live("scopes an attached client's tools to its session", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const registry = yield* Tool.Service
+    const owner = Session.ID.make("ses_owner")
+    const other = Session.ID.make("ses_other")
+    const phone = yield* clientServer("phone", ["set_timer"])
+    const tui = yield* clientServer("tui", ["open_terminal"])
+    const scope = yield* Scope.make()
+
+    yield* mcp.attach("android", phone.client, owner).pipe(Scope.provide(scope))
+    yield* mcp.attach("tui", tui.client)
+    yield* registered("android_set_timer")
+    yield* registered("tui_open_terminal")
+    const catalog = (sessionID?: Session.ID) =>
+      registry
+        .snapshot(undefined, sessionID)
+        .pipe(
+          Effect.map((snapshot) =>
+            snapshot.codeModeCatalog === undefined
+              ? []
+              : codeModeListings(snapshot.codeModeCatalog).map((entry) => entry.path),
+          ),
+        )
+    expect(yield* catalog(owner)).toEqual(["android.set_timer", "tui.open_terminal"])
+    expect(yield* catalog(other)).toEqual(["tui.open_terminal"])
+    expect(yield* catalog()).toEqual(["tui.open_terminal"])
+
+    // Other sessions can't reach the tool through Code Mode, nor by calling the client directly.
+    const blocked = yield* call("android.set_timer", other)
+    expect(blocked.output?.output).toContain("Unknown tool 'android.set_timer'")
+    const search = (sessionID: Session.ID) =>
+      executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call_search",
+          name: "execute",
+          input: { code: `return await search({ query: "timer" })` },
+        },
+      })
+    expect((yield* search(other)).output?.output).not.toContain("set_timer")
+    expect((yield* search(owner)).output?.output).toContain("set_timer")
+    const error = yield* mcp.callTool({ server: "android", name: "set_timer", sessionID: other }).pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Mcp.ToolCallError)
+    expect(error.message).toContain("only available to the session it was connected for")
+    expect(phone.sessions).toEqual([])
+    expect((yield* call("tui.open_terminal", other)).output?.output).toBe("tui:open_terminal")
+
+    expect((yield* call("android.set_timer", owner)).output?.output).toBe("phone:set_timer")
+    expect(phone.sessions).toEqual([owner])
+
+    yield* Scope.close(scope, Exit.void)
+    yield* registered("android_set_timer", false)
+    expect(yield* catalog(owner)).toEqual(["tui.open_terminal"])
   }),
 )
 

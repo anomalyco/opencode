@@ -52,7 +52,12 @@ export interface ServerInstructions {
 }
 
 /** Checked MCP tool definition tagged with the server that owns it. */
-export type Tool = McpClient.Tool & { readonly server: ServerName; readonly codemode?: boolean }
+export type Tool = McpClient.Tool & {
+  readonly server: ServerName
+  readonly codemode?: boolean
+  // Set on the tools of a client attached for one session: only that session sees and may call them.
+  readonly sessionID?: Session.ID
+}
 export type ToolResultContent = McpClient.CallToolContent
 export type ToolResult = McpClient.CallToolResult
 export type Prompt = McpClient.Prompt & { readonly server: ServerName }
@@ -114,6 +119,7 @@ type ServerEntry = {
 type AttachedEntry = {
   readonly scope: Scope.Closeable
   readonly client: McpClient.Connection
+  readonly sessionID?: Session.ID
   tools: ReadonlyArray<Tool>
 }
 
@@ -154,9 +160,14 @@ export interface Interface extends State.Transformable<Editor> {
   /**
    * Attaches a client-hosted MCP server for the lifetime of the calling scope. Its tools are named after
    * `name` like any server's. Attaching a name again stacks the new connection on top: it serves the
-   * name until it closes, then the most recent remaining connection takes over.
+   * name until it closes, then the most recent remaining connection takes over. With `sessionID`, only that
+   * session sees the client's tools, and calls from any other session are rejected.
    */
-  readonly attach: (name: string, transport: Transport) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
+  readonly attach: (
+    name: string,
+    transport: Transport,
+    sessionID?: Session.ID,
+  ) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
   readonly tools: () => Effect.Effect<Tool[]>
   /**
    * Waits for servers that are still connecting, each until it settles or until its startup grace
@@ -547,8 +558,8 @@ export const layer = (options?: Options) =>
         yield* bus.publish(McpEvent.StatusChanged, { server: name })
       })
 
-      const toAttachedTools = (server: ServerName, tools: ReadonlyArray<McpClient.Tool>) =>
-        tools.map((tool): Tool => ({ ...tool, server }))
+      const toAttachedTools = (server: ServerName, tools: ReadonlyArray<McpClient.Tool>, sessionID?: Session.ID) =>
+        tools.map((tool): Tool => ({ ...tool, server, sessionID }))
 
       const detach = Effect.fnUntraced(function* (name: ServerName, entry: AttachedEntry) {
         const stack = attached.get(name) ?? []
@@ -571,7 +582,7 @@ export const layer = (options?: Options) =>
         yield* next.client.tools().pipe(
           Effect.timeout(FALLBACK_LIST_TIMEOUT),
           Effect.map((tools) => {
-            next.tools = toAttachedTools(name, tools)
+            next.tools = toAttachedTools(name, tools, next.sessionID)
           }),
           Effect.ignore,
         )
@@ -582,7 +593,7 @@ export const layer = (options?: Options) =>
 
       // The handshake runs interruptibly and outside the lock, so a stalled client never blocks detach or
       // fallback for its name; the lock only guards adding the finished connection to the stack.
-      const attach = Effect.fnUntraced(function* (name: ServerName, transport: Transport) {
+      const attach = Effect.fnUntraced(function* (name: ServerName, transport: Transport, sessionID?: Session.ID) {
         const { McpClient } = yield* Effect.promise(() => import("./client.js"))
         const scope = yield* Effect.acquireRelease(Scope.fork(root), (scope) => Scope.close(scope, Exit.void))
         // The client registers its own close only once initialized; closing the scope mid-handshake (caller
@@ -618,7 +629,12 @@ export const layer = (options?: Options) =>
             yield* Scope.close(scope, Exit.void)
             return yield* new McpClient.ConnectError({ server: name, message: "Connection closed" })
           }
-          const entry: AttachedEntry = { scope, client: result.connection, tools: toAttachedTools(name, result.tools) }
+          const entry: AttachedEntry = {
+            scope,
+            client: result.connection,
+            sessionID,
+            tools: toAttachedTools(name, result.tools, sessionID),
+          }
           attached.set(name, [...(attached.get(name) ?? []), entry])
           const locked = <E>(effect: Effect.Effect<void, E>) =>
             fork(effect.pipe(attachedLocks.withLock(name), Effect.ignore))
@@ -627,14 +643,14 @@ export const layer = (options?: Options) =>
           const refresh = result.connection.tools().pipe(
             Effect.timeout(FALLBACK_LIST_TIMEOUT),
             Effect.map((tools) => {
-              entry.tools = toAttachedTools(name, tools)
+              entry.tools = toAttachedTools(name, tools, entry.sessionID)
             }),
             Effect.andThen(bus.publish(McpEvent.ToolsChanged, { server: name })),
           )
           result.connection.onToolsChanged(() =>
             locked(Effect.suspend(() => (attached.get(name)?.at(-1) === entry ? refresh : Effect.void))),
           )
-          yield* Effect.logInfo("mcp client attached", { server: name, tools: entry.tools.length })
+          yield* Effect.logInfo("mcp client attached", { server: name, tools: entry.tools.length, sessionID })
           yield* bus.publish(McpEvent.ToolsChanged, { server: name })
           return entry
         })
@@ -781,8 +797,8 @@ export const layer = (options?: Options) =>
           overrides.set(name, false)
           yield* state.reload()
         }),
-        attach: Effect.fn("MCP.attach")(function* (client, transport) {
-          yield* attach(ServerName.make(client), transport)
+        attach: Effect.fn("MCP.attach")(function* (client, transport, sessionID) {
+          yield* attach(ServerName.make(client), transport, sessionID)
         }),
         // Reads report what is connected now; servers still starting contribute once they publish a change.
         tools: Effect.fn("MCP.tools")(function* () {
@@ -823,8 +839,15 @@ export const layer = (options?: Options) =>
           // An attached client owns the tools it lists, even when a configured server shares its name, and
           // owns its name outright when no configured server has it.
           const client = attached.get(server)?.at(-1)
-          if (client && (client.tools.some((tool) => tool.name === input.name) || !entries.has(server)))
+          if (client && (client.tools.some((tool) => tool.name === input.name) || !entries.has(server))) {
+            if (client.sessionID !== undefined && client.sessionID !== input.sessionID)
+              return yield* new ToolCallError({
+                server,
+                tool: input.name,
+                message: `MCP tool "${input.name}" on client "${server}" is only available to the session it was connected for`,
+              })
             return yield* call(client.client).pipe(failed("client"))
+          }
           const target = yield* connected(server)
           if (!target.client)
             return yield* new ToolCallError({

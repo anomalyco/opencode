@@ -23,6 +23,7 @@ describe("connectClientMcp", () => {
       url: server.url + "?ticket=t1",
       name: "tui",
       directory: "/repo",
+      sessionID: "ses_owner",
       headers: { authorization: "Basic secret" },
       tools: [
         {
@@ -50,6 +51,7 @@ describe("connectClientMcp", () => {
     expect(url.searchParams.get("name")).toBe("tui")
     expect(url.searchParams.get("ticket")).toBe("t1")
     expect(url.searchParams.get("location[directory]")).toBe("/repo")
+    expect(url.searchParams.get("sessionID")).toBe("ses_owner")
     expect(peer.request.headers.get("authorization")).toBe("Basic secret")
 
     await peer.client.ping()
@@ -89,6 +91,7 @@ describe("connectClientMcp", () => {
       tools: [{ name: "ping", handler: () => ({ content: [{ type: "text", text: "pong" }] }) }],
     })
     const first = await server.next()
+    expect(new URL(first.request.url).searchParams.has("sessionID")).toBe(false)
     expect((await first.client.listTools()).tools).toHaveLength(1)
 
     first.socket.close(1011, "internal")
