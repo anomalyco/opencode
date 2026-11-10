@@ -5,7 +5,6 @@ import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Key } from "@solid-primitives/keyed"
 import { useQueryClient } from "@tanstack/solid-query"
-import { ActivityRing } from "@opencode/ui/activity-ring"
 import { Button } from "@opencode/ui/button"
 import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
@@ -24,10 +23,9 @@ import { createSessionRenamer } from "@/session/commands/rename-session"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
-import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
 import { useLayout } from "@/shell/state/layout"
-import { useTabs } from "@/shell/tabs/tabs"
+import { tabHref, useTabs } from "@/shell/tabs/tabs"
 import { RenameDialog } from "./project-session-row"
 import {
   addPin,
@@ -51,6 +49,7 @@ import {
   type RecentSession,
 } from "./recent-sessions-model"
 import { notifySessionTabsRemoved } from "./session-events"
+import { TabNavItem } from "./tab-nav"
 import { sessionTabTitle } from "./tab-title"
 
 // Root sessions fetched per server page.
@@ -722,7 +721,7 @@ export function RecentSessions() {
       },
     }
 
-    return index === undefined ? <RecentSessionRow {...props} /> : <PinnedSessionRow {...props} index={index} />
+    return index === undefined ? <RecentSessionSlot {...props} /> : <PinnedSessionRow {...props} index={index} />
   }
 
   return (
@@ -770,18 +769,22 @@ export function RecentSessions() {
                   reorderPinned(arrayMove(visible, source.initialIndex, source.index))
                 }}
               >
-                <Key each={pinned()} by={(item) => item.key}>
-                  {(item, index) => row(item, index)}
-                </Key>
+                <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
+                  <Key each={pinned()} by={(item) => item.key}>
+                    {(item, index) => row(item, index)}
+                  </Key>
+                </div>
               </DragDropProvider>
             </div>
           </Show>
           <Show when={recent().length > 0}>
             <div role="group" aria-labelledby="sidebar-recent-list" class="flex shrink-0 flex-col gap-2 pb-2.5">
               <SectionHeader id="sidebar-recent-list" label={language.t("sidebar.recent.section.recent")} />
-              <Key each={recent()} by={(item) => item.key}>
-                {(item) => row(item)}
-              </Key>
+              <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
+                <Key each={recent()} by={(item) => item.key}>
+                  {(item) => row(item)}
+                </Key>
+              </div>
             </div>
           </Show>
           <Show when={empty()}>
@@ -818,7 +821,7 @@ function SectionHeader(props: { id: string; label: string }) {
   )
 }
 
-type RecentSessionRowProps = {
+type RecentSessionTabProps = {
   item: () => RecentSession
   selected: () => boolean
   pinned: boolean
@@ -834,7 +837,23 @@ type RecentSessionRowProps = {
   onDelete: () => void
 }
 
-function PinnedSessionRow(props: RecentSessionRowProps & { index: () => number }) {
+function RecentSessionSlot(
+  props: RecentSessionTabProps & { ref?: (element: HTMLDivElement) => void; dragging?: boolean },
+) {
+  return (
+    <div
+      ref={props.ref}
+      data-titlebar-tab-slot
+      data-orientation="vertical"
+      data-active={props.selected()}
+      class="relative flex w-full shrink-0"
+    >
+      <RecentSessionTab {...props} />
+    </div>
+  )
+}
+
+function PinnedSessionRow(props: RecentSessionTabProps & { index: () => number }) {
   const sortable = useSortable({
     get id() {
       return props.item().key
@@ -844,84 +863,59 @@ function PinnedSessionRow(props: RecentSessionRowProps & { index: () => number }
     },
   })
 
-  return (
-    <div ref={sortable.ref} class="relative shrink-0">
-      <RecentSessionRow {...props} />
-    </div>
-  )
+  return <RecentSessionSlot {...props} ref={sortable.ref} dragging={sortable.isDragSource()} />
 }
 
-function RecentSessionRow(props: RecentSessionRowProps) {
+function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean }) {
   const language = useLanguage()
-  const global = useGlobal()
-  const dialog = useDialog()
 
   const item = () => props.item()
-  const ctx = () => global.serverCtx(ServerConnection.Key.make(item().server))
-  const project = () => ctx()?.projects.forSession(item().session)
+  const server = () => ServerConnection.Key.make(item().server)
 
   const status = useSessionTabAvatarState(
-    () => ServerConnection.Key.make(item().server),
+    server,
     () => item().session.id,
     () => true,
     () => item().session,
   )
 
-  const title = () => sessionTabTitle(item().session.title, language.t("session.tab.session"))
+  const menu = () => (
+    <>
+      <Show
+        when={props.pinned}
+        fallback={<Menu.Item onSelect={props.onPin}>{language.t("sidebar.recent.pin")}</Menu.Item>}
+      >
+        <Menu.Item onSelect={props.onUnpin}>{language.t("sidebar.recent.unpin")}</Menu.Item>
+        <Menu.Item disabled={!props.canMoveUp()} onSelect={props.onMoveUp}>
+          {language.t("sidebar.recent.moveUp")}
+        </Menu.Item>
+        <Menu.Item disabled={!props.canMoveDown()} onSelect={props.onMoveDown}>
+          {language.t("sidebar.recent.moveDown")}
+        </Menu.Item>
+      </Show>
+      <Menu.Separator />
+      <Menu.Item onSelect={props.onRename}>{language.t("common.rename")}</Menu.Item>
+      <Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>
+      <Menu.Separator />
+      <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
+    </>
+  )
 
   return (
-    <Menu.Context modal={false}>
-      <Menu.Context.Trigger
-        as="button"
-        type="button"
-        data-slot="sidebar-recent-item"
-        data-state={props.selected() ? "active" : undefined}
-        aria-current={props.selected() ? "page" : undefined}
-        class="group relative flex h-7 w-full min-w-0 shrink-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 text-start text-[13px] leading-4 font-medium text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[state=active]:bg-v2-overlay-simple-overlay-pressed data-[state=active]:text-v2-text-text-base"
-        onClick={props.onOpen}
-      >
-        <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
-          <SessionTabAvatarView
-            project={project()}
-            directory={item().session.location.directory}
-            unread={false}
-          />
-        </span>
-        <span dir="auto" class="min-w-0 flex-1 truncate">
-          {title()}
-        </span>
-        <Show when={status.loading()}>
-          <span class="flex size-4 shrink-0 items-center justify-center">
-            <ActivityRing width={14} height={14} />
-          </span>
-        </Show>
-      </Menu.Context.Trigger>
-      <Menu.Context.Portal>
-        <Menu.Context.Content
-          onCloseAutoFocus={(event) => {
-            if (dialog.active) event.preventDefault()
-          }}
-        >
-          <Show
-            when={props.pinned}
-            fallback={<Menu.Item onSelect={props.onPin}>{language.t("sidebar.recent.pin")}</Menu.Item>}
-          >
-            <Menu.Item onSelect={props.onUnpin}>{language.t("sidebar.recent.unpin")}</Menu.Item>
-            <Menu.Item disabled={!props.canMoveUp()} onSelect={props.onMoveUp}>
-              {language.t("sidebar.recent.moveUp")}
-            </Menu.Item>
-            <Menu.Item disabled={!props.canMoveDown()} onSelect={props.onMoveDown}>
-              {language.t("sidebar.recent.moveDown")}
-            </Menu.Item>
-          </Show>
-          <Menu.Separator />
-          <Menu.Item onSelect={props.onRename}>{language.t("common.rename")}</Menu.Item>
-          <Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>
-          <Menu.Separator />
-          <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
-        </Menu.Context.Content>
-      </Menu.Context.Portal>
-    </Menu.Context>
+    <TabNavItem
+      href={tabHref({ type: "session", server: server(), sessionId: item().session.id })}
+      server={server()}
+      session={item().session}
+      preparing={false}
+      unread={false}
+      attention={false}
+      loading={status.loading()}
+      onNavigate={props.onOpen}
+      active={props.selected()}
+      dragging={props.dragging}
+      orientation="vertical"
+      menu={menu}
+    />
   )
 }
 
