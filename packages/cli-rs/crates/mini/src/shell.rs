@@ -128,6 +128,7 @@ pub fn run(input: Input) -> error::Result<()> {
         initial: RefCell::new(input.initial_input.clone()),
         waiting: RefCell::new(Vec::new()),
         stream: RefCell::new(None),
+        connected: RefCell::new(tokio::sync::watch::channel(false).1),
         resize: Cell::new(None),
         height_pending: Cell::new(false),
         size: Cell::new(mini_size(&app)),
@@ -258,6 +259,8 @@ struct Mini {
     /// Prompts submitted before the session was ready.
     waiting: RefCell<Vec<RunPrompt>>,
     stream: RefCell<Option<tokio::task::JoinHandle<()>>>,
+    /// Whether the stream is connected, for a session wait that retries (`waitUntilConnected`).
+    connected: RefCell<tokio::sync::watch::Receiver<bool>>,
     resize: Cell<Option<TimerId>>,
     /// A footer height waits for the next frame.
     height_pending: Cell<bool>,
@@ -477,7 +480,9 @@ impl Mini {
         self.load_models(&session.directory, target.model.as_ref().and_then(|model| model.variant.clone()));
         let proxy = self.app.proxy();
         let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
-        let task = self.app.runtime().spawn(replay::connect(self.client.clone(), session.id, limit, proxy));
+        let (connected, receiver) = tokio::sync::watch::channel(false);
+        *self.connected.borrow_mut() = receiver;
+        let task = self.app.runtime().spawn(replay::connect(self.client.clone(), session.id, limit, proxy, connected));
         *self.stream.borrow_mut() = Some(task);
     }
 
@@ -1381,11 +1386,12 @@ impl Mini {
         let session = session.to_owned();
         let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
         let mini = self.clone();
+        let connected = self.connected.borrow().clone();
         self.app.spawn(
             {
                 let session = session.clone();
                 async move {
-                    replay::wait(&client, &session).await?;
+                    replay::wait(&client, &session, connected).await?;
                     replay::messages(&client, &session, limit).await
                 }
             },
