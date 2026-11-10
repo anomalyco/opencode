@@ -88,7 +88,7 @@ describe("prompt history", () => {
     ])
   })
 
-  test("keeps a video's local file instead of its bytes, and gives a video of any type without one a file", async () => {
+  test("keeps a video's local file, or a file written for its bytes, and keeps the bytes when that write fails", async () => {
     await using tmp = await tmpdir()
     const image = { uri: "data:image/png;base64,AAAA", path: "/tmp/shot.png" }
     const video = { uri: "data:video/mp4;base64,BBBB", path: "/tmp/my clip.mp4" }
@@ -98,72 +98,33 @@ describe("prompt history", () => {
 
     expect(persisted.slice(0, 2)).toEqual([image, { ...video, uri: pathToFileURL(video.path).href }])
     for (const file of persisted.slice(2)) {
-      expect(path.dirname(file.path!)).toBe(path.join(tmp.path, "prompt-media"))
+      expect(path.dirname(file.path!)).toBe(promptMediaDirectory(tmp.path))
       expect(file.uri).toBe(pathToFileURL(file.path!).href)
     }
     // Sending reads each file back as the type it was restored with.
     expect((await readKeptAttachments(persisted.slice(2), true)).files.map((file) => file.uri)).toEqual(restored)
+
+    // A directory under the video's name makes the final rename fail.
+    const name = Bun.SHA256.hash(Buffer.from("EEEE", "base64"), "hex") + ".mp4"
+    await mkdir(path.join(promptMediaDirectory(tmp.path), name))
+    const unwritable = [{ uri: "data:video/mp4;base64,EEEE" }]
+    expect(persistablePrompt(entry("media", unwritable), tmp.path).files).toEqual(unwritable)
   })
 
-  test("persisting a kept video again restarts its grace window", async () => {
+  test("restarts the grace window of a kept video persisted again or put back in the composer, and of no other file", async () => {
     await using tmp = await tmpdir()
     const prompt = entry("media", [{ uri: "data:video/mp4;base64,AAAA" }])
-    const file = persistablePrompt(prompt, tmp.path).files![0]!.path!
-    const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
-    await utimes(file, day, day)
+    const kept = persistablePrompt(prompt, tmp.path).files![0]!.path!
+    const own = path.join(tmp.path, "clip.mp4")
+    await Bun.write(own, "")
+    const fresh = async (file: string) => Date.now() - (await stat(file)).mtimeMs < 60_000
 
     // As a draft persisted again does before its entry is written.
-    expect(persistablePrompt(prompt, tmp.path).files![0]!.path).toBe(file)
-    await prunePromptMedia(tmp.path)
-    expect(await Bun.file(file).exists()).toBe(true)
-  })
+    await age(kept)
+    expect(persistablePrompt(prompt, tmp.path).files![0]!.path).toBe(kept)
+    expect(await fresh(kept)).toBe(true)
 
-  test("keeps a video's bytes and leaves no temporary file when its file cannot be written", async () => {
-    await using tmp = await tmpdir()
-    const uri = "data:video/mp4;base64,BBBB"
-    // A directory under the video's name makes the final rename fail after the temporary file is written.
-    const name = Bun.SHA256.hash(Buffer.from("BBBB", "base64"), "hex") + ".mp4"
-    await mkdir(path.join(promptMediaDirectory(tmp.path), name), { recursive: true })
-
-    expect(persistablePrompt(entry("media", [{ uri }]), tmp.path).files).toEqual([{ uri }])
-    const deadline = Date.now() + 2_000
-    while ((await readdir(promptMediaDirectory(tmp.path))).length > 1 && Date.now() < deadline) await Bun.sleep(5)
-    expect(await readdir(promptMediaDirectory(tmp.path))).toEqual([name])
-  })
-
-  test("prunes kept videos that no history or stash entry names, once they are past the grace window", async () => {
-    await using tmp = await tmpdir()
-    const kept = (data: string) =>
-      persistablePrompt(entry("media", [{ uri: `data:video/mp4;base64,${data}` }]), tmp.path)
-    const [history, stash, orphan, fresh] = ["AAAA", "BBBB", "CCCC", "DDDD"].map(kept)
-    const leftover = path.join(promptMediaDirectory(tmp.path), "partial.mp4.0.tmp")
-    await Bun.write(leftover, "")
-    const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
-    for (const file of [history!, stash!, orphan!].map((prompt) => prompt.files![0]!.path!).concat(leftover))
-      await utimes(file, day, day)
-    await Bun.write(path.join(tmp.path, "prompt-history.jsonl"), JSON.stringify(history) + "\n")
-    await Bun.write(path.join(tmp.path, "prompt-stash.jsonl"), JSON.stringify({ prompt: stash, timestamp: 1 }) + "\n")
-
-    await prunePromptMedia(tmp.path)
-    const names = (prompts: PromptInfo[]) => prompts.map((prompt) => path.basename(prompt.files![0]!.path!)).toSorted()
-    expect((await readdir(promptMediaDirectory(tmp.path))).toSorted()).toEqual(names([history!, stash!, fresh!]))
-
-    // Nothing goes when an entry file cannot be read: it may name any of them.
-    await rm(path.join(tmp.path, "prompt-stash.jsonl"))
-    await mkdir(path.join(tmp.path, "prompt-stash.jsonl"))
-    await prunePromptMedia(tmp.path)
-    expect((await readdir(promptMediaDirectory(tmp.path))).toSorted()).toEqual(names([history!, stash!, fresh!]))
-  })
-
-  test("restarts the grace window of only the kept videos a prompt names", async () => {
-    await using tmp = await tmpdir()
-    const kept = path.join(promptMediaDirectory(tmp.path), "0d".repeat(32) + ".mp4")
-    const own = path.join(tmp.path, "clip.mp4")
-    const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
-    for (const file of [kept, own]) {
-      await Bun.write(file, "")
-      await utimes(file, day, day)
-    }
+    await age(kept, own)
     keepPromptMedia(
       entry(
         "clips",
@@ -171,8 +132,33 @@ describe("prompt history", () => {
       ),
       tmp.path,
     )
-    expect(Date.now() - (await stat(kept)).mtimeMs).toBeLessThan(60_000)
-    expect((await stat(own)).mtimeMs).toBe(day.getTime())
+    expect(await fresh(kept)).toBe(true)
+    expect(await fresh(own)).toBe(false)
+  })
+
+  test("prunes kept videos that no history or stash entry names, once they are past the grace window", async () => {
+    await using tmp = await tmpdir()
+    const kept = (data: string) =>
+      persistablePrompt(entry("media", [{ uri: `data:video/mp4;base64,${data}` }]), tmp.path)
+    const [history, stash, orphan, fresh] = ["AAAA", "BBBB", "CCCC", "DDDD"].map(kept)
+    const file = (prompt: PromptInfo) => prompt.files![0]!.path!
+    const leftover = path.join(promptMediaDirectory(tmp.path), "partial.mp4.0.tmp")
+    await Bun.write(leftover, "")
+    await age(file(history!), file(stash!), file(orphan!), leftover)
+    const stashFile = path.join(tmp.path, "prompt-stash.jsonl")
+    await Bun.write(path.join(tmp.path, "prompt-history.jsonl"), JSON.stringify(history) + "\n")
+    await Bun.write(stashFile, JSON.stringify({ prompt: stash, timestamp: 1 }) + "\n")
+    const remaining = [history!, stash!, fresh!].map((prompt) => path.basename(file(prompt))).toSorted()
+    const listed = async () => (await readdir(promptMediaDirectory(tmp.path))).toSorted()
+
+    await prunePromptMedia(tmp.path)
+    expect(await listed()).toEqual(remaining)
+
+    // Nothing goes when an entry file cannot be read: it may name any of them.
+    await rm(stashFile)
+    await mkdir(stashFile)
+    await prunePromptMedia(tmp.path)
+    expect(await listed()).toEqual(remaining)
   })
 
   test.each(["wcwidth", "unicode"] as const)("appends a prompt and shifts ranges by the %s offset", (widthMethod) => {
@@ -200,3 +186,9 @@ describe("prompt history", () => {
     expect(appendPrompt(entry(""), entry("next"), widthMethod).text).toBe("next")
   })
 })
+
+// Past the day-long grace window of kept videos.
+async function age(...files: string[]) {
+  const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
+  for (const file of files) await utimes(file, day, day)
+}

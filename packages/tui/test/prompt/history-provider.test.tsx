@@ -87,20 +87,24 @@ async function waitForHistory(history: ReturnType<typeof usePromptHistory>) {
   }
 }
 
+// Each provider's entries, and a way to add one that returns once it is written.
 const providers = {
   history: {
     file: "prompt-history.jsonl",
     line: (prompt: PromptInfo) => JSON.stringify(prompt),
     Provider: PromptHistoryProvider,
-    useAdd: () => usePromptHistory().append,
+    use: () => {
+      const history = usePromptHistory()
+      return { loaded: history.loaded, add: history.append }
+    },
   },
   stash: {
     file: "prompt-stash.jsonl",
     line: (prompt: PromptInfo) => JSON.stringify({ prompt, timestamp: 1 }),
     Provider: PromptStashProvider,
-    useAdd: () => {
+    use: () => {
       const stash = usePromptStash()
-      return (prompt: PromptInfo) => stash.push({ prompt })
+      return { loaded: stash.loaded, add: (prompt: PromptInfo) => stash.push({ prompt }) }
     },
   },
 }
@@ -127,9 +131,9 @@ test.each(["history", "stash"] as const)(
     const lines = [prompt("oldest", oldest), ...Array.from({ length: 49 }, (_, index) => prompt(String(index)))]
     await Bun.write(path.join(state, provider.file), lines.map(provider.line).join("\n") + "\n")
 
-    let add: (prompt: PromptInfo) => void = () => {}
+    let entries: ReturnType<typeof provider.use> | undefined
     function Consumer() {
-      add = provider.useAdd()
+      entries = provider.use()
       return <box />
     }
     const app = await testRender(() => (
@@ -140,20 +144,14 @@ test.each(["history", "stash"] as const)(
       </TuiPathsProvider>
     ))
     try {
-      await app.renderOnce()
-      await until(async () => !(await Bun.file(unnamed).exists()))
+      await entries!.loaded
+      expect(await Bun.file(unnamed).exists()).toBe(false)
       expect(await Bun.file(oldest).exists()).toBe(true)
 
-      add(prompt("newest"))
-      await until(async () => !(await Bun.file(oldest).exists()))
+      await entries!.add(prompt("newest"))
+      expect(await Bun.file(oldest).exists()).toBe(false)
     } finally {
       app.renderer.destroy()
     }
   },
 )
-
-async function until(condition: () => Promise<boolean>) {
-  const deadline = Date.now() + 2_000
-  while (!(await condition()) && Date.now() < deadline) await Bun.sleep(5)
-  expect(await condition()).toBe(true)
-}

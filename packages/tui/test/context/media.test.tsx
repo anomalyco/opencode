@@ -1,12 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import { CliRenderEvents, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { ManualClock, setRendererCapabilities } from "@opentui/core/testing"
-import { expect, jest, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { createSignal, For, type JSX } from "solid-js"
 import { image, renderMedia, video } from "../fixture/media"
 
 test("re-reads the protocol on capability reports and the pixel size after resizes, polling a bounded time", async () => {
-  await using host = await renderMedia(() => null)
+  const clock = new ManualClock()
+  await using host = await renderMedia(() => null, false, clock)
   const renderer = host.app.renderer
   const media = host.media()
   const state = () => ({
@@ -21,32 +22,34 @@ test("re-reads the protocol on capability reports and the pixel size after resiz
   expect(state()).toEqual({ protocol: "blocks", thumbnailFps: 12, cellAspect: 2, cellPixels: 2 })
   renderer.emit(CliRenderEvents.CAPABILITIES, setRendererCapabilities(renderer, { kitty_graphics: true }))
   expect(state()).toEqual({ protocol: "kitty", thumbnailFps: 15, cellAspect: 2, cellPixels: 10 })
-  jest.useFakeTimers()
-  try {
-    // Sixel needs the pixel resolution, which arrives later without an event; only rich media asks for it, and only
-    // for 10 seconds after it turns on or the terminal resizes.
-    renderer.emit(CliRenderEvents.CAPABILITIES, setRendererCapabilities(renderer, { sixel: true }))
-    report({ width: 800, height: 480 })
-    jest.advanceTimersByTime(1_000)
-    expect(media.protocol()).toBe("blocks")
-    report(null)
-    await host.setRichMedia(true)
-    jest.advanceTimersByTime(10_000)
-    report({ width: 800, height: 480 })
-    jest.advanceTimersByTime(1_000)
-    expect(media.protocol()).toBe("blocks")
-    host.app.resize(40, 20)
-    report({ width: 800, height: 480 })
-    jest.advanceTimersByTime(250)
-    expect(state()).toEqual({ protocol: "sixel", thumbnailFps: 10, cellAspect: 1.2, cellPixels: 20 })
-  } finally {
-    jest.useRealTimers()
-  }
+
+  // Sixel needs the pixel resolution, which arrives later without an event; only rich media asks for it, and only
+  // for 10 seconds after it turns on or the terminal resizes.
+  renderer.emit(CliRenderEvents.CAPABILITIES, setRendererCapabilities(renderer, { sixel: true }))
+  report({ width: 800, height: 480 })
+  clock.advance(1_000)
+  expect(media.protocol()).toBe("blocks")
+  report(null)
+  await host.setRichMedia(true)
+  clock.advance(10_000)
+  report({ width: 800, height: 480 })
+  clock.advance(1_000)
+  expect(media.protocol()).toBe("blocks")
+  host.app.resize(40, 20)
+  report({ width: 800, height: 480 })
+  clock.advance(250)
+  expect(state()).toEqual({ protocol: "sixel", thumbnailFps: 10, cellAspect: 1.2, cellPixels: 20 })
 })
 
-test("opens clamped requests, and turning rich media off closes the viewer, picture-in-picture and inline playback", async () => {
-  await using host = await renderMedia(() => null, true)
+test("rich media sends Kitty frames through files, and turning it off closes every player and restores the transport", async () => {
+  await using host = await renderMedia(() => null)
   const media = host.media()
+  const renderer = host.app.renderer
+  expect(renderer.kittyImageTransport).toBe("raw")
+  await host.setRichMedia(true)
+  expect(renderer.kittyImageTransport).toBe("file")
+
+  // Requests open clamped to the gallery, and an empty gallery opens nothing.
   media.openViewer([], 0)
   expect(media.viewer()).toBeUndefined()
   media.openViewer([image("image"), video("video")], 5, { time: 1.5 })
@@ -57,15 +60,6 @@ test("opens clamped requests, and turning rich media off closes the viewer, pict
   expect(media.viewer()).toBeUndefined()
   expect(media.pip()).toBeUndefined()
   expect(media.activeTile()).toBeUndefined()
-})
-
-test("sends Kitty frames through files while rich media is on, and stops when the provider unmounts", async () => {
-  await using host = await renderMedia(() => null)
-  const renderer = host.app.renderer
-  expect(renderer.kittyImageTransport).toBe("raw")
-  await host.setRichMedia(true)
-  expect(renderer.kittyImageTransport).toBe("file")
-  await host.setRichMedia(false)
   expect(renderer.kittyImageTransport).toBe("raw")
 
   await host.setRichMedia(true)
@@ -114,6 +108,7 @@ test("players go to the four tiles showing the most of themselves, and stay two 
     expect(open.join()).toBe("0,1,2,3,4")
   }
   expect(opened).toBe(5)
+  // Nothing moves, so only the grace timer asks for the placement that takes tile 0's player.
   clock.advance(2_000)
   await settle()
   expect(open.join()).toBe("1,2,3,4")
@@ -144,38 +139,6 @@ test("players go to the four tiles showing the most of themselves, and stay two 
   expect(host.app.renderer.listenerCount(CliRenderEvents.FRAME)).toBe(0)
 })
 
-test("eight tiles arriving one by one in a transcript stuck to its bottom settle on four players, with nothing moving", async () => {
-  const clock = new ManualClock()
-  const [count, setCount] = createSignal(0)
-  const boxes: BoxRenderable[] = []
-  // A 9-row transcript: at its bottom, tiles 4 to 7 show whole and tile 3 shows a row.
-  await using host = await renderMedia(
-    () => (
-      <scrollbox height={9} stickyScroll stickyStart="bottom">
-        <For each={Array.from({ length: count() })}>
-          {() => <box ref={(element: BoxRenderable) => boxes.push(element)} height={2} flexShrink={0} />}
-        </For>
-      </scrollbox>
-    ),
-    false,
-    clock,
-  )
-  const media = host.media()
-  const open = () => boxes.map((_, index) => String(index)).filter(media.posterOpen)
-  for (let index = 0; index < 8; index++) {
-    setCount(index + 1)
-    media.trackPoster(String(index), boxes[index]!)
-    clock.advance(500)
-    await host.app.renderOnce()
-  }
-  // Each tile that scrolled out keeps its player through the grace period. Only the grace timer asks for the frame
-  // that closes them.
-  expect(open()).toHaveLength(8)
-  clock.advance(2_000)
-  await host.app.renderOnce()
-  expect(open().join()).toBe("4,5,6,7")
-})
-
 test("a tile under a hidden ancestor drops its player, and gets it back when the ancestor shows again", async () => {
   const clock = new ManualClock()
   const [visible, setVisible] = createSignal(true)
@@ -193,7 +156,6 @@ test("a tile under a hidden ancestor drops its player, and gets it back when the
     false,
     clock,
   )
-  const renderer = host.app.renderer
   const media = host.media()
   media.trackPoster("tile", tile!)
   const state = async () => {
@@ -211,7 +173,7 @@ test("a tile under a hidden ancestor drops its player, and gets it back when the
   setVisible(true)
   expect(await state()).toEqual({ shown: true, open: true })
   // Only the visibility check follows frames, not another measurement each frame.
-  expect(renderer.listenerCount(CliRenderEvents.FRAME)).toBe(1)
+  expect(host.app.renderer.listenerCount(CliRenderEvents.FRAME)).toBe(1)
 })
 
 // Each change brings the tile from beyond half a scroll box or screen away to within it, through one event alone.

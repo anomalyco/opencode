@@ -196,6 +196,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
   init: () => {
     const paths = useTuiPaths()
     const historyPath = path.join(paths.state, "prompt-history.jsonl")
+    const loaded = Promise.withResolvers<void>()
     onMount(async () => {
       const lines = parsePromptHistory(await readText(historyPath).catch(() => ""))
       setStore("history", lines)
@@ -204,11 +205,14 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       if (lines.length > 0)
         await writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
       await prunePromptMedia(paths.state)
+      loaded.resolve()
     })
 
     const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
 
     return {
+      /** Settles once the entries are read and the kept videos none of them name are pruned. */
+      loaded: loaded.promise,
       move(direction: 1 | -1, input: string) {
         if (!store.history.length) return undefined
         const current = store.history.at(store.index)
@@ -220,11 +224,12 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         if (next === 0) return emptyPrompt()
         return store.history.at(next)
       },
+      /** Returns once the entry is written, and the kept videos it no longer names are pruned. */
       append(item: PromptInfo) {
         const entry = structuredClone(persistablePrompt(unwrap(item), paths.state))
         if (isDuplicateEntry(store.history.at(-1), entry)) {
           setStore("index", 0)
-          return
+          return Promise.resolve()
         }
         let trimmed = false
         setStore(
@@ -238,13 +243,11 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
           }),
         )
 
-        if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n")
+        if (trimmed)
+          return writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n")
             .then(() => prunePromptMedia(paths.state))
             .catch(() => {})
-          return
-        }
-        appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        return appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
       },
     }
   },

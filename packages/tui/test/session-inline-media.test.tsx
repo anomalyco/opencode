@@ -6,9 +6,11 @@ import { pathToFileURL } from "node:url"
 import { appendToSessionPrompt, takeDraft } from "../src/component/prompt/draft-stash"
 import { MAX_LOCAL_VIDEO_BYTES } from "../src/component/prompt/local-attachment"
 import type { Config } from "../src/config"
-import { promptMediaDirectory, prunePromptMedia } from "../src/prompt/history"
+import { promptMediaDirectory, prunePromptMedia, type PromptFile } from "../src/prompt/history"
+import { appendText } from "../src/util/persistence"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
+import { waitForHighlightedFrame } from "./fixture/frame"
 import { descendants, imageFixture, videoFixture } from "./fixture/media"
 import { directory, json } from "./fixture/tui-client"
 
@@ -40,15 +42,17 @@ const shots = [imageURI, videoURI, imageURI, videoURI, imageURI, videoURI].map((
   mime: uri.startsWith("data:video/") ? "video/mp4" : "image/png",
   name: `shot-${index}`,
 }))
+// A remote server lists `out` once for both of its files; only the file counts. A local server has only the fixture.
+// The last is outside the session's directory.
+const named = [`${directory}/out/demo.mp4`, "out/gone.mp4", videoFixture, "/elsewhere/clip.mp4"]
+const listing = [
+  { path: "out/demo.mp4.part", type: "file" },
+  { path: "out/demo.mp4", type: "file" },
+  { path: "out/gone.mp4", type: "directory" },
+]
 // Listed newest first, as the server pages them.
 const messages = [
-  {
-    type: "user",
-    id: "msg_reverted",
-    text: "Reverted",
-    files: [inline(imageBase64, "image/png", "gone.png")],
-    time,
-  },
+  { type: "user", id: "msg_reverted", text: "Reverted", files: [inline(imageBase64, "image/png", "gone.png")], time },
   {
     type: "synthetic",
     id: "msg_generated",
@@ -64,6 +68,7 @@ const messages = [
     model: { providerID: "demo", id: "model" },
     time,
     content: [
+      { type: "text", text: `Rendered ${named.map((file) => `\`${file}\``).join(" and ")}.` },
       {
         type: "tool",
         id: "call_shots",
@@ -71,16 +76,9 @@ const messages = [
         time,
         state: { status: "completed", input: {}, content: [{ type: "text", text: "captured" }, ...shots] },
       },
-      { type: "text", text: "Captured the frames" },
     ],
   },
-  {
-    type: "user",
-    id: "msg_ask",
-    text: "What happens",
-    files: [inline(videoBase64, "video/mp4", "clip.mp4")],
-    time,
-  },
+  { type: "user", id: "msg_ask", text: "What happens", files: [inline(videoBase64, "video/mp4", "clip.mp4")], time },
 ]
 const queued = {
   id: "msg_queued",
@@ -90,10 +88,26 @@ const queued = {
   time: { created: 5 },
   payload: { text: "Queued", files: [inline(imageBase64, "image/png", "queued.png")] },
 }
+// The transcript shows the user's video, the named video, the tool's first three files, and the generated image. The
+// viewer's gallery adds the tool's other three, and leaves out the reverted and queued messages' images.
+const transcriptTiles = { videos: 3, images: 3 }
 
-async function openSession(config: Config.Info, options: { state?: string; localServer?: boolean } = {}) {
+type Stashed = { text: string; files: PromptFile[] }
+const video = (start: number) => ({ start, end: start + 9, text: "[Video 1]" })
+
+/** Opens the session with `stash` in the prompt stash under `state`, oldest first. */
+async function openSession(config: Config.Info, options: { state: string; localServer?: boolean; stash?: Stashed[] }) {
   takeDraft(session.id)
-  const prompts: { files?: { uri: string }[] }[] = []
+  const stash = path.join(options.state, "prompt-stash.jsonl")
+  const entries = (options.stash ?? []).map((prompt) => ({
+    prompt: { ...prompt, agents: [], skills: [], pasted: [] },
+    timestamp: 1,
+  }))
+  if (entries.length) await Bun.write(stash, entries.map((entry) => JSON.stringify(entry) + "\n").join(""))
+  const listed: string[] = []
+  const prompts: PromiseWithResolvers<{ files?: { uri: string }[] }>[] = []
+  const prompt = (index: number) => (prompts[index] ??= Promise.withResolvers())
+  let received = 0
   const setup = await createAppFixture({
     width: 100,
     height: 60,
@@ -105,6 +119,12 @@ async function openSession(config: Config.Info, options: { state?: string; local
       const rest = url.pathname.replace(/^\/api\/(experimental\/)?session\/ses_inline_media/, "")
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
       if (url.pathname === "/api/fs/read/generated/image.png") return new Response(Bun.file(imageFixture))
+      if (url.pathname === "/api/fs/read/out/demo.mp4") return new Response(Bun.file(videoFixture))
+      // The startup listing has no path.
+      if (url.pathname === "/api/fs/list" && url.searchParams.has("path")) {
+        listed.push(url.searchParams.get("path")!)
+        return json({ location, data: listing })
+      }
       if (url.pathname === "/api/agent")
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
       if (url.pathname === "/api/fs/find") return json({ location, data: [] })
@@ -118,256 +138,257 @@ async function openSession(config: Config.Info, options: { state?: string; local
       if (rest === "/revert/commit") return new Response(null, { status: 204 })
       if (rest !== "/prompt") return undefined
       const body = await request.json()
-      prompts.push(body)
+      prompt(received++).resolve(body)
       return json({ data: { id: body.id, sessionID: session.id, type: "user", time, payload: { text: body.text } } })
     },
   })
   await setup.ready
-  await setup.waitForFrame((frame) => frame.includes("What happens"))
+  await waitForHighlightedFrame(setup, (frame) => frame.includes("What happens") && frame.includes("Rendered"))
   const nodes = () => descendants(setup.renderer.root)
+  const history = path.join(options.state, "prompt-history.jsonl")
   return Object.assign(setup, {
-    prompts,
+    stash,
+    listed,
+    /** The body of the `index`th prompt sent. */
+    sent: (index: number) => prompt(index).promise,
     videos: () => nodes().filter((node) => node instanceof VideoRenderable),
     images: () => nodes().filter((node) => node instanceof ImageRenderable),
+    textarea: () => nodes().find((node) => node instanceof TextareaRenderable),
     composer: () => nodes().find((node) => node instanceof TextareaRenderable)?.plainText ?? "",
-    // Video tiles open and decode on the wall clock, so poll between frames.
+    /** The newest history entry, once the writes already queued for the file are done. */
+    async saved() {
+      await appendText(history, "")
+      return JSON.parse((await Bun.file(history).text()).trim().split("\n").at(-1)!)
+    },
+    // Tiles open and decode, and pastes and checks resolve, on the wall clock: look after each frame, up to a deadline.
     async until(condition: () => boolean) {
       const deadline = Date.now() + 5_000
-      while (!condition() && Date.now() < deadline) {
-        await Bun.sleep(10)
-        await setup.renderOnce()
-      }
+      while (!condition() && Date.now() < deadline)
+        await new Promise((resolve) => setup.renderer.once("frame", resolve))
       expect(condition()).toBe(true)
     },
-    async palette(command: string) {
+    async click(text: string) {
+      const lines = setup.captureCharFrame().split("\n")
+      const y = lines.findIndex((line) => line.includes(text))
+      await setup.mockMouse.click(lines[y]!.indexOf(text) + 1, y)
+    },
+    async search(text: string) {
       setup.mockInput.pressKey("p", { ctrl: true })
       await setup.waitFor(() => setup.renderer.currentFocusedRenderable instanceof InputRenderable)
-      await setup.mockInput.typeText(command)
-      await setup.waitForFrame((frame) => frame.includes(command))
+      await setup.mockInput.typeText(text)
+      await setup.waitForFrame((frame) => frame.includes(text))
+    },
+    async palette(command: string) {
+      await this.search(command)
       setup.mockInput.pressEnter()
     },
   })
 }
 
-// The transcript shows the user's video, the tool's first three files, and the generated image.
-const transcriptTiles = { videos: 2, images: 3 }
+type App = Awaited<ReturnType<typeof openSession>>
 
-/** Opens the session with `prompt` in the stash and pops it into the composer. */
-async function popStash(state: string, prompt: { text: string; files: unknown[] }, localServer?: boolean) {
-  const entry = { prompt: { ...prompt, agents: [], skills: [], pasted: [] }, timestamp: 1 }
-  await Bun.write(path.join(state, "prompt-stash.jsonl"), JSON.stringify(entry) + "\n")
-  const app = await openSession(richMedia, { state, localServer })
-  await app.until(() => app.videos().length === transcriptTiles.videos)
-  await app.palette("Stash pop")
-  await app.waitForFrame(() => app.composer() === prompt.text)
-  return app
+/** Opens the named video's tile, which sits right under the text naming it, above the tool's tiles. */
+async function openNamedVideo(app: App, name: string) {
+  const y = app
+    .captureCharFrame()
+    .split("\n")
+    .findIndex((line) => line.includes("Rendered"))
+  const tile = app
+    .videos()
+    .filter((tile) => tile.y > y)
+    .toSorted((a, b) => a.y - b.y)[0]!
+  await app.mockMouse.click(tile.x + 1, tile.y + 1)
+  const header = await app.waitForFrame((frame) => frame.includes("2 / 9"))
+  expect(header.split("\n")[0]).toContain(name)
+  app.mockInput.pressEscape()
+  await app.waitForFrame((frame) => !frame.includes("2 / 9"))
 }
 
-test("shows the session's media as tiles that open the viewer over the whole gallery", async () => {
-  await using app = await openSession(richMedia)
+test("against a remote server, media shows as tiles that open the viewer, and a pasted video drafts as its path", async () => {
+  await using temporary = await tmpdir()
+  // As a remote server's restore leaves it: a file uri on the server's machine, though this one has a file there too.
+  const held = path.join(temporary.path, "held.mp4")
+  await copyFile(videoFixture, held)
+  const remote = { uri: pathToFileURL(held).href, name: "held.mp4", mention: video(5) }
+  await using app = await openSession(richMedia, {
+    state: temporary.path,
+    stash: [{ text: "Look [Video 1]", files: [remote] }],
+  })
   await app.until(
     () => app.videos().length === transcriptTiles.videos && app.images().length === transcriptTiles.images,
   )
-  expect(app.videos().every((video) => video.paused && !video.audio)).toBe(true)
-
-  const lines = app.captureCharFrame().split("\n")
-  const y = lines.findIndex((line) => line.includes("+3 more"))
-  await app.mockMouse.click(lines[y]!.indexOf("+3 more") + 1, y)
-  // The first hidden tool file, after the user's video and the three tiles shown. The 8 items leave out the reverted
-  // and queued messages' images.
-  await app.waitForFrame((frame) => frame.includes("5 / 8"))
-
-  app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("5 / 8"))
-}, 20000)
-
-test("keeps the prompt from taking input while the viewer is open", async () => {
-  await using app = await openSession(richMedia)
-  await app.palette("View media")
-  // Opened from the command palette at the newest item.
-  await app.waitForFrame((frame) => frame.includes("8 / 8"))
-  const textarea = descendants(app.renderer.root).find((node) => node instanceof TextareaRenderable)
-  expect(textarea?.focusable).toBe(false)
-  await Bun.sleep(50) // Past the dialog's refocus timer.
-  await app.mockInput.typeText("abc")
-  app.mockInput.pressEnter()
-  app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("8 / 8"))
-  expect(app.prompts).toEqual([])
-  expect(app.composer()).toBe("")
-}, 20000)
-
-test("attaches a pasted video as its path, keeps only the path in history, and sends its bytes again", async () => {
-  await using temporary = await tmpdir()
-  await using app = await openSession(richMedia, { state: temporary.path })
-  await app.until(() => app.videos().length === transcriptTiles.videos)
   const transcript = app.videos()
+  expect(transcript.every((tile) => tile.paused && !tile.audio)).toBe(true)
+  await openNamedVideo(app, "demo.mp4")
+  expect(app.listed).toEqual(["out"])
 
+  // "+3 more" opens the first hidden tool file. The open viewer keeps keys from the prompt.
+  await app.click("+3 more")
+  await app.waitForFrame((frame) => frame.includes("6 / 9"))
+  await app.mockInput.typeText("abc")
+  expect(app.composer()).toBe("")
+  app.mockInput.pressEscape()
+  await app.waitForFrame((frame) => !frame.includes("6 / 9"))
+
+  // The palette opens it at the newest item. The palette gives focus back on a timer, which the prompt must refuse.
+  await app.palette("View media")
+  await app.waitForFrame((frame) => frame.includes("9 / 9"))
+  expect(app.textarea()?.focusable).toBe(false)
+  app.mockInput.pressEscape()
+  await app.waitForFrame((frame) => !frame.includes("9 / 9"))
+
+  // The draft plays the pasted file itself, which pasting did not read, and attaching an image keeps its tile.
   app.mockInput.pasteBracketedText(videoFixture)
-  await app.waitForFrame(() => app.composer().includes("[Video 1]"))
   await app.until(() => app.videos().length === transcriptTiles.videos + 1)
-  const draft = app.videos().find((video) => !transcript.includes(video))!
-  // The draft plays the pasted file itself, which pasting did not read.
+  expect(app.composer()).toContain("[Video 1]")
+  const draft = app.videos().find((tile) => !transcript.includes(tile))!
   expect(draft.source).toBe(videoFixture)
-
-  // Attaching an image keeps the video's tile.
   app.mockInput.pasteBracketedText(imageFixture)
-  await app.waitForFrame(() => app.composer().includes("[Image 1]"))
   await app.until(() => app.images().length === transcriptTiles.images + 1)
-  expect(app.videos().includes(draft)).toBe(true)
+  expect(app.composer()).toContain("[Image 1]")
+  expect(app.videos()).toContain(draft)
 
+  // History keeps the video's path, not its bytes, and sending the recalled prompt reads them again.
   app.mockInput.pressKey("c", { ctrl: true })
-  const history = path.join(temporary.path, "prompt-history.jsonl")
-  await app.until(() => Bun.file(history).size > 0)
-  const saved = await Bun.file(history).text()
+  const saved = JSON.stringify(await app.saved())
   expect(saved).toContain(JSON.stringify(pathToFileURL(videoFixture).href))
   expect(saved).not.toContain("data:video")
-
   app.mockInput.pressArrow("up")
   await app.waitForFrame(() => app.composer().includes("[Video 1]"))
   app.mockInput.pressEnter()
-  await app.until(() => app.prompts.length === 1)
-  expect(app.prompts[0]?.files?.map((file) => file.uri)).toEqual([videoURI, imageURI])
+  expect((await app.sent(0)).files?.map((file) => file.uri)).toEqual([videoURI, imageURI])
 
   // The sent message adds its video without rebuilding the tiles still on screen. A tile it scrolls out of view closes
   // its player, and at most four players stay open.
-  await app.until(() => app.videos().some((video) => !transcript.includes(video)))
-  expect(app.videos().filter((video) => transcript.includes(video)).length).toBeGreaterThan(0)
+  await app.until(() => app.videos().some((tile) => !transcript.includes(tile) && tile !== draft))
+  expect(app.videos().filter((tile) => transcript.includes(tile)).length).toBeGreaterThan(0)
   expect(app.videos().length).toBeLessThanOrEqual(4)
-}, 20000)
 
-test("pastes the path of a video over the size core sends as text, with a warning", async () => {
-  await using temporary = await tmpdir()
+  // A video over the size core sends inline pastes as its path, with a warning.
   const large = path.join(temporary.path, "large.mp4")
   await Bun.write(large, new Uint8Array(MAX_LOCAL_VIDEO_BYTES + 1))
-  await using app = await openSession(richMedia)
-
   app.mockInput.pasteBracketedText(large)
-  await app.waitForFrame((frame) => frame.includes("large.mp4 is over the attachment size limit"))
+  await app.until(() => app.captureCharFrame().includes("large.mp4 is over the attachment size limit"))
   expect(app.composer()).toBe(large)
-}, 20000)
-
-// Undo, revert, and fork restore sent videos as bytes, whether or not the experiment is on.
-test("a restored video reaches history as a file at once", async () => {
-  await using temporary = await tmpdir()
-  const files = [{ uri: videoURI, mention: { start: 5, end: 14, text: "[Video 1]" } }]
-  const prompt = { text: "Look [Video 1]", files, agents: [], skills: [], pasted: [] }
-  await Bun.write(path.join(temporary.path, "prompt-stash.jsonl"), JSON.stringify({ prompt, timestamp: 1 }) + "\n")
-  await using app = await openSession({}, { state: temporary.path, localServer: true })
-  await app.palette("Stash pop")
-  await app.waitForFrame(() => app.composer() === prompt.text)
-  // Straight after the restore, before anything asynchronous could give the video a file.
   app.mockInput.pressKey("c", { ctrl: true })
-  const history = path.join(temporary.path, "prompt-history.jsonl")
-  await app.until(() => Bun.file(history).size > 0)
-  const file = JSON.parse((await Bun.file(history).text()).trim()).files[0]
-  expect(file.uri).toBe(pathToFileURL(file.path).href)
-  expect(path.extname(file.path)).toBe(".mp4")
-  expect(Buffer.from(await Bun.file(file.path).arrayBuffer()).toString("base64")).toBe(videoBase64)
 
-  // Sent again, even to a local server, the kept file is no source the model should hear about.
-  app.mockInput.pressArrow("up")
-  await app.waitForFrame(() => app.composer() === prompt.text)
-  app.mockInput.pressEnter()
-  await app.until(() => app.prompts.length === 1)
-  expect(app.prompts[0]?.files).toEqual(files)
-}, 20000)
-
-test("a stash pop keeps an old kept video its prompt names from being pruned", async () => {
-  await using temporary = await tmpdir()
-  const kept = path.join(promptMediaDirectory(temporary.path), "0c".repeat(32) + ".mp4")
-  await Bun.write(kept, Bun.file(videoFixture))
-  const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
-  await utimes(kept, day, day)
-  const files = [{ uri: pathToFileURL(kept).href, path: kept, mention: { start: 5, end: 14, text: "[Video 1]" } }]
-  const prompt = { text: "Look [Video 1]", files, agents: [], skills: [], pasted: [] }
-  const stash = path.join(temporary.path, "prompt-stash.jsonl")
-  await Bun.write(stash, JSON.stringify({ prompt, timestamp: 1 }) + "\n")
-  await using app = await openSession({}, { state: temporary.path })
+  // The stashed file video gets no tile: the viewer opens on the image pasted after it, as the draft's only item.
   await app.palette("Stash pop")
-  await app.waitForFrame(() => app.composer() === prompt.text)
-
-  // Once the stash no longer names it, only the draft holds it.
-  await app.until(() => Bun.file(stash).size === 0)
-  await prunePromptMedia(temporary.path)
-  expect(await Bun.file(kept).exists()).toBe(true)
-}, 20000)
-
-test("a local server's restored file video of any type gets its path at once, with the experiment off", async () => {
-  await using temporary = await tmpdir()
-  const video = path.join(temporary.path, "held.webm")
-  const image = path.join(temporary.path, "held.png")
-  await Promise.all([copyFile(videoFixture, video), copyFile(imageFixture, image)])
-  const files = [
-    { uri: pathToFileURL(video).href, name: "held.webm", mention: { start: 5, end: 14, text: "[Video 1]" } },
-    { uri: pathToFileURL(image).href, name: "held.png", mention: { start: 15, end: 24, text: "[Image 1]" } },
-  ]
-  await using app = await openSession({}, { state: temporary.path, localServer: true })
-  // As an undo puts the sent prompt back. The server reads the image itself, as before.
-  const prompt = { text: "Look [Video 1] [Image 1]", files, agents: [], skills: [], pasted: [] }
-  const composer = appendToSessionPrompt(session.id, prompt, app.renderer.widthMethod)
-  expect(composer?.current.files).toEqual([{ ...files[0], path: video }, files[1]])
-
-  app.mockInput.pressKey("c", { ctrl: true })
-  const history = path.join(temporary.path, "prompt-history.jsonl")
-  await app.until(() => Bun.file(history).size > 0)
-  expect(JSON.parse((await Bun.file(history).text()).trim()).files).toEqual([{ ...files[0], path: video }, files[1]])
-}, 20000)
-
-test("a local server's restored files show as tiles, and a video that is gone is left out with a warning", async () => {
-  await using temporary = await tmpdir()
-  const video = path.join(temporary.path, "held.mp4")
-  const image = path.join(temporary.path, "held.png")
-  const mentioned = path.join(temporary.path, "seen.mp4")
-  await Promise.all([copyFile(videoFixture, video), copyFile(imageFixture, image), copyFile(videoFixture, mentioned)])
-  const files = [
-    { uri: pathToFileURL(video).href, name: "held.mp4", mention: { start: 5, end: 14, text: "[Video 1]" } },
-    { uri: pathToFileURL(mentioned).href, name: "seen.mp4", mention: { start: 15, end: 24, text: "@seen.mp4" } },
-    { uri: pathToFileURL(image).href, name: "held.png", mention: { start: 25, end: 34, text: "[Image 1]" } },
-  ]
-  await using app = await popStash(temporary.path, { text: "Look [Video 1] @seen.mp4 [Image 1]", files }, true)
-  await app.until(() => app.videos().length === transcriptTiles.videos + 2)
-  await app.until(() => app.images().length === transcriptTiles.images + 1)
-
-  // The server reads the image and the `@` mention itself; the video is read again here, and it is gone.
-  await rm(video)
-  app.mockInput.pressEnter()
-  await app.waitForFrame((frame) => frame.includes("Could not read held.mp4 again"))
-  await app.until(() => app.prompts.length === 1)
-  expect(app.prompts[0]?.files?.map((file) => file.uri)).toEqual([
-    pathToFileURL(mentioned).href,
-    pathToFileURL(image).href,
-  ])
-}, 20000)
-
-test("a remote server's restored file video gets no tile and is not sent, as this terminal cannot read it", async () => {
-  await using temporary = await tmpdir()
-  const held = path.join(temporary.path, "held.mp4")
-  await copyFile(videoFixture, held)
-  const files = [{ uri: pathToFileURL(held).href, name: "held.mp4", mention: { start: 5, end: 14, text: "[Video 1]" } }]
-  await using app = await popStash(temporary.path, { text: "Look [Video 1]", files })
-  await Bun.sleep(100)
-  await app.renderOnce()
-  expect(app.videos()).toHaveLength(transcriptTiles.videos)
-  expect(app.captureCharFrame()).not.toContain("held.mp4")
+  await app.waitForFrame(() => app.composer() === "Look [Video 1]")
+  app.mockInput.pasteBracketedText(imageFixture)
+  await app.until(() => app.composer().includes("[Image 1]"))
+  await app.palette("View media attachments")
+  const viewer = await app.waitForFrame((frame) => frame.split("\n")[0]!.includes("image.png"))
+  expect(viewer.split("\n")[0]).not.toContain(" / ")
+  app.mockInput.pressEscape()
 
   // Nor does the server get the uri, which would name this terminal's file.
   app.mockInput.pressEnter()
   await app.waitForFrame((frame) => frame.includes("Could not read held.mp4 again"))
-  await app.until(() => app.prompts.length === 1)
-  expect(app.prompts[0]?.files ?? []).toEqual([])
-}, 20000)
+  expect((await app.sent(1)).files?.map((file) => file.uri)).toEqual([imageURI])
+})
 
-test("keeps the old image previews with the experiment off", async () => {
-  await using app = await openSession({ session: { image_preview: true }, prompt: { image_preview: true } })
+test("against a local server, a restored prompt's files show as tiles, and a video gone by sending is left out", async () => {
+  await using temporary = await tmpdir()
+  const held = path.join(temporary.path, "held.mp4")
+  const image = path.join(temporary.path, "held.png")
+  const mentioned = path.join(temporary.path, "seen.mp4")
+  await Promise.all([copyFile(videoFixture, held), copyFile(imageFixture, image), copyFile(videoFixture, mentioned)])
+  const files = [
+    { uri: pathToFileURL(held).href, name: "held.mp4", mention: video(5) },
+    { uri: pathToFileURL(mentioned).href, name: "seen.mp4", mention: { start: 15, end: 24, text: "@seen.mp4" } },
+    { uri: pathToFileURL(image).href, name: "held.png", mention: { start: 25, end: 34, text: "[Image 1]" } },
+  ]
+  const text = "Look [Video 1] @seen.mp4 [Image 1]"
+  await using app = await openSession(richMedia, { state: temporary.path, localServer: true, stash: [{ text, files }] })
+  await app.until(() => app.videos().length === transcriptTiles.videos)
+  await openNamedVideo(app, path.basename(videoFixture))
+  expect(app.listed).toEqual([])
+
+  await app.palette("Stash pop")
+  await app.waitForFrame(() => app.composer() === text)
+  await app.until(
+    () => app.videos().length === transcriptTiles.videos + 2 && app.images().length === transcriptTiles.images + 1,
+  )
+
+  // The server reads the image and the `@` mention itself; the video is read again here, and it is gone.
+  await rm(held)
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Could not read held.mp4 again"))
+  expect((await app.sent(0)).files?.map((file) => file.uri)).toEqual([
+    pathToFileURL(mentioned).href,
+    pathToFileURL(image).href,
+  ])
+})
+
+test("with rich media off, the old image previews stay, and restored videos still reach history as files", async () => {
+  await using temporary = await tmpdir()
+  // A video history or the stash kept a day ago, which only a stash entry still names.
+  const kept = path.join(promptMediaDirectory(temporary.path), "0c".repeat(32) + ".mp4")
+  await Bun.write(kept, Bun.file(videoFixture))
+  const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
+  await utimes(kept, day, day)
+  // Undo, revert, and fork restore a sent video as its bytes, as the newer entry has it.
+  const restored = { text: "Look [Video 1]", files: [{ uri: videoURI, mention: video(5) }] }
+  const stash = [{ text: "Keep [Video 1]", files: [{ uri: pathToFileURL(kept).href, path: kept, mention: video(5) }] }]
+  await using app = await openSession(
+    { session: { image_preview: true }, prompt: { image_preview: true } },
+    { state: temporary.path, localServer: true, stash: [...stash, restored] },
+  )
+
+  // The previews show without the video tiles' strip and its "+3 more".
   await app.until(() => app.images().length === transcriptTiles.images)
-  await Bun.sleep(100)
   await app.renderOnce()
-  expect(app.videos()).toEqual([])
   expect(app.captureCharFrame()).not.toContain("more")
+  expect(app.videos()).toEqual([])
+
+  // Nor is the transcript's media a gallery, which would also look for the files replies name: the palette offers no
+  // "View media". Settings join the commands once the search applies.
+  await app.search("View media")
+  const palette = await app.waitForFrame((frame) => frame.includes("Settings ·"))
+  expect(palette.match(/View media/g)).toEqual(["View media"])
+  app.mockInput.pressEscape()
 
   // A pasted video path stays text.
   app.mockInput.pasteBracketedText(videoFixture)
-  await app.waitForFrame(() => app.composer().includes(videoFixture))
+  await app.until(() => app.composer().includes(videoFixture))
   expect(app.composer()).not.toContain("[Video")
-}, 20000)
+  app.mockInput.pressKey("c", { ctrl: true })
+
+  // History keeps a restored video as a file straight after the restore, and sending reads its bytes again without
+  // naming the kept file to the model.
+  await app.palette("Stash pop")
+  await app.waitForFrame(() => app.composer() === restored.text)
+  app.mockInput.pressKey("c", { ctrl: true })
+  const file = (await app.saved()).files[0]
+  expect(file.uri).toBe(pathToFileURL(file.path).href)
+  expect(path.dirname(file.path)).toBe(promptMediaDirectory(temporary.path))
+  expect(Buffer.from(await Bun.file(file.path).arrayBuffer()).toString("base64")).toBe(videoBase64)
+  app.mockInput.pressArrow("up")
+  await app.waitForFrame(() => app.composer() === restored.text)
+  app.mockInput.pressEnter()
+  expect((await app.sent(0)).files).toEqual(restored.files)
+
+  // A local server's restored file video of any type gets its path at once. The server reads the image itself.
+  const webm = path.join(temporary.path, "held.webm")
+  const png = path.join(temporary.path, "held.png")
+  await Promise.all([copyFile(videoFixture, webm), copyFile(imageFixture, png)])
+  const files = [
+    { uri: pathToFileURL(webm).href, name: "held.webm", mention: video(5) },
+    { uri: pathToFileURL(png).href, name: "held.png", mention: { start: 15, end: 24, text: "[Image 1]" } },
+  ]
+  await app.until(() => app.composer() === "")
+  const prompt = { text: "Look [Video 1] [Image 1]", files, agents: [], skills: [], pasted: [] }
+  const composer = appendToSessionPrompt(session.id, prompt, app.renderer.widthMethod)
+  const localized = [{ ...files[0], path: webm }, files[1]]
+  expect(composer?.current.files).toEqual(localized)
+  app.mockInput.pressKey("c", { ctrl: true })
+  expect((await app.saved()).files).toEqual(localized)
+
+  // Popping the entry that names the old kept video restarts its grace window, so pruning keeps it.
+  await app.palette("Stash pop")
+  await app.waitForFrame(() => app.composer() === "Keep [Video 1]")
+  await appendText(app.stash, "")
+  await prunePromptMedia(temporary.path)
+  expect(await Bun.file(kept).exists()).toBe(true)
+})

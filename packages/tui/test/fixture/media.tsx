@@ -19,8 +19,6 @@ import { createTuiResolvedConfig } from "./tui-runtime"
 // 2 s and 4 s 160x90 H.264 clips without audio: ffmpeg -f lavfi -i testsrc2=size=160x90:rate=10 -t 2 -c:v libx264 -an
 export const videoFixture = path.join(import.meta.dir, "media", "video-only.mp4")
 export const longVideoFixture = path.join(import.meta.dir, "media", "video-long.mp4")
-/** A 20 s 64x36 clip at 2 fps, long enough for 5 s seeks to add up: testsrc2=size=64x36:rate=2 -t 20, as above. */
-export const seekVideoFixture = path.join(import.meta.dir, "media", "video-seek.mp4")
 /** A 96x48 PNG, the bytes of `diffImageFixture`. */
 export const imageFixture = path.join(import.meta.dir, "media", "image.png")
 
@@ -41,7 +39,8 @@ const probe = () => ({
 
 /**
  * Renders `view` inside the media provider and host, which shows the real viewer and PiP, toasts, and what they need.
- * The `clock` drives the renderer's timers, such as the seek bar's; playback follows the wall clock regardless.
+ * The `clock` drives the renderer's timers, such as the seek bar's; playback follows the wall clock regardless, so a
+ * test that needs a playing video at a time seeks it there.
  */
 export async function renderMedia(view: () => JSX.Element, richMedia = false, clock?: Clock) {
   const temporary = await tmpdir()
@@ -84,11 +83,12 @@ export async function renderMedia(view: () => JSX.Element, richMedia = false, cl
     ),
     { width: 80, height: 30, kittyKeyboard: true, clock },
   )
-  // Playback and file resolution follow the wall clock, so poll with short sleeps between frames.
+  // Media files resolve and images decode on Bun's thread pool, whose results arrive only between macrotasks, so
+  // yield one before each frame until the condition holds.
   async function until(condition: () => boolean) {
     const deadline = Date.now() + 5_000
     while (!condition() && Date.now() < deadline) {
-      await Bun.sleep(5)
+      await new Promise((resolve) => setImmediate(resolve))
       await app.renderOnce()
     }
     if (!condition()) console.log(app.captureCharFrame())

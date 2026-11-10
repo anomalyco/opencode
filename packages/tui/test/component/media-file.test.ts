@@ -21,13 +21,15 @@ test("media files are written once, atomically, under their content hash", async
   const file = path.join(temporary.path, `${sha256}.mp4`)
   await expect(files.ensure(sha256, ".mp4", () => Promise.reject(new Error("offline")))).rejects.toThrow("offline")
   const release = Promise.withResolvers<Uint8Array>()
+  const asked = Promise.withResolvers<void>()
   let reads = 0
   const read = () => {
     reads++
+    asked.resolve()
     return release.promise
   }
   const pending = [files.ensure(sha256, ".mp4", read), files.ensure(sha256, ".mp4", read)]
-  await Bun.sleep(0)
+  await asked.promise
   expect(await Bun.file(file).exists()).toBe(false)
   release.resolve(bytes)
   expect(await Promise.all(pending)).toEqual([file, file])
@@ -69,8 +71,7 @@ test("file uris play in place on a local server and are read through a remote on
     [image("windows", { uri: "file:///C:/work/out/a%20b.png", path: undefined, location: windows }), remote, bytes],
     [image("posix", { uri: "file:///work/a%5Cb.png", path: undefined, location: posix }), remote, bytes],
   ] as const
-  for (const [item, sources, expected] of cases)
-    expect([item.id, await resolve(item, sources)]).toEqual([item.id, expected])
+  for (const [item, sources, expected] of cases) expect(await resolve(item, sources), `${item.kind} ${item.id}`).toEqual(expected)
   expect(reads).toEqual([
     { path: "media/video-only.mp4", location: fixtures },
     { path: "out/a b.png", location: windows },

@@ -6,15 +6,16 @@ import { descendants, image, longVideoFixture, renderMedia, video } from "../fix
 
 type Host = Awaited<ReturnType<typeof renderMedia>>
 
-test("the viewer hands a video to picture-in-picture and takes it back at the same time", async () => {
-  await using host = await renderMedia(() => null)
-  host.media().openViewer([video("clip")], 0)
+test("the viewer hands a video to picture-in-picture and takes it back with its time, sound and loop", async () => {
+  await using host = await renderMedia(() => null, false, new ManualClock())
+  host.media().openViewer([video("clip", { path: longVideoFixture })], 0)
   await host.until(() => host.videos("media-viewer-stage")[0]?.playing === true)
-  for (const key of [" ", "5", "m", "down", "down", "l"]) await host.press(key)
+  // "5" seeks to 2 s at once, so "shift+right" waits out the interval; the time it is headed to goes along.
+  for (const key of [" ", "5", "m", "down", "down", "l", "shift+right"]) await host.press(key)
 
   await host.press("p")
   expect(host.media().viewer()).toBeUndefined()
-  expect(host.media().pip()).toMatchObject({ item: { id: "clip" }, playing: false })
+  expect(host.media().pip()).toMatchObject({ item: { id: "clip" }, time: 3, playing: false })
   const pip = await readyPip(host)
   expect(pip.paused).toBe(true)
   expectCarried(pip)
@@ -26,16 +27,6 @@ test("the viewer hands a video to picture-in-picture and takes it back at the sa
   expect(host.media().pip()).toBeUndefined()
   expect(host.media().viewer()).toMatchObject({ items: [{ id: "clip" }], index: 0, playing: false })
   expectCarried(host.videos("media-viewer-stage")[0]!)
-})
-
-test("the viewer hands picture-in-picture the time a pending seek is headed to", async () => {
-  const clock = new ManualClock()
-  await using host = await renderMedia(() => null, false, clock)
-  host.media().openViewer([video("clip", { path: longVideoFixture })], 0)
-  await host.until(() => host.videos("media-viewer-stage")[0]?.playing === true)
-  // "0" seeks at once, so the next seek waits out the interval while the player stays at 0 s.
-  for (const key of [" ", "0", "shift+right", "p"]) await host.press(key)
-  expect(host.media().pip()).toMatchObject({ time: 1, playing: false })
 })
 
 test("drags by its title and plays from its controls", async () => {
@@ -53,46 +44,40 @@ test("drags by its title and plays from its controls", async () => {
 
   const play = host.find("media-play")!
   await host.app.mockMouse.click(play.x, play.y)
-  await host.until(() => pip.playing)
+  expect(pip.playing).toBe(true)
   host.keymap().dispatch("media.pip.toggle")
   expect(pip.paused).toBe(true)
 })
 
-test("pauses under the viewer and plays again once it closes", async () => {
+test("pauses under the viewer, even when it becomes ready there, and plays again once the viewer closes", async () => {
   await using host = await renderMedia(() => null)
   host.media().openPip(video("clip"))
-  const pip = await readyPip(host)
-  expect(pip.playing).toBe(true)
+  const playing = await readyPip(host)
+  expect(playing.playing).toBe(true)
   host.media().openViewer([image("image")], 0)
   await host.app.renderOnce()
-  expect(pip.paused).toBe(true)
+  expect(playing.paused).toBe(true)
   host.media().closeViewer()
   await host.app.renderOnce()
-  expect(pip.playing).toBe(true)
-})
+  expect(playing.playing).toBe(true)
 
-test("waits for the viewer to close when it becomes ready under it", async () => {
-  await using host = await renderMedia(() => null)
+  host.media().closePip()
   host.media().openViewer([image("image")], 0)
   host.media().openPip(video("clip"), { time: 0.5, playing: true })
-  const pip = await readyPip(host)
-  expect(pip.currentTime).toBeCloseTo(0.5, 1)
-  expect(pip.paused).toBe(true)
+  const covered = await readyPip(host)
+  expect(covered.currentTime).toBeCloseTo(0.5, 1)
+  expect(covered.paused).toBe(true)
   host.media().closeViewer()
   await host.app.renderOnce()
-  expect(pip.playing).toBe(true)
+  expect(covered.playing).toBe(true)
 })
 
-test("a selection, seek or move released on its controls does not click them", async () => {
-  await using host = await renderMedia(() => <text>selectable words</text>)
+// The media strip test covers a selection released on a control.
+test("a seek or move released on its controls does not click them", async () => {
+  await using host = await renderMedia(() => null)
   host.media().openPip(video("clip"), { playing: false })
   const pip = await readyPip(host)
   const controls = ["media-play", "media-pip-expand", "media-pip-close"].map((id) => host.find(id)!)
-  for (const control of controls) {
-    await host.app.mockMouse.drag(1, 0, control.x, control.y)
-    expect(host.app.renderer.getSelection()?.getSelectedText()).toBeTruthy()
-    host.app.renderer.clearSelection()
-  }
   const seekBar = () =>
     descendants(host.find("media-pip")!).find((node) => node instanceof TextRenderable && node.plainText.includes("●"))
   await host.until(() => seekBar() !== undefined)
@@ -111,14 +96,14 @@ test("a selection, seek or move released on its controls does not click them", a
 test("a form taking the keys moves a playing video to picture-in-picture and closes the viewer otherwise", async () => {
   await using host = await renderMedia(() => null)
   host.media().openViewer([video("clip")], 0)
-  // The time the transport last reported, which trails the player's by up to a frame, goes along.
-  await host.until(() => (host.videos("media-viewer-stage")[0]?.currentTime ?? 0) > 0.3)
+  await host.until(() => host.videos("media-viewer-stage")[0]?.playing === true)
+  host.videos("media-viewer-stage")[0]!.seek(0.5)
   const popForm = host.keymap().mode.push("form")
   await host.app.renderOnce()
   expect(host.media().viewer()).toBeUndefined()
   expect(host.keymap().mode.current()).toBe("form")
   expect(host.media().pip()).toMatchObject({ item: { id: "clip" }, playing: true })
-  expect(host.media().pip()!.time).toBeGreaterThan(0.2)
+  expect(host.media().pip()!.time).toBeCloseTo(0.5, 1)
   popForm()
 
   host.keymap().dispatch("media.pip.close")
@@ -138,9 +123,9 @@ test("expanded before it is ready, it opens the viewer at its time and playing",
   expect(host.media().viewer()).toMatchObject({ items: [{ id: "clip" }], time: 0.5, playing: true })
 })
 
-/** The time, mute, volume and loop the viewer test sets go along between the viewer and picture-in-picture. */
+/** The time, mute, volume and loop the first test sets go along between the viewer and picture-in-picture. */
 function expectCarried(player: VideoRenderable) {
-  expect(player.currentTime).toBeCloseTo(1, 1)
+  expect(player.currentTime).toBeCloseTo(3, 1)
   expect(player.muted).toBe(true)
   expect(player.volume).toBeCloseTo(0.8)
   expect(player.loop).toBe(true)

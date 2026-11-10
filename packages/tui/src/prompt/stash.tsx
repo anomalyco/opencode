@@ -38,20 +38,25 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
   init: () => {
     const paths = useTuiPaths()
     const stashPath = path.join(paths.state, "prompt-stash.jsonl")
+    const loaded = Promise.withResolvers<void>()
     onMount(async () => {
       const lines = parsePromptStash(await readText(stashPath).catch(() => ""))
       setStore("entries", lines)
       if (lines.length > 0)
         await writeText(stashPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
       await prunePromptMedia(paths.state)
+      loaded.resolve()
     })
 
     const [store, setStore] = createStore({ entries: [] as StashEntry[] })
 
     return {
+      /** Settles once the entries are read and the kept videos none of them name are pruned. */
+      loaded: loaded.promise,
       list() {
         return store.entries
       },
+      /** Returns once the entry is written, and the kept videos it no longer names are pruned. */
       push(entry: Omit<StashEntry, "timestamp">) {
         const stash = structuredClone({
           prompt: persistablePrompt(unwrap(entry.prompt), paths.state),
@@ -68,13 +73,11 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
           }),
         )
 
-        if (trimmed) {
-          writeText(stashPath, store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n")
+        if (trimmed)
+          return writeText(stashPath, store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n")
             .then(() => prunePromptMedia(paths.state))
             .catch(() => {})
-          return
-        }
-        appendText(stashPath, JSON.stringify(stash) + "\n").catch(() => {})
+        return appendText(stashPath, JSON.stringify(stash) + "\n").catch(() => {})
       },
       pop() {
         if (store.entries.length === 0) return undefined

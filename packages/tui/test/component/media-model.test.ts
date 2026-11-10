@@ -14,20 +14,19 @@ import {
 
 const time = { created: 1 }
 
-test("classifies media by mime type, then by extension", () => {
-  const rows = [
-    ["IMAGE/JPEG", undefined, "image", false],
-    ["video/x-m4v", undefined, "video", true],
-    ["video/webm", "clip.webm", "video", false],
-    ["application/pdf", "clip.mp4", "other", false],
-    ["application/octet-stream", "clip.MOV", "video", true],
-    ["video/x-matroska", "clip.mkv", "video", false],
-    ["", "photo.webp", "image", false],
-    ["", "notes.txt", "other", false],
-    ["", undefined, "other", false],
-  ] as const
-  for (const [mime, name, kind, playable] of rows)
-    expect([mime, mediaKind(mime, name), isPlayableVideo({ kind, mime, name })]).toEqual([mime, kind, playable])
+test.each([
+  ["IMAGE/JPEG", undefined, "image", false],
+  ["video/x-m4v", undefined, "video", true],
+  ["video/webm", "clip.webm", "video", false],
+  ["application/pdf", "clip.mp4", "other", false],
+  ["application/octet-stream", "clip.MOV", "video", true],
+  ["video/x-matroska", "clip.mkv", "video", false],
+  ["", "photo.webp", "image", false],
+  ["", "notes.txt", "other", false],
+  ["", undefined, "other", false],
+] as const)("%p named %p is %p media, playable: %p", (mime, name, kind, playable) => {
+  expect(mediaKind(mime, name)).toBe(kind)
+  expect(isPlayableVideo({ kind, mime, name })).toBe(playable)
 })
 
 test.each([
@@ -208,7 +207,10 @@ test.each([
     const crop = layout.crop
     // Whole pixels inside the source, at least one wide and tall.
     const gaps = [crop.left, crop.top, source.width - crop.left - crop.width, source.height - crop.top - crop.height]
-    expect([...gaps, crop.width - 1, crop.height - 1].every((gap) => Number.isInteger(gap) && gap >= 0)).toBe(true)
+    for (const gap of [...gaps, crop.width - 1, crop.height - 1]) {
+      expect(Number.isInteger(gap)).toBe(true)
+      expect(gap).toBeGreaterThanOrEqual(0)
+    }
     expect(layout.rect.left + layout.rect.width).toBeLessThanOrEqual(geometry.stage.width)
     expect(layoutView(geometry, layout.view)).toEqual(layout)
   }
@@ -239,7 +241,8 @@ test("zoom fits, grows to fill the stage before cropping, pans to the edges and 
   const zoomed = { ...initialView(large.source), zoom: 4 }
   const center = layoutView(large, zoomed).crop
   const panned = layoutView(large, panBy(large, zoomed, 10, -5)).crop
-  expect([panned.left < center.left, panned.top > center.top]).toEqual([true, true])
+  expect(panned.left).toBeLessThan(center.left)
+  expect(panned.top).toBeGreaterThan(center.top)
   expect(layoutView(large, panBy(large, zoomed, 1e6, 1e6)).crop).toMatchObject({ left: 0, top: 0 })
   expect(panBy(large, initialView(large.source), 10, 10)).toEqual(initialView(large.source))
   // 200 columns of 10 pixels show 2000 pixels, so 1920 source pixels fit at nearly the actual size.

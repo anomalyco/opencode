@@ -175,16 +175,13 @@ describe("prompt local attachments", () => {
     expect(await resolvePastedAttachments(image, process.platform)).toBeUndefined()
   })
 
-  test("keeps MP4, MOV, and M4V paths as videos only when asked, up to core's cap, and reads kept files", async () => {
+  // A larger one pastes as text, below.
+  test("pastes MP4, MOV, and M4V paths as videos only when asked, up to core's cap", async () => {
     await using tmp = await tmpdir()
-    const clips = ["clip.mp4", "clip.MOV", "clip.m4v"].map((name) => path.join(tmp.path, name))
-    await Promise.all(clips.map((clip) => Bun.write(clip, new Uint8Array([1, 2, 3]))))
-    const large = path.join(tmp.path, "large.m4v")
-    const capped = path.join(tmp.path, "capped.mp4")
-    await Promise.all([
-      Bun.write(large, new Uint8Array(MAX_LOCAL_VIDEO_BYTES + 1)),
-      Bun.write(capped, new Uint8Array(MAX_LOCAL_VIDEO_BYTES)),
-    ])
+    const clips = ["clip.mp4", "clip.MOV", "clip.m4v", "capped.mp4"].map((name) => path.join(tmp.path, name))
+    await Promise.all(
+      clips.map((clip) => Bun.write(clip, new Uint8Array(clip.includes("capped") ? MAX_LOCAL_VIDEO_BYTES : 3))),
+    )
 
     // Pasting keeps only the path; sending reads the file.
     const file = (clip: string) => ({
@@ -194,47 +191,43 @@ describe("prompt local attachments", () => {
       path: clip,
     })
     expect(await resolvePastedAttachments(clips.join(" "), process.platform, true)).toEqual(clips.map(file))
-    expect(await resolvePastedAttachments(capped, process.platform, true)).toEqual([file(capped)])
-    expect(await resolvePastedAttachments(large, process.platform, true)).toBeUndefined()
     expect(await resolvePastedAttachments(clips[0]!, process.platform)).toBeUndefined()
-
-    const image = { uri: "data:image/png;base64,AAAA", path: path.join(tmp.path, "missing.png") }
-    const kept = (file: string) => ({ uri: pathToFileURL(file).href, path: file })
-    const gone = path.join(tmp.path, "gone.mov")
-    expect(await readKeptAttachments([image, kept(clips[0]!), kept(gone)], true)).toEqual({
-      files: [image, { ...kept(clips[0]!), uri: "data:video/mp4;base64,AQID" }],
-      unreadable: ["gone.mov"],
-    })
   })
 
-  // `.x-matroska` is what history names a kept `video/x-matroska` video's file.
-  test.each([
-    ["clip.mkv", "video/x-matroska"],
-    ["clip.qt", "video/quicktime"],
-    [`${"0f".repeat(32)}${keptVideoExtension("video/x-matroska")}`, "video/x-matroska"],
-  ])("sends a kept %s as %s", async (name, mime) => {
+  // `.x-matroska` is what history names a kept `video/x-matroska` video's file. A restored video is kept under a
+  // content hash, over the paste cap; its name is the one the user knows.
+  test("reads kept files again as their type, up to the attachment limit, and names the ones it leaves out", async () => {
     await using tmp = await tmpdir()
-    const file = path.join(tmp.path, name)
-    await Bun.write(file, new Uint8Array([1, 2, 3]))
-    const result = await readKeptAttachments([{ uri: pathToFileURL(file).href, path: file }], true)
-    expect(result.files[0]?.uri).toBe(`data:${mime};base64,AQID`)
-  })
-
-  test("reads a kept file again up to the attachment limit, not the paste cap, and names one it leaves out", async () => {
-    await using tmp = await tmpdir()
-    // A restored video is kept under a content hash; its name is the one the user knows.
+    const types = {
+      "clip.mp4": "video/mp4",
+      "clip.mkv": "video/x-matroska",
+      "clip.qt": "video/quicktime",
+      [`${"0f".repeat(32)}${keptVideoExtension("video/x-matroska")}`]: "video/x-matroska",
+    }
+    const small = Object.keys(types).map((name) => path.join(tmp.path, name))
     const restored = path.join(tmp.path, "0f".repeat(32) + ".mp4")
     const large = path.join(tmp.path, "large.mp4")
     await Promise.all([
+      ...small.map((file) => Bun.write(file, new Uint8Array([1, 2, 3]))),
       Bun.write(restored, new Uint8Array(MAX_LOCAL_VIDEO_BYTES + 1)),
       Bun.write(large, new Uint8Array(MAX_LOCAL_ATTACHMENT_BYTES + 1)),
     ])
     const kept = (file: string, name?: string) => ({ uri: pathToFileURL(file).href, path: file, name })
+    const image = { uri: "data:image/png;base64,AAAA", path: path.join(tmp.path, "missing.png") }
+    const gone = path.join(tmp.path, "gone.mov")
 
-    const result = await readKeptAttachments([kept(restored, "clip.mp4"), kept(large, "big clip.mp4")], true)
-    expect(result.files.map((file) => file.name)).toEqual(["clip.mp4"])
-    expect(result.files[0]?.uri.startsWith("data:video/mp4;base64,")).toBe(true)
-    expect(result.unreadable).toEqual(["big clip.mp4"])
+    const result = await readKeptAttachments(
+      [image, ...small.map((file) => kept(file)), kept(restored, "clip.mp4"), kept(large, "big clip.mp4"), kept(gone)],
+      true,
+    )
+    expect(result.files.map((file) => file.uri.split(",")[0])).toEqual([
+      "data:image/png;base64",
+      ...Object.values(types).map((mime) => `data:${mime};base64`),
+      "data:video/mp4;base64",
+    ])
+    expect(result.files[1]).toEqual({ ...kept(small[0]!), uri: "data:video/mp4;base64,AQID" })
+    expect(result.files.at(-1)).toMatchObject({ name: "clip.mp4" })
+    expect(result.unreadable).toEqual(["big clip.mp4", "gone.mov"])
   })
 
   test("never sends a remote server a file uri history or the stash recalled without a path", async () => {

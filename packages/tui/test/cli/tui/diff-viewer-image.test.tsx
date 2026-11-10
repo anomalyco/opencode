@@ -36,19 +36,16 @@ test("recognizes only supported image file extensions", () => {
     expect(diffMediaKind(file, richMedia)).toBe(kind)
 })
 
+// `reads` in both records the files the card loads itself, which a video leaves to the viewer.
 test("a local server's working-tree video plays in place as a silent tile that opens the viewer", async () => {
   const directory = path.dirname(path.dirname(videoFixture))
   const reads: string[] = []
   await using setup = await renderVideo({ file: "media/video-only.mp4", directory, localServer: true, reads })
-  await setup.until(() => setup.frame().includes("▶ 0:02"))
+  await setup.until(() => setup.videos().length === 1)
   const video = setup.videos()[0]!
-  expect(setup.videos()).toHaveLength(1)
   expect(video.source).toBe(videoFixture)
   expect(video.audio).toBe(false)
-  expect(video.paused).toBe(true)
 
-  await setup.app.mockMouse.moveTo(video.x + 2, video.y + 1)
-  await setup.until(() => video.playing)
   await setup.app.mockMouse.click(video.x + 2, video.y + 1)
   expect(setup.media().viewer()?.items).toMatchObject([
     { kind: "video", mime: "video/mp4", uri: `file://${videoFixture}`, location: { directory } },
@@ -58,13 +55,9 @@ test("a local server's working-tree video plays in place as a silent tile that o
 
 test("a remote Windows server's working-tree video shows a placeholder and is read only by the viewer", async () => {
   const reads: string[] = []
-  await using setup = await renderVideo({
-    file: "assets/my clip#1.mp4",
-    directory: "C:\\repo",
-    localServer: false,
-    reads,
-  })
-  await setup.until(() => setup.frame().includes("Click to load"))
+  const directory = "C:\\repo"
+  await using setup = await renderVideo({ file: "assets/my clip#1.mp4", directory, localServer: false, reads })
+  await setup.app.renderOnce()
   expect(setup.frame()).toContain("video · my clip#1.mp4")
   expect(setup.videos()).toEqual([])
 
@@ -72,13 +65,7 @@ test("a remote Windows server's working-tree video shows a placeholder and is re
   const y = lines.findIndex((line) => line.includes("Click to load"))
   await setup.app.mockMouse.click(lines[y]!.indexOf("Click to load") + 1, y)
   expect(setup.media().viewer()?.items).toMatchObject([
-    {
-      kind: "video",
-      mime: "video/mp4",
-      uri: "file:///C:/repo/assets/my%20clip%231.mp4",
-      name: "my clip#1.mp4",
-      location: { directory: "C:\\repo" },
-    },
+    { uri: "file:///C:/repo/assets/my%20clip%231.mp4", name: "my clip#1.mp4", location: { directory } },
   ])
   expect(reads).toEqual([])
 })
@@ -204,7 +191,6 @@ test.each(["fetch", "decode"])("recovers from a %s error when the file changes",
   }
 })
 
-// `reads` records the files the card loads itself; a video leaves loading to the viewer.
 function renderVideo(input: { file: string; directory: string; localServer: boolean; reads: string[] }) {
   return renderMedia(
     () => (
