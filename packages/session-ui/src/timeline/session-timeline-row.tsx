@@ -395,6 +395,26 @@ export function createSessionTimelineRowRenderer(input: {
 
       const key = () => `context:${row().group.key}`
 
+      // A group opens itself only while a member is still producing output worth reading: a running shell tool, or
+      // streaming reasoning. It folds back to its summary as soon as that work settles or the turn is interrupted,
+      // and a group whose members are all settled stays closed however recent it is. An explicit click still wins.
+      const live = createMemo(
+        () =>
+          phase(row().userMessageID).live &&
+          parts().some((part) =>
+            part.type === "tool"
+              ? (part.state.status === "streaming" || part.state.status === "running") &&
+                timelineCategory(part) === "shell"
+              : part.type === "reasoning" && part.streaming === true,
+          ),
+      )
+
+      const active = createMemo(
+        () =>
+          phase(row().userMessageID).live &&
+          input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key,
+      )
+
       return (
         <div class="contents" data-notices-only={parts().every((part) => part.type === "notice") ? "" : undefined}>
           <SessionContextToolGroup
@@ -420,7 +440,9 @@ export function createSessionTimelineRowRenderer(input: {
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
             toolDefaultOpen={(tool) =>
-              input.timelineDetail || tool.name === "execute" ? contentDefaultOpen(tool) : false
+              input.timelineDetail || tool.name === "execute"
+                ? contentDefaultOpen(tool, phase(row().userMessageID).live)
+                : false
             }
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
@@ -428,11 +450,8 @@ export function createSessionTimelineRowRenderer(input: {
               input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
             }
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
-            open={input.disclosure.value(key()) === true}
-            busy={
-              phase(row().userMessageID).live &&
-              input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
-            }
+            open={input.disclosure.value(key()) ?? live()}
+            busy={active()}
             onOpenChange={(open) => input.disclosure.set(key(), open)}
             onSizeChange={onSizeChange}
           />
@@ -531,7 +550,7 @@ export function createSessionTimelineRowRenderer(input: {
     const defaultOpen = createMemo(() => {
       const item = content()
 
-      return item ? contentDefaultOpen(item) : undefined
+      return item ? contentDefaultOpen(item, phase(row().userMessageID).live) : undefined
     })
 
     // Only the finished turn's footer part derives them, and only while the host shows sources.
@@ -592,8 +611,18 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
-  function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
+  function contentDefaultOpen(item: SessionMessageAssistant["content"][number], live = false) {
     if (item.type === "tool" && item.name === "execute") return true
+
+    // Work in progress stays open so its output is readable while it arrives. Once the call settles, or the
+    // turn is interrupted, the configured Collapse setting decides, which is what makes an entry fold away.
+    if (
+      item.type === "tool" &&
+      (item.state.status === "streaming" || item.state.status === "running") &&
+      timelineCategory(item) === "shell" &&
+      live
+    )
+      return true
 
     if (input.timelineDetail) {
       const category = timelineCategory(item)
@@ -1250,15 +1279,9 @@ export function createSessionTimelineRowRenderer(input: {
                     id={current().ref.partID}
                     content={content()}
                     streaming
-                    defaultOpen={
-                      input.timelineDetail
-                        ? input.timelineDetail().thinking.details === "expanded"
-                        : input.reasoningMode() === "full"
-                    }
-                    open={
-                      input.disclosure.value(current().ref.partID) ??
-                      (input.timelineDetail ? input.timelineDetail().thinking.details === "expanded" : undefined)
-                    }
+                    // This row exists only while the model is still thinking, so it opens itself; the Collapse
+                    // setting applies once the reasoning settles into a finished part. A manual close still wins.
+                    open={input.disclosure.value(current().ref.partID) ?? true}
                     onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
                     onContentRendered={onSizeChange}
                   />

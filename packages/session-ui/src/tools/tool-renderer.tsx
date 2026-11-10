@@ -687,8 +687,9 @@ export function CurrentContextToolGroup(props: {
                             id={part().id}
                             content={part()}
                             streaming={part().streaming ?? false}
-                            // The group already reads as Thinking, so opening it shows the thoughts themselves.
-                            defaultOpen={thinking() || props.reasoningDefaultOpen}
+                            // The group already reads as Thinking, so opening it shows the thoughts themselves. Live
+                            // reasoning stays open while it streams; finished reasoning follows the setting.
+                            defaultOpen={part().streaming || thinking() || props.reasoningDefaultOpen}
                             open={props.reasoningOpen?.(part().id)}
                             onOpenChange={(open) => props.onReasoningOpenChange?.(part().id, open)}
                             onContentRendered={props.onSizeChange}
