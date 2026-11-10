@@ -379,8 +379,9 @@ struct Row<T> {
     view: View,
 }
 
-/// Each footer item's group, title, key, whether disabled, and whether it runs an action.
-type FooterKey = Vec<(Group, String, Option<String>, bool, bool)>;
+/// Whether the footer is narrow, and each footer item's group, title, key, whether disabled, and whether it runs an
+/// action.
+type FooterKey = (bool, Vec<(Group, String, Option<String>, bool, bool)>);
 
 /// An option as its row draws it: the option, its description, and its footer.
 type Look<'a, T> = (&'a SelectOption<T>, Option<&'a str>, Option<&'a str>);
@@ -496,6 +497,16 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
             }
         }
     });
+    // TS reads the terminal size reactively: the list height, the details' width and the footer follow a resize.
+    let resized = app.on_resize(bind!(weak, |inner, _cx, _, _| {
+        let select = Select(inner);
+        select.render();
+        select.scroll_to_selection(false);
+    }));
+    let resizes = app.clone();
+    cx.on_close(opentui::keymap::Disposer::new(move || {
+        resizes.remove_handler(resized);
+    }));
     handle.0.scroll.on_mouse(move |cx, event| {
         if !matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
             return;
@@ -1014,18 +1025,33 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     // The list height: `min(rows, floor(height / 2) - 6)`, less the row the `…` takes.
     fn list_height(&self) -> u32 {
         let (rows, limit) = self.list_rows();
-        rows.min(limit) - u32::from(self.0.state.borrow().ellipsis)
+        rows.min(limit).saturating_sub(u32::from(self.0.state.borrow().ellipsis))
     }
 
     // An overflowing list gives its last row to a `…` while rows are below the view. At the bottom the `…` hands
     // its row back to the list, so the dialog keeps its height. The scroll position is the one the moves made so
     // far land on; with the `…` the view is one row shorter, so a list scrolled one row past the end loses it.
+    // Whether rows are below is TS `scrollTop + viewport.height < scrollHeight`, by the rows the titles draw.
     fn update_overflow(&self) {
         let (rows, limit) = self.list_rows();
         let top = self.0.scroll.scroll_position().1;
+        let drawn = self.drawn_rows();
         let mut state = self.0.state.borrow_mut();
         let view = f64::from(limit) - if state.ellipsis { 1.0 } else { 0.0 };
-        state.ellipsis = rows > limit && top + view < f64::from(rows);
+        state.ellipsis = rows > limit && top + view < f64::from(drawn);
+    }
+
+    // The rows the whole list draws, a title's line breaks included.
+    fn drawn_rows(&self) -> u32 {
+        let state = self.0.state.borrow();
+        let headers: u32 = state
+            .grouped
+            .iter()
+            .enumerate()
+            .filter(|(_, (category, _))| !category.is_empty())
+            .map(|(i, _)| if i > 0 { 2 } else { 1 })
+            .sum();
+        state.flat.iter().map(|&index| option_rows(&state.filtered[index])).sum::<u32>() + headers
     }
 
     // A wheel scroll moved the list.
@@ -1067,8 +1093,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     return Some(y);
                 }
                 // TS scrolls by the laid-out row: a title's line breaks add rows, as the queued prompts' do.
-                let option = &state.filtered[index];
-                y += 1 + option.title.matches('\n').count() as u32 + option.details.len() as u32;
+                y += option_rows(&state.filtered[index]);
                 position += 1;
             }
         }
@@ -1389,12 +1414,15 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 FooterAction::new(hint.title.clone()).key(hint.label.clone()),
             ));
         }
-        let key: Vec<_> = items
-            .iter()
-            .map(|(group, item)| {
-                (*group, item.title.clone(), item.key.clone(), item.disabled, item.on_trigger.is_some())
-            })
-            .collect();
+        let key = (
+            cx.width() < 60,
+            items
+                .iter()
+                .map(|(group, item)| {
+                    (*group, item.title.clone(), item.key.clone(), item.disabled, item.on_trigger.is_some())
+                })
+                .collect(),
+        );
         if self.0.footer_key.borrow().as_ref() == Some(&key) {
             return;
         }
@@ -1414,6 +1442,24 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             },
         ));
     }
+}
+
+// The title as its row draws it, cut to its width.
+fn shown_title<T>(option: &SelectOption<T>) -> String {
+    match option.truncate {
+        Truncate::None => option.title.clone(),
+        Truncate::Left => truncate_left(&option.title, option.title_width.unwrap_or(61)),
+        Truncate::Right => truncate(&option.title, option.title_width.unwrap_or(61)),
+    }
+}
+
+// The rows an option draws: its title's lines, then its details.
+fn option_rows<T>(option: &SelectOption<T>) -> u32 {
+    let breaks = match &option.title_spans {
+        Some(spans) => spans.iter().map(|(part, _)| part.matches('\n').count()).sum(),
+        None => shown_title(option).matches('\n').count(),
+    };
+    1 + breaks as u32 + option.details.len() as u32
 }
 
 fn category_row(cx: &DialogCx, title: &str, first: bool) -> View {
@@ -1454,14 +1500,9 @@ fn option_row<T>(
     if let Some(gutter) = &option.gutter {
         row.add(&View::new(app).shrink(0.0).child(&gutter(app, text)));
     }
-    let title = match option.truncate {
-        Truncate::None => option.title.clone(),
-        Truncate::Left => truncate_left(&option.title, option.title_width.unwrap_or(61)),
-        Truncate::Right => truncate(&option.title, option.title_width.unwrap_or(61)),
-    };
     let mut spans = match &option.title_spans {
         Some(spans) => spans.iter().map(|(part, color)| part.clone().fg(color.unwrap_or(text))).collect(),
-        None => vec![title.fg(text)],
+        None => vec![shown_title(option).fg(text)],
     };
     if let Some(description) = description {
         spans.push(format!(" {description}").fg(secondary));
