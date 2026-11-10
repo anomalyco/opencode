@@ -1,11 +1,18 @@
 import { Effect, Schema } from "effect"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
+import {
+  ProviderID,
+  type ModelID,
+  type OpenString,
+  type ProviderOptions,
+  type RequestOptions,
+} from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../protocols/system-one.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { MediaRoute } from "../route/media.js"
 import { HttpTransport } from "../route/transport/index.js"
@@ -87,7 +94,13 @@ export interface OpenRouterDecisionOptions {
   readonly user?: string
 }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export interface OpenRouterEmbeddingOptions {
+  readonly [key: string]: unknown
+  readonly provider?: OpenRouterProviderRouting
+  readonly user?: string
+}
+
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenRouterProviderOptionsInput | OpenRouterResponsesProviderOptionsInput
@@ -147,7 +160,7 @@ export const protocol = Protocol.make({
             reasoning_details: reasoningDetails,
           }
         },
-      }).pipe(Effect.map((body) => bodyOptions(body, request.providerOptions, request.generation?.maxTokens))),
+      }).pipe(Effect.map((body) => bodyOptions(body, request.providerOptions, request.maxTokens))),
   },
   stream: OpenAIChat.protocol.stream,
 })
@@ -238,7 +251,7 @@ const responsesRoute = Route.make({
   protocol: responsesProtocol,
   endpoint: Endpoint.path("/responses", { baseURL }),
   transport: HttpTransport.sseJson.with<OpenRouterResponsesBody>(),
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export const routes = [route, responsesRoute]
@@ -271,8 +284,17 @@ export const configure = (input: Config = {}) => {
       compatibility: { mediaInput: "state" },
       providerOptions,
     })
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    provider: id,
+    endpoint: options.endpoint,
+    auth: options.auth,
+    headers: input.headers,
+    http: input.http,
+  })
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model<OpenRouterEmbeddingOptions>({ id: modelID, providerOptions })
   const chat = (modelID: string | ModelID) =>
-    chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
+    chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, capabilities: { promptCacheKey: true } })
   return {
     id,
     model: chat,
@@ -281,12 +303,14 @@ export const configure = (input: Config = {}) => {
       configuredResponses.model<OpenRouterResponsesProviderOptionsInput>({ id: modelID }),
     image,
     decision,
+    embedding,
     configure,
   }
 }
 
 export const provider = configure()
 export const decision = provider.decision
+export const embedding = provider.embedding
 export const image = provider.image
 export const chat = provider.chat
 export const responses = provider.responses
@@ -303,6 +327,11 @@ export const imageModel = (modelID: string, settings?: Settings) => {
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
+}
+
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 
 export * as OpenRouter from "./openrouter.js"

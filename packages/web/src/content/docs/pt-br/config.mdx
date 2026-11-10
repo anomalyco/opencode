@@ -66,7 +66,7 @@ A configuração remota é carregada primeiro, servindo como a camada base. Toda
 
 Por exemplo, se sua organização fornece servidores MCP que estão desativados por padrão:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Configuração remota de .well-known/opencode"
 {
   "mcp": {
     "jira": {

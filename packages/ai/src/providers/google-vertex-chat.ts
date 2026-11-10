@@ -1,14 +1,14 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("google-vertex")
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   GoogleVertexShared.OAuthOptions & {
     readonly baseURL?: string
     readonly location?: string

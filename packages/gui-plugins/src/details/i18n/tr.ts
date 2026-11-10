@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Hiçbir eklenti yapılandırılmadı",
   skills: "Beceriler",
   "skills.empty": "Hiçbir beceri yapılandırılmadı",
-  lsp: "LSP",
-  "lsp.empty": "Hiçbir LSP sunucusu yapılandırılmadı",
   failed: "Başarısız",
   retry: "Yeniden dene",
   connecting: "Bağlanıyor…",

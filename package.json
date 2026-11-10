@@ -13,10 +13,8 @@
     "dev:vite:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode service get password)\" exec bun run dev:vite \"$@\" --server \"$(opencode service status)\"' --",
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
-    "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
     "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
-    "dev:www": "bun run --cwd services/www dev",
-    "bench:devex": "bun run --cwd packages/app test:bench:devex",
+    "dev:site": "bun run --cwd services/site dev",
     "lint": "oxlint && ast-grep scan -c script/ast-grep/gui-plugins/sgconfig.yml && bun script/sdk-docs.ts",
     "lint:changed": "bun script/lint-changed.ts",
     "lint:effect-patterns": "ast-grep scan -c script/ast-grep/sgconfig.yml packages/util/src packages/core/src packages/server/src packages/protocol/src packages/cli/src",
@@ -41,7 +39,6 @@
       "packages/*",
       "packages/plugins/*",
       "services/*",
-      "packages/console/*",
       "packages/stats/*"
     ],
     "catalog": {
@@ -52,6 +49,7 @@
       "@effect/sql-sqlite-node": "4.1.0",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.4.3",
+      "@hona/strobe": "0.28.0",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@opentui/core": "0.8.1",
@@ -114,6 +112,7 @@
   },
   "devDependencies": {
     "@ast-grep/cli": "0.44.0",
+    "@hona/strobe": "catalog:",
     "@opencode/client": "workspace:*",
     "@oxlint/plugins": "1.60.0",
     "@tsconfig/bun": "catalog:",
@@ -177,11 +176,11 @@
     "@tanstack/virtual-core@3.17.8": "patches/@tanstack%2Fvirtual-core@3.17.8.patch",
     "@ff-labs/fff-bun@0.10.5": "patches/@ff-labs%2Ffff-bun@0.10.5.patch",
     "vite@8.2.4": "patches/vite@8.2.4.patch",
-    "@modelcontextprotocol/client@2.3.1": "patches/@modelcontextprotocol%2Fclient@2.3.1.patch",
     "@corvu/drawer@0.2.4": "patches/@corvu%2Fdrawer@0.2.4.patch",
     "app-builder-lib@26.15.7": "patches/app-builder-lib@26.15.7.patch",
     "electron-updater@6.8.9": "patches/electron-updater@6.8.9.patch",
     "@pierre/trees@1.0.0-beta.6": "patches/@pierre%2Ftrees@1.0.0-beta.6.patch",
-    "@brendonovich/vite-plugin-opencode@0.1.3": "patches/@brendonovich%2Fvite-plugin-opencode@0.1.3.patch"
+    "@brendonovich/vite-plugin-opencode@0.1.3": "patches/@brendonovich%2Fvite-plugin-opencode@0.1.3.patch",
+    "@modelcontextprotocol/client@2.4.0": "patches/@modelcontextprotocol%2Fclient@2.4.0.patch"
   }
 }

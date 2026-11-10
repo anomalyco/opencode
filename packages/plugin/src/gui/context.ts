@@ -214,8 +214,8 @@ export interface Context extends BaseContext {
    */
   readonly embeds: Embeds
   /**
-   * The app's own components: icons, buttons, tooltips, menus, the loading indicator, the dialog frame, switches,
-   * text fields, keybind chips, Markdown and highlighted code.
+   * The app's own components: icons, buttons, tooltips, menus and menu rows, the loading indicator, the dialog frame,
+   * switches, text fields, selects, keybind chips, Markdown, highlighted code, and settings pages, sections and rows.
    *
    * @example
    * ```tsx

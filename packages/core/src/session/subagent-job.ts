@@ -36,6 +36,8 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
       if (info) yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
     }).pipe(
       Effect.ensuring(Effect.sync(() => notifications.delete(key))),
+      // The global context drops the caller's span annotations; delivery is the parent session's work.
+      Effect.annotateSpans("session.id", recovery.parentSessionID),
       Effect.forkIn(scope, { startImmediately: true }),
       Effect.setContext(context),
     )

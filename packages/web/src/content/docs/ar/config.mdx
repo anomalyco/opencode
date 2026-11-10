@@ -65,7 +65,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 على سبيل المثال، إذا كانت مؤسستك توفر خوادم MCP معطّلة افتراضيًا:
 
-```json title="Remote config from .well-known/opencode"
+```json title="الإعدادات البعيدة من .well-known/opencode"
 {
   "mcp": {
     "jira": {

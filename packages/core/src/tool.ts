@@ -10,6 +10,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
 import { CodeModeTool } from "./codemode/tool.js"
+import { Flag } from "./flag.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -87,6 +88,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
+    const flag = yield* Flag.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -138,6 +140,7 @@ const layer = Layer.effect(
         "gen_ai.tool.name": name,
         "gen_ai.tool.call.id": context.id,
         "session.id": context.sessionID,
+        "gen_ai.agent.name": context.agent,
       })
       const execution = yield* execute(tool, input, context).pipe(
         Effect.map((value) => ({ value })),
@@ -274,6 +277,7 @@ const layer = Layer.effect(
                 codeModeInventory,
                 (name, tool, input, context) => run(tool, name, input, context),
                 permission,
+                flag,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -354,6 +358,7 @@ const layer = Layer.effect(
               }
               return yield* run(tool, name, toolInput, context)
             }),
+          flag,
         )
       }),
     })
@@ -361,7 +366,9 @@ const layer = Layer.effect(
 )
 
 /** Store a valid tool under its effective name, or record why it was skipped. */
-function commit(editor: Data, id: string, tool: Tool.Info & { readonly id: string }) {
+function commit(editor: Data, id: string, input: Tool.Info & { readonly id: string }) {
+  // JavaScript plugins may leave out `input` for a tool that takes none.
+  const tool = input.input === undefined || input.input === null ? { ...input, input: {} } : input
   const registered = register(tool)
   if (Result.isFailure(registered)) {
     editor.errors.push({
@@ -400,6 +407,11 @@ function register(tool: Tool.Info): Result.Result<ToolDefinition, RegistrationEr
   const id = effectiveName(tool)
   if (tool.options?.codemode === false && id === "execute")
     return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
+  // Standard Schema libraries such as ArkType make schemas that are functions.
+  if (typeof tool.input !== "object" && typeof tool.input !== "function")
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
+    )
   return Result.try({
     try: () => ToolDefinition.make(definition(tool)),
     catch: (error) =>
@@ -415,5 +427,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node, Permission.node],
+  deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
 })

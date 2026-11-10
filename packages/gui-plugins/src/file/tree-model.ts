@@ -7,6 +7,8 @@ export const FILE_TREE_ROW_HEIGHT = 28
 
 export type AllowedTreeInput = ReturnType<typeof buildAllowedTreeInput>
 
+export type LiveTreeInput = ReturnType<typeof buildLiveTreeInput>
+
 export function normalizeFileTreeV2Path(value: string) {
   if (!value.includes("\\") && !value.startsWith("/") && !value.endsWith("/") && !value.includes("//")) return value
 
@@ -64,7 +66,26 @@ export function buildAllowedTreeInput(paths: readonly string[]) {
     list.push(normalized)
   }
 
-  return { paths: list, originalByPath, directories, untrackedDirs, total: directories.size + files.size }
+  return { paths: list, originalByPath, directories, untrackedDirs, files, total: directories.size + files.size }
+}
+
+/**
+ * The directories of an allowed tree that are collapsed: tracked folders stay open until the user collapses them, and
+ * folders listed as one untracked entry stay closed until the user opens them.
+ */
+export function collectAllowedCollapsedDirs(
+  model: AllowedTreeInput,
+  expanded: (dir: string) => boolean | undefined,
+): ReadonlySet<string> {
+  const collapsed = new Set<string>()
+
+  for (const dir of model.directories) {
+    const open = model.untrackedDirs.has(dir) ? expanded(dir) === true : expanded(dir) !== false
+
+    if (!open) collapsed.add(dir)
+  }
+
+  return collapsed
 }
 
 export function buildLiveTreeInput(
@@ -72,7 +93,9 @@ export function buildLiveTreeInput(
   expanded: (path: string) => boolean,
 ) {
   const paths: string[] = []
+  const pathSet = new Set<string>()
   const expandedDirs: string[] = []
+  const expandedSet = new Set<string>()
   const nodesByPath = new Map<string, FileNode>()
   const ignoredPaths = new Set<string>()
   const orderByPath = new Map<string, number>()
@@ -91,11 +114,13 @@ export function buildLiveTreeInput(
       if (node.type === "directory") {
         const canonical = `${norm}/`
         paths.push(canonical)
+        pathSet.add(canonical)
 
         if (node.ignored) ignoredPaths.add(canonical)
 
         if (expanded(norm)) {
           expandedDirs.push(canonical)
+          expandedSet.add(canonical)
           queue.push(node.path)
         }
 
@@ -103,21 +128,18 @@ export function buildLiveTreeInput(
       }
 
       paths.push(norm)
+      pathSet.add(norm)
 
       if (node.ignored) ignoredPaths.add(norm)
     }
   }
 
-  return { paths, expandedDirs, nodesByPath, ignoredPaths, orderByPath }
+  return { paths, pathSet, expandedDirs, expandedSet, nodesByPath, ignoredPaths, orderByPath }
 }
 
-export function buildGitStatusMap(
-  kinds: ReadonlyMap<string, ChangeKind> | undefined,
-  ignoredPaths?: ReadonlySet<string>,
-): Map<string, TreeGitStatus> {
+/** Change kinds keyed by normalized tree path, as the tree's git status shows them. */
+export function buildKindsStatus(kinds: ReadonlyMap<string, ChangeKind> | undefined) {
   const next = new Map<string, TreeGitStatus>()
-
-  for (const path of ignoredPaths ?? []) next.set(path, "ignored")
 
   for (const [raw, kind] of kinds ?? []) {
     const path = normalizeFileTreeV2Path(raw)
@@ -126,6 +148,76 @@ export function buildGitStatusMap(
   }
 
   return next
+}
+
+/** The tree's whole git status: ignored entries, overridden by change kinds. */
+export function buildGitStatusMap(
+  kindsStatus: ReadonlyMap<string, TreeGitStatus>,
+  ignoredPaths: ReadonlySet<string>,
+): Map<string, TreeGitStatus> {
+  const next = new Map<string, TreeGitStatus>()
+
+  for (const path of ignoredPaths) next.set(path, "ignored")
+
+  for (const [path, status] of kindsStatus) next.set(path, status)
+
+  return next
+}
+
+/**
+ * The git status patch between two status layers. When the change kinds are the same map, only the ignored entries
+ * that differ are visited, so a folder toggle in a large tree diffs a few entries instead of rebuilding every status.
+ */
+export function diffStatusLayers(
+  previous: { readonly kinds: ReadonlyMap<string, TreeGitStatus>; readonly ignored: ReadonlySet<string> },
+  next: { readonly kinds: ReadonlyMap<string, TreeGitStatus>; readonly ignored: ReadonlySet<string> },
+) {
+  if (previous.kinds !== next.kinds) {
+    return diffGitStatusPatch(
+      buildGitStatusMap(previous.kinds, previous.ignored),
+      buildGitStatusMap(next.kinds, next.ignored),
+    )
+  }
+
+  const remove: string[] = []
+  const set: Array<{ path: string; status: TreeGitStatus }> = []
+
+  for (const path of previous.ignored) {
+    if (!next.ignored.has(path) && !next.kinds.has(path)) remove.push(path)
+  }
+
+  for (const path of next.ignored) {
+    if (!previous.ignored.has(path) && !next.kinds.has(path)) set.push({ path, status: "ignored" })
+  }
+
+  return { remove, set }
+}
+
+export function sameStringMap<T extends string>(
+  a: ReadonlyMap<string, T> | undefined,
+  b: ReadonlyMap<string, T> | undefined,
+) {
+  if (a === b) return true
+
+  if ((a?.size ?? 0) !== (b?.size ?? 0)) return false
+
+  for (const [key, value] of a ?? []) {
+    if (b?.get(key) !== value) return false
+  }
+
+  return true
+}
+
+export function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>) {
+  if (a === b) return true
+
+  if (a.size !== b.size) return false
+
+  for (const item of a) {
+    if (!b.has(item)) return false
+  }
+
+  return true
 }
 
 export function diffGitStatusPatch(
