@@ -294,17 +294,6 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn probe_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("probe", probe, host, options, instance, out) }
-}
-
 /// The TUI's home with `setup` active, in process or wired through the C ABI's byte shims (`Loopback`).
 fn home_with(
     setup: fn(&mut abi::Setup) -> Result<(), String>,
@@ -328,7 +317,12 @@ fn home_with(
 #[test]
 fn a_dispatch_and_a_storage_write_reach_the_claims_in_call_order() {
     for loopback in [false, true] {
-        let h = home_with(probe, probe_create, loopback, support::deps(Arc::new(fake(String::new()))));
+        let h = home_with(
+            probe,
+            abi::export_plugin!(@loopback "probe", probe),
+            loopback,
+            support::deps(Arc::new(fake(String::new()))),
+        );
         h.wait_for("probe renders []");
         h.tui.keymap.dispatch("probe.act", None);
         h.wait_for("probe renders [true]");
@@ -349,17 +343,6 @@ fn updates(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn updates_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("probe", updates, host, options, instance, out) }
-}
-
 // Expected: an event that changes only plugin state, with no store batch and no storage write, renders the plugin's
 // claims again, on both paths.
 #[test]
@@ -372,7 +355,7 @@ fn an_event_handler_renders_its_plugins_claims_again() {
             &json!({ "data": [], "cursor": {} }),
         )]);
         let deps = Deps { events: true, ..support::deps(Arc::new(memory.clone())) };
-        let h = home_with(updates, updates_create, loopback, deps);
+        let h = home_with(updates, abi::export_plugin!(@loopback "probe", updates), loopback, deps);
         h.wait_for("updates 0");
         memory.emit(&json!({
             "id": "evt_rpc", "created": 1, "type": "rpc.example.updated",

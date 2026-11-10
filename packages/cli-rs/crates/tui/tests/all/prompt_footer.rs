@@ -4,7 +4,6 @@
 
 use crate::support::{self, DIRECTORY, Harness};
 
-use std::ffi::c_void;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -84,18 +83,6 @@ fn routes() -> Vec<MemoryRoute> {
     routes
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn footer_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    let plugin = opencode_tui::plugins::prompt_footer::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("loopback.prompt.footer", plugin.setup, host, options, instance, out) }
-}
-
 /// Session `ses_a`, `width` columns wide, over `server`; with `loopback`, the footer runs through the byte shims.
 fn mount(server: &Gated, width: u16, loopback: bool) -> Harness {
     let plugins: &[&str] = if loopback { &["-opencode.prompt.footer"] } else { &[] };
@@ -108,9 +95,14 @@ fn mount(server: &Gated, width: u16, loopback: bool) -> Harness {
     let h = support::mount(width, 30, deps);
     h.wait_for("Fix the parser");
     if loopback {
-        let (definition, _) =
-            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), footer_create)
-                .unwrap();
+        let (definition, _) = opencode_plugin::loader::native::loopback(
+            &opencode_tui::plugins::host::host(&h.tui),
+            abi::export_plugin!(
+                @loopback "loopback.prompt.footer",
+                opencode_tui::plugins::prompt_footer::plugin().setup
+            ),
+        )
+        .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
         h.wait_for("Fix the parser");
     }

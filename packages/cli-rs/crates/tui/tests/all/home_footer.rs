@@ -4,7 +4,6 @@
 use crate::support::{self, DIRECTORY, Fake, Harness, list};
 
 use std::cell::RefCell;
-use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -83,18 +82,6 @@ fn a_status_claim_updates_while_the_footer_keeps_its_node() {
     });
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn footer_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    let plugin = opencode_tui::plugins::home_footer::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("loopback.home.footer", plugin.setup, host, options, instance, out) }
-}
-
 /// The cells of the footer's three rows (the prompt's placeholder above them is random).
 fn footer(h: &Harness) -> Vec<opentui::testing::Cell> {
     let frame = h.app.render();
@@ -107,9 +94,11 @@ fn footer_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
     let plugins: &[&str] = if loopback { &["-opencode.home.footer"] } else { &[] };
     let h = mount(100, plugins, vec![abi::Plugin { id: "test.status", setup: status }.into()]);
     if loopback {
-        let (definition, _) =
-            opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), footer_create)
-                .unwrap();
+        let (definition, _) = opencode_plugin::loader::native::loopback(
+            &opencode_tui::plugins::host::host(&h.tui),
+            abi::export_plugin!(@loopback "loopback.home.footer", opencode_tui::plugins::home_footer::plugin().setup),
+        )
+        .unwrap();
         opencode_tui::plugins::host::add(&h.tui, definition);
     }
     h.wait_for("2 MCP");

@@ -57,20 +57,6 @@ fn sounds_off_creates_no_engine() {
     assert!(loudest(&harness.tui).is_none());
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn notifications_create(
-    host: *const opencode_plugin::abi::HostApi,
-    options: opencode_plugin::abi::Bytes,
-    instance: *mut *mut std::ffi::c_void,
-    out: *mut opencode_plugin::abi::Owned,
-) -> i32 {
-    let plugin = opencode_tui::plugins::notifications::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe {
-        opencode_plugin::abi::runtime::create("loopback.notifications", plugin.setup, host, options, instance, out)
-    }
-}
-
 /// The screen after a permission request, which plays a sound, and a failure of a session that is not on screen,
 /// which toasts with an "Open" action. With `loopback`, the notifications plugin is wired through the byte shims of
 /// the C ABI (`Loopback`), where its events and effects cross as JSON, instead of running in process.
@@ -82,7 +68,10 @@ fn notified(loopback: bool) -> String {
     if loopback {
         let (definition, _) = opencode_plugin::loader::native::loopback(
             &opencode_tui::plugins::host::host(&harness.tui),
-            notifications_create,
+            opencode_plugin::abi::export_plugin!(
+                @loopback "loopback.notifications",
+                opencode_tui::plugins::notifications::plugin().setup
+            ),
         )
         .unwrap();
         opencode_tui::plugins::host::add(&harness.tui, definition);
