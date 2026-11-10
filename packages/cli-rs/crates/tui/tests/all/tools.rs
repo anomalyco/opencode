@@ -3,7 +3,7 @@
 //! error and denied states, clicks that expand, and the warning color of a call that waits on a
 //! permission request.
 
-use crate::support::{self, Fake, Harness, Log, deref_harness};
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -294,7 +294,7 @@ fn write_and_edit_blocks_show_the_file_and_the_diff() {
 }
 
 #[test]
-fn the_edit_diff_splits_above_120_columns() {
+fn the_edit_diff_splits_in_a_session_pane_above_120_columns() {
     let patch = "--- src/a.rs\n+++ src/a.rs\n@@ -1,3 +1,3 @@\n fn main() {\n-    old();\n+    new();\n }\n";
     let messages = turn(vec![tool(
         "call_1",
@@ -309,10 +309,21 @@ fn the_edit_diff_splits_above_120_columns() {
         ),
     )]);
     let h = open(140, 30, messages, Vec::new());
+    // The docked sidebar leaves the session pane 98 columns, so the diff is unified (`contentWidth`,
+    // `session-frame.tsx:283-298`).
     let screen = h.wait_for("new();");
     let (_, removed) = h.find("old();");
     let (_, added) = h.find("new();");
-    assert_eq!(added, removed, "{screen}");
+    assert_ne!(added, removed, "{screen}");
+    // Hiding it widens the pane past 120 columns, and the rows render again split.
+    opencode_tui::dialogs::settings::update(&h.tui, |draft| {
+        opencode_tui::dialogs::settings::set_path(draft, &["session", "sidebar"], json!("hide"))
+    });
+    let split = h.app.wait_until(WAIT, || {
+        h.app.render();
+        h.find("old();").1 == h.find("new();").1
+    });
+    assert!(split, "{}", h.app.text());
 }
 
 #[test]
