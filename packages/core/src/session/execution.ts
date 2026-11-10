@@ -83,7 +83,12 @@ export const layer = Layer.effect(
     // terminal is the signature of a process that died without teardown (crash, SIGKILL, eviction);
     // recovery is a property of the database, never of a shutdown hook that may not run.
     const claimOnCommit = (sessionID: SessionSchema.ID) => ({
-      commit: () => store.claim(sessionID),
+      commit: () =>
+        Effect.gen(function* () {
+          // Recheck inside the publication transaction before it can commit an orphaned start.
+          if (!(yield* store.get(sessionID))) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+          yield* store.claim(sessionID)
+        }),
     })
     const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.release(sessionID),
