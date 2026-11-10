@@ -123,7 +123,7 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.experimental.row.activityTimeline.title",
     target: "settings-activity-timeline",
     description: "settings.experimental.row.activityTimeline.description",
-    keywords: "timeline activity explored edited ran grouping status",
+    keywords: "new timeline redesign activity explored edited ran grouping status",
   },
   {
     tab: "experimental",
