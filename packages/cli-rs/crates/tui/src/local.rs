@@ -95,6 +95,8 @@ pub struct Local {
     pub(crate) warned: RefCell<HashSet<String>>,
     /// `--agent`, which a session without an agent draft shows over its own agent (`local.tsx:90-96`).
     pub(crate) startup_agent: RefCell<Option<String>>,
+    /// `--model`, which `fallbackModel` tries first (`local.tsx:184-193`).
+    pub(crate) startup_model: RefCell<Option<Model>>,
     watch: RefCell<Option<Watch>>,
     pub(crate) layers: RefCell<Vec<Disposer>>,
     /// The in-memory `go-upsell` record (`storage.memory`).
@@ -168,6 +170,7 @@ impl Local {
             usage_loading: RefCell::default(),
             warned: RefCell::default(),
             startup_agent: RefCell::default(),
+            startup_model: RefCell::default(),
             watch: RefCell::new(None),
             layers: RefCell::new(Vec::new()),
             go_memory: RefCell::default(),
@@ -594,8 +597,11 @@ impl Local {
         Some(Selection { model: Model::new(&choice.provider_id, &choice.model_id), variant: choice.variant })
     }
 
-    // `fallbackModel`. `--model` is E.1's.
+    // `fallbackModel`.
     fn fallback(&self) -> Option<Model> {
+        if let Some(startup) = self.startup_model.borrow().clone().filter(|model| self.is_valid(model)) {
+            return Some(startup);
+        }
         if let Some(configured) = self.configured().filter(|c| self.is_valid(&c.model)) {
             return Some(configured.model);
         }
@@ -820,6 +826,14 @@ impl Local {
             self.add_recent(model);
         }
         self.notify();
+    }
+
+    /// Adds `model` to the recent models when it is listed, without selecting it.
+    pub(crate) fn add_recent_valid(&self, model: &Model) {
+        if self.is_valid(model) {
+            self.add_recent(model);
+            self.notify();
+        }
     }
 
     fn add_recent(&self, model: &Model) {

@@ -426,6 +426,7 @@ pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
         return;
     }
     local.startup_agent.replace(agent.clone());
+    local.startup_model.replace(model.clone());
     let pending = Rc::new(RefCell::new(Some((agent, model))));
     let listener: Rc<RefCell<Option<Disposer>>> = Rc::default();
     let apply = {
@@ -442,8 +443,12 @@ pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
             if let Some(agent) = agent {
                 local.set_agent(&agent);
             }
-            if let Some(model) = model {
-                local.set(&model, true);
+            // TS sets it before it opens `-s` or `-c`'s session (`app.tsx:666-686`), so a session already open
+            // keeps its own model and `--model` only joins the recent models.
+            match model {
+                Some(model) if local.route().is_some() => local.add_recent_valid(&model),
+                Some(model) => local.set(&model, true),
+                None => {}
             }
         })
     };
