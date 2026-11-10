@@ -7,7 +7,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
-import { Flag } from "@opencode/core/flag"
+import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
@@ -16,6 +16,7 @@ import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionMessage } from "@opencode/core/session/message"
 import { SessionSearchIndex } from "@opencode/core/session/search-index"
 import { SessionSearchMaintenance } from "@opencode/core/session/search-maintenance"
 import { SessionTable } from "@opencode/core/session/sql"
@@ -32,20 +33,17 @@ const locations = Layer.effect(
   Effect.gen(function* () {
     const map = yield* LayerMap.make(
       (ref: Location.Ref) =>
-        // The maintenance loop only reads flags from a location.
+        // The maintenance loop only reads Config from a location.
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
         Layer.mergeAll(
-          Flag.testLayer(
-            [
-              new Document({
-                type: "document",
-                info: new Info({
-                  experimental: new ConfigExperimental.Info({ sqlite_fts: flags.get(ref.workspaceID ?? "") }),
-                }),
+          Config.testLayer([
+            new Document({
+              type: "document",
+              info: new Info({
+                experimental: new ConfigExperimental.Info({ sqlite_fts: flags.get(ref.workspaceID ?? "") }),
               }),
-            ],
-            { app: { channel: "latest" } },
-          ),
+            }),
+          ]),
           Layer.succeed(
             Location.Service,
             Location.Service.of({
@@ -181,22 +179,33 @@ describe("SessionSearchMaintenance", () => {
     }),
   )
 
-  it.effect("backfills only while no session is writing", () =>
-    Effect.gen(function* () {
-      const { db } = yield* setup
-      const bus = yield* Bus.Service
-      const write = bus.publish(SessionEvent.Renamed, { sessionID: Session.ID.make("ses_old"), title: "Busy" })
-      yield* load(location("busy", true))
-      yield* Effect.repeat(write.pipe(Effect.andThen(TestClock.adjust("2 seconds"))), { times: 20 })
-      expect(yield* SessionSearchIndex.status(db)).toMatchObject({
-        version: SessionSearchIndex.Version,
-        backfill: "titles",
-      })
-      yield* elapse
-      expect((yield* SessionSearchIndex.status(db)).backfill).toBe("done")
-      expect(yield* titles(db, "walrus")).toEqual([Session.ID.make("ses_old")])
-    }),
-  )
+  for (const activity of ["writing", "streaming"] as const)
+    it.effect(`backfills only while no session is ${activity}`, () =>
+      Effect.gen(function* () {
+        const { db } = yield* setup
+        const bus = yield* Bus.Service
+        const sessionID = Session.ID.make("ses_old")
+        // A streaming reply publishes only deltas, which write nothing, until its text ends.
+        const event =
+          activity === "writing"
+            ? bus.publish(SessionEvent.Renamed, { sessionID, title: "Busy" }).pipe(Effect.asVoid)
+            : bus.publish(SessionEvent.Text.Delta, {
+                sessionID,
+                assistantMessageID: SessionMessage.ID.make("msg_streaming"),
+                ordinal: 0,
+                delta: "token",
+              })
+        yield* load(location(`busy_${activity}`, true))
+        yield* Effect.repeat(event.pipe(Effect.andThen(TestClock.adjust("2 seconds"))), { times: 20 })
+        expect(yield* SessionSearchIndex.status(db)).toMatchObject({
+          version: SessionSearchIndex.Version,
+          backfill: "titles",
+        })
+        yield* elapse
+        expect((yield* SessionSearchIndex.status(db)).backfill).toBe("done")
+        expect(yield* titles(db, "walrus")).toEqual([Session.ID.make("ses_old")])
+      }),
+    )
 
   it.effect("drops sessions deleted after the backfill", () =>
     Effect.gen(function* () {

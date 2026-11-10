@@ -80,7 +80,7 @@ const build = (db: Db) =>
       .run()
     yield* addMessage(db, 1, user(1, "migrations keep running"))
     yield* addMessage(db, 4, assistant(4, "giraffe answer", true))
-    expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: true })
+    expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: true, layout: "compact" })
     while (!(yield* SessionSearchIndex.backfillBatch(db, 1)).done) {}
     yield* addMessage(db, 2, user(2, "zebra crossing"))
     yield* db.update(SessionTable).set({ title: "Kangaroo" }).where(eq(SessionTable.id, sessionID)).run()
@@ -95,7 +95,7 @@ const build = (db: Db) =>
 /** A later boot over the same storage keeps the index and its triggers. */
 const reopen = (db: Db) =>
   Effect.gen(function* () {
-    expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: false })
+    expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: false, layout: "compact" })
     expect(yield* SessionSearchIndex.status(db)).toMatchObject({ backfill: "done", pending: 0, documents: 4 })
     yield* db
       .delete(SessionMessageTable)

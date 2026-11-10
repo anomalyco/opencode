@@ -58,7 +58,7 @@ import m55 from "./migration/20261029002625_session_part.js"
 import m56 from "./migration/20261029073502_session_time_busy.js"
 import m57 from "./migration/20261029165540_schedule_checks.js"
 import m58 from "./migration/20261030054400_job.js"
-import m59 from "./migration/20261105195531_session_search.js"
+import m59 from "./migration/20261110172520_session_search.js"
 
 export const migrations = [
   m00,

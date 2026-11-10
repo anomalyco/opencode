@@ -4,7 +4,7 @@ import { Cause, Clock, Context, Effect, Latch, Layer, Option, RcMap, Schema, Str
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
-import { Flag } from "../flag.js"
+import { Config } from "../config.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { SessionEvent } from "./event.js"
 import { SessionSearchIndex } from "./search-index.js"
@@ -20,7 +20,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSearchMaintenance") {}
 
-const isSessionEvent = Schema.is(SessionEvent.Durable)
+const isDurable = Schema.is(SessionEvent.Durable)
 
 /** Work this long before re-reading config, so turning the flag off stops a backfill promptly. */
 const SLICE = 1_000
@@ -32,7 +32,7 @@ const IDLE = "30 seconds"
 const SETTLE = "1 second"
 const SLOW_BATCH = 250
 /**
- * The backfill runs only once no Session has written for this long, so its transactions, which hold the JS thread
+ * The backfill runs only once no Session has written or streamed for this long, so its transactions, which hold the JS thread
  * and the write lock, never land while a reply streams. Changes to the queue are drained either way.
  */
 const QUIET = 5_000
@@ -53,13 +53,15 @@ export const layer = Layer.effect(
       activity: 0,
     }
 
+    // Any Session event counts as activity, including the text and reasoning deltas of a streaming reply, which write
+    // nothing; only writes wake the loop.
     yield* bus.subscribe().pipe(
-      Stream.filter(isSessionEvent),
-      Stream.runForEach(() =>
+      Stream.filter((event) => event.type.startsWith("session.")),
+      Stream.runForEach((event) =>
         Clock.currentTimeMillis.pipe(
           Effect.flatMap((now) => {
             state.activity = now
-            return state.active ? doorbell.open : Effect.void
+            return state.active && isDurable(event) ? doorbell.open : Effect.void
           }),
         ),
       ),
@@ -73,7 +75,8 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const context = yield* locations.contextEffectOption(ref)
           if (Option.isNone(context)) return false
-          return yield* Context.get(context.value, Flag.Service).enabled("sqlite_fts")
+          const entries = yield* Context.get(context.value, Config.Service).entries()
+          return Config.latest(entries, "experimental")?.sqlite_fts === true
         }).pipe(
           Effect.scoped,
           Effect.orElseSucceed(() => false),

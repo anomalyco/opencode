@@ -16683,6 +16683,9 @@
               "part_rows": {
                 "type": "boolean"
               },
+              "sqlite_fts": {
+                "type": "boolean"
+              },
               "image_generate": {
                 "anyOf": [
                   {

@@ -260,6 +260,15 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_search_text\` (
+          \`id\` integer PRIMARY KEY,
+          \`title\` text NOT NULL,
+          \`summary\` text NOT NULL,
+          \`user_text\` text NOT NULL,
+          \`assistant_text\` text NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_v2\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,

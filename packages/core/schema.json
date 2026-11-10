@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "da16f7c0-2fc6-4f36-bd62-2be5a0189899",
+  "id": "a87a7a18-9521-45a7-b823-9411d8e167e8",
   "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
   "ddl": [
     {
@@ -90,6 +90,10 @@
     },
     {
       "name": "session_search_document",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_search_text",
       "entityType": "tables"
     },
     {
@@ -1595,6 +1599,56 @@
       "table": "session_search_document"
     },
     {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "session_search_text"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "title",
+      "entityType": "columns",
+      "table": "session_search_text"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "summary",
+      "entityType": "columns",
+      "table": "session_search_text"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_text",
+      "entityType": "columns",
+      "table": "session_search_text"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "assistant_text",
+      "entityType": "columns",
+      "table": "session_search_text"
+    },
+    {
       "type": "text",
       "notNull": false,
       "autoincrement": false,
@@ -2378,6 +2432,13 @@
       "nameExplicit": false,
       "name": "session_search_document_pk",
       "table": "session_search_document",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "session_search_text_pk",
+      "table": "session_search_text",
       "entityType": "pks"
     },
     {

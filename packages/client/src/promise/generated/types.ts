@@ -2593,6 +2593,7 @@ export type ConfigEntry =
           console_watches?: boolean
           mcp_events?: boolean
           part_rows?: boolean
+          sqlite_fts?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
           location_idle_timeout?: string | false

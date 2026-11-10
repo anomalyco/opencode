@@ -146,6 +146,18 @@ export const SessionSearchDocumentTable = sqliteTable(
 )
 
 /**
+ * The text each `session_search` entry was indexed with, by document ID. Only an SQLite older than 3.43, which lacks
+ * contentless_delete, fills it: removing an entry from its index takes the indexed text again.
+ */
+export const SessionSearchTextTable = sqliteTable("session_search_text", {
+  id: integer().primaryKey(),
+  title: text().notNull(),
+  summary: text().notNull(),
+  user_text: text().notNull(),
+  assistant_text: text().notNull(),
+})
+
+/**
  * Sources whose search entry may be stale, filled by triggers on the source tables so every writer, including
  * binaries that predate the index, queues its changes. Holds IDs only; indexing rereads the source.
  */

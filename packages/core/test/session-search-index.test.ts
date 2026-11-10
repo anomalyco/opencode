@@ -27,6 +27,7 @@ import {
   SessionPartTable,
   SessionSearchDirtyTable,
   SessionSearchDocumentTable,
+  SessionSearchTextTable,
   SessionTable,
 } from "@opencode/core/session/sql"
 import { SessionID } from "@opencode/schema/session-id"
@@ -154,6 +155,26 @@ const sync = (db: Db) =>
     yield* drain(db)
   })
 
+/**
+ * Starts the index in `layout`. An existing index keeps its layout, so a `text` index built here stands in for an
+ * SQLite without contentless_delete, which picks that layout itself.
+ */
+const startIn = (db: Db, layout: SessionSearchIndex.Layout) =>
+  layout === "compact"
+    ? Effect.void
+    : Effect.gen(function* () {
+        yield* db.run(
+          "CREATE VIRTUAL TABLE session_search USING fts5(title, summary, user_text, assistant_text, content='', tokenize='porter unicode61 remove_diacritics 2')",
+        )
+        yield* db
+          .insert(KVTable)
+          .values({
+            key: "session.search",
+            value: { version: SessionSearchIndex.Version, layout: "text", backfill: "titles" },
+          })
+          .run()
+      })
+
 const find = (db: Db, query: string) =>
   SessionSearchIndex.search(db, { query }).pipe(Effect.map((hits) => hits.map((hit) => hit.messageID ?? hit.sessionID)))
 
@@ -164,19 +185,22 @@ const documentIDs = (db: Db) =>
     .orderBy(SessionSearchDocumentTable.source_id)
     .all()
 
+const Layouts = ["compact", "text"] as const
+
 describe("SessionSearchIndex", () => {
   it.effect("reports support and builds the index once", () =>
     Effect.gen(function* () {
       const db = yield* database()
-      expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: true })
+      expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: true, layout: "compact" })
       // On a current index the check only reads: the schema, which every connection caches, stays as it was.
       const schemaVersion = db.get<{ schema_version: number }>(sql`PRAGMA schema_version`)
       const before = yield* schemaVersion
-      expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: false })
+      expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: false, layout: "compact" })
       expect(yield* schemaVersion).toEqual(before)
       expect(yield* SessionSearchIndex.status(db)).toEqual({
         version: SessionSearchIndex.Version,
         backfill: "titles",
+        layout: "compact",
         pending: 0,
         documents: 0,
       })
@@ -342,101 +366,191 @@ describe("SessionSearchIndex", () => {
     }),
   )
 
-  it.effect("reads assistant text from part rows and from inline content", () =>
+  for (const layout of Layouts)
+    it.effect(`reads assistant text from part rows and from inline content (${layout} layout)`, () =>
+      Effect.gen(function* () {
+        const db = yield* database((db) =>
+          Effect.gen(function* () {
+            yield* addSession(db, sessionA, null)
+            yield* addMessage(db, sessionA, 1, assistant("1", [text("inlineword"), tool("call_1", "inlinetool")]))
+            // A newer release keeps the parts in session_part and leaves an empty envelope.
+            yield* addMessage(db, sessionA, 2, assistant("2", [text("envelopeword")]))
+            yield* db
+              .update(SessionMessageTable)
+              .set({ data: sql`json_set(${SessionMessageTable.data}, '$.content', json('[]'))` })
+              .where(eq(SessionMessageTable.id, id("2")))
+              .run()
+            yield* db
+              .insert(SessionPartTable)
+              .values(
+                [text("firstpart"), tool("call_2", "parttool"), text("secondpart")].map((part, ordinal) => ({
+                  message_id: id("2"),
+                  session_id: sessionA,
+                  ordinal,
+                  type: part.type,
+                  call_id: part.type === "tool" ? part.id : null,
+                  time_created: 1,
+                  time_updated: 1,
+                  data: Schema.encodeSync(SessionMessage.AssistantContent)(part),
+                })),
+              )
+              .run()
+          }),
+        )
+        yield* startIn(db, layout)
+        yield* sync(db)
+        expect((yield* SessionSearchIndex.status(db)).layout).toBe(layout)
+
+        expect(yield* find(db, "inlineword")).toEqual([id("1")])
+        expect(yield* find(db, "firstpart")).toEqual([id("2")])
+        expect(yield* find(db, "secondpart")).toEqual([id("2")])
+        for (const word of ["envelopeword", "inlinetool", "parttool"]) expect(yield* find(db, word)).toEqual([])
+
+        yield* db
+          .update(SessionPartTable)
+          .set({ data: Schema.encodeSync(SessionMessage.AssistantContent)(text("editedpart")) })
+          .where(eq(SessionPartTable.ordinal, 2))
+          .run()
+        yield* drain(db)
+        expect(yield* find(db, "secondpart")).toEqual([])
+        expect(yield* find(db, "editedpart")).toEqual([id("2")])
+      }),
+    )
+
+  for (const layout of Layouts)
+    it.effect(`follows updates, renames, reverts and cascading deletes (${layout} layout)`, () =>
+      Effect.gen(function* () {
+        const db = yield* database((db) =>
+          Effect.gen(function* () {
+            yield* addSession(db, sessionA, "alpha title")
+            yield* addSession(db, sessionB, "beta title")
+            yield* addMessage(db, sessionA, 1, user("a1", "first alpha prompt"))
+            yield* addMessage(db, sessionA, 2, user("a2", "second alpha prompt"))
+            yield* addMessage(db, sessionA, 3, user("a3", "third alpha prompt"))
+            yield* addMessage(db, sessionB, 1, user("b1", "beta prompt"))
+          }),
+        )
+        yield* startIn(db, layout)
+        yield* sync(db)
+        expect((yield* SessionSearchIndex.status(db)).layout).toBe(layout)
+
+        yield* db
+          .update(SessionMessageTable)
+          .set({ data: { text: "rewritten alpha prompt", time: { created: 1_000 } } })
+          .where(eq(SessionMessageTable.id, id("a1")))
+          .run()
+        yield* db.update(SessionTable).set({ title: "gamma title" }).where(eq(SessionTable.id, sessionA)).run()
+        yield* drain(db)
+        expect(yield* find(db, "first")).toEqual([])
+        expect(yield* find(db, "rewritten")).toEqual([id("a1")])
+        expect(yield* find(db, "alpha")).not.toContain(sessionA)
+        expect(yield* find(db, "gamma")).toEqual([sessionA])
+
+        // Revert deletes every message from the boundary on.
+        yield* db
+          .delete(SessionMessageTable)
+          .where(sql`${SessionMessageTable.session_id} = ${sessionA} AND ${SessionMessageTable.seq} >= 2`)
+          .run()
+        yield* drain(db)
+        expect(yield* find(db, "second third")).toEqual([])
+        expect(yield* find(db, "rewritten")).toEqual([id("a1")])
+
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionA)).run()
+        yield* drain(db)
+        expect(yield* find(db, "rewritten gamma")).toEqual([])
+        expect((yield* documentIDs(db)).map((row) => row.source)).toEqual([id("b1"), sessionB])
+
+        // Deleting a project cascades through its sessions and their messages.
+        yield* db.delete(ProjectTable).run()
+        yield* drain(db)
+        expect(yield* SessionSearchIndex.status(db)).toMatchObject({ pending: 0, documents: 0 })
+        expect(yield* find(db, "beta")).toEqual([])
+      }),
+    )
+
+  it.effect("reads part rows and inline text left in the same message", () =>
     Effect.gen(function* () {
       const db = yield* database((db) =>
         Effect.gen(function* () {
           yield* addSession(db, sessionA, null)
-          yield* addMessage(db, sessionA, 1, assistant("1", [text("inlineword"), tool("call_1", "inlinetool")]))
-          // A newer release keeps the parts in session_part and leaves an empty envelope.
-          yield* addMessage(db, sessionA, 2, assistant("2", [text("envelopeword")]))
-          yield* db
-            .update(SessionMessageTable)
-            .set({ data: sql`json_set(${SessionMessageTable.data}, '$.content', json('[]'))` })
-            .where(eq(SessionMessageTable.id, id("2")))
-            .run()
+          yield* addMessage(db, sessionA, 1, assistant("1", [text("inlineleftover")]))
           yield* db
             .insert(SessionPartTable)
-            .values(
-              [text("firstpart"), tool("call_2", "parttool"), text("secondpart")].map((part, ordinal) => ({
-                message_id: id("2"),
-                session_id: sessionA,
-                ordinal,
-                type: part.type,
-                call_id: part.type === "tool" ? part.id : null,
-                time_created: 1,
-                time_updated: 1,
-                data: Schema.encodeSync(SessionMessage.AssistantContent)(part),
-              })),
-            )
+            .values({
+              message_id: id("1"),
+              session_id: sessionA,
+              ordinal: 0,
+              type: "text",
+              call_id: null,
+              time_created: 1,
+              time_updated: 1,
+              data: Schema.encodeSync(SessionMessage.AssistantContent)(text("partword")),
+            })
             .run()
         }),
       )
       yield* sync(db)
-
-      expect(yield* find(db, "inlineword")).toEqual([id("1")])
-      expect(yield* find(db, "firstpart")).toEqual([id("2")])
-      expect(yield* find(db, "secondpart")).toEqual([id("2")])
-      for (const word of ["envelopeword", "inlinetool", "parttool"]) expect(yield* find(db, word)).toEqual([])
-
-      yield* db
-        .update(SessionPartTable)
-        .set({ data: Schema.encodeSync(SessionMessage.AssistantContent)(text("editedpart")) })
-        .where(eq(SessionPartTable.ordinal, 2))
-        .run()
-      yield* drain(db)
-      expect(yield* find(db, "secondpart")).toEqual([])
-      expect(yield* find(db, "editedpart")).toEqual([id("2")])
+      expect(yield* find(db, "inlineleftover")).toEqual([id("1")])
+      expect(yield* find(db, "partword")).toEqual([id("1")])
     }),
   )
 
-  it.effect("follows updates, renames, reverts and cascading deletes", () =>
+  it.effect("indexes nothing for a failed compaction", () =>
     Effect.gen(function* () {
       const db = yield* database((db) =>
         Effect.gen(function* () {
-          yield* addSession(db, sessionA, "alpha title")
-          yield* addSession(db, sessionB, "beta title")
-          yield* addMessage(db, sessionA, 1, user("a1", "first alpha prompt"))
-          yield* addMessage(db, sessionA, 2, user("a2", "second alpha prompt"))
-          yield* addMessage(db, sessionA, 3, user("a3", "third alpha prompt"))
-          yield* addMessage(db, sessionB, 1, user("b1", "beta prompt"))
+          yield* addSession(db, sessionA, null)
+          yield* db.run(sql`
+            INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+            VALUES (${id("1")}, ${sessionA}, 'compaction', 1, 1000, 1000,
+              ${JSON.stringify({ status: "failed", reason: "auto", error: { message: "failedword" }, time: { created: 1 } })})
+          `)
         }),
       )
       yield* sync(db)
-
-      yield* db
-        .update(SessionMessageTable)
-        .set({ data: { text: "rewritten alpha prompt", time: { created: 1_000 } } })
-        .where(eq(SessionMessageTable.id, id("a1")))
-        .run()
-      yield* db.update(SessionTable).set({ title: "gamma title" }).where(eq(SessionTable.id, sessionA)).run()
-      yield* drain(db)
-      expect(yield* find(db, "first")).toEqual([])
-      expect(yield* find(db, "rewritten")).toEqual([id("a1")])
-      expect(yield* find(db, "alpha")).not.toContain(sessionA)
-      expect(yield* find(db, "gamma")).toEqual([sessionA])
-
-      // Revert deletes every message from the boundary on.
-      yield* db
-        .delete(SessionMessageTable)
-        .where(sql`${SessionMessageTable.session_id} = ${sessionA} AND ${SessionMessageTable.seq} >= 2`)
-        .run()
-      yield* drain(db)
-      expect(yield* find(db, "second third")).toEqual([])
-      expect(yield* find(db, "rewritten")).toEqual([id("a1")])
-
-      yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionA)).run()
-      yield* drain(db)
-      expect(yield* find(db, "rewritten gamma")).toEqual([])
-      expect((yield* documentIDs(db)).map((row) => row.source)).toEqual([id("b1"), sessionB])
-
-      // Deleting a project cascades through its sessions and their messages.
-      yield* db.delete(ProjectTable).run()
-      yield* drain(db)
-      expect(yield* SessionSearchIndex.status(db)).toMatchObject({ pending: 0, documents: 0 })
-      expect(yield* find(db, "beta")).toEqual([])
+      expect(yield* find(db, "failedword")).toEqual([])
+      expect((yield* SessionSearchIndex.status(db)).documents).toBe(0)
     }),
   )
+
+  it.effect("caps the stored bytes each queue batch reads", () =>
+    Effect.gen(function* () {
+      const db = yield* database((db) => addSession(db, sessionA, null))
+      yield* sync(db)
+      const large = "x".repeat(SessionSearchIndex.MaxBatchBytes * 0.6)
+      yield* oldWriter(db, sessionA, 1, user("1", `puffin ${large}`))
+      yield* oldWriter(db, sessionA, 2, user("2", `gannet ${large}`))
+      yield* SessionSearchIndex.processBatch(db)
+      expect((yield* SessionSearchIndex.status(db)).pending).toBe(1)
+      yield* drain(db)
+      expect((yield* find(db, "puffin gannet")).toSorted()).toEqual([id("1"), id("2")])
+    }),
+  )
+
+  for (const layout of Layouts)
+    it.effect(`removes a long deleted session across several batches (${layout} layout)`, () =>
+      Effect.gen(function* () {
+        const db = yield* database((db) =>
+          Effect.gen(function* () {
+            yield* addSession(db, sessionA, "long session")
+            for (const seq of Array.from({ length: 205 }, (_, index) => index + 1))
+              yield* addMessage(db, sessionA, seq, user(`${seq}`, `prompt number ${seq}`))
+          }),
+        )
+        yield* startIn(db, layout)
+        yield* sync(db)
+        // Without the cascade only the session is queued, so its one queue entry removes every entry of the session.
+        yield* db.run("PRAGMA foreign_keys = OFF")
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionA)).run()
+        // One batch removes at most 200 entries and keeps the session queued.
+        yield* SessionSearchIndex.processBatch(db)
+        expect(yield* SessionSearchIndex.status(db)).toMatchObject({ documents: 6 })
+        yield* drain(db)
+        expect(yield* SessionSearchIndex.status(db)).toMatchObject({ pending: 0, documents: 0 })
+        expect(yield* db.select().from(SessionSearchTextTable).all()).toEqual([])
+        expect(yield* find(db, "prompt")).toEqual([])
+      }),
+    )
 
   it.effect("hides deleted sources before their queue entry is processed", () =>
     Effect.gen(function* () {
@@ -562,7 +676,7 @@ describe("SessionSearchIndex", () => {
     }),
   )
 
-  it.effect("rebuilds when a trigger is missing or the version changed", () =>
+  it.effect("rebuilds when a trigger is missing or the version is older", () =>
     Effect.gen(function* () {
       const db = yield* database((db) =>
         Effect.gen(function* () {
@@ -576,18 +690,39 @@ describe("SessionSearchIndex", () => {
       yield* db.run("DROP TRIGGER session_search_message_insert")
       yield* addMessage(db, sessionA, 2, user("2", "unqueued prompt"))
       expect((yield* SessionSearchIndex.status(db)).pending).toBe(0)
-      expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: true })
+      expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: true, layout: "compact" })
       expect(yield* SessionSearchIndex.status(db)).toMatchObject({ backfill: "titles", documents: 0 })
       yield* backfill(db)
       expect((yield* find(db, "kept unqueued")).toSorted()).toEqual([id("1"), id("2")])
 
       yield* db
         .update(KVTable)
-        .set({ value: { version: SessionSearchIndex.Version + 1, backfill: "done" } })
+        .set({ value: { version: SessionSearchIndex.Version - 1, backfill: "done" } })
         .where(eq(KVTable.key, "session.search"))
         .run()
-      expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: true })
+      expect(yield* SessionSearchIndex.ensure(db)).toEqual({ supported: true, rebuilt: true, layout: "compact" })
       expect((yield* SessionSearchIndex.status(db)).version).toBe(SessionSearchIndex.Version)
+    }),
+  )
+
+  it.effect("leaves an index built by a newer version alone", () =>
+    Effect.gen(function* () {
+      const db = yield* database((db) =>
+        Effect.gen(function* () {
+          yield* addSession(db, sessionA, null)
+          yield* addMessage(db, sessionA, 1, user("1", "kept prompt"))
+        }),
+      )
+      yield* sync(db)
+      const newer = { version: SessionSearchIndex.Version + 1, layout: "compact", backfill: "done" } as const
+      yield* db.update(KVTable).set({ value: newer }).where(eq(KVTable.key, "session.search")).run()
+      yield* addMessage(db, sessionA, 2, user("2", "queued for the newer version"))
+
+      expect(yield* SessionSearchIndex.ensure(db)).toMatchObject({ supported: false })
+      expect(yield* SessionSearchIndex.processBatch(db)).toBe(0)
+      expect(yield* SessionSearchIndex.backfillBatch(db)).toEqual({ indexed: 0, done: true })
+      expect(yield* SessionSearchIndex.status(db)).toMatchObject({ version: newer.version, pending: 1, documents: 1 })
+      expect(yield* find(db, "kept")).toEqual([id("1")])
     }),
   )
 
@@ -830,7 +965,7 @@ describe("SessionSearchIndex", () => {
       // The backfill passes the same rows.
       yield* db
         .update(KVTable)
-        .set({ value: { version: SessionSearchIndex.Version + 1, backfill: "done" } })
+        .set({ value: { version: SessionSearchIndex.Version - 1, backfill: "done" } })
         .where(eq(KVTable.key, "session.search"))
         .run()
       yield* sync(db)
@@ -844,8 +979,9 @@ describe("SessionSearchIndex", () => {
       yield* db.run("PRAGMA foreign_keys = ON")
       yield* DatabaseMigration.applyOnly(
         db,
-        migrations.filter((migration) => migration.id !== "20261029215249_session_search"),
+        migrations.filter((migration) => !migration.id.endsWith("_session_search")),
       )
+      expect(yield* db.all(sql`SELECT name FROM sqlite_master WHERE name LIKE 'session_search%'`)).toEqual([])
       yield* db
         .insert(ProjectTable)
         .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })

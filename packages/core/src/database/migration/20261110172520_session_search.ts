@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration.js"
 
 const migration: DatabaseMigration.Migration = {
-  id: "20261105195531_session_search",
+  id: "20261110172520_session_search",
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
@@ -15,6 +15,15 @@ const migration: DatabaseMigration.Migration = {
           \`id\` integer PRIMARY KEY,
           \`source_id\` text NOT NULL,
           \`session_id\` text NOT NULL
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`session_search_text\` (
+          \`id\` integer PRIMARY KEY,
+          \`title\` text NOT NULL,
+          \`summary\` text NOT NULL,
+          \`user_text\` text NOT NULL,
+          \`assistant_text\` text NOT NULL
         );
       `)
       yield* tx.run(
