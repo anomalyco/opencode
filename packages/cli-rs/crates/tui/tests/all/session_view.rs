@@ -3,7 +3,6 @@
 
 use crate::support::{self, WAIT};
 
-use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -346,30 +345,6 @@ fn a_catalog_read_inside_the_messages_visitor_loads_after_the_render() {
     assert!(asked, "{:?}", h.memory.requests());
 }
 
-#[allow(unsafe_code)]
-unsafe extern "C" fn context_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    let plugin = opencode_tui::plugins::sidebar_context::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("loopback.sidebar.context", plugin.setup, host, options, instance, out) }
-}
-
-#[allow(unsafe_code)]
-unsafe extern "C" fn limit_create(
-    host: *const abi::HostApi,
-    options: abi::Bytes,
-    instance: *mut *mut c_void,
-    out: *mut abi::Owned,
-) -> i32 {
-    let plugin = opencode_tui::plugins::sidebar_limit::plugin();
-    // SAFETY: the loader passes what `PluginApi::create` documents.
-    unsafe { abi::runtime::create("loopback.sidebar.limit", plugin.setup, host, options, instance, out) }
-}
-
 /// The frames of the sidebar's context and limit sections while a session's replies end. With `loopback`, the
 /// sections are wired through the byte shims of the C ABI (`Loopback`) instead of running in process.
 fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
@@ -381,7 +356,16 @@ fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     };
     let h = mount_at(170, "ses_a", json!({ "animations": false, "plugins": plugins }));
     if loopback {
-        for create in [context_create as _, limit_create as _] {
+        for create in [
+            abi::export_plugin!(
+                @loopback "loopback.sidebar.context",
+                opencode_tui::plugins::sidebar_context::plugin().setup
+            ) as _,
+            abi::export_plugin!(
+                @loopback "loopback.sidebar.limit",
+                opencode_tui::plugins::sidebar_limit::plugin().setup
+            ) as _,
+        ] {
             let (definition, _) =
                 opencode_plugin::loader::native::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap();
             opencode_tui::plugins::host::add(&h.tui, definition);
