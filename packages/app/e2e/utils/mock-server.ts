@@ -52,7 +52,6 @@ export interface MockServerConfig {
   hostname?: string
   provider: Resolvable<MockProviderCatalog>
   integrations?: Resolvable<unknown[]>
-  credentials?: Resolvable<unknown[]>
   // Runs on POST /api/credential/:id/activate; the fixture swaps its integrations and catalog to the new account.
   onCredentialActivate?: (credentialID: string) => void
   // Runs on PATCH /api/credential/:id with the request body; the fixture applies the new label.
@@ -897,7 +896,6 @@ function mockHandlers(
         integrationOAuthCancel: (ctx) =>
           Effect.sync(() => config.onIntegrationOAuthCancel?.(ctx.params.attemptID)).pipe(Effect.andThen(noContent)),
         integrationConnectExternal: () => noContent,
-        credentialList: () => Effect.sync(() => ({ data: resolve(config.credentials ?? []) })),
         credentialActivate: (ctx) =>
           Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
         credentialUpdate: (ctx) =>

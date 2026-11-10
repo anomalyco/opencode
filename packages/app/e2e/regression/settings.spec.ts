@@ -3,6 +3,7 @@ import type { ConfigEntry, OpenCodeEvent, SessionMessageInfo, WorktreeDirectory 
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session } from "../utils/app"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSession, openSettings, type WorkspaceInput } from "../utils/workspace"
+import { CONSOLE_URL, consoleGateway, consoleSignIn } from "../utils/console"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
 
@@ -787,31 +788,21 @@ test("project extensions link Console MCPs and skills and offer sign-in as the s
   page,
   context,
 }) => {
-  const consoleUrl = "https://opencode.ai/console"
+  const consoleUrl = CONSOLE_URL
   await context.route("https://opencode.ai/console/**", (route) => route.fulfill({ body: "Console" }))
-
-  const gateway = (slug: string) => ({
-    type: "remote",
-    url: `${consoleUrl}/api/integration-gateway/${slug}/mcp`,
-    oauth: false,
-  })
 
   const { settings } = await open(page, {
     configEntries: [
       {
         type: "document",
         info: {
-          mcp: { servers: { slack: gateway("slack"), github: { ...gateway("github"), protocol: "2026-07-28" } } },
+          mcp: {
+            servers: {
+              slack: consoleGateway("slack"),
+              github: consoleGateway("github", { protocol: "2026-07-28" }),
+            },
+          },
         },
-      },
-    ],
-    credentials: [
-      {
-        id: "cred_console",
-        integrationID: "opencode",
-        label: "Acme",
-        active: true,
-        value: { type: "key", key: "fixture-only", metadata: { server: consoleUrl, orgID: "org_acme" } },
       },
     ],
     mcp: [
@@ -819,6 +810,7 @@ test("project extensions link Console MCPs and skills and offer sign-in as the s
       { name: "stripe", integrationID: "stripe-oauth", status: { status: "needs_auth", error: "Sign in required" } },
     ],
     integrations: [
+      consoleSignIn,
       {
         id: "stripe-oauth",
         name: "Stripe",
@@ -865,6 +857,22 @@ test("project extensions link Console MCPs and skills and offer sign-in as the s
   const skill = page.waitForEvent("popup")
   await skills.getByRole("button", { name: "Manage Funnel analytics in Console", exact: true }).click()
   await expect(await skill).toHaveURL(`${consoleUrl}/org_acme/extensions?kind=skills&search=funnel`)
+})
+
+test("a Console skill links to Console's home when no Console MCP names the workspace", async ({ page, context }) => {
+  await context.route(`${CONSOLE_URL}**`, (route) => route.fulfill({ body: "Console" }))
+
+  const { settings } = await open(page, {
+    integrations: [consoleSignIn],
+    skills: [{ id: "funnel", name: "Funnel analytics", path: "skill://funnel/SKILL.md", content: "x" }],
+  })
+
+  await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+  await settings.getByRole("tab", { name: "Skills", exact: true }).click()
+
+  const skill = page.waitForEvent("popup")
+  await settings.getByRole("button", { name: "Manage Funnel analytics in Console", exact: true }).click()
+  await expect(await skill).toHaveURL(CONSOLE_URL)
 })
 
 for (const field of [
@@ -1213,13 +1221,7 @@ test.describe("pages open before slow data", () => {
 
   test("extensions list Console MCPs and skills with local ones", async ({ page, context }) => {
     await context.route("https://opencode.ai/console/**", (route) => route.fulfill({ body: "Console" }))
-    const consoleUrl = "https://opencode.ai/console"
-
-    const gateway = (slug: string) => ({
-      type: "remote",
-      url: `${consoleUrl}/api/integration-gateway/${slug}/mcp`,
-      oauth: false,
-    })
+    const consoleUrl = CONSOLE_URL
 
     const actions: string[] = []
 
@@ -1230,9 +1232,9 @@ test.describe("pages open before slow data", () => {
           info: {
             mcp: {
               servers: {
-                linear: gateway("linear"),
-                github: { ...gateway("github"), protocol: "2026-07-28" },
-                clickhouse: gateway("clickhouse"),
+                linear: consoleGateway("linear"),
+                github: consoleGateway("github", { protocol: "2026-07-28" }),
+                clickhouse: consoleGateway("clickhouse"),
               },
             },
           },
@@ -1243,15 +1245,7 @@ test.describe("pages open before slow data", () => {
           info: { mcp: { servers: { linear: { type: "remote", url: "https://mcp.linear.app/mcp" } } } },
         },
       ],
-      credentials: [
-        {
-          id: "cred_console",
-          integrationID: "opencode",
-          label: "Acme",
-          active: true,
-          value: { type: "key", key: "fixture-only", metadata: { server: consoleUrl, orgID: "org_acme" } },
-        },
-      ],
+      integrations: [consoleSignIn],
       mcp: ["figma", "linear", "github", "clickhouse"].map((name) => ({ name, status: { status: "connected" } })),
       skills: [
         {

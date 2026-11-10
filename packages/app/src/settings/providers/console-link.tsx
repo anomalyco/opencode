@@ -1,11 +1,12 @@
 import { Icon } from "@opencode/ui/icon"
 import type { SkillInfo } from "@opencode/client/promise"
-import { onCleanup } from "solid-js"
+import { createEffect, onCleanup } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
+import { useData } from "@/runtime/server/current"
 import { createExtensionLoad } from "@/settings/extension-load"
-import { consoleAccount, consoleMcpLinks, consoleMcps, consoleSkillLink } from "./console-extensions"
+import { consoleMcpLinks, consoleMcps, consoleSkillLink, consoleWorkspace } from "./console-extensions"
 import "@/settings/settings.css"
 
 /**
@@ -14,32 +15,48 @@ import "@/settings/settings.css"
  */
 export function createConsoleSources(directory: () => string | undefined) {
   const serverSdk = useServerSDK()
+  const data = useData()
+
+  const location = () => {
+    const target = directory()
+
+    return target ? { directory: target } : data.location.default()
+  }
 
   const sources = createExtensionLoad({
     key: () => `${serverSdk.scope}\0${directory() ?? ""}`,
     task: async (_, signal) => {
       const target = directory()
 
-      const [entries, active, account] = await Promise.all([
+      const [entries, active] = await Promise.all([
         serverSdk.api.config.get(undefined, { signal }),
         target ? serverSdk.api.config.get({ location: { directory: target } }, { signal }) : undefined,
-        serverSdk.api.credential.list({ signal }).then(consoleAccount),
       ])
 
-      return { mcps: consoleMcps(entries, active ?? entries), account }
+      return consoleMcps(entries, active ?? entries)
     },
   })
 
   onCleanup(serverSdk.event.on("config.updated", () => sources.invalidate()))
-  onCleanup(serverSdk.event.on("credential.updated", () => sources.invalidate()))
 
-  const value = () => {
+  createEffect(() => {
+    if (serverSdk.connection.status() !== "connected") return
+    void data.location.integration.sync(location()).catch(() => undefined)
+  })
+
+  const signedIn = () =>
+    !!data.location.integration
+      .list(location())
+      ?.find((integration) => integration.id === "opencode")
+      ?.connections.some((connection) => connection.type === "credential")
+
+  const mcps = () => {
     const current = sources.view()
 
-    return current.status === "ready" ? current.value : undefined
+    return current.status === "ready" ? current.value : []
   }
 
-  const mcp = (name: string) => value()?.mcps.find((entry) => entry.name === name)
+  const mcp = (name: string) => mcps().find((entry) => entry.name === name)
 
   // A same-named server in the user's config replaces Console's, so only the link stays Console's.
   const managed = (name: string) => {
@@ -51,7 +68,7 @@ export function createConsoleSources(directory: () => string | undefined) {
   const links = (name: string) => {
     const current = mcp(name)
 
-    return current && consoleMcpLinks(current, value()?.account)
+    return current && consoleMcpLinks(current)
   }
 
   return {
@@ -63,7 +80,7 @@ export function createConsoleSources(directory: () => string | undefined) {
     // A Console server whose account isn't connected lists tools but can't run them, so it asks for the connection in
     // the switch's place, as a server that needs a sign-in does.
     connect: (name: string) => (managed(name)?.needsConnection ? links(name)?.connect : undefined),
-    skill: (skill: Pick<SkillInfo, "id" | "path">) => consoleSkillLink(skill, value()?.account),
+    skill: (skill: Pick<SkillInfo, "id" | "path">) => consoleSkillLink(skill, consoleWorkspace(mcps()), signedIn()),
   }
 }
 

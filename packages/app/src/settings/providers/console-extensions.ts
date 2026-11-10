@@ -1,25 +1,11 @@
-import type { ConfigEntry, CredentialEntry, SkillInfo } from "@opencode/client/promise"
+import type { ConfigEntry, SkillInfo } from "@opencode/client/promise"
 import type { ServerConfig } from "@opencode/schema/mcp"
-import { Option, Schema } from "effect"
+import { Option, Result, Schema } from "effect"
+import { Base64Url } from "effect/encoding"
 
-const decodeConsoleMetadata = Schema.decodeUnknownOption(
-  Schema.Struct({ server: Schema.optionalKey(Schema.String), orgID: Schema.optionalKey(Schema.String) }),
-)
+const CONSOLE_URL = "https://opencode.ai/console"
 
-export function consoleAccount(credentials: readonly CredentialEntry[]) {
-  const credential = credentials.find((item) => item.integrationID === "opencode" && item.active)
-
-  if (!credential) return
-
-  const metadata = decodeConsoleMetadata(credential.value.metadata ?? {})
-
-  if (Option.isNone(metadata)) return
-
-  return {
-    server: (metadata.value.server ?? "https://opencode.ai/console").replace(/\/+$/, ""),
-    orgID: metadata.value.orgID,
-  }
-}
+const decodeGatewayClaims = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ w: Schema.String })))
 
 /** Config exposes no source field, so recognize only Console's managed gateway entries. */
 export function consoleMcps(entries: readonly ConfigEntry[], active: readonly ConfigEntry[] = entries) {
@@ -51,10 +37,17 @@ export function consoleMcps(entries: readonly ConfigEntry[], active: readonly Co
 
 export type ConsoleMcp = ReturnType<typeof consoleMcps>[number]
 
-export function consoleMcpLinks(item: ConsoleMcp, account: ReturnType<typeof consoleAccount>) {
-  if (!account?.orgID || account.server !== item.server) return { manage: item.server }
+/** The Console and workspace the gateway servers belong to; every server Console delivers names the same one. */
+export function consoleWorkspace(mcps: readonly ConsoleMcp[]) {
+  const source = mcps.find((item) => item.workspace)
 
-  const root = `${item.server}/${encodeURIComponent(account.orgID)}/extensions`
+  return source?.workspace ? { server: source.server, workspace: source.workspace } : undefined
+}
+
+export function consoleMcpLinks(item: ConsoleMcp) {
+  if (!item.workspace) return { manage: item.server, connect: item.server }
+
+  const root = `${item.server}/${encodeURIComponent(item.workspace)}/extensions`
 
   return {
     manage: `${root}/mcp/${encodeURIComponent(item.slug)}`,
@@ -67,16 +60,20 @@ export function consoleMcpLinks(item: ConsoleMcp, account: ReturnType<typeof con
  * while Console is signed in, except the ones OpenCode ships. The page of one skill needs Console's internal ID, which
  * the app doesn't receive, so the link opens Console's skills filtered to this one.
  */
-export function consoleSkillLink(skill: Pick<SkillInfo, "id" | "path">, account: ReturnType<typeof consoleAccount>) {
-  if (!account) return
+export function consoleSkillLink(
+  skill: Pick<SkillInfo, "id" | "path">,
+  workspace: ReturnType<typeof consoleWorkspace>,
+  signedIn: boolean,
+) {
+  if (!signedIn) return
 
   const slug = /^skill:\/\/([^/]+)\//.exec(skill.path)?.[1]
 
   if (!slug || ["opencode", "report", "browser"].includes(skill.id)) return
 
-  if (!account.orgID) return account.server
+  if (!workspace) return CONSOLE_URL
 
-  return `${account.server}/${encodeURIComponent(account.orgID)}/extensions?kind=skills&search=${encodeURIComponent(slug)}`
+  return `${workspace.server}/${encodeURIComponent(workspace.workspace)}/extensions?kind=skills&search=${encodeURIComponent(slug)}`
 }
 
 function gateway(config: ServerConfig) {
@@ -91,7 +88,23 @@ function gateway(config: ServerConfig) {
   return {
     server: `${url.origin}${match[1]}`,
     slug: match[2],
+    workspace: gatewayWorkspace(config.headers),
     // Console pins this protocol when it offers tools before the member connects their account.
     needsConnection: config.protocol === "2026-07-28",
   }
+}
+
+// Console's gateway token is `ocgw_<base64url claims>.<signature>`, and its claims name the workspace (`w`).
+function gatewayWorkspace(headers: Readonly<Record<string, string>> | undefined) {
+  const authorization = Object.entries(headers ?? {}).find(([name]) => name.toLowerCase() === "authorization")?.[1]
+
+  const claims = /^Bearer ocgw_([^.]+)\./.exec(authorization ?? "")?.[1]
+
+  if (!claims) return
+
+  const decoded = Result.getOrUndefined(Base64Url.decodeString(claims))
+
+  if (decoded === undefined) return
+
+  return Option.getOrUndefined(decodeGatewayClaims(decoded))?.w
 }
