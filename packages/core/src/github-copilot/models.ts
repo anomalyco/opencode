@@ -212,6 +212,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
       context: remote.capabilities.limits.max_context_window_tokens ?? remote.capabilities.limits.max_prompt_tokens,
       input: remote.capabilities.limits.max_prompt_tokens,
       output: remote.capabilities.limits.max_output_tokens,
+      images: remote.capabilities.limits.vision?.max_prompt_images,
     },
   })
 }

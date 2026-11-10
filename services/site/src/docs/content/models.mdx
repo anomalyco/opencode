@@ -533,6 +533,10 @@ Use the server's real model name, limits, input and output types, and tool suppo
 custom-model fallback values are accurate. If the endpoint requires a key, add `apiKey` to `settings` with an environment
 substitution such as `"apiKey": "{env:LOCAL_API_KEY}"`; do not commit secrets.
 
+If the server caps the images in one request, such as vLLM's `--limit-mm-per-prompt`, set `limit.images` to that cap.
+OpenCode then replaces the oldest images in the conversation with a short note instead of sending a request the server
+rejects.
+
 ## References
 
 Model selectors use `provider/model` with an optional `#variant`:

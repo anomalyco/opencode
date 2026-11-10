@@ -158,6 +158,7 @@ security boundary.
 | Desktop picker selection      | 20 MiB total                                                  | Two 12 MiB files exceed the selection limit  |
 | `max_base64_bytes`            | Encoded Base64 only, excluding the complete `data:` URL       | `SGVsbG8=` counts as 8 bytes                 |
 | Provider image limits         | Apply after OpenCode processing                               | A provider may reject an accepted image      |
+| Images per request            | Model `limit.images`; older images are replaced with a note   | With `4`, a fifth image drops the first      |
 | Text attachment model support | Does not require a multimodal model                           | `notes.txt` is inserted as prompt text       |
 | `read` text limits            | Uses separate paging and truncation limits                    | Read a large log in pages                    |
 

@@ -219,6 +219,20 @@ describe("SessionModelRequest.boundImages", () => {
     expect(removed(boundImages([...history, ...Array.from({ length: 4 }, (_, i) => image(`${9 + i}.png`))]))).toBe(8)
   })
 
+  test("replaces the oldest images beyond the model's image limit", () => {
+    const image = (name: string) =>
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: name })
+    const messages = Array.from({ length: 6 }, (_, i) => image(`${i}.png`))
+    const result = boundImages(messages, 4)
+
+    expect(result.slice(0, 2).map((message) => message.content)).toEqual([
+      [Message.text(expect.stringContaining("image was removed"))],
+      [Message.text(expect.stringContaining("image was removed"))],
+    ])
+    expect(result.slice(2)).toEqual(messages.slice(2))
+    expect(boundImages(messages, 6)).toBe(messages)
+  })
+
   test("replaces images nested in tool results", () => {
     const image = "a".repeat(13 * 1024 * 1024)
     const result = boundImages([

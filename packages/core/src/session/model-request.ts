@@ -213,7 +213,8 @@ export const unsupportedParts = (
   provider?: string,
 ) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
-export const boundImages = (messages: LLMRequest["messages"]) => {
+/** Replaces the oldest images to keep the inline payload within budget and the count within the model's limit. */
+export const boundImages = (messages: LLMRequest["messages"], limit?: number) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
   const sizes = messages.flatMap((message) =>
     message.content.flatMap((part) => {
@@ -234,6 +235,8 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
     if (kept <= IMAGE_BYTES_TRIGGER) continue
     while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
   }
+  // Endpoints such as vLLM reject a request with more images than they serve, so the count limit is exact.
+  cut = Math.max(cut, limit === undefined ? 0 : sizes.length - limit)
   if (cut === 0) return messages
 
   let index = 0
@@ -327,7 +330,10 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
+        messages: boundImages(
+          unsupportedParts(shaped.messages, model.capabilities, model.model.provider),
+          model.limit.images,
+        ),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         ...generation,

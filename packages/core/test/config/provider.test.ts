@@ -1208,7 +1208,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
                       },
                       capabilities: { tools: true, input: ["text"], output: ["text"] },
                       disabled: true,
-                      limit: { context: 100, output: 50 },
+                      limit: { context: 100, output: 50, images: 4 },
                       cost: { input: 1, output: 2 },
                       settings: { retained: true },
                       headers: { first: "first", shared: "first" },
@@ -1285,7 +1285,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           model.limit = { context: 10, output: 1 }
         })
         yield* addPlugin(entries)
-        expect(transformed).toEqual({ context: 100, output: 75 })
+        expect(transformed).toEqual({ context: 100, output: 75, images: 4 })
 
         const provider = required(yield* providers.get(providerID))
         const model = required(yield* models.get(providerID, modelID))
@@ -1316,7 +1316,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         })
         expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
         expect(model.enabled).toBe(false)
-        expect(model.limit).toEqual({ context: 100, output: 75 })
+        expect(model.limit).toEqual({ context: 100, output: 75, images: 4 })
         expect(model.cost).toEqual([
           {
             input: Money.USDPerMillionTokens.make(1),

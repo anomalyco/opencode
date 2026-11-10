@@ -1112,7 +1112,7 @@ const clip = (value: string) => {
 /** The newest whole, real user messages within `keep` tokens: no synthetic guidance, no half of an attachment. */
 export const recentUserMessages = (
   messages: ReadonlyArray<SessionMessage.Info>,
-  model: Pick<SessionContext.Loaded["model"], "ref" | "capabilities">,
+  model: Pick<SessionContext.Loaded["model"], "ref" | "capabilities" | "limit">,
   keep: number,
 ) => {
   const users = messages
@@ -1120,6 +1120,7 @@ export const recentUserMessages = (
     .map((message) => ({ ...message, skills: undefined }))
   const sendable = SessionModelRequest.boundImages(
     SessionModelRequest.unsupportedParts(toLLMMessages(users, model.ref), model.capabilities),
+    model.limit.images,
   )
   return sendable.slice(oldestToDrop(sendable, estimateMessage, keep))
 }
@@ -1138,6 +1139,7 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
   // so image-heavy sessions can estimate high.
   const sent = SessionModelRequest.boundImages(
     SessionModelRequest.unsupportedParts(base.messages, context.model.capabilities),
+    context.model.limit.images,
   )
   // The anchor's usage covers its own output, but not its local tool results, which the provider never saw.
   const unmeasured = sent.filter((message) => message.role !== "assistant" || message.id !== anchor?.id)
