@@ -185,7 +185,9 @@ impl Tui {
 
     /// Replaces the route view and syncs the new one with everything.
     pub fn navigate(&self, route: Route) {
-        let remount = self.view.borrow().is_some() && self.route() == route;
+        // Going home from home to another location is a navigation, not a remount.
+        let remount =
+            self.view.borrow().is_some() && self.route() == route && !crate::features::location::pending(self);
         // Mounting may move the focus (a docked panel, a pending permission); an open dialog keeps it.
         let dialog = self.dialogs.is_open().then(|| self.app.focused());
         if let Some(view) = self.view.borrow_mut().take() {

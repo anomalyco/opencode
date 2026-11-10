@@ -255,7 +255,7 @@ impl Open {
     fn load(self: &Rc<Self>) {
         let Some(tui) = self.tui() else { return };
         let client = tui.data.client().clone();
-        let directory = tui.directory.clone();
+        let directory = crate::features::location::active(&tui).directory;
         tui.app.spawn(
             async move {
                 let recent = SessionListInput {
@@ -535,7 +535,8 @@ impl Open {
                 .collect()
         });
 
-        let current = tui.directory.as_str();
+        let current = crate::features::location::active(&tui).directory;
+        let current = current.as_str();
         let current_project = state.location.as_ref().map(|location| location.project.canonical.as_str());
         let mut projects: Vec<&Project> =
             state.projects.iter().filter(|project| project.time.archived.is_none()).collect();
@@ -578,7 +579,8 @@ impl Open {
             return Vec::new();
         };
         let canonical = project.canonical.as_str();
-        let current = tui.directory.as_str();
+        let current = crate::features::location::active(&tui).directory;
+        let current = current.as_str();
         let home = home();
         let mut directories: Vec<&str> = vec![canonical];
         directories.extend(state.worktrees.iter().flatten().map(String::as_str));

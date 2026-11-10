@@ -28,6 +28,8 @@ pub struct LocationState {
     generation: Cell<u64>,
     /// Where the next home works, from the open dialog or `session.new` (TS `HomeRoute.location`).
     home: RefCell<Option<Location>>,
+    /// The mounted home's own location (TS `route.location`), `None` for the default.
+    target: RefCell<Option<Location>>,
     /// The default location the home follows, `None` while it works where [`navigate_home`] sent it.
     followed: RefCell<Option<Location>>,
     /// The session whose environment was uploaded on this connection.
@@ -37,6 +39,22 @@ pub struct LocationState {
 /// The location as set, before the server answered (`location.ref`).
 pub fn current(tui: &Tui) -> Option<Location> {
     tui.location.reference.borrow().clone()
+}
+
+/// `location.ref ?? data.location.default()`.
+pub fn active(tui: &Tui) -> Location {
+    current(tui).unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()))
+}
+
+/// The home route's location: `route.location ?? data.location.default()`.
+pub fn home_target(tui: &Tui) -> Location {
+    let target = tui.location.target.borrow().clone();
+    target.unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()))
+}
+
+/// Whether [`navigate_home`] asked for a home that has not mounted yet. Home to home still applies it.
+pub(crate) fn pending(tui: &Tui) -> bool {
+    tui.location.home.borrow().is_some()
 }
 
 /// The location whose directory the server reported missing (`location.error.location`).
@@ -54,6 +72,7 @@ pub fn navigate_home(tui: &Tui, location: Option<Location>) {
 pub fn home(tui: &Tui) {
     let explicit = tui.location.home.borrow_mut().take();
     let default = tui.data.read(|state| state.default_location().clone());
+    *tui.location.target.borrow_mut() = explicit.clone();
     *tui.location.followed.borrow_mut() = explicit.is_none().then(|| default.clone());
     set(tui, explicit.unwrap_or(default));
 }
