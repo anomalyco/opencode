@@ -10,7 +10,7 @@ use std::pin::Pin;
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
 use crate::client::Client;
@@ -184,9 +184,10 @@ impl Connector for Tungstenite {
         Box::pin(async move {
             let socket = ws::connect(&url, &[]).await.map_err(|error| error.to_string())?;
             let (mut sink, mut stream) = socket.split();
-            let (socket, mut remote) = pair();
-            let deliver = remote.deliver.clone();
-            tokio::spawn(async move {
+            let (socket, remote) = pair();
+            let (mut sent, deliver) = (remote.sent, remote.deliver);
+            let (written, writer) = oneshot::channel::<()>();
+            let reader = async move {
                 while let Some(message) = stream.next().await {
                     let incoming = match message {
                         Ok(ws::Message::Text(text)) => Incoming::Text(text.as_str().to_owned()),
@@ -203,14 +204,16 @@ impl Connector for Tungstenite {
                     }
                 }
                 let _ = deliver.send(Incoming::Closed).await;
-            });
+            };
+            tokio::spawn(ws::read_until_closed(reader, writer));
             tokio::spawn(async move {
-                while let Some(frame) = remote.sent.recv().await {
+                let _written = written;
+                while let Some(frame) = sent.recv().await {
                     if sink.send(ws::Message::binary(frame)).await.is_err() {
                         return;
                     }
                 }
-                let _ = sink.close().await;
+                let _ = tokio::time::timeout(ws::CLOSE_GRACE, sink.close()).await;
             });
             Ok(socket)
         })
@@ -466,5 +469,13 @@ mod tests {
         socket.outgoing.send(vec![1, 0, 80, 0, 24, 120]).await.unwrap();
         assert_eq!(server.await.unwrap(), ws::Message::binary(vec![1, 0, 80, 0, 24, 120]));
         assert_eq!(socket.incoming.recv().await, Some(Incoming::Closed));
+    }
+
+    #[tokio::test]
+    async fn tungstenite_lets_go_of_a_peer_that_never_answers_the_close() {
+        let (url, closed) = crate::ws::silent_peer().await;
+        let socket = Tungstenite.open(url).await.unwrap();
+        drop(socket.outgoing);
+        closed.await.unwrap();
     }
 }
