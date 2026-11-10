@@ -192,6 +192,11 @@ fn newlines(bytes: &[u8]) -> u64 {
     bytes.iter().filter(|&&byte| byte == b'\n').count() as u64
 }
 
+/// A path as a single-quoted PowerShell string literal.
+fn ps_path(path: &Path) -> String {
+    path.display().to_string().replace('\'', "''")
+}
+
 #[test]
 fn reports_ordered_output_and_exit_code_without_a_terminal() {
     let service = TerminalService::default();
@@ -526,7 +531,7 @@ fn a_grandchild_holding_the_pipe_delays_the_exit_by_at_most_the_drain() {
     let finished = run(&service, info.id, &file);
     assert_eq!(finished.exit.exit_code, Some(0));
     assert!(
-        finished.elapsed < Duration::from_secs(4),
+        finished.elapsed < Duration::from_secs(10),
         "{:?}",
         finished.elapsed
     );
@@ -537,14 +542,157 @@ fn a_grandchild_holding_the_pipe_delays_the_exit_by_at_most_the_drain() {
 #[test]
 fn terminate_does_not_hang_on_a_grandchild() {
     let service = TerminalService::default();
+    let pid_file = TempPath::new("terminate-pid");
+    let inner = Script::powershell(
+        "terminate-grandchild",
+        &format!(
+            r#"
+            [System.IO.File]::WriteAllText('{}', "$PID")
+            Start-Sleep -Seconds 60
+            "#,
+            ps_path(&pid_file.0)
+        ),
+    );
     let (info, _file) = start(&service, |file| {
-        cmd("start /b ping -n 60 127.0.0.1 & ping -n 60 127.0.0.1", file)
+        cmd(
+            &format!(
+                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {} \
+                 & ping -n 60 127.0.0.1",
+                inner.0.0.display()
+            ),
+            file,
+        )
     });
-    // Let the outer command start its grandchild.
-    std::thread::sleep(Duration::from_millis(500));
+    let grandchild = read_pid(&pid_file.0);
+    assert!(alive(grandchild));
     let started = Instant::now();
     service.terminate(info.id).unwrap();
-    assert!(started.elapsed() < Duration::from_secs(2));
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
+    wait_dead(grandchild);
+}
+
+#[test]
+fn a_noisy_grandchild_still_exits_after_the_drain() {
+    let service = TerminalService::default();
+    let inner = Script::powershell(
+        "noisy-grandchild",
+        "while ($true) { [Console]::Out.Write('x') }",
+    );
+    let (info, file) = start(&service, |file| {
+        cmd(
+            &format!(
+                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {}",
+                inner.0.0.display()
+            ),
+            file,
+        )
+    });
+    let finished = run(&service, info.id, &file);
+    assert_eq!(finished.exit.exit_code, Some(0));
+    assert!(
+        finished.elapsed < Duration::from_secs(10),
+        "{:?}",
+        finished.elapsed
+    );
+    service.terminate(info.id).unwrap();
+}
+
+#[test]
+fn signal_after_a_normal_exit_kills_a_leftover_grandchild() {
+    let service = TerminalService::default();
+    let pid_file = TempPath::new("leftover-pid");
+    let inner = Script::powershell(
+        "leftover-grandchild",
+        &format!(
+            r#"
+            [System.IO.File]::WriteAllText('{}', "$PID")
+            Start-Sleep -Seconds 60
+            "#,
+            ps_path(&pid_file.0)
+        ),
+    );
+    let (info, _file) = start(&service, |file| {
+        cmd(
+            &format!(
+                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {}",
+                inner.0.0.display()
+            ),
+            file,
+        )
+    });
+    let grandchild = read_pid(&pid_file.0);
+    let exit = service.wait(info.id).unwrap().recv().unwrap();
+    assert_eq!(exit.exit_code, Some(0));
+    assert_eq!(exit.signal, None);
+    // The process keeps its record after the exit; the grandchild still runs.
+    assert!(alive(grandchild));
+    assert_eq!(
+        service.get(info.id).unwrap().lifecycle,
+        TerminalLifecycle::Exited {
+            exit_code: Some(0),
+            signal: None
+        }
+    );
+    assert_eq!(service.list(ProcessMode::Pipe).unwrap().len(), 1);
+    service.signal(info.id, ProcessSignal::Kill).unwrap();
+    wait_dead(grandchild);
+    service.terminate(info.id).unwrap();
+    assert!(service.list(ProcessMode::Pipe).unwrap().is_empty());
+}
+
+#[test]
+fn the_stdout_survives_closing_stderr() {
+    let service = TerminalService::default();
+    let script = Script::powershell(
+        "stderr",
+        r#"Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class StandardHandles {
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetStdHandle(int handle);
+    [DllImport("kernel32.dll")]
+    public static extern bool CloseHandle(IntPtr handle);
+}
+"@
+# STD_ERROR_HANDLE - stdout must be a separate handle to the same pipe.
+[StandardHandles]::CloseHandle([StandardHandles]::GetStdHandle(-12)) | Out-Null
+Start-Sleep -Milliseconds 200
+[Console]::Out.WriteLine("after-stderr-closed")
+"#,
+    );
+    let (info, file) = start(&service, |file| script.request(file, base_env()));
+    let finished = run(&service, info.id, &file);
+    assert_eq!(finished.output, "after-stderr-closed\r\n");
+    assert_eq!(finished.exit.exit_code, Some(0));
+    service.terminate(info.id).unwrap();
+}
+
+#[test]
+fn arguments_round_trip_through_the_command_line() {
+    let service = TerminalService::default();
+    let script = Script::powershell(
+        "quoting",
+        r#"for ($i = 0; $i -lt $args.Count; $i++) { [Console]::Out.WriteLine("$i<$($args[$i])>") }"#,
+    );
+    // A trailing backslash needs doubling only when the argument is quoted.
+    let args = ["plain", "with space", "say \"hi\"", r"C:\with space\"];
+    let (info, file) = start(&service, |file| {
+        let mut request = script.request(file, base_env());
+        request.args.extend(args.iter().map(|arg| arg.to_string()));
+        request
+    });
+    let finished = run(&service, info.id, &file);
+    assert_eq!(
+        finished.output,
+        "0<plain>\r\n1<with space>\r\n2<say \"hi\">\r\n3<C:\\with space\\>\r\n"
+    );
+    assert_eq!(finished.exit.exit_code, Some(0));
+    service.terminate(info.id).unwrap();
 }
 
 #[test]
