@@ -198,8 +198,16 @@
     height: 28px;
   }
 
-  /* Without the warning icon, the error lines up under the tool's name. */
+  /* Without the warning icon, the error hangs from the nested line like any other row's content. */
   [data-slot="tool-error-card-content"] {
     padding-left: 0;
+  }
+
+  > [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-content"] {
+    padding-inline-start: 12px;
+
+    &::before {
+      display: block;
+    }
   }
 }
