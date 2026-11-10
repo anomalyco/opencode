@@ -168,8 +168,15 @@ export const read = Effect.fn("ReadTool.read")(function* (
   if (first.bytes.length >= first.info.size) return yield* completePage(input, resource, first.bytes, page)
   // A negative offset counts back from the last line, so count the lines first, then read forward from there.
   if (page.offset !== undefined && page.offset < 0) {
-    const total = yield* countLines(files, input, resource, first)
-    return yield* streamPage(files, input, resource, first, { ...page, offset: Math.max(1, total + page.offset + 1) })
+    const counted = yield* countLines(files, input, resource, first)
+    // Read up to where the count ended, which the stat size may overstate.
+    return yield* streamPage(
+      files,
+      input,
+      resource,
+      { bytes: first.bytes, info: { size: counted.bytes } },
+      { ...page, offset: Math.max(1, counted.lines + page.offset + 1) },
+    )
   }
   return yield* streamPage(files, input, resource, first, page)
 })
@@ -277,7 +284,7 @@ const countLines = Effect.fnUntraced(function* (files: Files, input: AbsolutePat
     lines += textLeaf(next.bytes).summary.lines
     last = next.bytes.at(-1)
   }
-  return lineCount(lines, last)
+  return { lines: lineCount(lines, last), bytes }
 })
 
 const readFile = (
