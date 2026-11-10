@@ -19,6 +19,7 @@ import {
   timelineRenders,
   timelineHidesActivity,
   timelineTextShows,
+  shellFailed,
 } from "./policy"
 import { errorInfo } from "./errors"
 import { noticeEvent, timelineEventTool } from "./events"
@@ -162,7 +163,7 @@ export function createReactiveTimelineProjection(input: {
       // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
       // notifies only when visibility actually flips.
       const [visible, setVisible] = createSignal(false)
-      createComputed(() => setVisible(timelineTextShows(content)))
+      createComputed(() => setVisible(timelineTextShows(content, !!input.activity?.())))
 
       return [content, visible] as const
     },
@@ -405,13 +406,15 @@ export namespace Timeline {
     const visible = (content: Content) =>
       !(detail.commentary.placement === "hidden" && commentary.has(content)) && isRenderable(detail, content, activity)
 
-    const visibleNotice = (message: Notice) => timelineNoticePlacement(detail, message) !== "hidden"
+    const visibleNotice = (message: Notice) => timelineNoticePlacement(detail, message, activity) !== "hidden"
+    const visibleShell = (shell: SessionMessageShell) =>
+      activity || detail.shell.placement !== "hidden" || shellFailed(shell)
 
     const visibleTurns = turns.filter((turn) => {
       if (turn.user) return true
 
-      // A command the user ran shows at every setting, as their messages do.
-      if (turn.shell) return true
+      // In the Activity timeline a command the user ran shows at every setting, as their messages do.
+      if (turn.shell && visibleShell(turn.shell)) return true
 
       return turn.entries.some((entry) =>
         entry.type === "notice"
@@ -434,7 +437,9 @@ export namespace Timeline {
         if (turn.shell)
           return [
             ...(index > 0 ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
-            new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id }),
+            ...(visibleShell(turn.shell)
+              ? [new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id })]
+              : []),
             ...turn.entries.flatMap((entry) =>
               entry.type === "notice" && visibleNotice(entry.message)
                 ? [new TimelineRow.Notice({ userMessageID: turn.id, messageID: entry.message.id })]
@@ -480,8 +485,17 @@ export namespace Timeline {
       rows,
       detail,
       new Set(
-        messages.flatMap((message) => (timelineNoticePlacement(detail, message) === "separate" ? [message.id] : [])),
+        messages.flatMap((message) =>
+          timelineNoticePlacement(detail, message, activity) === "separate" ||
+          (!activity &&
+            (message.type === "compaction" ||
+              message.type === "model-switched" ||
+              message.type === "location-switched"))
+            ? [message.id]
+            : [],
+        ),
       ),
+      activity,
     )
 
     return {
@@ -516,6 +530,7 @@ export namespace Timeline {
 
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
 
+    const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
     let assistantGroupIndex = 0
     let previousAssistantTool = false
 
@@ -555,9 +570,10 @@ export namespace Timeline {
 
       appendGroups(before)
 
-      // The user stopped the turn, so the timeline confirms it at every setting.
+      // In the Activity timeline the user stopped the turn, so the timeline confirms it at every setting.
       if (interruptedAt >= 0) {
-        rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
+        if (activity || (!compaction && detail.notices.placement !== "hidden"))
+          rows.push(new TimelineRow.TurnDivider({ userMessageID: turnID }))
         appendGroups(after)
       }
 
@@ -726,14 +742,21 @@ function turnCommentary(entries: Entry[], settled: boolean, visible: (content: C
   return commentary.filter((content) => content !== texts.at(-1))
 }
 
-function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {
+function groupMessages(
+  rows: TimelineRow.TimelineRow[],
+  detail: TimelineDetail,
+  separate: ReadonlySet<string>,
+  activity: boolean,
+) {
   return rows.reduce<TimelineRow.TimelineRow[]>((result, row) => {
     const previous = result.at(-1)
     // Live status renders nothing while other feedback shows, so a group below it spaces from the content above it.
     const above = Predicate.isTagged(previous, "Activity") ? result.at(-2) : previous
 
     const current =
-      Predicate.isTagged(row, "Notice") && detail.notices.placement === "grouped" && !separate.has(row.messageID)
+      ((Predicate.isTagged(row, "Notice") && detail.notices.placement === "grouped") ||
+        (!activity && Predicate.isTagged(row, "Shell") && detail.shell.placement === "grouped")) &&
+      !separate.has(row.messageID)
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
             previousAssistantPart: Predicate.isTagged(above, "AssistantPart"),
@@ -984,7 +1007,7 @@ function groupContent(
     const type =
       activity && item.content.type === "tool" && timelineEventTool(item.content)
         ? "events"
-        : contentGroupType(item.content, commentary, detail)
+        : contentGroupType(item.content, commentary, detail, activity)
 
     if (type) {
       if (adjacent?.type !== type) flush()
@@ -1006,15 +1029,20 @@ function groupContent(
   return groups
 }
 
-function contentGroupType(content: Content, commentary: ReadonlySet<Content>, detail: TimelineDetail) {
-  if (content.type === "tool") return toolGroupType(content, detail)
+function contentGroupType(
+  content: Content,
+  commentary: ReadonlySet<Content>,
+  detail: TimelineDetail,
+  activity: boolean,
+) {
+  if (content.type === "tool") return toolGroupType(content, detail, activity)
 
   if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
   return detail.thinking.placement !== "grouped" ? undefined : "context"
 }
 
-function toolGroupType(content: Extract<Content, { type: "tool" }>, detail: TimelineDetail) {
+function toolGroupType(content: Extract<Content, { type: "tool" }>, detail: TimelineDetail, activity: boolean) {
   if (content.name === "question" && !currentToolFailed(content)) return undefined
 
   if (detail[timelineCategory(content)!].placement === "grouped") return "context"
@@ -1023,7 +1051,7 @@ function toolGroupType(content: Extract<Content, { type: "tool" }>, detail: Time
 
   if (currentToolFailed(content)) return undefined
 
-  if (timelineCategory(content) === "edit") return "file"
+  if (activity ? timelineCategory(content) === "edit" : ["patch", "edit", "write"].includes(content.name)) return "file"
 
   return undefined
 }

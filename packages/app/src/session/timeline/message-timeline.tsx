@@ -180,10 +180,12 @@ function MessageTimelineView(
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const messageByID = projection.messageByID
 
+  const settings = useSettings()
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
     presentationKey: () => JSON.stringify(props.data.timelineDetail()),
+    activity: settings.general.activityTimeline,
     projection,
     showHeader,
     follow: props.follow,
@@ -283,8 +285,6 @@ function MessageTimelineView(
           },
         ],
   )
-
-  const settings = useSettings()
 
   const rowRenderer = createSessionTimelineRowRenderer({
     foldUserMessages: settings.general.foldUserMessages,

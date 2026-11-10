@@ -48,9 +48,7 @@ export function currentToolFailed(tool: SessionMessageAssistantTool) {
   return (
     tool.state.status === "error" ||
     (tool.name === "execute" && executeToolFailed(currentToolMetadata(tool))) ||
-    (canonicalToolName(tool.name) === "shell" &&
-      tool.state.status === "completed" &&
-      shellResultFailed(currentToolMetadata(tool)))
+    (tool.name === "shell" && tool.state.status === "completed" && shellResultFailed(currentToolMetadata(tool)))
   )
 }
 

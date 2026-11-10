@@ -77,7 +77,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       ["list", "ui.tool.list"],
       ["glob", "ui.tool.glob"],
       ["grep", "ui.tool.grep"],
-      ["browser", "ui.tool.browser"],
       ["subagent", "ui.tool.agent.default"],
       ["webfetch", "ui.tool.webfetch"],
       ["websearch", "ui.tool.websearch"],
@@ -93,6 +92,8 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     if (activity() && split.tool === "websearch") return i18n.t("ui.tool.searchWeb")
 
     if (activity() && split.tool === "webfetch") return i18n.t("ui.tool.fetch")
+
+    if (activity() && split.tool === "browser") return i18n.t("ui.tool.browser")
     const key = map.get(split.tool)
 
     if (!key) return split.tool

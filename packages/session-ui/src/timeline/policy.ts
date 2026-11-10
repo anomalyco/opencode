@@ -30,9 +30,10 @@ export function timelineCategory(content: Content): keyof TimelineDetail | undef
  * in the Activity timeline, where the agent's recovery is part of the work the setting hides.
  */
 export function timelineRenders(detail: TimelineDetail, content: Content, activity = false) {
-  if (content.type === "text") return timelineTextShows(content)
+  if (content.type === "text") return timelineTextShows(content, activity)
 
-  if (content.type === "reasoning") return detail.thinking.placement !== "hidden" && timelineTextShows(content)
+  if (content.type === "reasoning")
+    return detail.thinking.placement !== "hidden" && timelineTextShows(content, activity)
 
   if (!activity && currentToolFailed(content)) return true
 
@@ -43,12 +44,12 @@ export function timelineRenders(detail: TimelineDetail, content: Content, activi
   return detail[timelineCategory(content)!].placement !== "hidden"
 }
 
-// A thought shows while it streams, before its first words arrive, so the timeline never hides that the model is
-// thinking. Once finished, a thought without text has nothing to open.
-export function timelineTextShows(content: Exclude<Content, { type: "tool" }>) {
+// In the Activity timeline a thought shows while it streams, before its first words arrive, so the timeline never hides
+// that the model is thinking. Once finished, a thought without text has nothing to open.
+export function timelineTextShows(content: Exclude<Content, { type: "tool" }>, activity = false) {
   if (content.text.trim()) return true
 
-  return content.type === "reasoning" && content.time?.completed === undefined
+  return activity && content.type === "reasoning" && content.time?.completed === undefined
 }
 
 /**
@@ -58,14 +59,15 @@ export function timelineTextShows(content: Exclude<Content, { type: "tool" }>) {
 export function timelineDefaultOpen(detail: TimelineDetail, item: Content | SessionMessageShell, activity = false) {
   if (activity && timelineClamps(item)) return false
 
-  // The user ran this command, so it opens to confirm it went through, whatever the setting.
-  if (item.type === "shell") return true
+  // In the Activity timeline the user's command opens to confirm it went through, whatever the setting.
+  if (item.type === "shell")
+    return activity || detail.shell.details === "expanded" || (detail.shell.placement === "hidden" && shellFailed(item))
 
   if (item.type === "tool" && item.name === "execute") return true
 
   const category = timelineCategory(item)
 
-  if (!category) return false
+  if (!category) return activity ? false : undefined
 
   // A failure shows even where its category is hidden, open so it explains itself.
   if (detail[category].placement === "hidden" && item.type === "tool" && currentToolFailed(item)) return true
@@ -74,7 +76,8 @@ export function timelineDefaultOpen(detail: TimelineDetail, item: Content | Sess
 
   if (category === "shell" || category === "edit") return detail[category].details === "expanded"
 
-  return false
+  // Elsewhere a tool keeps its own default, such as an answered question showing its answers.
+  if (activity || item.type !== "tool" || item.state.status === "error") return false
 }
 
 /** Whether the setting hides every kind of activity, as Messages only does. */
@@ -106,8 +109,12 @@ function timelineClamps(item: Content | SessionMessageShell) {
 
 // Like the TUI, background work reports its outcome as its own row where it finished, never folded into a group.
 // A subagent's outcome follows the subagent setting, so it shows wherever its launch does.
-export function timelineNoticePlacement(detail: TimelineDetail, message: SessionMessageInfo): TimelinePlacement {
-  if (timelineEvent(message)) return "separate"
+export function timelineNoticePlacement(
+  detail: TimelineDetail,
+  message: SessionMessageInfo,
+  activity = false,
+): TimelinePlacement {
+  if (activity && timelineEvent(message)) return "separate"
   const source = message.type === "synthetic" ? message.metadata?.source : undefined
   const placement = source === "subagent" ? detail.subagents.placement : detail.notices.placement
 

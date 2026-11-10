@@ -295,8 +295,8 @@ function currentSkillName(tool: SessionMessageAssistantTool) {
 }
 
 // Context group labels name each tool once; detailed subtitles belong to the tool rows.
-function toolTitle(tool: SessionMessageAssistantTool, i18n: UiI18n) {
-  switch (canonicalToolName(tool.name)) {
+function toolTitle(tool: SessionMessageAssistantTool, i18n: UiI18n, activity = false) {
+  switch (activity ? canonicalToolName(tool.name) : tool.name) {
     case "read":
       return i18n.t("ui.tool.read")
     case "list":
@@ -419,7 +419,7 @@ function ExaOutput(props: { output?: string }) {
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
-  | { type: "notice" | "text"; id: string; render: () => JSX.Element }
+  | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
 
 // The most consequential work names a group: changing files over running commands, and both over reading.
 const modePriority: TimelineMode[] = ["edit", "run", "tool", "explore"]
@@ -473,7 +473,7 @@ function activityLabel(tools: SessionMessageAssistantTool[], i18n: UiI18n) {
   const runs = calls("run")
   // Commands are counted, never quoted: a command can be any length.
   const commands = runs.length ? [i18n.plural("ui.timeline.activity.commands", runs.length)] : []
-  const used = [...new Set(calls("tool").map((tool) => toolTitle(tool, i18n)))]
+  const used = [...new Set(calls("tool").map((tool) => toolTitle(tool, i18n, true)))]
 
   const others = {
     explore: explore(false),
@@ -532,9 +532,9 @@ export function CurrentContextToolGroup(props: {
     i18n.list([
       ...new Set(
         props.parts.flatMap((part) => {
-          if (part.type !== "tool") return []
+          if (part.type !== "tool" && part.type !== "shell") return []
 
-          return [toolTitle(part, i18n)]
+          return [part.type === "tool" ? toolTitle(part, i18n, props.activity) : i18n.t("ui.tool.shell")]
         }),
       ),
     ]),
@@ -613,7 +613,7 @@ export function CurrentContextToolGroup(props: {
     }
 
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
-    const count = props.parts.filter((part) => part.type === "tool").length || thoughts
+    const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
     const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
     const index = text.indexOf(title)
     const before = text.slice(0, index).trim()
@@ -645,7 +645,12 @@ export function CurrentContextToolGroup(props: {
 
       const previous = groups.at(-1)
 
-      if (isFileChangeTool(tool) && Array.isArray(previous) && previous[0] && isFileChangeTool(previous[0])) {
+      if (
+        isFileChangeTool(tool, props.activity) &&
+        Array.isArray(previous) &&
+        previous[0] &&
+        isFileChangeTool(previous[0], props.activity)
+      ) {
         previous.push(tool)
 
         return groups
@@ -685,7 +690,7 @@ export function CurrentContextToolGroup(props: {
   const patchKeys = createMemo(() => {
     const keys = new Map<SessionMessageAssistantTool, string>()
     items().forEach((item) => {
-      if (!Array.isArray(item) || !item[0] || !isFileChangeTool(item[0])) return
+      if (!Array.isArray(item) || !item[0] || !isFileChangeTool(item[0], props.activity)) return
       const key = props.patchGroupKey?.(item) ?? item[0].id
       item.forEach((tool) => keys.set(tool, key))
     })
@@ -818,7 +823,10 @@ export function CurrentContextToolGroup(props: {
                 const callback = createMemo(() => {
                   const value = item()
 
-                  return !Array.isArray(value) && (value.type === "notice" || value.type === "text") ? value : undefined
+                  return !Array.isArray(value) &&
+                    (value.type === "notice" || value.type === "shell" || value.type === "text")
+                    ? value
+                    : undefined
                 })
 
                 return (
@@ -890,7 +898,7 @@ export function CurrentContextToolGroup(props: {
                                   }
                                   fallback={
                                     <Show
-                                      when={isFileChangeTool(tool())}
+                                      when={isFileChangeTool(tool(), props.activity)}
                                       fallback={
                                         <ToolDisplay
                                           id={tool().id}
@@ -1248,8 +1256,8 @@ function scrollParent(element: HTMLElement): HTMLElement | undefined {
   return scrollParent(parent)
 }
 
-function isFileChangeTool(tool: SessionMessageAssistantTool) {
-  const name = canonicalToolName(tool.name)
+function isFileChangeTool(tool: SessionMessageAssistantTool, activity = false) {
+  const name = activity ? canonicalToolName(tool.name) : tool.name
 
   return tool.state.status !== "error" && (name === "edit" || name === "write" || name === "patch")
 }
@@ -1515,10 +1523,11 @@ export function ToolDisplay(
     error?: string
   },
 ) {
-  // A call stored under a tool's old name renders as that tool.
+  // In the Activity timeline a call stored under a tool's old name renders as that tool.
+  const activity = useActivityTimeline()
   const props = mergeProps(input, {
     get tool() {
-      return canonicalToolName(input.tool)
+      return activity() ? canonicalToolName(input.tool) : input.tool
     },
   })
   const data = useData()
@@ -1910,8 +1919,8 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="window-cursor"
-        // The body lists the result links, so a search that returned none has nothing to open.
-        hasContent={urls(props.output).length > 0}
+        // In the Activity timeline the body lists the result links, so a search that returned none has nothing to open.
+        hasContent={activity() ? urls(props.output).length > 0 : undefined}
         trigger={{
           title: title(),
           subtitle: query(),

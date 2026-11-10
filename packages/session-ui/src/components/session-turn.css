@@ -20,11 +20,10 @@
     display: none;
   }
 
-  /* Rows fill the column, so shell output and other cards span the timeline whatever their content. */
   [data-slot="session-turn-message-container"] {
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
     align-self: stretch;
     min-width: 0;
     gap: 0px;
@@ -320,4 +319,10 @@
     letter-spacing: -0.04px;
     color: var(--v2-text-text-muted);
   }
+}
+
+/* In the Activity timeline rows fill the column, so shell output and other cards span the timeline whatever their
+   content. */
+[data-activity-timeline] [data-component="session-turn"] [data-slot="session-turn-message-container"] {
+  align-items: stretch;
 }
