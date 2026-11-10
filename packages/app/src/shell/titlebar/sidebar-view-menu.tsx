@@ -176,10 +176,10 @@ export function SidebarViewMenu(props: {
             )}
           </For>
           <Menu.Separator />
-          <Menu.Item disabled={active() === 0} onSelect={() => props.onResetFilters()}>
+          <Menu.Item disabled={active() === 0} onSelect={props.onResetFilters}>
             {language.t("sidebar.view.resetFilters")}
           </Menu.Item>
-          <Menu.Item disabled={!props.canMarkRead} onSelect={() => props.onMarkRead()}>
+          <Menu.Item disabled={!props.canMarkRead} onSelect={props.onMarkRead}>
             {language.t("sidebar.view.markAllRead")}
           </Menu.Item>
         </Menu.Content>

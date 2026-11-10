@@ -213,11 +213,13 @@ function leaf<R extends SidebarRow>(
 
 // A collapsed group still shows its active row, so that row keeps its place in the order.
 function openKeys<R extends SidebarRow>(group: SidebarGroup<R>): string[] {
-  const rows = group.children ? group.children.flatMap((child) => (group.collapsed ? child.rows : [])) : group.rows
+  if (group.collapsed) {
+    const rows = group.children ? group.children.flatMap((child) => child.rows) : group.rows
 
-  if (group.collapsed) return rows.filter((row) => row.open && row.active).map((row) => row.key)
+    return rows.filter((row) => row.open && row.active).map((row) => row.key)
+  }
 
   if (group.children) return group.children.flatMap(openKeys)
 
-  return rows.filter((row) => row.open).map((row) => row.key)
+  return group.rows.filter((row) => row.open).map((row) => row.key)
 }

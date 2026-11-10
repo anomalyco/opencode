@@ -224,13 +224,10 @@ export function SidebarCustomized(props: {
         ? ctx.data.session.list().filter((session) => !!session.parentID && session.time.archived === undefined)
         : []
 
-      const seen = new Set<string>()
-
       return [...indexed, ...children].flatMap((session): Row[] => {
         const key = sessionRowKey(server, session.id)
 
-        if (openKeys.has(key) || seen.has(key)) return []
-        seen.add(key)
+        if (openKeys.has(key)) return []
         const project = ctx.projects.forSession(session)
 
         return [
@@ -280,7 +277,7 @@ export function SidebarCustomized(props: {
   })
 
   const serverOptions = () =>
-    global.servers.list().map((conn) => ({ key: `${ServerConnection.key(conn)}`, label: servers.label(conn) }))
+    global.servers.list().map((conn) => ({ key: ServerConnection.key(conn), label: servers.label(conn) }))
 
   const projectOptions = () =>
     [...projectLabels().values()].map((project) => ({ id: project.id, label: displayName(project) }))
@@ -465,28 +462,18 @@ export function SidebarCustomized(props: {
 
       if (!value) return
 
-      const conn =
-        (group().server && connOf(group().server!)) ||
-        connected().find(
-          (item) =>
-            servers.current(item) &&
-            ctxOf(ServerConnection.key(item))
-              ?.projects.list()
-              .some((p) => p.id === value.id),
-        ) ||
-        connected().find((item) =>
-          ctxOf(ServerConnection.key(item))
-            ?.projects.list()
-            .some((p) => p.id === value.id),
-        )
+      const copy = (conn: ServerConnection.Any) =>
+        ctxOf(ServerConnection.key(conn))
+          ?.projects.list()
+          .find((item) => item.id === value.id)
 
-      if (conn)
-        actions.openProjectNewSession(
-          conn,
-          ctxOf(ServerConnection.key(conn))
-            ?.projects.list()
-            .find((p) => p.id === value.id)?.worktree ?? value.worktree,
-        )
+      const owners = connected().filter((conn) => copy(conn))
+
+      const server = group().server
+
+      const conn = (server ? connOf(server) : undefined) ?? owners.find(servers.current) ?? owners[0]
+
+      if (conn) actions.openProjectNewSession(conn, copy(conn)?.worktree ?? value.worktree)
     }
 
     return (
@@ -529,7 +516,6 @@ export function SidebarCustomized(props: {
             {label()}
           </span>
         </button>
-        {/* Shares the column of the Sessions "+": a collapsed group's open count, swapped for new session on hover. */}
         <span class="relative flex size-5 shrink-0 items-center justify-center">
           <Show when={group().collapsed && group().open > 0}>
             <span
@@ -563,9 +549,9 @@ export function SidebarCustomized(props: {
     )
 
   const markAllRead = () =>
-    visibleRows()
-      .filter((row) => row.session && row.status === "unread")
-      .forEach((row) => ctxOf(row.server)?.notification.session.markViewed(row.session!.id))
+    visibleRows().forEach((row) => {
+      if (row.session && row.status === "unread") ctxOf(row.server)?.notification.session.markViewed(row.session.id)
+    })
 
   const anyUnread = () =>
     visibleRows().some(
