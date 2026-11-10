@@ -9,6 +9,8 @@ import "~/i18n/server"
 
 const criticalCSS = `[data-component="top"]{min-height:80px;display:flex;align-items:center}`
 
+// The hydrated app's document: the development server's (production renders every page as plain HTML,
+// src/static/render.tsx).
 export default createHandler(
   () => (
     <StartServer

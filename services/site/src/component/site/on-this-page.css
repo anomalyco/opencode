@@ -153,6 +153,14 @@
   --contents-top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--notice-height, 3rem));
 }
 
+/* While a phone dropdown under a sticky bar is open (menu-hold.ts), only its list scrolls: the page,
+   and with it the bars, hold still. Closing it leaves the page where it was. */
+@media (max-width: 60rem) {
+  html[data-menu-hold] {
+    overflow: hidden;
+  }
+}
+
 [data-site] [data-component="contents-menu"] {
   display: none;
   margin-block: 1.5rem 2.5rem;
@@ -180,13 +188,27 @@
       display: none;
     }
 
+    /* 16px, like the icons on the menu button's column. It points to the inline end while closed
+       (right, or left in right-to-left pages) and turns to point down when open. */
     [data-slot="chevron"] {
-      transition: scale 200ms var(--ease-out);
+      width: 16px;
+      height: 16px;
+      rotate: -90deg;
+      transition: rotate 180ms var(--ease-out);
+
+      html[dir="rtl"] & {
+        rotate: 90deg;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
     }
   }
 
-  &[open] summary [data-slot="chevron"] {
-    scale: 1 -1;
+  &[open] summary [data-slot="chevron"],
+  html[dir="rtl"] &[open] summary [data-slot="chevron"] {
+    rotate: 0deg;
   }
 
   summary [data-slot="label"] {
@@ -200,6 +222,8 @@
     inset-inline-end: 0;
     display: flex;
     flex-direction: column;
+    /* Phones: menu-hold.ts sets the height from under the bar to the bottom of the visual viewport
+       when the list opens; this is the fallback. */
     max-height: calc(100dvh - var(--contents-top) - var(--contents-height) - 1rem);
     padding-bottom: 0.75rem;
     overflow-y: auto;
@@ -221,17 +245,38 @@
     display: block;
     background: var(--bg);
 
-    /* One line above the bar and one below, each across the whole screen. The top line sits on the
-       row above the bar: stuck, that row is the top bar's own bottom hairline, which paints over it,
-       so there's only ever one line there and nothing moves when the bar sticks. */
+    /* The row itself spans the screen (its padding puts the label and chevron back on the content
+       edge and the menu column), so its press fill does too. A fill painted past a narrower box
+       (border-image's outset) is clipped to that box on iOS, where the sticky bar is its own layer.
+       At rest the bar has no lines. Pinned (data-stuck, from ContentsMenu), a line fades in above
+       and below it, each across the whole screen. The top line sits on the row above the bar, where
+       the bar above (the top bar's hairline, or the legal tabs' divider) already draws its own and
+       paints over it, so there's only ever one line there. Nothing moves when they show; the bar's
+       background stays a hard cut. */
+    summary {
+      margin-inline: calc(-1 * var(--edge));
+      padding-inline: var(--edge);
+    }
+
     summary::before,
     summary::after {
       content: "";
       position: absolute;
-      inset-inline: calc(-1 * var(--edge));
+      inset-inline: 0;
       height: 1px;
       background: var(--border);
       pointer-events: none;
+      opacity: 0;
+      transition: opacity 150ms ease;
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+
+    &[data-stuck] summary::before,
+    &[data-stuck] summary::after {
+      opacity: 1;
     }
 
     summary::before {
@@ -252,13 +297,14 @@
        edge), like the accordions' plus. */
     @media (max-width: 40rem) {
       summary [data-slot="chevron"] {
-        margin-inline-end: calc(34px - var(--edge) - 6px);
+        margin-inline-end: calc(34px - var(--edge) - 8px);
       }
     }
 
     /* The label and the items start at the page content's edge, at body size; the items are 44px+
-       rows (17px Inter at 1.4 plus 11px above and below). The current item's pipe sits in the page's
-       left margin, 12px before the text; the open list spans the margins for that. */
+       rows (17px Inter at 1.4 plus 11px above and below). The open list spans the screen and so does
+       each row (its padding keeps the label on the content edge), so a row's press fill and the
+       current item's pipe reach the screen's edges. */
     summary {
       font-size: var(--body-size);
     }
@@ -270,22 +316,25 @@
     ul {
       inset-inline-start: calc(-1 * var(--edge));
       inset-inline-end: calc(-1 * var(--edge));
-      padding-inline: var(--edge);
+      padding-inline: 0;
     }
 
     /* Each row of the open list is as tall as the bar (--row-height). */
     a {
       --rail-pad: calc((var(--contents-height) - 1lh) / 2);
-      padding-inline-start: 0;
+      padding-inline: var(--edge);
       font-size: var(--body-size);
 
+      /* The current row's bar is on the screen's edge and as tall as the whole row. */
       &::before {
-        inset-inline-start: -12px;
+        inset-inline-start: 0;
+        top: 0;
+        height: 100%;
       }
     }
 
     li[data-level="3"] a {
-      padding-inline-start: 1rem;
+      padding-inline-start: calc(var(--edge) + 1rem);
     }
   }
 

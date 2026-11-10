@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
-import { CodeMode, Tool } from "../src/index.js"
+import { CodeMode, Tool } from "./lib/index.js"
 import {
   decodeInput,
   inputProperties,

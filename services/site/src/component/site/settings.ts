@@ -173,9 +173,6 @@ export const homeSections = [
   "byos",
   "tools",
   "openSource",
-  "privacy",
-  "faq",
-  "signup",
   "console",
 ] as const
 export type HomeSection = (typeof homeSections)[number]
@@ -497,8 +494,10 @@ export const bannerLabels = ["badge", "plain"] as const
 // a sentence, a dense grid with the count, or a slow marquee.
 export const providerLogoStyles = ["none", "row", "inline", "grid", "marquee"] as const
 // "Bring your own subs": the providers' grid then the plans, your subscriptions beside the plans,
-// or tabs between the two.
-export const subsStyles = ["grid", "split", "tabs"] as const
+// or tabs between the two. A, B and C (byos-options.tsx) explore showing that OpenCode works with
+// nearly every subscription, provider and model: a ruled row per way in, a wall of every provider's
+// mark, or the names set as one run of text.
+export const subsStyles = ["grid", "split", "tabs", "A rows", "B wall", "C names"] as const
 // "Get started": a numbered path, a price ladder, one large sentence, a terminal transcript, or two
 // cells in the tools grid's borders.
 export const getStartedStyles = ["steps", "ladder", "sentence", "terminal", "cards"] as const
@@ -529,9 +528,6 @@ export const ossProofs = ["stats", "section", "off"] as const
 // The open source section as it is, or with a "fork it" block (terminal transcript and what a fork
 // lets you do) and a "Fork on GitHub" button.
 export const ossVariants = ["current", "fork"] as const
-// The home email sign-up (signup.tsx): a sentence whose address is typed in place, a standard field
-// and button, or a terminal prompt.
-export const signupStyles = ["sentence", "input", "terminal"] as const
 // "section" lays the Console out like the other home sections: title, then copy, no dots.
 export const consoleSections = ["section", "panel", "inline", "slim", "split", "corner", "off"] as const
 export const consoleHeights = ["auto", "card", "half", "compact"] as const
@@ -793,9 +789,6 @@ function createSchema() {
     stats: z.enum(statsModes).catch("slot"),
     ossProof: z.enum(ossProofs).catch("stats"),
     ossVariant: z.enum(ossVariants).catch("current"),
-    // The home email sign-up is hidden for now; "on" shows it again.
-    signupSection: z.enum(toggles).catch("off"),
-    signupStyle: z.enum(signupStyles).catch("sentence"),
     avatarAnimation: z.enum(avatarAnimations).catch("same as logos"),
     avatarLink: z.enum(avatarLinks).catch("commits"),
     // Milliseconds between one avatar's reveal and the next, in the diagonal wash.
@@ -821,7 +814,7 @@ function createSchema() {
     ditherOpacity: z.number().min(10).max(100).catch(20),
     ditherCurve: z.number().min(1).max(4).catch(1),
     ditherLine: z.enum(toggles).catch("off"),
-    // The Console section between the FAQ and the footer on the home page.
+    // The Console section above the footer on the home page.
     consoleSection: z.enum(consoleSections).catch("panel"),
     consoleHeight: z.enum(consoleHeights).catch("compact"),
     consoleLabel: z.enum(consoleLabels).catch("left"),
@@ -846,8 +839,8 @@ function createSchema() {
     // A multiplier on the entrance's timing: 2 plays it in half the time.
     footerWordmarkSpeed: z.number().min(0.5).max(2).catch(1),
     footerWordmarkPlay: z.enum(footerWordmarkPlays).catch("drag"),
-    // window.opencode, its DevTools greeting and OpenCode Lite starting when DevTools opens
-    // (lib/console-api.ts), loaded once the page is idle.
+    // window.opencode, its one-line DevTools hint and OpenCode Lite starting when DevTools opens
+    // (lib/console-stub.ts, lib/console-api.ts).
     consoleApi: z.enum(toggles).catch("on"),
     // The light, dark and system switch at the bottom of the footer.
     themeSwitcher: z.enum(toggles).catch("on"),
@@ -1049,8 +1042,6 @@ function createSchema() {
     whatColumns: z.enum(sectionColumns).catch("2 columns"),
     toolsColumns: z.enum(sectionColumns).catch("2 columns"),
     openSourceColumns: z.enum(sectionColumns).catch("2 columns"),
-    privacyColumns: z.enum(sectionColumns).catch("2 columns"),
-    faqColumns: z.enum(sectionColumns).catch("2 columns"),
     consoleColumns: z.enum(sectionColumns).catch("2 columns"),
     // The intro copy (lead or Console headline) beside the body columns above; the section body is
     // as wide as the wider of the two.
@@ -1139,7 +1130,7 @@ const defaults = siteSettingsDefaults
  */
 // Production reads every setting as its default's constant (script/fold-settings.ts, which fails the
 // build on any other read), so its store starts empty and the defaults stay out of the bundle.
-export const [siteSettings, setStore] = createStore<SiteSettings>(
+export const [siteSettings, setStore] = /* @__PURE__ */ createStore<SiteSettings>(
   import.meta.env.DEV ? structuredClone(defaults) : ({} as SiteSettings),
 )
 
@@ -1196,7 +1187,6 @@ if (import.meta.env.DEV && !isServer) {
       heroText,
       stats,
       ossProof,
-      signupStyle,
       avatarLink,
       cornerButton,
       wordmarkNodes,

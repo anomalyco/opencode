@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from "solid-js"
-import { useI18n } from "~/context/i18n"
+import { useI18n } from "~/context/i18n-context"
 import { washStartTime } from "./entrance"
 
 // The wordmark's shapes on its 234 × 42 drawing grid. "inner" paths are the counters.

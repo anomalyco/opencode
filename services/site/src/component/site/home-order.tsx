@@ -27,9 +27,6 @@ const selectors: Record<HomeSection, string> = {
   tools: '[data-section="tools"]',
   // Open source proof as its own section moves with the stats, right after them.
   openSource: ':is([data-section="openSource"], [data-section="openSourceProof"])',
-  privacy: '[data-section="privacy"]',
-  faq: '[data-section="faq"]',
-  signup: '[data-section="signup"]',
   console: '[data-section="console"]',
 }
 
@@ -41,9 +38,6 @@ const labels: Record<HomeSection, string> = {
   byos: "Bring your own subs",
   tools: "Bring your own tools",
   openSource: "Open source",
-  privacy: "Privacy",
-  faq: "FAQ",
-  signup: "Email sign-up",
   console: "Console",
 }
 
@@ -134,6 +128,8 @@ function write(order: readonly string[]) {
 
 /** Keeps the page's section order in step with Settings (call once from the home page). */
 export function useHomeOrder() {
+  // Production keeps no saved order: the server's style element already holds the default's rules.
+  if (!import.meta.env.DEV) return
   onMount(() => {
     createEffect(() => write(draft() ?? siteSettings.homeOrder))
   })

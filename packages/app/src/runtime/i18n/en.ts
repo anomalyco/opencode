@@ -80,6 +80,7 @@ export const dict = {
   "command.file.open": "Open file",
   "command.tab.close": "Close tab",
   "command.tab.reopenClosed": "Reopen closed tab",
+  "command.tab.closeSession": "Close session tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
   "command.input.focus": "Focus input",
@@ -619,6 +620,9 @@ export const dict = {
   "session.panel.bottom": "Bottom panel",
   "session.panel.bottom.hide": "Hide bottom panel",
   "session.error.notFound": "This session cannot be found",
+  "session.reference.open": "Open Session",
+  "session.reference.copyTitle": "Copy Session Title",
+  "session.reference.copyTitle.failed": "Failed to copy session title",
   "session.error.notFound.description": "This tab points to a session that no longer exists on this server.",
   "session.error.notFound.closeTab": "Close Tab",
   "session.error.incompatible": "This server version isn't supported",
@@ -1209,6 +1213,9 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Access files outside the project directory",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Detect repeated tool calls with identical input",
+
+  "session.markRead": "Mark as read",
+  "session.markUnread": "Mark as unread",
 
   "session.delete.failed.title": "Failed to delete session",
   "session.delete.title": "Delete session",

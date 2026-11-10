@@ -66,7 +66,7 @@ Ekstern konfigurasjon lastes først, og fungerer som grunnlaget. Alle andre konf
 
 For eksempel, hvis organisasjonen din tilbyr MCP servere som er deaktivert som standard:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Ekstern konfigurasjon fra .well-known/opencode"
 {
   "mcp": {
     "jira": {

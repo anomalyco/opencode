@@ -1,10 +1,11 @@
-// Splits the translations by where the browser needs them, for the client build (vite.config.ts,
-// i18nSlices). The source files stay as they are (src/i18n/<locale>.ts, src/i18n/content/<locale>.ts);
-// this reads them and the app's import graph and works out, for each locale:
+// Splits the translations by where the browser needs them, for the static pages' script
+// (script/static-client.ts, i18nSlices). The source files stay as they are (src/i18n/<locale>.ts,
+// src/i18n/content/<locale>.ts); this reads them and the app's import graph and works out, for each
+// locale:
 //
 // - the shell slice: the dictionary keys and page copy the code every page loads can show
 //   (entry-client.tsx and app.tsx with their static imports), and what most page routes show;
-// - one slice per lazy boundary, a module the browser loads on demand (each page route, and each
+// - one slice per lazy boundary, a module the browser loads on demand (each island and overlay, any
 //   module only ever loaded with import()): what its static imports can show, minus the shell;
 // - the full file: everything any client code can show, for switching to the language in place.
 //
@@ -117,15 +118,16 @@ const shellRoots = [path.join(src, "entry-client.tsx"), path.join(src, "app.tsx"
 const routes = [...new Bun.Glob("routes/**/*.tsx").scanSync(src)]
   .map((file) => path.join(src, file))
   .filter((file) => /export default/.test(readFileSync(file, "utf8")))
-const client = closure([...shellRoots, ...routes], true)
-// Lazy boundaries: the page routes and every module the client loads with import(), even one that is
-// also imported statically elsewhere (an import() can still be the first to load it). The development
-// loader's imports of the source files, in src/i18n, don't count.
+// The static pages' script (src/client/entry.ts) too, so what its islands and overlays load is a boundary.
+const client = closure([...shellRoots, ...routes, path.join(src, "client/entry.ts")], true)
+// Lazy boundaries: every module the static pages' script loads with import(), even one that is also
+// imported statically elsewhere (an import() can still be the first to load it). The development
+// loader's imports of the source files, in src/i18n, don't count, and nothing loads a page route in
+// the browser in production (the development server keeps the source files whole).
 const boundaries = [
-  ...new Set([
-    ...routes,
-    ...[...client].flatMap((file) => scan(file).dynamic).filter((file) => !file.startsWith(path.join(src, "i18n"))),
-  ]),
+  ...new Set(
+    [...client].flatMap((file) => scan(file).dynamic).filter((file) => !file.startsWith(path.join(src, "i18n"))),
+  ),
 ].toSorted()
 
 // The shell: what the code every page loads can show, plus what most page routes show (the site's

@@ -1,4 +1,5 @@
 import { createSignal, onCleanup } from "solid-js"
+import { addMenuCloser, runMenuClosers } from "./menu-closers"
 
 /**
  * Whether any menu, sheet or pop-up is open on the page, as a signal and as `data-menu-open` on <html>,
@@ -74,20 +75,17 @@ export function watchMenus(ignore: string) {
   }
 }
 
-const closers = new Set<() => void>()
-
 /**
- * Registers a menu's close with closeAllMenus. Call it while a component is created; the close is
- * dropped again when the component is cleaned up.
+ * Registers a menu's close with closeAllMenus (menu-closers.ts). Call it while a component is created;
+ * the close is dropped again when the component is cleaned up.
  */
 export function onCloseMenus(close: () => void) {
-  closers.add(close)
-  onCleanup(() => closers.delete(close))
+  onCleanup(addMenuCloser(close))
 }
 
 /** Closes every registered menu, sheet and pop-up, and the `<details>` menus, with their submenus. */
 export function closeAllMenus() {
-  closers.forEach((close) => close())
+  runMenuClosers()
   document
     .querySelectorAll<HTMLDetailsElement>('details[data-component="contents-menu"][open], details[data-menu][open]')
     .forEach((details) => (details.open = false))

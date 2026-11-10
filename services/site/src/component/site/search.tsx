@@ -3,14 +3,15 @@ import { createSignal, onCleanup, onMount, Show, type Component } from "solid-js
 import { Dynamic } from "solid-js/web"
 import { useI18n } from "~/context/i18n"
 import { detectPlatform, isApple } from "~/lib/platform"
+import { revealHandedOff } from "./search-reveal"
 import { siteSettings } from "./settings"
 
 /**
  * The site search: ⌘K, Ctrl+K or "/" (when not typing) opens it. It has no visible trigger unless
  * Settings › Search hint shows one. This shell only listens for the shortcut; the dialog
- * (search-palette.tsx, with its styles) loads on the first open, on hover or focus of a trigger, or
- * when the page is idle, and the index (search-index.ts) loads on first open. Neither adds to the
- * page's first load.
+ * (search-palette.tsx, with its styles) and the index (search-index.ts) load on intent: ⌘ or Ctrl
+ * pressed (the start of ⌘K), hover or focus of a trigger, or the first open. Neither loads without
+ * one.
  */
 
 export type SiteSearchProps = {
@@ -32,7 +33,11 @@ export const setSearchShown = setShown
 // The polite live region's text (result counts, copy confirmations). It lives in the shell, so the
 // region is in the page before its first announcement.
 const [announcement, setAnnouncement] = createSignal("")
+export const searchAnnouncement = announcement
 export const setSearchAnnouncement = setAnnouncement
+
+/** How the search was opened, for the funnel's `search.opened`. */
+export type SearchVia = "shortcut" | "slash" | "button"
 
 /** ⌘K or Ctrl+K anywhere, or "/" outside text fields. */
 export function isSearchShortcut(event: KeyboardEvent) {
@@ -53,37 +58,37 @@ export function prefetchSearch() {
 
 export function SiteSearch(props: SiteSearchProps) {
   const i18n = useI18n()
-  const [Palette, setPalette] = createSignal<Component<SiteSearchProps & { openOnMount: boolean }>>()
+  const [Palette, setPalette] = createSignal<Component<SiteSearchProps & { openOnMount?: SearchVia }>>()
   const [mounted, setMounted] = createSignal(false)
   const [mac, setMac] = createSignal(true)
-  let openOnMount = false
+  let openOnMount: SearchVia | undefined
 
   // Until the dialog has loaded; once mounted it handles the shortcut and the open event itself.
-  const open = () => {
+  const open = (via: SearchVia) => {
     if (Palette()) return
-    openOnMount = true
+    openOnMount = via
     void prefetchSearch().then((module) => setPalette(() => module.SearchPalette))
   }
 
   onMount(() => {
+    revealHandedOff()
     setMounted(true)
     setMac(isApple(detectPlatform()))
     const shortcut = (event: KeyboardEvent) => {
-      if (Palette() || !isSearchShortcut(event)) return
+      if (Palette()) return
+      // ⌘ or Ctrl on its own starts loading the dialog, so a fast ⌘K, type and Enter finds results.
+      if (event.key === "Meta" || event.key === "Control")
+        return void prefetchSearch().then((module) => !Palette() && setPalette(() => module.SearchPalette))
+      if (!isSearchShortcut(event)) return
       event.preventDefault()
-      open()
+      open(event.key === "/" ? "slash" : "shortcut")
     }
-    // Load the dialog once the page is idle, so a fast ⌘K, type and Enter finds results.
-    const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
-    const task = idle(
-      () => void prefetchSearch().then((module) => !Palette() && setPalette(() => module.SearchPalette)),
-    )
+    const openFromButton = () => open("button")
     document.addEventListener("keydown", shortcut)
-    document.addEventListener(searchOpenEvent, open)
+    document.addEventListener(searchOpenEvent, openFromButton)
     onCleanup(() => {
-      if (window.cancelIdleCallback && typeof task === "number") window.cancelIdleCallback(task)
       document.removeEventListener("keydown", shortcut)
-      document.removeEventListener(searchOpenEvent, open)
+      document.removeEventListener(searchOpenEvent, openFromButton)
     })
   })
 
@@ -103,7 +108,7 @@ export function SiteSearch(props: SiteSearchProps) {
           aria-expanded={shown() ? "true" : "false"}
           onPointerEnter={() => void prefetchSearch()}
           onFocus={() => void prefetchSearch()}
-          onClick={() => (Palette() ? document.dispatchEvent(new Event(searchOpenEvent)) : open())}
+          onClick={() => (Palette() ? document.dispatchEvent(new Event(searchOpenEvent)) : open("button"))}
         >
           {mac() ? "⌘K" : "Ctrl K"}
         </button>

@@ -176,8 +176,6 @@ const preloadRules: [string, string, (s: SiteSettings, el: HTMLElement, d: SiteS
   ],
   ['ul[data-component="tools"]', "data-settling", (s, el, d) => (s.toolTiles !== d.toolTiles ? "" : undefined)],
   ['dl[data-component="stats"]', "data-settling", (s, el, d) => (s.stats !== d.stats ? "" : undefined)],
-  ['section[data-section="signup"]', "data-off", (s) => (s.signupSection === "off" ? "" : undefined)],
-  ['[data-component="signup"]', "data-settling", (s, el, d) => (s.signupStyle !== d.signupStyle ? "" : undefined)],
   [
     "section[data-console-height]",
     "data-settling",
@@ -237,7 +235,7 @@ export const themeScript = (settings: boolean) =>
  * The site root's settings attributes with the default settings, the only values production
  * renders (Settings and Design mode are development tools): `null` for an attribute it leaves off.
  * script/css-variants.ts writes them to css-variants.json, from which the production build drops the
- * CSS for every other value (vite.config.ts); test/css-variants.test.ts keeps the file current.
+ * CSS for every other value (script/css-variants-plugin.ts); test/css-variants.test.ts keeps the file current.
  */
 export function defaultRootAttributes() {
   // The root as production renders it: every settings attribute present, docs variants not fixed.
@@ -250,4 +248,39 @@ export function defaultRootAttributes() {
         return [rule[1], value === undefined ? null : String(value)]
       }),
   )
+}
+
+/**
+ * The settings attributes production renders on other elements, as `[element, attribute, value]`
+ * with the default settings (`null` for one it leaves off). The element is the attribute selectors
+ * with a value in the last compound of the rule's selector (`[data-component="products"]`), so a rule
+ * whose element has none is left out, as is one whose value reads the element or the address. They
+ * go in css-variants.json beside the root's.
+ */
+export function defaultScopedAttributes() {
+  // A rule that reads the element (or the address) depends on more than the settings.
+  const element = new Proxy({} as HTMLElement, {
+    get: () => {
+      throw new Error("reads the element")
+    },
+  })
+  const evaluate = (rule: (typeof preloadRules)[number]) => {
+    try {
+      const value = rule[2](siteSettingsDefaults, element, siteSettingsDefaults)
+      return [value === undefined ? null : String(value)]
+    } catch {
+      return []
+    }
+  }
+  return preloadRules
+    .filter((rule) => rule[0] !== "" && rule[1].startsWith("data-"))
+    .flatMap((rule) =>
+      evaluate(rule).flatMap((value) =>
+        rule[0].split(",").flatMap((selector) => {
+          const last = selector.trim().match(/(?:[^\s>+~[\]()]|\[[^\]]*\]|\([^)]*\))+$/)?.[0] ?? ""
+          const owner = last.match(/\[[\w-]+[~|^$*]?="[^"]*"\]/g)?.join("")
+          return owner ? [[owner, rule[1], value] as const] : []
+        }),
+      ),
+    )
 }

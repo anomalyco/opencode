@@ -2,10 +2,11 @@ import { defineConfig, PluginOption } from "vite"
 import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 import { fromPathname } from "./src/lib/language"
-import variants from "./src/component/site/css-variants.json"
 import { docs } from "./src/docs/vite"
-import { i18nSlices } from "./script/i18n-plugin"
 import { foldSettingsForProduction } from "./script/fold-settings"
+import { cssVariantsForProduction, devOnlyCss } from "./script/css-variants-plugin"
+import { stylesheetGroups } from "./script/stylesheet-groups"
+import { staticClient } from "./script/static-client"
 
 // Nitro's dev server drops any page the app renders with a 404 status and falls through to a bare
 // "Cannot GET". In development only, serve the not-found page's preview (/dev/404, which follows
@@ -39,84 +40,6 @@ function notFoundInDev(): PluginOption {
   }
 }
 
-// Production only: a stylesheet named *.dev.css is for development tools (Settings, Design mode) and
-// builds empty, so its rules never reach a page's render-blocking CSS.
-function devOnlyCss(): PluginOption {
-  return {
-    name: "dev-only-css",
-    apply: "build",
-    enforce: "pre",
-    load: (id) => (/\.dev\.css(\?|$)/.test(id) ? "" : undefined),
-  }
-}
-
-// Production only: Settings and Design mode are development tools, so the site root's settings
-// attributes always carry the default settings' values (src/component/site/css-variants.json). This
-// drops, from the production CSS, each selector that needs another value of one of them, and each
-// rule left with none; the development server keeps every variant for Design mode. Only attributes
-// outside parentheses count (an attribute inside :not(), :is() or :has() keeps its selector).
-function cssVariantsForProduction(): PluginOption {
-  const fixed = variants as Record<string, string | null>
-  const impossible = (selector: string) => {
-    let depth = 0
-    let top = ""
-    for (const char of selector) {
-      if (char === "(") depth++
-      if (depth === 0) top += char
-      if (char === ")") depth--
-    }
-    return [...top.matchAll(/\[(data-[\w-]+)(~?=)["']?([^"'\]]*)["']?\]/g)].some((match) => {
-      if (!(match[1] in fixed)) return false
-      const value = fixed[match[1]]
-      if (value === null) return true
-      return match[2] === "~=" ? !value.split(" ").includes(match[3]) : value !== match[3]
-    })
-  }
-  const split = (selector: string) => {
-    const parts: string[] = []
-    let depth = 0
-    let quote = ""
-    let start = 0
-    for (let i = 0; i < selector.length; i++) {
-      const char = selector[i]
-      if (quote) {
-        if (char === quote) quote = ""
-        continue
-      }
-      if (char === '"' || char === "'") quote = char
-      else if (char === "(" || char === "[") depth++
-      else if (char === ")" || char === "]") depth--
-      else if (char === "," && depth === 0) {
-        parts.push(selector.slice(start, i))
-        start = i + 1
-      }
-    }
-    return [...parts, selector.slice(start)]
-  }
-  return {
-    name: "css-variants-for-production",
-    apply: "build",
-    config: () => ({
-      css: {
-        postcss: {
-          plugins: [
-            {
-              postcssPlugin: "css-variants-for-production",
-              Rule(rule: { selector: string; remove(): void }) {
-                const selectors = split(rule.selector)
-                const kept = selectors.filter((selector) => !impossible(selector))
-                if (kept.length === selectors.length) return
-                if (!kept.length) return rule.remove()
-                rule.selector = kept.join(",")
-              },
-            },
-          ],
-        },
-      },
-    }),
-  }
-}
-
 export default defineConfig({
   plugins: [
     // Before Solid compiles JSX, in both the server and browser builds (script/fold-settings.ts).
@@ -130,12 +53,19 @@ export default defineConfig({
       cloudflare: {
         nodeCompat: true,
       },
+      // The Worker's code in one file. Nitro bundles the server build's chunks again, and Rolldown
+      // could split code the pages share with the server entry into a chunk that imports the entry
+      // back, which workerd refuses to load (5 Nov: _ssr/ssr.mjs and ssr2.mjs, "Export 'ssr_exports'
+      // is not defined"). Every module ships in the one upload anyway, so splitting saves nothing.
+      // Here, not as Nitro's top-level inlineDynamicImports: the preset's rollupConfig overrides that.
+      rollupConfig: { output: { inlineDynamicImports: true } },
     }),
     notFoundInDev(),
     devOnlyCss(),
     cssVariantsForProduction(),
+    stylesheetGroups(),
+    staticClient(),
     docs(),
-    i18nSlices(),
   ],
   server: {
     allowedHosts: true,
@@ -164,17 +94,19 @@ export default defineConfig({
     minify: false,
     // The stylesheets the pages load are minified even though the Worker's code is not.
     cssMinify: true,
+    // Browsers with native light-dark() (and CSS nesting). For older targets the minifier lowers
+    // light-dark() to --lightningcss-light/--lightningcss-dark variables set only where a rule
+    // declares color-scheme, so the site's tokens freeze at the theme of the element that defines
+    // them: a forced-dark card or band (color-scheme: dark) kept the page's light tokens in
+    // production, though the dev server (no lowering) showed it right.
+    cssTarget: ["chrome123", "edge123", "firefox120", "safari17.5"],
   },
   environments: {
-    // The browser bundles are minified; the Worker keeps readable code for its stack traces.
     client: {
       build: {
         // Nitro copies public/ with fs.cp, which keeps the symlinks into packages/ui as links.
         // Letting Vite copy it first writes real files.
         copyPublicDir: true,
-        // Oxc, Vite 8's own minifier. "esbuild" here left the bundles unminified: Vite only adds its
-        // esbuild minifier when the top-level build.minify asks for it, and that stays off for the Worker.
-        minify: "oxc",
       },
     },
   },

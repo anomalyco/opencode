@@ -32,12 +32,14 @@ function useCopy() {
 
 /**
  * One copyable command as a list row: the method, the command, and a neutral Copy button. Clicking
- * the command copies too; the button alone says so (and is the keyboard's way in).
+ * the command copies too; the button alone says so (and is the keyboard's way in). `copies` names
+ * what it installs for the funnel's `ui.copied` (lib/funnel.ts), and the item's id the method.
  */
-function CopyRow(props: { item: Command; method: string; state: ReturnType<typeof useCopy> }) {
+function CopyRow(props: { item: Command; method: string; copies: string; state: ReturnType<typeof useCopy> }) {
   const i18n = useI18n()
   return (
-    <li data-slot="copy-row">
+    // data-funnel makes the row a control for the tracker, as a click on its command copies too.
+    <li data-slot="copy-row" data-funnel-copy={props.copies} data-funnel-method={props.item.id} data-funnel="copy">
       <span data-slot="method">{props.method}</span>
       <span
         data-slot="name"
@@ -71,7 +73,8 @@ function CopyRow(props: { item: Command; method: string; state: ReturnType<typeo
 
 /**
  * Every row action takes the width of the widest one in `root`, whatever the language, so the
- * buttons line up. Measured after web fonts load; fallback font widths differ.
+ * buttons line up. Measured after web fonts load; fallback font widths differ. On a static page,
+ * src/client/islands/download-list.ts does this and CopyRow's copying.
  */
 function alignActions(root: HTMLElement) {
   void document.fonts.ready.then(() => {
@@ -83,20 +86,19 @@ function alignActions(root: HTMLElement) {
 }
 
 /**
- * The download sections (Desktop, Mobile, Terminal, Extensions, Integrations, FAQ), at the bottom of
+ * The download sections (Desktop, Terminal, Mobile, Extensions, FAQ), at the bottom of
  * /product. `heading` draws each section's
  * title (an id for anchors, then the title); `columns` marks the blocks for the /product
- * title-in-the-first-column layout. `apps: false` leaves out the Desktop, Mobile and Terminal
- * sections (/product has those on its cards); `editors: false` and
- * `integrations: false` the editor Extensions and Integrations ones. `firstId` replaces the first section's id, so a
- * page's own anchor (/product#download) lands on it. `beforeFaq` goes right above the FAQ.
+ * title-in-the-first-column layout. `apps: false` leaves out the Desktop, Terminal and Mobile
+ * sections (/product has those on its cards); `editors: false` the editor Extensions one. `firstId`
+ * replaces the first section's id, so a page's own anchor (/product#download) lands on it.
+ * `beforeFaq` goes right above the FAQ.
  */
 export function DownloadSections(props: {
   heading: (id: string, title: string) => JSX.Element
   columns?: boolean
   apps?: boolean
   editors?: boolean
-  integrations?: boolean
   firstId?: string
   beforeFaq?: JSX.Element
 }) {
@@ -109,7 +111,7 @@ export function DownloadSections(props: {
   onMount(() => alignActions(root))
 
   const Section = (section: { id: string; title: string; children: JSX.Element }) => (
-    <section data-component="block" data-columns={props.columns ? "" : undefined}>
+    <section data-component="block" data-section={section.id} data-columns={props.columns ? "" : undefined}>
       {props.heading(section.id, section.title)}
       <div data-slot="body">{section.children}</div>
     </section>
@@ -122,16 +124,16 @@ export function DownloadSections(props: {
           <DesktopList os={null} state={state} />
         </Section>
 
-        <Section id="download-mobile" title={content().mobile.title}>
-          <MobileList />
-        </Section>
-
         <Section id="download-terminal" title={content().terminal.title}>
           <ul data-component="download-list">
             <For each={content().terminal.installs}>
-              {(item) => <CopyRow item={item} method={item.id} state={state} />}
+              {(item) => <CopyRow item={item} method={item.id} copies="terminal" state={state} />}
             </For>
           </ul>
+        </Section>
+
+        <Section id="download-mobile" title={content().mobile.title}>
+          <MobileList />
         </Section>
       </Show>
 
@@ -141,15 +143,6 @@ export function DownloadSections(props: {
           title={content().extensions.title}
         >
           <LinkList items={content().extensions.items} action={content().actions.install} />
-        </Section>
-      </Show>
-
-      <Show when={props.integrations !== false}>
-        <Section
-          id={props.editors === false ? (props.firstId ?? "download-integrations") : "download-integrations"}
-          title={content().integrations.title}
-        >
-          <LinkList items={content().integrations.items} action={content().actions.install} />
         </Section>
       </Show>
 
@@ -198,11 +191,14 @@ function DesktopList(props: { os: OS; build?: DownloadPlatform; state: ReturnTyp
                 : undefined
             }
             data-current={build.id === props.build ? "" : undefined}
+            // For the static pages' script, which marks this computer's build (download-list.ts).
+            data-build={build.id}
           >
             <PlatformIcon platform={build.platform} />
             <span data-slot="name">
               {build.label}
-              {/* Only the one build the browser could pin down (detectDesktopBuild), never two. */}
+              {/* Only the one build the browser could pin down (detectDesktopBuild), never two; on a
+                  static page, src/client/islands/download-list.ts marks it. */}
               <Show when={build.id === props.build}>
                 <span data-slot="detail">{i18n.t("site.download.thisComputer")}</span>
               </Show>
@@ -213,7 +209,7 @@ function DesktopList(props: { os: OS; build?: DownloadPlatform; state: ReturnTyp
           </li>
         )}
       </For>
-      <CopyRow item={content().desktop.install} method="brew" state={props.state} />
+      <CopyRow item={content().desktop.install} method="brew" copies="desktop" state={props.state} />
     </ul>
   )
 }
@@ -303,7 +299,8 @@ function LinkList(props: { items: readonly { label: string; href: string; extern
 /**
  * A product page's "Download" section, below its features: that product's builds, stores or install
  * commands from the same data as /product (lib/download-content.ts), under the page's usual section
- * heading, at #download.
+ * heading, at #download. The Terminal page installs rather than downloads, so its section is
+ * "Install" at #install, and the section keeps #download for links made before the rename.
  */
 export function ProductDownload(props: { slug: PageSlug }) {
   const i18n = useI18n()
@@ -328,8 +325,17 @@ export function ProductDownload(props: { slug: PageSlug }) {
   })
 
   return (
-    <section data-component="block" data-slot="product-download">
-      <SectionHeading id="download" title={i18n.t("download.action.download")} label />
+    <section
+      id={props.slug === "terminal" ? "download" : undefined}
+      data-component="block"
+      data-slot="product-download"
+      data-section="download"
+    >
+      <SectionHeading
+        id={props.slug === "terminal" ? "install" : "download"}
+        title={i18n.t(props.slug === "terminal" ? "download.action.install" : "download.action.download")}
+        label
+      />
       <div data-slot="body" ref={root}>
         <Show when={details().lead}>{(lead) => <p data-slot="lead">{lead()}</p>}</Show>
         <Switch>
@@ -347,7 +353,9 @@ export function ProductDownload(props: { slug: PageSlug }) {
         <Show when={details().commandsLead}>{(lead) => <p data-slot="lead">{lead()}</p>}</Show>
         <Show when={details().commands.length > 0}>
           <ul data-component="download-list">
-            <For each={details().commands}>{(item) => <CopyRow item={item} method={item.id} state={state} />}</For>
+            <For each={details().commands}>
+              {(item) => <CopyRow item={item} method={item.id} copies={props.slug} state={state} />}
+            </For>
           </ul>
         </Show>
         <Show when={details().more}>
@@ -363,20 +371,56 @@ export function ProductDownload(props: { slug: PageSlug }) {
 }
 
 /** The extension pages' Install section, in the product pages' Download style, at #download. */
-export function ExtensionDownload(props: { lead: string; command?: string }) {
+export function ExtensionDownload(props: {
+  lead: string
+  command?: string
+  commands?: { method: string; command: string }[]
+  /** Where the lead's [bracketed] words link to. */
+  store?: string
+}) {
   const i18n = useI18n()
   const state = useCopy()
   let root!: HTMLDivElement
   onMount(() => alignActions(root))
   return (
-    <section data-component="block" data-slot="product-download">
+    <section data-component="block" data-slot="product-download" data-section="download">
       <SectionHeading id="download" title={i18n.t("download.action.install")} label />
       <div data-slot="body" ref={root}>
-        <p data-slot="lead">{props.lead}</p>
-        <Show when={props.command}>
-          {(command) => (
+        <p data-slot="lead">
+          <For each={props.lead.split(/(\[[^\]]+\])/)}>
+            {(part) =>
+              part.startsWith("[") && part.endsWith("]") ? (
+                <Show when={props.store} fallback={part.slice(1, -1)}>
+                  {(href) => (
+                    <a href={href()} target="_blank" rel="noopener">
+                      {part.slice(1, -1)}
+                    </a>
+                  )}
+                </Show>
+              ) : (
+                part
+              )
+            }
+          </For>
+        </p>
+        <Show
+          when={
+            props.commands ??
+            (props.command ? [{ method: props.command.split(" ")[0], command: props.command }] : undefined)
+          }
+        >
+          {(commands) => (
             <ul data-component="download-list">
-              <CopyRow item={{ id: "install", command: command() }} method={command().split(" ")[0]} state={state} />
+              <For each={commands()}>
+                {(item) => (
+                  <CopyRow
+                    item={{ id: item.method, command: item.command }}
+                    method={item.method}
+                    copies="extension"
+                    state={state}
+                  />
+                )}
+              </For>
             </ul>
           )}
         </Show>

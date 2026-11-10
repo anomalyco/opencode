@@ -1,5 +1,5 @@
 import { Link, Meta, Title } from "@solidjs/meta"
-import { createAsync, useSearchParams } from "@solidjs/router"
+import { useSearchParams } from "@solidjs/router"
 import { Show, Suspense } from "solid-js"
 import { Site } from "~/component/site/site"
 import { LocaleLinks } from "~/component/locale-links"
@@ -9,6 +9,7 @@ import { breadcrumbData, JsonLd } from "~/component/structured-data"
 import { changelogPage } from "~/lib/changelog"
 import { areaKeys, changelogQuery } from "~/lib/changelog-notes"
 import { useI18n } from "~/context/i18n"
+import { pageData } from "~/lib/page-data"
 import { useLanguage } from "~/context/language"
 import {
   ChangelogPages,
@@ -18,7 +19,6 @@ import {
   ChangelogUnavailable,
 } from "~/component/site/changelog-entry"
 import { useMarkdown } from "~/component/site/use-markdown"
-import { changelogMarkdown } from "~/lib/changelog-markdown"
 import { PageTitle } from "~/component/site/sticky-title"
 
 export default function Changelog() {
@@ -28,8 +28,10 @@ export default function Changelog() {
   // `?page=2` for older updates and `?area=desktop,terminal` to filter; both are shareable URLs.
   const page = () => Number(params.page ?? 1) || 1
   const filter = () => areaKeys(params.area)
-  const view = createAsync(() => changelogPage(page(), filter()))
-  const markdown = useMarkdown("/changelog", changelogMarkdown, { changelog: view })
+  const view = pageData(() => changelogPage(page(), filter()))
+  const markdown = useMarkdown("/changelog", (context, pages) => pages.changelogMarkdown(context), {
+    changelog: view,
+  })
   const feed = () => language.route(`/changelog.xml${changelogQuery({ filter: filter() })}`)
 
   return (

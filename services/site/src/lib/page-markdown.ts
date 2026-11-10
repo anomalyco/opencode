@@ -7,7 +7,8 @@ import { areaKeys, changelogEntryView, changelogView, type ChangelogView } from 
 import { fontMarkdown } from "~/lib/font-content"
 import { homeMarkdown } from "~/lib/home-markdown"
 import { route, type Locale } from "~/lib/language"
-import { legalHubMarkdown, legalMarkdown } from "~/lib/legal"
+import { legalMarkdown } from "~/lib/legal"
+import { legalHubMarkdown } from "~/lib/legal-documents"
 import { privacyPolicy } from "~/lib/legal/privacy-policy"
 import { termsOfService } from "~/lib/legal/terms-of-service"
 import { markdownDocument, type MarkdownContext } from "~/lib/markdown"
@@ -15,6 +16,7 @@ import { pressMarkdown } from "~/lib/press-content"
 import { extensionMarkdown, productMarkdown, productsMarkdown } from "~/lib/product-markdown"
 import { extensionPages } from "~/component/site/extension-data"
 import { allProductPages, productAreas } from "~/component/site/product-data"
+import { productDetails } from "~/component/site/product-details"
 
 type PageMarkdown = {
   title: string
@@ -35,7 +37,7 @@ type PageMarkdown = {
  * negotiation, llms.txt and llms-full.txt all read this list.
  */
 export const pageMarkdown: Record<string, PageMarkdown> = {
-  "/": { title: "Home", description: "What OpenCode is, its apps, features and FAQ", markdown: homeMarkdown },
+  "/": { title: "Home", description: "What OpenCode is, its apps and features", markdown: homeMarkdown },
   "/product": {
     title: "Product",
     description: "Every OpenCode product and extension, more open source from Anomaly, and every download",
@@ -48,7 +50,7 @@ export const pageMarkdown: Record<string, PageMarkdown> = {
         `/${product.slug}`,
         {
           title: product.name,
-          description: product.body,
+          description: product.slug === "mobile" ? productDetails.mobile.description : product.body,
           markdown: productMarkdown(product.slug),
           changelog: filter
             ? (releases: ChangelogRelease[]) => changelogView(releases, { filter, size: 3 })
@@ -59,7 +61,7 @@ export const pageMarkdown: Record<string, PageMarkdown> = {
   ),
   ...Object.fromEntries(
     extensionPages.map((extension) => [
-      `/extensions/${extension.slug}`,
+      extension.product ? `/product/${extension.slug}` : `/extensions/${extension.slug}`,
       { title: extension.name, description: extension.body, markdown: extensionMarkdown(extension.slug) },
     ]),
   ),

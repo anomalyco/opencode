@@ -88,14 +88,14 @@ export function PairPanel() {
   )
 }
 
-/** A command with a Copy button, in the Terminal install tabs' frame. */
+/** A command with a Copy button, in the Terminal install tabs' frame (on a static page, src/client/islands/download-list.ts copies). */
 function Command(props: { command: string }) {
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
   let timer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => clearTimeout(timer))
   return (
-    <div data-slot="command">
+    <div data-slot="command" data-funnel-copy="pair">
       <code>{props.command}</code>
       <button
         type="button"

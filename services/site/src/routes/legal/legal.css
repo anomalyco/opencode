@@ -1,3 +1,11 @@
+/* The print cover and colophon (legal-print.tsx), whose styles load for print only. */
+@media screen {
+  [data-component="legal-print-cover"],
+  [data-component="legal-print-colophon"] {
+    display: none;
+  }
+}
+
 [data-page="legal-document"] {
   /* "Legal | Privacy Policy" in the logo row, as on the product pages, and it stays there: a sticky
      band in the page colour (the sticky title's bar) covers the window from its top edge to just
@@ -36,7 +44,9 @@
       top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
       z-index: 9;
       height: 2.75rem;
-      margin: calc(var(--topbar-height) + 0.5rem - var(--content-top)) calc(-1 * var(--edge)) 0.5rem;
+      /* 1.75rem below: the title's text starts about 27px under the band's line, as the first
+         heading under a bar does elsewhere. */
+      margin: calc(var(--topbar-height) + 0.5rem - var(--content-top)) calc(-1 * var(--edge)) 1.75rem;
       padding: 0 var(--edge);
 
       /* "Legal" fills the band's height: a 44px target, as on the product pages. */
@@ -506,7 +516,8 @@
       list-style: none;
       display: flex;
       flex-direction: column;
-      gap: 1.5rem;
+      /* Entries group by spacing alone, no dividers: wide gaps between versions, tight ones inside. */
+      gap: 2rem;
 
       li {
         display: grid;
@@ -539,10 +550,20 @@
       }
     }
 
+    /* Phones: one column, so each version is a stack (date, summary, commit, links) 4 to 6px apart,
+       text to text, with 40px between versions. */
     @media (max-width: 40rem) {
-      [data-slot="versions"] li {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 0.375rem;
+      [data-slot="versions"] {
+        gap: 2.5rem;
+
+        li {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0.125rem;
+        }
+
+        [data-slot="detail"] {
+          gap: 0;
+        }
       }
     }
   }
@@ -634,8 +655,11 @@
   }
 }
 
-/* External links keep their arrow on the same line, just after the text. */
-:is([data-page="legal-document"], [data-page="legal-hub"]) a:has(> [data-slot="external"]) {
+/* External links keep their arrow on the same line, just after the text: in the page, not the nav, menus
+   and footer, which lay out their own. */
+:is([data-page="legal-document"], [data-page="legal-hub"])
+  :where([data-component="content"])
+  a:has(> [data-slot="external"]) {
   display: inline-flex;
   align-items: baseline;
   gap: 0.3em;

@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { Permission } from "@opencode/schema/permission"
+import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { Model } from "@opencode/schema/model"
 import { Worktree } from "@opencode/schema/worktree"
 import { Effect, Layer, Option, Predicate, Schema } from "effect"
@@ -691,13 +692,26 @@ function mockHandlers(
           const path = decodeURIComponent(new URL(ctx.request.url, "http://localhost").pathname.slice(13))
           const value = yield* Effect.promise(() => Promise.resolve(config.fileContent?.(path)))
 
-          if (Predicate.isString(value)) return HttpServerResponse.uint8Array(new TextEncoder().encode(value))
+          // Like the server, every read is a sandboxed download; media keeps its type so elements can play it.
+          const options = {
+            contentType: ["image", "audio", "video"].includes(artifactKind(path))
+              ? artifactMime(path)
+              : "application/octet-stream",
+            headers: {
+              "content-disposition": "attachment",
+              "content-security-policy": "default-src 'none'; img-src 'self'; media-src 'self'; sandbox",
+              "x-content-type-options": "nosniff",
+            },
+          }
+
+          if (Predicate.isString(value)) return HttpServerResponse.uint8Array(new TextEncoder().encode(value), options)
 
           // Like the server, stream base64 content as the bytes it encodes.
           return HttpServerResponse.uint8Array(
             value?.encoding === "base64"
               ? Buffer.from(value.content, "base64")
               : new TextEncoder().encode(value?.content ?? ""),
+            options,
           )
         }),
       )
@@ -1249,7 +1263,25 @@ function mockHandlers(
           }),
         sessionRemove: () => noContent,
         sessionShell: () => noContent,
-        sessionView: () => noContent,
+        sessionView: (ctx) =>
+          Effect.sync(() => {
+            const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+
+            if (!session) return
+            const time = currentSession(session, config.directory).time
+
+            session.time = { ...time, viewed: Math.max(time.viewed ?? 0, ctx.payload.idle) }
+            state.emit([
+              {
+                id: `evt_viewed_${session.id}_${ctx.payload.idle}`,
+                created: Date.now(),
+                type: "session.viewed",
+                durable: { aggregateID: session.id, seq: 1, version: 1 },
+                location: { directory: requestDirectory(config, ctx.request) },
+                data: { sessionID: session.id, idle: ctx.payload.idle },
+              },
+            ])
+          }).pipe(Effect.andThen(noContent)),
         sessionForm: (ctx) =>
           Effect.succeed({
             data: resolve(config.forms ?? []).filter(

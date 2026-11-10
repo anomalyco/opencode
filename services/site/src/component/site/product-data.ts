@@ -1,5 +1,5 @@
 // Product copy shared by the carousel, the product pages and the Markdown versions of the pages.
-// Product order rule: copy that lists the products names them as desktop, mobile, terminal, SDK.
+// Product order rule: copy that lists the products names them as desktop, terminal, mobile, SDK.
 
 import { docsUrl } from "~/lib/docs"
 import { isMobile, requestPlatform } from "~/lib/platform"
@@ -26,7 +26,7 @@ export const sdkSnippet = [
   `<span data-p>})</span>`,
 ].join("\n")
 
-export type ProductSlug = "desktop" | "mobile" | "terminal" | "sdk"
+export type ProductSlug = "desktop" | "terminal" | "mobile" | "sdk"
 /** The products after the carousel's four, with pages of their own and cards on /product. */
 export type MoreSlug = "ide" | "mini"
 /** Every product with a page. */
@@ -34,7 +34,7 @@ export type PageSlug = ProductSlug | MoreSlug
 
 /**
  * The products, in the order the carousel shows them. This is the site-wide product order: any copy
- * that lists the products names them as desktop, mobile, terminal, SDK.
+ * that lists the products names them as desktop, terminal, mobile, SDK.
  */
 export const products = [
   {
@@ -44,17 +44,17 @@ export const products = [
     action: "Download",
   },
   {
+    slug: "terminal",
+    name: "Terminal",
+    body: "A fast terminal UI that works in any shell, editor or remote server.",
+    action: "Install",
+  },
+  {
     slug: "mobile",
     name: "Mobile",
     body: "Start, steer and approve sessions from your phone, wherever you are.",
     isNew: true,
     action: "Download",
-  },
-  {
-    slug: "terminal",
-    name: "Terminal",
-    body: "A fast terminal UI that works in any shell, editor or remote server.",
-    action: "Install",
   },
   {
     slug: "sdk",
@@ -158,239 +158,6 @@ export const mobileStores = [
 ] as const
 
 /**
- * The product page below the intro: the showcase clips (the fourth only with Settings › Feature
- * clips count "4"), then six short feature points.
- */
-export const productDetails: Record<
-  PageSlug,
-  {
-    /** The page's `<title>`, 50–60 characters. */
-    title: string
-    /** The meta and share description, 120–160 characters. */
-    description: string
-    /** For the page's structured data. */
-    operatingSystem: string
-    // The longer description under the product page title; the carousel card keeps the short one.
-    intro: string
-    features: { title: string; body: string }[]
-    showcase: { title: string; body: string; clip?: string }[]
-    /** False shows the showcase as text, its clips neither shown nor loaded. */
-    showcaseMedia?: false
-  }
-> = {
-  desktop: {
-    title: "OpenCode | Desktop app for macOS, Windows and Linux",
-    description:
-      "Run several OpenCode agents at once, each in its own tab. Review every change as a diff, comment on any line and preview results in the built-in browser.",
-    operatingSystem: "macOS, Windows, Linux",
-    intro:
-      "Run several agents at once, each session in its own tab. Review every change as a diff, comment on any line, and check the result in the built-in browser. For macOS, Windows and Linux.",
-    features: [
-      { title: "Built-in terminal", body: "Run commands in a terminal tab beside the session." },
-      { title: "SSH servers", body: "Connect to another machine over SSH and work on its projects." },
-      { title: "Extensions", body: "Manage MCP servers, plugins and skills in one menu." },
-      { title: "All your projects", body: "Switch between projects and their sessions in one window." },
-      { title: "WSL", body: "On Windows, run sessions in a WSL 2 distro instead of natively." },
-      { title: "Office files", body: "Open Word, Excel and PowerPoint files beside the session." },
-      { title: "Keyboard shortcuts", body: "Every action has a keyboard shortcut, and you can change any of them." },
-      { title: "Updates itself", body: "New versions download and install from the app." },
-    ],
-    showcase: [
-      {
-        title: "Sessions in tabs",
-        clip: "/product-videos/features/desktop-1",
-        body: "Keep several agents working at once, each session in its own tab.",
-      },
-      {
-        title: "Review and comment",
-        clip: "/product-videos/features/desktop-2",
-        body: "Read each change as a diff, comment on a line and send it back.",
-      },
-      {
-        title: "See it in the browser",
-        clip: "/product-videos/features/desktop-3",
-        body: "The agent's work opens in a browser beside the session as it lands.",
-      },
-      {
-        title: "Pair your phone",
-        clip: "/product-videos/features/desktop-4",
-        body: "Scan a QR code in OpenCode Mobile to steer sessions from your iPhone.",
-      },
-    ],
-  },
-  mobile: {
-    title: "OpenCode | Mobile, your coding sessions on your phone",
-    description:
-      "Start, steer and approve OpenCode sessions from your phone. Talk to the agent, review its changes and allow what it needs, while it runs on your computer.",
-    // Android joins when it is available (androidStatus).
-    operatingSystem: androidSoon ? "iOS" : "iOS, Android",
-    intro:
-      "Start, steer and approve sessions from your phone, wherever you are. Call a session and talk to the agent, review its changes, and allow what it needs, all on OpenCode running on your own computer.",
-    // The page shows only its four clips for now (5 Nov 2026). The grid's points, checked against
-    // the iOS app's What's New entries (anomalyco/opencode-ios), are kept here to bring back:
-    // "Every computer" takes two taps (the drawer title, then the server), and muting leaves
-    // notifications on (it skips Catch Up, the unread dot and the badge), so both need new copy.
-    // { title: "Notify when done", body: "Get a short summary when a session you started finishes." },
-    // { title: "Pair from anywhere", body: "Connect from any network with opencode pair --remote." },
-    // { title: "Every computer", body: "Switch between the computers you've paired in one tap." },
-    // { title: "Siri and Shortcuts", body: "Start a call or a session from Siri or Control Center." },
-    // { title: "Follow along", body: "Watch the timeline update as the agent works." },
-    // { title: "Your computer", body: "Connects to OpenCode running on your own machine." },
-    // { title: "Share sheet", body: "Share anything to a session without opening the app." },
-    // { title: "Mute sessions", body: "Keep a session in your list without getting its notifications." },
-    features: [],
-    showcase: [
-      {
-        title: "Voice",
-        clip: "/product-videos/features/mobile-1",
-        body: "Call a session and say what you need. The agent answers out loud.",
-      },
-      {
-        title: "Approvals",
-        clip: "/product-videos/features/mobile-2",
-        body: "Review the change and allow it from your phone when the agent asks.",
-      },
-      {
-        title: "Sessions",
-        clip: "/product-videos/features/mobile-3",
-        body: "Open any session to see where it is, then pick up where you left off.",
-      },
-      // Steer is true (Steer While It Works, 11 Oct 2026) but has no footage yet; it returns here
-      // with a capture of a follow-up sent mid-run.
-      // {
-      //   title: "Steer",
-      //   body: "Send a follow-up to change direction mid-session.",
-      // },
-      {
-        title: "Results",
-        clip: "/product-videos/features/mobile-4",
-        body: "The call tells you what changed once the work you asked for is done.",
-      },
-    ],
-  },
-  terminal: {
-    title: "OpenCode | Terminal UI for the open source coding agent",
-    description:
-      "A fast terminal UI for OpenCode that works in any shell, editor or remote server. Describe what you want, see each edit as a diff and approve commands.",
-    operatingSystem: "macOS, Linux, Windows",
-    intro:
-      "A fast terminal UI that works in any shell, editor or remote server. Describe what you want in plain words, watch each edit land as a diff, and choose which commands run on their own.",
-    features: [
-      { title: "Any terminal", body: "Works in any shell, in your editor's terminal or on a remote server." },
-      { title: "Diffs in the timeline", body: "See each edit as a diff in the timeline, as the agent makes it." },
-      { title: "Pick up later", body: "Continue the last session with -c, or any with -s." },
-      { title: "One-off runs", body: "opencode run sends one message and prints the reply." },
-      { title: "Agents and commands", body: "Switch agents with shift+tab and open every command with ctrl+p." },
-      { title: "Auto-approve", body: "Run with --auto to allow every action you haven't denied." },
-      { title: "Any server", body: "Connect to an OpenCode server by URL with --server." },
-      { title: "Usage stats", body: "opencode stats shows shareable usage statistics." },
-    ],
-    showcase: [
-      {
-        title: "Ask in plain words",
-        clip: "/product-videos/features/terminal-1",
-        body: "Type what you want, and the agent shows its plan as it works.",
-      },
-      {
-        title: "Approve what runs",
-        clip: "/product-videos/features/terminal-2",
-        body: "Edits show as diffs, and commands wait for your permission.",
-      },
-      {
-        title: "Make it yours",
-        clip: "/product-videos/features/terminal-3",
-        body: "Switch themes in a keystroke, from the default to tokyonight and more.",
-      },
-      {
-        title: "Mini",
-        clip: "/product-videos/features/terminal-4",
-        body: "Run opencode mini and replies print into your own scrollback.",
-      },
-    ],
-  },
-  sdk: {
-    title: "OpenCode | TypeScript SDK for scripts, CI jobs and tools",
-    description:
-      "Drive OpenCode from your own scripts, CI jobs and tools. The typed TypeScript client creates sessions, sends prompts and streams every event as it happens.",
-    operatingSystem: "macOS, Linux, Windows",
-    intro:
-      "Drive OpenCode from your own scripts, CI jobs and tools. The SDK runs OpenCode inside your process, with your config and models, and its typed client creates sessions, sends prompts and streams every event.",
-    features: [
-      { title: "TypeScript client", body: "Typed requests and events, the same values as @opencode/client." },
-      { title: "Sessions from code", body: "Create sessions and send prompts from any script." },
-      { title: "Any model", body: "Uses whichever models your OpenCode setup has." },
-      { title: "npm or bun", body: "Install it with npm i @opencode/sdk or bun add @opencode/sdk." },
-      { title: "In-process host", body: "Runs OpenCode in memory, with no network hop." },
-      { title: "Your plugins", body: "Pass your own plugins in when you create the in-process host." },
-      { title: "Promise or Effect", body: "A Promise API and an Effect API with the same values." },
-      { title: "Cloudflare Workers", body: "Run OpenCode inside a Cloudflare Durable Object on Workers." },
-    ],
-    // Text only: the four points without their clips, so the page loads no video for them.
-    showcaseMedia: false,
-    showcase: [
-      {
-        title: "Fix CI from code",
-        clip: "/product-videos/features/sdk-1",
-        body: "A short script asks OpenCode to fix failing tests, then runs them again.",
-      },
-      {
-        title: "Follow every step",
-        clip: "/product-videos/features/sdk-2",
-        body: "Stream events to see each tool the agent calls, as it happens.",
-      },
-      {
-        title: "Build your own tools",
-        clip: "/product-videos/features/sdk-3",
-        body: "Wire OpenCode into bots, dashboards and workflows with a few lines.",
-      },
-      {
-        title: "In your process",
-        clip: "/product-videos/features/sdk-4",
-        body: "Runs OpenCode inside your process, with your config and models.",
-      },
-    ],
-  },
-  ide: {
-    title: "OpenCode | Editor integrations for VS Code, Cursor and Zed",
-    description:
-      "Use OpenCode inside your editor, with the extension for VS Code, Cursor, Windsurf and VSCodium, and opencode acp for Zed, JetBrains IDEs and other ACP editors.",
-    operatingSystem: "macOS, Windows, Linux",
-    intro:
-      "Use OpenCode inside your editor. In VS Code, Cursor, Windsurf and VSCodium, run opencode in the integrated terminal and the extension installs itself. Zed, JetBrains IDEs and other editors that support the Agent Client Protocol run OpenCode with opencode acp.",
-    features: [
-      { title: "Quick launch", body: "Cmd+Esc or Ctrl+Esc opens OpenCode in a split terminal." },
-      { title: "New session", body: "Cmd+Shift+Esc or Ctrl+Shift+Esc starts another session." },
-      { title: "Context", body: "Shares your current selection or tab with OpenCode." },
-      { title: "File references", body: "Cmd+Option+K or Alt+Ctrl+K inserts @File#L37-42." },
-      { title: "Installs itself", body: "Run opencode in the integrated terminal to add it." },
-      { title: "ACP editors", body: "Zed, JetBrains IDEs, Avante.nvim and CodeCompanion.nvim." },
-      { title: "Open VSX", body: "Also on Open VSX for Cursor, Windsurf and VSCodium." },
-      { title: "Same agent", body: "The OpenCode you run in the terminal, beside your code." },
-    ],
-    showcase: [],
-  },
-  mini: {
-    title: "OpenCode | Mini, a minimal terminal interface for the agent",
-    description:
-      "Mini runs OpenCode in a minimal terminal interface. Replies print into your terminal's own scrollback, and only a prompt and a status line stay below.",
-    operatingSystem: "macOS, Linux, Windows",
-    intro:
-      "A minimal terminal interface for OpenCode. Run opencode mini and replies print straight into your terminal's own scrollback, so you scroll, search and copy them like any other output. Only the prompt and a status line stay at the bottom.",
-    features: [
-      { title: "Your scrollback", body: "Replies become ordinary terminal history." },
-      { title: "One prompt", body: "Agent, model, context and cost on one status line." },
-      { title: "Permissions", body: "Allow edits and commands from the prompt area." },
-      { title: "How much shows", body: "Quiet, default or everything, for thinking and tool output." },
-      { title: "Pick up later", body: "Continue the last session with -c, or any with -s." },
-      { title: "Same OpenCode", body: "The same server, agents and models as the other apps." },
-      { title: "Agents", body: "Switch agents right from the prompt." },
-      { title: "Compact", body: "Shrink a long session with /compact." },
-    ],
-    showcase: [],
-  },
-}
-
-/**
  * The changelog areas (keys in `/changelog?area=`) for each product: its product page lists the
  * newest entries with notes there and links to the changelog with the same filter. Core notes (the
  * shared server and agent) are on the changelog for everyone and would fill every product's list.
@@ -399,8 +166,8 @@ export const productDetails: Record<
  */
 export const productAreas: Partial<Record<PageSlug, string[]>> = {
   desktop: ["desktop"],
-  mobile: ["mobile"],
   terminal: ["terminal"],
+  mobile: ["mobile"],
   sdk: ["sdk"],
 }
 
@@ -410,11 +177,6 @@ export const productAreas: Partial<Record<PageSlug, string[]>> = {
  * request's platform (requestPlatform), so the server and the first render agree.
  */
 export function deviceOrder<T extends { slug: string }>(items: readonly T[]): T[] {
-  const order = [...items]
-  if (!isMobile(requestPlatform())) return order
-  const desktop = order.findIndex((item) => item.slug === "desktop")
-  const mobile = order.findIndex((item) => item.slug === "mobile")
-  if (desktop < 0 || mobile < 0) return order
-  ;[order[desktop], order[mobile]] = [order[mobile], order[desktop]]
-  return order
+  if (!isMobile(requestPlatform())) return [...items]
+  return [...items.filter((item) => item.slug === "mobile"), ...items.filter((item) => item.slug !== "mobile")]
 }

@@ -6,10 +6,6 @@ export const content = {
       text: "Masaüstü eklentileri oluşturun, kurun ve paylaşın.",
       link: "2.2'deki yenilikler",
     },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Claude Code girişinizi OpenCode'da kullanın.",
-      link: "v2.2.3'e bakın",
-    },
     "desktop-terminals-now-survive-restarts": {
       text: "Masaüstü terminalleri artık yeniden başlatmalarda kapanmıyor.",
       link: "v2.2.4'e bakın",
@@ -63,68 +59,34 @@ export const content = {
     desktop: {
       title: "OpenCode | macOS, Windows ve Linux için masaüstü uygulaması",
       description:
-        "Birden fazla OpenCode ajanını aynı anda, her birini kendi sekmesinde çalıştırın. Her değişikliği diff olarak inceleyin, satırlara yorum yapın ve sonucu yerleşik tarayıcıda görün.",
+        "İstediğiniz kadar OpenCode ajanını paralel çalıştırın, her değişikliği yanlarındaki tarayıcıda görün ve her cihazdan devam edin. macOS, Windows ve Linux için.",
       intro:
         "Birden fazla ajanı aynı anda, her oturumu kendi sekmesinde çalıştırın. Her değişikliği diff olarak inceleyin, istediğiniz satıra yorum yapın ve sonucu yerleşik tarayıcıda kontrol edin. macOS, Windows ve Linux için.",
-      features: {
-        "built-in-terminal": {
-          title: "Yerleşik terminal",
-          body: "Komutları oturumun yanındaki bir terminal sekmesinde çalıştırın.",
-        },
-        "ssh-servers": {
-          title: "SSH sunucuları",
-          body: "SSH ile başka bir makineye bağlanın ve oradaki projelerde çalışın.",
-        },
-        extensions: {
-          title: "Eklentiler",
-          body: "MCP sunucularını, eklentileri ve becerileri tek menüden yönetin.",
-        },
-        wsl: {
-          title: "WSL",
-          body: "Windows'ta oturumları yerel yerine bir WSL 2 dağıtımında çalıştırın.",
-        },
-        "office-files": {
-          title: "Office dosyaları",
-          body: "Word, Excel ve PowerPoint dosyalarını oturumun yanında açın.",
-        },
-        "keyboard-shortcuts": {
-          title: "Kısayollar",
-          body: "Her eylemin bir klavye kısayolu var ve hepsini değiştirebilirsiniz.",
-        },
-        "updates-itself": {
-          title: "Kendini günceller",
-          body: "Yeni sürümler uygulamanın içinden iner ve kurulur.",
-        },
-        "all-your-projects": {
-          title: "Tüm projeleriniz",
-          body: "Projeler ve oturumları arasında tek pencerede geçiş yapın.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sekmelerde oturumlar",
-          body: "Birden fazla ajanı aynı anda, her biri kendi sekmesinde çalıştırın.",
-        },
-        "review-and-comment": {
-          title: "İncele ve yorumla",
-          body: "Değişiklikleri diff olarak okuyun, satıra yorum yapıp geri gönderin.",
+        "parallel-agents": {
+          title: "Paralel ajanlar",
+          body: "İstediğiniz kadar ajan başlatın ve hepsinin paralel çalışmasına izin verin. Bitirdikçe aralarında geçiş yapın.",
         },
         "see-it-in-the-browser": {
           title: "Tarayıcıda gör",
-          body: "Ajanın işi geldikçe oturumun yanındaki bir tarayıcıda açılır.",
+          body: "Uygulamanız ajanın yanında bir tarayıcıda açılır, böylece ikiniz de her değişikliği anında görürsünüz.",
         },
-        "pair-your-phone": {
-          title: "Telefonu eşle",
-          body: "Oturumları iPhone'unuzdan yönetmek için OpenCode Mobile'da bir QR kodu okutun.",
+        "on-every-device": {
+          title: "Her cihazda",
+          body: "Tüm cihazlarınızda ajan başlatın ve masaüstü uygulamasından, terminalden ya da telefonunuzdan devam edin.",
+        },
+        "extend-it": {
+          title: "Genişletin",
+          body: "Araçlarınızı ve hizmetlerinizi bağlayın, ajan her şeyle çalışabilsin. Ya da OpenCode'un kendisi için kenar çubuğunda kendi arayüzü olan eklentiler yapmasını sağlayın.",
         },
       },
     },
     mobile: {
       title: "OpenCode | Mobile, kodlama oturumlarınız telefonunuzda",
       description:
-        "OpenCode oturumlarını telefonunuzdan başlatın, yönlendirin ve onaylayın. Ajan bilgisayarınızda çalışırken onunla konuşun, değişikliklerini inceleyin ve ihtiyaç duyduğu izinleri verin.",
+        "OpenCode oturumlarını telefonunuzdan başlatın ve yönetin. Ajan bilgisayarınızda çalışırken onunla konuşun.",
       intro:
-        "Oturumları nerede olursanız olun telefonunuzdan başlatın, yönlendirin ve onaylayın. Bir oturumu arayıp ajanla konuşun, değişikliklerini inceleyin ve ihtiyaç duyduğu izinleri verin. Hepsi kendi bilgisayarınızda çalışan OpenCode üzerinde.",
+        "Nerede olursanız olun oturumları telefonunuzdan başlatın ve yönetin. Bir oturumu arayıp ajanla konuşun ya da bir oturum açıp kaldığınız yerden devam edin, hepsi kendi bilgisayarınızdaki OpenCode üzerinde.",
       features: {
         "notify-when-done": {
           title: "Bitince haber ver",
@@ -163,10 +125,6 @@ export const content = {
         voice: {
           title: "Ses",
           body: "Oturumu arayın, ne istediğinizi söyleyin. Ajan sesli yanıt verir.",
-        },
-        approvals: {
-          title: "Onaylar",
-          body: "Ajan izin istediğinde değişikliği inceleyin ve telefonunuzdan onaylayın.",
         },
         sessions: {
           title: "Oturumlar",
@@ -422,9 +380,9 @@ export const content = {
           title: "Her MCP istemcisi",
           body: "OpenCode, Claude Code, Cursor, Codex, Zed ve çok daha fazlası.",
         },
-        "named-sessions": {
-          title: "Adlı oturumlar",
-          body: "Her oturum, yeniden başlatmalarda da kendi sekmelerini korur.",
+        "all-your-logins": {
+          title: "Tüm oturum açmalarınız",
+          body: "Ajanlar zaten oturum açtığınız siteleri kullanır. Anahtar yok, kurulum yok.",
         },
         allowlists: {
           title: "İzin listeleri",
@@ -432,10 +390,14 @@ export const content = {
         },
       },
       install:
-        "Bunu bir kez çalıştırın. browse MCP sunucusunu seçtiğiniz ajanlara ekler ve eklentiyi Chrome Web Store'dan eşler. Node.js 22.19 ya da daha yenisi gerekir.",
+        "Önce [Chrome uzantısını] yükleyin. Kalan adımlarda size yol gösterir. CLI'yi doğrudan yüklemek için (buna ihtiyacınız olmamalı) bunlardan birini kullanın.",
     },
   },
   apps: {
+    browse: {
+      category: "Ajanlar için tarayıcı kontrolü",
+      body: "Ajanınız gerçek tarayıcınızı, oturumlarınız ve sekmelerinizle kullansın.",
+    },
     hex: {
       category: "Sesle dikte",
       body: "Her uygulama için cihaz üzerinde sesle dikte.",
@@ -476,9 +438,6 @@ export const content = {
       "github-copilot": {
         name: "GitHub Copilot",
       },
-      "claude-code": {
-        name: "Claude Code",
-      },
     },
     plans: {
       "opencode-go": {
@@ -491,7 +450,7 @@ export const content = {
     steps: {
       download: {
         title: "İndir",
-        line: "Masaüstü, mobil ya da terminal.",
+        line: "Masaüstü, terminal ya da mobil.",
       },
       "use-free-models": {
         title: "Ücretsiz modeller",
@@ -508,7 +467,7 @@ export const content = {
   byos: {
     title: "Kendi aboneliğinizi getirin",
     headline: "Zaten sahip olduğunuz abonelikleri kullanın.",
-    line: "ChatGPT Plus ya da Pro, GitHub Copilot veya Claude Code ile giriş yapın. Ya da bir OpenCode aboneliği kullanın.",
+    line: "ChatGPT Plus ya da Pro veya GitHub Copilot ile giriş yapın. Ya da bir OpenCode aboneliği kullanın.",
     yours: {
       label: "Aboneliğiniz",
       items: {
@@ -517,9 +476,6 @@ export const content = {
         },
         "github-copilot": {
           name: "GitHub Copilot",
-        },
-        "claude-code": {
-          name: "Claude Code",
         },
       },
     },
@@ -838,7 +794,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "Masaüstü, mobil ve terminal uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanı. MIT lisanslı, 220.000'den fazla GitHub yıldızı.",
+          body: "Masaüstü, terminal ve mobil uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanı. MIT lisanslı, 220.000'den fazla GitHub yıldızı.",
         },
         sst: {
           name: "SST",
@@ -864,10 +820,11 @@ export const content = {
     },
     about: {
       title: "OpenCode hakkında",
+      body: "OpenCode ve ürünleri için uzun ve kısa sürümlerde, kopyalanmaya hazır tanıtım metinleri.",
       boilerplate: {
-        long: "OpenCode açık kaynaklı bir kodlama ajanıdır. Masaüstü uygulaması, mobil uygulama, terminal arayüzü ve SDK olarak gelir ve Claude, GPT ve Gemini dahil her sağlayıcının modelleriyle çalışır. OpenCode MIT lisanslıdır ve Anomaly tarafından geliştirilir. 220.000'den fazla GitHub yıldızı ve 1.000'den fazla katkıcısı vardır, her ay 22 milyondan fazla geliştirici onu kullanır.",
+        long: "OpenCode açık kaynaklı bir kodlama ajanıdır. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK olarak gelir ve Claude, GPT ve Gemini dahil her sağlayıcının modelleriyle çalışır. OpenCode MIT lisanslıdır ve Anomaly tarafından geliştirilir. 220.000'den fazla GitHub yıldızı ve 1.000'den fazla katkıcısı vardır, her ay 22 milyondan fazla geliştirici onu kullanır.",
         short:
-          "OpenCode, Anomaly'nin masaüstü, mobil ve terminal uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanıdır.",
+          "OpenCode, Anomaly'nin masaüstü, terminal ve mobil uygulamaları ile bir SDK'sı olan açık kaynaklı kodlama ajanıdır.",
       },
       products: {
         "opencode-console": {
@@ -1211,19 +1168,6 @@ export const content = {
         },
         vscodium: {
           label: "VSCodium",
-        },
-      },
-    },
-    integrations: {
-      title: "Entegrasyonlar",
-      items: {
-        github: {
-          label: "GitHub",
-          body: "OpenCode'u GitHub Actions'ta kullanın.",
-        },
-        gitlab: {
-          label: "GitLab",
-          body: "OpenCode'u GitLab CI/CD'de ya da Duo'da kullanın.",
         },
       },
     },

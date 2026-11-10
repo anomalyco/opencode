@@ -20,6 +20,7 @@ import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { isoDay } from "../lib/format"
 import { jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
+import { providerIconId } from "../lib/provider-icon"
 import { dismissChartTooltipOnExit } from "../lib/chart-tooltip"
 import { methodologyItems } from "../lib/methodology"
 import { loadHomePage, type HomePageData } from "../lib/page-data"
@@ -965,7 +966,7 @@ function LeaderboardCard(props: {
   const i18n = useI18n()
   const language = useLanguage()
   const hasProvider = () => isKnownCatalogLab(props.entry.provider, props.catalogLabs)
-  const icon = () => (hasProvider() ? getProviderIconId(props.entry.author) : "synthetic")
+  const icon = () => (hasProvider() ? providerIconId(props.entry.author) : "synthetic")
   return (
     <a
       data-component="leader-card"
@@ -1014,14 +1015,6 @@ function LeaderboardCard(props: {
       </div>
     </a>
   )
-}
-
-function getProviderIconId(author: string) {
-  if (author === "MiniMax") return "minimax"
-  if (author === "Moonshot") return "moonshotai"
-  if (author === "Qwen") return "alibaba"
-  if (author === "Zhipu") return "zhipuai"
-  return author.toLowerCase()
 }
 
 function formatBillions(value: number) {

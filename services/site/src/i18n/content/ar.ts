@@ -21,38 +21,34 @@ export const content = {
     desktop: {
       title: "OpenCode | تطبيق سطح المكتب لأنظمة macOS وWindows وLinux",
       description:
-        "شغّل عدة وكلاء OpenCode معًا، كلٌّ في علامة تبويب خاصة. راجع كل تغيير كفرق، وعلّق على أي سطر، وعاين النتيجة في المتصفح المدمج.",
+        "شغّل عدد وكلاء OpenCode الذي تريده بالتوازي، وشاهد كل تغيير في متصفح بجانبهم، وتابعهم من أي جهاز. لأنظمة macOS وWindows وLinux.",
       intro:
         "شغّل عدة وكلاء معًا، وكل جلسة في علامة تبويب خاصة. راجع كل تغيير كفرق، وعلّق على أي سطر، وتحقق من النتيجة في المتصفح المدمج. متاح لأنظمة macOS وWindows وLinux.",
-      features: {
-        "built-in-terminal": { title: "طرفية مدمجة", body: "شغّل الأوامر في علامة تبويب طرفية بجانب الجلسة." },
-        "ssh-servers": { title: "خوادم SSH", body: "اتصل بجهاز آخر عبر SSH واعمل على مشاريعه." },
-        extensions: { title: "الإضافات", body: "أدِر خوادم MCP والملحقات والمهارات من قائمة واحدة." },
-        wsl: { title: "WSL", body: "على Windows، شغّل الجلسات في توزيعة WSL 2 بدل التشغيل الأصلي." },
-        "office-files": { title: "ملفات Office", body: "افتح ملفات Word وExcel وPowerPoint بجانب الجلسة." },
-        "keyboard-shortcuts": { title: "اختصارات المفاتيح", body: "لكل إجراء اختصار، ويمكنك تغيير أي منها." },
-        "updates-itself": { title: "يحدّث نفسه", body: "تُنزَّل الإصدارات الجديدة وتُثبَّت من داخل التطبيق." },
-        "all-your-projects": { title: "كل مشاريعك", body: "تنقّل بين المشاريع وجلساتها في نافذة واحدة." },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "جلسات في تبويبات",
-          body: "اترك عدة وكلاء يعملون معًا، وكل جلسة في علامة تبويب خاصة.",
+        "parallel-agents": {
+          title: "وكلاء بالتوازي",
+          body: "شغّل عدد الوكلاء الذي تريده ودعهم يعملون جميعًا بالتوازي. تنقّل بينهم كلما أنهى أحدهم عمله.",
         },
-        "review-and-comment": { title: "راجع وعلّق", body: "اقرأ كل تغيير كفرق، وعلّق على سطر، وأعِده إلى الوكيل." },
         "see-it-in-the-browser": {
           title: "شاهده في المتصفح",
-          body: "يُفتح عمل الوكيل في متصفح بجانب الجلسة فور وصوله.",
+          body: "يفتح تطبيقك في متصفح بجانب الوكيل، فتريان معًا كل تغيير لحظة وصوله.",
         },
-        "pair-your-phone": { title: "اربط هاتفك", body: "امسح رمز QR في OpenCode Mobile لتوجّه الجلسات من iPhone." },
+        "on-every-device": {
+          title: "على كل أجهزتك",
+          body: "شغّل الوكلاء على جميع أجهزتك، وتابعهم من تطبيق سطح المكتب أو الطرفية أو هاتفك.",
+        },
+        "extend-it": {
+          title: "وسّعه",
+          body: "اربط أدواتك وخدماتك ليتمكن الوكيل من العمل مع أي شيء. أو دع OpenCode يبني إضافات لنفسه، بواجهتها الخاصة في الشريط الجانبي.",
+        },
       },
     },
     mobile: {
       title: "OpenCode | Mobile، جلسات البرمجة على هاتفك",
       description:
-        "ابدأ جلسات OpenCode ووجّهها ووافق عليها من هاتفك. تحدّث مع الوكيل، وراجع تغييراته، واسمح بما يحتاجه، بينما يعمل على حاسوبك.",
+        "ابدأ جلسات OpenCode وقُدها من هاتفك. تحدّث إلى الوكيل أثناء عمله على حاسوبك.",
       intro:
-        "ابدأ الجلسات ووجّهها ووافق عليها من هاتفك أينما كنت. اتصل بجلسة وتحدّث مع الوكيل، وراجع تغييراته، واسمح بما يحتاجه، وكل ذلك مع OpenCode الذي يعمل على حاسوبك الخاص.",
+        "ابدأ الجلسات وقُدها من هاتفك أينما كنت. اتصل بجلسة وتحدّث إلى الوكيل، أو افتح أي جلسة وتابع من حيث توقفت، كل ذلك في OpenCode على حاسوبك.",
       features: {
         "notify-when-done": { title: "إشعار عند الانتهاء", body: "احصل على ملخص قصير عند انتهاء جلسة بدأتها." },
         "pair-from-anywhere": { title: "اربط من أي مكان", body: "اتصل من أي شبكة عبر opencode pair --remote." },
@@ -65,7 +61,6 @@ export const content = {
       },
       showcase: {
         voice: { title: "الصوت", body: "اتصل بجلسة وقل ما تحتاجه. يجيبك الوكيل بصوت مسموع." },
-        approvals: { title: "الموافقات", body: "راجع التغيير واسمح به من هاتفك عندما يطلب الوكيل." },
         results: { title: "النتائج", body: "تخبرك المكالمة بما تغيّر بعد انتهاء العمل الذي طلبته." },
         sessions: { title: "الجلسات", body: "افتح أي جلسة لترى أين وصلت، ثم أكمل من حيث توقفت." },
         steer: { title: "التوجيه", body: "أرسل رسالة متابعة لتغيير الاتجاه في منتصف الجلسة." },
@@ -196,14 +191,21 @@ export const content = {
         "lend-a-tab": { title: "أعِر علامة تبويب", body: "انقر زر شريط الأدوات لتسليم الوكيل علامة تبويب مفتوحة." },
         "record-and-capture": { title: "تسجيل والتقاط", body: "لقطات شاشة وتسجيلات شاشة وحركة الشبكة بصيغة HAR." },
         "any-mcp-client": { title: "أي عميل MCP", body: "OpenCode وClaude Code وCursor وCodex وZed وغيرها الكثير." },
-        "named-sessions": { title: "جلسات مسمّاة", body: "تحتفظ كل جلسة بعلامات تبويبها حتى بعد إعادة التشغيل." },
+        "all-your-logins": {
+          title: "كل تسجيلات دخولك",
+          body: "يستخدم الوكلاء المواقع التي سجّلت الدخول إليها بالفعل. بلا مفاتيح ولا إعداد.",
+        },
         allowlists: { title: "قوائم السماح", body: "اقصر علامات تبويب الجلسة على المواقع التي تحددها." },
       },
       install:
-        "شغّل هذا مرة واحدة. يضيف خادم browse MCP إلى الوكلاء الذين تختارهم ويربط الإضافة من Chrome Web Store. يتطلب Node.js 22.19 أو أحدث.",
+        "ثبّت [إضافة Chrome] أولًا، وستُرشدك خلال بقية الخطوات. لتثبيت CLI مباشرة (لن تحتاج إلى ذلك عادةً)، استخدم أيًّا من هذه الأوامر.",
     },
   },
   apps: {
+    browse: {
+      category: "التحكم في المتصفح للوكلاء",
+      body: "دع وكيلك يستخدم متصفحك الحقيقي، مع تسجيلات دخولك وعلامات التبويب.",
+    },
     opentunnel: { category: "أنفاق محلية", body: "عناوين HTTPS عامة للتطبيقات المحلية." },
     opentui: { category: "مكتبة", body: "مكتبة لواجهات المستخدم في الطرفية." },
     hex: { category: "إملاء صوتي", body: "إملاء صوتي على الجهاز لأي تطبيق." },
@@ -220,7 +222,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "نزّل", line: "Desktop أو Mobile أو Terminal." },
+      download: { title: "نزّل", line: "Desktop أو Terminal أو Mobile." },
       "use-free-models": {
         title: "نماذج مجانية",
         line: "يأتي OpenCode مع مجموعة من النماذج المجانية. لا حاجة إلى حساب.",
@@ -235,7 +237,7 @@ export const content = {
   byos: {
     title: "اشتراكك الخاص",
     headline: "استخدم الاشتراكات التي لديك بالفعل.",
-    line: "سجّل الدخول عبر ChatGPT Plus أو Pro، أو GitHub Copilot، أو Claude Code. أو استخدم اشتراك OpenCode.",
+    line: "سجّل الدخول عبر ChatGPT Plus أو Pro، أو GitHub Copilot. أو استخدم اشتراك OpenCode.",
     yours: { label: "اشتراكك", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["اشتراك OpenCode", "OpenCode Go"],
     ours: { label: "خطط OpenCode" },
@@ -400,7 +402,7 @@ export const content = {
       learnMore: "لمعرفة المزيد، زُر [anoma.ly](site).",
       projects: {
         opencode: {
-          body: "وكيل البرمجة مفتوح المصدر، مع تطبيقات لسطح المكتب والهاتف والطرفية، وSDK. مرخّص بـ MIT، وأكثر من 220,000 نجمة على GitHub.",
+          body: "وكيل البرمجة مفتوح المصدر، مع تطبيقات لسطح المكتب والطرفية والهاتف، وSDK. مرخّص بـ MIT، وأكثر من 220,000 نجمة على GitHub.",
         },
         sst: {
           body: "إطار عمل لبناء تطبيقات متكاملة على بنيتك التحتية الخاصة. مرخّص بـ MIT، ومفتوح منذ 2020، وأكثر من 26,000 نجمة على GitHub.",
@@ -422,9 +424,10 @@ export const content = {
     },
     about: {
       title: "عن OpenCode",
+      body: "أوصاف OpenCode ومنتجاته بنسختين طويلة وقصيرة، جاهزة للنسخ.",
       boilerplate: {
-        long: "OpenCode وكيل برمجة مفتوح المصدر. يتوفر كتطبيق لسطح المكتب وتطبيق للهاتف وواجهة طرفية وSDK، ويعمل مع نماذج من أي مزوّد، منها Claude وGPT وGemini. OpenCode مرخّص بـ MIT ومن صنع Anomaly. لديه أكثر من 220,000 نجمة على GitHub وأكثر من 1,000 مساهم، ويستخدمه أكثر من 22 مليون مطوّر كل شهر.",
-        short: "OpenCode وكيل برمجة مفتوح المصدر من Anomaly، مع تطبيقات لسطح المكتب والهاتف والطرفية، وSDK.",
+        long: "OpenCode وكيل برمجة مفتوح المصدر. يتوفر كتطبيق لسطح المكتب وواجهة طرفية وتطبيق للهاتف وSDK، ويعمل مع نماذج من أي مزوّد، منها Claude وGPT وGemini. OpenCode مرخّص بـ MIT ومن صنع Anomaly. لديه أكثر من 220,000 نجمة على GitHub وأكثر من 1,000 مساهم، ويستخدمه أكثر من 22 مليون مطوّر كل شهر.",
+        short: "OpenCode وكيل برمجة مفتوح المصدر من Anomaly، مع تطبيقات لسطح المكتب والطرفية والهاتف، وSDK.",
       },
       products: {
         "opencode-console": {
@@ -607,13 +610,6 @@ export const content = {
         vscodium: { label: "VSCodium" },
       },
     },
-    integrations: {
-      title: "التكاملات",
-      items: {
-        github: { body: "استخدم OpenCode في GitHub Actions." },
-        gitlab: { label: "GitLab", body: "استخدم OpenCode في GitLab CI/CD أو Duo." },
-      },
-    },
   },
   productDownloads: {
     terminal: { commands: { curl: { name: "سكربت" } } },
@@ -662,10 +658,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "أنشئ ملحقات Desktop وثبّتها وشاركها.",
       link: "اكتشف جديد 2.2",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "سجّل الدخول إلى OpenCode بحساب Claude Code.",
-      link: "شاهد v2.2.3",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "طرفيات Desktop تبقى الآن بعد إعادة التشغيل.",

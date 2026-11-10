@@ -1,5 +1,5 @@
-/* The quiet product lists (icon, name, description and an Install button): Extensions on /product,
-   and More from Anomaly there and on every product and extension page (product-list.tsx). */
+/* The quiet product lists (icon, name, description and an Install button): More products on
+   /product, and More from Anomaly on every product and extension page (product-list.tsx). */
 [data-site] {
   /* The one space between items, in every list (Extensions, Integrations, More from Anomaly). */
   --product-list-gap: 2.25rem;
@@ -95,6 +95,62 @@
       min-width: 6.5rem;
       justify-content: center;
       margin-inline-start: var(--gutter);
+    }
+
+    /* From 40rem: the Press list's row model (doc-list.css). The row's content stays on the
+       column's edge with its padding outside it, and the whole row is the link (the button's cover
+       spans it): hover, press or keyboard focus fills it in the rows' grey and shows the bar at its
+       start edge, both bleeding past the edge. The gap keeps the items the same distance apart. */
+    @media (min-width: 40rem) {
+      row-gap: calc(var(--product-list-gap) - 2 * var(--doc-row-pad));
+
+      li {
+        padding: var(--doc-row-pad);
+        margin-inline: calc(-1 * var(--doc-row-pad));
+        transition: background-color 150ms ease;
+
+        &::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          inset-inline-start: 0;
+          width: 2px;
+          background: var(--doc-row-bar);
+          opacity: 0;
+          transition: opacity 150ms ease;
+        }
+
+        &:has([data-slot="get"]:is(:active, :focus-visible)) {
+          background: var(--doc-row-fill);
+
+          &::after {
+            opacity: 1;
+          }
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            background: var(--doc-row-fill);
+
+            &::after {
+              opacity: 1;
+            }
+          }
+        }
+      }
+
+      /* No press scale: a transform would make the button the box its cover is placed in, and a
+         click on the row would end outside it. */
+      [data-slot="get"] {
+        transform: none !important;
+      }
+
+      [data-slot="get"]::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+      }
     }
 
     /* The nav's corner arrow after an external item's name, as in the phone menu: 6px after the
