@@ -443,7 +443,8 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
             .focused_colors(theme.text.formfield.base, theme.background.formfield.focused)
             .cursor_color(theme.text.base)
     });
-    let scroll = ScrollBox::new(app).scrollbars(false);
+    // Headers and option rows are a plain column, so a move lays out only the rows it restyles.
+    let scroll = ScrollBox::new(app).scrollbars(false).layout_mode(LayoutMode::List);
     let body =
         View::new(app).margin_edge(Edge::Left, -(DIALOG_INSET as i32)).margin_edge(Edge::Right, -(DIALOG_INSET as i32));
     let footer_slot = View::new(app);
