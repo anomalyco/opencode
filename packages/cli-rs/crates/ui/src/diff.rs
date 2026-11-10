@@ -1,6 +1,9 @@
 //! Diff wrapper (U.4a): a patch as the Edit and apply-patch tools show it, a port of `PatchDiff`
 //! (`packages/tui/src/component/patch-diff.tsx`) on opentui-rust's `Diff`. Each hunk is its own diff, and every
-//! hunk after the first gets a header row. The virtual chunks TS uses for patches over 3,000 lines are not ported.
+//! hunk after the first gets a header row. An added file over 3,000 lines goes in chunks that mount only near the
+//! view ([`Chunked`]), as TS `VirtualAddedPatch` does where it has the scroll box (the diff viewer).
+
+use std::cell::RefCell;
 
 use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
@@ -110,13 +113,152 @@ pub fn view(
     wrap: WrapMode,
     gutter_padding: u32,
 ) -> View {
-    let look = Look {
+    view_with(app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding)
+}
+
+fn look(theme: &Theme) -> Look {
+    Look {
         colors: colors(theme),
         text: theme.text.base,
         hunk_header: theme.diff.text.hunk_header,
         hunk_header_bg: theme.diff.background.context,
-    };
-    view_with(app, &look, syntax, patch, view, filetype, wrap, gutter_padding)
+    }
+}
+
+/// Added files longer than this go in chunks (`VIRTUAL_MIN_LINES`).
+const CHUNKED_MIN_LINES: usize = 3000;
+/// The lines of one chunk (`VIRTUAL_CHUNK_LINES`).
+const CHUNK_LINES: usize = 128;
+
+/// One chunk of an added file: a patch of its own, `rows` lines tall.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedChunk {
+    pub patch: String,
+    pub rows: usize,
+}
+
+/// `splitAddedPatch`: a patch that only adds one whole file, in chunks of `size` lines, each with the file headers
+/// and its own `@@` line. `None` for any other patch.
+pub fn split_added(patch: &str, size: usize) -> Option<Vec<AddedChunk>> {
+    let header = patch.split_inclusive('\n').scan(0, |offset, line| {
+        let start = *offset;
+        *offset += line.len();
+        Some((start, line))
+    });
+    let (start, line) = header.into_iter().find(|(_, line)| line.starts_with("@@ -0,0 +1,"))?;
+    let count: usize = line["@@ -0,0 +1,".len()..].split_once(" @@")?.0.parse().ok()?;
+    let body = &patch[start + line.len()..];
+    let mut lines: Vec<&str> = body.strip_suffix('\n').unwrap_or(body).split('\n').collect();
+    let marker = lines.last().is_some_and(|line| line.starts_with("\\ No newline at end of file")).then(|| lines.pop());
+    if lines.len() != count || lines.iter().any(|line| !line.starts_with('+')) {
+        return None;
+    }
+    let prefix = &patch[..start];
+    let chunks = lines.chunks(size).enumerate().map(|(index, slice)| {
+        let first = index * size;
+        let end = match marker.flatten() {
+            Some(marker) if first + size >= count => format!("\n{marker}"),
+            _ => String::new(),
+        };
+        AddedChunk {
+            patch: format!("{prefix}@@ -0,0 +{},{} @@\n{}{end}", first + 1, slice.len(), slice.join("\n")),
+            rows: slice.len(),
+        }
+    });
+    Some(chunks.collect())
+}
+
+/// `VirtualAddedPatch`: an added file over 3,000 lines in chunks of 128 rows, unwrapped so each chunk is exactly its
+/// rows tall. Only the chunks [`Chunked::show`] puts in view are mounted; the others are blank rows of their height.
+/// Each chunk is highlighted on its own (deviation `H06-chunked-diff-highlights`).
+pub struct Chunked {
+    root: View,
+    /// Each chunk's slot and patch, and its diff while mounted.
+    chunks: Vec<(View, String)>,
+    mounted: RefCell<Vec<Option<Diff>>>,
+    make: Box<dyn Fn(&str) -> Diff>,
+}
+
+impl Chunked {
+    /// The chunks of `patch` when it adds one file of more than 3,000 lines, drawn as [`view`] draws a patch.
+    pub fn new(
+        app: &App,
+        theme: &Theme,
+        syntax: &SyntaxTheme,
+        patch: &str,
+        filetype: Option<&str>,
+        gutter_padding: u32,
+    ) -> Option<Self> {
+        let chunks = split_added(patch, CHUNK_LINES)?;
+        let lines: usize = chunks.iter().map(|chunk| chunk.rows).sum();
+        if lines <= CHUNKED_MIN_LINES {
+            return None;
+        }
+        crate::grammars::register();
+        let gutter = DiffGutter { padding_left: 1 + gutter_padding, min_digits: Some(lines.to_string().len() as u32) };
+        let root = View::new(app).width(Length::Percent(100.0));
+        let chunks: Vec<(View, String)> = chunks
+            .into_iter()
+            .map(|chunk| {
+                let slot = View::new(app).height(chunk.rows as u32).shrink(0.0);
+                root.add(&slot);
+                (slot, chunk.patch)
+            })
+            .collect();
+        let (app, look, syntax, filetype) = (app.clone(), look(theme), syntax.clone(), filetype.map(str::to_owned));
+        let make = Box::new(move |patch: &str| {
+            let diff = Diff::new(&app)
+                .view(DiffView::Unified)
+                .filetype(filetype.as_deref())
+                .syntax_theme(syntax.clone())
+                .wrap(WrapMode::None)
+                .colors(look.colors)
+                .gutter(gutter)
+                .set_diff(patch);
+            let (left, right) = diff.code_views();
+            for code in [left, right] {
+                code.fg(look.text).focusable(false);
+            }
+            diff
+        });
+        let chunked = Self { root, mounted: RefCell::new(vec![None; chunks.len()]), chunks, make };
+        // Until the first `show`, the first chunks, as TS's first frame has them.
+        chunked.show(0, 0);
+        Some(chunked)
+    }
+
+    pub fn root(&self) -> &View {
+        &self.root
+    }
+
+    /// Mounts the chunks that rows `top..top + height` of the file overlap, and one on each side, and unmounts the
+    /// others.
+    pub fn show(&self, top: i64, height: i64) {
+        let size = CHUNK_LINES as i64;
+        let (first, last) = (top.div_euclid(size) - 1, (top + height).div_euclid(size) + 1);
+        let mut mounted = self.mounted.borrow_mut();
+        for (index, ((slot, patch), diff)) in self.chunks.iter().zip(mounted.iter_mut()).enumerate() {
+            let near = (first..=last).contains(&(index as i64));
+            match (near, diff.is_some()) {
+                (true, false) => {
+                    let made = (self.make)(patch);
+                    slot.add(&made);
+                    *diff = Some(made);
+                }
+                (false, true) => {
+                    slot.clear();
+                    *diff = None;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// The patch lines of the mounted chunks.
+    pub fn mounted_lines(&self) -> usize {
+        let mounted = self.mounted.borrow();
+        mounted.iter().flatten().map(|diff| diff.diff().lines().count()).sum()
+    }
 }
 
 /// [`view`] in the colors of `look`, for clients with their own theme roles (mini).

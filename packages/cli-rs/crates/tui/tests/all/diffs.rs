@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 
 const DIRECTORY: &str = "/project";
 
-fn routes() -> Vec<MemoryRoute> {
+fn routes(diff: Value) -> Vec<MemoryRoute> {
     let location =
         json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
@@ -26,10 +26,6 @@ fn routes() -> Vec<MemoryRoute> {
         "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
         "time": { "created": 1, "updated": 1 },
         "location": { "directory": DIRECTORY },
-    });
-    let diff = json!({
-        "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1,
-        "status": "modified",
     });
     vec![
         MemoryRoute::json("GET", "/api/location", 200, &location),
@@ -55,7 +51,15 @@ struct Diffs {
 support::deref_harness!(Diffs);
 
 fn mount(route: Route) -> Diffs {
-    let memory = Memory::new(routes());
+    let diff = json!({
+        "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1,
+        "status": "modified",
+    });
+    mount_with(route, diff, 140, 30)
+}
+
+fn mount_with(route: Route, diff: Value, width: u16, height: u16) -> Diffs {
+    let memory = Memory::new(routes(diff));
     let config = json!({ "animations": false, "session": { "sidebar": "hide" }, "diffs": { "source": "turn" } });
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
@@ -63,7 +67,7 @@ fn mount(route: Route) -> Diffs {
         events: true,
         ..support::deps(Arc::new(memory.clone()))
     };
-    Diffs { harness: support::mount(140, 30, deps), memory, turns: Cell::new(0) }
+    Diffs { harness: support::mount(width, height, deps), memory, turns: Cell::new(0) }
 }
 
 impl Diffs {
@@ -183,4 +187,49 @@ fn a_docked_panel_does_not_take_the_plugin_manager_search() {
     h.wait_for("src/main.rs");
     h.app.type_text("zzqq");
     h.wait_for("No results found");
+}
+
+// Expected (r2 review, bigboi-ui-6): TS `diff-viewer.test.tsx` "virtualizes a large added file at %i columns without
+// losing its end": the viewer shows the start of a 7,502-line added file, then its end, also after a resize.
+#[test]
+fn a_large_added_file_shows_its_start_and_end() {
+    for width in [80, 160] {
+        let patch = large_added_patch();
+        let diff =
+            json!({ "file": "snapshot.json", "patch": patch, "additions": 7502, "deletions": 0, "status": "added" });
+        let h = mount_with(Route::Home, diff, width, 24);
+        h.wait_for("/project");
+        h.tui.keymap.dispatch("diff.open", None);
+        h.wait_for("row-0000");
+        h.tui.keymap.dispatch("diff.last", None);
+        h.wait_for("row-7499");
+        h.tui.keymap.dispatch("diff.first", None);
+        h.wait_for("row-0000");
+        h.app.resize(if width == 80 { 160 } else { 80 }, 20);
+        // The viewer draws again at the new width first (TS awaits a flush).
+        h.app.render();
+        h.tui.keymap.dispatch("diff.last", None);
+        h.wait_for("row-7499");
+    }
+}
+
+/// The added JSON file of TS `diff-viewer.test.tsx`: 7,502 lines, one of them very long.
+fn large_added_patch() -> String {
+    let rows = (0..7500).map(|index| {
+        let repeat = if index == 777 {
+            2000
+        } else if index % 7 == 0 {
+            24
+        } else {
+            1
+        };
+        let comma = if index == 7499 { "" } else { "," };
+        format!("+  \"row-{index:04}\": \"{}\"{comma}", "value".repeat(repeat))
+    });
+    let lines: Vec<String> = std::iter::once("+{".to_owned()).chain(rows).chain(["+}".to_owned()]).collect();
+    format!(
+        "diff --git a/snapshot.json b/snapshot.json\nnew file mode 100644\n--- /dev/null\n+++ b/snapshot.json\n@@ -0,0 +1,{} @@\n{}",
+        lines.len(),
+        lines.join("\n")
+    )
 }
