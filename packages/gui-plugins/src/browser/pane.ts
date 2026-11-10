@@ -998,6 +998,8 @@ export function createBrowserPane(input: {
 
         return popup.contents
       },
+      // A popup can only be adopted by a live page of an attached binding; deny it while reconnecting or locked.
+      canOpenPopup: () => current() && !!handles.get(owner.binding),
     })
 
     raisePill(win.id)
