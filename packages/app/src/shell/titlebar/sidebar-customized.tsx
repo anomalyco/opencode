@@ -94,10 +94,9 @@ export function SidebarCustomized(props: {
   })
 
   // Filters narrow the list for this window only; they reset on reload.
-  const [local, setLocal] = createStore<{ filters: SidebarFilters; limits: Record<string, number>; open: boolean }>({
+  const [local, setLocal] = createStore<{ filters: SidebarFilters; limits: Record<string, number> }>({
     filters: { status: [], server: [], project: [] },
     limits: {},
-    open: true,
   })
 
   const connected = createMemo(() =>
@@ -587,21 +586,9 @@ export function SidebarCustomized(props: {
   return (
     <div class="flex min-h-0 flex-1 flex-col [app-region:no-drag]">
       <div class="flex h-7 shrink-0 items-center gap-1.5 ps-2 pe-1">
-        <button
-          type="button"
-          class="flex min-w-0 items-center gap-1.5 text-[13px] leading-[var(--line-height-compact)] font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none"
-          aria-expanded={local.open}
-          onClick={() => setLocal("open", (value) => !value)}
-        >
-          <span class="truncate">{language.t("sidebar.view.sessions")}</span>
-          <Icon
-            name="fill-triangle-down"
-            size="small"
-            class="shrink-0 text-v2-icon-icon-muted transition-transform"
-            classList={{ "-rotate-90 rtl:rotate-90": !local.open }}
-          />
-        </button>
-        <div class="flex-1" />
+        <span class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-compact)] font-medium text-v2-text-text-muted">
+          {language.t("sidebar.view.sessions")}
+        </span>
         <SidebarViewMenu
           state={state()}
           servers={serverOptions()}
@@ -622,7 +609,7 @@ export function SidebarCustomized(props: {
           onClick={props.onNewSession}
         />
       </div>
-      <div class="flex min-h-0 flex-1 flex-col" classList={{ hidden: !local.open }}>
+      <div class="flex min-h-0 flex-1 flex-col">
         {props.children({ sections: sections(), tabFooter, tabLabel })}
         <Show when={filterCount() > 0 && !visibleRows().some((row) => !row.active)}>
           <div class="px-2 py-2 text-12-regular text-v2-text-text-faint">
