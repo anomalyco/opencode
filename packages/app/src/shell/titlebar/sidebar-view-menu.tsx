@@ -46,7 +46,7 @@ export function SidebarViewMenu(props: {
     setMenu("sub", (current) => (open ? key : current === key ? undefined : current))
 
   return (
-    <Menu gutter={4} modal={false} placement="bottom-end" onOpenChange={(open) => !open && setMenu("sub", undefined)}>
+    <Menu gutter={4} modal={false} placement="bottom-start" onOpenChange={(open) => !open && setMenu("sub", undefined)}>
       <Menu.Trigger
         as={IconButton}
         variant="ghost-muted"
