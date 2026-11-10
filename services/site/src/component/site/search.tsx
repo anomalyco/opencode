@@ -3,6 +3,7 @@ import { createSignal, onCleanup, onMount, Show, type Component } from "solid-js
 import { Dynamic } from "solid-js/web"
 import { useI18n } from "~/context/i18n"
 import { detectPlatform, isApple } from "~/lib/platform"
+import { isSearchShortcut } from "./search-key"
 import { revealHandedOff } from "./search-reveal"
 import { siteSettings } from "./settings"
 
@@ -38,15 +39,6 @@ export const setSearchAnnouncement = setAnnouncement
 
 /** How the search was opened, for the funnel's `search.opened`. */
 export type SearchVia = "shortcut" | "slash" | "button"
-
-/** ⌘K or Ctrl+K anywhere, or "/" outside text fields. */
-export function isSearchShortcut(event: KeyboardEvent) {
-  if (event.defaultPrevented || event.altKey || event.repeat) return false
-  const target = event.target as HTMLElement
-  if (target.closest?.("[contenteditable]")) return false
-  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "k") return true
-  return event.key === "/" && !event.metaKey && !event.ctrlKey && !target.closest?.("input, textarea, select")
-}
 
 let palette: Promise<typeof import("./search-palette")> | undefined
 /** Starts loading the dialog and the index, for a trigger's hover or focus. */

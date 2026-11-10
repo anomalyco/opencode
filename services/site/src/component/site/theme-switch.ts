@@ -7,10 +7,32 @@ export const themes = ["system", "light", "dark"] as const
 export type Theme = (typeof themes)[number]
 
 /**
+ * Runs the switch: shows the theme the page starts in, and a click on the switch shows and saves the
+ * next one. `label` names the switch for the theme it shows and the one it goes to; `bar`, while it
+ * gives a colour, replaces the browser bar's. Returns `show`, which shows a theme (by default the
+ * current one) without saving it.
+ */
+export function startThemeSwitch(
+  site: HTMLElement,
+  label: (theme: Theme, next: Theme) => string,
+  bar?: () => string | undefined,
+) {
+  const show = (theme = (site.dataset.theme as Theme | undefined) ?? "system") => showTheme(site, theme, label, bar?.())
+  show()
+  document.addEventListener("click", (event) => {
+    if (!(event.target as Element).closest?.('[data-component="theme-toggle"] [data-slot="cycle"]')) return
+    const next = themes[(themes.indexOf(site.dataset.theme as Theme) + 1) % 3]
+    localStorage.setItem("opencode-theme", next)
+    show(next)
+  })
+  return show
+}
+
+/**
  * Shows `theme` on the site root and the switch (its label, from `label`, and its icon), and colours
  * the browser bar and form controls for it. `bar` replaces the bar's colour while it is set.
  */
-export function showTheme(site: HTMLElement, theme: Theme, label: (theme: Theme, next: Theme) => string, bar?: string) {
+function showTheme(site: HTMLElement, theme: Theme, label: (theme: Theme, next: Theme) => string, bar?: string) {
   site.dataset.theme = theme
   const next = themes[(themes.indexOf(theme) + 1) % 3]
   document.querySelectorAll('[data-component="theme-toggle"] [data-slot="cycle"]').forEach((cycle) => {

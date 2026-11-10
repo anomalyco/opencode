@@ -7,13 +7,14 @@
 import { Funnel } from "~/lib/funnel"
 import { installConsoleStub } from "~/lib/console-stub"
 import type { SearchVia } from "~/component/site/search"
+import { isSearchShortcut } from "~/component/site/search-key"
 import { markdownShortcut } from "~/component/site/markdown-key"
 import { revealHandedOff } from "~/component/site/search-reveal"
 import { startTooltips } from "~/component/site/tooltips"
+import { copyHeadingLinks } from "~/component/site/copy-feedback"
+import { startContents } from "~/component/site/contents-spy"
 import { inlineKey } from "~/lib/direction"
-import { $, $$, on, site, target } from "./dom"
-import { startContents } from "./contents"
-import { startCopy } from "./copy"
+import { $, $$, on, site, t, target } from "./dom"
 import { startFaq } from "./faq"
 import { startFrame } from "./footer"
 import { startIslands } from "./islands"
@@ -29,7 +30,7 @@ startIslands()
 function startShell() {
   startTheme()
   startMenus()
-  startCopy()
+  copyHeadingLinks(t("changelog.share.copied"))
   startFaq()
   startContents()
   startFrame()
@@ -56,13 +57,9 @@ function startShell() {
   on("keydown", (event) => {
     if (searching) return
     if (event.key === "Meta" || event.key === "Control") return void loadSearch()
-    if (event.defaultPrevented || event.altKey || event.repeat || target(event).closest("[contenteditable]")) return
-    const command = (event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "k"
-    const slash =
-      event.key === "/" && !event.metaKey && !event.ctrlKey && !target(event).closest("input, textarea, select")
-    if (!command && !slash) return
+    if (!isSearchShortcut(event)) return
     event.preventDefault()
-    pending.via = slash ? "slash" : "shortcut"
+    pending.via = event.key === "/" ? "slash" : "shortcut"
     void loadSearch()
   })
 

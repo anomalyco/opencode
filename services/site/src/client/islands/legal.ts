@@ -2,7 +2,7 @@ import { inHistory, pinnedScroll, revealTab } from "~/component/site/legal-tabs"
 import { checkPath, copyPath } from "~/component/site/icon-paths"
 import { copySelection } from "~/lib/clipboard"
 import { strip } from "~/lib/language"
-import { refreshContents } from "../contents"
+import { refreshContents } from "~/component/site/contents-spy"
 import { $, $$, on, target } from "../dom"
 
 /**
