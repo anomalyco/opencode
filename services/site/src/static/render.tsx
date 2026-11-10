@@ -9,7 +9,7 @@ import { AppRoot } from "~/app"
 import { dir, pageLocale, strip, tag } from "~/lib/language"
 import type { StaticPass } from "~/lib/page-data"
 import { sourceLogo } from "~/lib/source-logo"
-import { staticPath } from "./routes"
+import { matches, staticPath } from "./routes"
 import {
   cardMorphKey,
   clearCardMorph,
@@ -24,12 +24,27 @@ import { cardTiming } from "~/component/site/products"
 type Middleware = ReturnType<typeof createMiddleware>[number]
 type PageModule = { default: Component; id$$?: string }
 
-// The page routes' modules, by path (`/changelog/:tag`; an index route's ends in a slash, `/brand/`), as
-// SolidStart's router loads them.
-const pages = fileRoutes as { path: string; page?: boolean; $component?: { import: () => Promise<PageModule> } }[]
+// The file routes, by path (`/changelog/:tag`; an index route's ends in a slash, `/brand/`), as
+// SolidStart's router loads them: the pages' modules, and the API routes' handlers by method (`$GET`).
+const pages = fileRoutes as {
+  path: string
+  page?: boolean
+  $component?: { import: () => Promise<PageModule> }
+  [handler: string]: unknown
+}[]
+
+/** Whether an API route or a server function (SolidStart's /_server) answers a request, not a page. A HEAD
+ * request is answered by the route's GET handler. */
+const answered = (path: string, method: string) =>
+  path.startsWith("/_server") ||
+  pages.some(
+    (route) =>
+      !route.page && (route[`$${method}`] || (method === "HEAD" && route.$GET)) && matches(route.path, path),
+  )
 
 /**
- * Production only: the static routes (routes.ts) as plain HTML with no hydration. The page renders
+ * Production only: the static routes (routes.ts) as plain HTML with no hydration, and the not-found
+ * page (`[...404].tsx`, with its 404 status) for every address no route answers. The page renders
  * with the same components, providers and head tags as the hydrated app, inside NoHydration and
  * synchronously (renderToString), so the HTML has no hydration keys and no serialized data, and the
  * page loads one script of its own (src/client/entry.ts) instead of the app. Its data (the status
@@ -41,7 +56,8 @@ export const staticPages: Middleware = async (_event, next) => {
   if (import.meta.env.DEV || !event || (event.request.method !== "GET" && event.request.method !== "HEAD"))
     return next()
   const url = new URL(event.request.url)
-  const pattern = staticPath(strip(url.pathname))
+  const path = strip(url.pathname)
+  const pattern = staticPath(path) ?? (answered(path, event.request.method) ? undefined : "/*404")
   const load =
     pattern && pages.find((route) => route.page && route.path.replace(/(.)\/$/, "$1") === pattern)?.$component?.import
   if (!load) return next()

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readFile, rm } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { build, type Plugin } from "vite"
@@ -15,12 +15,14 @@ const virtual = "virtual:static-client"
 
 /**
  * The static pages' script (src/client/entry.ts, with the islands and overlays it loads) in a build
- * of its own, as the docs build theirs (src/docs/script/build.ts), so it never changes how the app's
- * code is split: the two share source, never output files. It runs once the app's browser build is
- * written, beside its files, and the Worker's build after it reads the script's file name from
- * `virtual:static-client` (src/static/render.tsx). A stylesheet the app's build puts in the shell's
- * or a group's file (script/stylesheet-groups.ts) is already on the page, so this build leaves it
- * empty; the ones the app loads on demand (search, the Markdown view) come with their code.
+ * of its own, as the docs build theirs (src/docs/script/build.ts): the only JavaScript production
+ * serves, since every page is static there (src/static/render.tsx). The app's browser build still
+ * runs, for the stylesheets every page links (the shell's and each group's, script/stylesheet-groups.ts)
+ * and the manifest the Worker finds them in, but its scripts, which only hydration would load, are
+ * deleted once it is written. Then this runs, beside its files, and the Worker's build after it reads
+ * the script's file name from `virtual:static-client`. A stylesheet already in the shell's or a
+ * group's file is on the page, so this build leaves it empty; the ones loaded on demand (search, the
+ * Markdown view) come with their code.
  */
 export function staticClient(): Plugin {
   let script: string | undefined
@@ -29,8 +31,15 @@ export function staticClient(): Plugin {
     resolveId: (id) => (id === virtual ? `\0${virtual}` : undefined),
     // Development renders no static pages (src/static/routes.ts), so it has no script.
     load: (id) => (id === `\0${virtual}` ? `export default ${JSON.stringify(script ?? null)}` : undefined),
-    async writeBundle(options) {
+    async writeBundle(options, bundle) {
       if (this.environment.name !== "client" || !options.dir) return
+      // The app's own scripts: no production page loads them.
+      const dir = options.dir
+      await Promise.all(
+        Object.values(bundle)
+          .filter((file) => /\.m?js(\.map)?$/.test(file.fileName))
+          .map((file) => rm(path.join(dir, file.fileName))),
+      )
       const shown = new Set(
         [...this.getModuleIds()].filter(
           (id) =>
@@ -61,7 +70,7 @@ export function staticClient(): Plugin {
           solid({ solid: { hydratable: false } }),
           devOnlyCss(),
           cssVariantsForProduction(),
-          i18nSlices({ app: false }),
+          i18nSlices(),
         ],
         build: {
           outDir: options.dir,

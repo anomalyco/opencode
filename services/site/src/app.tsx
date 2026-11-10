@@ -1,7 +1,7 @@
 import { Link, Title, Meta } from "@solidjs/meta"
-import { Router, useBeforeLeave, useCurrentMatches, useIsRouting, useLocation } from "@solidjs/router"
+import { Router, useCurrentMatches, useLocation } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
-import { createEffect, type JSX, Show, Suspense } from "solid-js"
+import { type JSX, Show, Suspense } from "solid-js"
 import { isServer } from "solid-js/web"
 import { Favicon } from "@opencode/ui/favicon"
 import { Font } from "@opencode/ui/font"
@@ -10,13 +10,11 @@ import "./style/fonts.css"
 import "./app.css"
 import { LanguageProvider } from "~/context/language"
 import { I18nProvider, useI18n } from "~/context/i18n"
-import { preloadStrings } from "~/i18n/preload"
 import { config } from "~/config"
 import { ogImage } from "~/lib/og"
 import { strip } from "~/lib/language"
 import { HeadMetaProvider, LiveMeta } from "~/component/head-meta"
 import { viewportContent } from "~/lib/viewport"
-import { quietPreloads, setNavigating } from "~/lib/route-preloads"
 // Before the router, so its popstate listener comes first.
 import "~/component/site/popstate"
 
@@ -49,17 +47,6 @@ function AppMeta() {
   const matches = useCurrentMatches()
   // The 404 route and its /dev/404 previews (the dev server shows one for bad URLs).
   const notFound = () => matches().some((match) => match.route.pattern.includes("404"))
-  preloadStrings()
-  // Preloaded pages' stylesheets wait for a navigation (lib/route-preloads.ts).
-  if (!isServer) {
-    const routing = useIsRouting()
-    // A leave that another listener blocked, or that stays on this page, never starts routing.
-    useBeforeLeave(() => {
-      setNavigating(true)
-      queueMicrotask(() => routing() || setNavigating(false))
-    })
-    createEffect(() => setNavigating(routing()))
-  }
   return (
     <>
       <Title>opencode</Title>
@@ -93,10 +80,6 @@ if (!isServer) {
   })
 }
 
-// The file routes, with preloads that leave the page alone when they fail (lib/route-preloads.ts). A
-// component on both sides, as <FileRoutes /> was, so hydration counts it the same.
-const Routes = () => (isServer ? FileRoutes() : quietPreloads(FileRoutes()))
-
 export default function App() {
   return (
     <Router
@@ -108,7 +91,7 @@ export default function App() {
       scrollRestoration
       root={AppRoot}
     >
-      <Routes />
+      <FileRoutes />
     </Router>
   )
 }
