@@ -174,11 +174,10 @@ export const GithubCopilotPlugin = define({
     // or the account changes. The token unlocks the pick and its Auto discount; Copilot rejects it for any other model.
     const routes = new Map<Session.ID, { model: string; account: string; token?: string; until: number }>()
     // The endpoint saved at login serves requests until the first refresh reads the account's current one, so an
-    // Enterprise login never sends its token to the public host while that refresh is still running.
+    // Enterprise login doesn't send its token to the public host while that refresh is still running.
     const login = yield* credentialSettings(ctx, "github-copilot", (value) =>
       value.type === "oauth" ? { baseURL: copilotBaseURL(value.metadata) } : {},
     )
-    const fallback = () => (typeof login.settings.baseURL === "string" ? login.settings.baseURL : baseURL())
     const discovered = yield* ProviderRefresh.start({
       integrationID: "github-copilot",
       initial: {} as {
@@ -260,8 +259,8 @@ export const GithubCopilotPlugin = define({
       const item = evt.get(Provider.ID.githubCopilot)
       if (!item) return
       const loaded = discovered.current
+      const url = loaded.baseURL ?? (typeof login.settings.baseURL === "string" ? login.settings.baseURL : baseURL())
       if (loaded.models) {
-        const url = loaded.baseURL ?? fallback()
         const router = CopilotModels.autoModel(url, loaded.models)
         evt.add({
           info: item.provider,
@@ -285,7 +284,7 @@ export const GithubCopilotPlugin = define({
               : model.package === "@opencode/ai/providers/openai"
                 ? "responses"
                 : undefined,
-            loaded.baseURL ?? fallback(),
+            url,
           )
           model.package = route.package
           model.settings = Provider.mergeOverlay(model.settings, { baseURL: route.baseURL })
