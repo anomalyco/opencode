@@ -380,13 +380,12 @@ export function registry() {
 
     const prepare = Effect.fn("ClaudeSessions.prepare")(function* (entry: Entry, request: Request) {
       // Retire an exited or incompatible process first: once we continue its parked turn, open() must not replace it.
-      // Stopping a turn that waits on tool results makes Claude Code record them as refused by the user, so a launch
-      // change waits for that turn to end. OpenCode still checks permissions when it runs each tool. A step without
-      // tools (the step limit) still stops the turn, since the old process would keep offering them.
+      // A launch change waits for a parked turn to end: stopping it makes Claude Code record the waiting tool calls as
+      // refused by the user. A step without tools (the step limit) still stops it, since the old process offers them.
       if (entry.process) {
-        const process = entry.process
-        const parked = process.waiting !== undefined && process.session.running && request.tools.length > 0
-        if (process.session.ended || (process.launch !== launch(request) && !parked)) yield* stop(entry)
+        const parked = entry.process.waiting && entry.process.session.running && request.tools.length > 0
+        const needsRestart = entry.process.session.ended || (entry.process.launch !== launch(request) && !parked)
+        if (needsRestart) yield* stop(entry)
       }
 
       if (!request.sessionID) {
@@ -428,8 +427,8 @@ export function registry() {
       }
       if (collected.aborted) {
         // A stopped OpenCode turn needs a fresh Claude turn; addUser would only steer the old one.
-        if (live.launch === launch(request)) yield* interrupt(entry)
-        else yield* stop(entry)
+        // After a launch change it also needs a new process.
+        yield* live.launch === launch(request) ? interrupt(entry) : stop(entry)
         return { start, continuation: undefined }
       }
       return { start, continuation }

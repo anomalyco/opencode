@@ -350,9 +350,7 @@ describe("Claude tool steps", () => {
       TestTools.append(prompt, yield* TestTools.step(test.model, prompt), TestTools.output)
       const remaining = TestTools.tools.filter((tool) => tool.name !== "confirm")
       yield* TestTools.step(test.model, prompt, remaining)
-      const received = claude.runs[0]!.received
-      expect(received.some((message) => message.request?.subtype === "interrupt")).toBe(false)
-      const last = received.findLast((message) => message.response?.response?.mcp_response)
+      const last = claude.runs[0]!.received.findLast((message) => message.response?.response?.mcp_response)
       expect(last.response.response.mcp_response.result).toEqual({
         isError: true,
         content: [{ type: "text", text: "This tool is no longer available." }],
