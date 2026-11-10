@@ -13,11 +13,7 @@ import { SessionEvent } from "./event.js"
 import { SessionSearchIndex } from "./search-index.js"
 
 export interface Interface {
-  /**
-   * Keeps the search index in step with `experimental.sqlite_fts`: builds it, backfills existing history in small
-   * transactions while no Session is writing, and indexes changes as Sessions write. Runs until interrupted, so fork
-   * it.
-   */
+  /** Builds and maintains the search index while `experimental.sqlite_fts` is on. Runs until interrupted. */
   readonly run: Effect.Effect<never>
 }
 
@@ -25,22 +21,18 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 const isDurable = Schema.is(SessionEvent.Durable)
 
-/** Work this long before re-reading config, so turning the flag off stops a backfill promptly. */
+/** Work this long before re-reading config. */
 const SLICE = 1_000
 /** Pause between transactions so requests waiting on the JS thread or the write lock get a turn. */
 const PAUSE = "5 millis"
-/** Re-read config at least this often, so a location that enables the index starts it without activity. */
 const IDLE = "30 seconds"
-/** After activity, wait this long so a streaming reply settles into one batch. */
+/** After activity, wait so a streaming reply settles into one batch. */
 const SETTLE = "1 second"
 const SLOW_BATCH = 250
-/**
- * The backfill runs only once no Session has written or streamed for this long, so its transactions, which hold the
- * JS thread and the write lock, never land while a reply streams. Changes to the queue are drained either way.
- */
+/** Backfill only after no Session has written or streamed for this long, so it never competes with a reply. */
 const QUIET = 5_000
 
-/** Only one server process maintains the index; it renews this lease every tick, so it outlives one idle wait. */
+/** One server process maintains the index; the lease is renewed every tick, so it outlives one idle wait. */
 const LeaderKey = "session.search:leader"
 const LEADER_TTL = 90_000
 
@@ -62,9 +54,8 @@ export const layer = Layer.effect(
       listener: undefined as Fiber.Fiber<void> | undefined,
     }
 
-    // Listens only while the index is maintained here, so the flag off costs nothing per event. Any Session event
-    // counts as activity, including the text and reasoning deltas of a streaming reply, which write nothing; only
-    // writes wake the loop.
+    // Listens only while maintaining, so the flag off costs nothing per event. Any Session event, including deltas
+    // that write nothing, counts as activity; only durable events wake the loop.
     const listen = (on: boolean) =>
       Effect.gen(function* () {
         if (on && !state.listener)
@@ -86,8 +77,7 @@ export const layer = Layer.effect(
         }
       })
 
-    // Config is per location, but the index covers the whole database, so it is maintained while any loaded
-    // location enables it. Off, like any flag, only stops new work: an index already built stays as it is.
+    // Config is per location but the index covers the whole database, so any loaded location enabling it counts.
     const enabled = Effect.gen(function* () {
       const flags = yield* Effect.forEach(Array.from(yield* RcMap.keys(locations.rcMap)), (ref) =>
         Effect.gen(function* () {
@@ -126,13 +116,10 @@ export const layer = Layer.effect(
       .run()
       .pipe(Effect.ignore)
 
-    /**
-     * Runs one transaction. Returns how many milliseconds to wait before the next one, or undefined when only new
-     * changes are left.
-     */
+    /** Runs one transaction. Returns milliseconds to wait before the next, or undefined to wait for changes. */
     const batch = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis
-      // A queued change is activity too, from this process or any other writing the database.
+      // A queued change is activity too, possibly from another process.
       if ((yield* SessionSearchIndex.processBatch(db)) > 0) {
         state.activity = now
         return 0
@@ -163,7 +150,6 @@ export const layer = Layer.effect(
       return undefined
     })
 
-    /** Returns how many milliseconds to wait before the next tick, or undefined to wait for new changes. */
     const tick = Effect.gen(function* () {
       const active = !state.unsupported && (yield* enabled) && (yield* lead)
       yield* listen(active)

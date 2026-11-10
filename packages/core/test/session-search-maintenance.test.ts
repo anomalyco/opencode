@@ -1,6 +1,6 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
-import { eq, sql } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { Duration, Effect, Layer, LayerMap } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -13,6 +13,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { KVTable } from "@opencode/core/kv/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -207,18 +208,20 @@ describe("SessionSearchMaintenance", () => {
       }),
     )
 
-  it.effect("drops sessions deleted after the backfill", () =>
+  it.effect("waits while another server holds the lease, then builds once it expires", () =>
     Effect.gen(function* () {
       const { db } = yield* setup
-      yield* load(location("delete", true))
-      yield* elapse
       yield* db
-        .delete(SessionTable)
-        .where(eq(SessionTable.id, Session.ID.make("ses_old")))
+        .insert(KVTable)
+        .values({ key: "session.search:leader", value: { owner: "other", until: 3_600_000 } })
         .run()
         .pipe(Effect.orDie)
+      yield* load(location("leased", true))
       yield* elapse
-      expect(yield* titles(db, "walrus")).toEqual([])
+      expect(yield* triggers(db)).toBe(0)
+      yield* TestClock.adjust("1 hour")
+      yield* elapse
+      expect(yield* titles(db, "walrus")).toEqual([Session.ID.make("ses_old")])
     }),
   )
 })

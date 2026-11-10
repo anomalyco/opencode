@@ -18,19 +18,15 @@ import {
 } from "./sql.js"
 
 /**
- * A contentless FTS5 index over session titles and message text. Triggers on the source tables only queue IDs in
- * `session_search_dirty`, so any writer, including a binary that predates the index or runs a SQLite without FTS5,
- * keeps working and leaves a record of what changed. {@link processBatch} drains that queue and {@link backfillBatch}
- * indexes rows that existed before the triggers. `SessionSearchMaintenance` runs them in the background.
- *
- * The index stores no text. SQLite 3.43+ removes an entry by rowid (`contentless_delete`), the `compact` layout. An
- * older SQLite, such as the system SQLite of macOS 13 and 14.0-14.1, needs the indexed text again to remove it, so
- * the `text` layout also keeps that text in `session_search_text`, at about three times the size.
+ * A contentless FTS5 index over session titles and message text. Triggers only queue IDs in `session_search_dirty`,
+ * so writers that predate the index or lack FTS5 keep working. The `compact` layout removes entries by rowid
+ * (contentless_delete, SQLite 3.43+). Older SQLite (e.g. macOS 13's system SQLite) needs the indexed text to remove
+ * an entry, so the `text` layout keeps it in `session_search_text`, at about three times the size.
  */
 
 type DatabaseService = Database.Interface["db"]
 
-/** Bump when the index columns, tokenizer, triggers, or extracted text change: {@link ensure} then rebuilds. */
+/** Bump when the columns, tokenizer, triggers or extracted text change, so {@link ensure} rebuilds. */
 export const Version = 1
 
 export type Layout = "compact" | "text"
@@ -42,11 +38,9 @@ export interface Unsupported {
 }
 
 export interface Status {
-  /** The index version this database was built for, if any. */
   readonly version?: number
   readonly backfill?: Backfill
   readonly layout?: Layout
-  /** Sources queued for reindexing. */
   readonly pending: number
   readonly documents: number
 }
@@ -60,51 +54,43 @@ export interface Hit {
 }
 
 /**
- * Creates the index and its triggers when missing, or rebuilds them from scratch when the stored version is older or
- * a trigger is gone (a migration that rebuilt a source table drops its triggers, and changes made meanwhile were never
- * queued). A rebuild empties the index and restarts the backfill. An index built by a newer version is left alone and
- * reported unsupported, so two versions sharing a database never rebuild each other's index. Picks the `compact`
- * layout when this SQLite supports it and keeps whichever layout an existing index has.
+ * Creates the index, or rebuilds it when the version is older or a trigger is gone (a migration that rebuilds a source
+ * table drops its triggers, so changes meanwhile were never queued). An index from a newer version is left alone so
+ * two versions sharing a database don't keep rebuilding each other's index.
  */
 export const ensure = Effect.fn("SessionSearchIndex.ensure")(function* (db: DatabaseService) {
   const before = yield* readState(db).pipe(Effect.orDie)
   if (before && before.version > Version) return newer
   const layout = yield* probe(db, before)
   if (typeof layout !== "string") return layout
-  const rebuilt = yield* db
-    .transaction(
-      () =>
-        Effect.gen(function* () {
-          const state = yield* readState(db)
-          if (state && state.version > Version) return undefined
-          const present = new Set(
-            (yield* db.all<{ name: string }>(
-              sql`SELECT name FROM sqlite_master WHERE name IN (${list([
-                IndexTable,
-                ...triggers.map((trigger) => trigger.name),
-              ])})`,
-            )).map((row) => row.name),
-          )
-          if (
-            state?.version === Version &&
-            state.layout === layout &&
-            present.has(IndexTable) &&
-            triggers.every((trigger) => present.has(trigger.name))
-          )
-            return false
-          for (const trigger of triggers) yield* db.run(`DROP TRIGGER IF EXISTS ${trigger.name}`)
-          yield* db.run(`DROP TABLE IF EXISTS ${IndexTable}`)
-          yield* db.delete(SessionSearchDocumentTable).run()
-          yield* db.delete(SessionSearchTextTable).run()
-          yield* db.delete(SessionSearchDirtyTable).run()
-          yield* db.run(createIndex(IndexTable, layout))
-          for (const trigger of triggers) yield* db.run(`CREATE TRIGGER ${trigger.name} ${trigger.body}`)
-          yield* writeState(db, { version: Version, layout, backfill: "titles" })
-          return true
-        }),
-      Immediate,
-    )
-    .pipe(Effect.orDie)
+  const names = Object.keys(Triggers)
+  const rebuilt = yield* immediate(
+    db,
+    Effect.gen(function* () {
+      const state = yield* readState(db)
+      if (state && state.version > Version) return undefined
+      const present = new Set(
+        (yield* db.all<{ name: string }>(
+          sql`SELECT name FROM sqlite_master WHERE name IN (${list([IndexTable, ...names])})`,
+        )).map((row) => row.name),
+      )
+      if (
+        state?.version === Version &&
+        state.layout === layout &&
+        [IndexTable, ...names].every((name) => present.has(name))
+      )
+        return false
+      for (const name of names) yield* db.run(`DROP TRIGGER IF EXISTS ${name}`)
+      yield* db.run(`DROP TABLE IF EXISTS ${IndexTable}`)
+      yield* db.delete(SessionSearchDocumentTable).run()
+      yield* db.delete(SessionSearchTextTable).run()
+      yield* db.delete(SessionSearchDirtyTable).run()
+      yield* db.run(createIndex(IndexTable, layout))
+      for (const [name, body] of Object.entries(Triggers)) yield* db.run(`CREATE TRIGGER ${name} ${body}`)
+      yield* writeState(db, layout, "titles")
+      return true
+    }),
+  )
   if (rebuilt === undefined) return newer
   return { supported: true, rebuilt, layout } satisfies Capability
 })
@@ -112,112 +98,90 @@ export const ensure = Effect.fn("SessionSearchIndex.ensure")(function* (db: Data
 const newer: Unsupported = { supported: false, reason: "The session search index was built by a newer version" }
 
 /**
- * Reindexes up to `limit` queued sources and dequeues them in one transaction, so a write queued meanwhile is either
- * seen by this batch or stays queued. An assistant still streaming is dequeued without touching the index: finishing
- * rewrites its row, which queues it again, so streaming never blocks other sources or keeps the queue busy. Returns
- * how many sources it dequeued; 0 means the queue is empty.
+ * Reindexes and dequeues up to `limit` sources in one transaction. A streaming assistant is dequeued untouched: the
+ * write that finishes it queues it again. Returns how many sources were read; 0 means the queue is empty.
  */
-// Small batches keep each transaction, and the JS thread it blocks, short. Messages also stop at MaxBatchBytes of
-// stored rows, like the backfill; the rest stay queued. `remove` binds the IDs twice, so 50 also stays under the
-// 100-parameter cap of Durable Object SQLite.
+// `remove` binds the IDs twice, so 50 stays under Durable Object SQLite's 100-parameter cap.
 export const processBatch = Effect.fn("SessionSearchIndex.processBatch")(function* (db: DatabaseService, limit = 50) {
-  return yield* db
-    .transaction(
-      () =>
-        Effect.gen(function* () {
-          const state = yield* readState(db)
-          // Another version took over the index since `ensure`; leave it to that version.
-          if (!current(state)) return 0
-          const ids = (yield* db
-            .select({ id: SessionSearchDirtyTable.source_id })
-            .from(SessionSearchDirtyTable)
-            .limit(limit)
-            .all()).map((row) => row.id)
-          if (ids.length === 0) return 0
-          const titles = yield* db
-            .select({ id: SessionTable.id, title: SessionTable.title })
-            .from(SessionTable)
-            .where(sql`${SessionTable.id} IN (${list(ids)})`)
-            .all()
-          const sized = yield* messageSizes(db, state.layout, sql`message.id IN (${list(ids)})`)
-          const taken = budget(sized)
-          const messages = taken.length === 0 ? [] : yield* messageSources(db, sql`message.id IN (${list(taken)})`)
-          const existing = new Set([...titles.map((row) => row.id), ...sized.map((row) => row.id)])
-          // A source that is gone was deleted. When it was a session, its message entries go with it.
-          const removed = yield* remove(
-            db,
-            state.layout,
-            ids.filter((id) => !existing.has(id)),
-          )
-          yield* write(db, state.layout, [...titles.map(titleDocument), ...messages])
-          const done = [...titles.map((row) => row.id), ...taken, ...removed]
-          if (done.length > 0)
-            yield* db.delete(SessionSearchDirtyTable).where(inArray(SessionSearchDirtyTable.source_id, done)).run()
-          return ids.length
-        }),
-      Immediate,
-    )
-    .pipe(Effect.orDie)
+  return yield* immediate(
+    db,
+    Effect.gen(function* () {
+      const state = yield* readState(db)
+      if (!current(state)) return 0
+      const ids = (yield* db
+        .select({ id: SessionSearchDirtyTable.source_id })
+        .from(SessionSearchDirtyTable)
+        .limit(limit)
+        .all()).map((row) => row.id)
+      if (ids.length === 0) return 0
+      const titles = yield* db
+        .select({ id: SessionTable.id, title: SessionTable.title })
+        .from(SessionTable)
+        .where(sql`${SessionTable.id} IN (${list(ids)})`)
+        .all()
+      const sized = yield* messageSizes(db, state.layout, sql`message.id IN (${list(ids)})`)
+      const taken = budget(sized)
+      const messages = taken.length === 0 ? [] : yield* messageSources(db, sql`message.id IN (${list(taken)})`)
+      const existing = new Set([...titles.map((row) => row.id), ...sized.map((row) => row.id)])
+      const removed = yield* remove(
+        db,
+        state.layout,
+        ids.filter((id) => !existing.has(id)),
+      )
+      yield* write(db, state.layout, [...titles.map(titleDocument), ...messages])
+      const done = [...titles.map((row) => row.id), ...taken, ...removed]
+      if (done.length > 0)
+        yield* db.delete(SessionSearchDirtyTable).where(inArray(SessionSearchDirtyTable.source_id, done)).run()
+      return ids.length
+    }),
+  )
 })
 
 /**
- * Indexes the next `limit` titles, then messages, that existed before the triggers, newest first, and advances the
- * stored cursor in the same transaction. A message batch also stops before {@link MaxBatchBytes} of stored rows, so a
- * stretch of huge messages, whose whole JSON SQLite parses to find the text, is split across transactions. Cursors follow the sources' primary keys, never their implicit rowids.
- * Rows written after {@link ensure} are queued by the triggers too; indexing one twice is harmless. The cursor passes
- * assistants still streaming without queuing them: the write that finishes one is queued then, and one that never
- * finishes would otherwise sit in the queue forever.
+ * Indexes the next `limit` titles, then messages, newest first, and advances the cursor in the same transaction.
+ * Message batches also stop at {@link MaxBatchBytes} of stored rows. Streaming assistants are passed, not queued:
+ * the write that finishes one queues it.
  */
 export const backfillBatch = Effect.fn("SessionSearchIndex.backfillBatch")(function* (db: DatabaseService, limit = 50) {
-  return yield* db
-    .transaction(
-      () =>
-        Effect.gen(function* () {
-          const state = yield* readState(db)
-          // Not ensured, or another version took over the index since: nothing for this version to backfill.
-          if (!current(state) || state.backfill === "done") return { indexed: 0, done: true }
-          if (state.backfill === "titles") {
-            // Session IDs descend over time, so ascending order is newest first.
-            const rows = yield* db
-              .select({ id: SessionTable.id, title: SessionTable.title })
-              .from(SessionTable)
-              .where(state.after === undefined ? undefined : sql`${SessionTable.id} > ${state.after}`)
-              .orderBy(SessionTable.id)
-              .limit(limit)
-              .all()
-            yield* write(db, state.layout, rows.map(titleDocument))
-            const last = rows.at(-1)
-            yield* writeState(
-              db,
-              rows.length < limit || !last
-                ? { version: Version, layout: state.layout, backfill: "messages" }
-                : { version: Version, layout: state.layout, backfill: "titles", after: last.id },
-            )
-            return { indexed: rows.length, done: false }
-          }
-          // Message IDs ascend over time, so descending order is newest first.
-          const candidates = yield* messageSizes(
-            db,
-            state.layout,
-            state.after === undefined ? sql`1 = 1` : sql`message.id < ${state.after}`,
-            sql`ORDER BY message.id DESC LIMIT ${limit}`,
-          )
-          const ids = budget(candidates)
-          const rows = ids.length === 0 ? [] : yield* messageSources(db, sql`message.id IN (${list(ids)})`)
-          yield* write(db, state.layout, rows)
-          const last = ids.at(-1)
-          const done = candidates.length < limit && ids.length === candidates.length
-          yield* writeState(
-            db,
-            done || last === undefined
-              ? { version: Version, layout: state.layout, backfill: "done" }
-              : { version: Version, layout: state.layout, backfill: "messages", after: last },
-          )
-          return { indexed: rows.length, done }
-        }),
-      Immediate,
-    )
-    .pipe(Effect.orDie)
+  return yield* immediate(
+    db,
+    Effect.gen(function* () {
+      const state = yield* readState(db)
+      if (!current(state) || state.backfill === "done") return { indexed: 0, done: true }
+      if (state.backfill === "titles") {
+        // Session IDs descend over time, so ascending order is newest first.
+        const rows = yield* db
+          .select({ id: SessionTable.id, title: SessionTable.title })
+          .from(SessionTable)
+          .where(state.after === undefined ? undefined : sql`${SessionTable.id} > ${state.after}`)
+          .orderBy(SessionTable.id)
+          .limit(limit)
+          .all()
+        yield* write(db, state.layout, rows.map(titleDocument))
+        const last = rows.at(-1)
+        yield* rows.length < limit || !last
+          ? writeState(db, state.layout, "messages")
+          : writeState(db, state.layout, "titles", last.id)
+        return { indexed: rows.length, done: false }
+      }
+      // Message IDs ascend over time, so descending order is newest first.
+      const candidates = yield* messageSizes(
+        db,
+        state.layout,
+        state.after === undefined ? sql`1 = 1` : sql`message.id < ${state.after}`,
+        sql`ORDER BY message.id DESC LIMIT ${limit}`,
+      )
+      const ids = budget(candidates)
+      const rows = ids.length === 0 ? [] : yield* messageSources(db, sql`message.id IN (${list(ids)})`)
+      yield* write(db, state.layout, rows)
+      const last = ids.at(-1)
+      const done = candidates.length < limit && ids.length === candidates.length
+      yield* done || last === undefined
+        ? writeState(db, state.layout, "done")
+        : writeState(db, state.layout, "messages", last)
+      return { indexed: rows.length, done }
+    }),
+  )
 })
 
 export const status = Effect.fn("SessionSearchIndex.status")(function* (db: DatabaseService) {
@@ -233,10 +197,7 @@ export const status = Effect.fn("SessionSearchIndex.status")(function* (db: Data
   } satisfies Status
 }, Effect.orDie)
 
-/**
- * Ranks entries matching any word of `query` by BM25, best first. Entries whose source was deleted but not yet
- * dequeued are left out.
- */
+/** Ranks entries matching any word of `query` by BM25, skipping sources deleted but not yet dequeued. */
 export const search = Effect.fn("SessionSearchIndex.search")(function* (
   db: DatabaseService,
   input: { readonly query: string; readonly limit?: number },
@@ -265,11 +226,10 @@ export const search = Effect.fn("SessionSearchIndex.search")(function* (
 }, Effect.orDie)
 
 const IndexTable = "session_search"
-/** Stored bytes of messages and their parts a backfill batch reads, at most, beyond its first message. */
+/** Stored bytes a batch reads at most, beyond its first message. */
 export const MaxBatchBytes = 1024 * 1024
 const Columns = "title, summary, user_text, assistant_text"
-// Every column weighs the same: on 534 recorded agent searches, equal weights put a session with the answer in the
-// first five more often than favoring titles and summaries (408 vs 391).
+// Equal column weights ranked better than favoring titles and summaries on 534 recorded agent searches.
 const Rank = `bm25(${IndexTable})`
 const Word = /[\p{L}\p{M}\p{N}]+/gu
 
@@ -279,61 +239,29 @@ const createIndex = (name: string, layout: Layout) =>
 const IndexedTypes = `'user', 'assistant', 'compaction'`
 const queue = (id: string) => `INSERT INTO session_search_dirty (source_id) VALUES (${id}) ON CONFLICT DO NOTHING;`
 
-// Triggers write only the plain queue table, never the index, so writes keep working on any SQLite.
-const triggers = [
-  {
-    name: "session_search_message_insert",
-    body: `AFTER INSERT ON session_message WHEN NEW.type IN (${IndexedTypes}) BEGIN ${queue("NEW.id")} END`,
-  },
-  {
-    name: "session_search_message_update",
-    body: `AFTER UPDATE OF type, data ON session_message WHEN NEW.type IN (${IndexedTypes}) OR OLD.type IN (${IndexedTypes}) BEGIN ${queue("NEW.id")} END`,
-  },
-  {
-    name: "session_search_message_delete",
-    body: `AFTER DELETE ON session_message WHEN OLD.type IN (${IndexedTypes}) BEGIN ${queue("OLD.id")} END`,
-  },
-  // A message's first part row replaces its inline content, whatever the part's type, so inserts and deletes of any
-  // part queue the message; updates matter only for text parts.
-  {
-    name: "session_search_part_insert",
-    body: `AFTER INSERT ON session_part BEGIN ${queue("NEW.message_id")} END`,
-  },
-  {
-    name: "session_search_part_update",
-    body: `AFTER UPDATE OF type, data, ordinal ON session_part WHEN NEW.type = 'text' OR OLD.type = 'text' BEGIN ${queue("NEW.message_id")} END`,
-  },
-  {
-    name: "session_search_part_delete",
-    body: `AFTER DELETE ON session_part BEGIN ${queue("OLD.message_id")} END`,
-  },
-  {
-    name: "session_search_session_insert",
-    body: `AFTER INSERT ON session_v2 WHEN NEW.title IS NOT NULL BEGIN ${queue("NEW.id")} END`,
-  },
-  {
-    name: "session_search_session_update",
-    body: `AFTER UPDATE OF title ON session_v2 WHEN NEW.title IS NOT OLD.title BEGIN ${queue("NEW.id")} END`,
-  },
-  {
-    name: "session_search_session_delete",
-    body: `AFTER DELETE ON session_v2 BEGIN ${queue("OLD.id")} END`,
-  },
-]
+const Triggers = {
+  session_search_message_insert: `AFTER INSERT ON session_message WHEN NEW.type IN (${IndexedTypes}) BEGIN ${queue("NEW.id")} END`,
+  session_search_message_update: `AFTER UPDATE OF type, data ON session_message WHEN NEW.type IN (${IndexedTypes}) OR OLD.type IN (${IndexedTypes}) BEGIN ${queue("NEW.id")} END`,
+  session_search_message_delete: `AFTER DELETE ON session_message WHEN OLD.type IN (${IndexedTypes}) BEGIN ${queue("OLD.id")} END`,
+  // Any part insert or delete can change which content is read; updates matter only for text parts.
+  session_search_part_insert: `AFTER INSERT ON session_part BEGIN ${queue("NEW.message_id")} END`,
+  session_search_part_update: `AFTER UPDATE OF type, data, ordinal ON session_part WHEN NEW.type = 'text' OR OLD.type = 'text' BEGIN ${queue("NEW.message_id")} END`,
+  session_search_part_delete: `AFTER DELETE ON session_part BEGIN ${queue("OLD.message_id")} END`,
+  session_search_session_insert: `AFTER INSERT ON session_v2 WHEN NEW.title IS NOT NULL BEGIN ${queue("NEW.id")} END`,
+  session_search_session_update: `AFTER UPDATE OF title ON session_v2 WHEN NEW.title IS NOT OLD.title BEGIN ${queue("NEW.id")} END`,
+  session_search_session_delete: `AFTER DELETE ON session_v2 BEGIN ${queue("OLD.id")} END`,
+}
 
 /**
- * Every batch reads, then writes. A deferred transaction that has read gets SQLITE_BUSY at once when it needs the
- * write lock while another connection writes, skipping busy_timeout; taking the lock up front waits for it instead.
+ * Batches read, then write. A deferred transaction that has read gets SQLITE_BUSY at once when it needs the write lock
+ * while another connection writes, skipping busy_timeout; IMMEDIATE takes the lock up front and waits instead.
  */
-const Immediate = { behavior: "immediate" } as const
+const immediate = <A, E>(db: DatabaseService, effect: Effect.Effect<A, E>) =>
+  db.transaction(() => effect, { behavior: "immediate" }).pipe(Effect.orDie)
 
 /**
- * Picks the layout this SQLite can maintain. Opening the existing index proves its layout works without writing; an
- * SQLite that lacks one of its options cannot open it, and then it is left alone, since dropping it fails too.
- * Without an index, throwaway tables are created and dropped instead, which changes the schema: `compact` needs
- * contentless_delete (3.43+), `text` only FTS5. Only a generic SQLITE_ERROR, as an unknown module or option raises,
- * means this SQLite lacks them; locks, read-only files, I/O errors and corruption are defects like any other failed
- * write.
+ * Picks the layout this SQLite can maintain, keeping an existing index's layout if it opens. Only a generic
+ * SQLITE_ERROR (unknown module or option) means unsupported; locks, read-only files and corruption are defects.
  */
 const probe = Effect.fnUntraced(function* (db: DatabaseService, state: State | undefined) {
   const existing = yield* db
@@ -344,14 +272,11 @@ const probe = Effect.fnUntraced(function* (db: DatabaseService, state: State | u
     if (unopened) return unopened
     if (state?.version === Version && state.layout) return state.layout
   }
-  // Reading sources uses `->>` (3.38+), which Bun's macOS floor already has; an older SQLite stays unsupported.
+  // Reading sources uses `->>` (3.38+).
   const json = yield* db.all(sql.raw(`SELECT '{}' ->> '$.a'`)).pipe(capability)
   if (json) return json
-  const compact = yield* creatable(db, "compact")
-  if (!compact) return "compact" as const
-  const text = yield* creatable(db, "text")
-  if (!text) return "text" as const
-  return text
+  if (!(yield* creatable(db, "compact"))) return "compact" as const
+  return (yield* creatable(db, "text")) ?? ("text" as const)
 })
 
 const creatable = (db: DatabaseService, layout: Layout) =>
@@ -362,11 +287,10 @@ const creatable = (db: DatabaseService, layout: Layout) =>
           yield* db.run(createIndex("session_search_probe", layout))
           yield* db.run("DROP TABLE session_search_probe")
         }),
-      Immediate,
+      { behavior: "immediate" },
     )
     .pipe(capability)
 
-/** Succeeds with undefined, or with Unsupported when the statement failed with a generic SQLITE_ERROR. */
 const capability = <A, E>(effect: Effect.Effect<A, E>) =>
   effect.pipe(
     Effect.as(undefined),
@@ -379,7 +303,7 @@ const capability = <A, E>(effect: Effect.Effect<A, E>) =>
 
 const SQLITE_ERROR = 1
 
-/** The SqlError behind a failed query; drizzle wraps it in a Cause. */
+// drizzle wraps the SqlError in a Cause.
 const sqlError = (error: unknown) => {
   if (isSqlError(error)) return error
   if (!Predicate.hasProperty(error, "cause") || !Cause.isCause(error.cause)) return
@@ -387,7 +311,7 @@ const sqlError = (error: unknown) => {
   return isSqlError(failure) ? failure : undefined
 }
 
-/** The primary SQLite result code of a driver error: Bun reports it as `errno`, Node as `errcode`. */
+// Bun reports the result code as `errno`, Node as `errcode`.
 const primaryCode = (cause: unknown) => {
   const code = Predicate.hasProperty(cause, "errcode")
     ? cause.errcode
@@ -416,15 +340,12 @@ const readState = (db: DatabaseService) =>
     .get()
     .pipe(Effect.map((row) => (row ? Option.getOrUndefined(decodeState(row.value)) : undefined)))
 
-/** A state this version built and can maintain. */
 const current = (state: State | undefined): state is State & { readonly layout: Layout } =>
   state?.version === Version && state.layout !== undefined
 
-const writeState = (db: DatabaseService, state: State & { readonly layout: Layout }) => {
+const writeState = (db: DatabaseService, layout: Layout, backfill: Backfill, after?: string) => {
   const value: Schema.Json =
-    state.after === undefined
-      ? { version: state.version, layout: state.layout, backfill: state.backfill }
-      : { version: state.version, layout: state.layout, backfill: state.backfill, after: state.after }
+    after === undefined ? { version: Version, layout, backfill } : { version: Version, layout, backfill, after }
   return db
     .insert(KVTable)
     .values({ key: StateKey, value })
@@ -435,11 +356,9 @@ const writeState = (db: DatabaseService, state: State & { readonly layout: Layou
 interface Document {
   readonly sourceID: string
   readonly sessionID: SessionSchema.ID
-  /** Undefined when the source has nothing to index. */
   readonly columns?: Columns
-  /** An assistant still streaming: its entry, if any, is left as it was. */
+  /** A streaming assistant: its entry is left as it was. */
   readonly unfinished?: true
-  /** A row that is not JSON or does not decode: indexed as empty, and logged. */
   readonly malformed?: true
 }
 
@@ -458,26 +377,15 @@ const titleDocument = (row: { id: SessionSchema.ID; title: string | null }): Doc
 
 const decodeMessage = Schema.decodeUnknownOption(Schema.fromJsonString(SessionMessage.Info))
 
-/**
- * Indexable messages matching `where`, each read as a message holding only its searchable fields. The query reads
- * a user's text, a completed compaction's summary, and a finished assistant's text parts (its `session_part` rows,
- * then any inline content, as history reads them), so tool output, attachments, and native data never leave SQLite,
- * and an assistant still streaming is not read at all. A compaction that is running or failed has nothing to index. `json_patch` drops absent fields so they decode as missing rather than null.
- *
- * An assistant is finished once `time.completed` is set: when its step ends or fails, or a later step supersedes it.
- * Imports, exports and forks use the same test for settled history, and every later change to it rewrites the row,
- * which queues it again.
- *
- * SQLite's JSON functions raise on text that is not JSON, which would fail the whole batch, so `state` checks the row
- * first (CASE evaluates in order) and elements are read by path from the row's own JSON rather than parsed one by
- * one. Such rows, and rows that do not decode, have nothing to index; a content element or part row that is not a
- * text object is skipped like any other non-text part.
- *
- * Each text is cut to {@link SessionSearchText.MaxText} inside SQLite, so a pasted log or file of megabytes never
- * reaches JS or the index and cannot stall a batch.
- */
 const MaxText = sql.raw(String(SessionSearchText.MaxText))
 
+/**
+ * Indexable messages matching `where`, reduced in SQLite to their searchable fields (each cut to MaxText) so tool
+ * output and attachments never reach JS. An assistant is finished once `time.completed` is set. SQLite's JSON
+ * functions raise on invalid JSON and would fail the whole batch, so `state` checks the row first (CASE evaluates in
+ * order) and elements are read by path from the row rather than parsed one by one. `json_patch` drops nulls so absent
+ * fields decode as missing.
+ */
 const messageSources = (db: DatabaseService, where: SQL, suffix: SQL = sql``) =>
   db
     .all<{
@@ -535,18 +443,12 @@ const messageSources = (db: DatabaseService, where: SQL, suffix: SQL = sql``) =>
           const message = row.message === null ? Option.none() : decodeMessage(row.message)
           if (Option.isNone(message)) return { ...document, malformed: true }
           const fields = SessionSearchText.fromMessage(message.value)
-          return {
-            ...document,
-            columns: fields ? { title: "", ...fields } : undefined,
-          }
+          return { ...document, columns: fields ? { title: "", ...fields } : undefined }
         }),
       ),
     )
 
-/**
- * Stored bytes of each indexable message matching `where` and its part rows, read before any of them is parsed.
- * `octet_length` reads only record headers but needs SQLite 3.43+, like the `compact` layout; `length` reads the text.
- */
+/** `octet_length` reads only record headers but needs SQLite 3.43+, like the `compact` layout. */
 const messageSizes = (db: DatabaseService, layout: Layout, where: SQL, suffix: SQL = sql``) => {
   const size = sql.raw(layout === "compact" ? "octet_length" : "length")
   return db.all<{ id: string; bytes: number }>(sql`
@@ -560,7 +462,7 @@ const messageSizes = (db: DatabaseService, layout: Layout, where: SQL, suffix: S
   `)
 }
 
-/** The leading messages that fit in {@link MaxBatchBytes}. The first always fits, so a larger one still progresses. */
+/** The first message always fits, so a larger one still progresses. */
 const budget = (rows: ReadonlyArray<{ id: string; bytes: number }>) => {
   const ids: string[] = []
   let bytes = 0
@@ -572,10 +474,6 @@ const budget = (rows: ReadonlyArray<{ id: string; bytes: number }>) => {
   return ids
 }
 
-/**
- * Replaces each source's index entry, reusing its document ID, or drops it when the source has nothing to index.
- * An unfinished assistant writes nothing: a reopened one keeps the entry from when it last finished.
- */
 const write = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout, input: ReadonlyArray<Document>) {
   const malformed = input.filter((document) => document.malformed).map((document) => document.sourceID)
   if (malformed.length > 0)
@@ -623,10 +521,6 @@ const write = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout, 
   }
 })
 
-/**
- * Removes the index entries of the documents `ids` selects. Without contentless_delete, FTS5 removes an entry only when
- * given the text it was indexed with again, kept in `session_search_text`.
- */
 const unindex = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout, ids: SQL) {
   if (layout === "compact") return yield* db.run(sql`DELETE FROM ${sql.raw(IndexTable)} WHERE rowid IN (${ids})`)
   yield* db.run(sql`
@@ -636,11 +530,7 @@ const unindex = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout
   yield* db.run(sql`DELETE FROM ${SessionSearchTextTable} WHERE id IN (${ids})`)
 })
 
-/**
- * Drops the entries of deleted sources: a message's own entry, or every entry of a deleted session, at most
- * {@link MaxRemove} per call so a long session doesn't hold one long transaction. Returns the sources whose entries
- * are all gone; the rest stay queued for the next batch.
- */
+/** Removes at most {@link MaxRemove} entries per call; sources with entries left stay queued. */
 const remove = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout, ids: ReadonlyArray<string>) {
   if (ids.length === 0) return []
   const matching = sql`source_id IN (${list(ids)}) OR session_id IN (${list(ids)})`

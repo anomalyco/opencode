@@ -128,9 +128,8 @@ export const SessionPartTable = sqliteTable(
 )
 
 /**
- * Gives each indexed source a stable `session_search` rowid: a message's text, keyed by message ID, or a session's
- * title, keyed by session ID. Source tables have text keys, whose implicit rowids VACUUM may renumber, so the
- * contentless index never uses them. No foreign keys: a cascade would drop this row but leave its index entry.
+ * A stable `session_search` rowid per source (message or session title); VACUUM may renumber the sources' implicit
+ * rowids. No foreign keys: a cascade would drop this row but leave its index entry.
  */
 export const SessionSearchDocumentTable = sqliteTable(
   "session_search_document",
@@ -145,10 +144,7 @@ export const SessionSearchDocumentTable = sqliteTable(
   ],
 )
 
-/**
- * The text each `session_search` entry was indexed with, by document ID. Only an SQLite older than 3.43, which lacks
- * contentless_delete, fills it: removing an entry from its index takes the indexed text again.
- */
+/** Indexed text by document ID, kept only by the `text` layout: without contentless_delete, removal needs it. */
 export const SessionSearchTextTable = sqliteTable("session_search_text", {
   id: integer().primaryKey(),
   title: text().notNull(),
@@ -157,10 +153,7 @@ export const SessionSearchTextTable = sqliteTable("session_search_text", {
   assistant_text: text().notNull(),
 })
 
-/**
- * Sources whose search entry may be stale, filled by triggers on the source tables so every writer, including
- * binaries that predate the index, queues its changes. Holds IDs only; indexing rereads the source.
- */
+/** Sources whose search entry may be stale, queued by triggers so every writer, even an older binary, records them. */
 export const SessionSearchDirtyTable = sqliteTable("session_search_dirty", {
   source_id: text().primaryKey(),
 })
