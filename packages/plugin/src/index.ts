@@ -61,7 +61,11 @@ export type PluginInput = {
   experimental_workspace: {
     register(type: string, adapter: WorkspaceAdapter): void
   }
-  serverUrl: URL
+  /**
+   * URL of this process's HTTP listener. Undefined when this process has no HTTP listener
+   * (for example a TUI started without `--port`); use `client`, which is in-process then.
+   */
+  serverUrl?: URL
   $: BunShell
 }
 
