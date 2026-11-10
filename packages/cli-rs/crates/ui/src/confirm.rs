@@ -2,6 +2,7 @@
 
 use crate::dialog::{DIALOG_INSET, DialogButton, DialogButtons, DialogCx, HeaderProps, header, layout_view};
 use crate::keymap::{KeymapLayer, TuiCommand};
+use crate::tool_info::titlecase;
 use opentui::prelude::*;
 use std::rc::Rc;
 
@@ -60,16 +61,4 @@ pub fn confirm(cx: &Rc<DialogCx>, props: ConfirmProps) -> View {
         DIALOG_INSET,
         1,
     )
-}
-
-/// `Locale.titlecase`: upper-cases the first letter of each word.
-pub fn titlecase(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut word = false;
-    for char in text.chars() {
-        let is_word = char.is_ascii_alphanumeric() || char == '_';
-        out.push(if is_word && !word { char.to_ascii_uppercase() } else { char });
-        word = is_word;
-    }
-    out
 }

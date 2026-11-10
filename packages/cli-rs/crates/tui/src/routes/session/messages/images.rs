@@ -6,12 +6,12 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use base64::Engine;
 use opencode_api::generated::{
     ExperimentalMediaGetInput, MediaHash, PromptFileAttachment, PromptFileSource, SessionMessageAssistantTool,
     SessionMessageAssistantToolState, ToolContent,
 };
 use opencode_store::Data;
+use opencode_ui::prompt_input::attach::data_uri;
 use opentui::native::ImageFit;
 use opentui::prelude::*;
 use opentui::widget::ImageView;
@@ -193,24 +193,12 @@ pub(crate) fn media_hash(uri: &str) -> Option<&str> {
     (hash.len() == 64 && hash.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))).then_some(hash)
 }
 
-/// The bytes of a base64 `data:` URI.
-pub(crate) fn data_uri(uri: &str) -> Option<Vec<u8>> {
-    let rest = uri.strip_prefix("data:")?;
-    let (meta, payload) = rest.split_once(',')?;
-    if !meta.ends_with(";base64") {
-        return Some(payload.as_bytes().to_vec());
-    }
-    base64::engine::general_purpose::STANDARD.decode(payload.trim()).ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn uris_decode_or_name_a_media_hash() {
-        assert_eq!(data_uri("data:image/png;base64,aGk="), Some(b"hi".to_vec()));
-        assert_eq!(data_uri("https://example.com/a.png"), None);
+    fn media_uris_name_their_hash() {
         let hash = "a".repeat(64);
         assert_eq!(media_hash(&format!("media:{hash}")), Some(hash.as_str()));
         assert_eq!(media_hash("media:abc"), None);

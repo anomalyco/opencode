@@ -11,6 +11,7 @@ use opencode_ui::dialog::{
     DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, header, layout,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_ui::prompt_input::attach::data_uri;
 use opentui::native::ImageFit;
 use opentui::prelude::*;
 use opentui::widget::ImageView;
@@ -19,7 +20,7 @@ use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 
 use crate::app::Tui;
-use crate::routes::session::messages::images::{data_uri, media_hash};
+use crate::routes::session::messages::images::media_hash;
 
 /// Opens the dialog on `images` (each a URI and its prompt label), at `initial`.
 pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
