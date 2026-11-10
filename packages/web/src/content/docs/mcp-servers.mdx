@@ -510,3 +510,38 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### LinkBunny
+
+Add the [LinkBunny MCP server](https://getlinkbunny.com/docs/agents#mcp) to handle contextual nofollow link exchanges for sites you control. It needs a LinkBunny account and Node.js 22 or later.
+
+Sign in once from your terminal. This opens your browser and saves the sign-in in the macOS Keychain or Linux Secret Service. See the [sign-in guide](https://getlinkbunny.com/docs/agents#mcp-browser-login) for other storage options.
+
+```bash
+npx -y @linkbunny/mcp@0.1.9 login
+```
+
+Then add the local server.
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "linkbunny": {
+      "type": "local",
+      "command": ["npx", "-y", "@linkbunny/mcp@0.1.9"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Start with the read-only status tool.
+
+```txt "use linkbunny"
+Call get_status to show my sites and any pending assignment. use linkbunny
+```
+
+The other LinkBunny tools change site or assignment state, so only use them for actions you approve. See the [LinkBunny workflow](https://getlinkbunny.com/skill.md) before using them. LinkBunny does not edit or publish your site.
