@@ -210,6 +210,13 @@ on("click", (event) => {
     return lockup === root ? closeLockup() : openLockup(root)
   const expand = target.closest("[data-slot=expand]")
   if (expand) return toggleSub(root, expand.getAttribute("aria-expanded") !== "true")
+  // Nested (phones, touch and narrow windows): tapping "Docs" opens and closes its versions in place,
+  // like its "›", instead of leaving for the docs home, which V2 still links. The flyout keeps the link.
+  const parent = target.closest("[data-slot=parent] > [role=menuitem]")
+  if (parent && menuOf(root).dataset.submenu === "nested") {
+    event.preventDefault()
+    return toggleSub(root, parent.getAttribute("aria-expanded") !== "true")
+  }
   if (target.closest("a")) closeLockup()
 })
 
