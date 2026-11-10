@@ -517,8 +517,19 @@ export const layer = Layer.effect(
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
       if (!info) return undefined
-      const { credential, runtimeInfo } = yield* prepare(info, ref.variant)
-      return yield* fromCatalogMedia(runtimeInfo, is, credential, dependencies)
+      const { provider, credential, runtimeInfo } = yield* prepare(info, ref.variant)
+      // Same keyless rule as chat. Media routes can't swap auth after construction, so the package gets `apiKey: false`.
+      const keyless =
+        provider?.activation === "enabled" &&
+        credential === undefined &&
+        !hasConfiguredAuth(runtimeInfo) &&
+        usesAPIKeyAuth(runtimeInfo.package)
+      return yield* fromCatalogMedia(
+        keyless ? { ...runtimeInfo, settings: { ...runtimeInfo.settings, apiKey: false } } : runtimeInfo,
+        is,
+        credential,
+        dependencies,
+      )
     })
     const fallback = Effect.fn("ModelResolver.fallback")(function* () {
       const model = yield* models.default()
@@ -576,6 +587,7 @@ const API_KEY_AUTH_PACKAGES: ReadonlySet<string> = new Set([
   "@opencode/ai/providers/deepseek",
   "@opencode/ai/providers/fireworks",
   "@opencode/ai/providers/openai-compatible",
+  "@opencode/ai/providers/openai-compatible/decisions",
   "@opencode/ai/providers/google",
   "@opencode/ai/providers/google/interactions",
   "@opencode/ai/providers/groq",
