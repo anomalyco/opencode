@@ -692,11 +692,32 @@ const toolHook: {
 
 const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
   Effect.tryPromise({
-    try: (signal) =>
-      tool.execute(input, {
-        ...context,
-        signal,
-        progress: (update) => Effect.runPromise(context.progress(update), { signal }),
-      }),
+    try: (interrupted) => {
+      // `signal` aborts when the call is interrupted, and also when the user stops the call once the tool has read
+      // it. Reading it awaits `cancel`, which tells the step this tool stops on its own instead of being interrupted.
+      const stopped = new AbortController()
+      const finished = new AbortController()
+      const signal = AbortSignal.any([interrupted, stopped.signal])
+      const cancel = context.cancel
+      let listening = false
+      const listen = () => {
+        if (listening || !cancel) return
+        listening = true
+        Effect.runPromise(cancel, { signal: AbortSignal.any([interrupted, finished.signal]) }).then(
+          () => stopped.abort(),
+          () => {},
+        )
+      }
+      return Promise.resolve(
+        tool.execute(input, {
+          ...context,
+          get signal() {
+            listen()
+            return signal
+          },
+          progress: (update) => Effect.runPromise(context.progress(update), { signal: interrupted }),
+        }),
+      ).finally(() => finished.abort())
+    },
     catch: toolError,
   })
