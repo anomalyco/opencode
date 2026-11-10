@@ -20,6 +20,8 @@ export const registry = {
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   full_codemode:
     "Enable the full Code Mode work in progress. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=full_codemode or experimental.full_codemode: true.",
+  local_auth:
+    "Enable local server accounts: register and sign in with a username and password on the server's sign-in screen, with sessions stored in the database.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
