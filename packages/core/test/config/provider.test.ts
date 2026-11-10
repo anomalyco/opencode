@@ -1055,7 +1055,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
         editor.update(providerID, (provider) => {
           provider.package = "@opencode/ai/providers/openai-compatible"
         })
-        const levels = { "glm-5": ["none", "thinking"], "glm-4.7": ["low", "high", "ultra"] }
+        const levels = {
+          "glm-5": ["none", "thinking"],
+          "glm-5.2": ["none", "high", "max"],
+          "glm-4.7": ["low", "high", "ultra"],
+        }
         for (const [id, ids] of Object.entries(levels))
           editor.models.update(providerID, Model.ID.make(id), (model) => {
             model.variants = ids.map((variant) => ({ id: Model.VariantID.make(variant), body: { level: variant } }))
@@ -1073,6 +1077,12 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(yield* variants("glm-5")).toEqual([
         { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         { id: Model.VariantID.make("thinking"), settings: { thinking: { type: "adaptive", display: "summarized" } } },
+      ])
+      const adaptive = { type: "adaptive", display: "summarized" }
+      expect(yield* variants("glm-5.2")).toEqual([
+        { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+        { id: Model.VariantID.make("high"), settings: { thinking: adaptive, effort: "high" } },
+        { id: Model.VariantID.make("max"), settings: { thinking: adaptive, effort: "max" } },
       ])
       // A level the new package can't spell is dropped rather than kept in the old spelling.
       expect(yield* variants("glm-4.7")).toEqual(

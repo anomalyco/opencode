@@ -305,10 +305,12 @@ function overlay(
  * catalog's reasoning support, so the current variant ids stand in for it; a level the package can't spell is dropped.
  */
 function respell(model: Model.Info, previous: Model.Info["variants"]) {
-  const spelled = [
-    ...(previous.some((variant) => variant.id === "thinking") ? Variant.resolve(model, [{ type: "toggle" }]) : []),
-    ...Variant.resolve(model),
-  ]
+  const toggle = Variant.resolve(model, [{ type: "toggle" }])
+  const effort = Variant.resolve(model)
+  // A toggle model's `none` turns thinking off; an effort model's `none` is an effort level, if the package has one.
+  const spelled = previous.some((variant) => variant.id === "thinking")
+    ? [...toggle, ...effort]
+    : [...effort, ...toggle]
   return previous.flatMap((variant) => spelled.find((item) => item.id === variant.id) ?? [])
 }
 
