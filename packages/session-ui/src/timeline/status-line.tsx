@@ -10,7 +10,7 @@ export function TimelineStatusLane(props: {
   label?: string
   collapsed?: boolean
   /** The space above the next row of the turn, so the line sits where that row will. */
-  spacing?: "tool" | "content"
+  spacing?: "s" | "l"
   class?: string
   children?: JSX.Element
 }) {

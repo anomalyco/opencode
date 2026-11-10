@@ -28,7 +28,7 @@ type Render = {
   /** The Activity timeline's lane, which folds away while a thought takes its place, or the lane the app had before. */
   lane: "activity" | "legacy"
   collapsed?: boolean
-  spacing?: "tool" | "content"
+  spacing?: "s" | "l"
   /** A shell or subagent call blocks the turn, so the lane offers to move it to the background. */
   hint?: boolean
   /** How long the call runs before that offer shows, as the build comparing it waits. */
@@ -41,7 +41,7 @@ const ActivityLane = Object.values(
     TimelineStatusLane: Component<{
       label?: string
       collapsed?: boolean
-      spacing?: "tool" | "content"
+      spacing?: "s" | "l"
       class?: string
       children?: JSX.Element
     }>

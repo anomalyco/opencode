@@ -2014,9 +2014,10 @@
   gap: 8px;
 }
 
-/* In the Activity timeline each changed file is its own accordion, rather than one stacked group. */
+/* In the Activity timeline each changed file is its own accordion, rather than one stacked group, as far from the next
+   as any two rows. */
 [data-activity-timeline] [data-component="accordion"][data-scope="apply-patch"] {
-  gap: 8px;
+  gap: var(--timeline-gap-s);
 
   [data-slot="accordion-item"] + [data-slot="accordion-item"] {
     margin-top: 0;
@@ -2220,8 +2221,13 @@
 }
 
 /* Rows in an opened group read like the group's own label: the tool muted, what it worked on bright, counts muted, all at
-   one weight. */
-[data-activity-timeline] [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"] {
+   one weight. A tool shown on its own row, as the most detailed settings show each call, reads the same. */
+[data-activity-timeline]
+  :is(
+    [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+    [data-slot="session-turn-assistant-content"] > [data-component="tool-part-wrapper"],
+    [data-slot="session-turn-assistant-content"] > [data-component="read-tool-group"]
+  ) {
   [data-slot="basic-tool-tool-title"],
   [data-slot="basic-tool-tool-subtitle"],
   [data-slot="basic-tool-tool-arg"],
@@ -2339,6 +2345,169 @@
   }
 }
 
-[data-component="timeline-event-row"] [data-component="context-tool-group-trigger"] {
-  height: 28px;
+/* The Activity timeline spaces rows by block: rows that continue a block sit the small gap below the one above, and a
+   row starting a block (the user's message, the agent's work in reply, an interruption) sits the large gap below.
+   The gap is the frame's only space above its content; rows add none of their own. */
+[data-activity-timeline] {
+  --timeline-gap-s: 16px;
+  --timeline-gap-m: 24px;
+  --timeline-gap-l: 32px;
+}
+
+[data-activity-timeline][data-timeline-gap="s"] {
+  padding-top: var(--timeline-gap-s);
+}
+
+[data-activity-timeline][data-timeline-gap="m"] {
+  padding-top: var(--timeline-gap-m);
+}
+
+[data-activity-timeline][data-timeline-gap="l"] {
+  padding-top: var(--timeline-gap-l);
+}
+
+/* The user's message actions show in the large gap below it rather than adding to it, above the row that follows so
+   they stay reachable. */
+[data-activity-timeline][data-timeline-row="UserMessage"] {
+  position: relative;
+  z-index: 1;
+
+  [data-component="user-message"] {
+    position: relative;
+  }
+
+  [data-slot="user-message-copy-wrapper"] {
+    position: absolute;
+    inset-inline: 0;
+    top: 100%;
+    height: 20px;
+    margin-top: 8px;
+  }
+}
+
+/* Rows are as tall as their text, so the gaps between them are the gaps that show. A row's 28px click area stays: 6px of
+   padding above and below, taken back by margins of the same size, so neighbouring click areas meet without overlapping.
+   An open row's header ends the small gap above its first nested row. */
+[data-activity-timeline] {
+  [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-trigger"],
+  [data-component="card"][data-kind="tool-error-card"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"] {
+    height: calc(var(--line-height-compact) + 12px);
+    padding-block: 6px;
+    margin-block: -6px;
+  }
+
+  [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
+    --tool-content-gap: var(--timeline-gap-s);
+    gap: 0;
+
+    > [data-slot="collapsible-trigger"] {
+      height: calc(var(--line-height-compact) + 12px);
+      padding-block: 6px;
+      margin-block: -6px;
+    }
+
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+      height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
+      padding-bottom: var(--timeline-gap-s);
+      margin-bottom: 0;
+    }
+  }
+
+  [data-component="context-tool-group-trigger"] {
+    height: var(--line-height-compact);
+    min-height: 0;
+  }
+
+  /* Rows a group draws itself, and its row of reads, sit on the same line of text as any other. */
+  [data-slot="context-tool-group-item"] {
+    [data-component="tool-trigger"],
+    [data-slot="basic-tool-tool-trigger-content"],
+    [data-slot="basic-tool-tool-info"] {
+      min-height: 0;
+      line-height: var(--line-height-compact);
+    }
+  }
+
+  [data-component="read-tool-group"] {
+    --read-tool-group-height: var(--line-height-compact);
+
+    [data-component="tool-trigger"],
+    [data-slot="basic-tool-tool-trigger-content"],
+    [data-slot="basic-tool-tool-info"] {
+      min-height: 0;
+      line-height: var(--line-height-compact);
+    }
+  }
+
+  /* The agent's text has a taller line than its rows; trimming the half-leading at its edges puts its first and last
+     lines where a row's text would sit, so the gaps around it read the same. */
+  [data-component="text-part"] [data-component="markdown"],
+  [data-component="reasoning-part"] [data-component="markdown"] {
+    text-box: trim-both text;
+  }
+
+  [data-component="text-part"] {
+    margin-top: 0;
+  }
+
+  /* The agent's last words in a turn keep their actions in the large gap below them, as the user's message does. */
+  [data-component="text-part"]:has(> [data-slot="text-part-copy-wrapper"]) {
+    position: relative;
+
+    > [data-slot="text-part-copy-wrapper"] {
+      position: absolute;
+      inset-inline: 0;
+      top: 100%;
+    }
+  }
+
+  [data-component="context-tool-group-list"],
+  [data-component="timeline-event-list"] {
+    gap: var(--timeline-gap-s);
+    padding-top: 0;
+  }
+
+  [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+  [data-component="timeline-event-list"] [data-slot="timeline-event-item"] {
+    min-height: var(--line-height-compact);
+  }
+
+  /* A card (a shell or a file) takes the medium gap where it meets a row of text, so it never crowds the text beside
+     it; between cards, and at the start or end of a list, the list's own small gap is all there is. */
+  [data-component="context-tool-group-list"] {
+    [data-slot="context-tool-group-item"]:has([data-component="bash-output"], [data-component="accordion"])
+      + [data-slot="context-tool-group-item"]:not(:has([data-component="bash-output"], [data-component="accordion"])),
+    [data-slot="context-tool-group-item"]:not(:has([data-component="bash-output"], [data-component="accordion"]))
+      + [data-slot="context-tool-group-item"]:has([data-component="bash-output"], [data-component="accordion"]) {
+      margin-top: calc(var(--timeline-gap-m) - var(--timeline-gap-s));
+    }
+  }
+
+  [data-component="context-tool-group-list"]
+    [data-slot="context-tool-group-item"]
+    > [data-component="tool-part-wrapper"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"] {
+    height: calc(var(--line-height-compact) + 12px);
+    padding-block: 6px;
+    margin-block: -6px;
+  }
+
+  /* An open row's nested content starts the small gap below its header. */
+  [data-component="collapsible"].tool-collapsible:has(> [data-slot="collapsible-content"]) {
+    gap: 0;
+
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+      margin-bottom: 0;
+      padding-bottom: var(--timeline-gap-s);
+      height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
+    }
+  }
+}
+
+[data-activity-timeline][data-timeline-row="AssistantPart"]:has([data-slot="text-part-copy-wrapper"]) {
+  position: relative;
+  z-index: 1;
 }

@@ -3,7 +3,8 @@ import { createStore } from "solid-js/store"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { replayScript, scenarios, ticks, type ScenarioName } from "../storybook/session-replay"
 import { timelinePresets } from "./detail"
-import { createTimelineProjection, nextRowSpacingAfter } from "./projection"
+import { createTimelineProjection } from "./projection"
+import { timelineLaneGap } from "./spacing"
 import { timelineStatus, timelineThinking } from "./status"
 import { TimelineStatusLane } from "./status-line"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
@@ -72,7 +73,7 @@ export const Playground = {
       })
       const active = projection.activeMessageID
 
-      return active ? nextRowSpacingAfter(projection.rows, active, projection.messageByID) : undefined
+      return active ? timelineLaneGap(projection.rows, active, projection.messageByID) : undefined
     })
 
     const status = createMemo(() => {

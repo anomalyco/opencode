@@ -654,6 +654,16 @@ export function createSessionTimelineRowRenderer(input: {
     return { label: message.description ?? message.text }
   }
 
+  // In the Activity timeline each row's space above comes from its block, and none of its own. A message joining the
+  // user's message above already sits its run's 4 px below it.
+  const gap = (row: FramedTimelineRow) => {
+    if (!input.activity?.()) return undefined
+
+    if (Predicate.isTagged(row, "UserMessage") && runs().get(row.userMessageID)?.above) return undefined
+
+    return input.projection.rowGaps().get(TimelineRow.key(row))
+  }
+
   const Frame = (props: { row: FramedTimelineRow; grow?: boolean; children: JSX.Element }) => (
     <div
       ref={(el) => {
@@ -665,16 +675,19 @@ export function createSessionTimelineRowRenderer(input: {
       data-activity-timeline={input.activity?.() ? "" : undefined}
       data-timeline-row={props.row._tag}
       data-timeline-spacing={Predicate.isTagged(props.row, "AssistantPart") ? props.row.spacing : undefined}
+      data-timeline-gap={gap(props.row)}
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-session md:mx-auto": input.centered?.(),
         "pt-2":
+          !input.activity?.() &&
           (Predicate.isTagged(props.row, "AssistantPart") || Predicate.isTagged(props.row, "Thinking")) &&
           props.row.spacing === "tool",
         "pt-4":
+          !input.activity?.() &&
           (Predicate.isTagged(props.row, "AssistantPart") || Predicate.isTagged(props.row, "Thinking")) &&
           props.row.spacing === "content",
-        "pt-6": Predicate.isTagged(props.row, "Error"),
+        "pt-6": !input.activity?.() && Predicate.isTagged(props.row, "Error"),
       }}
     >
       <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>
@@ -800,7 +813,7 @@ export function createSessionTimelineRowRenderer(input: {
       <>
         <Show when={goal()}>
           {(objective) => (
-            <div data-slot="session-turn-message-container" class={`w-full pt-6 ${inset()}`}>
+            <div data-slot="session-turn-message-container" class={`w-full ${inset()}`}>
               <div data-component="user-message" data-goal="">
                 <div data-slot="user-message-body">
                   <div data-slot="user-message-text" dir="auto">
@@ -838,7 +851,7 @@ export function createSessionTimelineRowRenderer(input: {
                           component={href() ? "a" : "div"}
                           data-slot="session-timeline-notice"
                           data-outcome={content().outcome}
-                          class={`block w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-v2-text-text-faint ${inset()}`}
+                          class={`block w-full truncate ${props.grouped ? "py-1" : input.activity?.() ? "" : "pt-3 pb-1"} text-13-regular leading-text-compact text-v2-text-text-faint ${inset()}`}
                           classList={{ "cursor-pointer hover:text-v2-text-text-base": clickable() }}
                           href={href()}
                           role={clickable() && !href() ? (shellID() ? "button" : "link") : undefined}
@@ -873,7 +886,10 @@ export function createSessionTimelineRowRenderer(input: {
                         </Dynamic>
                       }
                     >
-                      <div data-slot="session-timeline-notice" class={`w-full py-1 ${inset()}`}>
+                      <div
+                        data-slot="session-timeline-notice"
+                        class={`w-full ${input.activity?.() ? "" : "py-1"} ${inset()}`}
+                      >
                         <div class="flex min-h-5 min-w-0 items-center gap-2 overflow-hidden">
                           <bdi
                             dir="auto"
@@ -899,7 +915,11 @@ export function createSessionTimelineRowRenderer(input: {
               }
             >
               {(model) => (
-                <div data-slot="session-timeline-notice" data-type="model-switched" class={`w-full py-2 ${inset()}`}>
+                <div
+                  data-slot="session-timeline-notice"
+                  data-type="model-switched"
+                  class={`w-full ${input.activity?.() ? "" : "py-2"} ${inset()}`}
+                >
                   <TimelineSeparator label={model().label} providerID={model().providerID} variant={model().variant} />
                 </div>
               )}
@@ -907,7 +927,11 @@ export function createSessionTimelineRowRenderer(input: {
           }
         >
           {(message) => (
-            <div data-slot="session-timeline-notice" data-type="location-switched" class={`w-full py-2 ${inset()}`}>
+            <div
+              data-slot="session-timeline-notice"
+              data-type="location-switched"
+              class={`w-full ${input.activity?.() ? "" : "py-2"} ${inset()}`}
+            >
               <TimelineSeparator
                 label={i18n.t("ui.sessionTimeline.notice.movedTo")}
                 value={message().location.directory}
@@ -974,7 +998,7 @@ export function createSessionTimelineRowRenderer(input: {
 
     return (
       <Show when={data.turnDiff && paths().length > 0}>
-        <div data-slot="session-turn-diffs" class="flex flex-col gap-2 pt-4">
+        <div data-slot="session-turn-diffs" class={`flex flex-col gap-2 ${input.activity?.() ? "" : "pt-4"}`}>
           <div class="flex h-6 min-w-0 items-center gap-2">
             <span class="shrink-0 text-14-medium text-v2-text-text-base tabular-nums">
               {i18n.plural("ui.sessionTurn.diffs.changed", paths().length)}
@@ -1036,7 +1060,7 @@ export function createSessionTimelineRowRenderer(input: {
     const joined = run(props.messageID)
     springStyle(
       () => element,
-      () => ({ height: joined()?.above ? 4 : 16 }),
+      () => ({ height: joined()?.above ? 4 : input.activity?.() ? 0 : 16 }),
       (el, value) => {
         el.style.height = `${value.height}px`
       },
@@ -1049,7 +1073,7 @@ export function createSessionTimelineRowRenderer(input: {
         ref={element}
         data-timeline-row="TurnGap"
         aria-hidden="true"
-        style={{ height: untrack(joined)?.above ? "4px" : "16px" }}
+        style={{ height: untrack(joined)?.above ? "4px" : input.activity?.() ? "0px" : "16px" }}
       />
     )
   }
@@ -1176,7 +1200,7 @@ export function createSessionTimelineRowRenderer(input: {
 
       return (
         <Frame row={current()}>
-          <div data-slot="session-turn-message-container" class={`w-full pt-2 ${padding()}`}>
+          <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <TimelineEventRow
               events={events()}
               open={input.disclosure.value(`events:${current().messageIDs[0]}`) === true}
@@ -1204,7 +1228,7 @@ export function createSessionTimelineRowRenderer(input: {
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-compaction">
-              <div class="py-2">
+              <div class={input.activity?.() ? "" : "py-2"}>
                 <TimelineSeparator label={i18n.t("ui.message.interrupted")} />
               </div>
             </div>
@@ -1329,7 +1353,7 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div class="pt-2 text-13-regular leading-text-compact text-v2-text-text-muted">{label()}</div>
+            <div class="text-13-regular leading-text-compact text-v2-text-text-muted">{label()}</div>
           </div>
         </Frame>
       )

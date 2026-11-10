@@ -16,7 +16,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { nextRowSpacingAfter, Timeline } from "@opencode/session-ui/timeline/projection"
+import { Timeline } from "@opencode/session-ui/timeline/projection"
+import { timelineLaneGap } from "@opencode/session-ui/timeline/spacing"
 import { timelineThinkingOpen } from "@opencode/session-ui/timeline/policy"
 import { timelineStatus } from "@opencode/session-ui/timeline/status"
 import { TimelineStatusLane } from "@opencode/session-ui/timeline/status-line"
@@ -473,7 +474,7 @@ function MessageTimelineView(
   const laneSpacing = createMemo(() => {
     const active = projection.activeMessageID()
 
-    return active ? nextRowSpacingAfter(projection.rows(), active, messageByID()) : undefined
+    return active ? timelineLaneGap(projection.rows(), active, messageByID()) : undefined
   })
 
   const hint = (live: () => boolean) => (

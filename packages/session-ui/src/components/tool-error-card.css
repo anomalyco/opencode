@@ -193,9 +193,19 @@
     flex-shrink: 0;
   }
 
-  /* As tall as the other rows, so opening it never moves its heading within the row's slot. */
+  /* A row's line of text inside its 28px click area, as the timeline's other rows have; the card's own 24px trigger
+     would leave less room than the line and clip it. Open, it ends the small gap above the error. */
   > [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
-    height: 28px;
+    height: calc(var(--line-height-compact) + 12px);
+  }
+
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
+  }
+
+  /* Its taller lines trim to their text at the edges, so the gaps around the error read like the gaps between rows. */
+  [data-slot="tool-error-card-content"] [data-slot="card-description"] {
+    text-box: trim-both text;
   }
 
   /* Without the warning icon, the error hangs from the nested line like any other row's content. */

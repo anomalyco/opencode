@@ -287,22 +287,23 @@
   gap: 24px;
 }
 
-/* Laid out like a row of activity: a 28px line below the space the next row of the turn would take, so the status
-   line sits where that row lands and the live thought takes its exact place. */
+/* Laid out like the agent's next row: a line of text below the gap that row would take, so the status line sits where
+   that row lands and the live thought takes its exact place. */
 [data-component="timeline-status-lane"] {
   --timeline-status-space: 0px;
   display: flex;
   align-items: center;
   gap: 8px;
-  height: calc(28px + var(--timeline-status-space));
+  height: calc(var(--line-height-compact) + var(--timeline-status-space));
   padding-top: var(--timeline-status-space);
 
-  &[data-spacing="tool"] {
-    --timeline-status-space: 8px;
+  /* The timeline's small and large gaps between rows, which the lane sits outside of. */
+  &[data-spacing="s"] {
+    --timeline-status-space: 16px;
   }
 
-  &[data-spacing="content"] {
-    --timeline-status-space: 16px;
+  &[data-spacing="l"] {
+    --timeline-status-space: 32px;
   }
 
   &[data-collapsed] {

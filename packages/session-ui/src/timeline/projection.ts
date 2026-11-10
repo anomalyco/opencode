@@ -22,6 +22,7 @@ import {
 } from "./policy"
 import { errorInfo } from "./errors"
 import { noticeEvent, timelineEventTool } from "./events"
+import { timelineGaps, type TimelineGap } from "./spacing"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
@@ -230,11 +231,17 @@ export function createReactiveTimelineProjection(input: {
     return result
   })
 
+  // The Activity timeline spaces rows by block; other timelines keep each row's own spacing.
+  const rowGaps = createMemo(() =>
+    input.activity?.() ? timelineGaps(rows(), sessionMessageByID()) : new Map<string, TimelineGap>(),
+  )
+
   return {
     activeMessageID,
     turnPhaseByID,
     assistantMessagesByParent,
     lastAssistantGroupKey,
+    rowGaps,
     messageByID: sessionMessageByID,
     messageRowIndex,
     messageLastRowIndex,
@@ -766,29 +773,6 @@ export function nextRowSpacing(index: number, previousTool: boolean) {
   if (index === 0) return undefined
 
   return previousTool ? ("tool" as const) : ("content" as const)
-}
-
-/**
- * The same space, read from a turn's rows, for the status line below it: the line sits where the next row will, so
- * nothing moves when that row takes its place.
- */
-export function nextRowSpacingAfter(
-  rows: readonly TimelineRow.TimelineRow[],
-  turnID: string,
-  messageByID: ReadonlyMap<string, SessionMessageInfo>,
-) {
-  const parts = rows.filter(
-    (row): row is GroupRow => Predicate.isTagged(row, "AssistantPart") && row.userMessageID === turnID,
-  )
-  const last = parts.at(-1)
-
-  if (!last) return undefined
-
-  const text =
-    last.group.type === "part" &&
-    Timeline.resolveContent(messageByID.get(last.group.ref.messageID), last.group.ref.partID)?.type === "text"
-
-  return nextRowSpacing(parts.length, !text)
 }
 
 export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {

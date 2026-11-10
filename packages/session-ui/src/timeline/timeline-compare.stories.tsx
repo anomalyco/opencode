@@ -3,7 +3,8 @@ import { For, Show, createEffect, createMemo, onCleanup, onMount, type JSX } fro
 import { createStore } from "solid-js/store"
 import { replayScript, replaySession, scenarios, sessionSteps, ticks } from "../storybook/session-replay"
 import { timelinePresets } from "./detail"
-import { createTimelineProjection, nextRowSpacingAfter } from "./projection"
+import { createTimelineProjection } from "./projection"
+import { timelineLaneGap } from "./spacing"
 import { timelineStatus, timelineThinking } from "./status"
 
 /**
@@ -116,7 +117,7 @@ export const Compare = {
       })
       const active = projection.activeMessageID
 
-      return active ? nextRowSpacingAfter(projection.rows, active, projection.messageByID) : undefined
+      return active ? timelineLaneGap(projection.rows, active, projection.messageByID) : undefined
     })
 
     // As in the app: a shell or subagent call still running in the step the agent is on blocks the turn.
