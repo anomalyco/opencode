@@ -368,3 +368,24 @@ async fn a_nested_read_works_and_a_write_inside_a_read_panics() {
     let panicked = receiver.recv_timeout(std::time::Duration::from_secs(2));
     assert_eq!(panicked, Ok(true), "a write inside a read must panic, not hang");
 }
+
+// r2 data review --------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn deleting_a_session_drops_its_forms() {
+    let (data, _) = counting();
+    emit(
+        &data,
+        json!({
+            "id": "evt_form", "created": 1, "type": "form.created", "location": { "directory": "/project" },
+            "data": { "form": { "id": "frm_a", "sessionID": "ses_form", "title": "Ask", "fields": [] } },
+        }),
+    );
+    assert_eq!(data.read(|state| state.form_sessions().len()), 1);
+    let seen = data.revision();
+    emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_form" })));
+    let (_, changes) = data.changes_since(seen);
+    assert!(changes.forms("ses_form"));
+    assert!(data.read(|state| state.forms("ses_form", None).is_none()));
+    assert!(data.read(|state| state.form_sessions().is_empty()));
+}
