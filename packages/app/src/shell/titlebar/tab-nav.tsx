@@ -10,7 +10,7 @@ import { Menu } from "@opencode/ui/menu"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { displayName } from "@opencode/ui/project-avatar"
+import { displayName, ProjectAvatar } from "@opencode/ui/project-avatar"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
@@ -71,6 +71,7 @@ export function TabNavItem(
     unread: boolean
     attention: boolean
     loading: boolean
+    shortcut?: number
     fallbackTitle?: string
     fallbackDirectory?: string
     /** Shows a title at once: the optimistic one, or the one to restore when its save fails. */
@@ -461,7 +462,14 @@ export function TabNavItem(
               <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
             }
           >
-            {(directory) => <SessionTabAvatarView project={project()} directory={directory()} unread={false} />}
+            {(directory) => (
+              <SessionTabAvatarView
+                project={project()}
+                directory={directory()}
+                unread={false}
+                label={props.shortcut?.toString()}
+              />
+            )}
           </Show>
           <Show when={dotted()}>
             <span data-slot="tab-avatar-unread-dot" aria-hidden="true" />
@@ -610,6 +618,7 @@ export function DraftTabItem(
     ref?: Ref<HTMLDivElement>
     href: string
     title: string
+    shortcut?: number
     active?: boolean
     onNavigate: () => void
     suppressNavigation?: boolean
@@ -684,8 +693,9 @@ export function DraftTabItem(
           }}
           class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
         >
-          <span class="flex size-4 shrink-0 items-center justify-center">
+          <span class="relative flex size-4 shrink-0 items-center justify-center">
             <svg
+              data-slot="tab-icon-face"
               class="text-v2-icon-icon-muted group-data-[active='true']:text-v2-icon-icon-base"
               width="16"
               height="16"
@@ -699,6 +709,13 @@ export function DraftTabItem(
                 stroke="currentColor"
               />
             </svg>
+            <Show when={props.shortcut}>
+              {(shortcut) => (
+                <span data-slot="tab-shortcut-face" aria-hidden="true">
+                  <ProjectAvatar fallback="" label={shortcut().toString()} variant="outline" />
+                </span>
+              )}
+            </Show>
           </span>
           <span
             data-titlebar-tab-title
