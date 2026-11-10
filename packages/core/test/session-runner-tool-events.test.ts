@@ -85,6 +85,29 @@ const hostedResult = LLMEvent.toolResult({
   },
 })
 
+test("ignores a repeated tool input start for an open call instead of dying", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.toolInputStart({ id: "call", name: "read" }),
+        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '{"path":' }),
+        LLMEvent.toolInputStart({ id: "call", name: "read" }),
+        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '"pixel.png"}' }),
+        LLMEvent.toolInputEnd({ id: "call", name: "read" }),
+      ],
+      publisher.publish,
+      { discard: true },
+    ),
+  )
+
+  // The duplicate start is dropped: one started event, both deltas accumulate, and the call ends
+  // with the full assembled input.
+  expect(published.filter((event) => event.type === "session.tool.input.started.1")).toHaveLength(1)
+  const ended = published.find((event) => event.type === "session.tool.input.ended.1")
+  expect(ended?.data).toMatchObject({ id: "call", text: '{"path":"pixel.png"}' })
+})
+
 test("local tool success serializes media base64 once through canonical content", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(call))
