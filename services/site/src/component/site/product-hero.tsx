@@ -22,7 +22,12 @@ export type HeroMedia = HeroFile & { themes?: { light: HeroFile; dark: HeroFile 
  * The hero at the top of a product page (product-page.tsx) and of Browse's page (extension-page.tsx):
  * the poster, then the video over it once it can play. Black when there is no media.
  */
-export function ProductHero(props: { slug: string; media: HeroMedia | undefined; design?: string }) {
+export function ProductHero(props: {
+  /** A product page's slug: the card that grows into this hero (card-morph.ts). */
+  slug?: string
+  media: HeroMedia | undefined
+  design?: string
+}) {
   // The page's colour scheme for the hero's themed files: read while hydrating, so the files match
   // what the hero's inline script picked, then kept in step with the theme and the system setting
   // (on a static page, src/client/islands/product-hero.ts).

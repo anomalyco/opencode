@@ -21,7 +21,8 @@ Read the design-system rules in `DESIGN.md` (also shown at `/dev/components#rule
 
 ## Static pages
 
-- The reading pages in `staticPaths` (`src/static/routes.ts`: legal, Brand, Press, the changelog and Browse) render in production as plain HTML from the same components, without hydration (`src/static/render.tsx`). They load one small script, `src/client/entry.ts`, which reads the markup the components render and loads each island in `src/client/islands/` only when the page has it.
+- The pages in `staticPaths` (`src/static/routes.ts`: home, the product pages, legal, Brand, Press, the changelog and Browse) render in production as plain HTML from the same components, without hydration (`src/static/render.tsx`). They load one small script, `src/client/entry.ts`, which reads the markup the components render and loads each island in `src/client/islands/` only when the page has it.
+- Between the home page, /product and the product pages, a card grows into its product's hero and back with a cross-document view transition (`card-morph.ts`); every other page change is a plain page load.
 - Behaviour both renderings need lives in framework-free modules in `src/component/site/` that the component and the script both call, such as `contents-spy.ts`, `changelog-motion.ts`, `tooltips.ts`, `site-frame.ts`, `theme-switch.ts` and `sheet-motion.ts`. Put new behaviour there. Where a component renders its state from signals and the script keeps its own copy, each names the other in a comment: change both.
 - `vite dev` renders these pages hydrated, because Design mode and Settings need the app, so a change that only works hydrated looks right there. Check them in a production build served by `perf/serve.ts`: `bun run build`, then `bun perf/serve.ts --port 4300`, and open the page on that port.
 - To serve a page hydrated again, remove its path from `staticPaths`.

@@ -70,6 +70,7 @@ import {
 import { inlineKey } from "~/lib/direction"
 import { staticRender } from "~/lib/static-render"
 import { cardVideo } from "./card-video"
+import { markCard, onScreen, showHeroPoster, travel, type CardTiming } from "./card-morph"
 
 export { installs, products, sdkSnippet, type ProductSlug } from "./product-data"
 
@@ -154,7 +155,7 @@ function shrink(slug: PageSlug, page: CardPage, saved: Scroll | undefined, go: (
   // moves: the pages only crossfade.
   const hero = document.querySelector('[data-component="product-hero"]')?.getBoundingClientRect()
   const morph = !prefersReducedMotion() && !!hero && onScreen(hero)
-  markCardTransition(morph ? "shrink" : "fade")
+  markCard(morph ? "shrink" : "fade", cardTiming())
   const media = pageMedia(siteSettings.productVideos, slug, "portrait", document.documentElement.dataset.locale)
   const poster = media?.still ?? media?.poster
   let card: HTMLElement | undefined
@@ -186,7 +187,7 @@ function shrink(slug: PageSlug, page: CardPage, saved: Scroll | undefined, go: (
     if (bounds && (box.left < bounds.left - 1 || box.right > bounds.right + 1)) return
     card = found
     card.style.viewTransitionName = "product-hero"
-    if (hero) travel(hero, box, siteSettings.cardShrinkDuration)
+    if (hero) travel(hero, box, siteSettings.cardShrinkDuration, cardTiming())
   })
   const fallback = setTimeout(() => {
     transition.skipTransition()
@@ -338,6 +339,7 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
                 onClick={(event) => grow(event, navigate, track?.getBoundingClientRect())}
                 onPointerEnter={() => heroPoster(product.slug)}
                 onFocus={() => heroPoster(product.slug)}
+                {...heroPosterSets(product.slug)}
               >
                 <Show when={"isNew" in product && product.isNew}>
                   <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
@@ -425,7 +427,7 @@ function grow(event: MouseEvent & { currentTarget: HTMLAnchorElement }, navigate
   // case the router reuses it for the new product.
   const leaving = document.querySelector<HTMLElement>('[data-component="product-hero"]')
   if (leaving) leaving.style.viewTransitionName = "none"
-  markCardTransition(morph ? "grow" : "fade")
+  markCard(morph ? "grow" : "fade", cardTiming())
   // Load the hero's poster first (hovering the card already started it), so the card grows into
   // a picture rather than a black box.
   const poster = heroPoster(slug)
@@ -448,7 +450,8 @@ function grow(event: MouseEvent & { currentTarget: HTMLAnchorElement }, navigate
       elementReady(`[data-component="product-hero"][data-product="${slug}"]`),
       poster ? imageReady(poster, stillSizes.hero) : undefined,
     ])
-    if (hero && morph) travel(from, hero.getBoundingClientRect(), siteSettings.cardGrowDuration)
+    showHeroPoster()
+    if (hero && morph) travel(from, hero.getBoundingClientRect(), siteSettings.cardGrowDuration, cardTiming())
   })
   const fallback = setTimeout(() => {
     transition.skipTransition()
@@ -456,8 +459,6 @@ function grow(event: MouseEvent & { currentTarget: HTMLAnchorElement }, navigate
   }, 400)
   current = transition
   void transition.finished.finally(() => {
-    // Keep the poster showing (no flash back to black) while the hero's video loads.
-    document.querySelector('[data-component="product-hero"] video')?.setAttribute("data-loaded", "")
     // A back step during the grow starts the next transition, which owns the page from then on.
     if (current === transition) delete document.documentElement.dataset.cardGrow
   })
@@ -508,6 +509,7 @@ export function ProductGrid() {
                 onClick={(event) => grow(event, navigate)}
                 onPointerEnter={() => heroPoster(product.slug)}
                 onFocus={() => heroPoster(product.slug)}
+                {...heroPosterSets(product.slug)}
               >
                 <Show when={"isNew" in product && product.isNew}>
                   <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
@@ -1412,62 +1414,37 @@ function heroPoster(slug: PageSlug) {
   return poster
 }
 
+/**
+ * On a static page, the product page hero's poster for each theme as a srcset (AVIF, else WebP), so
+ * its script loads the one the page will show from the first hover (src/client/card-morph.ts).
+ */
+function heroPosterSets(slug: PageSlug) {
+  if (!staticRender()) return {}
+  const media = pageMedia(siteSettings.productVideos, slug, "landscape")
+  const set = (poster: string | undefined) => {
+    const sources = poster ? imageSources(poster) : undefined
+    return sources && (sources.avif ?? sources.webp ?? sources.src)
+  }
+  return {
+    "data-hero-light": set(media?.themes?.light.poster ?? media?.poster),
+    "data-hero-dark": set(media?.themes?.dark.poster ?? media?.poster),
+  }
+}
+
+/** Settings › Card to page's timing (card-morph.ts). */
+export function cardTiming(): CardTiming {
+  return {
+    grow: siteSettings.cardGrowDuration,
+    shrink: siteSettings.cardShrinkDuration,
+    easing: cardEasingCurves[siteSettings.cardEasing],
+    pageFade: siteSettings.cardPageFade,
+    pageDelay: siteSettings.cardPageDelay,
+    imageFade: siteSettings.cardImageFade,
+  }
+}
+
 // Each image decodes once: a click after the hover finds it ready instead of decoding it again.
 const decoded = new Map<string, Promise<unknown>>()
-
-/**
- * Sets how long the box takes from how far it travels: the set duration for a trip of half the
- * window's diagonal or more, down to three quarters of it for a short one, so a small move doesn't
- * drift. Runs before the transition animates, which reads the value when it starts.
- */
-function travel(from: DOMRect, to: DOMRect, duration: number) {
-  const distance = Math.max(
-    Math.hypot(to.left - from.left, to.top - from.top),
-    Math.hypot(to.right - from.right, to.bottom - from.bottom),
-  )
-  const scale = Math.min(1, Math.max(0.75, distance / (0.5 * Math.hypot(window.innerWidth, window.innerHeight))))
-  const root = document.documentElement
-  const scaled = Math.round(duration * scale)
-  root.style.setProperty("--card-duration", `${scaled}ms`)
-  if (root.dataset.cardGrow !== "shrink") return
-  root.style.setProperty("--card-page-fade", `${Math.min(siteSettings.cardPageFade, scaled)}ms`)
-  root.style.setProperty("--card-image-fade", `${Math.min(siteSettings.cardImageFade, scaled)}ms`)
-}
-
-/**
- * Marks the page as changing between a card and its product page ("fade" when reduced motion keeps
- * the box still), and sets the timing from Settings › Card to page for the ::view-transition styles
- * in product-page.css.
- */
-function markCardTransition(direction: "grow" | "shrink" | "fade") {
-  const root = document.documentElement
-  root.dataset.cardGrow = direction
-  // Going back, nothing may outlast the shrink: the page and image fades fit inside it and the new
-  // page fades in at once, so the transition ends when the box lands.
-  const shrinking = direction === "shrink"
-  const duration = shrinking ? siteSettings.cardShrinkDuration : siteSettings.cardGrowDuration
-  root.style.setProperty("--card-duration", `${duration}ms`)
-  root.style.setProperty("--card-easing", cardEasingCurves[siteSettings.cardEasing])
-  root.style.setProperty(
-    "--card-page-fade",
-    `${shrinking ? Math.min(siteSettings.cardPageFade, duration) : siteSettings.cardPageFade}ms`,
-  )
-  root.style.setProperty("--card-page-delay", `${shrinking ? 0 : siteSettings.cardPageDelay}ms`)
-  root.style.setProperty(
-    "--card-image-fade",
-    `${shrinking ? Math.min(siteSettings.cardImageFade, duration) : siteSettings.cardImageFade}ms`,
-  )
-}
-
-/** True when at least half of the box is inside the window (and inside `clip`, if given). */
-function onScreen(box: DOMRect, clip?: DOMRect) {
-  const left = Math.max(box.left, 0, clip?.left ?? 0)
-  const right = Math.min(box.right, window.innerWidth, clip?.right ?? Infinity)
-  const top = Math.max(box.top, 0, clip?.top ?? 0)
-  const bottom = Math.min(box.bottom, window.innerHeight, clip?.bottom ?? Infinity)
-  const visible = Math.max(0, right - left) * Math.max(0, bottom - top)
-  return box.width > 0 && box.height > 0 && visible >= (box.width * box.height) / 2
-}
 
 /** Resolves once an image (the copy a <picture> with `sizes` picks) has loaded and decoded, or after 400ms. */
 function imageReady(src: string, sizes: string) {

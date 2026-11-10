@@ -10,6 +10,16 @@ import { dir, pageLocale, strip, tag } from "~/lib/language"
 import type { StaticPass } from "~/lib/page-data"
 import { sourceLogo } from "~/lib/source-logo"
 import { staticPath } from "./routes"
+import {
+  cardMorphKey,
+  clearCardMorph,
+  markCard,
+  onScreen,
+  revealCard,
+  showHeroPoster,
+  travel,
+} from "~/component/site/card-morph"
+import { cardTiming } from "~/component/site/products"
 
 type Middleware = ReturnType<typeof createMiddleware>[number]
 type PageModule = { default: Component; id$$?: string }
@@ -51,19 +61,34 @@ export const staticPages: Middleware = async (_event, next) => {
     ))
   const first = render()
   event.response.headers.set("Content-Type", "text/html")
-  if (!pass.pending.length) return unmarked(first)
+  if (!pass.pending.length) return finish(first)
   // The loaders answer their own expected failures (lib/edge-cache.ts); anything else fails the page
   // (a 500, which htmlCache never stores) rather than rendering it without its data.
   pass.values = await Promise.all(pass.pending)
   pass.collect = false
   pass.next = 0
-  return unmarked(render())
+  return finish(render())
 }
 
-/** Without Solid's markers around dynamic text, which only hydration reads. */
-function unmarked(html: string) {
-  return html.replace(/<!--!?\$?\/?-->/g, "")
+/**
+ * Without Solid's markers around dynamic text, which only hydration reads. A page with a product
+ * card, or a product page's hero, opts into cross-document view transitions for the card ↔ hero
+ * morph (card-morph.ts): the rule and the arriving half go first in its head, ahead of the
+ * stylesheets, so they run before the page's first frame.
+ */
+function finish(html: string) {
+  const page = html.replace(/<!--!?\$?\/?-->/g, "")
+  if (!/data-component="product-card"|data-component="product-hero"[^>]*data-product=/.test(page)) return page
+  return page.replace("<link ", `${cardReveal}<link `)
 }
+
+// The functions' own source, each statement on its own line, so a comment the bundle keeps stays
+// one.
+const cardReveal =
+  `<style>@view-transition{navigation:auto}</style><script>(${revealCard})(${JSON.stringify(cardTiming())},"${cardMorphKey}",{markCard:${markCard},travel:${travel},onScreen:${onScreen},clearCardMorph:${clearCardMorph},showHeroPoster:${showHeroPoster}})</script>`.replace(
+    /\n\s*/g,
+    "\n",
+  )
 
 function StaticDocument(props: { locale: Parameters<typeof tag>[0]; styles: string[]; children: unknown }) {
   return (
