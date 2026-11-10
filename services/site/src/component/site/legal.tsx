@@ -14,6 +14,7 @@ import {
   legalDate,
   legalMarkdown,
   legalTextChanged,
+  legalSections,
   legalVersions,
   type LegalDocumentContent,
   published,
@@ -26,6 +27,7 @@ import { copySelection } from "~/lib/clipboard"
 import { architectLabelCases, architectRules, legalHistoryViews, legalPrintStyles, siteSettings } from "./settings"
 import { resolvePattern } from "~/lib/legal/cover-pattern"
 import { LegalPrint, LegalReferences, legalReferences, useLegalReference } from "./legal-print"
+import printStylesheet from "./legal-print.css?url"
 import {
   architectLayout,
   coverConcepts,
@@ -38,6 +40,8 @@ import { ContentsMenu, HeadingLink, OnThisPage, SectionHeading, slug } from "./o
 import { Site } from "./site"
 import { useMarkdown } from "./use-markdown"
 import { PageTitle } from "./sticky-title"
+import { inHistory, pinnedScroll, revealTab } from "./legal-tabs"
+import { staticRender } from "~/lib/static-render"
 
 const feed = "/legal/feed.xml"
 const feedTitle = "OpenCode legal updates"
@@ -47,7 +51,7 @@ const feedTitle = "OpenCode legal updates"
  * every legal document and the document's sections. Above the text: the dates, History, Save as
  * PDF and a plain-language summary. Settings › Legal history (or `?historyView=` for review links)
  * picks where History shows: inline above the text, or in place of it (tabs, a toggle, the Contents
- * rail), or in a side drawer.
+ * rail), or in a side drawer. The static pages drive the same markup from src/client/islands/legal.ts.
  */
 export function LegalDocument(props: { document: LegalDocumentContent }) {
   const i18n = useI18n()
@@ -170,14 +174,24 @@ export function LegalDocument(props: { document: LegalDocumentContent }) {
     ...versions.map((version) => ({ id: `version-${version.sha.slice(0, 7)}`, title: legalDate(version.date) })),
   ]
   // Created once: Site reads its aside more than once, and a fresh element each time breaks hydration.
+  // A static page (src/static) has History's list ready in a template, for its script to swap in.
   const aside =
     sections.length > 1 || versions.length > 0 ? (
       <div data-component="legal-rail" data-design="legalHistoryView" lang="en" dir="ltr">
         <Show when={showingHistory()} fallback={sections.length > 1 ? <OnThisPage items={sections} /> : undefined}>
           <OnThisPage items={historyItems} />
         </Show>
+        <Show when={staticRender() && versions.length > 0}>
+          <template data-slot="history-contents">
+            <OnThisPage items={historyItems} />
+          </template>
+        </Show>
       </div>
     ) : undefined
+  // The print cover and colophon (legal-print.tsx) are large and only print: a static page leaves
+  // them to its script, which renders them on the way to printing (src/client/islands/legal.ts),
+  // unless a print or review link asks for them.
+  const print = !staticRender() || reviewParams.some((key) => params[key]) || !!params.autoprint
 
   const history = (back?: boolean) => (
     <LegalHistory document={props.document} onBack={back ? () => openHistory(false) : undefined} />
@@ -185,18 +199,20 @@ export function LegalDocument(props: { document: LegalDocumentContent }) {
 
   return (
     <Site page="legal-document" aside={aside} markdown={markdown}>
-      <LegalPrint
-        style={printStyle()}
-        part="cover"
-        layout={architect()}
-        divider={divider()}
-        labelCase={labelCase()}
-        pattern={pattern()}
-        patternId={params.pattern ? "custom" : siteSettings.architectPattern}
-        document={props.document}
-        sections={sections}
-        references={references}
-      />
+      <Show when={print}>
+        <LegalPrint
+          style={printStyle()}
+          part="cover"
+          layout={architect()}
+          divider={divider()}
+          labelCase={labelCase()}
+          pattern={pattern()}
+          patternId={params.pattern ? "custom" : siteSettings.architectPattern}
+          document={props.document}
+          sections={sections}
+          references={references}
+        />
+      </Show>
       <Title>{props.document.metaTitle}</Title>
       <ShareMeta
         title={props.document.metaTitle}
@@ -211,6 +227,8 @@ export function LegalDocument(props: { document: LegalDocumentContent }) {
         <Meta name="robots" content="noindex, nofollow" />
       </Show>
       <Link rel="alternate" type="application/rss+xml" title={feedTitle} href={feed} />
+      {/* The print styles load beside the page without holding up its first paint. */}
+      <Link rel="stylesheet" href={printStylesheet} media="print" />
       {/* The legal pages are English at every locale URL, so the trail uses their English URLs. */}
       <JsonLd
         data={breadcrumbData([
@@ -286,6 +304,7 @@ export function LegalDocument(props: { document: LegalDocumentContent }) {
             type="button"
             data-component="site-button"
             data-variant="neutral"
+            data-slot="print"
             data-design="legalPrintStyle"
             onClick={() => window.print()}
           >
@@ -371,14 +390,16 @@ export function LegalDocument(props: { document: LegalDocumentContent }) {
             <For each={props.document.body}>{(node) => <LegalBody node={node} anchors />}</For>
           </LegalReferences.Provider>
         </article>
-        <LegalPrint
-          style={printStyle()}
-          part="colophon"
-          labelCase={labelCase()}
-          document={props.document}
-          sections={sections}
-          references={references}
-        />
+        <Show when={print}>
+          <LegalPrint
+            style={printStyle()}
+            part="colophon"
+            labelCase={labelCase()}
+            document={props.document}
+            sections={sections}
+            references={references}
+          />
+        </Show>
       </div>
       <Show when={view() === "drawer" && versions.length > 0}>
         <dialog
@@ -410,50 +431,6 @@ export function LegalDocument(props: { document: LegalDocumentContent }) {
       </Show>
     </Site>
   )
-}
-
-/**
- * The document's sections for "Contents": each h2 with an id. The Privacy Policy's own inline
- * table of contents is left out.
- */
-function legalSections(body: LegalNode[]) {
-  // Review notes (data-review) are hidden from readers, so their headings stay out of Contents.
-  return body
-    .filter(published)
-    .filter((node) => typeof node !== "string" && node[0] === "h2" && node[1].id)
-    .map((node) => node as Exclude<LegalNode, string>)
-    .filter((node) => !node[1].id.endsWith("table-of-contents"))
-    .map((node) => ({ id: node[1].id, title: legalText(node) }))
-}
-
-/** Whether an address fragment is History or one of its parts: a version, or what changed. */
-const inHistory = (hash: string) => hash === "#history" || hash === "#history-changes" || hash.startsWith("#version-")
-
-/**
- * Where the page scrolls to keep a pinned tab bar pinned with the view under it starting at its top,
- * or undefined when the bar is not pinned. The bar's place in the flow is read from the view after
- * it, since a pinned (sticky) bar reports where it is drawn.
- */
-function pinnedScroll(tabs: HTMLElement) {
-  const panel = [...(tabs.parentElement?.children ?? [])].find(
-    (element): element is HTMLElement =>
-      element instanceof HTMLElement && !element.hidden && !!(tabs.compareDocumentPosition(element) & 4),
-  )
-  if (!panel) return undefined
-  const style = getComputedStyle(tabs)
-  const top = parseFloat(style.top)
-  const flow = panel.getBoundingClientRect().top - parseFloat(style.marginBottom) - tabs.offsetHeight
-  return flow < top - 0.5 ? flow + window.scrollY - top : undefined
-}
-
-/** Scrolls the tab row sideways, never the page, to show a tab cut off at its edges. */
-function revealTab(tab: HTMLElement) {
-  const list = tab.parentElement
-  if (!list) return
-  const item = tab.getBoundingClientRect()
-  const box = list.getBoundingClientRect()
-  if (item.left < box.left) list.scrollLeft -= box.left - item.left
-  if (item.right > box.right) list.scrollLeft += item.right - box.right
 }
 
 function legalText(node: LegalNode): string {
@@ -706,7 +683,13 @@ function LegalBody(props: {
 }) {
   if (typeof props.node === "string") return props.node
   const node = props.node
-  if (node[0] === "analytics-choice") return <AnalyticsChoice />
+  // Shown in the browser only; a static page's script renders it into this host (src/client/islands/legal.ts).
+  if (node[0] === "analytics-choice")
+    return staticRender() ? (
+      <div data-slot="analytics-choice-host" style={{ display: "contents" }} />
+    ) : (
+      <AnalyticsChoice />
+    )
   if (published(node)) return <LegalElement node={node} anchors={props.anchors} />
   // A note to the legal reviewers in a draft: shown only with Settings › Legal review notes.
   return (

@@ -13,7 +13,8 @@ import {
   type Letter,
 } from "~/lib/font-content"
 import { GlyphShape } from "./glyph"
-import { ease, Plate, prefersReducedMotion, span, useClock, useSeen, useVisible } from "./plate"
+import { useVisible } from "~/component/site/visible"
+import { ease, Plate, prefersReducedMotion, span, useClock, useSeen } from "./plate"
 
 const HOLD = 1800
 const FADE = 400

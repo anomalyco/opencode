@@ -3,6 +3,7 @@ import { createSignal, onCleanup, onMount, Show, type Component } from "solid-js
 import { Dynamic } from "solid-js/web"
 import { useI18n } from "~/context/i18n"
 import { detectPlatform, isApple } from "~/lib/platform"
+import { revealHandedOff } from "./search-reveal"
 import { siteSettings } from "./settings"
 
 /**
@@ -32,6 +33,7 @@ export const setSearchShown = setShown
 // The polite live region's text (result counts, copy confirmations). It lives in the shell, so the
 // region is in the page before its first announcement.
 const [announcement, setAnnouncement] = createSignal("")
+export const searchAnnouncement = announcement
 export const setSearchAnnouncement = setAnnouncement
 
 /** How the search was opened, for the funnel's `search.opened`. */
@@ -69,6 +71,7 @@ export function SiteSearch(props: SiteSearchProps) {
   }
 
   onMount(() => {
+    revealHandedOff()
     setMounted(true)
     setMac(isApple(detectPlatform()))
     const shortcut = (event: KeyboardEvent) => {

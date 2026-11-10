@@ -65,7 +65,7 @@ Uzak yapılandırma ilk olarak yüklenir ve temel katman görevi görür. Diğer
 
 Örneğin, kuruluşunuz varsayılan olarak devre dışı bırakılan MCP sunucuları sağlıyorsa:
 
-```json title="Remote config from .well-known/opencode"
+```json title=".well-known/opencode üzerinden uzak yapılandırma"
 {
   "mcp": {
     "jira": {

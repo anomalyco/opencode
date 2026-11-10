@@ -16,6 +16,7 @@ import type { Schema } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useTheme } from "@opencode/ui/theme/context"
 import { toaster } from "@opencode/ui/toast"
+import { writeClipboard } from "@opencode/session-ui/copy"
 import { base64Encode } from "@opencode/util/encode"
 import { uuid } from "@opencode/util/uuid"
 import {
@@ -294,7 +295,11 @@ export function createHostApis() {
       },
     }),
     system: () => ({
-      copy: (text) => platform.writeClipboardText?.(text) ?? navigator.clipboard.writeText(text),
+      async copy(text) {
+        if (platform.writeClipboardText) return platform.writeClipboardText(text)
+
+        if (!(await writeClipboard(text))) throw new Error(language.t("common.requestFailed"))
+      },
       async save(file) {
         if (platform.saveFile) return platform.saveFile({ defaultPath: file.name }, file.content)
         const url = URL.createObjectURL(new Blob([file.content], { type: "application/octet-stream" }))

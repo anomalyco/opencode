@@ -620,6 +620,140 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("routes Auto through Copilot's router and keeps the pick until compaction", () =>
+    Effect.gen(function* () {
+      const picks: unknown[] = []
+      const state = { pick: "routed", available: true, listed: false, auth: "" }
+      const remote = (id: string, extra: Record<string, unknown> = {}) => ({
+        model_picker_enabled: false,
+        id,
+        name: id,
+        version: id,
+        supported_endpoints: ["/chat/completions"],
+        capabilities: {
+          family: id,
+          limits: { max_prompt_tokens: 128_000, max_output_tokens: 64_000 },
+          supports: { tool_calls: true },
+        },
+        ...extra,
+      })
+      const api = HttpClient.make((request) =>
+        Effect.gen(function* () {
+          if (request.url.endsWith("/copilot_internal/user"))
+            return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
+          if (request.url.endsWith("/models")) {
+            state.listed = true
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                data: [
+                  remote("routed", { billing: { auto_discount: 0.1 } }),
+                  remote("other", { billing: { auto_discount: 0.1 } }),
+                  remote("fallback", { is_chat_fallback: true }),
+                ],
+              }),
+            )
+          }
+          state.auth = request.headers.authorization
+          picks.push(
+            request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : null,
+          )
+          if (!state.available) return HttpClientResponse.fromWeb(request, new Response(null, { status: 503 }))
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              session_token: `token-${state.pick}`,
+              expires_at: 4_000_000_000,
+              selected_model: { id: state.pick },
+            }),
+          )
+        }),
+      )
+      yield* connect({ apiEndpoint: "https://copilot.test" })
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
+      const models = yield* Model.Service
+      yield* advance(() => state.listed)
+      yield* drain
+      // Free plans hide every model from the picker; Auto is the one they can select.
+      expect(
+        (yield* models.available()).filter((model) => model.providerID === Provider.ID.githubCopilot).map((m) => m.id),
+      ).toEqual([Model.ID.make("auto")])
+
+      const hooks = yield* PluginHooks.Service
+      const ids = yield* sessions()
+      const resolve = (kind: SessionRequestKind, sessionID = ids.parent) =>
+        hooks
+          .trigger("session", "experimental.model.resolve", {
+            sessionID,
+            agent: Agent.ID.make("build"),
+            kind,
+            model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("auto") }),
+          })
+          .pipe(Effect.map((event) => (event.model.id === "auto" ? undefined : String(event.model.id))))
+      const token = (model: string) =>
+        hooks
+          .trigger("session", "model.request", {
+            sessionID: ids.parent,
+            agent: Agent.ID.make("build"),
+            model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make(model) }),
+            kind: "primary",
+            headers: {},
+          })
+          .pipe(Effect.map((event) => event.headers["Copilot-Session-Token"]))
+
+      expect(yield* resolve("title")).toBeUndefined()
+      expect(picks).toEqual([])
+      expect(yield* resolve("primary")).toBe("routed")
+      expect(yield* resolve("primary")).toBe("routed")
+      expect(yield* resolve("generate")).toBe("routed")
+      expect(picks).toEqual([{ prompt: "" }])
+      expect(yield* token("routed")).toBe("token-routed")
+      // Copilot rejects the token for any model but the one it was issued for.
+      expect(yield* token("other")).toBeUndefined()
+
+      state.pick = "other"
+      yield* hooks.trigger("session", "compaction", {
+        sessionID: ids.parent,
+        agent: Agent.ID.make("compaction"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("routed") }),
+        system: [],
+        messages: [],
+        options: {},
+        tools: {},
+      })
+      // The compaction request itself keeps the pick's token; the request after it routes again.
+      expect(yield* token("routed")).toBe("token-routed")
+      expect(yield* resolve("primary")).toBe("other")
+      expect(yield* token("other")).toBe("token-other")
+      expect(picks).toHaveLength(2)
+
+      expect(state.auth).toBe("Bearer token")
+
+      // A pick belongs to the account that made it.
+      state.pick = "routed"
+      state.listed = false
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
+        integrationID: Integration.ID.make("github-copilot"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "second",
+          refresh: "second",
+          expires: 0,
+          metadata: { apiEndpoint: "https://copilot.test" },
+        }),
+      })
+      yield* advance(() => state.listed)
+      yield* drain
+      expect(yield* resolve("primary")).toBe("routed")
+      expect(state.auth).toBe("Bearer second")
+
+      state.available = false
+      expect(yield* resolve("primary", ids.child)).toBe("fallback")
+    }),
+  )
+
   it.effect("disables gpt-5-chat-latest before Copilot language selection", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service

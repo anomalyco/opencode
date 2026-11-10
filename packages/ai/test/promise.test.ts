@@ -130,13 +130,13 @@ describe("AI promise client", () => {
     expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe("Hello world")
 
     const image = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
-    expect(image.image).toBeInstanceOf(Media.Asset)
-    expect(image.image.mediaType).toBe("image/png")
-    expect(await ai.run(image.image.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
+    expect(image.images[0]).toBeInstanceOf(Media.Asset)
+    expect(image.images[0].mediaType).toBe("image/png")
+    expect(await ai.run(image.images[0].bytes())).toEqual(Uint8Array.from([1, 2, 3]))
     const requested = await ai.image.generate(
       ai.image.request({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" }),
     )
-    expect(requested.image.mediaType).toBe("image/png")
+    expect(requested.images[0].mediaType).toBe("image/png")
 
     const deltas: Array<string> = []
     for await (const event of ai.stream(request)) {

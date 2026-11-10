@@ -1,7 +1,8 @@
 import "./logo-wall.css"
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from "solid-js"
-import { inView, revealMotion, washRootMargin, washStartTime, washThreshold } from "./reveal"
+import { onEntrance, revealMotion } from "./reveal"
 import type { logoAnimations, logoLayouts, SiteSettings } from "./settings"
+import { useVisible } from "./visible"
 
 type Logo = { name: string; logo: string; metrics: { aspect: number; density: number; centerY: number } }
 
@@ -67,7 +68,6 @@ export function LogoWall(props: {
   // The next logo to try, in list order.
   let next = slots().length
   let tick = 0
-  let visible = false
   // The entrance: the first time the row scrolls into view the logos arrive one at a time from the
   // left (top left first where they wrap), in the reveal style. Armed on the client only and never
   // with reduced motion; until the wash starts the logos are hidden, and no swap runs before it ends.
@@ -115,27 +115,14 @@ export function LogoWall(props: {
     () => props.items.reduce((sum, item) => sum + logoWidth(item.metrics), 0) / Math.max(1, props.items.length),
   )
 
+  // Swaps run only while the row is on screen and the tab is showing.
+  const visible = useVisible(() => row, "0px")
+
   onMount(() => {
-    const observer = new IntersectionObserver((entries) => {
-      visible = entries.some((entry) => entry.isIntersecting)
-    })
-    if (row) observer.observe(row)
     setMounted(true)
-    let first = true
-    const entrance = new IntersectionObserver(
-      (entries) => {
-        const initial = first
-        first = false
-        if (!entries.some(inView)) return
-        setStart(washStartTime(initial))
-        entrance.disconnect()
-      },
-      { threshold: washThreshold, rootMargin: washRootMargin },
-    )
-    if (row && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setArmed(true)
-      entrance.observe(row)
-    }
+    const entrance =
+      row && !window.matchMedia("(prefers-reduced-motion: reduce)").matches ? onEntrance(row, setStart) : undefined
+    setArmed(!!entrance)
     // Whole cards across the row's container: the probe is one card wide, its margin one gutter.
     const measure = () => {
       if (!row?.parentElement || !probe) return
@@ -151,15 +138,14 @@ export function LogoWall(props: {
     if (row?.parentElement) resize.observe(row.parentElement)
     measure()
     onCleanup(() => {
-      observer.disconnect()
-      entrance.disconnect()
+      entrance?.()
       resize.disconnect()
     })
   })
 
   createEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    const timer = setInterval(() => visible && !document.hidden && entranceDone() && swap(), props.interval * 1000)
+    if (!visible() || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    const timer = setInterval(() => entranceDone() && swap(), props.interval * 1000)
     onCleanup(() => clearInterval(timer))
   })
 

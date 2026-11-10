@@ -66,7 +66,7 @@ La configuration distante est chargée en premier, servant de couche de base. To
 
 Par exemple, si votre organisation fournit des serveurs MCP qui sont désactivés par défaut :
 
-```json title="Remote config from .well-known/opencode"
+```json title="Configuration distante depuis .well-known/opencode"
 {
   "mcp": {
     "jira": {

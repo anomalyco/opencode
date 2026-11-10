@@ -765,6 +765,28 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("keeps catalog capabilities that a migrated override omits", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("chat")
+      yield* providers.transform((editor) => {
+        editor.models.update(providerID, modelID, (model) => {
+          model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
+        })
+      })
+      const result = ConfigNormalize.normalize({ provider: { custom: { models: { chat: { tool_call: true } } } } })
+      if (result.type !== "normalized") throw new Error("Expected normalized config")
+      yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
+      expect((yield* models.get(providerID, modelID))?.capabilities).toEqual({
+        tools: true,
+        input: ["audio"],
+        output: ["audio"],
+      })
+    }),
+  )
+
   it.effect("lets a configured provider baseURL override catalog model baseURLs", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
