@@ -535,6 +535,7 @@ export function fromPromise(plugin: Plugin) {
                         update(value)
                         Object.assign(tool, value, {
                           output: value.output,
+                          freeform: value.freeform,
                           options: value.options,
                           execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
                             executePromiseTool(value, input, context),

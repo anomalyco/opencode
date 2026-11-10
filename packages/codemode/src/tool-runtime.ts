@@ -10,6 +10,7 @@ import {
   inputTypeScript,
   isEmptyInput,
   outputTypeScript,
+  stringParameter,
 } from "./tool-schema.js"
 import { isNamespace, type Namespace } from "./namespace.js"
 import { type Durable, type Idempotent, isTool, type Tool, type ToolContext } from "./tool.js"
@@ -186,7 +187,8 @@ const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
       // Joining the final fragments avoids retaining the rendering's intermediate string ropes in JSC.
       return (signature ??= [
         toolExpression(visible.path),
-        isEmptyInput(visible.tool) ? "()" : `(${inputTypeScript(visible.tool, true)})`,
+        stringParameter(visible.tool)?.signature ??
+          (isEmptyInput(visible.tool) ? "()" : `(${inputTypeScript(visible.tool, true)})`),
         `: Promise<${outputTypeScript(visible.tool, true)}>`,
       ].join(""))
     },
@@ -451,8 +453,10 @@ export const make = <R>(
       const normalized = args.length === 0 ? [{}] : args
       if (normalized.length !== 1)
         throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
+      const input = normalized[0]
+      const field = typeof input === "string" ? stringParameter(tool)?.name : undefined
       return yield* Effect.try({
-        try: () => decodeToolInput(tool, normalized[0]),
+        try: () => decodeToolInput(tool, field === undefined ? input : { [field]: input }),
         catch: (cause) =>
           new ToolRuntimeError(
             "InvalidToolInput",

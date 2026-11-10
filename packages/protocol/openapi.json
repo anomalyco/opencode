@@ -16804,6 +16804,12 @@
           "tools": {
             "type": "boolean"
           },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
+          },
           "input": {
             "type": "array",
             "items": {
@@ -20511,6 +20517,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
           },
           "input": {
             "type": "array",
@@ -25083,6 +25095,10 @@
         },
         "required": ["type", "uri", "mime"],
         "additionalProperties": false
+      },
+      "Tool.FreeformFormat": {
+        "type": "string",
+        "enum": ["text", "regex", "lark"]
       },
       "Tool.TextContent": {
         "type": "object",

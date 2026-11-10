@@ -61,6 +61,10 @@ only shape the model-visible signature. Without `output`, the signature uses `Pr
 
 Descriptions and schemas are model-visible contracts. Authorization belongs in `execute`.
 
+Set `freeform: true` on a tool whose input is one required string field to let programs pass that string directly. For
+`{ patchText: string }`, the catalog shows `tools.patch(patchText: string)`, and `tools.patch("*** Begin Patch...")`
+delivers `{ patchText: "*** Begin Patch..." }` to validation, hooks and the executor. The object form still works.
+
 Nested records are the shorthand for ordinary namespaces. Use `Namespace.make` when a namespace needs a description:
 
 ```ts
