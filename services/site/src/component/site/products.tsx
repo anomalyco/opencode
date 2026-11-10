@@ -6,12 +6,10 @@ import {
   createUniqueId,
   For,
   Match,
-  lazy,
   on,
   onCleanup,
   onMount,
   Show,
-  Suspense,
   Switch,
   type JSX,
 } from "solid-js"
@@ -73,9 +71,6 @@ import { cardVideo } from "./card-video"
 import { markCard, onScreen, showHeroPoster, travel, type CardTiming } from "./card-morph"
 
 export { installs, products, sdkSnippet, type ProductSlug } from "./product-data"
-
-// Loaded only for a fine pointer once the carousel's cards overflow (ProductCarousel).
-const ProductsArrows = lazy(() => import("./products-arrows"))
 
 type Scroll = { y: number; x: number }
 /** The pages a product page's hero can shrink back into a card on: the home carousel and the /product grid. */
@@ -241,29 +236,20 @@ export function ProductCarouselSkeleton() {
   )
 }
 
-export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Element }) {
+export function ProductCarousel(props: {
+  exclude?: ProductSlug
+  header?: JSX.Element
+  /** Under the cards, for the track `products-track`: the home page's previous and next (products-arrows.tsx). */
+  arrows?: JSX.Element
+}) {
   const i18n = useI18n()
   const language = useLanguage()
   const extensionCardCopy = useArea("extensionCard", extensionCardSource)
   const productCopy = useArea("products", productsSource)
   const navigate = useNavigate()
   let track: HTMLDivElement | undefined
-  // A mouse wheel can't scroll the cards sideways, so a fine pointer gets arrows, loaded once the
-  // cards overflow (products-arrows.tsx). Touch screens swipe and never load them.
-  const [arrows, setArrows] = createSignal(false)
 
-  onMount(() => {
-    trackScroll("/", track)
-    const check = () => {
-      if (!track || track.scrollWidth - track.clientWidth < 2 || !matchMedia("(pointer: fine)").matches) return
-      setArrows(true)
-      window.removeEventListener("resize", check)
-    }
-    check()
-    if (arrows()) return
-    window.addEventListener("resize", check)
-    onCleanup(() => window.removeEventListener("resize", check))
-  })
+  onMount(() => trackScroll("/", track))
 
   // The visitor's order (Mobile first on a phone or tablet), fixed at the first render.
   const order = deviceOrder(products)
@@ -323,7 +309,7 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
         <h2 data-slot="sr-only">{i18n.t("site.products.label")}</h2>
       </Show>
       {props.header}
-      <div data-slot="track" ref={track}>
+      <div data-slot="track" id="products-track" ref={track}>
         <For each={order.filter((product) => product.slug !== props.exclude)}>
           {(product, index) => (
             <article data-component="product-card">
@@ -394,13 +380,7 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
           </article>
         </Show>
       </div>
-      <Show when={arrows() && track}>
-        {(element) => (
-          <Suspense>
-            <ProductsArrows track={element()} />
-          </Suspense>
-        )}
-      </Show>
+      {props.arrows}
     </section>
   )
 }

@@ -1,139 +1,6 @@
-import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createUniqueId, For, onCleanup, onMount, Show } from "solid-js"
 import { useI18n } from "~/context/i18n-context"
-import { washStartTime } from "./entrance"
-
-// The wordmark's shapes on its 234 × 42 drawing grid. "inner" paths are the counters.
-const markPaths = [
-  { kind: "inner", d: "M18 30H6V18H18V30Z" },
-  { kind: "open", d: "M18 12H6V30H18V12ZM24 36H0V6H24V36Z" },
-  { kind: "inner", d: "M48 30H36V18H48V30Z" },
-  { kind: "open", d: "M36 30H48V12H36V30ZM54 36H36V42H30V6H54V36Z" },
-  { kind: "inner", d: "M84 24V30H66V24H84Z" },
-  { kind: "open", d: "M84 24H66V30H84V36H60V6H84V24ZM66 18H78V12H66V18Z" },
-  { kind: "inner", d: "M108 36H96V18H108V36Z" },
-  { kind: "open", d: "M108 12H96V36H90V6H108V12ZM114 36H108V12H114V36Z" },
-  { kind: "inner", d: "M144 30H126V18H144V30Z" },
-  { kind: "code", d: "M144 12H126V30H144V36H120V6H144V12Z" },
-  { kind: "inner", d: "M168 30H156V18H168V30Z" },
-  { kind: "code", d: "M168 12H156V30H168V12ZM174 36H150V6H174V36Z" },
-  { kind: "inner", d: "M198 30H186V18H198V30Z" },
-  { kind: "code", d: "M198 12H186V30H198V12ZM204 36H180V6H198V0H204V36Z" },
-  { kind: "inner", d: "M234 24V30H216V24H234Z" },
-  { kind: "code", d: "M216 12V18H228V12H216ZM234 24H216V30H234V36H210V6H234V24Z" },
-] as const
-
-type Point = [number, number]
-
-// Each path's closed contours as corner points. The paths only use M, H, V and Z with absolute
-// coordinates, so the corners are the points those commands land on.
-function contoursOf(d: string) {
-  const tokens = d.match(/[MHVZ]|-?\d+(?:\.\d+)?/g) ?? []
-  const contours: Point[][] = []
-  let x = 0
-  let y = 0
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index]
-    if (token === "M") {
-      x = Number(tokens[++index])
-      y = Number(tokens[++index])
-      contours.push([])
-    }
-    if (token === "H") x = Number(tokens[++index])
-    if (token === "V") y = Number(tokens[++index])
-    if (token !== "Z") contours[contours.length - 1].push([x, y])
-  }
-  return contours
-}
-
-// Each letter's contours, as the entrance draws them: from the top left corner, clockwise.
-const contours = markPaths.flatMap((path, index) =>
-  contoursOf(path.d).map((raw) => {
-    const points = raw.length > 1 && raw[0].join() === raw.at(-1)?.join() ? raw.slice(0, -1) : raw
-    // Clockwise on screen (y down) has a positive shoelace sum.
-    const area = points.reduce((sum, [x, y], at) => {
-      const next = points[(at + 1) % points.length]
-      return sum + x * next[1] - next[0] * y
-    }, 0)
-    const turned = area < 0 ? [...points].reverse() : points
-    const corner = turned.reduce((best, point, at) => {
-      const top = turned[best]
-      return point[0] + point[1] < top[0] + top[1] || (point[0] + point[1] === top[0] + top[1] && point[1] < top[1])
-        ? at
-        : best
-    }, 0)
-    const ordered = [...turned.slice(corner), ...turned.slice(0, corner)]
-    const lengths = ordered.map((point, at) => {
-      const next = ordered[(at + 1) % ordered.length]
-      return Math.abs(next[0] - point[0]) + Math.abs(next[1] - point[1])
-    })
-    const total = lengths.reduce((sum, length) => sum + length, 0)
-    return {
-      letter: Math.floor(index / 2),
-      d: `M${ordered.map((point) => point.join(" ")).join("L")}Z`,
-      // How far round the contour each corner is, 0 to 1.
-      corners: ordered.map((point, at) => ({
-        point,
-        share: lengths.slice(0, at).reduce((sum, length) => sum + length, 0) / total,
-      })),
-    }
-  }),
-)
-
-// The entrance's curve, cubic-bezier(0.65, 0, 0.35, 1), as the time at which it reaches `share`, so
-// a node can appear as the outline passes it.
-const CURVE = [0.65, 0, 0.35, 1] as const
-function timeAt(share: number) {
-  const bezier = (u: number, a: number, b: number) => 3 * a * u * (1 - u) ** 2 + 3 * b * u ** 2 * (1 - u) + u ** 3
-  const search = (low: number, high: number, depth: number): number => {
-    const middle = (low + high) / 2
-    if (depth === 0) return middle
-    return bezier(middle, CURVE[1], CURVE[3]) < share ? search(middle, high, depth - 1) : search(low, middle, depth - 1)
-  }
-  return bezier(search(0, 1, 24), CURVE[0], CURVE[2])
-}
-
-// The word's letters: each one's two paths (counter, then shape), its contours for the entrance,
-// and its corners for the optional node points (each with the share of the entrance at which the
-// outline reaches it). Letters sit every 30 units: 24 wide with a one-module gap.
-const WORD = "opencode"
-const SLOT = 30
-const letters = [...WORD].map((char, index) => {
-  const own = contours.filter((contour) => contour.letter === index)
-  const reached = new Map<string, { point: Point; at: number }>()
-  own.forEach((contour) =>
-    contour.corners.forEach((corner) => {
-      const key = corner.point.join()
-      const at = timeAt(corner.share)
-      if ((reached.get(key)?.at ?? 1) > at) reached.set(key, { point: corner.point, at })
-    }),
-  )
-  return {
-    char,
-    paths: [markPaths[index * 2], markPaths[index * 2 + 1]],
-    solid: markPaths[index * 2 + 1],
-    traces: own.map((contour) => contour.d),
-    corners: [...reached.values()],
-  }
-})
-const home = letters.map((_, index) => index)
-// On phones (site.css, max-width 40rem) the word stacks in two lines of COLUMNS letters, "open"
-// over "code", scaled up to the full width. The lines are LINE units apart, a letter's full height,
-// so the "p" descender ends level with the top of the "d" ascender. They interlock without
-// touching in any order: a descender is a letter's left stem and an ascender its right.
-const COLUMNS = 4
-const LINE = 42
-const STACKED = "(max-width: 40rem)"
-
-// The entrance in ms at 1× speed: letter by letter, STAGGER apart, each letter's outline draws
-// round from its top left corner while its hatch wipes in from the same corner, over LETTER ms on
-// one curve; each node fades in as the outline passes it. CSS animations (site.css) do the motion.
-const ENTRANCE = { letter: 700, stagger: 150, node: 150 }
-// The share of the mark on screen that starts the entrance.
-const ENTRANCE_THRESHOLD = 0.1
-// A drag starts once the pointer has moved this many px sideways, more than it has moved down.
-const THRESHOLD = 6
-// How far past a neighbour's midpoint (in drawing units) the dragged letter goes before it gives way.
-const HYSTERESIS = 3
+import { letters, SLOT, wordmark, wordmarkTiming } from "./wordmark"
 
 /**
  * The footer wordmark: outlined letters with a light diagonal hatch, like a technical drawing.
@@ -170,275 +37,33 @@ export function Wordmark(props: {
   const pattern = `mark-hatch-${createUniqueId()}`
   const hatch = () => props.hatch ?? 2.5
   const node = 0.9
-  const entrance = () => props.entrance ?? "off"
-  const [mounted, setMounted] = createSignal(false)
-  // The entrance: unseen until it starts, then CSS animations while "entering", then the mark.
-  const [phase, setPhase] = createSignal<"waiting" | "entering" | "done">("done")
-  // The outline's hairline in drawing units (1 screen px), measured as the entrance starts: the
-  // entrance's outlines are dashed, and dashes go wrong on a non-scaling stroke.
-  const [hairline, setHairline] = createSignal(1)
+  const timing = () => wordmarkTiming(props.speed ?? 1)
 
-  const timing = createMemo(() => {
-    const speed = props.speed ?? 1
-    const letter = ENTRANCE.letter / speed
-    const stagger = ENTRANCE.stagger / speed
-    return { letter, stagger, end: stagger * (letters.length - 1) + letter + ENTRANCE.node }
-  })
-
-  // The letters' order: order()[slot] is the letter in that slot.
-  const [order, setOrder] = createSignal(home)
-  const slotOf = (letter: number) => order().indexOf(letter)
-  // The letter being dragged with the pointer, or picked up with the keyboard (with the order
-  // before it moved, for Escape). Only which letter is dragged is a signal, set once per drag; where
-  // it is goes straight to its transform once a frame, with no re-render.
-  const [drag, setDrag] = createSignal<number>()
-  const [grabbed, setGrabbed] = createSignal<{ letter: number; before: number[] }>()
-  // The letter that takes Tab focus (roving tabindex).
-  const [focused, setFocused] = createSignal(0)
-  const [announcement, setAnnouncement] = createSignal("")
-  const playable = () => !!props.play && mounted() && phase() === "done"
-  const reordered = () => order().some((item, slot) => item !== home[slot])
-  // The letters in paint order: a dragged letter goes last, so it draws over the others.
-  const painted = () => {
-    const dragged = drag()
-    return dragged === undefined ? home : [...home.filter((letter) => letter !== dragged), dragged]
-  }
-  // The letter the pointer is pressed on stays blue while the mark holds the capture.
-  const [pressed, setPressed] = createSignal<number>()
-  const lifted = (letter: number) => pressed() === letter || drag() === letter || grabbed()?.letter === letter
-  // Whether the word is stacked in two lines (phones), and drawing units per screen pixel there, for
-  // the lift and the pointer. The stacked word is 4 letters (114 units) across the same width.
-  const stacked = () => window.matchMedia(STACKED).matches
-  const unit = () => (stacked() ? 114 : 234) / Math.max(1, svg.getBoundingClientRect().width)
-  // Where a slot is in the word, in drawing units: one line, or two of COLUMNS on phones.
-  const spot = (slot: number) =>
-    stacked() ? { x: (slot % COLUMNS) * SLOT, y: Math.floor(slot / COLUMNS) * LINE } : { x: slot * SLOT, y: 0 }
-
-  const place = (letter: number, slot: number) => {
-    const next = order().filter((item) => item !== letter)
-    next.splice(Math.max(0, Math.min(letters.length - 1, slot)), 0, letter)
-    setOrder(next)
-  }
-  const say = (key: Parameters<typeof i18n.t>[0], letter: number) =>
-    setAnnouncement(i18n.t(key, { letter: letters[letter].char, position: slotOf(letter) + 1 }))
-  const moved = (letter: number) => {
-    say("footer.wordmark.moved", letter)
-  }
-
-  createEffect(() => {
-    if (drag() !== undefined || grabbed()) return
-    props.onOrder?.(reordered())
-  })
-
-  createEffect(() => {
-    if (props.play) return
-    setOrder(home)
-    setDrag(undefined)
-    setGrabbed(undefined)
-  })
-
-  // The pointer pressed on a letter, until it is released: where it went down, the letter and its
-  // element, the order then, and drawing units per screen pixel (measured once, at the press).
-  let origin:
-    | {
-        x: number
-        y: number
-        id: number
-        letter: number
-        slot: number
-        before: number[]
-        unit: number
-        element: SVGGElement
-      }
-    | undefined
-  let pointerX = 0
-  let pointerY = 0
-  let frame = 0
-  const pointerDown = (letter: number, event: PointerEvent) => {
-    if (!playable() || event.button !== 0) return
-    const element = event.currentTarget as SVGGElement
-    origin = {
-      x: event.clientX,
-      y: event.clientY,
-      id: event.pointerId,
-      letter,
-      slot: slotOf(letter),
-      before: order(),
-      unit: unit(),
-      element,
-    }
-    // Captured on the mark, not the letter, so the letter can move to the top while it is dragged.
-    svg.setPointerCapture(event.pointerId)
-    // A press does not focus the letter: focus restyles the page (its :has(:focus-visible) rules) mid-drag.
-    event.preventDefault()
-    setPressed(letter)
-  }
-  const pointerMove = (event: PointerEvent) => {
-    if (!origin || event.pointerId !== origin.id) return
-    pointerX = event.clientX
-    pointerY = event.clientY
-    if (drag() === origin.letter) {
-      frame ||= requestAnimationFrame(follow)
-      return
-    }
-    const dx = event.clientX - origin.x
-    const dy = event.clientY - origin.y
-    // Down first means scrolling (or nothing), not a drag.
-    if (Math.abs(dy) > THRESHOLD && Math.abs(dy) >= Math.abs(dx)) {
-      origin = undefined
-      setPressed(undefined)
-      return
-    }
-    if (Math.abs(dx) < THRESHOLD) return
-    setDrag(origin.letter)
-    follow()
-  }
-  // Once a frame: the dragged letter to the pointer (whole pixels, lifted 2px), and the letters it
-  // passes to their new slots. A neighbour gives way once the dragged letter is half way into its
-  // slot (or, stacked, half way into the other line), plus HYSTERESIS, so nothing flickers back and
-  // forth around a midpoint. The order is one list read line by line, so a letter moved into the top
-  // line pushes that line's last letter down to the start of the bottom line, as text reflows.
-  const follow = () => {
-    frame = 0
-    if (!origin || drag() !== origin.letter) return
-    const start = spot(origin.slot)
-    const x = start.x + Math.round(pointerX - origin.x) * origin.unit
-    const y = start.y + Math.round(pointerY - origin.y) * origin.unit
-    origin.element.style.transform = `translate3d(${x - origin.letter * SLOT}px, ${y - 2 * origin.unit}px, 0)`
-    const lines = stacked() ? letters.length / COLUMNS : 1
-    const columns = letters.length / lines
-    const current = slotOf(origin.letter)
-    const nearest = (position: number, at: number, size: number, count: number) => {
-      const forward = Math.floor((position - size / 2 - HYSTERESIS) / size) + 1
-      const back = Math.ceil((position + size / 2 + HYSTERESIS) / size) - 1
-      return Math.max(0, Math.min(count - 1, forward > at ? forward : back < at ? back : at))
-    }
-    const line = nearest(y, Math.floor(current / columns), LINE, lines)
-    const column = nearest(x, current % columns, SLOT, columns)
-    const slot = line * columns + column
-    if (slot !== current) place(origin.letter, slot)
-  }
-  const pointerUp = () => {
-    const held = origin
-    origin = undefined
-    cancelAnimationFrame(frame)
-    frame = 0
-    setPressed(undefined)
-    if (!held || drag() === undefined) return
-    // The letter eases from where it was let go into its slot (its transition, in site.css).
-    held.element.style.removeProperty("transform")
-    setDrag(undefined)
-    if (held.before.some((item, slot) => item !== order()[slot])) moved(held.letter)
-  }
-
-  const keydown = (letter: number, event: KeyboardEvent) => {
-    if (!playable()) return
-    const slot = slotOf(letter)
-    const held = grabbed()
-    // Stacked on phones, up and down move between the lines.
-    const line = stacked() ? COLUMNS : 0
-    const direction =
-      event.key === "ArrowLeft"
-        ? -1
-        : event.key === "ArrowRight"
-          ? 1
-          : event.key === "ArrowUp"
-            ? -line
-            : event.key === "ArrowDown"
-              ? line
-              : 0
-    if (event.key === " " || event.key === "Enter") {
-      event.preventDefault()
-      if (held) {
-        setGrabbed(undefined)
-        return say("footer.wordmark.dropped", letter)
-      }
-      setGrabbed({ letter, before: order() })
-      return say("footer.wordmark.picked", letter)
-    }
-    if (event.key === "Escape" && held) {
-      event.preventDefault()
-      setOrder(held.before)
-      setGrabbed(undefined)
-      return say("footer.wordmark.cancelled", letter)
-    }
-    if (!direction && event.key !== "Home" && event.key !== "End") return
-    event.preventDefault()
-    const target =
-      event.key === "Home" ? 0 : event.key === "End" ? letters.length - 1 : Math.max(0, Math.min(7, slot + direction))
-    if (held || event.altKey) {
-      if (target === slot) return
-      place(letter, target)
-      if (held) return say("footer.wordmark.moved", letter)
-      return moved(letter)
-    }
-    focusSlot(target)
-  }
-  const focusSlot = (slot: number) => {
-    setFocused(order()[slot])
-    svg.querySelector<SVGGElement>(`[data-slot="letter"][data-letter="${order()[slot]}"]`)?.focus()
-  }
-
-  // Plays the entrance after `delay` ms. Out of "entering" for a frame first, so a replay restarts
-  // the CSS animations.
-  let timers: ReturnType<typeof setTimeout>[] = []
+  // What it does once the page's code runs is wordmark.ts, here and on the static pages: again
+  // whenever Settings changes how it plays (Design mode). Once the entrance has played, a changed
+  // style or speed plays it again at once; turning it off and on waits for the mark to be in view.
   let played = false
-  const play = (delay: number) => {
-    played = true
-    timers.forEach(clearTimeout)
-    setPhase("waiting")
-    timers = [
-      setTimeout(
-        () => {
-          setHairline(unit())
-          setPhase("entering")
-          timers.push(setTimeout(() => setPhase("done"), timing().end))
-        },
-        Math.max(16, delay),
-      ),
-    ]
-  }
-  onCleanup(() => timers.forEach(clearTimeout))
-
-  onMount(() => {
-    setMounted(true)
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+  let shown: string | undefined
+  onMount(() =>
     createEffect(() => {
-      if (entrance() === "off") {
-        timers.forEach(clearTimeout)
-        played = false
-        setPhase("done")
-        return
-      }
-      if (played) return
-      setPhase("waiting")
-      // Starts as the mark comes into view (a tenth of it on screen), so the drawing is under way
-      // while it scrolls in. Already in view at load (a short page), it waits for first paint.
-      let first = true
-      const observer = new IntersectionObserver(
-        (entries) => {
-          const initial = first
-          first = false
-          if (!entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= ENTRANCE_THRESHOLD)) return
-          observer.disconnect()
-          if (!played) play(washStartTime(initial) - performance.now())
-        },
-        { threshold: ENTRANCE_THRESHOLD },
+      const entrance = props.entrance ?? "off"
+      const style = `${entrance} ${props.speed ?? 1}`
+      const changed = shown !== undefined && shown !== style
+      shown = style
+      if (entrance === "off") played = false
+      onCleanup(
+        wordmark(svg, {
+          entrance,
+          speed: props.speed ?? 1,
+          play: !!props.play,
+          t: (key, params) => i18n.t(key, params),
+          onOrder: props.onOrder,
+          start: !played ? "view" : changed ? "now" : "played",
+          onPlay: () => (played = true),
+        }),
       )
-      observer.observe(svg)
-      onCleanup(() => observer.disconnect())
-    })
-    // A changed style or speed plays the entrance again, once it has played.
-    createEffect(
-      on(
-        () => [entrance(), props.speed],
-        () => {
-          if (played && entrance() !== "off") play(0)
-        },
-        { defer: true },
-      ),
-    )
-  })
+    }),
+  )
 
   return (
     <>
@@ -446,29 +71,18 @@ export function Wordmark(props: {
         viewBox="0 0 234 42"
         preserveAspectRatio="xMinYMin meet"
         data-slot="face"
-        data-mounted={mounted() ? "" : undefined}
-        data-state={phase() === "done" ? undefined : phase()}
-        data-entrance={phase() === "entering" ? entrance() : undefined}
         style={{
           "--wm-letter": `${timing().letter}ms`,
           "--wm-stagger": `${timing().stagger}ms`,
-          "--wm-hairline": `${hairline()}px`,
+          "--wm-hairline": "1px",
           "--wm-pattern": `url(#${pattern})`,
           "--wm-pattern-active": `url(#${pattern}-active)`,
         }}
         data-play={props.play ? "" : undefined}
-        data-reordered={props.play && reordered() ? "" : undefined}
-        data-ready={playable() ? "" : undefined}
-        // Not data-dragging: a page-wide :has() rule (home-order.css) watches that name, so changing
-        // it would restyle the whole page as a drag starts.
-        data-moving={drag() !== undefined || grabbed() ? "" : undefined}
         role={props.play ? "listbox" : "img"}
         aria-label={props.play ? i18n.t("footer.wordmark.letters") : i18n.t("footer.wordmark.name")}
         aria-describedby={props.play ? instructions : undefined}
         aria-orientation={props.play ? "horizontal" : undefined}
-        onPointerMove={pointerMove}
-        onPointerUp={pointerUp}
-        onPointerCancel={pointerUp}
         ref={svg}
       >
         <defs>
@@ -494,48 +108,32 @@ export function Wordmark(props: {
           </Show>
         </defs>
         <g data-slot="stage">
-          <For each={painted()}>
-            {(index) => (
+          <For each={letters}>
+            {(letter, index) => (
               <g
                 data-slot="letter"
-                data-letter={index}
-                data-lifted={lifted(index) ? "" : undefined}
-                data-dragged={drag() === index ? "" : undefined}
-                style={{
-                  "--slot": slotOf(index),
-                  "--home": index,
-                  "--i": slotOf(index),
-                  "--lift": grabbed()?.letter === index ? `${-2 * unit()}px` : undefined,
-                }}
+                data-letter={index()}
+                style={{ "--slot": index(), "--home": index(), "--i": index() }}
                 role={props.play ? "option" : undefined}
                 aria-roledescription={props.play ? i18n.t("footer.wordmark.roleLetter") : undefined}
                 aria-label={
                   props.play
                     ? i18n.t("footer.wordmark.option", {
-                        letter: letters[index].char,
-                        position: slotOf(index) + 1,
+                        letter: letter.char,
+                        position: index() + 1,
                         count: letters.length,
                       })
                     : undefined
                 }
-                aria-selected={props.play ? (grabbed()?.letter === index ? "true" : "false") : undefined}
-                aria-posinset={props.play ? slotOf(index) + 1 : undefined}
+                aria-selected={props.play ? "false" : undefined}
+                aria-posinset={props.play ? index() + 1 : undefined}
                 aria-setsize={props.play ? letters.length : undefined}
-                tabindex={props.play ? (focused() === index ? 0 : -1) : undefined}
-                onFocus={() => setFocused(index)}
-                onBlur={() => {
-                  if (grabbed()?.letter === index) setGrabbed(undefined)
-                }}
-                onKeyDown={(event) => keydown(index, event)}
-                onPointerDown={(event) => pointerDown(index, event)}
+                tabindex={props.play ? (index() === 0 ? 0 : -1) : undefined}
               >
-                <path d={letters[index].solid.d} data-slot="fill" />
-                <For each={letters[index].paths}>{(path) => <path d={path.d} data-slot="outline" />}</For>
-                <Show when={phase() === "entering" && entrance() === "draw"}>
-                  <For each={letters[index].traces}>{(d) => <path d={d} pathLength="1" data-slot="trace" />}</For>
-                </Show>
+                <path d={letter.solid.d} data-slot="fill" />
+                <For each={letter.paths}>{(path) => <path d={path.d} data-slot="outline" />}</For>
                 <Show when={props.nodes}>
-                  <For each={letters[index].corners}>
+                  <For each={letter.corners}>
                     {(corner) => (
                       <rect
                         data-slot="node"
@@ -549,7 +147,7 @@ export function Wordmark(props: {
                   </For>
                 </Show>
                 <Show when={props.play}>
-                  <rect data-slot="focus" x={index * SLOT - 3} y="-3" width="30" height="48" />
+                  <rect data-slot="focus" x={index() * SLOT - 3} y="-3" width="30" height="48" />
                 </Show>
               </g>
             )}
@@ -560,9 +158,7 @@ export function Wordmark(props: {
         <span data-slot="sr-only" id={instructions}>
           {i18n.t("footer.wordmark.instructions")}
         </span>
-        <span data-slot="sr-only" role="status">
-          {announcement()}
-        </span>
+        <span data-slot="sr-only" role="status" />
       </Show>
     </>
   )

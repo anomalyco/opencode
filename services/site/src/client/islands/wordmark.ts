@@ -1,16 +1,15 @@
-import { Wordmark } from "~/component/site/marks"
 import { siteSettings } from "~/component/site/settings"
-import { $, html, site } from "../dom"
-import { mount } from "../solid"
+import { wordmark } from "~/component/site/wordmark"
+import { $, html, site, t } from "../dom"
 import { setBarColor } from "../theme"
 
 /**
- * The footer's wordmark (site.tsx on the hydrated pages): rendered again in the browser as it comes
- * near, so it draws itself in and its letters can be dragged. While they are out of order the
+ * The footer's wordmark (Wordmark in marks.tsx, site.tsx): wordmark.ts draws it in as it comes into
+ * view and lets its letters be dragged, from the server's markup. While they are out of order the
  * "Like letters?" bar slides open at the page's end; filling the bottom of the screen, its blue runs
  * on to the screen's bottom edge (the page behind and the browser bar take it).
  */
-export default function wordmark(root: HTMLElement) {
+export default function wordmarkIsland(root: HTMLElement) {
   const bar = $('[data-component="letters-bar"]')
   let shown = false
   let inView = false
@@ -70,18 +69,13 @@ export default function wordmark(root: HTMLElement) {
       { threshold: [0, 0.98] },
     ).observe(bar)
 
-  void mount(
-    () => (
-      <Wordmark
-        hatch={siteSettings.wordmarkHatch}
-        nodes={siteSettings.wordmarkNodes === "on"}
-        entrance={siteSettings.footerWordmark === "off" ? "off" : siteSettings.footerWordmarkAnimation}
-        speed={siteSettings.footerWordmarkSpeed}
-        play={siteSettings.footerWordmarkPlay === "drag"}
-        onOrder={order}
-      />
-    ),
-    root,
-    true,
-  )
+  const svg = $<SVGSVGElement>('svg[data-slot="face"]', root)
+  if (svg)
+    wordmark(svg, {
+      entrance: siteSettings.footerWordmark === "off" ? "off" : siteSettings.footerWordmarkAnimation,
+      speed: siteSettings.footerWordmarkSpeed,
+      play: siteSettings.footerWordmarkPlay === "drag",
+      t,
+      onOrder: order,
+    })
 }
