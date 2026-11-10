@@ -818,6 +818,15 @@ export const dict = {
   "sidebar.inbox.elapsed.days.one": "{{count}}d",
   "sidebar.inbox.elapsed.days.other": "{{count}}d",
   "sidebar.inbox.time.now": "now",
+  "sidebar.recent.pinned": "Pinned",
+  "sidebar.recent.section.recent": "Recent",
+  "sidebar.recent.empty": "No recent sessions",
+  "sidebar.recent.search": "Search sessions",
+  "sidebar.recent.noResults": "No sessions found",
+  "sidebar.recent.pin": "Pin",
+  "sidebar.recent.unpin": "Unpin",
+  "sidebar.recent.moveUp": "Move up",
+  "sidebar.recent.moveDown": "Move down",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.clearNotifications": "Clear notifications",
 
@@ -854,6 +863,9 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
     "Group side tabs by project or show one list. Only applies to side tabs.",
+  "settings.experimental.row.recentSessions.title": "Recent sessions",
+  "settings.experimental.row.recentSessions.description":
+    "Replaces the left sidebar with pinned and recent sessions from every server. Not shown with top tabs.",
   "settings.experimental.sidebarOrganize.projects": "Projects",
   "settings.experimental.sidebarOrganize.list": "One list",
   "settings.experimental.sidebarOrganize.customize": "Customize",

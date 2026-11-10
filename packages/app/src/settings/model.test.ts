@@ -98,6 +98,7 @@ describe("settings schema", () => {
         newIcons: false,
         foldUserMessages: false,
         newQuestionUI: false,
+        recentSessions: false,
         sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",

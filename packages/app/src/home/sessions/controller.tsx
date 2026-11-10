@@ -390,10 +390,7 @@ export function createHomeSessionsController(home: HomeController) {
       .update({ sessionID: session.id, title: next }, { signal })
       .then(() => {
         ctx.data.session.remember({ ...(ctx.data.session.get(session.id) ?? session), title: next })
-        // Rename advances time.updated server-side; re-sync the canonical
-        // record so date grouping and ordering do not go stale.
-        ctx.data.session.invalidate(session.id)
-        void ctx.data.session.sync(session.id).catch(() => {})
+        // Rename advances time.updated server-side, but the data layer's rename guard keeps the session where it was.
         queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
           current?.map((item) => (item.id === session.id ? { ...item, title: next } : item)),
         )
@@ -580,7 +577,8 @@ export function createHomeSessionsController(home: HomeController) {
           const tab = tabs.addSessionTab({ server: connKey, sessionId: session.id })
 
           if (!options?.background) tabs.select(tab)
-          ctx.data.session.remember(session)
+          // Keep the canonical record's server times: the list row may carry a local send bump.
+          ctx.data.session.remember(ctx.data.session.get(session.id) ?? session)
 
           if (!options?.background) ctx.projects.touch(directory)
         })

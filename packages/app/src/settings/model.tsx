@@ -135,6 +135,8 @@ const generalSchema = Persistence.struct({
   foldUserMessages: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,
+  // Pinned and recent sessions from every server in the left sidebar, off until it ships.
+  recentSessions: Schema.Boolean,
   sidebarOrganize: Schema.Literals(["projects", "list", "customize"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
@@ -309,6 +311,7 @@ export const defaultSettings: Settings = {
     newIcons: false,
     foldUserMessages: false,
     newQuestionUI: false,
+    recentSessions: false,
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
@@ -333,6 +336,14 @@ export const defaultSettings: Settings = {
 
 function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
+}
+
+/** The recent sessions sidebar is offered only in local/dev desktop builds; a stored `true` does nothing elsewhere. */
+export function recentSessionsAvailable(platform: { platform: "web" | "desktop" }) {
+  return (
+    platform.platform === "desktop" &&
+    (import.meta.env.VITE_OPENCODE_CHANNEL === "local" || import.meta.env.VITE_OPENCODE_CHANNEL === "dev")
+  )
 }
 
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
@@ -427,6 +438,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
           setStore("general", "newQuestionUI", value)
+        },
+        recentSessions: withFallback(() => store.general?.recentSessions, defaultSettings.general.recentSessions),
+        setRecentSessions(value: boolean) {
+          setStore("general", "recentSessions", value)
         },
         sidebarOrganize: withFallback(() => store.general?.sidebarOrganize, defaultSettings.general.sidebarOrganize),
         setSidebarOrganize(value: SidebarOrganize) {

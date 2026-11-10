@@ -828,6 +828,7 @@ async function sendPrompt(
   }
 
   await session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
+  session.data.session.acceptSend(session.id)
 }
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {

@@ -1,9 +1,10 @@
-import { Component } from "solid-js"
+import { Component, Show } from "solid-js"
 import { Switch } from "@opencode/ui/switch"
 import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
-import { useSettings } from "@/settings/model"
+import { recentSessionsAvailable, useSettings } from "@/settings/model"
 import { SettingsRow } from "@/settings/row"
 import "@/settings/settings.css"
 
@@ -11,6 +12,7 @@ export const experimentalSettingsAvailable = true
 
 export const SettingsExperimental: Component = () => {
   const language = useLanguage()
+  const platform = usePlatform()
   const settings = useSettings()
 
   return (
@@ -79,6 +81,19 @@ export const SettingsExperimental: Component = () => {
                 </Switch>
               </div>
             </SettingsRow>
+            <Show when={recentSessionsAvailable(platform)}>
+              <SettingsRow
+                title={language.t("settings.experimental.row.recentSessions.title")}
+                description={language.t("settings.experimental.row.recentSessions.description")}
+              >
+                <div data-action="settings-recent-sessions">
+                  <Switch
+                    checked={settings.general.recentSessions()}
+                    onChange={(checked) => settings.general.setRecentSessions(checked)}
+                  />
+                </div>
+              </SettingsRow>
+            </Show>
           </SettingsList>
         </div>
       </div>

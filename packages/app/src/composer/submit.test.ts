@@ -120,6 +120,7 @@ function session(input: {
   switchAgent?: ComposerSession["api"]["switchAgent"]
   switchModel?: ComposerSession["api"]["switchModel"]
   background?: ComposerSession["background"]
+  accept?: () => void
 }): ComposerSession {
   return {
     // Unique per test: what this client knows about a session outlives the test that sent to it.
@@ -157,6 +158,10 @@ function session(input: {
       location: { command: { list: () => [] } },
       session: {
         setStatus: (_sessionID, status) => input.statuses?.push(status),
+        acceptSend: () => {
+          input.calls.push("accept-send")
+          input.accept?.()
+        },
         // Like the data layer: admit locally, prepare, then send.
         prompt: async (value) => {
           input.calls.push("admit")
@@ -206,6 +211,19 @@ describe("Composer submission", () => {
     admitted.resolve()
     expect(calls[0]).toBe("keep-preview")
     expect(calls).toContain("admit")
+  })
+
+  test("marks the session accepted only once the send is admitted", async () => {
+    const calls: string[] = []
+    const accepted = Promise.withResolvers<void>()
+    const state = createMemoryComposerState({ prompt: "Hello" }).capture()
+
+    await submitInput(active(state, session({ calls, accept: () => accepted.resolve() }))).submit(
+      new Event("submit"),
+    )
+    await accepted.promise
+
+    expect(calls.filter((call) => call === "accept-send")).toHaveLength(1)
   })
 
   test("an empty submit does not retain a preview", async () => {
@@ -1115,7 +1133,7 @@ describe("Composer submission", () => {
       const run = running()
 
       await run.submit()
-      expect(run.calls).toEqual(["admit", "switch-agent", "switch-model", "send", "background"])
+      expect(run.calls).toEqual(["admit", "switch-agent", "switch-model", "send", "accept-send", "background"])
 
       await run.submit()
       expect(run.calls.filter((call) => call === "background")).toHaveLength(1)

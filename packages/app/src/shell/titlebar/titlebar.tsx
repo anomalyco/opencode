@@ -12,7 +12,7 @@ import { useLayout } from "@/shell/state/layout"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useSettings } from "@/settings/model"
+import { recentSessionsAvailable, useSettings } from "@/settings/model"
 import { WindowsAppMenu } from "./windows-menu"
 import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
@@ -20,6 +20,7 @@ import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
 import { SidebarOrganized } from "@/shell/titlebar/sidebar-organized"
+import { RecentSessions } from "@/shell/titlebar/recent-sessions"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -74,6 +75,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+  const recentSessions = createMemo(() => settings.general.recentSessions() && recentSessionsAvailable(platform))
 
   const openSettings = useSettingsDialog()
   const dialog = useDialog()
@@ -808,21 +810,28 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">
                               <Show
-                                when={settings.appearance.tabLayout() === "inbox"}
+                                when={recentSessions()}
                                 fallback={
-                                  <Switch fallback={verticalTabStrip()}>
-                                    <Match when={settings.general.sidebarOrganize() === "projects"}>
-                                      <SidebarOrganized currentTab={currentTab()}>{verticalTabStrip}</SidebarOrganized>
-                                    </Match>
-                                    <Match when={settings.general.sidebarOrganize() === "customize"}>
-                                      <SidebarCustomized currentTab={currentTab()} onNewSession={openNewTab}>
-                                        {(grouped) => verticalTabStrip(undefined, undefined, grouped)}
-                                      </SidebarCustomized>
-                                    </Match>
-                                  </Switch>
+                                  <Show
+                                    when={settings.appearance.tabLayout() === "inbox"}
+                                    fallback={
+                                      <Switch fallback={verticalTabStrip()}>
+                                        <Match when={settings.general.sidebarOrganize() === "projects"}>
+                                          <SidebarOrganized currentTab={currentTab()}>{verticalTabStrip}</SidebarOrganized>
+                                        </Match>
+                                        <Match when={settings.general.sidebarOrganize() === "customize"}>
+                                          <SidebarCustomized currentTab={currentTab()} onNewSession={openNewTab}>
+                                            {(grouped) => verticalTabStrip(undefined, undefined, grouped)}
+                                          </SidebarCustomized>
+                                        </Match>
+                                      </Switch>
+                                    }
+                                  >
+                                    <SidebarInbox />
+                                  </Show>
                                 }
                               >
-                                <SidebarInbox />
+                                <RecentSessions />
                               </Show>
                             </div>
                             <Show when={titlebarItems.ids().length > 0}>
