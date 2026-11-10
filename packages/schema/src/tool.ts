@@ -13,13 +13,12 @@ export const Freeform = Schema.Union([
   Schema.Struct({ type: Schema.Literal("text") }),
   Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
   Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
-]).annotate({ identifier: "LLM.Freeform" })
+]).annotate({ identifier: "Tool.Freeform" })
 export type Freeform = typeof Freeform.Type
 
 export const FreeformFormat = Schema.Literals(Freeform.members.map((member) => member.fields.type.literal)).annotate({
   identifier: "Tool.FreeformFormat",
 })
-export type FreeformFormat = typeof FreeformFormat.Type
 
 export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"))
 export type CallID = typeof CallID.Type

@@ -154,7 +154,7 @@ export type Snapshot = {
 
 type Route = {
   readonly package: string
-  readonly freeform?: readonly FreeformFormat[]
+  readonly freeform?: Model.Capabilities["freeform"]
   readonly baseURL?: string
   readonly compatibility?: Model.Compatibility
 }
