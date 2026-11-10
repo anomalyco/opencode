@@ -34,7 +34,7 @@ export function DocsSearchDialog(props: { set: DocsSet }) {
             aria-controls="docs-search-results"
             aria-autocomplete="list"
             aria-label="Search"
-            placeholder="Search the docs"
+            placeholder={props.set.id === "v1" ? "Search the V1 docs" : "Search the docs"}
             autocomplete="off"
             autocapitalize="off"
             spellcheck={false}

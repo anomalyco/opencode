@@ -5,6 +5,7 @@
 @import "../../style/index.css";
 @import "../../component/site/site.css";
 @import "../../component/site/rtl.css";
+@import "../../component/site/locale-type.css";
 @import "../../component/site/github-link.css";
 @import "../../component/site/tap-targets.css";
 @import "../../component/site/docs-lockup.css";
@@ -12,6 +13,7 @@
 @import "../../component/site/on-this-page.css";
 @import "../../component/site/search-palette.css";
 @import "../../component/site/docs-variants.css";
+@import "../../component/site/docs-version-notice.css";
 
 /* Pages load as plain documents; the next one fades in, and the shell stays put. */
 @view-transition {
@@ -598,6 +600,12 @@
       overflow-x: auto;
       font: 400 var(--fs-meta) / 1.6 var(--font-mono);
       white-space: pre;
+
+      /* Not inline code, even in a list item (site.css), as code tabs are in the V1 docs. */
+      code {
+        padding: 0;
+        background: none;
+      }
     }
   }
 }
@@ -736,5 +744,17 @@
 @media (prefers-reduced-motion: reduce) {
   [data-site] details[data-component="api-operation"] > summary::after {
     transition: none;
+  }
+}
+
+/* The V1 notice (DocsLayout.tsx), above the title, sticks to the window's top beside the sidebar.
+   Phones already pin the top bar, the section row and the Contents bar, so there it reads once. */
+[data-site][data-page="docs"] [data-component="docs-version-notice"][data-variant] {
+  margin-bottom: 2rem;
+
+  @media (max-width: 60rem) {
+    position: static;
+    margin: 0 0 1.5rem;
+    padding-inline: 0;
   }
 }

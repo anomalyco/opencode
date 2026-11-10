@@ -39,6 +39,8 @@ const failures = (
       const page = `https://opencode.local/${path.relative(root, file).replace(/index\.html$/, "")}`
       return Promise.all(
         Array.from(html.matchAll(/href="([^"]+)"/g), async (match) => {
+          // Not a link on this site: an autolinked URL a translation ran into (`http://localhost:4096）`).
+          if (!URL.canParse(match[1], page)) return
           const url = new URL(match[1], page)
           if (url.origin !== "https://opencode.local") return
           if (externalRoutes.test(url.pathname)) return

@@ -70,7 +70,7 @@ async function frame(code: Element): Promise<ElementContent> {
   const file = title?.replace(/ \(excerpt\)$/, "")
   const named = file !== undefined && /[./]/.test(file) && !/\s/.test(file)
 
-  if ((lang === "text" || lang === "plaintext") && !title && /[├└]──/.test(text))
+  if (["text", "txt", "plaintext"].includes(lang) && !title && /[├└]──/.test(text))
     return jsx("CodeFrame", { variant: "fileTree", kind: "tree", label: "Files" }, [
       jsx("FileTree", { tree: text }, []),
     ])

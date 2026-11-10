@@ -28,7 +28,7 @@ export function DocsNav(props: { set: DocsSet; section: string; groups: DocsNavG
                 {(item) => (
                   <li>
                     <a
-                      href={docsHref(item.slug, props.set)}
+                      href={item.href ?? docsHref(item.slug, props.set)}
                       aria-current={item.slug === props.currentSlug ? "page" : undefined}
                     >
                       <Bracket />

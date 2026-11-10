@@ -5,7 +5,7 @@
  * own app. The sets share one stylesheet, script and fonts, under the latest docs' `_build`.
  */
 export type DocsSet = {
-  id: "latest"
+  id: "latest" | "v1"
   base: string
   /** Its MDX, from the repository root (content.ts names the same folder for Vite). */
   content: string
@@ -15,6 +15,10 @@ export type DocsSet = {
    * (cloudflare.config.ts runWorkerFirst), and a missing one is a 404 rather than a page.
    */
   files: readonly string[]
+  /** Its other languages, each in its own folder (`/v1/docs/ja/`), beside English at the base. */
+  locales?: readonly string[]
+  /** Kept out of search engines: the pages and their Markdown twins say noindex, and no sitemap lists them. */
+  noindex?: boolean
 }
 
 export const latestDocs: DocsSet = {
@@ -24,4 +28,32 @@ export const latestDocs: DocsSet = {
   files: ["_build", "assets", "pagefind", "favicon.svg", "llms.txt", "sitemap.xml", "openapi.json"],
 }
 
-export const docsSets = [latestDocs]
+// The V1 docs, in their Starlight app's MDX (vite.ts reads its syntax) until that app is retired.
+export const v1Docs: DocsSet = {
+  id: "v1",
+  base: "/v1/docs/",
+  content: "packages/web/src/content/docs",
+  files: ["assets", "pagefind", "llms.txt", "theme.json"],
+  locales: [
+    "ar",
+    "bs",
+    "da",
+    "de",
+    "es",
+    "fr",
+    "it",
+    "ja",
+    "ko",
+    "nb",
+    "pl",
+    "pt-br",
+    "ru",
+    "th",
+    "tr",
+    "zh-cn",
+    "zh-tw",
+  ],
+  noindex: true,
+}
+
+export const docsSets = [latestDocs, v1Docs]
