@@ -18,7 +18,7 @@ pub mod permission;
 mod scroll;
 pub mod subagent;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
@@ -220,6 +220,44 @@ struct Inner {
     state: RefCell<State>,
     widgets: RefCell<Widgets>,
     layers: RefCell<Vec<Disposer>>,
+    /// Counts the sessions opened, so a read that ends after another session opened is dropped.
+    generation: Cell<u64>,
+    /// Permission requests whose tool call is being read, until a reply drops them.
+    asking: RefCell<HashSet<String>>,
+}
+
+/// A session's pending requests, read by a hydration.
+#[derive(Debug, Default)]
+pub struct Requests {
+    pub permissions: Vec<permission::Request>,
+    pub forms: Vec<FormInfo>,
+    /// The forms of no session at the session's location.
+    pub global_forms: Vec<FormInfo>,
+}
+
+/// Lists the session's permissions with their tool calls, its forms, and the forms of no session at `directory`.
+pub async fn requests(client: &Client, session: &str, directory: &str) -> Requests {
+    let input = FormListInput { location: Some(LocationQueryInput { directory: Some(directory.to_owned()) }) };
+    let (permissions, forms, globals) = futures_util::future::join3(
+        client.permission_list(&PermissionListInput { session_id: SessionID(session.to_owned()) }),
+        client.session_form_list(&SessionFormListInput { session_id: session.to_owned() }),
+        client.form_list(&input),
+    )
+    .await;
+    let mut requests = Vec::new();
+    for request in permissions.unwrap_or_default() {
+        requests.push(source(client, session, request).await);
+    }
+    Requests {
+        permissions: requests,
+        forms: forms.unwrap_or_default(),
+        global_forms: globals
+            .map(|list| list.data)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|form| form.session_id == GLOBAL)
+            .collect(),
+    }
 }
 
 /// The footer views. Cloning is cheap.
@@ -256,6 +294,8 @@ impl Footers {
             }),
             widgets: RefCell::default(),
             layers: RefCell::default(),
+            generation: Cell::new(0),
+            asking: RefCell::default(),
         });
         install_layers(&inner);
         Self(inner)
@@ -311,12 +351,15 @@ impl Footers {
         Some(desired.min(rows).max(1))
     }
 
-    /// Opens a session: forgets the last one's requests and children, and lists its pending requests and the
-    /// forms of no session at its location (`hydrate`). `thinking` shows the children's reasoning.
+    /// Opens a session: forgets the last one's requests and children. Its requests arrive with the stream's
+    /// hydration ([`Self::hydrated`]). `thinking` shows the children's reasoning. Reads still in flight for the
+    /// last session are dropped when they end.
     pub fn open(&self, client: &Client, session: &str, directory: &str, thinking: bool) {
+        self.0.generation.set(self.0.generation.get() + 1);
         *self.0.target.borrow_mut() =
             Some(Target { client: client.clone(), session: session.to_owned(), directory: directory.to_owned() });
         *self.0.tracker.borrow_mut() = Some(Tracker::new(session, thinking, Some(directory.to_owned())));
+        self.0.asking.borrow_mut().clear();
         {
             let mut state = self.0.state.borrow_mut();
             state.permissions.clear();
@@ -332,49 +375,19 @@ impl Footers {
             self.0.close_route();
         }
         self.0.sync();
-        self.hydrate();
     }
 
-    /// Lists the session's pending requests and the forms of no session at its location again, replacing what
-    /// was known (`hydrate` on connect, reconnect, and resize).
-    pub fn hydrate(&self) {
-        let Some(target) = self.0.target.borrow().clone() else { return };
-        let (client, session, directory) = (&target.client, target.session.as_str(), target.directory.as_str());
-        let weak = Rc::downgrade(&self.0);
-        let input = FormListInput { location: Some(LocationQueryInput { directory: Some(directory.to_owned()) }) };
-        let globals = client.clone();
-        self.0.app.spawn(async move { globals.form_list(&input).await }, move |_, result| {
-            let Some(inner) = weak.upgrade() else { return };
-            let forms = result.map(|list| list.data).unwrap_or_default();
-            inner.state.borrow_mut().global_forms =
-                forms.into_iter().filter(|form| form.session_id == GLOBAL).collect();
-            inner.sync();
-        });
-        let weak = Rc::downgrade(&self.0);
-        let (client, id) = (client.clone(), session.to_owned());
-        self.0.app.spawn(
-            async move {
-                let (permissions, forms) = futures_util::future::join(
-                    client.permission_list(&PermissionListInput { session_id: SessionID(id.clone()) }),
-                    client.session_form_list(&SessionFormListInput { session_id: id.clone() }),
-                )
-                .await;
-                let mut requests = Vec::new();
-                for request in permissions.unwrap_or_default() {
-                    requests.push(source(&client, &id, request).await);
-                }
-                (requests, forms.unwrap_or_default())
-            },
-            move |_, (permissions, forms)| {
-                let Some(inner) = weak.upgrade() else { return };
-                {
-                    let mut state = inner.state.borrow_mut();
-                    state.permissions = permissions;
-                    state.forms = forms;
-                }
-                inner.sync();
-            },
-        );
+    /// The session's pending requests and the forms of no session at its location, as a hydration listed them
+    /// after the stream subscribed (connect, reconnect, and resize). They replace what was known; the events that
+    /// followed the subscription apply after them (`hydrate`).
+    pub fn hydrated(&self, requests: Requests) {
+        {
+            let mut state = self.0.state.borrow_mut();
+            state.permissions = requests.permissions;
+            state.forms = requests.forms;
+            state.global_forms = requests.global_forms;
+        }
+        self.0.sync();
     }
 
     /// `blockerStatus`: the status of the request shown, if any.
@@ -401,11 +414,19 @@ impl Footers {
                 let Some(target) = inner.target.borrow().clone() else {
                     return;
                 };
+                // A reply or another session that comes while the tool call is read drops the request.
+                inner.asking.borrow_mut().insert(request.id.as_str().to_owned());
                 let weak = Rc::downgrade(inner);
+                let generation = inner.generation.get();
                 inner.app.spawn(
                     async move { source(&target.client, &target.session, request).await },
                     move |_, request| {
                         let Some(inner) = weak.upgrade() else { return };
+                        if inner.generation.get() != generation
+                            || !inner.asking.borrow_mut().remove(request.info.id.as_str())
+                        {
+                            return;
+                        }
                         {
                             let mut state = inner.state.borrow_mut();
                             if state.permissions.iter().any(|item| item.info.id == request.info.id) {
@@ -419,6 +440,7 @@ impl Footers {
             }
             V2Event::PermissionReplied(replied) => {
                 let id = &replied.data.request_id;
+                inner.asking.borrow_mut().remove(id.as_str());
                 inner.state.borrow_mut().permissions.retain(|item| &item.info.id != id);
                 inner.sync();
             }
@@ -563,6 +585,7 @@ impl Inner {
     /// Runs the tracker's reads; each result goes back to it.
     fn run(self: &Rc<Self>, fetches: Vec<Fetch>) {
         let Some(target) = self.target.borrow().clone() else { return };
+        let generation = self.generation.get();
         for fetch in fetches {
             let weak = Rc::downgrade(self);
             let client = target.client.clone();
@@ -571,7 +594,7 @@ impl Inner {
                     let parent = target.session.clone();
                     self.app.spawn(async move { family(&client, &parent).await }, move |_, sessions| {
                         if let Some(inner) = weak.upgrade() {
-                            inner.tracked(|tracker: &mut Tracker| tracker.family(sessions));
+                            inner.tracked(generation, |tracker: &mut Tracker| tracker.family(sessions));
                         }
                     });
                 }
@@ -579,7 +602,7 @@ impl Inner {
                     let id = session.clone();
                     self.app.spawn(async move { lineage(&client, &id, &family).await }, move |_, discovery| {
                         if let Some(inner) = weak.upgrade() {
-                            inner.tracked(|tracker: &mut Tracker| tracker.discovered(&session, discovery));
+                            inner.tracked(generation, |tracker: &mut Tracker| tracker.discovered(&session, discovery));
                         }
                     });
                 }
@@ -597,7 +620,9 @@ impl Inner {
                         },
                         move |_, result| {
                             if let Some(inner) = weak.upgrade() {
-                                inner.tracked(|tracker: &mut Tracker| tracker.child_loaded(&session, result));
+                                inner.tracked(generation, |tracker: &mut Tracker| {
+                                    tracker.child_loaded(&session, result)
+                                });
                             }
                         },
                     );
@@ -605,7 +630,10 @@ impl Inner {
                 Fetch::Blockers { session, epoch, delay } => {
                     if !delay.is_zero() {
                         self.app.set_timeout(delay, move |_| {
-                            let Some(inner) = weak.upgrade() else { return };
+                            let Some(inner) = weak.upgrade().filter(|inner| inner.generation.get() == generation)
+                            else {
+                                return;
+                            };
                             let due = inner.tracker.borrow_mut().as_mut().is_some_and(|t| t.retry_due(&session, epoch));
                             if due {
                                 inner.run(vec![Fetch::Blockers {
@@ -639,7 +667,7 @@ impl Inner {
                         },
                         move |_, (permissions, forms)| {
                             if let Some(inner) = weak.upgrade() {
-                                inner.tracked(|tracker: &mut Tracker| {
+                                inner.tracked(generation, |tracker: &mut Tracker| {
                                     tracker.blockers_loaded(&session, epoch, permissions, forms)
                                 });
                             }
@@ -650,8 +678,12 @@ impl Inner {
         }
     }
 
-    /// Hands a read's result to the tracker, then runs what it reads next.
-    fn tracked(self: &Rc<Self>, apply: impl FnOnce(&mut Tracker) -> Vec<Fetch>) {
+    /// Hands a read's result to the tracker, then runs what it reads next. A read started for another session is
+    /// dropped.
+    fn tracked(self: &Rc<Self>, generation: u64, apply: impl FnOnce(&mut Tracker) -> Vec<Fetch>) {
+        if self.generation.get() != generation {
+            return;
+        }
         let fetches = {
             let mut tracker = self.tracker.borrow_mut();
             let Some(tracker) = tracker.as_mut() else { return };
@@ -2416,5 +2448,81 @@ impl Footers {
     /// The session's pending prompts changed (an inbox event or an admission).
     pub fn queue_changed(&self) {
         self.0.queue_changed();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use opencode_api::memory::{Memory, Route};
+    use opentui::testing::TestApp;
+    use serde::Deserialize;
+    use serde_json::json;
+
+    use super::*;
+
+    fn event(kind: &str, data: Value) -> V2Event {
+        let event = json!({ "id": "evt_1", "created": 1, "type": kind,
+            "durable": { "aggregateID": "ses_1", "seq": 1, "version": 1 }, "data": data });
+        V2Event::deserialize(&event).unwrap()
+    }
+
+    fn asked(session: &str) -> V2Event {
+        event(
+            "permission.asked",
+            json!({ "id": "per_1", "sessionID": session, "action": "bash", "resources": ["ls"],
+                "source": { "type": "tool", "messageID": "msg_a", "id": "call_1" } }),
+        )
+    }
+
+    /// The footers of `ses_1`, whose tool-call reads answer at once.
+    fn footers(app: &TestApp) -> (Footers, Client) {
+        let theme = crate::theme::resolve(&crate::theme::ThemeInput::default());
+        let prompt = Prompt::new(app, &theme, false, &Default::default());
+        let footers = Footers::new(app, &prompt, &theme, false);
+        let message = json!({ "id": "msg_a", "type": "assistant", "content": [] });
+        let memory = Memory::new(vec![Route::json("GET", "/api/session/ses_1/message/msg_a", 200, &message)]);
+        let client = Client::with_transport("http://test", Arc::new(memory)).unwrap();
+        footers.open(&client, "ses_1", "/", false);
+        (footers, client)
+    }
+
+    /// A request answered while its tool call is read stays answered.
+    #[test]
+    fn a_reply_during_the_tool_call_read_drops_the_request() {
+        let app = TestApp::new(40, 12);
+        let (footers, _) = footers(&app);
+        footers.event(&asked("ses_1"));
+        footers.event(&event(
+            "permission.replied",
+            json!({ "sessionID": "ses_1", "requestID": "per_1",
+            "reply": "once" }),
+        ));
+        app.wait_until(Duration::from_millis(300), || false);
+        assert_eq!(footers.blocker_status(), "");
+    }
+
+    /// A read for the last session does not reach the session opened after it.
+    #[test]
+    fn a_read_of_the_last_session_is_dropped() {
+        let app = TestApp::new(40, 12);
+        let (footers, client) = footers(&app);
+        footers.event(&asked("ses_1"));
+        footers.open(&client, "ses_2", "/", false);
+        app.wait_until(Duration::from_millis(300), || false);
+        assert_eq!(footers.blocker_status(), "");
+    }
+
+    /// The requests a hydration listed show; the stream applies its events after them.
+    #[test]
+    fn the_listed_requests_show() {
+        let app = TestApp::new(40, 12);
+        let (footers, _) = footers(&app);
+        let V2Event::PermissionAsked(event) = asked("ses_1") else { unreachable!() };
+        let request =
+            permission::Request { info: super::asked(&event.data), input: Value::Null, metadata: Value::Null };
+        footers.hydrated(Requests { permissions: vec![request], ..Requests::default() });
+        assert_eq!(footers.blocker_status(), "awaiting permission");
     }
 }
