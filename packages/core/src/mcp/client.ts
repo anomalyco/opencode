@@ -28,7 +28,7 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import { Cause, Clock, Duration, Effect, Exit, PlatformError, Schedule, Schema } from "effect"
+import { Cause, Clock, Duration, Effect, Exit, PlatformError, Queue, Schedule, Schema, Stream } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
@@ -62,6 +62,34 @@ const isTransient = (error: unknown) =>
   error instanceof SdkHttpError
     ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
     : error instanceof TypeError && "code" in error
+
+// MCP Events (SEP-3415, a draft extension). Every notification on an `events/stream` names the stream by
+// its request's JSON-RPC id.
+const EVENTS = "io.modelcontextprotocol/events"
+const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
+const STREAM = "ai.opencode/stream"
+const Subscribed = { _meta: Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Schema.String, Schema.Number]) }) }
+
+const EventType = Schema.Struct({
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  inputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+})
+export type EventType = typeof EventType.Type
+const Occurrence = Schema.Struct({
+  eventId: Schema.String,
+  name: Schema.String,
+  timestamp: Schema.String,
+  data: Schema.Unknown,
+  cursor: Schema.optional(Schema.NullOr(Schema.String)),
+})
+export type Occurrence = typeof Occurrence.Type
+const EventList = Schema.toStandardSchemaV1(Schema.Struct({ events: Schema.Array(EventType) }))
+const EventNotification = Schema.toStandardSchemaV1(Schema.Struct({ ...Occurrence.fields, ...Subscribed }))
+const Terminated = Schema.toStandardSchemaV1(
+  Schema.Struct({ error: Schema.Struct({ message: Schema.optional(Schema.String) }), ...Subscribed }),
+)
+const StreamResult = Schema.toStandardSchemaV1(Schema.Unknown)
 
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
 export type ResourceTemplate = ResourceTemplateType
@@ -174,11 +202,24 @@ export interface Connection {
       readonly sessionID?: Session.ID
     } & PerRequest,
   ) => Effect.Effect<CallToolResult, Error>
+  /** MCP Events, when the server offers them. */
+  readonly events: Events | undefined
   readonly onClose: (callback: (reason: string) => void) => void
   readonly onSessionExpired: (callback: () => void) => void
   readonly onToolsChanged: (callback: () => void) => void
   readonly onPromptsChanged: (callback: () => void) => void
   readonly onResourcesChanged: (callback: () => void) => void
+}
+
+export interface Events {
+  /** The first page of event types (`events/list`). */
+  readonly list: () => Effect.Effect<ReadonlyArray<EventType>, Error>
+  /** Push delivery (`events/stream`): ends when the server closes the stream, fails when it terminates it. */
+  readonly stream: (input: {
+    readonly name: string
+    readonly arguments?: Record<string, unknown>
+    readonly cursor?: string | null
+  }) => Stream.Stream<Occurrence, Error>
 }
 
 /** An MCP server reached over a transport someone else already opened, such as a client socket. */
@@ -229,6 +270,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     return signal
   }
 
+  // Open event streams, keyed by their request's JSON-RPC id. The SDK numbers requests itself and doesn't say
+  // how, so each `events/stream` carries a token in `_meta`, and its id is read from the message as it goes out.
+  const streams = new Map<string, Queue.Queue<Occurrence, Error | Cause.Done>>()
+  const unsent = new Map<string, Queue.Queue<Occurrence, Error | Cause.Done>>()
+
   // The SDK fails pending requests with a bare "Connection closed"; the transport error before it says why.
   let lastError: string | undefined
   const explain = (error: unknown) =>
@@ -256,12 +302,21 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
+    const send = transport.send.bind(transport)
+    transport.send = (message, options) => {
+      const token =
+        "method" in message && message.method === "events/stream" ? message.params?._meta?.[STREAM] : undefined
+      const queue = typeof token === "string" ? unsent.get(token) : undefined
+      if (queue && "id" in message) streams.set(String(message.id), queue)
+      return send(message, options)
+    }
     const client = new Client(options.clientInfo ?? { name: "opencode", version: "unknown" }, {
       capabilities: {
         ...(elicitation ? { elicitation: { form: {}, url: {} } } : {}),
         // Legacy era only: roots are deprecated as of 2026-07-28 and modern servers cannot request them.
         // Some legacy servers refuse to run without one (https://github.com/anomalyco/opencode/issues/2308).
         ...(options.roots === false ? {} : { roots: {} }),
+        extensions: { [EVENTS]: {} },
       },
       versionNegotiation: negotiation(protocol),
       listChanged: {
@@ -278,6 +333,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     }
     if (options.roots !== false)
       client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(options.directory).href }] }))
+    client.setNotificationHandler("notifications/events/event", { params: EventNotification }, (params) => {
+      const queue = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+      if (queue) Queue.offerUnsafe(queue, params)
+    })
+    client.setNotificationHandler("notifications/events/terminated", { params: Terminated }, (params) => {
+      const queue = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+      if (queue) Queue.failCauseUnsafe(queue, Cause.fail(new Error(params.error.message ?? "Event stream terminated")))
+    })
     if (elicitation) {
       // A 2026-07-28 server asks for input in the result of the request that needs it. Our SDK patch puts
       // that request's options on the context (`mcpReq.origin`, see patches/@modelcontextprotocol%2Fclient),
@@ -419,6 +482,44 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       protocolVersion: client.getNegotiatedProtocolVersion(),
       title: client.getServerVersion()?.title?.trim() || undefined,
       instructions: client.getInstructions()?.trim() || undefined,
+      events: client.getServerCapabilities()?.extensions?.[EVENTS]
+        ? {
+            list: () =>
+              request("list MCP events", (signal) =>
+                client.request({ method: "events/list", params: {} }, EventList, { ...catalog, signal }),
+              ).pipe(Effect.map((result) => result.events)),
+            stream: (input) =>
+              Stream.callback<Occurrence, Error>((queue) =>
+                Effect.gen(function* () {
+                  const token = crypto.randomUUID()
+                  unsent.set(token, queue)
+                  yield* Effect.addFinalizer(() =>
+                    Effect.sync(() => {
+                      unsent.delete(token)
+                      for (const [id, open] of streams) if (open === queue) streams.delete(id)
+                    }),
+                  )
+                  // Interrupting the request cancels the stream; the server closing it resolves the request.
+                  yield* request("stream MCP events", (signal) =>
+                    client.request(
+                      { method: "events/stream", params: { ...input, _meta: { [STREAM]: token } } },
+                      StreamResult,
+                      {
+                        signal,
+                        timeout: execution,
+                      },
+                    ),
+                  ).pipe(
+                    Effect.matchEffect({
+                      onFailure: (error) => Queue.fail(queue, error),
+                      onSuccess: () => Queue.end(queue),
+                    }),
+                    Effect.forkScoped,
+                  )
+                }),
+              ),
+          }
+        : undefined,
       // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
       // re-parses it and compiles an output validator for every listed tool. Each call passes its own
       // checked definition instead, so modern Mcp-Param-* header mirroring still sees the input schema.

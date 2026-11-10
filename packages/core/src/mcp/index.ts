@@ -182,6 +182,8 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
+  /** MCP Events of a configured server, when it is connected and offers them. */
+  readonly events: (server: ServerName | string) => Effect.Effect<McpClient.Events | undefined, NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
@@ -895,6 +897,9 @@ export const layer = (options?: Options) =>
                 : { type: "blob", uri: part.uri, blob: part.blob, mimeType: part.mimeType },
             ),
           })
+        }),
+        events: Effect.fn("MCP.events")(function* (server) {
+          return (yield* connected(ServerName.make(server))).client?.events
         }),
       })
     }),
