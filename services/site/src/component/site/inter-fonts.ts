@@ -9,7 +9,8 @@ export { interLatin }
 // overlap: a character in both that Inter lacks would fetch the second file only to fall back. The
 // Latin file keeps both axes (weight, optical size) but only the OpenType features the site uses
 // (pyftsubset --layout-features="calt,case,ccmp,locl,tnum,pnum,kern,mark,mkmk,cpsp,liga"): no
-// character variants or stylistic sets.
+// character variants or stylistic sets. Pages get these from src/style/fonts.css, which writes them
+// out (test/fonts.test.ts keeps the two the same).
 export const interFaces = [
   [
     interRest,

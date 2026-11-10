@@ -424,13 +424,13 @@ describe("ReadToolFileSystem", () => {
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const file = path.join(directory, "long.txt")
-      yield* files.writeFileString(file, "a".repeat(2_001))
+      yield* files.writeFileString(file, `${"a".repeat(1_999)}😀tail`)
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "long.txt", { limit: 1 })
 
       expect(result).toMatchObject({
         type: "text-page",
-        content: `${"a".repeat(2_000)}... (line truncated to 2000 chars)`,
+        content: `${"a".repeat(1_999)}... (line truncated to 2000 chars)`,
         truncated: false,
       })
     }),

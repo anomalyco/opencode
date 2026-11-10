@@ -90,6 +90,8 @@ r2_credentials() {
   export AWS_ACCESS_KEY_ID="$id"
   AWS_SECRET_ACCESS_KEY=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256 | cut -c1-64)
   export AWS_SECRET_ACCESS_KEY
+  # These are R2's own credentials, so drop the role credentials the job assumed to read Secrets Manager.
+  unset AWS_SESSION_TOKEN AWS_PROFILE AWS_REGION
   export AWS_DEFAULT_REGION=auto AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
   # Larger parts mean fewer CompleteMultipartUpload parts for the 200-350 MB desktop builds.
   AWS_CONFIG_FILE=$(mktemp)

@@ -1,19 +1,18 @@
+/* Matches the composer's session mention (packages/app/src/composer/editor/editor.css). */
 .markdown-session-link {
   display: inline;
-  padding: 1px 5px;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
-  background: var(--v2-background-bg-layer-02);
-  box-shadow: inset 0 0 0 1px var(--v2-border-border-base);
-  color: var(--v2-text-text-accent);
+  border-radius: 2px;
+  background: none;
+  color: var(--v2-text-text-muted);
   font: inherit;
+  font-weight: var(--font-weight-medium);
+  text-align: start;
   cursor: pointer;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
 }
 
 .markdown-session-link:hover {
-  color: var(--v2-text-text-accent-hover);
   text-decoration: underline;
   text-underline-offset: 2px;
 }

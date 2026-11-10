@@ -15,7 +15,6 @@ const changelogExclusions = [
   ":(exclude)packages/console",
   ":(exclude)packages/function",
   ":(exclude)packages/stats",
-  ":(exclude)packages/web",
   ":(exclude)services",
   ":(exclude)infra",
 ]

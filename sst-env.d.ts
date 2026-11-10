@@ -20,16 +20,10 @@ declare module "sst" {
       "value": string
     }
     "Share": import("@cloudflare/workers-types").Service
-    "Web": {
-      "type": "sst.cloudflare.Astro"
-      "url": string
-    }
     "WebApp": {
       "type": "sst.cloudflare.StaticSite"
       "url": string
     }
-    "ZenData": import("@cloudflare/workers-types").R2Bucket
-    "ZenDataNew": import("@cloudflare/workers-types").R2Bucket
   }
 }
 

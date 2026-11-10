@@ -51,6 +51,10 @@ export type ComposerQueue = {
   cancelEdit: () => void
   // Loads the first queued prompt into the composer. Returns false when the queue is empty.
   editFirst: () => boolean
+  // Moves an admitted follow-up ahead of the queued prompts, using the queue's serialized reorder.
+  first: (inboxID: string) => void
+  // Steers the next prompt only while the queue is idle; never skips a busy first row.
+  steerFirst: () => void
 }
 
 export type ComposerSession = {
