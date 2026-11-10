@@ -175,6 +175,7 @@ const Group = HttpApiGroup.make("mock")
       success: NoContent,
     }),
   )
+  .add(HttpApiEndpoint.get("credentialList", "/api/credential", { success: Json }))
   .add(
     HttpApiEndpoint.post("credentialActivate", "/api/credential/:credentialID/activate", {
       params: { credentialID: Schema.String },
