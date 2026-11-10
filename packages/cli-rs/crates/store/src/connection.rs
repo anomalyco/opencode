@@ -219,7 +219,18 @@ impl State {
             V2Event::SessionStepStarted(event) => self.on_step_started(event),
             V2Event::SessionStepStreamed(event) => self.on_step_streamed(event),
             V2Event::SessionStepEnded(event) => self.on_step_ended(event),
-            V2Event::SessionStepFailed(event) => self.on_step_failed(event),
+            V2Event::SessionStepFailed(event) => {
+                self.on_step_failed(event);
+                // A budget refusal means the cached usage limits are out of date, which is what
+                // the refusal sends people to.
+                let budget = matches!(
+                    event.data.error.r#type.as_str(),
+                    "provider.budget-limit" | "provider.model-budget-limit"
+                );
+                if let Some(location) = event.location.as_ref().filter(|_| budget) {
+                    return self.refresh_catalog(Catalog::UsageLimits, &Location::from(location));
+                }
+            }
             V2Event::SessionTextStarted(event) => {
                 self.on_text_started(&event.data.session_id, &event.data.assistant_message_id)
             }
