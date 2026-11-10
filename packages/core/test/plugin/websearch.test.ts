@@ -503,4 +503,47 @@ describe("built-in web search providers", () => {
       ])
     }),
   )
+
+  it.effect("returns no You.com results when the search finds nothing", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "No results found." }],
+            structuredContent: { results: {}, metadata: {} },
+          },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchYouCom.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect((yield* websearch.query({ query: "q", providerID: WebSearch.ID.make("youcom") })).results).toEqual([])
+    }),
+  )
+
+  it.effect("fails You.com searches that return an MCP tool error", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: { content: [{ type: "text", text: "Error: Rate limited" }], isError: true },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchYouCom.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(
+        yield* websearch.query({ query: "q", providerID: WebSearch.ID.make("youcom") }).pipe(Effect.flip),
+      ).toBeInstanceOf(WebSearch.RequestError)
+    }),
+  )
 })
