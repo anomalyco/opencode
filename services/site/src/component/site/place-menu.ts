@@ -16,9 +16,12 @@ let anchors = 0
  * positioning keeps it in its box.
  */
 export function placeMenu(menu: HTMLElement) {
-  // A previous run leaves placement styles inline, including `position: fixed`; a fixed element
-  // has no offsetParent, so the guard below would bail before showPopover() on reopen. Clear them
-  // before measuring; a menu hidden with `hidden` still has no offsetParent and is still bailed on.
+  // A previous run leaves placement styles inline, including `position: fixed` and unfinished popover
+  // state. A hidden menu is still `:popover-open`, so UA popover rules (inset: 0, margin: auto)
+  // would distort the measurement. Clear the popover and its styles before measuring; a menu hidden
+  // with `hidden` still has no offsetParent and is still bailed on.
+  if (menu.matches(":popover-open")) menu.hidePopover()
+  menu.removeAttribute("popover")
   menu.removeAttribute("style")
   menu.removeAttribute("data-side")
   const box = menu.offsetParent
