@@ -30,7 +30,6 @@ await rm(outdir, { recursive: true, force: true })
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const requestedTarget = process.env.OPENCODE_TARGET
-const skipInstall = process.argv.includes("--skip-install")
 const skipWebUi = process.argv.includes("--skip-web-ui")
 const solidPlugin = createSolidTransformPlugin()
 const highlights = Script.preview ? undefined : embed(process.env.OPENCODE_RELEASE_NOTES)
@@ -69,9 +68,6 @@ const targets =
       : allTargets
 if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
-// Bun 1.4.4 skips native packages for the other libc by default, but the musl targets need them.
-if (!skipInstall)
-  await $`bun install --os="*" --cpu="*" --libc="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @Mackery6969/pty@${pkg.dependencies["@Mackery6969/pty"]}`
 const appArchive = path.join(dir, ".cache", "bun-app-archive.bin")
 await Bun.write(appArchive, await buildAppArchive(Script.channel, Script.version, { skipBuild: skipWebUi }))
 const appAssetsPlugin: BunPlugin = {
