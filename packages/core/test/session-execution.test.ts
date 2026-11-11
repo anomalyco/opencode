@@ -438,9 +438,6 @@ describe("SessionExecution lifecycle", () => {
   )
 })
 
-// Shell commands only run in the process daemon off Windows (pipe mode is Unix-only), so the daemon shell cases skip there.
-const daemonLive = process.platform === "win32" ? it.live.skip : it.live
-
 describe("SessionRestart background recovery", () => {
   it.effect("keeps shell owners idle until a user prompt delivers recovered notices exactly once", () =>
     Effect.gen(function* () {
@@ -530,7 +527,7 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  daemonLive("counts a suspended parent's restart attempt before its shell-woken child can wake it", () =>
+  it.live("counts a suspended parent's restart attempt before its shell-woken child can wake it", () =>
     Effect.gen(function* () {
       const db = yield* Database.Service
       const jobs = yield* Job.Service
@@ -608,7 +605,7 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  daemonLive("watches shell jobs whose commands survived the restart", () =>
+  it.live("watches shell jobs whose commands survived the restart", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const store = yield* SessionStore.Service
@@ -670,7 +667,7 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  daemonLive("settles a shell call a killed server left running as moved to the background", () =>
+  it.live("settles a shell call a killed server left running as moved to the background", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const store = yield* SessionStore.Service
@@ -757,7 +754,7 @@ describe("SessionRestart background recovery", () => {
   )
 
   for (const exited of [false, true])
-    daemonLive(
+    it.live(
       `reattaches once a ${exited ? "finished" : "running"} shell a killed server backgrounded without settling its call`,
       () =>
         Effect.gen(function* () {
@@ -818,7 +815,7 @@ describe("SessionRestart background recovery", () => {
         }),
     )
 
-  daemonLive("settles a recovered child's unsettled shell call before the child resumes", () =>
+  it.live("settles a recovered child's unsettled shell call before the child resumes", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const store = yield* SessionStore.Service

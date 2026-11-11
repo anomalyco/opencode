@@ -141,8 +141,8 @@ type Ended = {
  * here; callers (e.g. `ShellTool`) own that association and store the shell ID.
  *
  * Local commands run in the process daemon when it is available (`Daemon`), so they outlive a planned server
- * restart: the next server takes them back. Remote workspaces, Windows and an unavailable daemon keep spawning
- * them from the server.
+ * restart: the next server takes them back. Remote workspaces and an unavailable daemon keep spawning them from
+ * the server.
  */
 export interface Interface {
   readonly create: <E = never, R = never>(
@@ -615,12 +615,9 @@ const layer = () =>
       // Commands this server spawned for the Location; daemon commands live in `runs`, owned by the server.
       const commands = new Map<Shell.ID, Spawned>()
       const exitOrder: Shell.ID[] = []
-      // Remote workspaces and Windows keep spawning commands from the server. Taken back before the service is
-      // returned, so session restart recovery sees them.
+      // Take local commands back before returning the service so session restart recovery sees them.
       const runs =
-        location.workspaceID === undefined && process.platform !== "win32" && PersistentPty.available
-          ? yield* daemon.at(location)
-          : undefined
+        location.workspaceID === undefined && PersistentPty.available ? yield* daemon.at(location) : undefined
 
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
       const { mkdir, unlink, stat } = yield* Effect.promise(() => import("fs/promises"))

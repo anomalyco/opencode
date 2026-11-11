@@ -35,6 +35,7 @@ import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 
 const it = testEffect(tempGlobalLayer)
+const idleCommand = process.platform === "win32" ? "Start-Sleep -Seconds 60" : "sleep 60"
 
 const model = SessionRunnerModel.node.replace(
   Layer.succeed(SessionRunnerModel.Service, {
@@ -95,7 +96,7 @@ const world = Effect.gen(function* () {
       ),
       scope,
     )
-  const shellSpawns = () => spawns.filter((command) => JSON.stringify(command).includes("sleep 60"))
+  const shellSpawns = () => spawns.filter((spawn) => JSON.stringify(spawn).includes(idleCommand))
   return { daemon, llm: Context.get(llm, TestLLM.Test), project, server, shellSpawns }
 })
 
@@ -115,8 +116,7 @@ const until = (check: () => boolean) =>
     while (!check()) yield* Effect.sleep(5)
   })
 
-// Shell commands only run in the process daemon off Windows (pipe mode is Unix-only).
-describe.skipIf(process.platform === "win32")("shell commands across a graceful restart", () => {
+describe("shell commands across a graceful restart", () => {
   for (const finished of [false, true])
     it.live(
       `settles a foreground call ${finished ? "whose command finished during the restart" : "whose command still runs"} and resumes its session`,
@@ -127,7 +127,7 @@ describe.skipIf(process.platform === "win32")("shell commands across a graceful 
           let turns = 0
           yield* llm.serve((request) =>
             request.tools.some((tool) => tool.name === "shell") && turns++ === 0
-              ? TestLLM.toolCall("call-restart", "shell", { command: "sleep 60" })
+              ? TestLLM.toolCall("call-restart", "shell", { command: idleCommand })
               : TestLLM.text("Done", "done"),
           )
 
@@ -210,7 +210,7 @@ describe.skipIf(process.platform === "win32")("shell commands across a graceful 
           let turns = 0
           yield* llm.serve((request) =>
             request.tools.some((tool) => tool.name === "shell") && turns++ === 0
-              ? TestLLM.toolCall("call-shutdown", "shell", { command: "sleep 60" })
+              ? TestLLM.toolCall("call-shutdown", "shell", { command: idleCommand })
               : TestLLM.text("Done", "done"),
           )
           let release = () => {}
