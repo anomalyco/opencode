@@ -72,6 +72,7 @@ const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 const EVENT_STREAM_IDLE = Duration.seconds(60)
 const EVENT_LIST_PAGES = 100
 
+/** Experimental: MCP Events is a draft extension; may change without compatibility guarantees. */
 const EventType = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
@@ -106,7 +107,10 @@ const EventNotification = Schema.toStandardSchemaV1(
 const HeartbeatNotification = Schema.toStandardSchemaV1(Schema.Struct({ cursor: Cursor, ...Subscribed }))
 const ErrorNotification = Schema.toStandardSchemaV1(Schema.Struct({ error: EventError, ...Subscribed }))
 
-/** One message on an event stream. Persist the latest non-null `cursor` to resume from it. */
+/**
+ * One message on an event stream. Persist the latest non-null `cursor` to resume from it.
+ * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ */
 export type EventMessage =
   /** The stream is live. Sent first, and again with `truncated` when the server skipped events it could not replay. */
   | { readonly type: "active"; readonly cursor: string | null; readonly truncated: boolean }
@@ -123,7 +127,10 @@ export type EventMessage =
   /** A recoverable failure, such as one failed upstream fetch; the stream stays open. */
   | { readonly type: "error"; readonly error: EventError }
 
-/** The server ended the subscription, as when access was revoked or the event type was removed or changed. */
+/**
+ * The server ended the subscription, as when access was revoked or the event type was removed or changed.
+ * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ */
 export class EventStreamTerminatedError extends Schema.TaggedError<EventStreamTerminatedError>()(
   "MCP.EventStreamTerminatedError",
   {
@@ -245,7 +252,7 @@ export interface Connection {
       readonly sessionID?: Session.ID
     } & PerRequest,
   ) => Effect.Effect<CallToolResult, Error>
-  /** MCP Events, when the connection declared them and the server offers them. */
+  /** MCP Events, when the connection declared them and the server offers them. Experimental; see `Events`. */
   readonly events: Events | undefined
   readonly onClose: (callback: (reason: string) => void) => void
   readonly onSessionExpired: (callback: () => void) => void
@@ -254,6 +261,7 @@ export interface Connection {
   readonly onResourcesChanged: (callback: () => void) => void
 }
 
+/** Experimental: MCP Events is a draft extension; may change without compatibility guarantees. */
 export interface Events {
   /** Every event type the server offers (`events/list`). */
   readonly list: () => Effect.Effect<ReadonlyArray<EventType>, Error>
@@ -288,7 +296,7 @@ export interface ConnectOptions {
   readonly clientInfo?: Implementation
   /** False declares no roots and leaves `roots/list` unanswered, for a connection no one directory owns. */
   readonly roots?: boolean
-  /** Declares MCP Events, a draft extension, and exposes `Connection.events` for a server that offers them. */
+  /** Experimental: declares MCP Events, a draft extension, and exposes `Connection.events` for a server that offers them. */
   readonly events?: boolean
 }
 

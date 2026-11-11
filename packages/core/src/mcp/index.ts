@@ -183,7 +183,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
-  /** MCP Events of a connected server that offers them, while the `mcp_events` flag is on. */
+  /** Experimental: MCP Events of a connected server that offers them, while the `mcp_events` flag is on. */
   readonly events: (server: ServerName | string) => Effect.Effect<McpClient.Events | undefined, NotFoundError>
 }
 
