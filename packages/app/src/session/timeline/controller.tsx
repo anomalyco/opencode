@@ -206,17 +206,23 @@ export function createTimelineController(input: {
   const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
   const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
 
-  const projection = (input.next ? createNextTimelineProjection : createTimelineProjection)({
+  const projectionInput = {
     sessionMessages: projectedMessages,
     status: input.session.data.status,
-    reasoningMode,
-    shellToolDefaultOpen: shellToolPartsExpanded,
-    editToolDefaultOpen: editToolPartsExpanded,
     timelineDetail,
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
-  })
+  }
+
+  const projection = input.next
+    ? createNextTimelineProjection(projectionInput)
+    : createTimelineProjection({
+        ...projectionInput,
+        reasoningMode,
+        shellToolDefaultOpen: shellToolPartsExpanded,
+        editToolDefaultOpen: editToolPartsExpanded,
+      })
 
   const errorMessage = (cause: unknown) =>
     Option.match(decodeErrorData(cause), {

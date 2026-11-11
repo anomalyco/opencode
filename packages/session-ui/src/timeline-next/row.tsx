@@ -53,14 +53,11 @@ import { timelineCategory, type TimelineDetail } from "../timeline/detail"
 import { currentToolFailed } from "../message/current-tool-state"
 import { userMessageRuns, userRunSpring } from "../timeline/user-runs"
 import { attached } from "../components/message-file"
-import {
-  createNextTimelineProjection,
-  Timeline,
-  TimelineRow,
-  unwrapErrorMessage,
-  type PartRef,
-  type ReasoningMode,
-} from "./projection"
+import { contentEntries, createNextTimelineProjection, resolveContent } from "./projection"
+import { TimelineRow, type PartRef } from "../timeline/timeline-row"
+import { unwrapErrorMessage } from "./errors"
+
+type ReasoningMode = "hidden" | "compact" | "full"
 import { IDLE_TURN_PHASE, sameRef, viewTurnPhase } from "../timeline/turn-phase-machine"
 import {
   DISPOSED_STEER_ARRIVAL_EVENT,
@@ -138,7 +135,7 @@ export function createNextTimelineRowRenderer(input: {
     rows.forEach((row) => {
       if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "context") return
       row.group.refs.forEach((ref) => {
-        const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
+        const content = resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
 
         if (
           content?.type !== "tool" ||
@@ -316,9 +313,7 @@ export function createNextTimelineRowRenderer(input: {
       ?.findLast((message) => message.content.some((content) => content.type === "text" && !!content.text.trim()))
 
     return message
-      ? Timeline.contentEntries(message).findLast(
-          (entry) => entry.content.type === "text" && !!entry.content.text.trim(),
-        )?.id
+      ? contentEntries(message).findLast((entry) => entry.content.type === "text" && !!entry.content.text.trim())?.id
       : undefined
   }
 
@@ -332,7 +327,7 @@ export function createNextTimelineRowRenderer(input: {
       const message = input.projection.messageByID().get(ref.messageID)
 
       if (message?.type === "assistant") {
-        Timeline.contentEntries(message).forEach((entry) => {
+        contentEntries(message).forEach((entry) => {
           // Match resolveContent's first entry when content IDs repeat.
           if (!contents.has(entry.id)) contents.set(entry.id, entry.content)
         })
@@ -525,7 +520,7 @@ export function createNextTimelineRowRenderer(input: {
     const content = createMemo(() => {
       const current = ref()
 
-      return current ? Timeline.resolveContent(message(), current.partID) : undefined
+      return current ? resolveContent(message(), current.partID) : undefined
     })
 
     const defaultOpen = createMemo(() => {
@@ -1235,7 +1230,7 @@ export function createNextTimelineRowRenderer(input: {
 
       const content = createMemo(() => {
         const ref = current().ref
-        const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
+        const content = resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
 
         return content?.type === "reasoning" ? content : undefined
       })
@@ -1308,6 +1303,9 @@ export function createNextTimelineRowRenderer(input: {
         </Frame>
       )
     }
+
+    // Drawn once the New timeline's rows are ported.
+    if (Predicate.isTagged(row(), "Worked")) return null
 
     const current = () => {
       const value = row()
