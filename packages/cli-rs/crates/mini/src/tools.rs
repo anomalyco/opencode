@@ -131,7 +131,7 @@ impl Frame {
     /// `span`: how long the tool ran.
     fn span(&self) -> String {
         match (self.start, self.end) {
-            (Some(start), Some(end)) if end > start => crate::shell::duration((end - start) as u64),
+            (Some(start), Some(end)) if end > start => opencode_ui::locale::duration(end - start),
             _ => String::new(),
         }
     }
