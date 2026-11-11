@@ -195,28 +195,3 @@ function sameGroup(a: PartGroup, b: PartGroup) {
 function sameRef(a: PartRef, b: PartRef) {
   return a.messageID === b.messageID && a.partID === b.partID
 }
-
-export type TimelineRowMap = {
-  TurnGap: { userMessageID: string }
-  UserMessage: { userMessageID: string }
-  Shell: { userMessageID: string; messageID: string }
-  Notice: { userMessageID: string; messageID: string }
-  TurnDivider: { userMessageID: string }
-  AssistantPart: {
-    userMessageID: string
-    group: PartGroup
-    previousAssistantPart: boolean
-    spacing?: "tool" | "content"
-  }
-  Thinking: { userMessageID: string; ref: PartRef }
-  Retry: { userMessageID: string; attempt: number; message: string; next: number }
-  Error: {
-    userMessageID: string
-    text: string
-    kind?: "free-limit" | "go-limit" | "budget-limit" | "model-budget-limit"
-    resetAt?: number
-  }
-  CompactionQueued: { userMessageID: string; inboxID: string }
-  TurnDiff: { userMessageID: string; messageID: string; from: string; files: readonly string[] }
-  Activity: { userMessageID: string }
-}

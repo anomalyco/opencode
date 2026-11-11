@@ -174,9 +174,8 @@ const layer = Layer.effect(
                     .pipe(Effect.mapError((error) => new CloneFailedError({ repository, message: error.message })))
                 }
 
-                if (status === "refreshed") {
-                  if (!existing)
-                    return yield* new FetchFailedError({ repository, message: "Repository is unavailable" })
+                // "refreshed" means the checkout was reused, so `existing` is always set here.
+                if (status === "refreshed" && existing) {
                   yield* git.sync
                     .fetchRemotes(existing)
                     .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))

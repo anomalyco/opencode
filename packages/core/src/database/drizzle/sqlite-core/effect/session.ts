@@ -258,10 +258,6 @@ export class SQLiteEffectPreparedQuery<
       }
 
       if (cacheStrat.type === "try") {
-        if (yield* this.isInTransaction) {
-          return yield* this.mapCachedResult(yield* query, mapResult)
-        }
-
         const { tables, key, isTag, autoInvalidate, config } = cacheStrat
         const fromCache: any[] | undefined = yield* this.cache.get(key, tables, isTag, autoInvalidate)
 

@@ -1126,8 +1126,6 @@ export const recentUserMessages = (
 
 const total = (estimate: Estimate) => estimate.measured + estimate.estimated
 
-export const estimateContext = (context: SessionContext.Loaded) => total(estimatePrompt(context))
-
 /** The size of the prompt `context` sends. */
 export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
   const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))

@@ -423,6 +423,10 @@ it.effect("auto compaction estimates current content against the buffered prompt
       compaction
         .compact({ reason: "auto", context, estimate })
         .pipe(Effect.map((outcome) => outcome.status !== "skipped"))
+    const estimateContext = (context: SessionContext.Loaded) => {
+      const estimate = SessionCompaction.estimatePrompt(context)
+      return estimate.measured + estimate.estimated
+    }
 
     // 85% of the input limit, which takes precedence over the context window.
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
@@ -479,21 +483,21 @@ it.effect("auto compaction estimates current content against the buffered prompt
       time: { created: DateTime.makeUnsafe(0), ran: DateTime.makeUnsafe(0) },
     })
     const grown = { ...input(89_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
-    expect(SessionCompaction.estimateContext(grown)).toBe(90_000)
+    expect(estimateContext(grown)).toBe(90_000)
     expect(yield* due(grown)).toBe(true)
     // A step estimates its prompt once and passes it; compaction decides on that instead of estimating again.
     expect(yield* due(grown, { measured: 0, estimated: 0 })).toBe(false)
     expect(yield* due(input(1_000, contextLimited), { measured: 84_000, estimated: 0 })).toBe(true)
 
     const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
-    expect(SessionCompaction.estimateContext({ ...grown, messages: [...grown.messages, interrupted] })).toBe(90_001)
+    expect(estimateContext({ ...grown, messages: [...grown.messages, interrupted] })).toBe(90_001)
     // Without provider usage, include 20 tokens for the system prompt, instructions, and tool definition.
-    expect(SessionCompaction.estimateContext({ ...grown, messages: [interrupted] })).toBe(21)
+    expect(estimateContext({ ...grown, messages: [interrupted] })).toBe(21)
     // Another provider's usage is not trusted either.
     const foreign = { ...assistant, model: { ...assistant.model, providerID: Provider.ID.make("other") } }
-    expect(SessionCompaction.estimateContext({ ...grown, messages: [foreign] })).toBe(21)
+    expect(estimateContext({ ...grown, messages: [foreign] })).toBe(21)
     expect(
-      SessionCompaction.estimateContext({
+      estimateContext({
         ...grown,
         messages: [{ ...interrupted, tokens: input(0, contextLimited).messages[0].tokens }],
       }),
@@ -506,7 +510,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const messages = [
       { ...assistant, content: [{ ...tool, state: { status: "completed" as const, input: {}, content: media } }] },
     ]
-    expect(SessionCompaction.estimateContext({ ...grown, messages })).toBe(92_500)
+    expect(estimateContext({ ...grown, messages })).toBe(92_500)
     const user = Schema.decodeUnknownSync(SessionMessage.User)({
       id: SessionMessage.ID.create(),
       type: "user",
@@ -514,7 +518,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
       files: media.map((file) => ({ mime: file.mime, data: "a".repeat(100_000), source: { type: "inline" } })),
       time: { created: 0 },
     })
-    expect(SessionCompaction.estimateContext({ ...grown, messages: [...messages, user] })).toBe(96_000)
+    expect(estimateContext({ ...grown, messages: [...messages, user] })).toBe(96_000)
     for (const [modalities, tokens, fallback] of [
       [["text", "image"], 92_040, 1_520],
       [["text", "pdf"], 93_042, 2_021],
@@ -524,8 +528,8 @@ it.effect("auto compaction estimates current content against the buffered prompt
         ...grown,
         model: { ...grown.model, capabilities: { ...grown.model.capabilities, input: modalities } },
       }
-      expect(SessionCompaction.estimateContext({ ...selected, messages: [...messages, user] })).toBe(tokens)
-      expect(SessionCompaction.estimateContext({ ...selected, messages: [user] })).toBe(fallback + 20)
+      expect(estimateContext({ ...selected, messages: [...messages, user] })).toBe(tokens)
+      expect(estimateContext({ ...selected, messages: [user] })).toBe(fallback + 20)
     }
 
     const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
