@@ -26,12 +26,12 @@ export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: 
 
 export function resolveNewSessionBranch(input: {
   worktree: string
-  directory: string
+  root: string
   createBranch?: string
   worktreeBranch: (worktree: string) => string | undefined
 }) {
   if (input.worktree === "create" && input.createBranch) return input.createBranch
-  const directory = input.worktree === "main" || input.worktree === "create" ? input.directory : input.worktree
+  const directory = input.worktree === "main" || input.worktree === "create" ? input.root : input.worktree
 
   return input.worktreeBranch(directory)
 }
@@ -167,8 +167,13 @@ export function createNewSessionWorkspaceController(input: {
     }),
   )
 
-  const projectRoot = createMemo(() => currentProject()?.worktree ?? sdk().directory)
-  const branchDirectory = () => (value() === "create" ? projectRoot() : sdk().directory)
+  // A draft opened from a worktree session keeps that worktree as its directory; Local still runs in the main checkout.
+  const projectRoot = createMemo(
+    () =>
+      data.location.info({ directory: sdk().directory })?.project.canonical ??
+      currentProject()?.worktree ??
+      sdk().directory,
+  )
 
   createEffect(() => {
     void Promise.all([
@@ -178,7 +183,7 @@ export function createNewSessionWorkspaceController(input: {
     ]).catch(() => undefined)
   })
   createEffect(() => {
-    if (value() !== "create" || sameDirectory(projectRoot(), sdk().directory)) return
+    if ((value() !== "main" && value() !== "create") || sameDirectory(projectRoot(), sdk().directory)) return
     void data.location.vcs.sync({ directory: projectRoot() }).catch(() => undefined)
   })
   // Only the selected worktree feeds the branch label. Syncing every worktree in the inventory boots
@@ -197,11 +202,18 @@ export function createNewSessionWorkspaceController(input: {
   const branch = createMemo(() =>
     resolveNewSessionBranch({
       worktree: value(),
-      directory: branchDirectory(),
+      root: projectRoot(),
       createBranch: input.selectedBranch(),
       worktreeBranch: (worktree) => data.location.vcs.info({ directory: worktree })?.branch.current,
     }),
   )
+
+  // Missing until the main checkout's Git info loads; a detached HEAD loads without a branch.
+  const checkout = createMemo(() => {
+    const info = data.location.vcs.info({ directory: projectRoot() })
+
+    return info ? { branch: info.branch.current } : undefined
+  })
 
   const remember = (worktree = value()) => {
     const project = currentProject()
@@ -264,6 +276,7 @@ export function createNewSessionWorkspaceController(input: {
     bar: {
       visible,
       branch,
+      checkout,
     },
     branches: (search: string, signal?: AbortSignal) =>
       serverSDK.api.vcs.branch

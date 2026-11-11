@@ -1,0 +1,157 @@
+---
+title: Referanser
+description: Legg til lokale kataloger og Git-repositorier som prosjektreferanser.
+---
+
+Referanser gir OpenCode tilgang til kataloger utenfor det gjeldende prosjektet. Bruk dem til å gjøre dokumentasjon, delte biblioteker, eksempler eller et annet repository tilgjengelig mens du jobber.
+
+Referanser konfigureres med et alias i `opencode.json` eller `opencode.jsonc`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## Lokale kataloger
+
+Bruk `path` for å referere til en lokal katalog.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+Baner kan være:
+
+- Relative til konfigurasjonsfilen som definerer referansen
+- Absolutte, for eksempel `/home/user/docs`
+- Relative til hjemmekatalogen din, for eksempel `~/docs`
+
+Du kan også bruke en kortform som streng:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Git-repositorier
+
+Bruk `repository` for å referere til et Git-repository. OpenCode henter repositoriet til sin lokale repository-hurtigbuffer og gjør den utsjekkede kildekoden tilgjengelig som en referansekatalog.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository` godtar Git-URL-er, referanser i formen vert/bane og GitHub-kortformen `owner/repo`. Det valgfrie feltet `branch` velger en gren eller ref. Uten `branch` bruker OpenCode standardgrenen til repositoriet.
+
+Du kan bruke kortform som streng når du ikke trenger gren, beskrivelse eller andre alternativer:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Git-referanser oppdateres asynkront. Det kan ta et øyeblikk før et nylig konfigurert repository er ferdig klonet eller oppdatert.
+:::
+
+---
+
+## Beskriv bruk
+
+Legg til `description` for å forklare når en agent bør bruke en referanse.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode tar med referanser som har beskrivelser i agentkonteksten. Beskrivelser bør være korte og presise nok til å skille mellom referanser med lignende innhold. Referanser uten beskrivelse er fortsatt tilgjengelige via autofullføring og direkte bruk, men blir ikke presentert for agenter.
+
+---
+
+## Skjul oppføringer i autofullføring
+
+Sett `hidden` til `true` for å utelate en referanse fra `@`-autofullføringen i TUI.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` påvirker bare autofullføring. En skjult referanse med beskrivelse tas fortsatt med i agentkonteksten.
+
+---
+
+## Bruk referanser
+
+Konfigurerte referanser vises i `@`-autofullføringen i TUI. Skriv `@alias` for å legge ved rotkatalogen til referansen, eller `@alias/` for å søke etter filer i den.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+Agenter får også de løste banene og beskrivelsene til konfigurerte referanser som har beskrivelser i systemkonteksten sin, slik at de kan undersøke en referanse når den er relevant uten at du må legge den ved manuelt.
+
+OpenCode tillater automatisk referansekataloger gjennom tillatelsesgrensen for eksterne kataloger. Vanlige verktøytillatelser gjelder fortsatt. For eksempel får ikke en agent som ikke kan redigere filer, redigeringstilgang fordi en katalog er konfigurert som referanse.
+
+---
+
+## Konfigurer felt
+
+| Felt          | Lokal | Git | Beskrivelse                                          |
+| ------------- | ----- | --- | ---------------------------------------------------- |
+| `path`        | Ja    | Nei | Lokal referansekatalog                               |
+| `repository`  | Nei   | Ja  | Git-URL, vert/bane eller GitHub-verdien `owner/repo` |
+| `branch`      | Nei   | Ja  | Valgfri Git-gren eller ref                           |
+| `description` | Ja    | Ja  | Veiledning som beskriver når referansen skal brukes  |
+| `hidden`      | Ja    | Ja  | Skjul referansen fra `@`-autofullføringen i TUI      |
+
+Referansealiaser kan ikke være tomme eller inneholde `/`, mellomrom, backticks eller kommaer.

@@ -453,6 +453,9 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
                 onPointerEnter={(event) =>
                   dispatch({ type: "modifier.changed", active: modified(event), config: readConfig() })
                 }
+                onPointerDown={(event) =>
+                  dispatch({ type: "modifier.changed", active: modified(event), config: readConfig() })
+                }
                 onClick={(event) =>
                   dispatch({ type: "action.clicked", modified: modified(event), config: readConfig() })
                 }

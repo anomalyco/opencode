@@ -51,7 +51,8 @@ const fallbackData = {
 
 const fallbackHandoff = {
   get: () => undefined,
-  forSession: () => ({ set() {}, settle() {}, clear() {} }),
+  held: () => false,
+  forSession: () => ({ set() {}, hold() {}, settle() {}, clear() {} }),
 }
 
 type ActiveServerValue = {

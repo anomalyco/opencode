@@ -94,7 +94,12 @@
     visibility: hidden;
   }
 
-  [data-component="menu-v2-item"][data-stoppable]:is(:hover, [data-highlighted]) {
+  /* A row whose Stop is in flight keeps showing its loader until the work leaves the list or the Stop settles. */
+  [data-component="menu-v2-item"][data-stoppable]:is(
+      :hover,
+      [data-highlighted],
+      :has([data-slot="session-activity-stop"][aria-disabled="true"])
+    ) {
     [data-slot="session-activity-stop"] {
       visibility: visible;
     }

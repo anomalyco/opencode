@@ -2,16 +2,15 @@ import { createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import type { QuoteSource } from "./quote-source"
 
-// A quote send that never answers turns into a failure the user can retry, rather than a spinner forever.
-export const QUOTE_SEND_TIMEOUT_MS = 30_000
-
 /**
  * The quote whose comment editor is open, and its send.
  * - `closed`: no editor is open.
  * - `open`: the editor shows `key`; `draft` stays `undefined` until the user edits, so the saved comment shows.
  * - `sending`: a direct send of `draft` is in flight; the editor stays open and ignores chip toggles and edits.
+ *   It ends only when the composer's submit settles, which the request layer bounds. A timeout of its own would
+ *   report a failure while the composer still sends, and a retry then could post the quote twice.
  * - `failed`: the send did not go through; the editor keeps the draft and shows an alert until the next edit.
- * - `disposed`: the composer state was evicted; late results and timers are ignored.
+ * - `disposed`: the composer state was evicted; late results are ignored.
  */
 export type QuoteCommentState =
   | { readonly status: "closed"; readonly issued: number }
@@ -45,20 +44,16 @@ export type QuoteCommentEvent =
   | { readonly type: "draft.changed"; readonly draft: string }
   | { readonly type: "send.requested"; readonly draft: string }
   | { readonly type: "send.settled"; readonly attempt: number; readonly sent: boolean }
-  | { readonly type: "send.timed-out"; readonly attempt: number }
   /** The context items still in the draft; an editor whose quote is gone closes. */
   | { readonly type: "retained"; readonly keys: readonly string[] }
   | { readonly type: "disposed" }
 
-export type QuoteCommentEffect =
-  | {
-      readonly type: "send.run"
-      readonly attempt: number
-      readonly key: string
-      readonly draft: string
-      readonly timeoutMs: number
-    }
-  | { readonly type: "timer.clear" }
+export type QuoteCommentEffect = {
+  readonly type: "send.run"
+  readonly attempt: number
+  readonly key: string
+  readonly draft: string
+}
 
 export type QuoteCommentTransition = {
   readonly state: QuoteCommentState
@@ -77,33 +72,25 @@ export const INITIAL_QUOTE_COMMENT_STATE: QuoteCommentState = Object.freeze({ st
 
 const NO_EFFECTS: readonly QuoteCommentEffect[] = Object.freeze([])
 
-const CLEAR_TIMER: readonly QuoteCommentEffect[] = Object.freeze([{ type: "timer.clear" }])
-
 export function transitionQuoteComment(state: QuoteCommentState, event: QuoteCommentEvent): QuoteCommentTransition {
   if (state.status === "disposed") return stay(state)
 
-  if (event.type === "disposed")
-    return { state: { status: "disposed" }, effects: state.status === "sending" ? CLEAR_TIMER : NO_EFFECTS }
+  if (event.type === "disposed") return { state: { status: "disposed" }, effects: NO_EFFECTS }
 
   if (event.type === "retained") {
     if (state.status === "closed" || event.keys.includes(state.key)) return stay(state)
 
-    return {
-      state: { status: "closed", issued: state.issued },
-      effects: state.status === "sending" ? CLEAR_TIMER : NO_EFFECTS,
-    }
+    return { state: { status: "closed", issued: state.issued }, effects: NO_EFFECTS }
   }
 
   if (state.status === "sending") {
-    if ((event.type !== "send.settled" && event.type !== "send.timed-out") || event.attempt !== state.attempt)
-      return stay(state)
+    if (event.type !== "send.settled" || event.attempt !== state.attempt) return stay(state)
 
-    if (event.type === "send.settled" && event.sent)
-      return { state: { status: "closed", issued: state.issued }, effects: CLEAR_TIMER }
+    if (event.sent) return { state: { status: "closed", issued: state.issued }, effects: NO_EFFECTS }
 
     return {
       state: { status: "failed", issued: state.issued, key: state.key, draft: state.draft, anchor: state.anchor },
-      effects: CLEAR_TIMER,
+      effects: NO_EFFECTS,
     }
   }
 
@@ -138,7 +125,7 @@ export function transitionQuoteComment(state: QuoteCommentState, event: QuoteCom
 
     return {
       state: { status: "sending", issued: attempt, attempt, key: state.key, draft: event.draft, anchor: state.anchor },
-      effects: [{ type: "send.run", attempt, key: state.key, draft: event.draft, timeoutMs: QUOTE_SEND_TIMEOUT_MS }],
+      effects: [{ type: "send.run", attempt, key: state.key, draft: event.draft }],
     }
   }
 
@@ -179,7 +166,6 @@ export type QuoteCommentController = ReturnType<typeof createQuoteCommentControl
 
 export function createQuoteCommentController() {
   const [state, setState] = createSignal(INITIAL_QUOTE_COMMENT_STATE)
-  let timer: ReturnType<typeof setTimeout> | undefined
   // Handed from `send` to the `send.run` effect it causes in the same dispatch.
   let submit: ((key: string, comment: string) => Promise<boolean>) | undefined
 
@@ -192,15 +178,10 @@ export function createQuoteCommentController() {
   }
 
   const run = (effect: QuoteCommentEffect) => {
-    clearTimeout(timer)
-    timer = undefined
-
-    if (effect.type === "timer.clear") return
     const send = submit
     submit = undefined
 
     if (!send) return dispatch({ type: "send.settled", attempt: effect.attempt, sent: false })
-    timer = setTimeout(() => dispatch({ type: "send.timed-out", attempt: effect.attempt }), effect.timeoutMs)
     void Promise.try(() => send(effect.key, effect.draft)).then(
       (sent) => dispatch({ type: "send.settled", attempt: effect.attempt, sent }),
       () => dispatch({ type: "send.settled", attempt: effect.attempt, sent: false }),

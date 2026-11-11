@@ -4,7 +4,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Slash } from "@opencode/ui/slash"
 import { Keybind } from "@opencode/ui/keybind"
 import { useCommand } from "@/shell/commands/command"
-import { Show, createMemo, createSignal, untrack, type JSX } from "solid-js"
+import { Match, Show, Switch, createComputed, createMemo, createSignal, onCleanup, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { getFilename } from "@opencode/util/path"
@@ -34,6 +34,13 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useSettings } from "@/settings/model"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
+import {
+  CHECKOUT_PLACEHOLDER_DELAY_MS,
+  INITIAL_CHECKOUT_LABEL_STATE,
+  selectCheckoutSkeleton,
+  transitionCheckoutLabel,
+  type CheckoutLabelEvent,
+} from "./workspace/checkout-machine"
 import { NewSessionBranch } from "./workspace/selector"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard } from "./pin-board"
@@ -117,17 +124,29 @@ export function NewSessionView(props: {
                   <Composer model={props.composer} />
                 </div>
                 <Show when={props.project.selected()}>
-                  {(project) => (
-                    <NewSessionLocation
-                      project={project()}
-                      workspace={props.workspace.bar.visible() ? props.workspace.selection.value() : "main"}
-                      root={props.workspace.project.root()}
-                      branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
-                      onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
-                      onClick={() => location()}
-                      onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
-                    />
-                  )}
+                  {(project) => {
+                    const workspace = () => (props.workspace.bar.visible() ? props.workspace.selection.value() : "main")
+
+                    const worktrees = () =>
+                      project().id && project().vcs === "git" ? () => location(project()) : undefined
+
+                    return (
+                      <NewSessionLocation
+                        project={project()}
+                        workspace={workspace()}
+                        root={props.workspace.project.root()}
+                        checkout={props.workspace.bar.checkout()}
+                        branch={
+                          workspace() === "main" && worktrees() ? undefined : (
+                            <NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />
+                          )
+                        }
+                        onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
+                        onClick={() => location()}
+                        onWorktree={worktrees()}
+                      />
+                    )
+                  }}
                 </Show>
               </div>
               <Show when={props.project.empty()}>
@@ -280,6 +299,8 @@ function NewSessionLocation(props: {
   /** "main", "create", or a worktree directory. */
   workspace: string
   root: string
+  /** Missing while the main checkout's Git info loads. */
+  checkout?: { branch?: string }
   branch?: JSX.Element
   onboarding: boolean
   onClick: () => void
@@ -300,6 +321,38 @@ function NewSessionLocation(props: {
       onSelect: props.onWorktree,
     },
   ])
+
+  const [checkoutLabel, setCheckoutLabel] = createSignal(INITIAL_CHECKOUT_LABEL_STATE)
+
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
+
+  const dispatchCheckout = (event: CheckoutLabelEvent) =>
+    untrack(() => {
+      const next = transitionCheckoutLabel(checkoutLabel(), event)
+      setCheckoutLabel(next.state)
+      next.effects.forEach((effect) => {
+        if (effect.type === "delay.stop") {
+          clearTimeout(timers.get(effect.attempt))
+          timers.delete(effect.attempt)
+
+          return
+        }
+
+        timers.set(
+          effect.attempt,
+          setTimeout(
+            () => dispatchCheckout({ type: "delay.elapsed", attempt: effect.attempt }),
+            CHECKOUT_PLACEHOLDER_DELAY_MS,
+          ),
+        )
+      })
+    })
+
+  createComputed(() =>
+    dispatchCheckout({ type: "checkout.changed", directory: props.root, loaded: props.checkout !== undefined }),
+  )
+
+  onCleanup(() => dispatchCheckout({ type: "disposed" }))
 
   const worktree = () => {
     if (props.workspace === "main") return
@@ -389,18 +442,28 @@ function NewSessionLocation(props: {
                     type="button"
                     data-action="prompt-worktree"
                     aria-haspopup="dialog"
+                    aria-label={worktree() ?? props.checkout?.branch ?? language.t("session.location.worktree")}
+                    aria-busy={selectCheckoutSkeleton(checkoutLabel())}
                     aria-description={language.t("session.location.worktree")}
                     class={`${TRIGGER} min-w-0`}
                     onClick={onWorktree()}
                   >
                     <Icon
-                      name={props.workspace === "create" ? "plus" : worktree() ? "outline-worktree" : "monitor"}
-                      size="small"
+                      name={props.workspace === "create" ? "plus" : worktree() ? "outline-worktree" : "branch"}
+                      size={worktree() ? "small" : "normal"}
                       class="shrink-0 text-v2-icon-icon-muted"
                     />
-                    <span class="min-w-0 truncate">
-                      {worktree() ?? language.t("session.new.workspace.triggerLocal")}
-                    </span>
+                    <Switch>
+                      <Match when={worktree() ?? props.checkout?.branch}>
+                        {(label) => <span class="min-w-0 truncate">{label()}</span>}
+                      </Match>
+                      <Match when={selectCheckoutSkeleton(checkoutLabel())}>
+                        <span
+                          aria-hidden="true"
+                          class="h-2 w-12 shrink-0 rounded-full bg-v2-background-bg-layer-02"
+                        />
+                      </Match>
+                    </Switch>
                     <Show when={props.onboarding}>
                       <span
                         data-slot="workspace-onboarding-dot"

@@ -3,6 +3,7 @@ import {
   createShellRunState,
   INITIAL_SUBAGENT_RUN_STATE,
   shellRunProps,
+  stoppedShell,
   subagentRunProps,
   transitionShellRun,
   transitionSubagentRun,
@@ -175,5 +176,27 @@ describe("transitionSubagentRun", () => {
 
     expect(viewSubagentRun(failed)).toMatchObject({ running: false, basicStatus: "error" })
     expect(viewSubagentRun(step(failed, { status: "error", metadata: {} }, true)).running).toBe(true)
+  })
+})
+
+describe("stoppedShell", () => {
+  const notice = "[full output saved to /tmp/sh_1.out]\n\nCommand interrupted by the user (shell ID: sh_1)."
+
+  const stopped = {
+    tool: "shell",
+    status: "error",
+    metadata: { interrupted: true, shellID: "sh_1", notice },
+    error: `step 1\nstep 2\n\n${notice}`,
+  }
+
+  test("splits a stopped call's error into its output and the notice, each once", () => {
+    expect(stoppedShell(stopped)).toEqual({ output: "step 1\nstep 2", notice })
+  })
+
+  test("leaves every other failure, and a stopped call whose error a plugin rewrote, as an error", () => {
+    expect(stoppedShell({ ...stopped, metadata: { notice } })).toBeUndefined()
+    expect(stoppedShell({ ...stopped, tool: "read" })).toBeUndefined()
+    expect(stoppedShell({ ...stopped, status: "completed" })).toBeUndefined()
+    expect(stoppedShell({ ...stopped, error: "rewritten by a plugin" })).toBeUndefined()
   })
 })

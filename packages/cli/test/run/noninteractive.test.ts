@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import {
+  ClientError,
   OpenCode,
   type EventSubscribeOutput,
   type ExperimentalJobListOutput,
+  type SessionActiveOutput,
+  type SessionInboxListOutput,
   type SessionMessageAssistantTool,
   type SessionMessageInfo,
 } from "@opencode/client/promise"
@@ -98,6 +101,50 @@ function executionFailed(message: string): V2Event {
       error: { type: "provider.transport", message },
     },
   }
+}
+
+function idleMessage(outcome: "succeeded" | "failed" | "interrupted", id = "msg_idle") {
+  return {
+    id,
+    type: "idle",
+    outcome,
+    ...(outcome === "failed" ? { error: { type: "provider.transport", message: "Execution failed" } } : {}),
+    time: { created: 5 },
+  } satisfies SessionMessageInfo
+}
+
+// A step that failed and was retried, followed by the step that recovered.
+function recoveredMessages(outcome: "succeeded" | "failed" | "interrupted") {
+  return (messageID: string): SessionMessageInfo[] => [
+    idleMessage(outcome),
+    {
+      id: "msg_recovered",
+      type: "assistant",
+      agent: "build",
+      model: { providerID: "test", id: "test-model" },
+      content: [{ type: "text", text: "Recovered answer" }],
+      finish: "stop",
+      time: { created: 3, completed: 4 },
+    },
+    {
+      id: "msg_assistant",
+      type: "assistant",
+      agent: "build",
+      model: { providerID: "test", id: "test-model" },
+      content: [],
+      finish: "error",
+      error: { type: "provider.transport", message: "Recovered transport error" },
+      time: { created: 2, completed: 3 },
+    },
+    { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+  ]
+}
+
+function jsonLines(stdout: string) {
+  return stdout
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
 }
 
 function failedTool(inboxID: string): V2Event[] {
@@ -210,16 +257,18 @@ function successfulGrep(inboxID: string): V2Event[] {
 async function run(input: {
   turn: (inboxID: string) => V2Event[]
   pendingForms?: FormInfo[]
-  attached?: boolean
+  standalone?: boolean
   format?: "default" | "json"
-  compatibility?: "v1"
   cancel?: (input: { sessionID: string; formID: string }) => Promise<void>
   renderTool?: (part: SessionMessageAssistantTool) => Promise<void>
   renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
   jobs?: () => ExperimentalJobListOutput
+  inbox?: (sessionID: string) => SessionInboxListOutput
+  active?: () => SessionActiveOutput
   terminalDelay?: number
+  signal?: AbortSignal
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
@@ -256,9 +305,14 @@ async function run(input: {
   spyOn(sdk.session.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
   let promptID = "msg_prompt"
   spyOn(sdk.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
-  spyOn(sdk.experimental.job, "list").mockImplementation(() => ok(input.jobs?.() ?? []) as never)
-  spyOn(sdk.session, "active").mockImplementation(() => ok({}) as never)
-  spyOn(sdk.session.inbox, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.experimental.job, "list").mockImplementation((async () => input.jobs?.() ?? []) as never)
+  spyOn(sdk.session, "active").mockImplementation((async () => input.active?.() ?? {}) as never)
+  spyOn(sdk.session.inbox, "list").mockImplementation(
+    (async (request: { sessionID: string }) => input.inbox?.(request.sessionID) ?? []) as never,
+  )
+  spyOn(sdk.session.inbox, "cancel").mockImplementation(() => ok(undefined))
+  spyOn(sdk.session, "interrupt").mockImplementation(() => ok({ interrupted: true }) as never)
+  spyOn(sdk.shell, "remove").mockImplementation(() => ok(undefined) as never)
   spyOn(sdk.session, "get").mockImplementation(
     ({ sessionID }) => ok({ id: sessionID, parentID: sessionID === "ses_child" ? "ses_1" : undefined }) as never,
   )
@@ -285,8 +339,8 @@ async function run(input: {
     thinking: false,
     format: input.format ?? "default",
     auto: false,
-    attached: input.attached ?? false,
-    compatibility: input.compatibility,
+    standalone: input.standalone ?? false,
+    signal: input.signal ?? new AbortController().signal,
     renderTool: input.renderTool ?? (() => Promise.resolve()),
     renderToolError: input.renderToolError ?? (() => Promise.resolve()),
   })
@@ -370,6 +424,7 @@ describe("runNonInteractivePrompt", () => {
       turn: (messageID) => [prompted(messageID)],
       wait: () => idle.promise,
       messages: (messageID) => [
+        idleMessage("succeeded"),
         {
           id: "msg_assistant",
           type: "assistant",
@@ -405,6 +460,7 @@ describe("runNonInteractivePrompt", () => {
   test("reports usage for a step that ends after the Session goes idle", async () => {
     const tokens = { input: 3, output: 5, reasoning: 7, cache: { read: 11, write: 13 } }
     const assistant = (messageID: string): SessionMessageInfo[] => [
+      idleMessage("succeeded"),
       {
         id: "msg_assistant",
         type: "assistant",
@@ -483,105 +539,30 @@ describe("runNonInteractivePrompt", () => {
     }
   })
 
-  test("cancels session and global form blockers and exits on pre-promotion interrupt", async () => {
-    const sdk = await run({
-      pendingForms: [form("frm_pending", "ses_1"), form("frm_pending_global", "global")],
-      // No prompted event: the execution settles interrupted before promotion,
-      // which must not leave the consume loop waiting forever.
-      turn: () => [formCreated(form("frm_live", "global")), settled("interrupted")],
+  for (const standalone of [true, false]) {
+    test(`${standalone ? "a standalone" : "an attached"} run ${standalone ? "cancels" : "leaves"} MCP input requests in its location`, async () => {
+      const cancelled: { sessionID: string; formID: string }[] = []
+      const output = await capture({
+        format: "json",
+        standalone,
+        pendingForms: [form("frm_pending", "ses_1"), form("frm_pending_global", "global")],
+        turn: (messageID) => [
+          formCreated(form("frm_live", "global")),
+          formCreated(form("frm_elsewhere", "global"), { ...location, directory: "/elsewhere" }),
+          prompted(messageID),
+          settled(),
+        ],
+        cancel: (request) => {
+          cancelled.push(request)
+          return Promise.resolve()
+        },
+      })
+      const global = standalone ? ["frm_live", "frm_pending_global"] : []
+      expect(cancelled.map((request) => request.formID).sort()).toEqual(["frm_pending", ...global].sort())
+      expect(output.exitCode).toBe(1)
+      expect(jsonLines(output.stdout).filter((event) => event.type === "error")).toHaveLength(1)
     })
-    const globalOptions = {
-      headers: {
-        "x-opencode-directory": "%2Fwork%20tree",
-      },
-    }
-    expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, globalOptions)
-    expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.session.form.cancel).toHaveBeenCalledWith(
-      { sessionID: "global", formID: "frm_pending_global" },
-      globalOptions,
-    )
-    expect(sdk.form.list).toHaveBeenCalledWith({
-      location: { directory: "/work tree" },
-    })
-    expect(process.exitCode).toBe(1)
-  })
-
-  test("attach mode cancels only session-owned forms", async () => {
-    const sdk = await run({
-      attached: true,
-      pendingForms: [form("frm_pending", "ses_1"), form("frm_pending_global", "global")],
-      turn: (messageID) => [formCreated(form("frm_live", "global")), prompted(messageID), settled()],
-    })
-    expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.form.list).not.toHaveBeenCalled()
-    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
-      { sessionID: "global", formID: "frm_live" },
-      expect.anything(),
-    )
-    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
-      { sessionID: "global", formID: "frm_pending_global" },
-      expect.anything(),
-    )
-    expect(process.exitCode).toBe(1)
-  })
-
-  test("V1 JSON output flushes step_start before an unrelated step failure", async () => {
-    const output = await capture({
-      compatibility: "v1",
-      format: "json",
-      turn: (messageID) => [
-        prompted(messageID),
-        stepStarted(),
-        stepFailed("Provider request failed"),
-        executionFailed("Provider request failed"),
-      ],
-    })
-
-    expect(
-      output.stdout
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => JSON.parse(line)),
-    ).toEqual([
-      expect.objectContaining({ type: "step_start", part: expect.objectContaining({ type: "step-start" }) }),
-      expect.objectContaining({
-        type: "error",
-        error: { type: "provider.transport", message: "Provider request failed" },
-      }),
-    ])
-    expect(output.stderr).toBe("")
-    const sdk = await run({ compatibility: "v1", turn: (messageID) => [prompted(messageID), settled()] })
-    expect(sdk.experimental.session.wait).not.toHaveBeenCalled()
-    expect(sdk.message.list).not.toHaveBeenCalled()
-  })
-
-  test("V1 default output flushes step_start before an unrelated execution failure", async () => {
-    const output = await capture({
-      compatibility: "v1",
-      turn: (messageID) => [prompted(messageID), stepStarted(), executionFailed("Execution failed")],
-    })
-
-    expect(output.stdout).toBe("")
-    expect(output.stderr).toContain("> build · test-model")
-    expect(output.stderr).toContain("Error: \u001b[0mExecution failed")
-    expect(output.stderr.indexOf("> build · test-model")).toBeLessThan(output.stderr.indexOf("Execution failed"))
-  })
-
-  test("V1 preserves terminal-finish failure suppression before content", async () => {
-    const output = await capture({
-      compatibility: "v1",
-      format: "json",
-      turn: (messageID) => [
-        prompted(messageID),
-        stepStarted(),
-        stepFailed("The provider response ended unexpectedly."),
-        executionFailed("The provider response ended unexpectedly."),
-      ],
-    })
-
-    expect(output).toEqual({ stdout: "", stderr: "", exitCode: 0 })
-  })
+  }
 
   test("renders a native terminal failure snapshot when live progress was missed", async () => {
     const rendered: SessionMessageAssistantTool[] = []
@@ -621,8 +602,8 @@ describe("runNonInteractivePrompt", () => {
     ])
   })
 
-  test("keeps failed tool partial output out of the explicit V1 JSON bridge shape", async () => {
-    const output = await capture({ compatibility: "v1", format: "json", turn: failedTool })
+  test("keeps failed tool partial output out of the JSON tool_use shape", async () => {
+    const output = await capture({ format: "json", turn: failedTool })
     const events = output.stdout
       .split("\n")
       .filter(Boolean)
@@ -689,11 +670,191 @@ describe("runNonInteractivePrompt", () => {
     expect(lists).toEqual([])
   })
 
-  test("Ctrl-C while waiting on a background subagent exits with code 130", async () => {
-    const running = run({ turn: (id) => [prompted(id), settled()], jobs: () => [subagentJob] })
+  test("a recovered step failure exits 0, reports its retry once, and still waits for background work", async () => {
+    const lists: ExperimentalJobListOutput[] = [[shellJob("sh_train", "python train.py")], []]
+    const retry = { attempt: 1, error: { type: "provider.transport", message: "Recovered transport error" } }
+    const output = await capture({
+      format: "json",
+      jobs: () => lists.shift() ?? [],
+      messages: recoveredMessages("succeeded"),
+      turn: (id) => [
+        prompted(id),
+        stepStarted(),
+        stepFailed("Recovered transport error"),
+        {
+          id: "evt_retry",
+          created: 3,
+          type: "session.retry.scheduled",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", at: 2003, ...retry },
+        },
+        stepStarted(),
+        settled(),
+        {
+          id: "evt_text",
+          created: 4,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_2", ordinal: 0, text: "Training finished." },
+        },
+        settled(),
+      ],
+    })
+    const events = jsonLines(output.stdout)
+    expect(output.exitCode).toBe(0)
+    expect(events.filter((event) => event.type === "error" || event.type === "retry")).toEqual([
+      { type: "retry", timestamp: 3, sessionID: "ses_1", messageID: "msg_assistant", nextRetryAt: 2003, ...retry },
+    ])
+    expect(
+      events.filter((event) => event.part?.messageID === "msg_assistant" && event.type === "step_start"),
+    ).toHaveLength(1)
+    expect(events.find((event) => event.type === "background_wait")).toMatchObject({
+      jobs: [{ id: "sh_train", kind: "shell" }],
+    })
+    expect(output.stdout).toContain("Training finished.")
+    expect(lists).toEqual([])
+  })
+
+  for (const outcome of ["failed", "interrupted"] as const) {
+    test(`a final ${outcome} outcome exits 1 with one error when the live event is dropped`, async () => {
+      const output = await capture({
+        format: "json",
+        turn: (id) => [prompted(id)],
+        // Without the failed step, so only the idle marker can report the outcome.
+        messages: (id) => recoveredMessages(outcome)(id).filter((message) => message.id !== "msg_assistant"),
+        wait: () => Promise.resolve(),
+      })
+      expect(output.exitCode).toBe(1)
+      expect(jsonLines(output.stdout).filter((event) => event.type === "error")).toHaveLength(1)
+    })
+  }
+
+  test("only the first idle marker after the prompt decides the outcome", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (id) => [prompted(id)],
+      wait: () => Promise.resolve(),
+      messages: (messageID) => [
+        idleMessage("failed", "msg_later_idle"),
+        { id: "msg_other_prompt", type: "user", text: "another client", time: { created: 6 } },
+        ...recoveredMessages("succeeded")(messageID),
+        idleMessage("failed", "msg_previous_idle"),
+      ],
+    })
+    expect(output.exitCode).toBe(0)
+    expect(output.stdout).not.toContain('"type":"error"')
+  })
+
+  test("a prompt left in the inbox by a failure before promotion does not hang", async () => {
+    const output = await capture({
+      format: "json",
+      turn: () => [executionFailed("instructions unavailable")],
+      messages: () => [],
+      inbox: (sessionID) => (sessionID === "ses_1" ? [{ id: "msg_prompt" } as SessionInboxListOutput[number]] : []),
+    })
+    expect(output.exitCode).toBe(1)
+    expect(jsonLines(output.stdout)).toEqual([
+      expect.objectContaining({
+        type: "error",
+        error: expect.objectContaining({ message: "instructions unavailable" }),
+      }),
+    ])
+  })
+
+  test("keeps waiting when a woken reply moves from the inbox to running between reads", async () => {
+    // The wake leaves the inbox as it is read, and its reply runs until the next check.
+    let wake: "queued" | "running" | "done" = "queued"
+    const output = await capture({
+      format: "json",
+      inbox: () => {
+        if (wake === "queued") wake = "running"
+        return []
+      },
+      active: (): SessionActiveOutput => {
+        if (wake !== "running") return {}
+        wake = "done"
+        return { ses_1: { type: "running" } }
+      },
+      turn: (id) => [
+        prompted(id),
+        settled(),
+        {
+          id: "evt_text",
+          created: 2,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_2", ordinal: 0, text: "Shell finished." },
+        },
+        settled(),
+      ],
+    })
+    expect(output.stdout).toContain("Shell finished.")
+  })
+
+  test("fails the run when a background state read fails instead of treating it as done", async () => {
+    await expect(
+      run({
+        turn: (id) => [prompted(id), settled()],
+        active: () => {
+          throw new Error("state unavailable")
+        },
+      }),
+    ).rejects.toThrow("state unavailable")
+  })
+
+  test("treats a server without the job list endpoint as having no jobs", async () => {
+    const output = await capture({
+      turn: (id) => [prompted(id), settled()],
+      jobs: () => {
+        throw new ClientError("UnsupportedContentType", { detail: "text/plain" })
+      },
+    })
+    expect(output.exitCode).toBe(0)
+    expect(output.stderr).toBe("")
+  })
+
+  test("does not wait on a job started before this prompt", async () => {
+    // A dev server left running by an earlier turn, as with --continue.
+    const output = await capture({
+      turn: (id) => [prompted(id), settled()],
+      jobs: () => [{ ...shellJob("sh_dev", "bun dev"), time: { started: 0 } }],
+    })
+    expect(output.exitCode).toBe(0)
+    expect(output.stderr).not.toContain("waiting for")
+  })
+
+  test("cancelling while waiting on background work stops the Session and this prompt's jobs", async () => {
+    const controller = new AbortController()
+    const old = { ...shellJob("sh_dev", "bun dev"), time: { started: 0 } }
+    const all = [old, shellJob("sh_train", "python train.py"), subagentJob]
+    // After the cancel reads and stops this prompt's jobs, only the older dev server is left.
+    let reads = 0
+    const running = run({
+      signal: controller.signal,
+      turn: (id) => [prompted(id), settled()],
+      jobs: () => (controller.signal.aborted && reads++ > 0 ? [old] : all),
+    })
     expect(await Promise.race([running.then(() => "exited"), Bun.sleep(20).then(() => "waiting")])).toBe("waiting")
-    process.emit("SIGINT")
-    await running
-    expect(process.exitCode).toBe(130)
+    controller.abort()
+    const sdk = await running
+    expect(sdk.session.interrupt).toHaveBeenCalledWith({ sessionID: "ses_1" })
+    expect(sdk.session.interrupt).toHaveBeenCalledWith({ sessionID: "ses_child" })
+    expect(sdk.shell.remove).toHaveBeenCalledWith({ id: "sh_train", location: { directory: "/work tree" } })
+    expect(sdk.shell.remove).not.toHaveBeenCalledWith(expect.objectContaining({ id: "sh_dev" }))
+  })
+
+  test("cancelling mid-turn interrupts the Session and ignores the transport errors that follow", async () => {
+    const controller = new AbortController()
+    const closed = Promise.withResolvers<void>()
+    const output = capture({
+      signal: controller.signal,
+      turn: (id) => [prompted(id)],
+      // The private server shuts down while the idle wait is open.
+      wait: () => closed.promise,
+    })
+    await Bun.sleep(10)
+    controller.abort()
+    closed.reject(new ClientError("Transport", { detail: "ECONNRESET" }))
+    expect(await output).toMatchObject({ stdout: "", stderr: "", exitCode: 0 })
   })
 })

@@ -138,13 +138,19 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await expect(dialog).toContainText('Delete session "Renamed from Home"?')
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused()
 
-  const removed = page.waitForRequest(
-    (request) => request.method() === "DELETE" && new URL(request.url()).pathname.endsWith(`/${fixture.targetID}`),
-  )
+  const removed = await holdRoute(page, (url) => url.pathname.endsWith(`/session/${fixture.targetID}`), {
+    method: "DELETE",
+  })
 
-  await dialog.getByRole("button", { name: "Delete session" }).click()
-  await removed
+  // A double click claims one delete: the dialog stays open, with both buttons disabled, until the server answers.
+  await dialog.getByRole("button", { name: "Delete session" }).dblclick()
+  await removed.arrived
+  await expect(dialog.getByRole("button", { name: "Delete session" })).toBeDisabled()
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled()
+  removed.release()
+  await expect(dialog).toBeHidden()
   await expect(renamedRow).toBeHidden()
+  expect(removed.requests).toHaveLength(1)
 })
 
 test("a failed session list says so and loads again on Try again, instead of showing the empty state", async ({

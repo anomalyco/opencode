@@ -39,11 +39,16 @@ type Data = {
 /** Names a finished turn by its Session and the user message that opened it. */
 export type TurnDiffInput = { sessionID: string; from: string }
 
+/** A turn's diff load as the host reports it; a turn not loaded yet reads as `loading`. */
+export type TurnDiffState =
+  | { readonly status: "loading" }
+  | { readonly status: "ready"; readonly diffs: readonly FileDiffInfo[] }
+  | { readonly status: "failed" }
+
 /** The host's cache of the files each finished turn changed. */
 export type TurnDiffSource = {
-  /** The turn's diffs, or undefined until they load. */
-  get: (input: TurnDiffInput) => readonly FileDiffInfo[] | undefined
-  /** Starts loading the turn's diffs unless they are cached or already loading. */
+  state: (input: TurnDiffInput) => TurnDiffState
+  /** Starts loading the turn's diffs, or retries a failed load; does nothing while loading or once loaded. */
   load: (input: TurnDiffInput) => void
 }
 
@@ -67,6 +72,8 @@ export const {
     sessionID?: string
     /** Whether message meta names the agent; the app follows its Show agent setting. Defaults to true. */
     agents?: boolean
+    /** Whether the assistant copy control stays visible at rest; the app enables this on dev/local builds. */
+    copyAlwaysVisible?: boolean
     shellRunning?: (id: string) => boolean
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     turnDiff?: TurnDiffSource
@@ -89,6 +96,9 @@ export const {
       },
       get agents() {
         return props.agents ?? true
+      },
+      get copyAlwaysVisible() {
+        return props.copyAlwaysVisible === true
       },
       get backgroundCompaction() {
         return props.backgroundCompaction === true

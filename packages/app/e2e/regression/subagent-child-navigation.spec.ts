@@ -331,14 +331,35 @@ test.describe("session ID links", () => {
     await expectSessionTitle(page, "Timeline visual stability")
     const markdown = page.locator('[data-component="markdown"]').filter({ hasText: "Visit" })
     await expect(markdown).toHaveAttribute("data-markdown-ready", "")
-    await expect(markdown.getByRole("button", { name: "Linked session", exact: true })).toHaveCount(2)
+    await expect(markdown.getByRole("button", { name: "@Linked session", exact: true })).toHaveCount(2)
     await markdown
       .locator("p")
       .filter({ hasText: "Or" })
-      .getByRole("button", { name: "Linked session", exact: true })
+      .getByRole("button", { name: "@Linked session", exact: true })
       .press("Enter")
     await expectPath(page, sessionHref(target))
     await expect(page.locator(`[data-titlebar-tab-link][href$="/session/${target}"]`)).toContainText("Linked session")
+  })
+
+  test("titles a session this window never loaded and copies its ID from the context menu", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+    await setupTimeline(page, {
+      sessions: [session(), session({ id: target, title: "Linked session" })],
+      messages: [userMessage(), assistantMessage([textPart("prt_session_menu", `Visit ${target}.`)])],
+    })
+    await expectSessionTitle(page, "Timeline visual stability")
+    const markdown = page.locator('[data-component="markdown"]').filter({ hasText: "Visit" })
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+    await markdown.getByRole("button", { name: "@Linked session", exact: true }).click({ button: "right" })
+    await expect(page.getByRole("menuitem", { name: "Open Session", exact: true })).toBeVisible()
+    await expect(page.getByRole("menuitem", { name: "Copy Session Title", exact: true })).toBeVisible()
+    await page.getByRole("menuitem", { name: "Copy Session ID", exact: true }).click()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(target)
+    await expect(page.getByRole("menu")).toHaveCount(0)
+    await expectPath(page, sessionHref(sessionID))
   })
 
   test("does not navigate to an ID that is absent from the current server", async ({ page }) => {

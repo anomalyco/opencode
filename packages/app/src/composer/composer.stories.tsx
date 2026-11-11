@@ -241,6 +241,8 @@ function ComposerStory(props: {
               undoing: () => false,
               cancelEdit() {},
               editFirst: () => false,
+              first() {},
+              steerFirst() {},
             }
           : undefined,
         onSubmit: () => {

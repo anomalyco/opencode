@@ -19,6 +19,7 @@ import { BasePath } from "./base-path"
 import { isAllowedCorsOrigin } from "./cors"
 import { authorizedRequest, unauthorizedResponse } from "./middleware/authorization"
 import { withoutParentSpan } from "./request-tracing"
+import { RequestSite } from "./request-site"
 import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
@@ -74,7 +75,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
-      BasePath.mount(basePath, transform ? transform(app) : app).pipe(
+      // RequestSite matches `/api` paths, so it runs inside the mount, where the prefix is already stripped.
+      BasePath.mount(basePath, (transform ? transform(app) : app).pipe(RequestSite.middleware(options))).pipe(
         HttpMiddleware.compression(),
         HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),

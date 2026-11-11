@@ -454,7 +454,7 @@ story("selects the whole paragraph on triple click across link icons", async ({ 
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({
-      text: "The release is running ([run 41750815701](https://github.com/Hona/strobe/actions/runs/41750815701)), see [MDN](https://developer.mozilla.org/docs) for more.",
+      text: "The release is running ([run 41750815701](https://github.com/anomalyco/strobe/actions/runs/41750815701)), see [MDN](https://developer.mozilla.org/docs) for more.",
       cached: true,
     })
   }, fixture)
