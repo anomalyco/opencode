@@ -5,42 +5,42 @@
       "javascriptreact"
     ],
     "sources": [
-      "@opentui/core@0.8.1/assets/javascript/highlights.scm"
+      "@opentui/core@0.8.4/assets/javascript/highlights.scm"
     ]
   },
   {
     "filetype": "typescript",
     "aliases": [],
     "sources": [
-      "@opentui/core@0.8.1/assets/typescript/highlights.scm"
+      "@opentui/core@0.8.4/assets/typescript/highlights.scm"
     ]
   },
   {
     "filetype": "typescriptreact",
     "aliases": [],
     "sources": [
-      "@opentui/core@0.8.1/assets/typescriptreact/highlights.scm"
+      "@opentui/core@0.8.4/assets/typescriptreact/highlights.scm"
     ]
   },
   {
     "filetype": "markdown",
     "aliases": [],
     "sources": [
-      "@opentui/core@0.8.1/assets/markdown/highlights.scm"
+      "@opentui/core@0.8.4/assets/markdown/highlights.scm"
     ]
   },
   {
     "filetype": "markdown_inline",
     "aliases": [],
     "sources": [
-      "@opentui/core@0.8.1/assets/markdown_inline/highlights.scm"
+      "@opentui/core@0.8.4/assets/markdown_inline/highlights.scm"
     ]
   },
   {
     "filetype": "zig",
     "aliases": [],
     "sources": [
-      "@opentui/core@0.8.1/assets/zig/highlights.scm"
+      "@opentui/core@0.8.4/assets/zig/highlights.scm"
     ]
   },
   {
