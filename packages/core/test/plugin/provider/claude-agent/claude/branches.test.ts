@@ -43,9 +43,9 @@ describe("Claude history branches", () => {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
-        FakeClaude.expectInterrupt(),
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn({ recording: "api-error" }),
+        FakeClaude.expectInterrupt(),
         FakeClaude.expectInterrupt(),
       ])
       const test = yield* TestSessions.start(claude)
