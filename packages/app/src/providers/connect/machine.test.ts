@@ -292,6 +292,129 @@ test("an unreachable OAuth status resumes the same attempt, and Back from it can
   ])
 })
 
+// The browser can't reach a remote server's callback, so the user pastes the URL it landed on instead.
+function waitingWithPaste() {
+  const starting = replay([loaded([oauth]), { type: "method.selected", index: 0 }])
+  const start = starting.effects.find((effect) => effect.type === "start")
+
+  if (start?.type !== "start") throw new Error("expected a start effect")
+
+  return {
+    attempt: start.attempt,
+    state: transitionProviderConnect(starting.state, {
+      type: "oauth.started",
+      attempt: start.attempt,
+      authorization: { ...authorization("auto"), paste: true },
+    }).state,
+  }
+}
+
+test("a browser sign-in offers a paste box only when its attempt takes a pasted redirect", () => {
+  expect(selectProviderConnectView(waitingWithPaste().state).paste).toEqual({
+    value: "",
+    error: undefined,
+    locked: false,
+    submitting: false,
+  })
+
+  const plain = replay([
+    loaded([oauth]),
+    { type: "method.selected", index: 0 },
+    { type: "oauth.started", attempt: 1, authorization: authorization("auto") },
+  ])
+
+  expect(selectProviderConnectView(plain.state).paste).toBeUndefined()
+  expect(transitionProviderConnect(plain.state, { type: "paste.changed", value: "http://x" }).state).toBe(plain.state)
+})
+
+test("a rejected paste shows the server error and keeps polling the same attempt", () => {
+  const waiting = waitingWithPaste()
+  const empty = transitionProviderConnect(waiting.state, { type: "paste.submitted" })
+
+  expect(empty.effects).toEqual([])
+  expect(selectProviderConnectView(empty.state).paste?.error).toEqual({ type: "required" })
+
+  const typed = transitionProviderConnect(empty.state, {
+    type: "paste.changed",
+    value: " http://127.0.0.1:1/callback?code=c&state=s ",
+  })
+
+  expect(selectProviderConnectView(typed.state).paste?.error).toBeUndefined()
+
+  const sent = transitionProviderConnect(typed.state, { type: "paste.submitted" })
+
+  expect(sent.effects).toMatchObject([
+    { type: "paste", attempt: waiting.attempt, value: "http://127.0.0.1:1/callback?code=c&state=s" },
+  ])
+  // The field takes no edits or second submit while the first is in flight.
+  expect(selectProviderConnectView(sent.state).paste).toMatchObject({ locked: true, submitting: true })
+  expect(transitionProviderConnect(sent.state, { type: "paste.submitted" }).effects).toEqual([])
+  expect(transitionProviderConnect(sent.state, { type: "paste.changed", value: "again" }).state).toBe(sent.state)
+
+  const rejected = transitionProviderConnect(sent.state, {
+    type: "paste.rejected",
+    attempt: waiting.attempt,
+    error: "This URL belongs to a different sign-in",
+  })
+
+  expect(selectProviderConnectView(rejected.state)).toMatchObject({
+    screen: "browser",
+    paste: {
+      value: " http://127.0.0.1:1/callback?code=c&state=s ",
+      error: { type: "rejected", message: "This URL belongs to a different sign-in" },
+      locked: false,
+    },
+  })
+
+  // Polling still decides how the sign-in ends.
+  const done = transitionProviderConnect(rejected.state, {
+    type: "polled",
+    attempt: waiting.attempt,
+    outcome: { status: "complete" },
+  })
+
+  expect(done.state.status).toBe("refreshing")
+})
+
+test("an accepted paste stays locked while polling reports how the sign-in ends", () => {
+  const waiting = waitingWithPaste()
+  const typed = transitionProviderConnect(waiting.state, { type: "paste.changed", value: "http://x" })
+  const sent = transitionProviderConnect(typed.state, { type: "paste.submitted" })
+  const accepted = transitionProviderConnect(sent.state, { type: "paste.accepted", attempt: waiting.attempt })
+
+  expect(selectProviderConnectView(accepted.state).paste).toEqual({
+    value: "http://x",
+    error: undefined,
+    locked: true,
+    submitting: false,
+  })
+  expect(transitionProviderConnect(accepted.state, { type: "paste.submitted" }).effects).toEqual([])
+})
+
+test("a paste result after Back is ignored, and a resumed sign-in starts editable", () => {
+  const waiting = waitingWithPaste()
+  const typed = transitionProviderConnect(waiting.state, { type: "paste.changed", value: "http://x" })
+  const sent = transitionProviderConnect(typed.state, { type: "paste.submitted" })
+  const back = transitionProviderConnect(sent.state, { type: "back" })
+
+  expect(transitionProviderConnect(back.state, { type: "paste.accepted", attempt: waiting.attempt }).state).toBe(
+    back.state,
+  )
+
+  const failed = transitionProviderConnect(sent.state, {
+    type: "polled",
+    attempt: waiting.attempt,
+    outcome: { status: "unreachable", error: "offline" },
+  })
+
+  const resumed = transitionProviderConnect(failed.state, { type: "retry" })
+
+  expect(selectProviderConnectView(resumed.state).paste).toMatchObject({ value: "http://x", locked: false })
+  expect(
+    transitionProviderConnect(resumed.state, { type: "paste.rejected", attempt: waiting.attempt, error: "late" }).state,
+  ).toBe(resumed.state)
+})
+
 test("a failed refresh retries the refresh, not the sign-in", () => {
   const sent = submittingKey()
   const stored = transitionProviderConnect(sent.state, { type: "submit.succeeded", attempt: sent.attempt })

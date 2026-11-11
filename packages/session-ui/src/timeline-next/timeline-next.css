@@ -1,0 +1,656 @@
+/*
+ * The New timeline's styles. Every rule hangs off [data-timeline="next"], which only the New timeline's rows and status
+ * lane carry, so none of them can reach the current timeline.
+ */
+
+[data-timeline="next"] [data-component="context-tool-group-trigger"] {
+  /* An activity label: what the agent did, muted, then what it touched in base text. */
+  [data-slot="context-tool-group-title"][data-activity] {
+    gap: 6px;
+  }
+
+  [data-slot="context-tool-group-verb"],
+  [data-slot="context-tool-group-detail"],
+  [data-slot="context-tool-group-separator"],
+  [data-slot="context-tool-group-elapsed"] {
+    flex-shrink: 0;
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    white-space: nowrap;
+  }
+
+  [data-slot="context-tool-group-verb"],
+  [data-slot="context-tool-group-separator"],
+  [data-slot="context-tool-group-elapsed"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="context-tool-group-detail"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--v2-text-text-base);
+  }
+}
+
+/* A stretch of thoughts alone lists them without a group around them. */
+[data-timeline="next"] [data-component="thought-rows"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Each changed file is its own accordion, rather than one stacked group, as far from the next
+   as any two rows. */
+[data-timeline="next"] [data-component="accordion"][data-scope="apply-patch"] {
+  gap: var(--timeline-gap-s);
+
+  [data-slot="accordion-item"] + [data-slot="accordion-item"] {
+    margin-top: 0;
+  }
+
+  [data-slot="accordion-item"] [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+    border-radius: var(--radius-lg);
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="accordion-content"] {
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+  }
+
+  /* A created file is all new, so its code reads plain rather than as one long addition. */
+  [data-slot="accordion-item"][data-type="add"] {
+    --opencode-diffs-addition-bg: transparent;
+    --opencode-diffs-addition-number-fg: var(--v2-text-text-faint);
+    --opencode-diffs-addition-color: transparent;
+    --diffs-addition-color-override: transparent;
+  }
+}
+
+/* Cut output shows its last lines, fading out at the top where it is cut. */
+[data-timeline="next"] [data-component="clamped-content"] {
+  &[data-clamped] {
+    max-height: var(--clamped-content-height, 96px);
+    overflow: hidden;
+  }
+
+  /* The fade is the code's own background, so the cut lines fade into the block rather than through it. */
+  &[data-overflow] {
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      top: 0;
+      height: 20px;
+      background: linear-gradient(var(--clamped-content-fade), transparent);
+      pointer-events: none;
+    }
+  }
+}
+
+/* A command the user ran is its command and output, always showing, with the output cut to four lines. */
+[data-timeline="next"] [data-component="shell-tool"] {
+  [data-slot="shell-tool-writing"] {
+    display: block;
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-component="bash-output"][data-clamp] {
+    [data-slot="bash-scroll"] {
+      max-height: none;
+    }
+
+    [data-component="clamped-content"] {
+      grid-area: 1 / 1;
+      /* The 12px top padding and four 20px lines of output, as a plain length the clamp can read back. */
+      --clamped-content-height: 92px;
+      --clamped-content-fade: var(--bash-section-background);
+    }
+  }
+}
+
+/* The output's toggle sits at the end of the command line, so neither block's text is a click target. */
+[data-timeline="next"] [data-component="shell-tool"] [data-slot="bash-command"] {
+  /* How the command ended and the output's toggle, above the command, which shares their grid cell and comes later,
+     so paints over it. The inset matches the file header's toggle. */
+  [data-slot="bash-actions"] {
+    position: relative;
+    z-index: 1;
+    grid-area: 1 / 1;
+    justify-self: end;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-end: 8px;
+  }
+
+  [data-slot="bash-outcome"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    white-space: nowrap;
+    color: var(--v2-text-text-muted);
+
+    &[data-tone="danger"] {
+      color: var(--v2-state-fg-danger);
+    }
+  }
+
+  [data-slot="bash-toggle-button"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: default;
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-text-text-accent);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+  }
+
+  &:has([data-slot="bash-toggle"]) [data-slot="bash-pre"] {
+    padding-inline-end: 40px;
+  }
+
+  &:has([data-slot="bash-outcome"]) [data-slot="bash-pre"] {
+    padding-inline-end: 120px;
+  }
+}
+
+/* A file's change counts follow its name, showing only the side that changed; its change bars are quieter; and its
+   toggle sits as far from the right edge as the file icon does from the left, since the icon's arrows are drawn narrow
+   inside their box. */
+[data-timeline="next"] [data-component="accordion"][data-scope="apply-patch"] [data-slot="accordion-item"] {
+  --opencode-diffs-bar-opacity: 0.5;
+
+  [data-slot="apply-patch-file-name-container"] {
+    flex-grow: 0;
+  }
+
+  [data-component="diff-changes"] {
+    flex-shrink: 0;
+  }
+
+  [data-component="diff-changes"] [data-empty] {
+    display: none;
+  }
+
+  [data-slot="apply-patch-trigger-actions"] > :last-child {
+    margin-inline-end: -4px;
+  }
+
+  /* Half the usual hover overlay, so the header only hints that it toggles. */
+  @media (hover: hover) {
+    [data-slot="accordion-header"] [data-slot="accordion-trigger"]:hover:not([data-disabled]) {
+      background-color: color-mix(in srgb, var(--v2-overlay-simple-overlay-hover) 50%, transparent);
+    }
+  }
+}
+
+/* Anything nested under a row hangs from a line 2px in from the row's leading edge, with the
+   content 14px in: a group's rows, a thought's text, search results, an error. */
+[data-timeline="next"]
+  [data-component="collapsible"].tool-collapsible:not([data-rail="false"])
+  > [data-slot="collapsible-content"] {
+  position: relative;
+  margin-inline-start: 0;
+  padding-inline-start: 14px;
+
+  /* Its ends follow the first and last text, measured by nested-rail.ts. Half the border color at rest; the strip it
+     sits in closes the row, and brightens it while the pointer is over it. */
+  &::before {
+    content: "";
+    display: block;
+    position: absolute;
+    inset-inline-start: 2px;
+    inset-block-start: var(--rail-top, 4px);
+    inset-block-end: var(--rail-bottom, 4px);
+    width: 1px;
+    background-color: color-mix(in srgb, var(--v2-border-border-base) 50%, transparent);
+    pointer-events: none;
+  }
+
+  &[data-rail-hover]::before {
+    background-color: var(--v2-border-border-base);
+  }
+}
+
+/* A goal the user set reads as their message, opening with a /goal tag centered on the first line. The tag sits as far
+   from the bubble's leading edge as from its top: the top padding plus the space the 16px tag leaves in that line. The
+   gap is a registered length, so it resolves against the bubble's line and the smaller tag inherits that value. */
+@property --timeline-next-goal-tag-gap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+[data-timeline="next"] [data-component="user-message"][data-goal] [data-slot="user-message-text"] {
+  --timeline-next-goal-tag-gap: calc((1lh - 16px) / 2);
+  padding-inline-start: calc(8px + var(--timeline-next-goal-tag-gap));
+
+  [data-slot="user-message-goal-badge"] {
+    margin-block-start: var(--timeline-next-goal-tag-gap);
+    margin-inline-end: 6px;
+    vertical-align: top;
+  }
+}
+
+/* Rows in an opened group read like the group's own label: the tool muted, what it worked on bright, counts muted, all at
+   one weight. A tool shown on its own row, as the most detailed settings show each call, reads the same. */
+[data-timeline="next"]
+  :is(
+    [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+    [data-slot="session-turn-assistant-content"] > [data-component="tool-part-wrapper"],
+    [data-slot="session-turn-assistant-content"] > [data-component="read-tool-group"]
+  ) {
+  [data-slot="basic-tool-tool-title"],
+  [data-slot="basic-tool-tool-subtitle"],
+  [data-slot="basic-tool-tool-arg"],
+  [data-slot="context-tool-group-matches"] {
+    font-weight: 440;
+  }
+
+  [data-slot="basic-tool-tool-title"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="basic-tool-tool-subtitle"],
+  [data-slot="basic-tool-tool-arg"] {
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="context-tool-group-matches"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  /* A compact row sets its title's weight from a more specific rule, so this one names the trigger too. */
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"] [data-slot="basic-tool-tool-title"] {
+    font-weight: 440;
+  }
+
+  [data-slot="context-tool-group-match-count"] {
+    flex-shrink: 0;
+  }
+
+  /* A thought's subtitle is how long it took, which the label keeps muted. */
+  [data-component="reasoning-part"] [data-slot="basic-tool-tool-subtitle"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="tool-loaded-label"] {
+    font-weight: 440;
+    color: var(--v2-text-text-muted);
+  }
+  /* A fetched page's link reads like a link in the user's message: the row's text color, underlined faintly. */
+  [data-slot="basic-tool-tool-subtitle"].webfetch-link {
+    color: var(--v2-text-text-base);
+
+    [data-slot="webfetch-link-text"] {
+      text-decoration: underline;
+      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
+      text-underline-offset: 2px;
+    }
+
+    &:hover [data-slot="webfetch-link-text"] {
+      text-decoration-color: currentColor;
+    }
+
+    .webfetch-link-icon {
+      display: none;
+    }
+  }
+}
+
+/* An event row opens to the subagents and shells it counts, each read like a nested row and leading to its session or
+   to the call that ran it. */
+[data-timeline="next"] [data-component="timeline-event-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+
+  [data-slot="timeline-event-item"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    min-width: 0;
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    text-decoration: none;
+    cursor: default;
+
+    &[aria-disabled] {
+      pointer-events: none;
+    }
+
+    &:hover [data-slot="timeline-event-item-title"] {
+      text-decoration: underline;
+      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
+      text-underline-offset: 2px;
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-text-text-accent);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+  }
+
+  /* Agents are named as configured, often in lowercase; the subagent card capitalizes them the same way. */
+  [data-slot="timeline-event-item-name"] {
+    flex-shrink: 0;
+    color: var(--v2-text-text-muted);
+    text-transform: capitalize;
+  }
+
+  [data-slot="timeline-event-item-title"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-component="tag"] {
+    flex-shrink: 0;
+  }
+}
+
+/* Rows are spaced by block: rows that continue a block sit the small gap below the one above, and a
+   row starting a block (the user's message, the agent's work in reply, an interruption) sits the large gap below.
+   The gap is the frame's only space above its content; rows add none of their own. */
+[data-timeline="next"] {
+  --timeline-gap-s: 16px;
+  --timeline-gap-m: 20px;
+  --timeline-gap-l: 32px;
+}
+
+[data-timeline="next"][data-timeline-gap="s"] {
+  padding-top: var(--timeline-gap-s);
+}
+
+[data-timeline="next"][data-timeline-gap="m"] {
+  padding-top: var(--timeline-gap-m);
+}
+
+[data-timeline="next"][data-timeline-gap="l"] {
+  padding-top: var(--timeline-gap-l);
+}
+
+/* The user's message actions show in the large gap below it rather than adding to it, above the row that follows so
+   they stay reachable. */
+[data-timeline="next"][data-timeline-row="UserMessage"] {
+  position: relative;
+  z-index: 1;
+
+  [data-component="user-message"] {
+    position: relative;
+  }
+
+  [data-slot="user-message-copy-wrapper"] {
+    position: absolute;
+    inset-inline: 0;
+    top: 100%;
+    height: 20px;
+    margin-top: 8px;
+  }
+}
+
+/* Rows are as tall as their text, so the gaps between them are the gaps that show. A row's 28px click area stays: 6px of
+   padding above and below, taken back by margins of the same size, so neighbouring click areas meet without overlapping.
+   An open row's header ends the small gap above its first nested row. */
+[data-timeline="next"] {
+  [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-trigger"],
+  [data-component="card"][data-kind="tool-error-card"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"] {
+    height: calc(var(--line-height-compact) + 12px);
+    padding-block: 6px;
+    margin-block: -6px;
+  }
+
+  [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
+    --tool-content-gap: var(--timeline-gap-s);
+    gap: 0;
+
+    > [data-slot="collapsible-trigger"] {
+      height: calc(var(--line-height-compact) + 12px);
+      padding-block: 6px;
+      margin-block: -6px;
+    }
+
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+      height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
+      padding-bottom: var(--timeline-gap-s);
+      margin-bottom: 0;
+    }
+  }
+
+  [data-component="context-tool-group-trigger"] {
+    height: var(--line-height-compact);
+    min-height: 0;
+  }
+
+  /* Rows a group draws itself, and its row of reads, sit on the same line of text as any other. */
+  [data-slot="context-tool-group-item"] {
+    [data-component="tool-trigger"],
+    [data-slot="basic-tool-tool-trigger-content"],
+    [data-slot="basic-tool-tool-info"] {
+      min-height: 0;
+      line-height: var(--line-height-compact);
+    }
+  }
+
+  [data-component="read-tool-group"] {
+    --read-tool-group-height: var(--line-height-compact);
+
+    [data-component="tool-trigger"],
+    [data-slot="basic-tool-tool-trigger-content"],
+    [data-slot="basic-tool-tool-info"] {
+      min-height: 0;
+      line-height: var(--line-height-compact);
+    }
+  }
+
+  /* The agent's text has a taller line than its rows; trimming the half-leading at its edges puts its first and last
+     lines where a row's text would sit, so the gaps around it read the same. */
+  [data-component="text-part"] [data-component="markdown"],
+  [data-component="reasoning-part"] [data-component="markdown"] {
+    text-box: trim-both text;
+  }
+
+  [data-component="text-part"] {
+    margin-top: 0;
+  }
+
+  /* The agent's last words in a turn keep their actions in the large gap below them, as the user's message does. */
+  [data-component="text-part"]:has(> [data-slot="text-part-copy-wrapper"]) {
+    position: relative;
+
+    > [data-slot="text-part-copy-wrapper"] {
+      position: absolute;
+      inset-inline: 0;
+      top: 100%;
+    }
+  }
+
+  [data-component="context-tool-group-list"],
+  [data-component="timeline-event-list"] {
+    gap: var(--timeline-gap-s);
+    padding-top: 0;
+  }
+
+  [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+  [data-component="timeline-event-list"] [data-slot="timeline-event-item"] {
+    min-height: var(--line-height-compact);
+  }
+
+  [data-component="context-tool-group-list"]
+    [data-slot="context-tool-group-item"]
+    > [data-component="tool-part-wrapper"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"] {
+    height: calc(var(--line-height-compact) + 12px);
+    padding-block: 6px;
+    margin-block: -6px;
+  }
+
+  /* An open row's nested content starts the small gap below its header. */
+  [data-component="collapsible"].tool-collapsible:has(> [data-slot="collapsible-content"]) {
+    gap: 0;
+
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+      margin-bottom: 0;
+      padding-bottom: var(--timeline-gap-s);
+      height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
+    }
+  }
+}
+
+[data-timeline="next"][data-timeline-row="AssistantPart"]:has([data-slot="text-part-copy-wrapper"]) {
+  position: relative;
+  z-index: 1;
+}
+
+/* The live thought sits where the row it settles into will, which its frame spaces like any other row. */
+[data-timeline="next"] [data-component="session-turn"] [data-slot="session-turn-thinking-row"][data-live-slot] {
+  margin-top: 0;
+}
+
+/* Rows fill the column, so shell output and other cards span the timeline whatever their content. */
+[data-timeline="next"] [data-component="session-turn"] [data-slot="session-turn-message-container"] {
+  align-items: stretch;
+}
+
+/* Laid out like the agent's next row: a line of text below the gap that row would take, so the status line sits where
+   that row lands and the live thought takes its exact place. */
+[data-timeline="next"][data-component="timeline-status-lane"] {
+  --timeline-status-space: 0px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(var(--line-height-compact) + var(--timeline-status-space));
+  padding-top: var(--timeline-status-space);
+
+  /* The timeline's gaps between rows, which the lane sits outside of. */
+  &[data-spacing="s"] {
+    --timeline-status-space: var(--timeline-gap-s);
+  }
+
+  &[data-spacing="m"] {
+    --timeline-status-space: var(--timeline-gap-m);
+  }
+
+  &[data-spacing="l"] {
+    --timeline-status-space: var(--timeline-gap-l);
+  }
+
+  &[data-collapsed] {
+    height: 0;
+    padding-top: 0;
+    overflow: hidden;
+  }
+
+  [data-slot="timeline-status-label"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    color: var(--v2-text-text-muted);
+  }
+}
+
+/* A failed call reads like the other rows: the tool muted, its subject bright, then a Failed
+   tag. Opening it shows the error in full. */
+[data-timeline="next"] [data-component="card"][data-kind="tool-error-card"] {
+  [data-slot="basic-tool-tool-title"] {
+    font-weight: 440;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="basic-tool-tool-subtitle"] {
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="tool-error-card-failed"] {
+    flex-shrink: 0;
+  }
+
+  /* A row's line of text inside its 28px click area, as the timeline's other rows have; the card's own 24px trigger
+     would leave less room than the line and clip it. Open, it ends the small gap above the error. */
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+    height: calc(var(--line-height-compact) + 12px);
+  }
+
+  > [data-component="collapsible"] > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
+  }
+
+  /* Its taller lines trim to their text at the edges, so the gaps around the error read like the gaps between rows. */
+  [data-slot="tool-error-card-content"] [data-slot="card-description"] {
+    text-box: trim-both text;
+  }
+
+  /* Without the warning icon, the error hangs from the nested line like any other row's content. */
+  [data-slot="tool-error-card-content"] {
+    padding-left: 0;
+  }
+
+  > [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-content"] {
+    padding-inline-start: 14px;
+
+    &::before {
+      display: block;
+    }
+  }
+}
+
+/* A row's line clips only sideways, where its subtitle truncates, so a tag as tall as the line is never cut at the
+   top or bottom by rounding. */
+[data-timeline="next"] [data-slot="basic-tool-tool-info-main"] {
+  overflow: clip visible;
+}
+
+/* Keyboard focus marks the row's line of text, rounded, inside its click area. The trigger itself also holds that
+   area and, open, the gap below the row, so filling it would paint a band across the gap. */
+[data-timeline="next"] [data-slot="collapsible-trigger"]:focus-visible {
+  background-color: transparent;
+
+  > [data-component="tool-trigger"] {
+    border-radius: 4px;
+    background-color: var(--surface-raised-base-hover);
+    box-shadow: 0 0 0 4px var(--surface-raised-base-hover);
+  }
+}
+
+/* A command set in its monospace face sits on the line's top rather than its baseline, so the row stays one line tall
+   with it as without it, and opening the row never moves its label. */
+[data-timeline="next"] [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
+  vertical-align: top;
+}
