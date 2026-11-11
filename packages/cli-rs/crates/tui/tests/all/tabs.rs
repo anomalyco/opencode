@@ -274,6 +274,36 @@ fn a_reload_keeps_the_writes_held_behind_the_lock() {
     h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
 }
 
+// A burst that overflows the store's signal channel while the UI is busy skips the `session.deleted` in it; the
+// skip resyncs as a reconnect does, and the store saw the deletion, so the tab still closes.
+#[test]
+fn a_deletion_lost_in_a_signal_overflow_still_closes_its_tab() {
+    let h = mount(100, json!({ "animations": false }));
+    h.open("ses_b");
+    h.tui.navigate(support::session_route("ses_a"));
+    h.wait_for("Write the docs");
+    let _listening = opencode_tui::features::events::subscribe(&h.tui, ["filesystem.changed"], |_, _| {});
+    let deleted = json!({
+        "id": "evt_deleted", "created": 3, "type": "session.deleted",
+        "durable": { "aggregateID": "ses_b", "seq": 1, "version": 1 },
+        "location": { "directory": "/project" },
+        "data": { "sessionID": "ses_b" },
+    });
+    let burst = (0..2048).map(|id| {
+        json!({
+            "id": format!("evt_fs_{id}"), "created": 4, "type": "filesystem.changed",
+            "location": { "directory": "/project" }, "data": { "file": format!("src/{id}.rs"), "event": "change" },
+        })
+    });
+    let events: Vec<_> =
+        std::iter::once(deleted).chain(burst).map(|event| serde_json::from_value(event).unwrap()).collect();
+    // The UI thread is busy: nothing drains its queue until it is full.
+    let proxy = h.app.proxy();
+    while proxy.post(|_| {}) != Err(opentui::app::ProxyError::Full) {}
+    h.tui.data.apply(&events);
+    h.wait_tabs(&["ses_a"], Some("ses_a"));
+}
+
 // `TabPulse` unmounts with its tab: closing a busy tab leaves no pulse that keeps the frame ticking.
 #[test]
 fn a_closed_busy_tab_stops_the_pulse_ticks() {
