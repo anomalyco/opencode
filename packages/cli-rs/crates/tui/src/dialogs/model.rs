@@ -4,7 +4,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use opencode_api::generated::{ModelInfo, ModelInfoStatus, ProviderInfo, SessionInfo};
+use opencode_api::generated::{ModelInfo, ModelInfoStatus, ProviderInfo};
 use opencode_api::js::locale_compare;
 use opencode_local::model_pref::Model;
 use opencode_ui::bind;
@@ -494,25 +494,15 @@ pub fn usage_alerts(local: &Local) {
     local.toasts.show(toast);
 }
 
-/// The agent and model the prompt shows and submits: what the user chose here (`useLocal`) once this
-/// state has its catalog, else the prompt's own reading of the catalog.
-pub fn prompt_selection(
-    tui: &Tui,
-    catalog: &crate::prompt::metadata::Catalog,
-    session: Option<&SessionInfo>,
-) -> Option<crate::prompt::metadata::Selection> {
-    let base = catalog.selection(session);
+/// The agent and model the prompt shows and submits: what the user chose here (`useLocal`), once this
+/// state has its catalog.
+pub fn prompt_selection(tui: &Tui) -> Option<crate::prompt::metadata::Selection> {
     let local = &tui.local;
-    let Some(agent) = local.agent().filter(|_| local.catalog_ready()) else {
-        return base;
-    };
-    let model = local
-        .selection()
-        .map(|selection| crate::prompt::metadata::Choice {
-            provider_id: selection.model.provider_id,
-            model_id: selection.model.model_id,
-            variant: selection.variant,
-        })
-        .or_else(|| base.and_then(|base| base.model));
+    let agent = local.agent().filter(|_| local.catalog_ready())?;
+    let model = local.selection().map(|selection| crate::prompt::metadata::Choice {
+        provider_id: selection.model.provider_id,
+        model_id: selection.model.model_id,
+        variant: selection.variant,
+    });
     Some(crate::prompt::metadata::Selection { agent, model })
 }
