@@ -46,8 +46,14 @@ const SHELL_OUTPUT_GRACE: Duration = Duration::from_millis(1500);
 
 pub fn run(input: Input) -> error::Result<()> {
     let settings = MiniSettings::resolve(input.config.mini.as_ref());
-    let mut options =
-        AppOptions { exit_on_ctrl_c: false, light_theme: None, palette_size: 256, ..AppOptions::default() };
+    // The footer keeps the terminal's background, as the TS renderer's transparent one does.
+    let mut options = AppOptions {
+        theme: Theme { background: Color::TRANSPARENT, ..Theme::dark() },
+        exit_on_ctrl_c: false,
+        light_theme: None,
+        palette_size: 256,
+        ..AppOptions::default()
+    };
     // `applyHeight` below sizes the footer to the composer before the first frame.
     options.host.split_footer = Some(FOOTER_HEIGHT);
     options.host.terminal.mouse = MouseTracking::Off;
