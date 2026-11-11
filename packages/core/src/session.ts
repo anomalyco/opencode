@@ -386,7 +386,10 @@ const layer = Layer.effect(
           yield* Plugin.awaitActivation
           const hooks = yield* PluginHooks.Service
           yield* hooks.trigger("session", "fork", { sessionID })
-        }).pipe(instances.provide(forked), Effect.orDie)
+        }).pipe(
+          instances.provide(forked),
+          Effect.catchCause((cause) => Effect.logWarning("fork hook failed", { sessionID, cause })),
+        )
         return forked
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),
