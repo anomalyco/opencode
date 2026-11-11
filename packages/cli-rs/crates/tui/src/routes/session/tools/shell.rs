@@ -4,9 +4,10 @@
 //! A V2 shell names its shell in the metadata, and its output comes from `GET /api/shell/{id}/output`:
 //! every second while the store lists the shell as running, once more when it exits, and on expand.
 
-use opencode_api::generated::{LocationQueryInput, ShellID, ShellOutputInput};
+use opencode_api::generated::ShellID;
 use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
+use opencode_ui::prompt_input::paste::strip_ansi;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use std::cell::{Cell, RefCell};
@@ -16,10 +17,8 @@ use std::time::Duration;
 use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, status_badge};
 use crate::app::Tui;
 use crate::routes::session::messages::list::Context;
-use crate::routes::session::messages::shell::{collapse_shell_output, strip_ansi};
+use crate::routes::session::messages::shell::{Output, collapse_shell_output};
 
-/// `SHELL_DISPLAY_LIMIT`: the most output kept, in characters, and read per request.
-const LIMIT: usize = 1024 * 1024;
 /// Lines of command and output a collapsed block shows.
 const MAX_LINES: usize = 10;
 
@@ -33,12 +32,7 @@ struct Inner {
     body: View,
     call: RefCell<Option<Call>>,
     expanded: Cell<bool>,
-    /// Output read from the server, already stripped and capped at [`LIMIT`].
-    output: RefCell<String>,
-    truncated: Cell<bool>,
-    cursor: Cell<i64>,
-    loading: Cell<bool>,
-    drain_requested: Cell<bool>,
+    output: RefCell<Output>,
     was_running: Cell<bool>,
     /// The store lists the shell as running; read where the store is not held.
     listed: Cell<bool>,
@@ -92,10 +86,6 @@ impl Shell {
             call: RefCell::default(),
             expanded: Cell::new(false),
             output: RefCell::default(),
-            truncated: Cell::new(false),
-            cursor: Cell::new(0),
-            loading: Cell::new(false),
-            drain_requested: Cell::new(false),
             was_running: Cell::new(false),
             listed: Cell::new(false),
             interval: Cell::new(None),
@@ -226,8 +216,6 @@ impl Inner {
         }
     }
 
-    /// `loadBackgroundOutput`: reads from the cursor; `drain` keeps reading to the end, skipping to
-    /// the last [`LIMIT`] characters.
     fn load(self: &Rc<Self>, drain: bool) {
         let call = self.call.borrow().clone();
         let Some(call) = call else { return };
@@ -235,71 +223,15 @@ impl Inner {
             return;
         }
         let Some(id) = call.shell else { return };
-        if self.loading.get() {
-            if drain {
-                self.drain_requested.set(true);
-            }
-            return;
-        }
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        self.loading.set(true);
-        let client = tui.data.client().clone();
-        let start = self.cursor.get();
-        let location = call.directory.map(|directory| LocationQueryInput { directory: Some(directory) });
+        let pages = self.output.borrow_mut().start(tui.data.client(), ShellID(id), call.directory, drain);
+        let Some(pages) = pages else { return };
         tui.app.spawn(
-            async move {
-                let mut chunks = Vec::new();
-                let mut cursor = start;
-                let mut skipped = false;
-                loop {
-                    let input = ShellOutputInput {
-                        id: ShellID(id.clone()),
-                        location: location.clone(),
-                        cursor: Some(cursor),
-                        limit: Some(LIMIT as i64),
-                    };
-                    let Ok(response) = client.shell_output(&input).await else {
-                        break;
-                    };
-                    let data = response.data;
-                    if !data.output.is_empty() {
-                        chunks.push(data.output);
-                    }
-                    if data.cursor <= cursor {
-                        break;
-                    }
-                    cursor = data.cursor;
-                    if !drain || cursor >= data.size {
-                        break;
-                    }
-                    let tail = cursor.max(data.size - LIMIT as i64);
-                    if tail > cursor {
-                        cursor = tail;
-                        skipped = true;
-                    }
-                }
-                (chunks, cursor, skipped)
-            },
-            bind!(self, |inner, _, (chunks, cursor, skipped)| {
-                for chunk in chunks {
-                    let next = strip_ansi(&format!("{}{chunk}", inner.output.borrow()));
-                    let count = next.chars().count();
-                    let next = if count > LIMIT {
-                        inner.truncated.set(true);
-                        next.chars().skip(count - LIMIT).collect()
-                    } else {
-                        next
-                    };
-                    *inner.output.borrow_mut() = next;
-                }
-                if skipped {
-                    inner.truncated.set(true);
-                }
-                inner.cursor.set(cursor);
-                inner.loading.set(false);
-                if inner.drain_requested.replace(false) {
+            pages,
+            bind!(self, |inner, _, pages| {
+                if inner.output.borrow_mut().finish(pages) {
                     inner.load(true);
                 }
                 inner.paint();
@@ -394,9 +326,10 @@ impl Inner {
             return strip_ansi(output.trim());
         }
         let loaded = self.output.borrow();
-        let source = if loaded.is_empty() { call.output.as_deref().unwrap_or_default() } else { loaded.as_str() };
+        let source =
+            if loaded.text.is_empty() { call.output.as_deref().unwrap_or_default() } else { loaded.text.as_str() };
         let text = strip_ansi(source.trim());
-        if self.truncated.get() {
+        if loaded.truncated {
             return format!("[earlier output omitted]\n{text}");
         }
         text

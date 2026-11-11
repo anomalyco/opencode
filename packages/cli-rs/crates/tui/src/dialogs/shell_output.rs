@@ -25,7 +25,7 @@ use opentui::prelude::*;
 use opentui::widget::ScrollEdge;
 
 use crate::app::Tui;
-use crate::routes::session::messages::shell::strip_ansi;
+use opencode_ui::prompt_input::paste::strip_ansi;
 
 const PAGE_BYTES: i64 = 64 * 1024;
 /// `Number.MAX_SAFE_INTEGER`: an output cursor past the end, which answers with the size alone.
