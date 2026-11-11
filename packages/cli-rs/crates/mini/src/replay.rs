@@ -480,6 +480,13 @@ impl Transcript {
         if commit.message_id.as_ref().is_some_and(|message| self.message_ids.contains(message)) {
             return None;
         }
+        // A prompt the list did not have yet counts as shown, so it does not print again once listed. TS does not
+        // record it (`parity/deviations/O89-mini-restored-prompt.md`).
+        if commit.kind == EntryKind::User
+            && let Some(message) = &commit.message_id
+        {
+            self.message_ids.insert(message.clone());
+        }
         Some(commit.clone())
     }
 
@@ -1969,6 +1976,20 @@ mod tests {
             ]
         );
         assert!(!transcript.replaying());
+    }
+
+    /// A prompt delivered before the list has it is restored as a local row; once listed, it does not print again.
+    #[test]
+    fn a_restored_prompt_prints_once_when_it_is_listed() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], true);
+        transcript.admitted("msg_p", "hello", &[], &[]);
+        let delivered = transcript.event(&event("session.inbox.delivered", json!({ "inboxID": "msg_p" })));
+        assert_eq!(texts(&delivered), [(EntryKind::User, "hello".into())]);
+        transcript.begin_replay();
+        assert_eq!(texts(&transcript.replayed(&[], true)), [(EntryKind::User, "hello".into())]);
+        let listed = message(json!({ "id": "msg_p", "type": "user", "text": "hello" }));
+        assert_eq!(texts(&transcript.hydrate(&[listed], false)), []);
     }
 
     /// A user message names its skills above its text while tools show, once per skill (`renderUser`).
