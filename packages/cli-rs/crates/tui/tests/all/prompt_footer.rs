@@ -114,11 +114,13 @@ fn mount(server: &Gated, width: u16, loopback: bool) -> Harness {
 fn a_change_event_before_the_first_read_returns_wins() {
     let server = Gated::new(false);
     let h = mount(&server, 100, false);
-    h.wait("the goal read to go out", || server.reads() == 1);
+    // The event stream's `server.connected` may read it again. It comes on the stream before the change, so that
+    // read is older too.
+    h.wait("the goal read to go out", || server.reads() >= 1);
     server.paused();
     h.wait_for("◎ goal paused");
-    server.release();
-    h.wait("the read to be answered", || server.memory.in_flight() == 0);
+    (0..2).for_each(|_| server.release());
+    h.wait("the reads to be answered", || server.memory.in_flight() == 0 && server.sent(GET).len() == server.reads());
     h.app.wait_until(std::time::Duration::from_millis(100), || false);
     h.app.render();
     assert!(h.app.text().contains("◎ goal paused"), "the stale reply showed the active goal:\n{}", h.app.text());
