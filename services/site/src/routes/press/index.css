@@ -267,15 +267,6 @@
       border-bottom: 1px solid var(--border);
     }
 
-    [data-slot="faq-question"] {
-      --padding-top: 1rem;
-      padding-bottom: 1rem;
-    }
-
-    [data-slot="faq-answer"] {
-      max-width: none;
-    }
-
     /* Room under the last line to the divider, equal to the room from the row title to the first
        label (measured text to text: the label row is taller than a FAQ answer's first line). */
     [data-slot="faq-answer-inner"][data-slot] {

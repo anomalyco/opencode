@@ -1,18 +1,20 @@
 import "./docs-version-notice.css"
+import { useI18n } from "~/context/i18n"
 import { siteSettings } from "./settings"
 
 /** On the V1 docs: a bar at the top of the content column, with a way back to the latest docs. */
 export function DocsVersionNotice(props: { latest: string; onLatest?: () => void }) {
+  const i18n = useI18n()
   return (
     <aside
       data-component="docs-version-notice"
       data-variant={siteSettings.docsVersionNotice}
       data-design="docsVersionNotice"
-      aria-label="Docs version"
+      aria-label={i18n.t("docs.version.label")}
     >
       <span data-slot="badge">V1</span>
       <p>
-        You're viewing a previous version of the docs.{" "}
+        {i18n.t("docs.version.notice")}{" "}
         <a
           href={props.latest}
           onClick={(event) => {
@@ -21,7 +23,7 @@ export function DocsVersionNotice(props: { latest: string; onLatest?: () => void
             props.onLatest()
           }}
         >
-          Switch to latest
+          {i18n.t("docs.version.switchToLatest")}
         </a>
       </p>
     </aside>

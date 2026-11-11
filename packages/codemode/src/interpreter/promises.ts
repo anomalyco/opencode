@@ -3,9 +3,9 @@ import { Callable, define, get, hidden, Arr, Fn, Obj, PromiseObj, record, type V
 import { constructor, fn, methods, native, receiver, requiresNew } from "./native.js"
 import { createAggregateErrorValue, materialize } from "./errors.js"
 import { describeValue, typeofValue } from "./references.js"
-import { isSupportedCallback } from "./callback.js"
+import { Interruption, isSupportedCallback } from "./callback.js"
 import type { Interpreter } from "./interpreter.js"
-import { type Completion, type Eval, Interruption, normal, type Reaction, type Resolving, Task } from "./runner.js"
+import { type Completion, type Eval, normal, type Reaction, type Resolving, Task } from "./runner.js"
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
 const resolvingFunctions = <R>(ctx: Interpreter<R>, resolving: Resolving) => ({

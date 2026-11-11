@@ -161,6 +161,26 @@
   gap: 6px;
 }
 
+.new-session-location-branch {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.new-session-location-branch [data-slot="icon-svg"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.new-session-location-branch > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .new-session-location-tag {
   max-width: 160px;
   flex-shrink: 0;

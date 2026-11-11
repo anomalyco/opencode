@@ -20,6 +20,7 @@ import type { PromptProject, PromptProjectController, PromptServer } from "@/new
 import type { NewSessionWorkspaceController } from "@/new-session/workspace/controller"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
+import { useData } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useCommand } from "@/shell/commands/command"
@@ -75,6 +76,7 @@ function NewSessionLocationDialog(props: {
   const global = useGlobal()
   const servers = useServers()
   const serverSDK = useServerSDK()
+  const data = useData()
 
   const [step, setStep] = createSignal(createLocationDialogState(props.drilled))
   const view = createMemo(() => locationDialogView(step()))
@@ -119,6 +121,10 @@ function NewSessionLocationDialog(props: {
 
     return !query || values.some((value) => value?.toLowerCase().includes(query))
   }
+
+  // Only the current server's checkouts have a synced branch.
+  const checkout = (project: PromptProject) =>
+    tagged(project.server) ? undefined : data.location.vcs.info({ directory: project.worktree })?.branch.current
 
   const otherCount = createMemo(() => props.project.projects().filter((project) => !project.used).length)
 
@@ -169,7 +175,13 @@ function NewSessionLocationDialog(props: {
         value: directory,
         directory,
       })),
-    ].filter((entry) => matches(workspaceTitle(project, entry.value), entry.directory))
+    ].filter((entry) =>
+      matches(
+        workspaceTitle(project, entry.value),
+        entry.directory,
+        entry.value === "main" ? checkout(project) : undefined,
+      ),
+    )
   })
 
   const entries = () => {
@@ -475,6 +487,7 @@ function NewSessionLocationDialog(props: {
                               >
                                 <ProjectRow
                                   project={item().project}
+                                  branch={checkout(item().project)}
                                   path={item().directory}
                                   drillLabel={language.t("session.new.location.worktrees")}
                                 />
@@ -495,7 +508,13 @@ function NewSessionLocationDialog(props: {
   )
 }
 
-function ProjectRow(props: { project: PromptProject; path: string; onDrill?: () => void; drillLabel: string }) {
+function ProjectRow(props: {
+  project: PromptProject
+  branch?: string
+  path: string
+  onDrill?: () => void
+  drillLabel: string
+}) {
   return (
     <>
       <div class="command-palette-row-main">
@@ -510,6 +529,14 @@ function ProjectRow(props: { project: PromptProject; path: string; onDrill?: () 
           <span class="new-session-location-name">
             <span class="command-palette-title palette-menu-title">{displayName(props.project)}</span>
             <ServerTag server={props.project.server} />
+            <Show when={props.branch}>
+              {(branch) => (
+                <span class="new-session-location-branch">
+                  <Icon name="branch" size="small" />
+                  <span dir="auto">{branch()}</span>
+                </span>
+              )}
+            </Show>
           </span>
           <span class="command-palette-description" dir="ltr">
             {props.path}

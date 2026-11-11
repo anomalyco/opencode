@@ -35,7 +35,7 @@ export const SettingsExperimental: Component = () => {
             >
               <Select
                 data-action="settings-sidebar-organize"
-                options={["list", "projects"] as const}
+                options={settings.general.sidebarOrganizeOptions}
                 current={settings.general.sidebarOrganize()}
                 label={(mode) => language.t(`settings.experimental.sidebarOrganize.${mode}`)}
                 onSelect={(mode) => mode && settings.general.setSidebarOrganize(mode)}

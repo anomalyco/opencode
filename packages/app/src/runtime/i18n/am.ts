@@ -333,7 +333,6 @@ export const dict = {
   "session.new.project.search": "የፍለጋ ፕሮጀክቶች",
   "session.new.project.add": "ፕሮጀክት አክል",
   "session.new.workspace.runIn": "ክፍለ ጊዜን በ ውስጥ ያሂዱ",
-  "session.new.workspace.triggerLocal": "አካባቢ",
   "session.new.workspace.local": "አካባቢያዊ ማከማቻ",
   "session.new.git.none": "ያለ Git",
   "session.header.open.finder": "Finder",

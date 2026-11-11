@@ -6,13 +6,13 @@ import {
   installs,
   mobileStores,
   productAreas,
-  productDetails,
   allProductPages,
   productPages,
   sdkDocs,
   sdkSnippet,
   type PageSlug,
 } from "~/component/site/product-data"
+import { productDetails } from "~/component/site/product-details"
 import { changelogEntryMarkdown } from "~/lib/changelog-markdown"
 import { downloadSectionsMarkdown, productDownloadMarkdown, storeMarkdown } from "~/lib/download-content"
 import { changelogQuery } from "~/lib/changelog-notes"

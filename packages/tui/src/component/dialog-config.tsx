@@ -117,7 +117,7 @@ export const settings: Setting[] = [
     category: "Session",
     path: ["session", "verbosity"],
     description: "How much tool activity is shown in the chat",
-    default: "medium",
+    default: "low",
     values: ["low", "medium", "high"],
     keywords: ["detail", "activity", "summary", "transcript"],
   },

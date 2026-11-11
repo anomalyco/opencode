@@ -212,18 +212,196 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
-  it.effect("reports out-of-range pagination as a typed error", () =>
+  it.effect("returns the last lines when the offset is past the end", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
-      const file = path.join(directory, "short.txt")
-      yield* files.writeFileString(file, "one\n")
+      const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
+        files.writeFileString(path.join(directory, name), content).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const long = Array.from({ length: 1_800 }, (_, index) => `${index + 1}`.padEnd(1_000, "x"))
 
-      const error = yield* ReadToolFileSystem.read(environment, absolute(file), "short.txt", { offset: 2 }).pipe(
-        Effect.flip,
+      expect(yield* read("short.txt", "one\ntwo\nthree\nfour\nfive\n", { offset: 9, limit: 2 })).toEqual([
+        "Read file short.txt, lines 4-5 (offset 9 is past the end; the file has 5 lines)",
+        "4: four",
+        "5: five",
+      ])
+      expect(yield* read("empty.txt", "", { offset: 5 })).toEqual([
+        "Read file empty.txt, 0 lines (offset 5 is past the end; the file has 0 lines)",
+      ])
+      // The 50 KB cap keeps the last 51 of 100 tail lines, still ending at the last line.
+      const tail = yield* read("long.txt", long.join("\n"), { offset: 2_000, limit: 2_000 })
+      expect([tail[0], tail.at(-1)]).toEqual([
+        "Read file long.txt, lines 1750-1800 (offset 2000 is past the end; the file has 1800 lines)",
+        `1800: ${long.at(-1)}`,
+      ])
+    }),
+  )
+
+  it.effect("returns the last lines of a file larger than the first chunk when the offset is past the end", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string | Uint8Array, page: ReadToolFileSystem.PageInput) =>
+        (typeof content === "string"
+          ? files.writeFileString(path.join(directory, name), content)
+          : files.writeFile(path.join(directory, name), content)
+        ).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const lines = Array.from({ length: 3_000 }, (_, index) => `${index + 1}`.padEnd(100, "x"))
+      const expected = (from: number) =>
+        lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
+
+      expect(yield* read("lf.txt", lines.join("\n") + "\n", { offset: 5_000 })).toEqual([
+        "Read file lf.txt, lines 2901-3000 (offset 5000 is past the end; the file has 3000 lines)",
+        ...expected(2_901),
+      ])
+      expect(yield* read("unterminated.txt", lines.join("\n"), { offset: 3_001 })).toEqual([
+        "Read file unterminated.txt, lines 2901-3000 (offset 3001 is past the end; the file has 3000 lines)",
+        ...expected(2_901),
+      ])
+      expect(yield* read("crlf.txt", lines.join("\r\n") + "\r\n", { offset: 3_001, limit: 5 })).toEqual([
+        "Read file crlf.txt, lines 2996-3000 (offset 3001 is past the end; the file has 3000 lines)",
+        ...expected(2_996),
+      ])
+      expect(yield* read("crlf-unterminated.txt", lines.join("\r\n"), { offset: 4_000, limit: 1 })).toEqual([
+        "Read file crlf-unterminated.txt, lines 3000-3000 (offset 4000 is past the end; the file has 3000 lines)",
+        ...expected(3_000),
+      ])
+
+      // A mid-file byte order mark is line content, not a decoder signature.
+      const marked = lines.map((line, index) => (index === 2_900 ? `\uFEFF${line}` : line))
+      expect((yield* read("bom.txt", marked.join("\n"), { offset: 3_001 }))[1]).toBe(`2901: \uFEFF${lines[2_900]}`)
+
+      const huge = yield* read("huge-last.txt", `${lines.slice(0, 10).join("\n")}\n${"z".repeat(300 * 1024)}`, {
+        offset: 12,
+      })
+      expect(huge).toEqual([
+        "Read file huge-last.txt, lines 1-11 (offset 12 is past the end; the file has 11 lines)",
+        ...expected(1).slice(0, 10),
+        `11: ${"z".repeat(2_000)}... (line truncated to 2000 chars)`,
+      ])
+
+      // Each clamped line is 2041 bytes, so 25 of them fit in the 50 KB cap.
+      const wide = Array.from({ length: 200 }, (_, index) => `${index + 1}`.padEnd(3_000, "w"))
+      const capped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: 201 })
+      expect(capped[0]).toBe("Read file wide.txt, lines 176-200 (offset 201 is past the end; the file has 200 lines)")
+      expect(capped.slice(1)).toEqual(
+        wide.slice(175).map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
       )
 
-      expect(error).toBeInstanceOf(ReadToolFileSystem.OffsetOutOfRangeError)
-      expect(error.message).toBe("Offset 2 is out of range for this file (1 line)")
+      // Matches whole-file reads: a null byte anywhere in the file rejects a past-end read.
+      const early = new TextEncoder().encode(lines.join("\n"))
+      early[10] = 0
+      const binary = yield* read("early-nul.txt", early, { offset: 3_001 }).pipe(Effect.flip)
+      expect(binary).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+
+  it.effect("starts a negative offset that many lines before the end", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
+        files.writeFileString(path.join(directory, name), content).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const small = "one\ntwo\nthree\nfour\nfive\n"
+
+      expect(yield* read("small.txt", small, { offset: -3 })).toEqual([
+        "Read file small.txt, lines 3-5",
+        "3: three",
+        "4: four",
+        "5: five",
+      ])
+      expect(yield* read("all.txt", small, { offset: -50 })).toEqual([
+        "Read file all.txt, lines 1-5",
+        "1: one",
+        "2: two",
+        "3: three",
+        "4: four",
+        "5: five",
+      ])
+      expect(yield* read("limited.txt", small, { offset: -4, limit: 2 })).toEqual([
+        "Read file limited.txt, lines 2-3",
+        "2: two",
+        "3: three",
+        "[Output truncated. Continue reading with offset: 4]",
+      ])
+      expect(yield* read("crlf.txt", "one\r\ntwo\r\nthree\r\n", { offset: -2 })).toEqual([
+        "Read file crlf.txt, lines 2-3",
+        "2: two",
+        "3: three",
+      ])
+      expect(yield* read("unterminated.txt", "one\ntwo\nthree", { offset: -1 })).toEqual([
+        "Read file unterminated.txt, lines 3-3",
+        "3: three",
+      ])
+      expect(yield* read("empty.txt", "", { offset: -5 })).toEqual(["Read file empty.txt, 0 lines"])
+    }),
+  )
+
+  it.effect("starts a negative offset from the end of a file larger than the first chunk", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
+        files.writeFileString(path.join(directory, name), content).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const lines = Array.from({ length: 3_000 }, (_, index) => `${index + 1}`.padEnd(100, "x"))
+      const expected = (from: number, to = 3_000) =>
+        lines.slice(from - 1, to).map((line, index) => `${from + index}: ${line}`)
+
+      expect(yield* read("lf.txt", lines.join("\n") + "\n", { offset: -50 })).toEqual([
+        "Read file lf.txt, lines 2951-3000",
+        ...expected(2_951),
+      ])
+      expect(yield* read("window.txt", lines.join("\n") + "\n", { offset: -50, limit: 10 })).toEqual([
+        "Read file window.txt, lines 2951-2960",
+        ...expected(2_951, 2_960),
+        "[Output truncated. Continue reading with offset: 2961]",
+      ])
+      expect(yield* read("crlf.txt", lines.join("\r\n"), { offset: -3 })).toEqual([
+        "Read file crlf.txt, lines 2998-3000",
+        ...expected(2_998),
+      ])
+      // 3000 lines of 101 bytes exceed the 50 KB cap, so reading from line 1 stops after 506 like any read.
+      const whole = yield* read("whole.txt", lines.join("\n") + "\n", { offset: -5_000 })
+      expect([whole[0], whole.at(-2), whole.at(-1)]).toEqual([
+        "Read file whole.txt, lines 1-506",
+        `506: ${lines[505]}`,
+        "[Output truncated. Continue reading with offset: 507]",
+      ])
+      // Each clamped line is 2041 bytes, so 25 of them fit in the 50 KB cap.
+      const wide = Array.from({ length: 200 }, (_, index) => `${index + 1}`.padEnd(3_000, "w"))
+      const clipped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: -100 })
+      expect([clipped[0], clipped.at(-1)]).toEqual([
+        "Read file wide.txt, lines 101-125",
+        "[Output truncated. Continue reading with offset: 126]",
+      ])
+      const short = lines.slice(0, 10)
+      const huge = yield* read("huge.txt", `${short.join("\n")}\n${"z".repeat(300 * 1024)}`, { offset: -20 })
+      expect(huge).toEqual([
+        "Read file huge.txt, lines 1-11",
+        ...expected(1, 10),
+        `11: ${"z".repeat(2_000)}... (line truncated to 2000 chars)`,
+      ])
+    }),
+  )
+
+  it.effect("rejects a negative offset for a directory", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      yield* files.writeFileString(path.join(directory, "a.txt"), "a\n")
+
+      const error = yield* ReadToolFileSystem.read(environment, absolute(directory), "src", { offset: -1 }).pipe(
+        Effect.flip,
+      )
+      expect(error).toBeInstanceOf(ReadToolFileSystem.DirectoryOffsetError)
+      expect(error.message).toBe("A negative offset only works for files, and src is a directory")
     }),
   )
 
@@ -246,13 +424,13 @@ describe("ReadToolFileSystem", () => {
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const file = path.join(directory, "long.txt")
-      yield* files.writeFileString(file, "a".repeat(2_001))
+      yield* files.writeFileString(file, `${"a".repeat(1_999)}😀tail`)
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "long.txt", { limit: 1 })
 
       expect(result).toMatchObject({
         type: "text-page",
-        content: `${"a".repeat(2_000)}... (line truncated to 2000 chars)`,
+        content: `${"a".repeat(1_999)}... (line truncated to 2000 chars)`,
         truncated: false,
       })
     }),

@@ -2,6 +2,7 @@ import { Struct } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { AlibabaChat } from "../protocols/alibaba-chat.js"
 import { AlibabaImages } from "../protocols/alibaba-images.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { AlibabaMessages } from "../protocols/alibaba-messages.js"
 import { AlibabaResponses } from "../protocols/alibaba-responses.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
@@ -118,7 +119,16 @@ export const configure = (input: Config) => {
   const media = MediaRoute.deployment({ ...input, baseURL: baseURL ?? `https://${host}/api/v1` }, opts.auth)
   const image = (id: string | ModelID, providerOptions?: ProviderOptions) =>
     AlibabaImages.model({ ...media, id, providerOptions })
-  return { id, model: chat, chat, messages, responses, image, configure }
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    provider: id,
+    endpoint: common.endpoint,
+    auth: opts.auth,
+    headers: input.headers,
+    http: input.http,
+  })
+  const embedding = (id: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model({ id, providerOptions })
+  return { id, model: chat, chat, messages, responses, image, embedding, configure }
 }
 
 export const provider = { id, configure }
@@ -136,6 +146,10 @@ export const responses = responsesModel
 export const imageModel = (id: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(id, input.providerOptions)
+}
+export const embeddingModel = (id: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).embedding(id, input.providerOptions)
 }
 
 function config(input: Settings<Config["providerOptions"]>) {

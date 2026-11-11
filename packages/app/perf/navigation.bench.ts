@@ -87,6 +87,9 @@ const scenes = {
 } satisfies Record<string, Scene>
 
 /** Where each case starts. */
+/** What a launch sets up: the scene, and whether setup opens the command palette. */
+type Setup = { scene: keyof typeof scenes; palette: boolean }
+
 const sceneOf = new Map<string, keyof typeof scenes>([
   ["open a session from home", "home"],
   ["close the last tab", "source"],
@@ -113,7 +116,7 @@ const metrics = ["run.duration", "interaction.p50"]
 
 export default bench({
   // A case's scene, and whether setup opens the command palette: cases with the same ones share a launch.
-  setupKey: ({ case: name }) => {
+  setupKey: ({ case: name }): Setup => {
     const scene = sceneOf.get(name)
 
     if (!scene) throw new Error(`navigation.bench.ts: no scene for "${name}"`)
@@ -122,7 +125,8 @@ export default bench({
   },
 
   targets: {
-    web: web({
+    // A target is made before the bench, so its hooks see the setup key as typed here.
+    web: web<{}, Setup>({
       expect: { title: "OpenCode" },
       viewport: { width: 1440, height: 900 },
       async prepare(ctx) {

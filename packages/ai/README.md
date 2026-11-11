@@ -1,6 +1,6 @@
 # @opencode/ai
 
-Schema-first APIs for text, images, and decisions, built with Effect. Video, speech, transcription, extraction, and
+Schema-first APIs for text, images, decisions, and embeddings, built with Effect. Video, speech, transcription, extraction, and
 realtime voice are [experimental](#experimental).
 
 `@opencode/ai` is the Promise API: one managed runtime behind the LLM and media methods, plus asset helpers. `ai.file`
@@ -16,7 +16,7 @@ const input = { model: openai.responses("gpt-4o-mini"), prompt: "Say hello." }
 const response = await ai.generate(input)
 console.log(response.text)
 const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
-await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
+await ai.write(generated.images[0], "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
 for await (const event of ai.stream(ai.request(input))) {
   // LLMEvent
 }
@@ -226,7 +226,7 @@ const image = Effect.gen(function* () {
     resolution: "1K",
     providerOptions: { quality: "high" }, // typed per image model
   })
-  yield* Media.write(response.image, "./garden.png")
+  yield* Media.write(response.images[0], "./garden.png")
 })
 
 // `Media.file` / `Media.write` use the Effect `FileSystem` service; provide your platform's layer.
@@ -322,6 +322,8 @@ const [refund, department] = response.answers
 ```
 
 `input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Answers come back in question order.
+A `predicate` can say what counts as true and as false with `criteria: { true, false }`; hosts without a criteria field
+read them appended to the instructions.
 A question the host declines is `{ name, type: "error", reason, message? }`, with `reason` such as `"refusal"`; the
 other answers still come back.
 `response.usage` has `inputTokens`, `outputTokens`, `totalTokens` and the host's reported `cost` when it sends one;
@@ -354,6 +356,95 @@ CloudflareAIGateway.configure({ accountId }).decision("typesafe/jev")
 
 OpenAI and Vercel AI Gateway use OpenAI's `/v1/decisions` API. TypeSafe, OpenCode, OpenRouter, Baseten and
 DigitalOcean use System One (`/systemone`), and Cloudflare sends the System One body through `/ai/run`.
+
+## Embeddings
+
+Embedding models turn each value into a vector, returned in value order.
+
+```ts
+import { ai } from "@opencode/ai"
+import { OpenAI } from "@opencode/ai/providers"
+
+const response = await ai.embedding.generate({
+  model: OpenAI.configure().embedding("text-embedding-3-small"),
+  values: ["I was charged twice.", "How do I reset my password?"],
+  dimensions: 256,
+  inputType: "document",
+})
+const [charge, password] = response.embeddings
+```
+
+A string value is text; media values are an `Asset` (or bytes or a URL) for hosts that embed images or documents.
+`dimensions` asks models that can shorten their vectors for that length. `inputType` says whether the values are
+search queries or stored documents; hosts with no such field (OpenAI's `/embeddings` API) ignore it, and host-specific
+task types go in `providerOptions` (NVIDIA's `input_type: "passage"`). `response.usage.inputTokens` is the host's
+token count, and its raw usage stays in `providerMetadata`. Media values fail the call on hosts that only embed text.
+
+```ts
+import {
+  Alibaba,
+  Azure,
+  Cohere,
+  DeepInfra,
+  DigitalOcean,
+  Fireworks,
+  OpenAICompatible,
+  OpenRouter,
+  VercelAIGateway,
+} from "@opencode/ai/providers"
+
+OpenRouter.configure().embedding("openai/text-embedding-3-small")
+VercelAIGateway.configure().embedding("openai/text-embedding-3-small")
+Cohere.configure().embedding("embed-v4.0")
+DeepInfra.configure().embedding("BAAI/bge-m3")
+Fireworks.configure().embedding("nomic-ai/nomic-embed-text-v1.5")
+DigitalOcean.configure().embedding("bge-m3")
+Alibaba.configure({ region: "ap-southeast-1" }).embedding("text-embedding-v4")
+Azure.configure({ resourceName }).embedding("text-embedding-3-small")
+OpenAICompatible.configure({ provider: "nvidia", baseURL: "https://integrate.api.nvidia.com/v1" }).embedding(
+  "nvidia/nemotron-3.5-embed-1b",
+)
+```
+
+Every host here uses OpenAI's `/embeddings` API; Cohere through its compatibility API
+(`https://api.cohere.ai/compatibility/v1`). Package entry points are `@opencode/ai/providers/<provider>/embeddings`.
+
+Google embeds through `embedContent`, which also takes images, audio, video and PDFs on `gemini-embedding-2`. Each
+value is its own content and gets its own vector (several parts in one content would be averaged into one). `dimensions`
+is `outputDimensionality`, `inputType` becomes `taskType` `RETRIEVAL_QUERY` or `RETRIEVAL_DOCUMENT`, and `taskType` or
+`title` in `providerOptions` replace or add to it. `gemini-embedding-2` ignores task types; Google recommends writing the
+task into the text instead (`task: search result | query: …`, `title: none | text: …`).
+
+```ts
+import { Google, GoogleVertex } from "@opencode/ai/providers"
+
+const response = await ai.embedding.generate({
+  model: Google.configure().embedding("gemini-embedding-2"),
+  values: [await ai.file("./receipt.png"), "A receipt for two coffees."],
+  dimensions: 768,
+})
+
+GoogleVertex.configure({ project, location: "global" }).embedding("gemini-embedding-2")
+```
+
+`GoogleVertex.configure().embedding(id)` picks the API from the model id: `gemini-embedding-2*` uses `embedContent`,
+and every other model (`gemini-embedding-001`, `text-embedding-005`, `text-multilingual-embedding-002`) uses the
+text-only `:predict` API, which also works with Express Mode keys. On `:predict`, `inputType` and the `taskType` and
+`title` options go on each instance (`task_type`, `title`), and `dimensions`, `autoTruncate` and other options go under
+`parameters`.
+
+```ts
+GoogleVertex.configure({ apiKey }).embedding("text-embedding-005")
+GoogleVertex.configure({ apiKey }).embedding("gemini-embedding-001")
+```
+
+The Gemini API sends up to 100 values per `batchEmbedContents` request, and Vertex `:predict` up to 250 per request
+(one for `gemini-embedding-001`, as Google documents). Vertex `embedContent` takes one value per request, so a call
+sends one request per value, four at a time, and needs project credentials: Vertex Express Mode API keys can't call
+`embedContent`. `gemini-embedding-2` runs in the `global`, `us` and `eu` Vertex locations. When a call
+is split into several requests, the vectors stay in value order, `usage.inputTokens` is their sum, and each request's
+metadata is listed in order under `providerMetadata.<provider>.responses`. The package entry points are
+`@opencode/ai/providers/google/embeddings` and `@opencode/ai/providers/google-vertex/embeddings`.
 
 ## Alibaba Cloud Model Studio
 
@@ -956,8 +1047,9 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
+- **`ai.embedding.request` / `ai.embedding.generate`** — one vector per text or media value, with optional `dimensions` and `inputType`; `EmbeddingClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer? })` builds a client over a custom executor. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
+- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image`, `decision` and `embedding` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer? })` builds a client over a custom executor. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
 - **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Video`, `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
 
 ## Experimental

@@ -70,7 +70,14 @@ export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (request: 
 const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
   Effect.forEach(questions, (question): Effect.Effect<readonly [string, unknown], AIError> => {
     if (question.type === "predicate")
-      return Effect.succeed([question.name, { type: "noul", instructions: question.instructions }] as const)
+      return Effect.succeed([
+        question.name,
+        {
+          type: "noul",
+          instructions: question.instructions,
+          ...(question.criteria === undefined ? {} : { criteria: question.criteria }),
+        },
+      ] as const)
     if (question.type === "score")
       return Effect.succeed([
         question.name,

@@ -4,6 +4,7 @@ import type { Element, Root } from "hast"
 // SolidStart's own file router, as in sitemap.test.ts: every page route the app serves.
 import { DEFAULT_EXTENSIONS } from "../node_modules/@solidjs/start/dist/config/constants.js"
 import { SolidStartServerFileRouter } from "../node_modules/@solidjs/start/dist/config/fs-router.js"
+import { latestDocs } from "~/docs/config"
 import { docsHref, docsSections } from "~/docs/lib/navigation"
 import rehypeShiki from "~/docs/rehype-shiki"
 import { downloadOf, surfaceOf, targetOf } from "~/lib/funnel-config"
@@ -65,11 +66,14 @@ describe("funnel config", () => {
     )
     expect(slugs.length).toBeGreaterThan(20)
     for (const slug of slugs) {
-      const path = docsHref(slug)
+      const path = docsHref(slug, latestDocs)
       expect(surfaceOf(strip(path))).toBe("www-docs")
       expect(targetOf(path)).toBe(slug === "index" ? "" : slug.split("/")[0])
     }
     expect([surfaceOf("/docs/"), targetOf("/docs/cli/keybinds/")]).toEqual(["www-docs", "cli"])
+    // The V1 docs, in every language, as one target.
+    for (const path of ["/v1/docs/", "/v1/docs/ja/config/"])
+      expect([surfaceOf(path), targetOf(path)]).toEqual(["www-docs", "v1"])
   })
 
   test("leaves the development tools out", () => {
@@ -174,7 +178,7 @@ describe("funnel markup", () => {
     const start = 'Funnel.start(() => import("~/lib/funnel-config").then((module) => module.funnelConfig()))'
     expect(await source("entry-client.tsx")).toContain(start)
     expect(await source("docs/client.ts")).toContain(
-      'Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => "en", base: "", downloadOf }))',
+      'Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => site.dataset.locale ?? "en", base: "", downloadOf }))',
     )
     // The stub imports nothing, so the config and the tracker stay out of every page's first JavaScript.
     expect(await source("lib/funnel.ts")).not.toMatch(/^import /m)

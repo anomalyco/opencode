@@ -44,12 +44,39 @@ const vmFlag = (codemode_vm: boolean): Flag.Interface => {
 const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll, flag = vmFlag(false)) =>
   CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, flag)
 
+test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
+  const input = Schema.Struct({ text: Schema.NonEmptyString })
+  const send = {
+    name: "send",
+    description: "Send text",
+    input,
+    output: Schema.String,
+    execute: ({ text }) => Effect.succeed({ output: text }),
+  } satisfies Info<typeof input, typeof Schema.String>
+  const tools = new Map<string, Info>([
+    ["echo", { ...send, name: "echo" }],
+    ["send", { ...send, freeform: { type: "text" } }],
+  ])
+  const codeMode = createCodeMode(tools)
+  expect(codeMode.freeform).toEqual({ type: "text" })
+  expect(CodeModeTool.catalog({ tools }).tools.map((tool) => "signature" in tool && tool.signature)).toEqual([
+    "tools.echo({\n  /** @minLength 1 */\n  text: string,\n}): Promise<string>",
+    "tools.send(/** @minLength 1 */ text: string): Promise<string>",
+  ])
+  const calls = await Effect.runPromise(
+    codeMode.execute({ code: 'return [await tools.send("first"), await tools.send({text: "second"})]' }, context),
+  )
+  expect(JSON.parse(calls.output.output)).toEqual(["first", "second"])
+  expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
+})
+
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
       "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+      "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
       "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-      "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+      "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
       "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
@@ -303,7 +330,7 @@ describe.each([
         { tool: "slack.admin.create", status: "completed" },
       ],
     })
-    expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
+    expect(result.content).toEqual([{ type: "text", text: '["admin","created"]' }])
   })
 
   test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {

@@ -40,7 +40,8 @@ function stats(live: Live): RepoStats {
     .toSorted(
       (a, b) => group(a.id) - group(b.id) || position(a.id) - position(b.id) || b.contributions - a.contributions,
     )
-    .slice(0, 72)
+    // The most the open source proof's two rows show at any width: 21 columns, at 1248px wide.
+    .slice(0, 42)
     .map((face) => ({
       login: face.login,
       avatar: face.avatar ?? `https://avatars.githubusercontent.com/u/${face.id}?v=4`,

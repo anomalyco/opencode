@@ -1,6 +1,8 @@
 import "./docs-lockup.css"
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
+import { useI18n } from "~/context/i18n"
+import type { I18n } from "~/context/i18n-context"
 import { docsProducts } from "~/lib/docs-content"
 import { docsUrl, v1DocsUrl } from "~/lib/docs"
 import { Chevron, ExternalArrow } from "./icons"
@@ -15,6 +17,13 @@ export const docsVersions = [
 ] as const
 
 export type DocsVersion = (typeof docsVersions)[number]["id"]
+
+/** A docs section's name in the page's language: "Docs" and "Build" translate, the product names don't. */
+export function docsSectionName(i18n: I18n, section: string) {
+  if (section === "Docs") return i18n.t("nav.docs")
+  if (section === "Build") return i18n.t("docs.section.build")
+  return section
+}
 
 type Item = {
   id: string
@@ -46,27 +55,37 @@ export function DocsLockup(props: {
   /** Demo only: link the sections elsewhere and switch them in place instead of navigating. */
   href?: (label: string) => string
   onSelect?: (label: string) => void
-  /** Demo only: the docs versions. */
+  /** The docs versions: this page in each (the docs, and the /docs demo). */
   version?: {
     current: DocsVersion
     href: (id: DocsVersion) => string
     onSelect: (id: DocsVersion) => void
   }
 }) {
-  const name = (label: string) => (label === "Docs" ? label : `${label} docs`)
+  const i18n = useI18n()
+  const name = (label: string) =>
+    label === "Docs"
+      ? docsSectionName(i18n, label)
+      : i18n.t("docs.lockup.sectionDocs", { section: docsSectionName(i18n, label) })
   // V1 is a version, not a section: "Docs" has a submenu of versions, V2 (these docs) and V1 (the old
   // docs site). The /docs demo can pass its own (?version= switches in place).
   const sections = () => docsProducts.filter((product) => product.label !== "V1")
   const defaultVersions: Item[] = [
-    { id: "latest", label: "V2", meta: "(latest)", ariaLabel: "Latest docs", href: docsUrl() },
-    { id: "v1", label: "V1", ariaLabel: "V1 docs", href: v1DocsUrl() },
+    {
+      id: "latest",
+      label: "V2",
+      meta: i18n.t("docs.version.latest"),
+      ariaLabel: i18n.t("docs.version.latestDocs"),
+      href: docsUrl(),
+    },
+    { id: "v1", label: "V1", ariaLabel: i18n.t("docs.version.v1Docs"), href: v1DocsUrl() },
   ]
   const versionItems = (version: NonNullable<typeof props.version>) =>
     docsVersions.map((item) => ({
       id: item.id,
       label: item.label,
-      meta: "meta" in item ? item.meta : undefined,
-      ariaLabel: item.id === "latest" ? "Latest docs" : "V1 docs",
+      meta: "meta" in item ? i18n.t("docs.version.latest") : undefined,
+      ariaLabel: item.id === "latest" ? i18n.t("docs.version.latestDocs") : i18n.t("docs.version.v1Docs"),
       href: version.href(item.id),
     }))
   // The lockup lives beside the logo: in the sidebar, so it scrolls away with it at the end of the
@@ -91,12 +110,12 @@ export function DocsLockup(props: {
     <div data-component="docs-lockup" data-host={props.inline}>
       <Dropdown
         id={`docs-lockup-menu${suffix}`}
-        menuLabel="Docs"
+        menuLabel={i18n.t("nav.docs")}
         trigger={(label) => name(label)}
-        triggerLabel={(label) => `${name(label)}, switch docs`}
+        triggerLabel={(label) => i18n.t("docs.lockup.switchLabel", { name: name(label) })}
         items={sections().map((product) => ({
           id: product.label,
-          label: product.label,
+          label: docsSectionName(i18n, product.label),
           ariaLabel: name(product.label),
           href: props.href?.(product.label) ?? product.href,
           sub:
@@ -104,16 +123,16 @@ export function DocsLockup(props: {
               ? undefined
               : props.version
                 ? {
-                    label: "Docs version",
+                    label: i18n.t("docs.version.label"),
                     items: versionItems(props.version),
                     current: props.version.current,
                     onSelect: (id: string) => props.version?.onSelect(id as DocsVersion),
                   }
-                : { label: "Docs version", items: defaultVersions, current: "latest" },
+                : { label: i18n.t("docs.version.label"), items: defaultVersions, current: "latest" },
         }))}
         current={props.current}
         onSelect={props.onSelect}
-        split={{ label: "Switch docs", onSelect: props.onSelect }}
+        split={{ label: i18n.t("docs.lockup.switch"), onSelect: props.onSelect }}
       />
       {/* Only the main docs have versions, and only an older one shows here. */}
       <Show when={props.current === "Docs" && props.version?.current !== "latest" && props.version}>
@@ -125,9 +144,11 @@ export function DocsLockup(props: {
             <Dropdown
               id={`docs-version-menu${suffix}`}
               variant="version"
-              menuLabel="Docs version"
+              menuLabel={i18n.t("docs.version.label")}
               trigger={(id) => docsVersions.find((item) => item.id === id)!.label}
-              triggerLabel={(id) => `${docsVersions.find((item) => item.id === id)!.label}, switch docs version`}
+              triggerLabel={(id) =>
+                i18n.t("docs.version.switch", { version: docsVersions.find((item) => item.id === id)!.label })
+              }
               items={versionItems(version())}
               current={version().current}
               onSelect={(id) => version().onSelect(id as DocsVersion)}
@@ -168,6 +189,7 @@ function Dropdown(props: {
   /** Settings › Docs nav › split: the word links to the section's home; `label` names the chevron. */
   split?: { label: string; onSelect?: (id: string) => void }
 }) {
+  const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const [subOpen, setSubOpen] = createSignal(false)
   // On phones the labels start at the bar's logo mark and the "›" centres on its menu button (docs-lockup.css).
@@ -306,7 +328,7 @@ function Dropdown(props: {
               data-nav-product-chevron="none"
               aria-haspopup="menu"
               aria-expanded="false"
-              aria-label={`${props.trigger(props.items[currentIndex()].id)} home`}
+              aria-label={i18n.t("docs.lockup.home", { name: props.trigger(props.items[currentIndex()].id) })}
               onClick={(event) => {
                 close()
                 if (!split().onSelect) return
