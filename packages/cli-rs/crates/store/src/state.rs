@@ -112,6 +112,8 @@ pub struct State {
     pub(crate) permission_live: Live,
     /// Forms created and settled by events, for list reads in flight.
     pub(crate) form_live: Live,
+    /// Messages events created or changed, for transcript reads in flight.
+    pub(crate) message_live: Live,
 }
 
 /// Items that events added to or removed from a pending list, by event sequence, so a list read
@@ -151,7 +153,10 @@ impl Live {
     }
 
     fn record(map: &mut IndexMap<String, u64>, id: &str, seq: u64) {
-        map.shift_remove(id);
+        if let Some(at) = map.get_mut(id) {
+            *at = seq;
+            return;
+        }
         map.insert(id.to_owned(), seq);
         if map.len() > DELETED_LIMIT {
             map.shift_remove_index(0);
