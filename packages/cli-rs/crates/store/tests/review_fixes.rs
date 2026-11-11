@@ -551,3 +551,54 @@ async fn a_transcript_refresh_keeps_the_reply_that_streamed_meanwhile() {
         assert_eq!(text(&data, "msg_a").as_deref(), Some("Hello"), "{page}");
     }
 }
+
+/// An older page read from a cursor that a latest-page refresh replaced is not stitched onto the
+/// new list: the load starts again from the new cursor, so no message goes missing.
+#[tokio::test]
+async fn an_older_page_does_not_leave_a_gap_after_a_refresh() {
+    let release = Slot::<()>::default();
+    let gate = release.clone();
+    let latest = Arc::new(AtomicUsize::new(2));
+    let head = latest.clone();
+    let row = |n: usize| json!({ "id": format!("msg_{n}"), "type": "user", "text": "x", "time": { "created": n } });
+    let data = data(
+        handler(move |req: Req| {
+            let gate = gate.clone();
+            let head = head.load(Ordering::SeqCst);
+            let cursor = req.param("cursor").map(str::to_owned);
+            async move {
+                // One message a page; the cursor `before:N` lists message N - 1.
+                let n = match cursor {
+                    None => head,
+                    Some(cursor) => {
+                        let n: usize = cursor.strip_prefix("before:").unwrap().parse::<usize>().unwrap() - 1;
+                        if n == 1 {
+                            gate.wait().await;
+                        }
+                        n
+                    }
+                };
+                let next = if n > 1 { json!({ "next": format!("before:{n}") }) } else { json!({}) };
+                ok(json!({ "data": [row(n)], "cursor": next }))
+            }
+        }),
+        Options { initial_message_limit: Some(1), ..Default::default() },
+    );
+    let session = id("ses_m");
+    data.message_sync(&session).await.unwrap();
+    let load = {
+        let (data, session) = (data.clone(), session.clone());
+        tokio::spawn(async move { data.message_load_more(&session, LoadMore::default()).await })
+    };
+    settle().await;
+    latest.store(3, Ordering::SeqCst);
+    data.message_invalidate(&session);
+    data.message_sync(&session).await.unwrap();
+    release.resolve(());
+    load.await.unwrap().unwrap();
+    let ids: Vec<String> =
+        data.read(|state| state.messages(&session).iter().map(|item| item.id().to_owned()).collect());
+    assert_eq!(ids.first().map(String::as_str), Some("msg_2"), "{ids:?}");
+    assert_eq!(ids, ["msg_2", "msg_3"]);
+    assert!(data.read(|state| state.has_more_messages(&session)), "the cursor to msg_1 is kept");
+}
