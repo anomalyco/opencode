@@ -107,6 +107,9 @@ pub struct State {
     pub(crate) deletion_epoch: u64,
     /// Deleted sessions by deletion epoch, oldest first.
     pub(crate) deleted_at: IndexMap<SessionID, u64>,
+    /// The incarnation of each transcript window that ended (deleted, evicted or reverted), a token, oldest first.
+    /// It keeps the newest [`DELETED_LIMIT`]; a window that never ended has incarnation 0.
+    incarnations: IndexMap<SessionID, u64>,
     /// Trailing refetch timers by key, with the token of the newest.
     pub(crate) settling: HashMap<String, (u64, AbortHandle)>,
     /// The permission read in flight per session, with the asks and replies that overtook it.
@@ -158,6 +161,7 @@ const OVERLAY_LIMIT: usize = 1024;
 /// (`Some`) or settled (`None`) while it was in flight, by ID in arrival order. Only the read whose
 /// ticket it carries publishes. More than [`OVERLAY_LIMIT`] changes overflow it: the read then
 /// publishes nothing and reads again, so the bound costs a read, never an item.
+#[derive(Debug, Clone)]
 pub(crate) struct Overlay<V> {
     ticket: u64,
     /// `None` once overflowed.
@@ -167,6 +171,11 @@ pub(crate) struct Overlay<V> {
 impl<V> Overlay<V> {
     pub(crate) fn new(ticket: u64) -> Self {
         Self { ticket, changes: Some(IndexMap::new()) }
+    }
+
+    /// The ticket of the read this overlay belongs to.
+    pub(crate) fn ticket(&self) -> u64 {
+        self.ticket
     }
 
     /// Ends the read `ticket` of `key`: its overlay, while that read is still the current one.
@@ -198,6 +207,12 @@ impl<V> Overlay<V> {
             }
         }
         Some(list)
+    }
+
+    /// The changes by ID in arrival order, for a caller that applies them itself. `None` when the
+    /// overlay overflowed.
+    pub(crate) fn into_changes(self) -> Option<IndexMap<String, Option<V>>> {
+        self.changes
     }
 }
 
@@ -257,6 +272,23 @@ impl State {
     /// True when `id` was deleted after the epoch a read started at.
     pub(crate) fn deleted_since(&self, id: &SessionID, started: u64) -> bool {
         self.deleted_at.get(id).copied().unwrap_or(0) > started
+    }
+
+    /// The incarnation of `id`'s transcript window. A completion publishes into the window only while it is the
+    /// incarnation the completion began in (models M2 rule 5, deviation O6-held-message-read).
+    pub(crate) fn incarnation(&self, id: &SessionID) -> u64 {
+        self.incarnations.get(id).copied().unwrap_or(0)
+    }
+
+    /// Ends `id`'s transcript window, so completions that began in it publish nothing. The token counter never
+    /// repeats, so a later window never matches an earlier incarnation.
+    pub(crate) fn end_transcript(&mut self, id: &SessionID) {
+        let token = self.token();
+        self.incarnations.shift_remove(id);
+        self.incarnations.insert(id.clone(), token);
+        if self.incarnations.len() > DELETED_LIMIT {
+            self.incarnations.shift_remove_index(0);
+        }
     }
 }
 
