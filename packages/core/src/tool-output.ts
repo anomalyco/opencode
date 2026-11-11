@@ -86,16 +86,14 @@ const layer = Layer.effect(
         "",
       )
       const limits = state.get()
-      const lines = text.split("\n")
-      if (text.endsWith("\n")) lines.pop()
-      const totalBytes = Buffer.byteLength(text, "utf-8")
-      if (lines.length <= limits.maxLines && totalBytes <= limits.maxBytes)
+      const totalLines = countLines(text)
+      if (totalLines <= limits.maxLines && Buffer.byteLength(text, "utf-8") <= limits.maxBytes)
         return { ...result, metadata: { ...result.metadata, truncated: false } }
 
-      // One cut at the line or byte limit, whichever comes first, so a line too long for the space left shows its start.
-      const shown = text
-        .slice(0, Math.min(afterLines(text, limits.maxLines), byteBoundary(text, limits.maxBytes)))
-        .replace(/\r?\n$/, "")
+      // Cut once, at the line or byte limit, whichever comes first, so a line too long for the space left shows its
+      // start. The preview never ends on a line break.
+      const end = Math.min(afterLines(text, limits.maxLines), byteBoundary(text, limits.maxBytes))
+      const shown = text.slice(0, text.endsWith("\r\n", end) ? end - 2 : text.endsWith("\n", end) ? end - 1 : end)
       const file = path.join(directory, fileName())
       const failure = yield* fs.ensureDir(directory).pipe(
         Effect.andThen(fs.writeFileString(file, text)),
@@ -104,10 +102,14 @@ const layer = Layer.effect(
           Effect.logWarning("failed to save full tool output", { file, cause: error }).pipe(Effect.as(describe(error))),
         ),
       )
-      const range = shown === "" ? "0 lines" : `lines 1-${shown.split("\n").length}`
-      const cutLine =
-        shown === "" || /^(\r?\n|$)/.test(text.slice(shown.length, shown.length + 2)) ? "" : " (last line cut)"
-      const marker = `[showing ${range} of ${lines.length}${cutLine}; ${
+      const shownLines = countLines(shown)
+      const lastLineCut =
+        shownLines > 0 &&
+        shown.length < text.length &&
+        !text.startsWith("\n", shown.length) &&
+        !text.startsWith("\r\n", shown.length)
+      const range = shownLines === 0 ? "0 lines" : `lines 1-${shownLines}`
+      const marker = `[showing ${range} of ${totalLines}${lastLineCut ? " (last line cut)" : ""}; ${
         failure === undefined ? `full output saved to ${file}` : `full output could not be saved: ${failure}`
       }]`
       const bounded: Tool.Content[] = []
@@ -178,6 +180,15 @@ export const node = makeLocationNode({
   deps: [FSUtil.node, Global.node, cleanupNode],
 })
 
+/** How many lines `text` has, not counting an empty one after a final line break. Counts without splitting. */
+function countLines(text: string) {
+  if (text === "") return 0
+  let count = 1
+  for (let index = text.indexOf("\n"); index !== -1 && index < text.length - 1; index = text.indexOf("\n", index + 1))
+    count++
+  return count
+}
+
 /** Where the line after the first `count` lines starts, or the end of `text`. */
 function afterLines(text: string, count: number) {
   let index = 0
@@ -194,8 +205,15 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
 /** The longest start of `text` that fits in `budget` UTF-8 bytes without splitting a character, emoji included. */
 function byteBoundary(text: string, budget: number) {
-  // encodeInto stops at whole code points; the segmenter then backs off to the start of the grapheme it is inside.
+  // encodeInto only encodes what fits in the buffer, and stops at a whole code point.
   const index = encoder.encodeInto(text, new Uint8Array(Math.max(0, budget))).read
-  if (index === text.length) return index
-  return graphemes.segment(text.slice(0, index + 2)).containing(index)?.index ?? index
+  if (index === text.length || index === 0) return index
+  const before = text.charCodeAt(index - 1)
+  const after = text.charCodeAt(index)
+  // Two ASCII characters always have a boundary between them, except the two halves of \r\n.
+  if (before < 0x80 && after < 0x80) return before === 13 && after === 10 ? index - 1 : index
+  // Otherwise back off to the start of the grapheme the cut is in. A line break always ends one, so segmenting from the
+  // start of the line keeps flag pairs and long emoji sequences exact; one code point past the cut gives the context.
+  const start = text.lastIndexOf("\n", index - 1) + 1
+  return start + (graphemes.segment(text.slice(start, index + 2)).containing(index - start)?.index ?? index - start)
 }
