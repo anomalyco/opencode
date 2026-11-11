@@ -108,6 +108,55 @@ pub struct State {
     pub(crate) deleted_at: IndexMap<SessionID, u64>,
     /// Trailing refetch timers by key, with the token of the newest.
     pub(crate) settling: HashMap<String, (u64, AbortHandle)>,
+    /// Permission requests asked and settled by events, for list reads in flight.
+    pub(crate) permission_live: Live,
+    /// Forms created and settled by events, for list reads in flight.
+    pub(crate) form_live: Live,
+}
+
+/// Items that events added to or removed from a pending list, by event sequence, so a list read
+/// can apply what overtook it (deviation O89-list-snapshots). Both maps keep the newest
+/// [`DELETED_LIMIT`] IDs; a read that more events overtake than that is a reconnect's business.
+#[derive(Default)]
+pub(crate) struct Live {
+    seq: u64,
+    added: IndexMap<String, u64>,
+    removed: IndexMap<String, u64>,
+}
+
+impl Live {
+    /// The sequence a read starts at.
+    pub(crate) fn now(&self) -> u64 {
+        self.seq
+    }
+
+    pub(crate) fn add(&mut self, id: &str) {
+        self.seq += 1;
+        Self::record(&mut self.added, id, self.seq);
+    }
+
+    pub(crate) fn remove(&mut self, id: &str) {
+        self.seq += 1;
+        Self::record(&mut self.removed, id, self.seq);
+    }
+
+    /// Whether an event added `id` after the read that started at `started`.
+    pub(crate) fn added_since(&self, id: &str, started: u64) -> bool {
+        self.added.get(id).is_some_and(|at| *at > started)
+    }
+
+    /// Whether an event removed `id` after the read that started at `started`.
+    pub(crate) fn removed_since(&self, id: &str, started: u64) -> bool {
+        self.removed.get(id).is_some_and(|at| *at > started)
+    }
+
+    fn record(map: &mut IndexMap<String, u64>, id: &str, seq: u64) {
+        map.shift_remove(id);
+        map.insert(id.to_owned(), seq);
+        if map.len() > DELETED_LIMIT {
+            map.shift_remove_index(0);
+        }
+    }
 }
 
 type ErrorHandler = Arc<dyn Fn(&Error) + Send + Sync>;

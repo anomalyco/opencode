@@ -424,3 +424,83 @@ async fn a_budget_refusal_refreshes_usage_limits() {
     emit(&data, failed("evt_model", "provider.model-budget-limit"));
     wait(|| reads(&paths, "/api/experimental/usage/limits") == 3).await;
 }
+
+// O-89: list snapshots keep what arrived meanwhile -------------------------------------------------
+
+/// A handler that answers `path` with the list the test releases, and everything else empty.
+fn held(path: &'static str) -> (Data, Slot<Value>) {
+    let slot = Slot::<Value>::default();
+    let release = slot.clone();
+    let data = data(
+        handler(move |req: Req| {
+            let release = release.clone();
+            async move {
+                if req.path == path {
+                    return ok(json!({ "data": release.wait().await }));
+                }
+                ok(json!({ "data": [] }))
+            }
+        }),
+        Options::default(),
+    );
+    (data, slot)
+}
+
+fn permission(id: &str) -> Value {
+    json!({ "id": id, "sessionID": "ses_p", "action": "bash", "resources": ["ls"] })
+}
+
+/// A permission asked while the list read is in flight survives the older snapshot; one replied
+/// meanwhile does not come back with it.
+#[tokio::test]
+async fn a_permission_list_keeps_asks_and_replies_that_overtook_it() {
+    let (data, release) = held("/api/session/ses_p/permission");
+    let task = data.permission_sync(&id("ses_p"));
+    let running = tokio::spawn(task);
+    settle().await;
+    emit(&data, json!({ "id": "evt_asked", "created": 1, "type": "permission.asked", "data": permission("per_new") }));
+    emit(
+        &data,
+        json!({
+            "id": "evt_replied", "created": 2, "type": "permission.replied",
+            "data": { "sessionID": "ses_p", "requestID": "per_old", "reply": "once" },
+        }),
+    );
+    release.resolve(json!([permission("per_old"), permission("per_kept")]));
+    running.await.unwrap().unwrap();
+    let ids = data.read(|state| {
+        state.permissions(&id("ses_p")).unwrap().iter().map(|item| item.id.0.clone()).collect::<Vec<_>>()
+    });
+    assert_eq!(ids, ["per_kept", "per_new"]);
+}
+
+fn form(id: &str) -> Value {
+    json!({ "id": id, "sessionID": "ses_f", "title": "Ask", "fields": [] })
+}
+
+#[tokio::test]
+async fn a_form_list_keeps_forms_created_and_settled_while_it_was_read() {
+    let (data, release) = held("/api/session/ses_f/form");
+    let running = tokio::spawn(data.form_sync("ses_f", None));
+    settle().await;
+    emit(
+        &data,
+        json!({
+            "id": "evt_form", "created": 1, "type": "form.created", "location": { "directory": "/project" },
+            "data": { "form": form("frm_new") },
+        }),
+    );
+    emit(
+        &data,
+        json!({
+            "id": "evt_cancel", "created": 2, "type": "form.cancelled", "location": { "directory": "/project" },
+            "data": { "id": "frm_old", "sessionID": "ses_f" },
+        }),
+    );
+    release.resolve(json!([form("frm_old"), form("frm_kept")]));
+    running.await.unwrap().unwrap();
+    let ids = data.read(|state| {
+        state.forms("ses_f", None).unwrap().iter().map(|form| form.info.id.0.clone()).collect::<Vec<_>>()
+    });
+    assert_eq!(ids, ["frm_kept", "frm_new"]);
+}
