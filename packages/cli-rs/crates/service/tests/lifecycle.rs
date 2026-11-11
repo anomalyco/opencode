@@ -459,6 +459,23 @@ async fn stop_waits_for_the_original_process_while_preserving_a_newly_registered
     assert!(fixture.running(successor));
 }
 
+// A stale registration whose pid now belongs to another process: `stop` must not signal it.
+#[tokio::test(flavor = "multi_thread")]
+async fn stop_refuses_a_registered_pid_that_another_process_reused() {
+    let fixture = Fixture::new();
+    let mut other = Command::new("sleep").arg("600").spawn().unwrap();
+    std::fs::write(&fixture.registration, format!(r#"{{"url":"http://127.0.0.1:1","pid":{}}}"#, other.id())).unwrap();
+    // The server registers after it starts; this file predates the process.
+    let file = std::fs::File::options().write(true).open(&fixture.registration).unwrap();
+    file.set_modified(std::time::SystemTime::now() - Duration::from_secs(3600)).unwrap();
+    let error = stop::stop(transport(), &fixture.registration, Pty::Clear, fast().stop).await.unwrap_err();
+    assert!(other.try_wait().unwrap().is_none(), "the other process was signalled");
+    assert!(error.to_string().contains("is not the OpenCode server"), "{error}");
+    assert!(fixture.registration.exists());
+    other.kill().unwrap();
+    other.wait().unwrap();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn waits_for_a_slow_winner_while_bounding_lock_probes() {
     needs_bun!();
