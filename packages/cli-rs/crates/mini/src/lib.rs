@@ -23,6 +23,7 @@ pub mod settings;
 pub mod shell;
 pub mod signals;
 pub mod splash;
+pub mod stderr;
 pub mod stdin;
 pub mod subagents;
 pub mod theme;
