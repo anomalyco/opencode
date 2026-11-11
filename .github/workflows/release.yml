@@ -318,7 +318,6 @@ jobs:
     if: needs.plan.outputs.desktop == 'true'
     permissions:
       contents: read
-      pull-requests: read # beta builds read who made each change and what it does for "What's new in beta"
     strategy:
       fail-fast: false
       matrix:
@@ -346,13 +345,6 @@ jobs:
       - name: Set up rpm
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rpm
-      # The beta build embeds the subjects of its newest commits for "What's new in beta"
-      # (packages/desktop/script/beta-notes.ts). Commits without file contents are enough.
-      - name: Fetch beta history
-        if: needs.plan.outputs.channel == 'beta'
-        run: git fetch --no-tags --filter=blob:none --depth=300 origin "$SHA"
-        env:
-          SHA: ${{ needs.tag.outputs.sha }}
       # Dev and beta trade larger packages for faster packaging. fpm sets XZ_OPT for the deb and rpm level, but xz
       # still reads XZ_DEFAULTS, so it uses every CPU.
       - name: Preview packaging settings
@@ -367,7 +359,6 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ needs.plan.outputs.channel == 'latest' && 'production' || needs.plan.outputs.channel }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.plan.outputs.version }}
-          GITHUB_TOKEN: ${{ github.token }} # read-only; beta notes read pull request authors and descriptions
       - name: Pack
         working-directory: packages/desktop
         timeout-minutes: 60
