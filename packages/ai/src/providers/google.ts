@@ -8,6 +8,7 @@ import {
   GoogleEmbedContent,
   type OptionsInput as GoogleEmbeddingOptionsInput,
 } from "../protocols/google-embed-content.js"
+import { GoogleDecisions } from "../protocols/google-decisions.js"
 import { GoogleInteractions } from "../protocols/google-interactions.js"
 import { GoogleImages } from "../protocols/google-images.js"
 import { GoogleSpeech } from "../protocols/google-speech.js"
@@ -23,6 +24,7 @@ export type { GoogleVideoOptions } from "../protocols/google-video.js"
 export type GeminiOptionsInput = Gemini.OptionsInput
 export type GeminiProviderOptionsInput = Gemini.ProviderOptionsInput
 export type GoogleInteractionsOptionsInput = GoogleInteractions.OptionsInput
+export type GoogleDecisionsOptionsInput = GoogleDecisions.OptionsInput
 
 export const id = ProviderID.make("google")
 
@@ -77,6 +79,10 @@ export const configure = (input: Config = {}) => {
     transcription: (modelID: string | ModelID) => GoogleTranscription.model({ ...media, id: modelID }),
     embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       embeddingRoute.model<GoogleEmbeddingOptionsInput>({ id: modelID, providerOptions }),
+    decision: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      GoogleDecisions.route
+        .with({ endpoint: { baseURL: media.baseURL }, auth: media.auth, headers: media.headers, http: media.http })
+        .model<GoogleDecisions.OptionsInput>({ id: modelID, providerOptions }),
     configure,
   }
 }
@@ -92,6 +98,10 @@ export const embeddingModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).embedding(modelID, input.providerOptions)
 }
+export const decisionModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 
 export const image = provider.image
 export const embedding = provider.embedding
@@ -100,3 +110,4 @@ export const interactions = provider.interactions
 export const video = provider.video
 export const speech = provider.speech
 export const transcription = provider.transcription
+export const decision = provider.decision
