@@ -58,7 +58,7 @@ fn list(context: &Context) -> error::Result<()> {
             format!("{icon} {}  {description}", pad_end(&server.name, width))
         })
         .collect();
-    print(&(lines.join("\n") + "\n"))
+    print(&opencode_ui::terminal_text(&(lines.join("\n") + "\n")))
 }
 
 fn add(args: &McpAddArgs) -> error::Result<()> {

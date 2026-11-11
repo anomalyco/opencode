@@ -18,6 +18,7 @@ use opencode_api::client::{Call, Client};
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::*;
 use opencode_api::transport::SseResponse;
+use opencode_ui::terminal_text;
 use opencode_ui::tool_info::{tool_inline_info, tool_output_text};
 use serde_json::value::RawValue;
 use serde_json::{Value, json};
@@ -557,9 +558,10 @@ impl Run {
             ui::println(&[
                 &format!("{}!", ui::TEXT_WARNING_BOLD),
                 &format!(
-                    "{}permission requested: {} ({resources}); auto-rejecting",
+                    "{}permission requested: {} ({}); auto-rejecting",
                     ui::TEXT_NORMAL,
-                    text(&request["action"])
+                    terminal_text(text(&request["action"])),
+                    terminal_text(&resources)
                 ),
             ]);
         }
@@ -786,6 +788,7 @@ impl Renderer {
         if self.emit(part.kind, end, json!({ "part": json })) {
             return;
         }
+        let value = terminal_text(value);
         let trimmed = value.trim();
         if trimmed.is_empty() {
             return;
@@ -927,8 +930,8 @@ impl Renderer {
                     &format!(
                         "{}retrying (attempt {}): {}",
                         ui::TEXT_NORMAL,
-                        js_string(&data["attempt"]),
-                        text(&data["error"]["message"])
+                        terminal_text(&js_string(&data["attempt"])),
+                        terminal_text(text(&data["error"]["message"]))
                     ),
                 ]);
             }
@@ -936,7 +939,8 @@ impl Renderer {
             "session.step.started" if !self.steps.borrow().contains_key(message) => {
                 let rest = object([("snapshot", data.get("snapshot").cloned())]);
                 if !self.step("step-start", &time, part_id(text(&event["id"])), message, rest) {
-                    self.block(&format!("> {} · {}", text(&data["agent"]), text(&data["model"]["id"])));
+                    let (agent, model) = (text(&data["agent"]), text(&data["model"]["id"]));
+                    self.block(&format!("> {} · {}", terminal_text(agent), terminal_text(model)));
                 }
             }
             "session.step.ended" => {
@@ -1160,8 +1164,8 @@ impl Renderer {
     }
 }
 
-/// `toolInlineInfo` over the JSON part. The generated type needs `metadata` and `content`, which the TS
-/// summary reads as optional.
+/// `toolInlineInfo` over the JSON part, its text without control characters. The generated type needs `metadata`
+/// and `content`, which the TS summary reads as optional.
 fn inline(part: &Value, directory: &str) -> Option<opencode_ui::tool_info::ToolInline> {
     let mut part = part.clone();
     if let Some(state) = part["state"].as_object_mut() {
@@ -1171,7 +1175,13 @@ fn inline(part: &Value, directory: &str) -> Option<opencode_ui::tool_info::ToolI
         }
     }
     match serde_json::from_value::<SessionMessageAssistantTool>(part) {
-        Ok(tool) => Some(tool_inline_info(&tool, Some(directory))),
+        Ok(tool) => {
+            let mut info = tool_inline_info(&tool, Some(directory));
+            for text in [Some(&mut info.title), info.description.as_mut(), info.body.as_mut()].into_iter().flatten() {
+                *text = terminal_text(text).into_owned();
+            }
+            Some(info)
+        }
         Err(error) => {
             log::warn!("run: cannot summarize a tool part: {error}");
             None

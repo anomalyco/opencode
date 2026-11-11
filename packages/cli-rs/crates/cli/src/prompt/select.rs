@@ -18,11 +18,11 @@ pub struct Choice<T> {
 
 impl<T> Choice<T> {
     pub fn new(value: T, label: impl Into<String>) -> Choice<T> {
-        Choice { value, label: label.into(), hint: None }
+        Choice { value, label: super::clean(label), hint: None }
     }
 
     pub fn hint(mut self, hint: impl Into<String>) -> Choice<T> {
-        self.hint = Some(hint.into());
+        self.hint = Some(super::clean(hint));
         self
     }
 }
@@ -87,7 +87,7 @@ pub struct Select<T> {
 }
 
 pub fn select<T: Clone + PartialEq>(message: impl Into<String>, options: Vec<Choice<T>>) -> Select<T> {
-    Select { message: message.into(), options, initial_value: None, max_items: None }
+    Select { message: super::clean(message), options, initial_value: None, max_items: None }
 }
 
 impl<T: Clone + PartialEq> Select<T> {
@@ -197,7 +197,7 @@ pub struct MultiSelect<T> {
 }
 
 pub fn multiselect<T: Clone + PartialEq>(message: impl Into<String>, options: Vec<Choice<T>>) -> MultiSelect<T> {
-    MultiSelect { message: message.into(), options, initial_values: Vec::new(), required: true }
+    MultiSelect { message: super::clean(message), options, initial_values: Vec::new(), required: true }
 }
 
 impl<T: Clone + PartialEq> MultiSelect<T> {
@@ -342,6 +342,12 @@ impl<T: Clone + PartialEq> Prompt for MultiSelectPrompt<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn labels_and_hints_cannot_write_escape_sequences() {
+        let choice = Choice::new((), "x\x1b]52;c;cHduZWQ=\x07y").hint("h\u{9b}2Ji");
+        assert_eq!((choice.label.as_str(), choice.hint.as_deref()), ("xy", Some("hi")));
+    }
 
     #[test]
     fn windows_long_lists_like_limit_options() {

@@ -19,26 +19,26 @@ pub struct Text<'a> {
 }
 
 pub fn text(message: impl Into<String>) -> Text<'static> {
-    Text { message: message.into(), placeholder: None, default_value: None, initial_value: None, validate: None }
+    Text { message: super::clean(message), placeholder: None, default_value: None, initial_value: None, validate: None }
 }
 
 impl<'a> Text<'a> {
     /// Shown dim while the input is empty; it is not a value.
     pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.placeholder = Some(placeholder.into());
+        self.placeholder = Some(super::clean(placeholder));
         self
     }
 
     #[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
     /// The answer when the input is empty on submit.
     pub fn default_value(mut self, value: impl Into<String>) -> Self {
-        self.default_value = Some(value.into());
+        self.default_value = Some(super::clean(value));
         self
     }
 
     /// Text already in the input, which the user can edit.
     pub fn initial_value(mut self, value: impl Into<String>) -> Self {
-        self.initial_value = Some(value.into());
+        self.initial_value = Some(super::clean(value));
         self
     }
 
@@ -143,7 +143,7 @@ pub struct Password<'a> {
 }
 
 pub fn password(message: impl Into<String>) -> Password<'static> {
-    Password { message: message.into(), validate: None }
+    Password { message: super::clean(message), validate: None }
 }
 
 impl<'a> Password<'a> {

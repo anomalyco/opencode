@@ -65,7 +65,7 @@ fn render(session: Option<(&str, &str)>, updated: Option<&str>, cli: &str) -> Op
         lines.push(String::new());
     }
     if let Some((title, id)) = session {
-        lines.push(row("Session", title));
+        lines.push(row("Session", &opencode_ui::terminal_text(title)));
         lines.push(row("Continue", &format!("{cli} -s {id}")));
         lines.push(String::new());
     }
@@ -122,6 +122,12 @@ mod tests {
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines[5], "  Run opencode to use 2.1.0");
         assert_eq!(lines[7], "  Session   A");
+    }
+
+    #[test]
+    fn the_session_title_cannot_write_escape_sequences() {
+        let text = render(Some(("x\x1b]52;c;cHduZWQ=\x07y\u{9b}", "ses_b")), None, "opencode").unwrap();
+        assert!(text.contains("\x1b[1mxy\x1b[0m"), "{text:?}");
     }
 
     fn strip(text: &str) -> String {

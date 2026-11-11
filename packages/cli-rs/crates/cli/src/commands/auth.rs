@@ -52,7 +52,7 @@ fn caught(result: error::Result<()>) -> error::Result<()> {
     if error.is::<Exit>() {
         return Err(error);
     }
-    eprintln!("{}", error_message(&error));
+    eprintln!("{}", opencode_ui::terminal_text(&error_message(&error)));
     Err(Exit(1).into())
 }
 
@@ -163,7 +163,7 @@ fn list(context: &Context, args: &AuthListArgs) -> error::Result<()> {
         .iter()
         .map(|(integration, source, kind)| format!("{}{}{kind}", pad_end(integration, width), pad_end(source, 28)))
         .collect();
-    print(&(lines.join("\n") + "\n"))
+    print(&opencode_ui::terminal_text(&(lines.join("\n") + "\n")))
 }
 
 fn export(context: &Context, args: &AuthExportArgs) -> error::Result<()> {
@@ -1437,7 +1437,17 @@ impl std::fmt::Display for IntegrationChoice {
 /// `selectIntegration`: an autocomplete grouped by category, sized to the terminal, that matches the
 /// label, ID, or category. Enter on an empty match asks again.
 pub(super) fn select_integration(choices: Vec<IntegrationChoice>, kind: &str) -> error::Result<String> {
-    let options = choices.iter().map(|choice| Choice::new(choice.clone(), choice.label.clone())).collect();
+    // `render_picker` draws the labels and hints itself, so they lose their control characters here.
+    let clean = |text: &str| opencode_ui::terminal_text(text).into_owned();
+    let options = choices
+        .into_iter()
+        .map(|choice| IntegrationChoice {
+            label: clean(&choice.label),
+            hint: choice.hint.as_deref().map(clean),
+            ..choice
+        })
+        .map(|choice| Choice::new(choice.clone(), choice.label.clone()))
+        .collect();
     let result = prompt::autocomplete("", options)
         .filter(|search, choice| {
             let search = search.to_lowercase();

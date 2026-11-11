@@ -138,8 +138,8 @@ impl Spinner {
             1 => red(S_STEP_CANCEL()),
             _ => red(S_STEP_ERROR()),
         };
-        shared.message = message.to_string();
-        output.write(&format!("{step}  {message}\n"));
+        shared.message = super::clean(message);
+        output.write(&format!("{step}  {}\n", shared.message));
         output.write(SHOW);
         shared.raw.take();
     }
@@ -172,5 +172,5 @@ fn clear_previous(shared: &Shared, output: Output, ci: bool) {
 }
 
 fn trim_dots(message: &str) -> String {
-    message.trim_end_matches('.').to_string()
+    super::clean(message.trim_end_matches('.'))
 }

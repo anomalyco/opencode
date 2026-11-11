@@ -31,6 +31,6 @@ pub fn fail(error: error::Error) -> u8 {
     if let Some(exit) = error.downcast_ref::<Exit>() {
         return exit.0;
     }
-    eprintln!("Error: {error:#}");
+    eprintln!("Error: {}", opencode_ui::terminal_text(&format!("{error:#}")));
     1
 }

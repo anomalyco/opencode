@@ -76,6 +76,13 @@ pub enum Output {
 
 type Validate<'a, V> = Box<dyn Fn(&V) -> Option<String> + 'a>;
 
+/// A caller's text (session titles, provider names, server messages, URLs) without escape sequences or control
+/// characters, before the prompt styles it. Clack writes it raw (`parity/deviations/O89-terminal-text.md`).
+fn clean(text: impl Into<String>) -> String {
+    let text: String = text.into();
+    opencode_ui::terminal_text(&text).into_owned()
+}
+
 /// Whether stdin and stdout are both terminals.
 pub fn is_interactive() -> bool {
     term::interactive()
@@ -110,19 +117,20 @@ pub fn cancel(message: &str) {
 /// The messages with Clack's `output` option, for commands that keep stdout for data.
 impl Output {
     pub fn intro(self, title: &str) {
-        self.write(&format!("{}  {title}\n", gray(S_BAR_START())));
+        self.write(&format!("{}  {}\n", gray(S_BAR_START()), clean(title)));
     }
 
     pub fn outro(self, message: &str) {
-        self.write(&format!("{}\n{}  {message}\n\n", gray(S_BAR()), gray(S_BAR_END())));
+        self.write(&format!("{}\n{}  {}\n\n", gray(S_BAR()), gray(S_BAR_END()), clean(message)));
     }
 
     pub fn cancel(self, message: &str) {
-        self.write(&format!("{}  {}\n\n", gray(S_BAR_END()), red(message)));
+        self.write(&format!("{}  {}\n\n", gray(S_BAR_END()), red(&clean(message))));
     }
 
     /// `log.message(message, { symbol, output })`.
     pub fn log(self, message: &str, symbol: &str) {
+        let message = clean(message);
         let bar = gray(S_BAR());
         let mut parts = vec![bar.clone()];
         for (index, line) in message.split('\n').enumerate() {

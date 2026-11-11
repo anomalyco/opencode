@@ -94,6 +94,6 @@ pub fn run(context: &Context, args: &MiniArgs) -> error::Result<()> {
 
 /// `fail`: the error in TS's colors on stderr, then exit 1.
 fn fail(message: &str) -> error::Result<()> {
-    eprintln!("\x1b[91m\x1b[1mError: \x1b[0m{message}");
+    eprintln!("\x1b[91m\x1b[1mError: \x1b[0m{}", opencode_ui::terminal_text(message));
     Err(Exit(1).into())
 }
