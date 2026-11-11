@@ -145,10 +145,13 @@ starts a pipe process: any command without a terminal. Both return
 - On Unix the child gets its own process group and an empty signal mask with
   default actions (the daemon blocks SIGTERM and SIGINT, and std keeps the
   mask across exec). On Windows it is created with `CREATE_NO_WINDOW` (no
-  console) inside a kill-on-close job. A bare program name is resolved by
-  `CreateProcessW` using the daemon's current directory and `PATH`, not the
-  request's `cwd` or `env`; the daemon never runs a shell, so passing
-  `["/c", command]` to `cmd.exe` is the caller's job.
+  console) inside a kill-on-close job. For a bare executable name,
+  `CreateProcessW` searches the directory containing the daemon executable,
+  the daemon's current directory, the 32-bit and then 16-bit Windows system
+  directories, the Windows directory, and finally the directories in the
+  daemon's `PATH`. This search is independent of the request's `cwd` and `env`,
+  which set the child's working directory and environment. To invoke a shell,
+  the caller must request one explicitly, e.g. `cmd.exe` with `["/c", command]`.
 - `output_path` must be absolute. The daemon opens it before spawning,
   truncating an existing file or creating one (mode `0666` minus the daemon's
   umask on Unix), and refuses a symlink or other reparse point as the final

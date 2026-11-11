@@ -538,7 +538,7 @@ fn read_output(
                     None
                 }
                 WAIT_TIMEOUT => {
-                    // The drain deadline passed with a descendant still writing.
+                    // The drain deadline passed with a descendant still holding the pipe open.
                     drop(read);
                     sink.eof();
                     return;
@@ -1065,7 +1065,7 @@ mod tests {
 
     #[test]
     fn signal_kills_a_jobless_child() {
-        let request = test_request("cmd.exe", &["/d", "/c", "ping -n 30 127.0.0.1 >nul"]);
+        let request = test_request("ping.exe", &["-n", "30", "127.0.0.1"]);
         let OutputPipe { client, .. } = output_pipe().unwrap();
         let process = Arc::new(spawn(1, &request, None, client).unwrap());
         assert!(!is_signalled(&process.process_handle().unwrap()));
