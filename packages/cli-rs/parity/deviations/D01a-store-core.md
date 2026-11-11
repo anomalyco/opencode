@@ -24,3 +24,16 @@
 - Rust: the generated `SessionInfo.location` is `Location.PublicRef` (directory only), so the
   workspace ID is not stored.
 - Reason: this follows the schema. Explicit workspace placement is reserved (root `AGENTS.md`).
+
+## A second `server.connected` invalidates every cached read
+
+- TypeScript: `server.connected` reads `session.active` and the default location again and calls
+  `vcs.sync` and `project.sync`, which do nothing while their reads are cached. The cache is
+  invalidated only when `config.connection` reports a status other than `connected`.
+- Rust: every `server.connected` after the first invalidates every cached read and flushes
+  `Changes::everything`, so VCS and the projects are read again with the rest
+  (`State::apply_event`, `crates/store/src/connection.rs`). The F.7 fold oracle
+  (`parity/fixtures/F.7/folds.json`, `server.connected@loaded`) records the two extra reads.
+- Reason: a reconnect that the status watch coalesced, or a queue-full drop (A09-bounded-queue),
+  never shows a disconnected status, and the events of the old stream are lost (F.7 review,
+  carbon-1).
