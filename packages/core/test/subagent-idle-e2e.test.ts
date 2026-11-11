@@ -334,7 +334,7 @@ describe("subagent idle reports end to end", () => {
           }),
         )
 
-        const launched = yield* h.call("call-launch", { background: true })
+        const launched = yield* h.call("call-launch")
         expect(launched).toMatchObject({ status: "completed", metadata: { status: "running" } })
 
         yield* waitForReports(h, h.parent.id, 1)
@@ -372,7 +372,7 @@ describe("subagent idle reports end to end", () => {
             build: [TestLLM.text("parent ack", "parent-1"), TestLLM.text("parent ack", "parent-2")],
           }),
         )
-        const launched = yield* h.call("call-launch", { background: true })
+        const launched = yield* h.call("call-launch")
         const childID = outputSessionID(launched.metadata)
         yield* waitForReports(h, h.parent.id, 1)
         expect((yield* deliveredReports(h, h.parent.id))[0]!.text).toContain("first answer")
@@ -412,18 +412,18 @@ describe("subagent idle reports end to end", () => {
             build: [TestLLM.text("parent ack", "parent-1"), TestLLM.text("parent ack", "parent-2")],
           }),
         )
-        const launched = yield* h.call("call-launch", { background: true })
+        const launched = yield* h.call("call-launch")
         const childID = outputSessionID(launched.metadata)
         yield* waitForReports(h, h.parent.id, 1)
         yield* h.sessions.wait(childID)
         yield* h.jobs.wait({ id: childID })
 
-        const second = yield* h.call("call-follow-up", { background: true, sessionID: childID })
+        const second = yield* h.call("call-follow-up", { sessionID: childID })
         expect(second).toMatchObject({ metadata: { sessionID: childID, status: "running" } })
         yield* waitForReports(h, h.parent.id, 2)
         expect((yield* deliveredReports(h, h.parent.id))[1]!.text).toContain("second answer")
 
-        const third = yield* h.call("call-follow-up-again", { background: true, sessionID: childID })
+        const third = yield* h.call("call-follow-up-again", { sessionID: childID })
         expect(third).toMatchObject({ metadata: { sessionID: childID, status: "running" } })
         yield* waitForReports(h, h.parent.id, 3)
         expect((yield* deliveredReports(h, h.parent.id))[2]!.text).toContain("third answer")
@@ -454,7 +454,6 @@ describe("subagent idle reports end to end", () => {
                 agent: "fallback",
                 description: "grandchild review",
                 prompt: "review the grandchild fixture",
-                background: true,
               }),
               TestLLM.text("child launched grandchild", "child-turn-1"),
               TestLLM.text("child saw first grandchild report", "child-turn-2"),
@@ -474,7 +473,7 @@ describe("subagent idle reports end to end", () => {
           }),
         )
 
-        const launched = yield* h.call("call-child", { background: true, description: "child review" })
+        const launched = yield* h.call("call-child", { description: "child review" })
         const childID = outputSessionID(launched.metadata)
 
         yield* waitForReports(h, h.parent.id, 1)
@@ -532,7 +531,6 @@ describe("subagent idle reports end to end", () => {
                 agent: "fallback",
                 description: "grandchild review",
                 prompt: "review the grandchild fixture",
-                background: true,
               }),
               TestLLM.text("silent child launched grandchild", "child-turn-1"),
               TestLLM.text("silent child saw grandchild", "child-turn-2"),
@@ -543,7 +541,6 @@ describe("subagent idle reports end to end", () => {
         )
 
         const launched = yield* h.call("call-silent-child", {
-          background: true,
           notify: false,
           description: "silent child review",
         })
@@ -578,7 +575,7 @@ describe("subagent idle reports end to end", () => {
           }),
         )
 
-        const launched = yield* h.call("call-launch", { background: true })
+        const launched = yield* h.call("call-launch")
         const childID = outputSessionID(launched.metadata)
         yield* Deferred.await(crashed)
         yield* h.sessions.wait(childID)
@@ -647,7 +644,7 @@ describe("subagent idle reports end to end", () => {
             type: "tool-call",
             id: "call-launch",
             name: SubagentTool.name,
-            input: { agent: "reviewer", description: "restart review", prompt: "review this", background: true },
+            input: { agent: "reviewer", description: "restart review", prompt: "review this" },
           },
         })
         const childID = outputSessionID(launched.metadata)
@@ -704,7 +701,7 @@ describe("subagent idle reports end to end", () => {
           }),
         )
         const gate = yield* h.llm.gate()
-        const launched = yield* h.call("call-launch", { background: true })
+        const launched = yield* h.call("call-launch")
         const childID = outputSessionID(launched.metadata)
         yield* gate.started
         expect((yield* claims(h))[childID]).toBe(true)
@@ -739,7 +736,7 @@ describe("subagent idle reports end to end", () => {
           }),
         )
         const gate = yield* h.llm.gate()
-        const launched = yield* h.call("call-launch", { background: true })
+        const launched = yield* h.call("call-launch")
         const childID = outputSessionID(launched.metadata)
         yield* gate.started
 
