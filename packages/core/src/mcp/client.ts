@@ -79,7 +79,8 @@ export const isTransient = (error: unknown): boolean =>
         : error instanceof OAuthError
           ? error.code === OAuthErrorCode.TemporarilyUnavailable
           : error instanceof Error &&
-            (("code" in error && typeof error.code === "string" && networkErrors.has(error.code)) ||
+            ((error instanceof TypeError && "code" in error) ||
+              ("code" in error && typeof error.code === "string" && networkErrors.has(error.code)) ||
               (error instanceof TypeError && /fetch|network/i.test(error.message)) ||
               isTransient(error.cause))
 
