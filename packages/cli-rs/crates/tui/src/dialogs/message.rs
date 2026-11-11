@@ -80,7 +80,7 @@ fn copy(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
     let Some(text) = tui.data.read(|state| state.message(session, message).map(text)) else {
         return;
     };
-    if tui.app.copy_to_clipboard(&text) {
+    if crate::features::selection::put(&tui.app, &text) {
         dialogs.clear();
         return;
     }
