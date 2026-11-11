@@ -93,6 +93,7 @@ export async function runPty(side: Side, value: PtyCase) {
     onData: (data) => proc.terminal?.write(data),
   })
   setup.renderer.root.add(terminal)
+  const closed = Promise.withResolvers<void>()
   const proc = Bun.spawn(value.command?.(side, server?.url) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
     env: box.env,
@@ -103,9 +104,12 @@ export async function runPty(side: Side, value: PtyCase) {
         output.text += decoder.decode(data, { stream: true })
         terminal.write(data)
       },
+      exit: () => closed.resolve(),
     },
   })
-  const exited = proc.exited.then((code) => ({ code }))
+  // The program's last writes can still sit in the pseudo-terminal when it exits; it has exited for the
+  // steps once they are read too, when the stream ends.
+  const exited = Promise.all([proc.exited, closed.promise]).then(([code]) => ({ code }))
   const screen = async () => {
     await setup.renderOnce()
     return terminal.screen().lines
@@ -212,6 +216,9 @@ async function waitFor(step: PtyStep, probe: Probe) {
   probe.exited.then(() => (done.exited = true))
   const state = { last: "", since: Date.now() }
   while (Date.now() < deadline) {
+    // Read before the render: output that arrives while a frame renders shows only in the next one, so a
+    // screen is final only when the program had exited before its frame began.
+    const exited = done.exited
     const lines = await probe.screen()
     const text = lines.join("\n")
     if (text !== state.last) Object.assign(state, { last: text, since: Date.now() })
@@ -223,7 +230,7 @@ async function waitFor(step: PtyStep, probe: Probe) {
     const screenOk = want === undefined || (typeof want === "string" ? text.includes(want) : want.test(text))
     const settled = step.settle === undefined || Date.now() - state.since >= step.settle
     if (oscOk && screenOk && settled) return
-    if (done.exited && !(oscOk && screenOk)) return `exited while waiting for ${describe(step)}\n${text}`
+    if (exited && !(oscOk && screenOk)) return `exited while waiting for ${describe(step)}\n${text}`
     await Bun.sleep(25)
   }
   return `timed out waiting for ${describe(step)}\n${state.last}`
