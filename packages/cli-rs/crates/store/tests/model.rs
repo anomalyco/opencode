@@ -1544,6 +1544,13 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
     ("shell exited during the shell read", "settled shells", &[Op::ShellCreate, Op::SyncShells, Op::ShellExit(0)]),
     // More shells start during the read than its overlay holds: it publishes its list and reads again.
     ("shell overlay overflows", "shells", &[Op::SyncShells, Op::ShellBurst]),
+    // O5: a durable `session.text.started` that the snapshot already holds added a second text part, so the reply
+    // showed twice, also after `session.text.ended` (O5-text-started-replay).
+    (
+        "text.started replayed over a snapshot",
+        "transcript ses_1",
+        &[Op::Step(1), Op::Text(1), Op::SyncMessages(1), Op::Release(Read::Head, 1), Op::End(1)],
+    ),
 ];
 
 const OPEN: &[(&str, &str, &[Op])] = &[
@@ -1581,13 +1588,6 @@ const OPEN: &[(&str, &str, &[Op])] = &[
             Op::Reconnect,
             Op::Step(1),
         ],
-    ),
-    // New: a durable `session.text.started` that the snapshot already holds adds a second text part, so the reply
-    // shows twice, also after `session.text.ended` (`on_text_started` pushes a part unconditionally).
-    (
-        "text.started replayed over a snapshot",
-        "transcript ses_1",
-        &[Op::Step(1), Op::Text(1), Op::SyncMessages(1), Op::Release(Read::Head, 1), Op::End(1)],
     ),
     // New: events for a session the store already found missing (a read answered `SessionNotFoundError`) recreate
     // its forms.

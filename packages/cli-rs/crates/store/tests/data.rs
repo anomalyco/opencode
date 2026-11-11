@@ -850,6 +850,40 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
     assert_eq!(data.revision(), third);
 }
 
+/// A part start applied again (a replay over a snapshot that already holds it) adds no second part, while a start
+/// with the next ordinal or another call ID does (O5).
+#[tokio::test]
+async fn part_starts_are_idempotent() {
+    let start = |kind: &str, id: &str, extra: Value| {
+        let mut data = json!({ "sessionID": SESSION, "assistantMessageID": "msg_a" });
+        data.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        event(durable(kind, id, 1, data))
+    };
+    let cases = [
+        ("text", "session.text.started", json!({ "ordinal": 0 }), json!({ "ordinal": 1 })),
+        ("reasoning", "session.reasoning.started", json!({ "ordinal": 0 }), json!({ "ordinal": 1 })),
+        (
+            "tool",
+            "session.tool.input.started",
+            json!({ "id": "call_1", "name": "bash" }),
+            json!({ "id": "call_2", "name": "bash" }),
+        ),
+    ];
+    for (name, kind, first, next) in cases {
+        let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
+        data.remember(info(session(0)));
+        let step = json!({
+            "sessionID": SESSION, "assistantMessageID": "msg_a", "agent": "build",
+            "model": { "providerID": "p", "id": "m" }, "started": 1,
+        });
+        data.apply(&[event(durable("session.step.started", "evt_step", 1, step))]);
+        data.apply(&[start(kind, "evt_1", first.clone()), start(kind, "evt_2", first)]);
+        assert_eq!(message(&data, SESSION, "msg_a")["content"].as_array().unwrap().len(), 1, "{name}: replay");
+        data.apply(&[start(kind, "evt_3", next)]);
+        assert_eq!(message(&data, SESSION, "msg_a")["content"].as_array().unwrap().len(), 2, "{name}: next part");
+    }
+}
+
 /// A reload with the same IDs in the same order, and the same "more" state, reports only the
 /// messages that differ (TS `reconcile`); anything else replaces the list.
 #[tokio::test]
