@@ -1000,7 +1000,7 @@ describe("SubagentTool reporting", () => {
       expect(spawned.content).toEqual([
         {
           type: "text",
-          text: `The subagent is working in the background (sessionID: ${childID}) and will not notify you when it finishes. To check on it, call the subagent tool with this sessionID or read the session.`,
+          text: `The subagent is working in the background (sessionID: ${childID}) and will not notify you when it finishes, so you won't receive its result. Only use notify=false for work whose result you don't need. To send it more work, call subagent again with this sessionID.`,
         },
       ])
       expect((yield* fixture.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
