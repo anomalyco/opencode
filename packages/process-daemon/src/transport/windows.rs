@@ -540,7 +540,7 @@ impl Drop for Operation {
     }
 }
 
-fn event() -> io::Result<OwnedHandle> {
+pub(crate) fn event() -> io::Result<OwnedHandle> {
     // SAFETY: create an unnamed, non-inheritable, initially unset manual-reset event.
     owned_handle(unsafe { CreateEventW(null(), 1, 0, null()) })
 }
