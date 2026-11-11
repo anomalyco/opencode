@@ -16,6 +16,7 @@ import { SessionMessage } from "../message.js"
 import { SessionHistory } from "../history.js"
 import { SessionRecentText } from "../recent-text.js"
 import type { FileAttachment } from "@opencode/schema/prompt"
+import type { SessionRequestMessage } from "@opencode/plugin/effect/session"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
@@ -312,9 +313,20 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
   }
 }
 
-/** Translate projected Session history into canonical @opencode/ai context. */
+/**
+ * Translate projected Session history into canonical @opencode/ai context. Messages built from a stored message carry
+ * its metadata for plugin hooks; SessionModelRequest strips it before the model request.
+ */
 export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+) =>
+  messages.flatMap((message) =>
+    toLLMMessage(message, model, providerMetadataKey).map(
+      (item): SessionRequestMessage =>
+        message.metadata === undefined || item.id !== message.id
+          ? item
+          : Object.assign(item, { metadata: message.metadata }),
+    ),
+  )

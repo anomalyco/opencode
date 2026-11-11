@@ -24,6 +24,7 @@ import type {
   SessionGenerate,
   SessionRequest,
   SessionRequestKind,
+  SessionRequestMessage,
   SessionTitle,
 } from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
@@ -83,7 +84,7 @@ export interface Input {
   readonly model: SessionRunnerModel.Resolved
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
-  readonly messages: Array<Message>
+  readonly messages: Array<SessionRequestMessage>
   readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
@@ -327,7 +328,16 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
+        // Rebuilding a message drops the stored metadata hooks could read, so it never reaches the provider.
+        messages: boundImages(
+          unsupportedParts(
+            shaped.messages.map((message) =>
+              Object.hasOwn(message, "metadata") ? Message.make({ ...message }) : message,
+            ),
+            model.capabilities,
+            model.model.provider,
+          ),
+        ),
         tools: Array.from(hooked, ([name, t]) => ({
           ...t,
           name,
