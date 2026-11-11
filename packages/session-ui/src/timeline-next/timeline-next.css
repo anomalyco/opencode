@@ -131,15 +131,32 @@
 
 /* The output's toggle sits at the end of the command line, so neither block's text is a click target. */
 [data-timeline="next"] [data-component="shell-tool"] [data-slot="bash-command"] {
-  /* Above the command, which shares its grid cell and comes later, so paints over it. Its inset matches the file
-     header's toggle. */
-  [data-slot="bash-toggle"] {
+  /* How the command ended and the output's toggle, above the command, which shares their grid cell and comes later,
+     so paints over it. The inset matches the file header's toggle. */
+  [data-slot="bash-actions"] {
     position: relative;
     z-index: 1;
     grid-area: 1 / 1;
     justify-self: end;
     align-self: center;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-inline-end: 8px;
+  }
+
+  [data-slot="bash-outcome"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    white-space: nowrap;
+    color: var(--v2-text-text-muted);
+
+    &[data-tone="danger"] {
+      color: var(--v2-state-fg-danger);
+    }
   }
 
   [data-slot="bash-toggle-button"] {
@@ -161,6 +178,10 @@
 
   &:has([data-slot="bash-toggle"]) [data-slot="bash-pre"] {
     padding-inline-end: 40px;
+  }
+
+  &:has([data-slot="bash-outcome"]) [data-slot="bash-pre"] {
+    padding-inline-end: 120px;
   }
 }
 

@@ -23,7 +23,15 @@ import {
 } from "../timeline/turn-phase-machine"
 import { errorInfo } from "./errors"
 import { noticeEvent } from "./events"
-import { contentGroup, contentShows, hidesActivity, liveThinkingShows, noticePlacement, textShows } from "./rules"
+import {
+  contentGroup,
+  contentShows,
+  echoesUserShell,
+  hidesActivity,
+  liveThinkingShows,
+  noticePlacement,
+  textShows,
+} from "./rules"
 
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
 
@@ -333,6 +341,7 @@ function constructRows(input: Input) {
 // Everything since the last idle marker is one turn, including prompts steered in meanwhile. Notices before the first
 // turn have none to join, so they lead.
 function constructTurns(input: Input) {
+  const userShellIDs = new Set(input.messages.flatMap((message) => (message.type === "shell" ? [message.shellID] : [])))
   const turns: Turn[] = []
   const leading: Notice[] = []
   const turnByUserID = new Map<string, Turn>()
@@ -367,6 +376,8 @@ function constructTurns(input: Input) {
   }
 
   input.messages.forEach((message) => {
+    if (echoesUserShell(message, userShellIDs)) return
+
     if (isNotice(message)) {
       if (current) current.entries.push({ type: "notice", message })
       else leading.push(message)

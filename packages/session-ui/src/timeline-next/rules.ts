@@ -1,6 +1,7 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { currentToolFailed, currentToolGroupedRead, currentToolInput } from "../message/current-tool-state"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "../timeline/detail"
+import { isInterruptedError } from "../timeline/turn-phase-machine"
 
 /**
  * What the New timeline shows, where, and how. The projection and the rows ask these questions; nothing else reads the
@@ -18,7 +19,8 @@ export type ToolMode = "explore" | "edit" | "run" | "tool"
  * - `line`: one line of activity.
  * - `card`: a command and its output, cut to its first lines until opened.
  * - `file`: a file's changes, cut to the first lines of its diff until opened.
- * - `event`: work that runs on, counted with others like it: Started 2 subagents.
+ * - `event`: work that runs on: a subagent, or a shell started in the background. Grouped, starting it is counted in
+ *   the group's label; on its own, it is counted with others like it: Started 2 subagents.
  */
 export type ToolShape = "line" | "card" | "file" | "event"
 
@@ -27,8 +29,6 @@ export type ToolRule = {
   category: "shell" | "edit" | "subagents" | "tools"
   mode: ToolMode
   shape: ToolShape
-  /** Starts open, whatever the setting. */
-  open?: boolean
   /** Shows only once settled, and never folds into a group. */
   alone?: boolean
   /** Never shows. */
@@ -51,7 +51,7 @@ const tools: Record<string, ToolRule> = {
   write: file,
   patch: file,
   shell: { category: "shell", mode: "run", shape: "card" },
-  execute: { category: "shell", mode: "run", shape: "line", open: true },
+  execute: { category: "shell", mode: "run", shape: "line" },
   subagent: { category: "subagents", mode: "tool", shape: "event" },
   question: { category: "tools", mode: "tool", shape: "line", alone: true },
   todowrite: { category: "tools", mode: "tool", shape: "line", hidden: true },
@@ -73,9 +73,19 @@ export function toolRule(tool: SessionMessageAssistantTool): ToolRule & { name: 
   return { ...rule, name }
 }
 
-/** Whether a call failed: it errored, or the command it ran exited non-zero. */
+/** Whether a call failed: it errored, or the command it ran exited non-zero. A call the user stopped did not fail. */
 export function toolFailed(tool: SessionMessageAssistantTool) {
-  return currentToolFailed({ ...tool, name: toolRule(tool).name })
+  return !toolStopped(tool) && currentToolFailed({ ...tool, name: toolRule(tool).name })
+}
+
+/**
+ * Whether the user stopped a call, by stopping the turn or cancelling its command. The shell reports a cancelled
+ * command as its own error, "Command cancelled".
+ */
+export function toolStopped(tool: SessionMessageAssistantTool) {
+  if (tool.state.status !== "error") return false
+
+  return isInterruptedError(tool.state.error) || tool.state.error.message === "Command cancelled"
 }
 
 /** Whether a part of an assistant message shows. A failure shows only where its category does. */
@@ -86,6 +96,9 @@ export function contentShows(detail: TimelineDetail, content: Content) {
   const rule = toolRule(content)
 
   if (rule.hidden) return false
+
+  // A call stopped before the model finished writing it did nothing.
+  if (toolStopped(content) && Object.keys(currentToolInput(content)).length === 0) return false
 
   if (rule.alone) return content.state.status !== "streaming" && content.state.status !== "running"
 
@@ -113,7 +126,12 @@ export function contentGroup(detail: TimelineDetail, content: Content, commentar
   if (content.type === "reasoning") return detail.thinking.placement === "grouped" ? ("context" as const) : undefined
   const rule = toolRule(content)
 
-  if (rule.shape === "event") return "events" as const
+  // Starting work that runs on is an action like any other, so it joins the activity group where its setting groups
+  // it. A launch that failed keeps its own row, as failures do.
+  if (rule.shape === "event")
+    return detail[rule.category].placement === "grouped" && !toolFailed(content)
+      ? ("context" as const)
+      : ("events" as const)
 
   if (rule.alone && !toolFailed(content)) return undefined
 
@@ -127,19 +145,18 @@ export function contentGroup(detail: TimelineDetail, content: Content, commentar
 }
 
 /**
- * Whether a part starts open. What the user opened or closed always wins. A card or a file shows its first lines
- * whatever the setting, so open means shown in full and they start cut short; a call that errored keeps the error
- * card's own default.
+ * Whether a part starts open. What the user opened or closed always wins. Expanded details show a command's whole
+ * output and a call's details; collapsed ones show a command's last lines and a call's one line. A file shows its name
+ * and changes, its diff opening as `diffOpens` says, and a call that errored opens to its error where details expand.
  */
 export function contentOpens(detail: TimelineDetail, content: Content) {
   if (content.type === "text") return false
 
-  if (content.type === "reasoning") return thoughtOpens(false)
+  if (content.type === "reasoning") return thoughtOpens(detail, false)
   const rule = toolRule(content)
 
-  if (content.state.status !== "error" && (rule.shape === "card" || rule.shape === "file")) return false
-
-  if (rule.open) return true
+  // A stopped call shows as one that ran, so it opens as one would.
+  if (rule.shape === "file" && (content.state.status !== "error" || toolStopped(content))) return false
 
   if (rule.category === "shell" || rule.category === "edit") return detail[rule.category].details === "expanded"
 
@@ -152,11 +169,12 @@ export function diffOpens(detail: TimelineDetail) {
 }
 
 /**
- * A thought is open while the model writes it, so it streams in view, and starts closed once finished, when the next
- * step follows it; opening it shows the thought. This holds whatever the setting.
+ * Whether a thought starts open. Expanded details stream the thought the model is writing in view and close it once
+ * it is finished, when the next step follows; collapsed ones keep it to one line throughout. Opening it shows the
+ * thought.
  */
-export function thoughtOpens(streaming: boolean) {
-  return streaming
+export function thoughtOpens(detail: TimelineDetail, streaming: boolean) {
+  return streaming && detail.thinking.details === "expanded"
 }
 
 /** Whether a thought the model is writing shows, at the end of its turn, in place of the status line. */
@@ -164,17 +182,37 @@ export function liveThinkingShows(detail: TimelineDetail) {
   return detail.thinking.placement !== "hidden"
 }
 
-/** A command the user ran always shows, cut to its first lines. */
-export const userShellOpens = false
+/** A command the user ran always shows, whole where shell details expand and its last lines otherwise. */
+export function userShellOpens(detail: TimelineDetail) {
+  return detail.shell.details === "expanded"
+}
+
+/** The notice the agent gets about a command the user ran repeats that command's own card, so it never shows. */
+export function echoesUserShell(message: SessionMessageInfo, userShellIDs: ReadonlySet<string>) {
+  const shellID = message.type === "synthetic" ? message.metadata?.shellID : undefined
+
+  return (
+    message.type === "synthetic" &&
+    message.metadata?.source === "shell" &&
+    typeof shellID === "string" &&
+    userShellIDs.has(shellID)
+  )
+}
 
 /**
  * Where a notice shows. What the user did and what changed the session always stands on its own. Background work
- * reports its outcome as its own row; a subagent's follows the subagent setting, so it shows wherever its launch did.
+ * reports its outcome as its own row, following the setting its launch follows: a subagent's the subagent setting, a
+ * shell's the shell setting.
  */
 export function noticePlacement(detail: TimelineDetail, message: SessionMessageInfo): TimelinePlacement {
   if (sessionEvent(message)) return "separate"
   const source = message.type === "synthetic" ? message.metadata?.source : undefined
-  const placement = source === "subagent" ? detail.subagents.placement : detail.notices.placement
+  const placement =
+    source === "subagent"
+      ? detail.subagents.placement
+      : source === "shell"
+        ? detail.shell.placement
+        : detail.notices.placement
 
   if (placement === "hidden") return timelineNoticeRequired(message) ? "separate" : "hidden"
 

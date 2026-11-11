@@ -16,11 +16,11 @@ import {
 import { createShellFollower } from "../../tools/shell-output"
 import { ConsoleCopy, toolInput, toolMetadata, type ToolProps } from "../../tools/tool-renderer"
 import { ClampedContent } from "./clamped-content"
-import { ErrorCard } from "./error-card"
 
 /**
- * A shell call always shows its command and output, the output cut to a few lines until expanded. Opening the call
- * means showing the output in full.
+ * A shell call always shows its command and output. Cut short, the output shows its last lines, where a command says how
+ * it went; opening the call shows it in full. How it ended sits on the card when it did not succeed: the exit code, a
+ * timeout, or that it was stopped.
  */
 export function ShellTool(props: ToolProps) {
   const i18n = useI18n()
@@ -50,6 +50,19 @@ export function ShellTool(props: ToolProps) {
   createComputed(on(runProps, (value) => dispatch({ type: "sync", props: value }), { defer: true }))
   const view = createMemo(() => viewShellRun(run()))
   const open = () => props.open ?? expanded()
+
+  const outcome = createMemo(() => {
+    const metadata = props.metadata
+
+    if (metadata.interrupted === true || metadata.status === "killed")
+      return { tone: "neutral" as const, label: i18n.t("ui.timeline.shell.stopped") }
+
+    if (metadata.timeout === true || metadata.status === "timeout")
+      return { tone: "danger" as const, label: i18n.t("ui.timeline.shell.timedOut") }
+
+    if (typeof metadata.exit === "number" && metadata.exit !== 0)
+      return { tone: "danger" as const, label: i18n.t("ui.timeline.shell.exit", { code: metadata.exit }) }
+  })
 
   const followID = createMemo(() => view().follow?.id)
   const followRunning = createMemo(() => view().follow?.running === true)
@@ -88,7 +101,7 @@ export function ShellTool(props: ToolProps) {
           command={view().command}
           output={view().output}
           expanded={open()}
-          tail={props.status === "running"}
+          outcome={outcome()}
           onToggle={() => {
             const next = !open()
 
@@ -101,26 +114,12 @@ export function ShellTool(props: ToolProps) {
   )
 }
 
-/** A command the user ran, shown as the agent's shell calls are, with how it ended when it failed. */
+/** A command the user ran, shown as the agent's shell calls are. */
 export function ShellMessage(props: {
   message: SessionMessageShell
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
-  const i18n = useI18n()
-
-  const error = createMemo(() => {
-    const message = props.message
-
-    if (message.status === "timeout") return i18n.t("ui.tool.shell.timeout")
-
-    if (message.status === "killed") return i18n.t("ui.tool.shell.cancelled")
-
-    if (message.status !== "exited" || message.exit === undefined || message.exit === 0) return
-
-    return i18n.t("ui.tool.shell.exit", { code: message.exit })
-  })
-
   return (
     <div data-component="session-shell-message" data-timeline-part-id={props.message.id}>
       <ShellTool
@@ -137,19 +136,17 @@ export function ShellMessage(props: {
         open={props.open}
         onOpenChange={props.onOpenChange}
       />
-      <Show when={error()}>
-        {(error) => <ErrorCard tool="shell" error={error()} subtitle={props.message.command} />}
-      </Show>
     </div>
   )
 }
 
-// Copy sits on the output only; the command's corner holds the output's toggle once there is more than the cut shows.
+// Copy sits on the output only. The command's corner holds how the command ended, and the output's toggle once there is
+// more than the cut shows.
 function ShellOutput(props: {
   command?: string
   output: string
   expanded: boolean
-  tail: boolean
+  outcome?: { tone: "neutral" | "danger"; label: string }
   onToggle: () => void
 }) {
   const i18n = useI18n()
@@ -174,19 +171,30 @@ function ShellOutput(props: {
         <Show when={props.command}>
           {(command) => (
             <div data-slot="bash-command">
-              <Show when={overflow() || props.expanded}>
-                <div data-slot="bash-toggle">
-                  <Tooltip value={toggleLabel()} placement="top">
-                    <button
-                      type="button"
-                      data-slot="bash-toggle-button"
-                      aria-label={toggleLabel()}
-                      aria-expanded={props.expanded}
-                      onClick={() => props.onToggle()}
-                    >
-                      <Icon name="chevron-grabber-vertical" size="small" />
-                    </button>
-                  </Tooltip>
+              <Show when={props.outcome || overflow() || props.expanded}>
+                <div data-slot="bash-actions">
+                  <Show when={props.outcome}>
+                    {(outcome) => (
+                      <span data-slot="bash-outcome" data-tone={outcome().tone}>
+                        {outcome().label}
+                      </span>
+                    )}
+                  </Show>
+                  <Show when={overflow() || props.expanded}>
+                    <div data-slot="bash-toggle">
+                      <Tooltip value={toggleLabel()} placement="top">
+                        <button
+                          type="button"
+                          data-slot="bash-toggle-button"
+                          aria-label={toggleLabel()}
+                          aria-expanded={props.expanded}
+                          onClick={() => props.onToggle()}
+                        >
+                          <Icon name="chevron-grabber-vertical" size="small" />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  </Show>
                 </div>
               </Show>
               <pre data-slot="bash-pre">
@@ -199,7 +207,7 @@ function ShellOutput(props: {
           {(output) => (
             <div data-slot="bash-result">
               <ConsoleCopy text={output()} label={i18n.t("ui.message.copyOutput")} />
-              <ClampedContent expanded={props.expanded} tail={props.tail} onOverflowChange={setOverflow}>
+              <ClampedContent expanded={props.expanded} tail onOverflowChange={setOverflow}>
                 <pre data-slot="bash-pre">
                   <code>
                     <LinkedText text={output()} />

@@ -4,19 +4,7 @@ import { For, Show, createMemo } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context/data"
 import { taskAgentName } from "../tools/tool-renderer"
-import { summarizeEvents, type TimelineEvent } from "./events"
-
-const verbKeys = {
-  started: "ui.timeline.event.started",
-  ran: "ui.timeline.activity.ran",
-  finished: "ui.timeline.event.finished",
-  stopped: "ui.timeline.event.stopped",
-} as const
-
-const kindKeys = {
-  subagent: "ui.timeline.event.subagents",
-  shell: "ui.timeline.event.shells",
-} as const
+import { kindKeys, summarizeEvents, verbKeys, type TimelineEvent } from "./events"
 
 /**
  * A run of subagent and background shell events, read like a group label: "Started 2 subagents · Finished 1 shell".

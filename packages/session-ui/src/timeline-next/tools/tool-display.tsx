@@ -30,10 +30,10 @@ const tools: Record<string, Component<ToolProps>> = {
 }
 
 /**
- * One call. A call that failed shows as an error card, and a shell that was stopped shows its output and then the
- * card. `tool` is the tool's current name, from the rules.
+ * One call. A call that failed shows as an error card. One the user stopped (`stopped`, from the rules) shows as one
+ * that ran does, a shell saying it was stopped on its card. `tool` is the tool's current name, from the rules.
  */
-export function ToolDisplay(props: ToolProps & { id: string; error?: string }) {
+export function ToolDisplay(props: ToolProps & { id: string; error?: string; stopped?: boolean }) {
   const data = useData()
   const i18n = useI18n()
 
@@ -64,12 +64,15 @@ export function ToolDisplay(props: ToolProps & { id: string; error?: string }) {
       <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
         <Switch>
           <Match when={stopped()}>
-            {(stopped) => (
-              <>
-                <Dynamic component={render()} {...props} output={stopped().output} />
-                <ErrorCard tool={props.tool} error={stopped().notice} subtitle={errorSubtitle()} />
-              </>
-            )}
+            {(stopped) => <Dynamic component={render()} {...props} output={stopped().output} />}
+          </Match>
+          <Match when={props.stopped}>
+            <Dynamic
+              component={render()}
+              {...props}
+              error={undefined}
+              metadata={props.tool === "shell" ? { ...props.metadata, interrupted: true } : props.metadata}
+            />
           </Match>
           <Match when={error()}>
             {(error) => {

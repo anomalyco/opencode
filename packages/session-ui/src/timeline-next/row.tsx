@@ -391,7 +391,7 @@ export function createNextTimelineRowRenderer(input: {
 
               return key
             }}
-            reasoningDefaultOpen={thoughtOpens(false)}
+            reasoningDefaultOpen={thoughtOpens(input.timelineDetail(), false)}
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
             toolDefaultOpen={(tool) => contentOpens(input.timelineDetail(), tool)}
@@ -925,7 +925,7 @@ export function createNextTimelineRowRenderer(input: {
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <ShellMessage
               message={message()}
-              open={input.disclosure.value(message().id) ?? userShellOpens}
+              open={input.disclosure.value(message().id) ?? userShellOpens(input.timelineDetail())}
               onOpenChange={(open) => input.disclosure.set(message().id, open)}
             />
           </div>
@@ -1230,8 +1230,8 @@ export function createNextTimelineRowRenderer(input: {
                     id={current().ref.partID}
                     content={content()}
                     streaming
-                    defaultOpen={thoughtOpens(true)}
-                    open={input.disclosure.value(current().ref.partID) ?? thoughtOpens(true)}
+                    defaultOpen={thoughtOpens(input.timelineDetail(), true)}
+                    open={input.disclosure.value(current().ref.partID) ?? thoughtOpens(input.timelineDetail(), true)}
                     onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
                     onContentRendered={onSizeChange}
                   />

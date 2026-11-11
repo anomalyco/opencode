@@ -1,11 +1,16 @@
 import type { SessionMessageAssistantReasoning } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { TextReveal } from "@opencode/ui/text-reveal"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, Show } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
 import { PacedMarkdown } from "../../message/message-content"
+import { reasoningHeading } from "../heading"
 
-/** A thought on its own row reads like a row of activity: Thought, then how long it took. Opening it shows the thought. */
+/**
+ * A thought on its own row reads like a row of activity: Thought, then how long it took. While the model writes it
+ * closed, it says what the model is thinking about, from the thought's latest heading. Opening it shows the thought.
+ */
 export function ThoughtRow(props: {
   id: string
   content: SessionMessageAssistantReasoning
@@ -16,6 +21,7 @@ export function ThoughtRow(props: {
   onContentRendered?: () => void
 }) {
   const i18n = useI18n()
+  const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : undefined))
 
   const duration = createMemo(() => {
     const time = props.content.time
@@ -47,7 +53,7 @@ export function ThoughtRow(props: {
           props.onOpenChange?.(value)
           props.onContentRendered?.()
         }}
-        trigger={
+        trigger={(open) => (
           <div data-component="context-tool-group-trigger">
             <span data-slot="context-tool-group-title" data-activity="">
               <span data-slot="context-tool-group-verb">
@@ -56,12 +62,19 @@ export function ThoughtRow(props: {
                   active={props.streaming}
                 />
               </span>
+              <Show when={!open() && heading()}>
+                {(value) => (
+                  <span data-slot="context-tool-group-detail">
+                    <TextReveal text={value()} />
+                  </span>
+                )}
+              </Show>
               <Show when={!props.streaming && duration()}>
                 {(value) => <span data-slot="context-tool-group-elapsed">{value()}</span>}
               </Show>
             </span>
           </div>
-        }
+        )}
       >
         <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
       </BasicTool>

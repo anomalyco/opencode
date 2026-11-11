@@ -24,7 +24,8 @@ import {
   toolMetadata,
   type ContextGroupPart,
 } from "../../tools/tool-renderer"
-import { toolRule, type ToolMode } from "../rules"
+import { kindKeys, launchKeys, summarizeEvents, toolEvent, verbKeys } from "../events"
+import { toolRule, toolStopped, type ToolMode } from "../rules"
 import { FileGroup } from "./file-group"
 import { ThoughtRow } from "./thought"
 import { ToolDisplay } from "./tool-display"
@@ -270,6 +271,7 @@ function GroupItem(props: {
           metadata={currentToolMetadata(tool())}
           output={currentToolOutput(tool())}
           error={currentToolError(tool())}
+          stopped={toolStopped(tool())}
           status={tool().state.status}
           defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
           open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
@@ -458,12 +460,39 @@ const modeVerb = {
 
 const decodeChangedPath = Schema.decodeUnknownOption(Schema.Struct({ file: Schema.String }))
 
-/** Names a stretch of the agent's work by its main mode, then what its other calls did: "Edited 4 files · 2 commands". */
-function activityLabel(tools: SessionMessageAssistantTool[], i18n: UiI18n) {
+/**
+ * Names a stretch of the agent's work by its main mode, then what its other calls did: "Edited 4 files · 2 commands,
+ * started 1 shell". Work that runs on is counted by what was started, not among the calls that started it; a stretch of
+ * only that reads like an events row: "Started 2 subagents".
+ */
+function activityLabel(group: SessionMessageAssistantTool[], i18n: UiI18n) {
+  const tools = group.filter((tool) => toolRule(tool).shape !== "event")
+  const launches = summarizeEvents(
+    group.flatMap((tool) => {
+      const event = toolRule(tool).shape === "event" ? toolEvent(tool) : undefined
+
+      return event ? [event] : []
+    }),
+  ).verbs
+  const launched = launches.flatMap((bucket) => {
+    const keys = bucket.verb === "started" ? launchKeys.started : bucket.verb === "ran" ? launchKeys.ran : undefined
+
+    return keys ? bucket.kinds.map((item) => i18n.plural(keys[item.kind], item.count)) : []
+  })
   const modes = new Set(tools.map((tool) => toolRule(tool).mode))
   const mode = modePriority.find((item) => modes.has(item))
 
-  if (!mode) return
+  if (!mode) {
+    const [first, ...rest] = launches
+
+    if (!first) return
+
+    return {
+      verb: i18n.t(verbKeys[first.verb]),
+      main: first.kinds.map((item) => i18n.plural(kindKeys[item.kind], item.count)).join(", "),
+      others: rest.length ? launched.slice(first.kinds.length) : [],
+    }
+  }
 
   const calls = (item: ToolMode) => tools.filter((tool) => toolRule(tool).mode === item)
   const count = (names: string[]) => tools.filter((tool) => names.includes(toolRule(tool).name)).length
@@ -518,7 +547,7 @@ function activityLabel(tools: SessionMessageAssistantTool[], i18n: UiI18n) {
   return {
     verb: i18n.t(modeVerb[mode]),
     main,
-    others: modePriority.filter((item) => item !== mode).flatMap((item) => others[item]),
+    others: [...modePriority.filter((item) => item !== mode).flatMap((item) => others[item]), ...launched],
   }
 }
 

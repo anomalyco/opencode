@@ -20,6 +20,25 @@ export type TimelineEvent = {
   shellID?: string
 }
 
+/** How an events row names each verb and kind: "Started 2 subagents". */
+export const verbKeys = {
+  started: "ui.timeline.event.started",
+  ran: "ui.timeline.activity.ran",
+  finished: "ui.timeline.event.finished",
+  stopped: "ui.timeline.event.stopped",
+} as const
+
+export const kindKeys = {
+  subagent: "ui.timeline.event.subagents",
+  shell: "ui.timeline.event.shells",
+} as const
+
+/** How a group's label counts work it started, beside its other calls: "1 command, started 1 shell". */
+export const launchKeys = {
+  started: { shell: "ui.timeline.activity.startedShells", subagent: "ui.timeline.activity.startedSubagents" },
+  ran: { shell: "ui.timeline.activity.commands", subagent: "ui.timeline.activity.subagents" },
+} as const
+
 const text = (value: unknown) => (typeof value === "string" && value ? value : undefined)
 
 /**

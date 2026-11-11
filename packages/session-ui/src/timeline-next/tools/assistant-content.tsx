@@ -8,7 +8,7 @@ import {
   currentToolOutput,
 } from "../../message/current-tool-state"
 import type { TurnSources } from "../../sources/sources"
-import { toolRule } from "../rules"
+import { toolRule, toolStopped } from "../rules"
 import { ThoughtRow } from "./thought"
 import { ToolDisplay } from "./tool-display"
 
@@ -67,6 +67,7 @@ export function AssistantContent(props: {
             output={currentToolOutput(tool())}
             status={tool().state.status}
             error={currentToolError(tool())}
+            stopped={toolStopped(tool())}
             defaultOpen={props.defaultOpen}
             open={props.toolOpen}
             onOpenChange={props.onToolOpenChange}
