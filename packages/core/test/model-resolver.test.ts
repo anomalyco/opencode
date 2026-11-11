@@ -4,9 +4,12 @@ import { OpenAIChat } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/testing"
 import { ConfigProvider, Effect, Layer } from "effect"
 import { Headers } from "effect/http"
+import { FetchHttpClient } from "effect/http"
 import { AISDKNative } from "@opencode/core/aisdk-native"
 import { Credential } from "@opencode/core/credential"
+import { Config } from "@opencode/core/config"
 import { Integration } from "@opencode/core/integration"
+import { UsageLimits } from "@opencode/core/usage-limits"
 import { Compatibility, ID, Info, Model, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Variant } from "@opencode/core/variant"
@@ -400,7 +403,16 @@ describe("ModelResolver", () => {
       },
       model: () => Effect.die("unused"),
     })
-    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(providers, models, integrations, npm, aisdk)))
+    const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
+    const usageLimits = Layer.mock(UsageLimits.Service)({
+      get: () => Effect.succeed(undefined),
+      go: () => Effect.succeed(undefined),
+    })
+    const layer = ModelResolver.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(providers, models, integrations, config, usageLimits, npm, aisdk, FetchHttpClient.layer),
+      ),
+    )
 
     return withConfigEnv({}, () =>
       Effect.gen(function* () {

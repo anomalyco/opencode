@@ -17,7 +17,9 @@ import { TestLLM } from "@opencode/ai/testing"
 import { AISDK } from "@opencode/core/aisdk"
 import { Credential } from "@opencode/core/credential"
 import { Generate } from "@opencode/core/generate"
+import { Config } from "@opencode/core/config"
 import { Integration } from "@opencode/core/integration"
+import { UsageLimits } from "@opencode/core/usage-limits"
 import { IntegrationConnection } from "@opencode/core/integration/connection"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { ModelsDev } from "@opencode/core/models-dev"
@@ -28,7 +30,7 @@ import { Money } from "@opencode/schema/money"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
-import { HttpClient, HttpClientResponse } from "effect/http"
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
@@ -72,6 +74,11 @@ const npm = Layer.mock(Npm.Service, {
   add: () => Effect.die("unused"),
   which: () => Effect.die("unused"),
 })
+const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
+const usageLimits = Layer.mock(UsageLimits.Service)({
+  get: () => Effect.succeed(undefined),
+  go: () => Effect.succeed(undefined),
+})
 const aisdk = Layer.mock(AISDK.Service, {
   hook: {
     sdk: () => Effect.die("unused"),
@@ -81,7 +88,11 @@ const aisdk = Layer.mock(AISDK.Service, {
 })
 const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 
-const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(providers, models, integrations, npm, aisdk)))
+const resolver = ModelResolver.layer.pipe(
+  Layer.provide(
+    Layer.mergeAll(providers, models, integrations, config, usageLimits, npm, aisdk, FetchHttpClient.layer),
+  ),
+)
 const generateDeps = Layer.mergeAll(models, RequestExecutor.fetchLayer)
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.mergeAll(resolver, client, generateDeps))))
 const resolverIt = testEffect(resolver)
@@ -323,7 +334,7 @@ describe("image and decision generation", () => {
         Provider.Info.make({
           ...Provider.Info.empty(providerID),
           activation: "enabled",
-          settings: 
+          settings:
             // A local host like LM Studio is enabled with no key.
             providerID === "lmstudio"
               ? { baseURL: "http://127.0.0.1:1234/v1", provider: "lmstudio", apiKey: "" }
@@ -430,8 +441,11 @@ describe("image and decision generation", () => {
     ),
   )
   const executor = RequestExecutor.layer.pipe(Layer.provide(http))
+  const mediaConfig = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
   const mediaResolver = ModelResolver.layer.pipe(
-    Layer.provide(Layer.mergeAll(mediaProviders, mediaModels, mediaIntegrations, npm, aisdk)),
+    Layer.provide(
+      Layer.mergeAll(mediaProviders, mediaModels, mediaIntegrations, mediaConfig, npm, aisdk, FetchHttpClient.layer),
+    ),
   )
   const mediaIt = testEffect(
     Generate.layer.pipe(Layer.provide(Layer.mergeAll(mediaResolver, client, mediaModels, executor))),

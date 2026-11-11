@@ -22,6 +22,10 @@ export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Us
 export interface Interface {
   /** The usage limits of the OpenCode Console workspace this location is signed in to, if it is. */
   readonly get: () => Effect.Effect<Info | undefined, UnavailableError>
+  /** The OpenCode Go allowance for a specific credential, if it subscribes to Go. */
+  readonly go: (
+    credential: Credential.Key | Credential.OAuth,
+  ) => Effect.Effect<UsageLimits.Go | undefined, UnavailableError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/UsageLimits") {}
@@ -62,7 +66,16 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ get })
+    const go = Effect.fn("UsageLimits.go")(function* (credential: Credential.Key | Credential.OAuth) {
+      const workspaceID = credential.metadata?.orgID
+      if (typeof workspaceID !== "string") return undefined
+      const server = ConsoleAccess.server(credential)
+      return yield* readGo(http, server, credential, workspaceID).pipe(
+        Effect.catch((error) => Effect.fail(new UnavailableError({ message: error.message }))),
+      )
+    })
+
+    return Service.of({ get, go })
   }),
 )
 
@@ -153,7 +166,7 @@ function readBudgets(http: HttpClient.HttpClient, server: string, credential: Cr
  * The Go allowance, from the inference API that shares the Console's origin. Go refuses (403) a workspace the member
  * doesn't subscribe to Go in, which has no allowance to show.
  */
-function readGo(
+export function readGo(
   http: HttpClient.HttpClient,
   server: string,
   credential: Credential.Key | Credential.OAuth,
