@@ -16,8 +16,8 @@ use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, ExperimentalUsageLimitsInput, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef,
-    ProviderInfo, SessionID, SessionInfo, UsageLimitsInfo,
+    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef, ProviderInfo, SessionID,
+    SessionInfo, UsageLimitsInfo,
 };
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
@@ -89,8 +89,6 @@ pub struct Local {
     state: RefCell<State>,
     listeners: Listeners,
     next_listener: Cell<u64>,
-    /// The keys of the locations whose usage limits are loading.
-    usage_loading: RefCell<HashSet<String>>,
     /// The usage warnings shown, once per model and level while the TUI runs (`usage.tsx` `warned`).
     pub(crate) warned: RefCell<HashSet<String>>,
     /// `--agent`, which a session without an agent draft shows over its own agent (`local.tsx:90-96`).
@@ -110,9 +108,6 @@ pub struct Local {
 struct State {
     /// Where the catalog is read from in the store.
     location: Option<Location>,
-    /// The usage limits by the key of the location the server answered for (`data.location.usage`): absent until
-    /// loaded, `None` when the location is not signed in to OpenCode Console.
-    usage: HashMap<String, Option<UsageLimitsInfo>>,
     preference: Preference,
     ready: bool,
     agent: Option<String>,
@@ -167,7 +162,6 @@ impl Local {
             state: RefCell::new(State::default()),
             listeners: Rc::default(),
             next_listener: Cell::new(0),
-            usage_loading: RefCell::default(),
             warned: RefCell::default(),
             startup_agent: RefCell::default(),
             startup_model: RefCell::default(),
@@ -289,31 +283,14 @@ impl Local {
         Some(Routed { id, session })
     }
 
-    /// `useUsageLimits().load`: loads the current location's limits once, or again with `refresh`, keeping the
-    /// loaded ones meanwhile.
+    /// `useUsageLimits().load`: loads the current location's limits into the store once, or again with `refresh`,
+    /// keeping the loaded ones meanwhile.
     pub fn load_usage(&self, refresh: bool) {
-        let key = self.catalog_location().key();
-        if self.usage_loading.borrow().contains(&key) || (!refresh && self.state.borrow().usage.contains_key(&key)) {
-            return;
+        let location = self.catalog_location();
+        if refresh {
+            self.data.catalog_invalidate(Catalog::UsageLimits, Some(&location));
         }
-        self.usage_loading.borrow_mut().insert(key.clone());
-        let client = self.client.clone();
-        let input = ExperimentalUsageLimitsInput { location: self.location() };
-        let weak = self.this.clone();
-        self.app.spawn(
-            async move { client.experimental_usage_limits(&input).await },
-            bind!(weak, |local, _, result| {
-                local.usage_loading.borrow_mut().remove(&key);
-                match result {
-                    Ok(output) => {
-                        // Filed under the location the server answered for, as `locationResource` publishes.
-                        local.state.borrow_mut().usage.insert(Location::from(&output.location).key(), output.data);
-                        local.notify();
-                    }
-                    Err(error) => log::warn!("usage limits: {error}"),
-                }
-            }),
-        );
+        self.read(Catalog::UsageLimits, &location);
     }
 
     /// The location the catalog and the usage limits are read for (`location.ref ?? data.location.default()`).
@@ -442,12 +419,10 @@ impl Local {
         self.catalog(|data| data?.integration.as_ref()?.iter().find(|item| item.id.0 == id).cloned())
     }
 
-    /// `useUsageLimits().info`: `None` until loaded, `Some(None)` when not signed in.
-    /// The current location's usage limits: `None` until loaded, `Some(None)` when it is not signed in to
-    /// OpenCode Console.
+    /// `useUsageLimits().info`, from the store: `None` until loaded, `Some(None)` when the location is not signed in
+    /// to OpenCode Console.
     pub fn usage(&self) -> Option<Option<UsageLimitsInfo>> {
-        let key = self.catalog_location().key();
-        self.state.borrow().usage.get(&key).cloned()
+        self.catalog(|data| data?.usage_limits.clone())
     }
 
     /// The selected model and what the usage limits leave it, when some limit applies (`limits.usage(model)`).

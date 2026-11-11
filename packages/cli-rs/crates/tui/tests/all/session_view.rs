@@ -453,6 +453,22 @@ fn usage_limits_are_kept_per_location() {
     assert_eq!(h.limits().len(), 2);
 }
 
+// Expected: signing in or out reads the limits the prompt footer shows again, through the store's
+// `credential.updated` rule (`packages/client/src/solid/data.ts:1453-1461`).
+#[test]
+fn a_credential_change_reads_the_footer_limits_again() {
+    let h = mount("ses_a", json!({ "animations": false }));
+    h.wait_for("$5 left");
+    assert_eq!(h.limits().len(), 1);
+    let event: V2Event = serde_json::from_value(json!({
+        "id": "evt_credential", "created": 1, "type": "credential.updated",
+        "data": { "integrationID": "opencode", "credentialID": "credential" },
+    }))
+    .unwrap();
+    h.tui.data.apply(&[event]);
+    h.wait("the limits read again", || h.limits().len() == 2);
+}
+
 // Expected: the transcript and its scroll controls listen to the settings while the session view is mounted, so
 // mounting the view again and again leaves no listener behind.
 #[test]
