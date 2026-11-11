@@ -703,7 +703,7 @@ fn output_pipe() -> Result<OutputPipe> {
                             server.as_raw_handle(),
                             overlapped.as_ptr(),
                             &mut count,
-                            0,
+                            1,
                         );
                     }
                     return Err(error).context("failed to connect output pipe");

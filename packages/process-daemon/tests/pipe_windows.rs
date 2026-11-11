@@ -197,6 +197,15 @@ fn ps_path(path: &Path) -> String {
     path.display().to_string().replace('\'', "''")
 }
 
+/// Writes a batch file. Paths are quoted inside the file, where cmd parses
+/// them normally; quoting them inside the `/c` argument would be mangled by
+/// the MSVCRT escaping applied to command-line arguments.
+fn batch(name: &str, lines: &[String]) -> TempPath {
+    let path = TempPath::script(name, "cmd");
+    fs::write(&path.0, lines.join("\r\n") + "\r\n").unwrap();
+    path
+}
+
 #[test]
 fn reports_ordered_output_and_exit_code_without_a_terminal() {
     let service = TerminalService::default();
@@ -502,19 +511,21 @@ fn signal_reaches_a_grandchild_in_the_job() {
             [System.IO.File]::WriteAllText('{}', "$PID")
             Start-Sleep -Seconds 60
             "#,
-            pid_file.0.display()
+            ps_path(&pid_file.0)
         ),
     );
-    let (info, _file) = start(&service, |file| {
-        cmd(
-            &format!(
-                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {} \
-                 & ping -n 60 127.0.0.1",
+    let outer = batch(
+        "grandchild-outer",
+        &[
+            "@echo off".to_string(),
+            format!(
+                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
                 inner.0.0.display()
             ),
-            file,
-        )
-    });
+            "ping -n 60 127.0.0.1".to_string(),
+        ],
+    );
+    let (info, _file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
     let grandchild = read_pid(&pid_file.0);
     assert!(alive(grandchild));
     service.signal(info.id, ProcessSignal::Term).unwrap();
@@ -553,16 +564,18 @@ fn terminate_does_not_hang_on_a_grandchild() {
             ps_path(&pid_file.0)
         ),
     );
-    let (info, _file) = start(&service, |file| {
-        cmd(
-            &format!(
-                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {} \
-                 & ping -n 60 127.0.0.1",
+    let outer = batch(
+        "terminate-outer",
+        &[
+            "@echo off".to_string(),
+            format!(
+                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
                 inner.0.0.display()
             ),
-            file,
-        )
-    });
+            "ping -n 60 127.0.0.1".to_string(),
+        ],
+    );
+    let (info, _file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
     let grandchild = read_pid(&pid_file.0);
     assert!(alive(grandchild));
     let started = Instant::now();
@@ -578,19 +591,41 @@ fn terminate_does_not_hang_on_a_grandchild() {
 #[test]
 fn a_noisy_grandchild_still_exits_after_the_drain() {
     let service = TerminalService::default();
+    let marker = TempPath::new("noisy-marker");
     let inner = Script::powershell(
         "noisy-grandchild",
-        "while ($true) { [Console]::Out.Write('x') }",
+        &format!(
+            r#"
+            # Prove the pipe is live before the parent exits.
+            [Console]::Out.Write('x')
+            [Console]::Out.Flush()
+            [System.IO.File]::WriteAllText('{}', 'started')
+            while ($true) {{
+                [Console]::Out.Write('x')
+            }}
+            "#,
+            ps_path(&marker.0)
+        ),
     );
-    let (info, file) = start(&service, |file| {
-        cmd(
-            &format!(
-                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {}",
+    // A batch parent: it waits for the marker, so the grandchild is already
+    // writing when the parent exits and the drain deadline is exercised.
+    let outer = batch(
+        "noisy-outer",
+        &[
+            "@echo off".to_string(),
+            format!(
+                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
                 inner.0.0.display()
             ),
-            file,
-        )
-    });
+            ":wait".to_string(),
+            format!("if exist \"{}\" goto done", marker.0.display()),
+            "ping -n 2 127.0.0.1 >nul".to_string(),
+            "goto wait".to_string(),
+            ":done".to_string(),
+            "exit /b 0".to_string(),
+        ],
+    );
+    let (info, file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
     let finished = run(&service, info.id, &file);
     assert_eq!(finished.exit.exit_code, Some(0));
     assert!(
@@ -615,15 +650,17 @@ fn signal_after_a_normal_exit_kills_a_leftover_grandchild() {
             ps_path(&pid_file.0)
         ),
     );
-    let (info, _file) = start(&service, |file| {
-        cmd(
-            &format!(
-                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {}",
+    let outer = batch(
+        "leftover-outer",
+        &[
+            "@echo off".to_string(),
+            format!(
+                "start /b powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
                 inner.0.0.display()
             ),
-            file,
-        )
-    });
+        ],
+    );
+    let (info, _file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
     let grandchild = read_pid(&pid_file.0);
     let exit = service.wait(info.id).unwrap().recv().unwrap();
     assert_eq!(exit.exit_code, Some(0));
