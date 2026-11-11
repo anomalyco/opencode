@@ -1,16 +1,17 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("fireworks")
 const baseURL = "https://api.fireworks.ai/inference/v1"
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput
@@ -34,11 +35,21 @@ export const route = Route.make({
 export const routes = [route]
 
 export const configure = (input: Config = {}) => {
-  const configured = route.with(bearerRouteDefaults(input, "FIREWORKS_API_KEY", baseURL))
+  const options = bearerRouteDefaults(input, "FIREWORKS_API_KEY", baseURL)
+  const configured = route.with(options)
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    provider: id,
+    endpoint: options.endpoint,
+    auth: options.auth,
+    headers: input.headers,
+    http: input.http,
+  })
   return {
     id,
     model: (modelID: string | ModelID) =>
-      configured.model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+      configured.model<OpenAIProviderOptionsInput>({ id: modelID, capabilities: { promptCacheKey: true } }),
+    embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      embeddingRoute.model({ id: modelID, providerOptions }),
     configure,
   }
 }
@@ -47,5 +58,10 @@ export const provider = configure()
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(toConfig(settings)).model(modelID)
+
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
+}
 
 export * as Fireworks from "./fireworks.js"

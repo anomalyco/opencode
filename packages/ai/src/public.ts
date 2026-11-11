@@ -12,8 +12,7 @@ export {
   ProviderMetadata,
   HttpTimeout,
   RequestEncoding,
-  GenerationOptions,
-  LanguageModelDefaults,
+  GENERATION_KEYS,
   ReasoningEfforts,
   ReasoningEffort,
   LanguageModelCompatibility,
@@ -93,8 +92,8 @@ export type {
   BaseRequest,
   ContentPartInput,
   GenerationOptionsFields,
-  GenerationOptionsInput,
   HttpOptions,
+  RequestOptions,
   LanguageModelInput,
   LanguageModelProviderOptions,
   LLMRequest,
@@ -153,6 +152,16 @@ export type {
   DecisionResponseFor,
   DecisionModelRoute,
 } from "./decision.js"
+export { EmbeddingModel, EmbeddingModelSchema, EmbeddingResponse, EmbeddingUsage, EmbeddingValue } from "./embedding.js"
+export type {
+  EmbeddingInputType,
+  EmbeddingModelOptions,
+  EmbeddingModelRoute,
+  EmbeddingOptions,
+  EmbeddingRequest,
+  EmbeddingRequestInput,
+  EmbeddingValueInput,
+} from "./embedding.js"
 export { Media } from "./media.js"
 export type {
   AwaitOptions as GenerationAwaitOptions,

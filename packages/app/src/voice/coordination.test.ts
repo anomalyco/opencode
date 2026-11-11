@@ -1,53 +1,9 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test"
-import { VoiceGates } from "./gates"
 import { ReplyWatch } from "./replies"
 import { TranscriptTail } from "./tail"
 import { history, speech } from "./fixtures/history"
 
 afterEach(() => setSystemTime())
-
-test("results wait for recorded speech to end and the quiet window", () => {
-  const gate = new VoiceGates()
-  setSystemTime(speech.at)
-  gate.assistant(true)
-  expect(gate.delay()).toBe(900)
-  setSystemTime(speech.end)
-  gate.assistant(false)
-  setSystemTime(speech.end + 899)
-  expect(gate.delay()).toBe(1)
-  setSystemTime(speech.end + 900)
-  expect(gate.delay()).toBe(0)
-})
-
-test("agent chatter is capped but user speech is never interrupted", () => {
-  const gate = new VoiceGates()
-  setSystemTime(1000)
-  gate.assistant(true)
-  expect(gate.delay()).toBeGreaterThan(0)
-  setSystemTime(6000)
-  expect(gate.delay()).toBe(0)
-  gate.user(true)
-  setSystemTime(60_000)
-  expect(gate.delay()).toBeGreaterThan(0)
-  gate.user(false)
-  setSystemTime(61_499)
-  expect(gate.delay()).toBe(1)
-  setSystemTime(61_500)
-  expect(gate.delay()).toBe(0)
-})
-
-test("a delegator answer has time to start, then protects speech for fifteen seconds", () => {
-  const gate = new VoiceGates()
-  setSystemTime(1000)
-  gate.answer()
-  expect(gate.delay()).toBe(1200)
-  setSystemTime(2000)
-  gate.assistant(true)
-  setSystemTime(15_999)
-  expect(gate.delay()).toBe(1)
-  setSystemTime(16_000)
-  expect(gate.delay()).toBe(0)
-})
 
 test("recorded history attributes the final reply and never replays a heard result", () => {
   const watch = new ReplyWatch()

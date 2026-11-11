@@ -362,7 +362,6 @@ export const dict = {
   "session.new.project.search": "Iskanje projektov",
   "session.new.project.add": "Dodajte projekt",
   "session.new.workspace.runIn": "Zaženi sejo",
-  "session.new.workspace.triggerLocal": "Lokalno",
   "session.new.workspace.local": "Lokalno skladišče",
   "session.new.git.none": "Ne Git",
   "session.header.open.finder": "Finder",

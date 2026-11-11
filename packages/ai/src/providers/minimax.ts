@@ -6,12 +6,18 @@ import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type LLMRequest, type ModelID, type ProviderOptions } from "../schema/index.js"
+import {
+  ProviderID,
+  type LLMRequest,
+  type ModelID,
+  type ProviderOptions,
+  type RequestOptions,
+} from "../schema/index.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("minimax")
@@ -36,7 +42,7 @@ export type ResponsesOptionsInput = {
 
 export type ProviderOptionsInput = MessagesOptionsInput | ChatOptionsInput | ResponsesOptionsInput
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     /** Overrides the selected API's base URL, including its version prefix. */
     readonly baseURL?: string
@@ -119,7 +125,7 @@ export const configure = (input: Config = {}) => {
   const chat = (modelID: string | ModelID) =>
     chatRoute.with(defaults).model<ChatOptionsInput>({
       id: modelID,
-      compatibility: { supportsStrictMode: false },
+      capabilities: { tools: { strict: false } },
     })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(defaults).model<ResponsesOptionsInput>({ id: modelID })

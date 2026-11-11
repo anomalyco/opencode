@@ -65,6 +65,8 @@ export type OAuthAuthorization = {
   | {
       readonly mode: "auto"
       readonly callback: Effect.Effect<Credential.OAuth, unknown>
+      /** Hands `callback` the redirect URL a user pasted, for when the browser cannot reach this machine. */
+      readonly submit?: (redirect: string) => Effect.Effect<void, unknown>
     }
   | {
       readonly mode: "code"
@@ -605,6 +607,7 @@ const layer = Layer.effect(
         url: authorization.url,
         instructions: authorization.instructions,
         mode: authorization.mode,
+        ...(authorization.mode === "auto" && authorization.submit ? { paste: true } : {}),
         time,
       })
     })
@@ -705,25 +708,9 @@ const layer = Layer.effect(
             .get()
             .integrations.get(credential.integrationID)
             ?.implementations.get(credential.value.methodID)?.refresh
-          const expiring = (value: Credential.OAuth) =>
-            Clock.currentTimeMillis.pipe(
-              Effect.map((now) => value.expires <= now + Duration.toMillis(Duration.minutes(5))),
-            )
-          if (!refresh || !(yield* expiring(credential.value))) return credential.value
-          return yield* authorize(
-            credentials.lock(
-              credential.id,
-              Effect.gen(function* () {
-                // Another Location may have refreshed while this caller waited.
-                const current = yield* credentials.get(credential.id)
-                if (!current || current.value.type !== "oauth") return undefined
-                if (!(yield* expiring(current.value))) return current.value
-                const value = yield* refresh(current.value).pipe(Effect.timeout("30 seconds"))
-                yield* credentials.update(current.id, { value })
-                return value
-              }),
-            ),
-          )
+          if (!refresh || !Credential.expiring(credential.value, yield* Clock.currentTimeMillis))
+            return credential.value
+          return yield* authorize(credentials.refresh(credential.id, { stale: Credential.expiring, refresh }))
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -797,6 +784,9 @@ const layer = Layer.effect(
           })
           if (!attempt) return yield* new AttemptNotFoundError(input)
           if (attempt.status !== "pending") return
+          // The attempt still settles through its callback; clients keep polling status for the result.
+          if (attempt.authorization.mode === "auto" && attempt.authorization.submit && input.code !== undefined)
+            return yield* authorize(attempt.authorization.submit(input.code))
           if (attempt.authorization.mode === "code" && input.code === undefined) {
             return yield* new CodeRequiredError({ attemptID: input.attemptID })
           }

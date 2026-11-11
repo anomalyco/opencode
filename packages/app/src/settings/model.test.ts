@@ -6,6 +6,7 @@ import {
   settingsSchema,
   settingsPersistence,
   defaultSettings,
+  recentSessionsAvailable,
   monoDefault,
   monoFontFamily,
   sansDefault,
@@ -93,12 +94,12 @@ describe("settings schema", () => {
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: false,
         showTurnDiffs: false,
-        newMessagesDivider: true,
         backgroundActivity: "left",
         timelineWidth: "comfortable",
         newIcons: false,
         foldUserMessages: false,
         newQuestionUI: false,
+        sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
       },
@@ -128,6 +129,15 @@ describe("settings schema", () => {
     })
   })
 
+  test.each(["list", "projects", "customize", "recent"])("round trips saved side-tab organization %s", (mode) => {
+    const settings = decode({ general: { sidebarOrganize: mode } })
+    expect(decode(encode(settings)).general.sidebarOrganize).toBe(mode)
+  })
+
+  test("the retired Recent sessions switch does not opt into Recent organization", () => {
+    expect(decode({ general: { recentSessions: true } }).general.sidebarOrganize).toBe("list")
+  })
+
   test("defaults invalid preferences locally while retaining valid siblings", () => {
     const settings = decode({
       general: {
@@ -139,6 +149,7 @@ describe("settings schema", () => {
         backgroundActivity: "invalid",
         timelineWidth: "invalid",
         newQuestionUI: "invalid",
+        sidebarOrganize: "off",
       },
       appearance: { fontSize: "large", mono: "Custom Mono", tabLayout: "vertical", showProjectName: true },
       permissions: { autoApprove: true, autoApproveProjects: { on: true, off: false, bad: "yes" } },
@@ -156,6 +167,7 @@ describe("settings schema", () => {
       backgroundActivity: "left",
       timelineWidth: "comfortable",
       newQuestionUI: false,
+      sidebarOrganize: "list",
     })
     expect(settings.appearance).toEqual({
       fontSize: 14,
@@ -199,6 +211,11 @@ describe("settings schema", () => {
       Schema.encodeUnknownSync(settingsSchema)({ ...decode({}), appearance: { fontSize: "large" } }),
     ).toThrow()
   })
+})
+
+test.each(["local", "dev", "beta", "prod", undefined] as const)("Recent availability in %s", (channel) => {
+  expect(recentSessionsAvailable("desktop", channel)).toBe(channel === "local" || channel === "dev")
+  expect(recentSessionsAvailable("web", channel)).toBe(false)
 })
 
 test("font defaults are Inter and IBM Plex Mono", () => {

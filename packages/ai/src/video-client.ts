@@ -1,6 +1,6 @@
 import { Context } from "effect"
 import { MediaClient } from "./media-client.js"
-import { VideoOutputEvent, VideoFinishEvent, type VideoEvent, type VideoRequest, type VideoResponse } from "./video.js"
+import type { VideoEvent, VideoRequest, VideoResponse } from "./video.js"
 
 export type Interface = MediaClient.Interface<VideoRequest, VideoEvent, VideoResponse>
 
@@ -13,11 +13,8 @@ export const VideoClient = {
   ...MediaClient.make(Service, {
     modality: "video",
     responseEvents: (response: VideoResponse) => [
-      ...response.videos.map((video, index) => VideoOutputEvent.make({ index, video })),
-      VideoFinishEvent.make({
-        usage: response.usage,
-        providerMetadata: response.providerMetadata,
-      }),
+      ...response.videos.map((video, index) => ({ type: "video" as const, index, video })),
+      { type: "finish" as const, usage: response.usage, providerMetadata: response.providerMetadata },
     ],
   }),
 } as const

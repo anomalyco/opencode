@@ -6,6 +6,7 @@ import type { ServerConnection } from "@/runtime/server/registry"
 import { ServerScope } from "@/runtime/server/scope"
 import type { Tab } from "@/shell/tabs/tabs"
 import type { createNotificationCoordinator } from "@/shell/notifications/coordinator"
+import type { AsyncStorage } from "@solid-primitives/storage"
 
 type NotificationDelivery = Parameters<ReturnType<typeof createNotificationCoordinator>["system"]>[1]
 
@@ -21,6 +22,8 @@ const sounds: string[] = []
 const clicks: Array<() => void> = []
 
 const selected: string[] = []
+
+const desktopStorage = new Map<string, AsyncStorage>()
 
 const tabs = {
   store: new Array<Tab>(),
@@ -63,7 +66,9 @@ beforeAll(async () => {
   mock.module("@/runtime/platform/platform", () => ({
     ...real.platform,
     usePlatform: () => ({
-      platform: "web",
+      platform: desktopStorage.has("desktop") ? "desktop" : "web",
+      windowID: "notification-test",
+      storage: () => desktopStorage.get("desktop"),
       notify: async (title: string, _description?: string, onClick?: () => void) => {
         alerts.push(title)
 
@@ -109,6 +114,7 @@ beforeEach(() => {
   sounds.length = 0
   clicks.length = 0
   selected.length = 0
+  desktopStorage.clear()
   Object.assign(preferences, {
     autoApprove: false,
     agent: true,
@@ -166,6 +172,7 @@ test.each(
     createState({
       sdk: {
         scope: ServerScope.local,
+        connection: { status: () => "connected" },
         event: {
           listen: (listener: (event: OpenCodeEvent) => void) => {
             listeners.push(listener)
@@ -264,6 +271,7 @@ test.each([
     createState({
       sdk: {
         scope: ServerScope.local,
+        connection: { status: () => "connected" },
         event: {
           listen: (listener: (event: OpenCodeEvent) => void) => {
             listeners.push(listener)
@@ -288,6 +296,155 @@ test.each([
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(alerts).toEqual([title])
   dispose()
+})
+
+test("manual unread edits wait for desktop storage to load", async () => {
+  const loaded = Promise.withResolvers<string | null>()
+
+  const hydrated = Promise.withResolvers<void>()
+
+  desktopStorage.set("desktop", {
+    getItem: (key) => (key === "notification.manual-unread" ? loaded.promise : Promise.resolve(null)),
+    setItem: async () => {},
+    removeItem: async () => {},
+  })
+
+  const mounted = createRoot((dispose) => {
+    const state = createState({
+      sdk: {
+        scope: ServerScope.local,
+        connection: { status: () => "connected" },
+        event: { listen: () => () => {} },
+      },
+      data: {
+        session: {
+          root: (id: string) => id,
+          get: () => ({ id: "desktop-marked", time: { idle: 1, viewed: 1 } }),
+        },
+      },
+      coordinator: {},
+    })
+
+    createEffect(() => {
+      if (state.session.ready()) hydrated.resolve()
+    })
+
+    return { dispose, state }
+  })
+
+  try {
+    expect(mounted.state.session.ready()).toBe(false)
+    mounted.state.session.opened("desktop-marked")
+    mounted.state.session.markUnread("desktop-new")
+    loaded.resolve(JSON.stringify({ sessions: ["desktop-marked", "desktop-other"] }))
+    await hydrated.promise
+    expect(mounted.state.session.manuallyUnread("desktop-marked")).toBe(false)
+    expect(mounted.state.session.manuallyUnread("desktop-other")).toBe(true)
+    expect(mounted.state.session.manuallyUnread("desktop-new")).toBe(true)
+  } finally {
+    mounted.dispose()
+  }
+})
+
+test("manual unread marks survive remounts and clear on read, reopen or deletion", () => {
+  const views: { sessionID: string; idle: number }[] = []
+
+  const listeners = new Set<(event: OpenCodeEvent) => void>()
+
+  const [sessions, setSessions] = createStore({
+    marked: { id: "manual-marked", time: { idle: 3, viewed: 3 }, location: { directory: "/manual" } },
+    other: { id: "manual-other", time: { idle: 4, viewed: 4 }, location: { directory: "/manual" } },
+  })
+
+  const start = () =>
+    createRoot((dispose) => ({
+      dispose,
+      state: createState({
+        sdk: {
+          scope: ServerScope.local,
+          connection: { status: () => "connected" },
+          event: {
+            listen: (listener: (event: OpenCodeEvent) => void) => {
+              listeners.add(listener)
+
+              return () => listeners.delete(listener)
+            },
+          },
+          api: {
+            session: {
+              view: async (input: { sessionID: string; idle: number }) => {
+                views.push(input)
+                setSessions("marked", "time", "viewed", input.idle)
+              },
+            },
+          },
+        },
+        data: {
+          session: {
+            root: (id: string) => (id === "manual-child" ? sessions.marked.id : id),
+            get: (id: string) => Object.values(sessions).find((session) => session.id === id),
+            list: () => Object.values(sessions),
+          },
+        },
+        coordinator: {},
+      }),
+    }))
+
+  vi.useFakeTimers()
+  const first = start()
+
+  try {
+    first.state.session.markUnread("manual-child")
+    first.state.session.markUnread(sessions.marked.id)
+    first.state.session.markUnread(sessions.other.id)
+    expect(first.state.session.unread("manual-child")).toBe(true)
+    expect(first.state.project.hasUnread("/manual")).toBe(true)
+    expect(views).toEqual([])
+    vi.runOnlyPendingTimers()
+    first.dispose()
+
+    const second = start()
+
+    try {
+      expect(second.state.session.unread(sessions.marked.id)).toBe(true)
+      second.state.session.markRead("manual-child")
+      expect(second.state.session.unread(sessions.marked.id)).toBe(false)
+      expect(second.state.session.unread(sessions.other.id)).toBe(true)
+      expect(views).toEqual([])
+      second.state.session.markUnread(sessions.marked.id)
+      setSessions("marked", "time", "idle", 5)
+      second.state.session.markViewed("manual-child")
+      expect(second.state.session.unread(sessions.marked.id)).toBe(true)
+      second.state.session.opened("manual-child")
+      expect(second.state.session.unread(sessions.marked.id)).toBe(false)
+      second.state.session.markUnread(sessions.marked.id)
+      listeners.forEach((listener) =>
+        listener({
+          type: "session.deleted",
+          id: "manual-deleted",
+          created: 0,
+          location: sessions.marked.location,
+          data: { sessionID: sessions.marked.id },
+        }),
+      )
+      expect(second.state.session.unread(sessions.marked.id)).toBe(false)
+      second.state.project.markViewed("/manual")
+      expect(second.state.project.hasUnread("/manual")).toBe(false)
+
+      setSessions("marked", "time", "idle", 6)
+      second.state.session.markRead(sessions.marked.id)
+      expect(views).toEqual([
+        { sessionID: sessions.marked.id, idle: 5 },
+        { sessionID: sessions.marked.id, idle: 6 },
+      ])
+      expect(second.state.session.unread(sessions.marked.id)).toBe(false)
+    } finally {
+      second.dispose()
+    }
+  } finally {
+    first.dispose()
+    vi.useRealTimers()
+  }
 })
 
 test("unread state and viewing follow the server's idle and viewed watermarks", async () => {
@@ -315,6 +472,7 @@ test("unread state and viewing follow the server's idle and viewed watermarks", 
     const state = createState({
       sdk: {
         scope: ServerScope.local,
+        connection: { status: () => "connected" },
         event: { listen: () => () => {} },
         api: {
           session: {
@@ -368,11 +526,21 @@ test("unread state and viewing follow the server's idle and viewed watermarks", 
   setStore("sessions", "root", "time", "idle", 6)
   expect(state.session.unread("root")).toBe(true)
   state.project.markViewed("/project")
+  expect(views.slice(2)).toEqual([{ sessionID: "root", idle: 6 }])
+
+  // Menu and Inbox actions mark sessions viewed from event handlers, with nothing to re-run them: a failed report
+  // still retries on its own, and a sibling's success does not cancel that retry.
+  setStore("viewing", undefined)
+  setStore("sessions", "root", "time", "idle", 8)
+  failures.remaining = 1
+  state.project.markViewed("/project")
   state.project.markViewed("/other")
-  expect(views.slice(2)).toEqual([
-    { sessionID: "root", idle: 6 },
+  expect(views.slice(3)).toEqual([
+    { sessionID: "root", idle: 8 },
     { sessionID: "other", idle: 4 },
   ])
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  expect(views.slice(5)).toEqual([{ sessionID: "root", idle: 8 }])
   dispose.dispose()
 })
 
@@ -449,17 +617,14 @@ test("unread state honours the old local list until its viewed state is carried 
   }
 
   const first = start()
-  // Until the stored list is read, nothing it had read can flash unread.
-  expect(unread(first.state)).toEqual([])
-  await advance(0)
-
-  // Nothing read here lights up, while a session that went idle after the list was found is new.
+  // localStorage holds the old list, so it is read at once: nothing read here lights up, while a session that went
+  // idle after the list was found is new.
   expect(unread(first.state)).toEqual(["unread-here", "new"])
 
   // The carry-over waits for startup to settle, then a failed report keeps the list for the next connection.
-  await advance(4_999)
+  await advance(4_000)
   expect(lists).toEqual([])
-  await advance(1)
+  await advance(1_000)
   expect(views).toEqual([{ sessionID: "read-here", idle: 5 }])
   expect(JSON.parse(localStorage.getItem(key) ?? "null")).toMatchObject({ started: 10 })
   first.dispose()

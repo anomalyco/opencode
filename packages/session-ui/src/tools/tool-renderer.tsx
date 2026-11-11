@@ -2,6 +2,7 @@
 import {
   Component,
   batch,
+  createComputed,
   createEffect,
   createMemo,
   createSignal,
@@ -14,6 +15,7 @@ import {
   Switch,
   Index,
   on,
+  untrack,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -25,6 +27,7 @@ import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
+import { createDisclosure } from "../components/disclosure"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { ToolErrorCard } from "../components/tool-error-card"
@@ -35,6 +38,7 @@ import { createImagePreview } from "../components/image-preview"
 import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
+import { formatExecuteOutput } from "@opencode/util/execute-output"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
@@ -62,9 +66,23 @@ import {
   readImagePath,
   type ExecuteToolCall,
 } from "../message/current-tool-state"
-import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
+import { AssistantReasoningContent } from "../message/message-content"
+import { createCopyFeedback } from "../components/copy"
 import { stripAnsi } from "./ansi"
-import { followShellOutput } from "./shell-output"
+import { createShellFollower } from "./shell-output"
+import {
+  createShellRunState,
+  shellRunProps,
+  subagentRunProps,
+  transitionShellRun,
+  transitionSubagentRun,
+  viewShellRun,
+  viewSubagentRun,
+  INITIAL_SUBAGENT_RUN_STATE,
+  stoppedShell,
+  type ShellRunEvent,
+  type SubagentRunState,
+} from "./run-machine"
 import { LinkedText } from "../components/linked-text"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
@@ -146,6 +164,8 @@ const toolMetadata = Schema.decodeUnknownSync(
     shellID: optional(Schema.String),
     status: optional(Schema.String),
     background: optional(Schema.Boolean),
+    interrupted: optional(Schema.Boolean),
+    notice: optional(Schema.String),
     count: optional(Schema.Finite),
     matches: optional(Schema.Finite),
     files: optional(Schema.Array(Schema.Unknown)),
@@ -225,7 +245,7 @@ function relativizeProjectPath(path: string, directory?: string) {
 
   if (!path.startsWith(prefix)) return path
 
-  return path.slice(directory.length)
+  return path.slice(prefix.length)
 }
 
 function displayDirectory(path: string | undefined) {
@@ -848,8 +868,9 @@ export function CurrentReadToolGroup(props: {
   onSizeChange?: () => void
 }) {
   const i18n = useI18n()
-  const [state, setState] = createStore({ open: false, truncated: false })
-  const open = () => props.open ?? state.open
+  const [state, setState] = createStore({ truncated: false })
+  const disclosure = createDisclosure({ open: () => props.open, onOpenChange: (open) => props.onOpenChange?.(open) })
+  const open = disclosure.open
   const expandable = () => open() || state.truncated
 
   const pending = createMemo(() =>
@@ -877,9 +898,7 @@ export function CurrentReadToolGroup(props: {
 
   const toggle = () => {
     if (!expandable()) return
-    const next = !open()
-    setState("open", next)
-    props.onOpenChange?.(next)
+    disclosure.toggle()
     props.onSizeChange?.()
   }
 
@@ -1284,35 +1303,19 @@ function ToolFileAccordion(props: {
   forceOpen?: boolean
   defer?: boolean
 }) {
-  const [expanded, setExpanded] = createSignal(props.defaultOpen ?? false)
-  const [visible, setVisible] = createSignal(false)
-  const open = () => props.open ?? expanded()
-
-  const change = (value: boolean) => {
-    if (props.open === undefined) setExpanded(value)
-    props.onOpenChange?.(value)
-  }
-
-  createEffect(() => {
-    if (props.forceOpen && !open()) change(true)
-  })
-
-  createEffect(() => {
-    if (!open()) {
-      setVisible(false)
-
-      return
-    }
-
-    const frame = requestAnimationFrame(() => setVisible(true))
-    onCleanup(() => cancelAnimationFrame(frame))
+  const disclosure = createDisclosure({
+    open: () => props.open,
+    defaultOpen: () => props.defaultOpen ?? false,
+    forceOpen: () => props.forceOpen ?? false,
+    defer: () => props.defer ?? false,
+    onOpenChange: (open) => props.onOpenChange?.(open),
   })
 
   return (
     <FileAccordionGroup>
       <FileAccordionItem
-        open={open()}
-        onOpenChange={change}
+        open={disclosure.open()}
+        onOpenChange={disclosure.setOpen}
         header={
           <div data-slot="apply-patch-trigger-content">
             <div data-slot="apply-patch-file-info">
@@ -1331,7 +1334,7 @@ function ToolFileAccordion(props: {
           </div>
         }
       >
-        <Show when={!props.defer || visible()}>{props.children}</Show>
+        <Show when={!props.defer || disclosure.mounted()}>{props.children}</Show>
       </FileAccordionItem>
     </FileAccordionGroup>
   )
@@ -1365,12 +1368,21 @@ export function ToolDisplay(
 
   const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
   const error = createMemo(() => toolDisplayError(props))
+  const stopped = createMemo(() => stoppedShell({ ...props, metadata: toolMetadata(props.metadata) }))
   const render = createMemo(() => ToolRegistry.render(props.tool) ?? GenericTool)
 
   return (
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
         <Switch>
+          <Match when={stopped()}>
+            {(stopped) => (
+              <>
+                <Dynamic component={render()} {...props} output={stopped().output} />
+                <ToolErrorCard tool={props.tool} error={stopped().notice} subtitle={errorSubtitle()} />
+              </>
+            )}
+          </Match>
           <Match when={error()}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
@@ -1737,7 +1749,6 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const delegating = () => props.status === "streaming"
 
     const input = createMemo(() => toolInput(props.input))
     const metadata = createMemo(() => toolMetadata(props.metadata))
@@ -1748,27 +1759,26 @@ ToolRegistry.register({
 
     const title = createMemo(() => taskAgentName(input().agent, data.store.agent) ?? i18n.t("ui.tool.agent.default"))
 
-    const background = createMemo(() => {
-      return metadata().background === true || (props.status === "completed" && metadata().status === "running")
-    })
+    const run = createMemo((state: SubagentRunState) => {
+      const id = childSessionId()
+      const childBusy = !!id && (data.store.session_status[id]?.type ?? "idle") !== "idle"
+
+      return transitionSubagentRun(state, {
+        type: "sync",
+        props: subagentRunProps({ status: props.status, metadata: metadata() }, childBusy),
+      })
+    }, INITIAL_SUBAGENT_RUN_STATE)
+
+    const view = createMemo(() => viewSubagentRun(run()))
 
     const subtitle = createMemo(() => {
       const value = input().description || childSessionId()
 
       if (!value) return value
 
-      if (background()) return `${value} (background)`
+      if (view().background) return `${value} (background)`
 
       return value
-    })
-
-    const running = createMemo(() => {
-      if (props.status === "streaming" || props.status === "running") return true
-      const id = childSessionId()
-
-      if (!id) return false
-
-      return (data.store.session_status[id]?.type ?? "idle") !== "idle"
     })
 
     const href = createMemo(() => sessionLink(childSessionId(), data.sessionHref))
@@ -1802,7 +1812,7 @@ ToolRegistry.register({
         <div data-component="task-tool-surface">
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <Show when={running()}>
+              <Show when={view().running}>
                 <SessionProgressIndicatorV2 />
               </Show>
               <span data-component="task-tool-title">{title()}</span>
@@ -1822,11 +1832,11 @@ ToolRegistry.register({
 
     return (
       <Show
-        when={delegating()}
+        when={view().delegating}
         fallback={
           <BasicTool
             icon="task"
-            status={props.status}
+            status={view().basicStatus}
             trigger={trigger()}
             hideDetails
             triggerAsLink
@@ -1891,26 +1901,18 @@ function ConsoleOutput(props: { command?: string; output: string }) {
 // The button sits beside its section's <pre>, not inside it, so selecting and copying text never picks it up.
 function ConsoleCopy(props: { text: string; label: string }) {
   const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
-  const label = () => (copied() ? i18n.t("ui.message.copied") : props.label)
-
-  const copy = async () => {
-    if (!props.text) return
-
-    if (!(await writeClipboard(props.text))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const copy = createCopyFeedback()
+  const label = () => (copy.copied() ? i18n.t("ui.message.copied") : props.label)
 
   return (
     <div data-slot="bash-copy">
       <Tooltip value={label()} placement="top">
         <IconButton
-          icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+          icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
           size="normal"
           variant="ghost-muted"
           onMouseDown={(event) => event.preventDefault()}
-          onClick={copy}
+          onClick={() => copy.copy(props.text)}
           aria-label={label()}
         />
       </Tooltip>
@@ -2005,17 +2007,18 @@ ToolRegistry.register({
   },
 })
 
-const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
-
 function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const lineCount = (text: string) => text.split("\n").length
   const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
 
+  // Code Mode returns structured results as compact JSON; show those indented, and highlight a bare JSON result.
+  const output = createMemo(() => formatExecuteOutput(props.output))
+
   // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
   const numberDigits = () =>
-    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(props.output) : 0)).length
+    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(output().text) : 0)).length
 
   return (
     <Dialog fit containerClass="!w-[min(calc(100vw_-_32px),720px)] max-h-[calc(100vh_-_92px)]">
@@ -2051,26 +2054,23 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
             when={props.error}
             fallback={
               <Show when={props.output}>
-                {(output) => (
-                  <ExecuteDetailsSection
-                    label={i18n.t("ui.tool.execute.output")}
-                    meta={lines(output())}
-                    copy={output()}
-                    copyLabel={i18n.t("ui.tool.execute.copyOutput")}
-                  >
-                    <Dynamic
-                      component={fileComponent}
-                      mode="text"
-                      file={{
-                        // Code Mode returns structured results as JSON; highlight those, leave anything else plain.
-                        name: Option.isSome(decodeJson(output())) ? "output.json" : "output.txt",
-                        contents: output(),
-                        cacheKey: checksum(output()),
-                      }}
-                      overflow="wrap"
-                    />
-                  </ExecuteDetailsSection>
-                )}
+                <ExecuteDetailsSection
+                  label={i18n.t("ui.tool.execute.output")}
+                  meta={lines(output().text)}
+                  copy={output().text}
+                  copyLabel={i18n.t("ui.tool.execute.copyOutput")}
+                >
+                  <Dynamic
+                    component={fileComponent}
+                    mode="text"
+                    file={{
+                      name: output().json !== undefined && output().rest === undefined ? "output.json" : "output.txt",
+                      contents: output().text,
+                      cacheKey: checksum(output().text),
+                    }}
+                    overflow="wrap"
+                  />
+                </ExecuteDetailsSection>
               </Show>
             }
           >
@@ -2098,26 +2098,20 @@ function ExecuteDetailsSection(props: {
   children: JSX.Element
 }) {
   const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
-
-  const copy = async () => {
-    if (!(await writeClipboard(props.copy))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const copy = createCopyFeedback()
 
   return (
     <section data-slot="execute-details-section">
       <header data-slot="execute-details-section-header">
         <span data-slot="execute-details-section-label">{props.label}</span>
         <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
-        <Tooltip value={copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
+        <Tooltip value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
           <IconButton
-            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+            icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
             size="normal"
             variant="ghost-muted"
-            aria-label={copied() ? i18n.t("ui.message.copied") : props.copyLabel}
-            onClick={copy}
+            aria-label={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel}
+            onClick={() => copy.copy(props.copy)}
           />
         </Tooltip>
       </header>
@@ -2129,6 +2123,7 @@ function ExecuteDetailsSection(props: {
 function ExecuteOutputRow(props: { output: string }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
+  const text = createMemo(() => formatExecuteOutput(props.output).text)
 
   const toggle = () => {
     if (window.getSelection()?.toString()) return
@@ -2155,12 +2150,12 @@ function ExecuteOutputRow(props: { output: string }) {
         </span>
         <span data-slot="execute-tool-call-name">{i18n.t("ui.tool.execute.output")}</span>
         <span data-slot="execute-tool-call-args">
-          {i18n.plural("ui.tool.execute.lines", props.output.split("\n").length)}
+          {i18n.plural("ui.tool.execute.lines", text().split("\n").length)}
         </span>
       </div>
       <Show when={open()}>
         <div data-slot="execute-tool-output">
-          <ConsoleOutput output={props.output} />
+          <ConsoleOutput output={text()} />
         </div>
       </Show>
     </div>
@@ -2250,50 +2245,61 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const data = useData()
-    const streaming = () => props.status === "streaming"
-    const metadata = createMemo(() => toolMetadata(props.metadata))
 
-    const pending = () => {
-      const id = metadata().shellID
-
-      return streaming() || props.status === "running" || (id !== undefined && data.shellRunning?.(id) === true)
-    }
-
-    const sawStreaming = streaming()
-    const command = createMemo(() => toolInput(props.input).command ?? metadata().command ?? "")
-
-    function Output() {
-      const [streamed, setStreamed] = createSignal("")
-
-      // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
-      const saved = createMemo(() =>
-        metadata().status === "exited" || metadata().status === "timeout" || metadata().status === "killed"
-          ? props.output
-          : undefined,
+    const runProps = () =>
+      shellRunProps(
+        {
+          status: props.status,
+          input: toolInput(props.input),
+          metadata: toolMetadata(props.metadata),
+          output: props.output,
+        },
+        (id) => data.shellRunning?.(id) === true,
       )
 
+    const [run, setRun] = createSignal(createShellRunState(untrack(runProps)))
+
+    const dispatch = (event: ShellRunEvent) => {
+      const next = transitionShellRun(untrack(run), event)
+
+      if (next !== untrack(run)) setRun(next)
+    }
+
+    // Synchronous, so the row never renders a pass with the previous phase.
+    createComputed(on(runProps, (value) => dispatch({ type: "sync", props: value }), { defer: true }))
+    const view = createMemo(() => viewShellRun(run()))
+    // The trigger animates the command in only when the row mounted while the model was still writing it.
+    const animateCommand = untrack(run).status === "writing"
+
+    function Output() {
+      const followID = createMemo(() => view().follow?.id)
+      const followRunning = createMemo(() => view().follow?.running === true)
+
       createEffect(() => {
-        if (saved() !== undefined) return
-        const id = metadata().shellID
+        const id = followID()
         const load = data.shellOutput
 
         if (id === undefined || !load) return
-        onCleanup(followShellOutput({ id, directory: data.directory, running: pending(), load, onOutput: setStreamed }))
+
+        const follower = createShellFollower({
+          id,
+          directory: data.directory,
+          running: untrack(followRunning),
+          load,
+          onOutput: (output) => dispatch({ type: "output.received", shellID: id, output }),
+        })
+
+        createEffect(on(followRunning, (running) => follower.setRunning(running), { defer: true }))
+        onCleanup(follower.dispose)
       })
 
-      const output = createMemo(() =>
-        stripAnsi(saved() ?? ((metadata().shellID !== undefined && streamed()) || props.output || "")).replace(
-          /\r\n?/g,
-          "\n",
-        ),
-      )
-
-      return <ConsoleOutput command={command()} output={output()} />
+      return <ConsoleOutput command={view().command} output={view().output} />
     }
 
     return (
       <BasicTool
         {...props}
+        status={view().basicStatus}
         icon="console"
         rail={false}
         hasContent
@@ -2303,18 +2309,18 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
+                <TextShimmer text={i18n.t("ui.tool.shell")} active={view().pending} />
               </span>
               <Show when={!open()}>
                 <Show
-                  when={command()}
+                  when={view().command}
                   fallback={
-                    <Show when={streaming()}>
+                    <Show when={view().writingPlaceholder}>
                       <span data-slot="basic-tool-tool-subtitle">{i18n.t("ui.tool.shell.writingCommand")}</span>
                     </Show>
                   }
                 >
-                  {(command) => <ShellSubmessage text={command()} animate={sawStreaming} />}
+                  {(command) => <ShellSubmessage text={command()} animate={animateCommand} />}
                 </Show>
               </Show>
             </div>
@@ -2516,8 +2522,6 @@ ToolRegistry.register({
         })) ?? patchFileGroups(props.metadata.files),
     )
 
-    const [expanded, setExpanded] = createSignal<string[]>([])
-
     const title = createMemo(() => {
       if (props.tool === "edit") return i18n.t("ui.messagePart.title.edit")
 
@@ -2526,53 +2530,23 @@ ToolRegistry.register({
       return i18n.t("ui.tool.patch")
     })
 
-    const open = createMemo(() => {
-      if (!props.fileOpen) return expanded()
-
-      return files().flatMap((file) => (props.fileOpen?.(file.path) === true ? [file.path] : []))
-    })
-
-    const change = (value: string | string[]) => {
-      const next = Array.isArray(value) ? value : value ? [value] : []
-
-      if (!props.onFileOpenChange) {
-        setExpanded(next)
-
-        return
-      }
-
-      files().forEach((file) => props.onFileOpenChange?.(file.path, next.includes(file.path)))
-    }
-
     return (
       <div data-component="apply-patch-tool">
         <Show when={files().length > 0} fallback={<FileTool {...props} title={title()} count={0} />}>
           <FileAccordionGroup>
             <Index each={files()}>
               {(file) => {
-                const value = () => file().path
-                const active = createMemo(() => open().includes(value()))
-                const [visible, setVisible] = createSignal(false)
-
-                createEffect(() => {
-                  if (!active()) {
-                    setVisible(false)
-
-                    return
-                  }
-
-                  requestAnimationFrame(() => {
-                    if (!active()) return
-                    setVisible(true)
-                  })
+                // Each file opens on its own: the owner's `fileOpen` controls it, otherwise it keeps its own state.
+                const disclosure = createDisclosure({
+                  open: () => (props.fileOpen ? props.fileOpen(file().path) === true : undefined),
+                  defer: () => props.deferContent !== false,
+                  onOpenChange: (open) => props.onFileOpenChange?.(file().path, open),
                 })
 
                 return (
                   <FileAccordionItem
-                    open={active()}
-                    onOpenChange={(expanded) =>
-                      change(expanded ? [...open(), value()] : open().filter((path) => path !== value()))
-                    }
+                    open={disclosure.open()}
+                    onOpenChange={disclosure.setOpen}
                     type={file().type}
                     header={
                       <div data-slot="apply-patch-trigger-content">
@@ -2609,7 +2583,7 @@ ToolRegistry.register({
                       </div>
                     }
                   >
-                    <Show when={props.deferContent === false || visible()}>
+                    <Show when={disclosure.mounted()}>
                       <For each={file().views}>
                         {(view) => (
                           <div data-component="apply-patch-file-diff">

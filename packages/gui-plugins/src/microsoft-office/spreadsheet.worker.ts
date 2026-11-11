@@ -10,6 +10,7 @@ import {
 import type { CellRange } from "@betteroffice/xlsx/headless"
 import { anchorRange, attempt, lastCell, parseRange, parseSpans } from "./sheet-cells"
 import { drawFrame, paintFrame } from "./sheet-frame"
+import { activateSheet, showSheet } from "./sheet-activate"
 import { frozenSize } from "./sheet-paint"
 import type { SheetLayout, SheetMethods, SheetTab } from "./sheet-protocol"
 import { serveWorker, Transfer } from "./worker-rpc"
@@ -19,6 +20,8 @@ import { serveWorker, Transfer } from "./worker-rpc"
 
 type Opened = {
   readonly workbook: WorkbookHandle
+  /** Every sheet's id by index, which reads address cells by; the same whichever sheet is active. */
+  readonly sheetIds: SheetInfo["sheetIds"]
   /** The active sheet's metadata; the engine draws only the active sheet. */
   info: SheetInfo
   /** Where each sheet's last cell ends, by sheet and frozen panes' size; measured once, as it costs a frame. */
@@ -41,7 +44,7 @@ serveWorker<SheetMethods>({
     const workbook = openWorkbook(new Uint8Array(input.bytes))
     const info = workbook.sheetInfo()
 
-    state.opened = { workbook, info, ends: new Map(), surface: new OffscreenCanvas(1, 1) }
+    state.opened = { workbook, sheetIds: info.sheetIds, info, ends: new Map(), surface: new OffscreenCanvas(1, 1) }
 
     const tabs = visibleTabs(workbook, info)
     // A workbook saved on a hidden sheet opens on the first visible one, as Excel does.
@@ -53,19 +56,17 @@ serveWorker<SheetMethods>({
   },
   show: (input) => {
     const opened = required()
-    const current = opened.info.activeSheet
-    const layout = attempt(() => show(opened, input.sheet))
+    const shown = showSheet(opened, input.sheet, (info) => ({ info, ...layout(opened.workbook, input.sheet) }))
 
-    if (layout) return layout
-
-    // One sheet that fails to open leaves the others readable: go back to the sheet on show.
-    attempt(() => show(opened, current))
+    if (shown) return shown
 
     throw new Error(`Sheet ${input.sheet} could not open`)
   },
   frame: (input) => {
-    const opened = active(input.sheet)
-    const frozen = { rows: opened.info.frozenRows, cols: opened.info.frozenCols }
+    const opened = required()
+    // A frame from a grid that has since given way to another sheet still draws its own sheet.
+    const info = activateSheet(opened, input.sheet)
+    const frozen = { rows: info.frozenRows, cols: info.frozenCols }
     const viewport = { x: input.x, y: input.y, width: input.width, height: input.height }
     const drawn = drawFrame(opened.workbook, viewport, frozen, input.wider)
 
@@ -136,21 +137,9 @@ function required() {
   return state.opened
 }
 
-/** The workbook with `sheet` active, as a frame from a grid that has since given way to another sheet may ask. */
-function active(sheet: number) {
-  const opened = required()
-
-  if (opened.info.activeSheet !== sheet) show(opened, sheet)
-
-  return opened
-}
-
 /** Makes a sheet the active one and reads what its grid needs. */
 function show(opened: Opened, sheet: number): SheetLayout {
-  opened.workbook.setActiveSheet(sheet)
-  opened.info = opened.workbook.sheetInfo()
-
-  return { info: opened.info, ...layout(opened.workbook, sheet) }
+  return { info: activateSheet(opened, sheet), ...layout(opened.workbook, sheet) }
 }
 
 /**
@@ -231,7 +220,7 @@ function measureEnd(
 /** The cells of a range on a sheet as the engine reads them, row by row; undefined when it cannot. */
 function read(opened: Opened, sheet: number, range: CellRange) {
   const target: XlsxRangeTarget = {
-    sheetId: opened.info.sheetIds[sheet],
+    sheetId: opened.sheetIds[sheet],
     range: { kind: "rowCol", start: { row: range.top, col: range.left }, end: { row: range.bottom, col: range.right } },
   }
 

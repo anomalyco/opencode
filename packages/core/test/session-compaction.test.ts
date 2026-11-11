@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import {
   AIError,
-  GenerationOptions,
   InvalidRequestError,
   LLMClient,
   LLMEvent,
@@ -45,6 +44,7 @@ import { Money } from "@opencode/schema/money"
 import { Skill } from "@opencode/schema/skill"
 import { Shell } from "@opencode/schema/shell"
 import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { asc, eq, inArray, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -476,7 +476,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
       id: "call_read",
       name: "read",
       state: { status: "completed", input: {}, content: [{ type: "text", text: "x".repeat(4_000) }] },
-      time: { created: DateTime.makeUnsafe(0) },
+      time: { created: DateTime.makeUnsafe(0), ran: DateTime.makeUnsafe(0) },
     })
     const grown = { ...input(89_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
     expect(SessionCompaction.estimateContext(grown)).toBe(90_000)
@@ -723,7 +723,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-session": parentID,
       "x-opencode-client": "opencode",
     })
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 30_000 }))
+    expect(requests[0]?.maxTokens).toBe(30_000)
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
@@ -819,7 +819,7 @@ it.effect("summary compaction past the ceiling keeps the conversation unchanged 
     expect(requests).toHaveLength(1)
     expect(requests[0].messages).toHaveLength(3)
     expect(requests[0].messages[0].content).toEqual([{ type: "text", text: messages[0].text }])
-    expect(requests[0].generation?.maxTokens).toBeLessThan(20_000)
+    expect(requests[0].maxTokens).toBeLessThan(20_000)
   }),
 )
 
@@ -870,7 +870,7 @@ it.effect("compaction lowers the output limit when it sends a request it could n
 
     expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 1_024 }))
+    expect(requests[0]?.maxTokens).toBe(1_024)
   }),
 )
 
@@ -890,7 +890,7 @@ it.effect("compaction keeps the output limit for a request that fits its target"
 
     expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 30_000 }))
+    expect(requests[0]?.maxTokens).toBe(30_000)
   }),
 )
 
@@ -1001,7 +1001,7 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
   }),
 )
 
-const measured = (text: string, input: number) =>
+const measured = (text: string, input: number, created = 0) =>
   Schema.decodeUnknownSync(SessionMessage.Assistant)({
     id: SessionMessage.ID.create(),
     type: "assistant",
@@ -1009,12 +1009,12 @@ const measured = (text: string, input: number) =>
     model: { id: "summary-model", providerID: "test" },
     content: [{ type: "text", text }],
     tokens: { input, output: 100, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 0, completed: 1 },
+    time: { created, completed: created + 1 },
   })
 
 /**
- * A 200k window compacts at 170k and starts a background summary at 85% of that, 144.5k. `near` ends past that
- * point; `due` continues it past the threshold.
+ * A 200k window compacts at 170k. The first response measured 80k, so a background summary starts half that room,
+ * 45k, before the threshold, at 125k. `near` ends past that point; `due` continues it past the threshold.
  */
 const precomputeHistory = () => {
   const near = [textUser("First question"), measured("First answer", 80_000), textUser("Second question")]
@@ -1062,7 +1062,8 @@ for (const background of [false, true]) {
     Effect.gen(function* () {
       const messages = [
         textUser("Earlier question"),
-        oldReasoning(),
+        // The cycle starts low, so the latest response is past the point where a background summary starts.
+        oldReasoning(summaryInput / 4),
         textUser("Latest question"),
         measured("Latest answer", summaryInput),
       ]
@@ -1084,7 +1085,7 @@ for (const background of [false, true]) {
         system: normal.request.system,
         tools: normal.request.tools,
         messages: [...normal.request.messages, Message.user(SessionCompaction.buildPrompt(false))],
-        generation: { maxTokens: summaryBuffer },
+        maxTokens: summaryBuffer,
       })
     }),
   )
@@ -1193,7 +1194,7 @@ it.effect("summary measured recovery reuses usage only for the matching agent", 
     }
     expect(yield* fixture.run(context)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0].generation?.maxTokens).toBeLessThanOrEqual(summaryBuffer / 5)
+    expect(requests[0].maxTokens).toBeLessThanOrEqual(summaryBuffer / 5)
     // Switching back restores the measured prefix; discarding usage for every agent is not sufficient.
     expect(yield* fixture.run()).toEqual({ status: "completed" })
     expect(requests).toHaveLength(2)
@@ -1203,7 +1204,7 @@ it.effect("summary measured recovery reuses usage only for the matching agent", 
         ...toLLMMessages(fixture.context.messages, resolved.ref),
         Message.user(SessionCompaction.buildPrompt(false)),
       ],
-      generation: { maxTokens: summaryBuffer },
+      maxTokens: summaryBuffer,
     })
   }),
 )
@@ -1330,8 +1331,9 @@ it.effect("a background summary that fell too far behind is replaced from a newe
     const compaction = yield* enablePrecompute
     const session = yield* insertSession(Session.ID.make("ses_precompute_behind"))
     const history = precomputeHistory()
-    // About 35k tokens arrived after the summarized prefix, past the 30k that may stay verbatim beside it.
-    const behind = [...history.near, textUser("x".repeat(140_000)), measured("Burst handled", 160_000)]
+    // About 75k tokens arrived after the summarized prefix, past the 68k (40% of the 170k budget) that may stay
+    // verbatim beside it.
+    const behind = [...history.near, textUser("x".repeat(300_000)), measured("Burst handled", 160_000)]
 
     yield* compaction.precompute(Effect.succeed(loaded(session, history.near)))
     yield* compaction.precompute(Effect.succeed(loaded(session, behind)))
@@ -1394,8 +1396,8 @@ it.effect("compaction summarizes as usual when the background summary no longer 
         return JSON.stringify(requests.at(-1)?.messages)
       })
 
-    // About 35k tokens arrived after the summarized prefix, past the 30k that may stay verbatim beside it.
-    const burst = [...history.near, textUser("x".repeat(140_000)), measured("Burst handled", 182_000)]
+    // About 75k tokens arrived after the summarized prefix, past the 68k that may stay verbatim beside it.
+    const burst = [...history.near, textUser("x".repeat(300_000)), measured("Burst handled", 182_000)]
     expect(yield* compactAfterPrecompute(burst)).toContain("Burst handled")
 
     // A different model would replay a summary written for the previous one.
@@ -1404,5 +1406,118 @@ it.effect("compaction summarizes as usual when the background summary no longer 
       model: { ...resolved, ref: { ...resolved.ref, id: Model.ID.make("other") } },
     }
     expect(yield* compactAfterPrecompute(history.due, switched)).toContain("Third answer")
+  }),
+)
+
+it.effect("a background summary keeps a tail longer than twice keep while it stays under 40% of the budget", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* enablePrecompute
+    const session = yield* insertSession(Session.ID.make("ses_precompute_long_tail"))
+    const history = precomputeHistory()
+    // About 35k tokens arrived after the summarized prefix: more than twice keep, less than 68k.
+    const burst = [...history.near, textUser("x".repeat(140_000)), measured("Burst handled", 160_000)]
+    const due = [...burst, textUser("Next question"), measured("Next answer", 182_000)]
+
+    yield* compaction.precompute(Effect.succeed(loaded(session, history.near)))
+    yield* compaction.precompute(Effect.succeed(loaded(session, burst)))
+    expect(yield* compaction.compact({ reason: "auto", context: loaded(session, due) })).toEqual({
+      status: "completed",
+    })
+
+    // The first summary was kept and swapped in: one request, ending before the response it was started from.
+    expect(requests).toHaveLength(1)
+    const summarized = JSON.stringify(requests[0].messages)
+    expect(summarized).toContain("Second question")
+    expect(summarized).not.toContain("Second answer")
+  }),
+)
+
+it.effect("a background summary starts a fixed lead before the threshold, not at a share of it", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* enablePrecompute
+    const session = yield* insertSession(Session.ID.make("ses_precompute_lead"))
+    // A 1M window compacts at 850k, so a background summary starts 60k before that, at 790k.
+    const large = (messages: readonly SessionMessage.Info[]) => ({
+      ...loaded(session, messages),
+      model: { ...resolved, limit: { context: 1_000_000, output: 128_000 } },
+    })
+    const early = [textUser("First question"), measured("First answer", 100_000), textUser("Second question")]
+    const before = [...early, measured("Second answer", 760_000)]
+    const within = [...before, textUser("Third question"), measured("Third answer", 800_000)]
+    const due = [...within, textUser("Fourth question"), measured("Fourth answer", 860_000)]
+
+    // 760k is past 85% of the threshold, but still more than the lead away from it.
+    yield* compaction.precompute(Effect.succeed(large(before)))
+    yield* compaction.precompute(Effect.succeed(large(within)))
+    expect(yield* compaction.compact({ reason: "auto", context: large(due) })).toEqual({ status: "completed" })
+
+    expect(requests).toHaveLength(1)
+    const summarized = JSON.stringify(requests[0].messages)
+    expect(summarized).toContain("Third question")
+    expect(summarized).not.toContain("Third answer")
+  }),
+)
+
+it.effect("a background summary starts on a window whose threshold is under 64k", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* enablePrecompute
+    const session = yield* insertSession(Session.ID.make("ses_precompute_small"))
+    // A 64k window compacts at 48k. The first response measured 20k, so half that room, 14k, sets the start at 34k.
+    const small = (messages: readonly SessionMessage.Info[]) => ({
+      ...loaded(session, messages),
+      model: { ...resolved, limit: { context: 64_000, output: 16_000 } },
+    })
+    const early = [textUser("First question"), measured("First answer", 20_000), textUser("Second question")]
+    const before = [...early, measured("Second answer", 30_000)]
+    const within = [...before, textUser("Third question"), measured("Third answer", 40_000)]
+    const due = [...within, textUser("Fourth question"), measured("Fourth answer", 50_000)]
+
+    yield* compaction.precompute(Effect.succeed(small(before)))
+    yield* compaction.precompute(Effect.succeed(small(within)))
+    expect(yield* compaction.compact({ reason: "auto", context: small(due) })).toEqual({ status: "completed" })
+
+    expect(requests).toHaveLength(1)
+    const summarized = JSON.stringify(requests[0].messages)
+    expect(summarized).toContain("Third question")
+    expect(summarized).not.toContain("Third answer")
+  }),
+)
+
+it.effect("a background summary waits for a response whose prompt is still cached", () =>
+  Effect.gen(function* () {
+    const compaction = yield* enablePrecompute
+    const history = precomputeHistory()
+    const later = (created: number) => [
+      ...history.near,
+      textUser("Third question"),
+      measured("Third answer", 160_000, created),
+    ]
+    const summarizedAfterBreak = (sessionID: string, ttl?: "1h") =>
+      Effect.gen(function* () {
+        requests = []
+        const session = yield* insertSession(Session.ID.make(sessionID))
+        const context = (messages: readonly SessionMessage.Info[]) => ({
+          ...loaded(session, messages),
+          model: { ...resolved, ...(ttl ? { cache: { ttl } } : {}) },
+        })
+        const now = DateTime.toEpochMillis(yield* DateTime.now)
+        // The latest response was written ten minutes ago; then a new one arrives.
+        yield* compaction.precompute(Effect.succeed(context(history.near)))
+        const resumed = later(now)
+        yield* compaction.precompute(Effect.succeed(context(resumed)))
+        const due = [...resumed, textUser("Fourth question"), measured("Fourth answer", 182_000, now)]
+        expect(yield* compaction.compact({ reason: "auto", context: context(due) })).toEqual({ status: "completed" })
+        expect(requests).toHaveLength(1)
+        return JSON.stringify(requests[0].messages)
+      })
+
+    yield* TestClock.adjust("10 minutes")
+    // Past the default five-minute cache, the summary starts from the next response instead.
+    expect(yield* summarizedAfterBreak("ses_precompute_cold")).toContain("Third question")
+    // A model that keeps its cache for an hour summarizes the older response right away.
+    expect(yield* summarizedAfterBreak("ses_precompute_hour", "1h")).not.toContain("Third question")
   }),
 )

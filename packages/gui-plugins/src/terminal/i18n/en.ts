@@ -9,6 +9,8 @@ export default {
   unavailable: "Terminals aren't available on this server",
   "title.numbered": "Terminal {{number}}",
   close: "Close terminal",
+  "close.failed": "Couldn't close the terminal",
+  "request.timedOut": "The server took too long to answer",
   "create.failed": "Couldn't create a terminal",
   "create.unsupported": "This server is too old for terminals. Update OpenCode on this server.",
   "rename.failed": "Couldn't rename the terminal",

@@ -212,6 +212,41 @@ test("desktop model button shows only the choose-model hint, not the model detai
   await expect(tooltip.getByText("Input & Output", { exact: true })).toHaveCount(0)
 })
 
+test("model dialog flyout waits after the arrow keys and cools down after it closes", async ({ page }) => {
+  const { model, dialog } = await openDesktopPicker(page, "ltr")
+  const flyout = dialog.locator('[data-slot="model-dialog-flyout"]')
+  const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
+  const rowA = dialog.locator('[data-option-key="opencode:mobile-a"]')
+  const rowB = dialog.locator('[data-option-key="opencode:mobile-b"]')
+  await model.click()
+  await expect(search).toBeFocused()
+  // See "tab preview opens cold" in tabs.spec.ts: pause at a fixed offset from an explicit install time.
+  const start = Date.now()
+  await page.clock.install({ time: start })
+  await page.clock.pauseAt(start + 10_000)
+
+  // The arrow keys take over before the hover's open delay ends, so its flyout never opens.
+  await rowA.hover()
+  await search.press("ArrowDown")
+  await page.clock.runFor(200)
+  await expect(rowB).toHaveAttribute("data-active", "")
+  await expect(flyout).toHaveCount(0)
+
+  await rowB.hover()
+  await page.clock.runFor(200)
+  await expect(flyout.getByRole("menuitemradio", { name: "max", exact: true })).toBeVisible()
+
+  // Once the flyout has been closed for a moment, the next row waits for the open delay again.
+  await page.mouse.move(5, 5)
+  await expect(flyout).toHaveCount(0)
+  await page.clock.runFor(400)
+  await rowA.hover()
+  await expect(rowA).toHaveAttribute("data-active", "")
+  await expect(flyout).toHaveCount(0)
+  await page.clock.runFor(200)
+  await expect(flyout.getByRole("menuitemradio", { name: "balanced", exact: true })).toBeVisible()
+})
+
 test("model dialog shows a summary and only the default variant for models without variants", async ({ page }) => {
   const { model, dialog } = await openDesktopPicker(page, "ltr")
   const flyout = dialog.locator('[data-slot="model-dialog-flyout"]')

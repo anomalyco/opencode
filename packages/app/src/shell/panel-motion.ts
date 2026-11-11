@@ -1,8 +1,18 @@
-import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { ease, frameLoop, prefersReducedMotion, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTimeScale } from "@opencode/ui/motion-tuning"
+import {
+  createPanelMotionState,
+  PANEL_FLIGHT_TIMEOUT_MS,
+  selectPanelMounted,
+  selectPanelPresent,
+  transitionPanelMotion,
+  type PanelMotionEffect,
+  type PanelMotionEvent,
+} from "./panel-motion-machine"
 
-// Panels in flight, across the app. Native views, which no DOM box clips, stay hidden while any panel moves.
+// Panels in flight across the app, the size of `landings`. Native views, which no DOM box clips, stay hidden while any
+// panel moves.
 const [flights, setFlights] = createSignal(0)
 
 // A resize handle being dragged. A native view's bounds land on screen frames before the DOM around it, so one kept
@@ -145,7 +155,12 @@ function rehold(next: Landing | undefined) {
 
 function shiftHeld() {
   const remaining = driver?.remaining() ?? 0
-  shifted.forEach((item) => (item.element.style.translate = `${item.shift * (remaining - item.rest)}px`))
+
+  // Runs every frame of a flight, so it allocates no callback.
+  for (let index = 0; index < shifted.length; index++) {
+    const item = shifted[index]!
+    item.element.style.translate = `${item.shift * (remaining - item.rest)}px`
+  }
 }
 
 // Reads where a hold's anchors start before its box takes its landing width; the returned function reads them again
@@ -244,22 +259,14 @@ export function createPanelMotion(input: {
   /** The width the panel travels across, in pixels, read once as each flight starts; it scales the flight's time. */
   distance?: () => number | undefined
 }) {
-  const [present, setPresent] = createSignal(input.open())
+  const [motionState, setMotionState] = createSignal(createPanelMotionState(input.open()))
   // Percent closed, so the spring's rest threshold stays well under a pixel.
   const motion = new Spring(input.open() ? 0 : 100)
   let stop: (() => void) | undefined
-  let landed: (() => void)[] = []
-  // A state `sync` asked to show at once, for when the change hasn't reached this motion yet, e.g. inside a batch.
-  let snapTo: boolean | undefined
-  let flying = false
+  let flightTimer: ReturnType<typeof setTimeout> | undefined
 
-  const fly = (next: boolean) => {
-    if (flying === next) return
-    flying = next
-    setFlights((count) => count + (next ? 1 : -1))
-  }
-
-  const paint = () => input.paint(Math.min(1, Math.max(0, motion.value / 100)))
+  const closed = () => Math.min(1, Math.max(0, motion.value / 100))
+  const paint = () => input.paint(closed())
 
   // Where the flight's current leg started, for how much of it remains.
   let from = 0
@@ -274,121 +281,112 @@ export function createPanelMotion(input: {
       from === motion.target ? 0 : Math.min(1, Math.max(0, (motion.value - motion.target) / (from - motion.target))),
   }
 
-  const unhold = () => {
-    if (!landings.delete(landing)) return
-    // Another flight still moving carries the shift from here.
-    rehold(driver === landing ? landings.values().next().value : driver)
-  }
-
-  const settle = () => {
-    stop?.()
-    stop = undefined
-    fly(false)
-    unhold()
-    const queued = landed
-    landed = []
-
-    if (!input.open()) setPresent(false)
-
-    if (!input.open()) input.onClosed?.()
-
-    queued.forEach((run) => run())
-  }
-
-  const snap = (open: boolean) => {
-    motion.snap(open ? 0 : 100)
+  // Writes only; anything reading layout this frame does so in the loop's read phase, before this runs. A frame in
+  // flight writes no signal and allocates nothing; only the landing frame goes through the machine.
+  const step = (dt: number) => {
+    motion.step(dt)
     paint()
-    settle()
+
+    if (driver === landing) shiftHeld()
+
+    if (!motion.resting) return true
+    stop = undefined
+    const current = untrack(motionState)
+
+    if (current.status === "flying") dispatch({ type: "flight.landed", attempt: current.attempt })
+
+    return false
+  }
+
+  // Effects that size or move the panel run before the state commits; its readers, like `present`, update after.
+  const dispatch = (event: PanelMotionEvent) =>
+    batch(() => {
+      const result = transitionPanelMotion(untrack(motionState), event)
+      setMotionState(result.state)
+      result.effects.forEach(run)
+    })
+
+  const run = (effect: PanelMotionEffect) => {
+    switch (effect.type) {
+      case "snap":
+        motion.snap(effect.open ? 0 : 100)
+        paint()
+
+        return
+      case "fly": {
+        const tuning = panelSpring(input.distance?.())
+        motion.omega = (2 * Math.PI) / tuning.duration
+        motion.zeta = 1 - tuning.bounce
+        // Retargeting keeps the current position and velocity, so a second toggle mid-flight turns around smoothly.
+        motion.set(effect.open ? 0 : 100)
+        landings.add(landing)
+        setFlights(landings.size)
+        rehold(landing)
+        stop ??= input.measure ? frameLoop.addMeasured(input.measure, step) : frameLoop.add(step)
+        clearTimeout(flightTimer)
+        flightTimer = setTimeout(
+          () => dispatch({ type: "flight.timed-out", attempt: effect.attempt }),
+          PANEL_FLIGHT_TIMEOUT_MS * Math.max(1, motionTimeScale()),
+        )
+
+        return
+      }
+
+      case "land":
+        stop?.()
+        stop = undefined
+        clearTimeout(flightTimer)
+        flightTimer = undefined
+
+        // After any snap, so a flight still moving measures this layout's landing.
+        if (!landings.delete(landing)) return
+        setFlights(landings.size)
+        // Another flight still moving carries the shift from here.
+        rehold(driver === landing ? landings.values().next().value : driver)
+
+        return
+      case "closed":
+        input.onClosed?.()
+
+        return
+      case "run":
+        effect.waiters.forEach((waiter) => waiter())
+
+        return
+      case "reveal":
+        // Reduced motion: the panel, opened at once, fades in without travel. Deferred so a panel that mounts with this
+        // open exists; microtasks run before the next paint.
+        queueMicrotask(() => {
+          if (input.open()) input.element?.()?.animate?.({ opacity: [0, 1] }, { duration: 150, easing: ease.out })
+        })
+
+        return
+      case "expire":
+        queueMicrotask(() => dispatch({ type: "pending.expired" }))
+    }
   }
 
   createEffect(
     on(
       () => [input.open(), input.identity?.()] as const,
-      ([open, identity], previous) => {
-        const target = open ? 0 : 100
-        // Work queued for the previous direction no longer applies.
-        landed = []
-        const now = snapTo === open
-        snapTo = undefined
-
-        if (open) setPresent(true)
-
-        if (previous === undefined || previous[1] !== identity) {
-          stop?.()
-          stop = undefined
-          fly(false)
-          motion.snap(target)
-          paint()
-          // After the snap, so a flight still moving measures this layout's landing.
-          unhold()
-
-          if (!open) setPresent(false)
-
-          return
-        }
-
-        if (prefersReducedMotion() && !now) {
-          snap(open)
-
-          return open ? reveal() : undefined
-        }
-
-        if (now) return snap(open)
-
-        const tuning = panelSpring(input.distance?.())
-        motion.omega = (2 * Math.PI) / tuning.duration
-        motion.zeta = 1 - tuning.bounce
-        // Retargeting keeps the current position and velocity, so a second toggle mid-flight turns around smoothly.
-        motion.set(target)
-        fly(true)
-        landings.add(landing)
-        rehold(landing)
-
-        // Writes only; anything reading layout this frame does so in the loop's read phase, before this runs.
-        const step = (dt: number) => {
-          motion.step(dt)
-          paint()
-
-          if (driver === landing) shiftHeld()
-
-          if (!motion.resting) return true
-          stop = undefined
-          settle()
-
-          return false
-        }
-
-        stop ??= input.measure ? frameLoop.addMeasured(input.measure, step) : frameLoop.add(step)
-      },
+      ([open, identity]) => dispatch({ type: "target.changed", open, identity, reduced: prefersReducedMotion() }),
     ),
   )
-
-  /** Reduced motion: the panel, opened at once, fades in without travel. */
-  const reveal = () =>
-    // Deferred so a panel that mounts with this open exists; microtasks run before the next paint.
-    queueMicrotask(() => {
-      if (input.open()) input.element?.()?.animate?.({ opacity: [0, 1] }, { duration: 150, easing: ease.out })
-    })
 
   // Repaints at rest when the open size changes, e.g. a resize drag or a window resize.
   createEffect(paint)
 
-  onCleanup(() => {
-    stop?.()
-    fly(false)
-    unhold()
-  })
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
-    present,
-    sync: (open: boolean) => {
-      if (flying && input.open() === open) return snap(open)
-      snapTo = open
-    },
-    whenSettled: (run: () => void) => {
-      if (flying) return void landed.push(run)
-      run()
-    },
+    present: createMemo(() => selectPanelPresent(motionState())),
+    /** From the first open on, for contents that stay mounted once closed. */
+    mounted: createMemo(() => selectPanelMounted(motionState())),
+    /** How far closed the panel is now, from 0 (open) to 1 (closed); not reactive, as it moves every frame. */
+    closed,
+    /** Shows `open` at once, also when the change hasn't reached this motion yet, e.g. inside a batch. */
+    sync: (open: boolean) => dispatch({ type: "sync.requested", open, current: untrack(input.open) }),
+    whenSettled: (run: () => void) => dispatch({ type: "waiter.queued", open: untrack(input.open), run }),
   }
 }
 

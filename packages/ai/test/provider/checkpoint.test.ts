@@ -156,7 +156,7 @@ testEffect(
     ai.request({
       model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
-      generation: { maxTokens: 20_000 },
+      maxTokens: 20_000,
       providerOptions: { textVerbosity: "low" },
       http: { body: { text: { verbosity: "high", format: { type: "json_object" } } } },
     }),
@@ -181,7 +181,7 @@ testEffect(
         ai.request({
           model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
           prompt: "Hello.",
-          generation: { maxTokens: 128 },
+          maxTokens: 128,
         }),
         trigger,
       )

@@ -8,6 +8,7 @@ import { Session } from "@opencode/schema/session"
 import { Effect } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
+import { ContentHeaders } from "../src/content-headers"
 import { ServerFetch } from "../src/fetch"
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
@@ -161,21 +162,21 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(user)
         expect((await opted.experimental.session.export({ sessionID })).messages).toEqual([user, assistant])
 
-        // The route serves raw bytes, immutable caching and a 304, and never renders active content inline.
+        // The route serves raw bytes as downloads, with immutable caching and a 304; image types stay usable by <img>.
         const image = await handler(new Request(route(png)))
         expect(image.status).toBe(200)
         expect(image.headers.get("content-type")).toBe("image/png")
-        expect(image.headers.get("content-disposition")).toBeNull()
+        expect(image.headers.get("content-disposition")).toBe("attachment")
         expect(image.headers.get("cache-control")).toBe("private, max-age=31536000, immutable")
         expect(image.headers.get("etag")).toBe(`"${hash(png)}"`)
         expect(image.headers.get("x-content-type-options")).toBe("nosniff")
-        expect(image.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox")
+        expect(image.headers.get("content-security-policy")).toBe(ContentHeaders.CONTENT_SECURITY_POLICY)
         expect(Buffer.from(await image.arrayBuffer()).toString("base64")).toBe(png)
         for (const unsafe of [svg, html]) {
           const response = await handler(new Request(route(unsafe)))
           expect(response.headers.get("content-type")).toBe("application/octet-stream")
           expect(response.headers.get("content-disposition")).toBe("attachment")
-          expect(response.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox")
+          expect(response.headers.get("content-security-policy")).toBe(ContentHeaders.CONTENT_SECURITY_POLICY)
           expect(Buffer.from(await response.arrayBuffer()).toString("base64")).toBe(unsafe)
         }
         const cached = await handler(new Request(route(png), { headers: { "If-None-Match": `W/"${hash(png)}"` } }))

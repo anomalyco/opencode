@@ -28,9 +28,9 @@ describe("Z.ai Images", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toBe("application/octet-stream")
+      expect(response.images[0].mediaType).toBe("application/octet-stream")
       // Z.ai documents that output URLs expire 30 days after generation; the test clock starts at 0.
-      expect(response.image.source).toEqual({
+      expect(response.images[0].source).toEqual({
         type: "url",
         url: "https://cdn.z.ai/generated.png",
         expiresAt: 30 * 24 * 60 * 60 * 1000,

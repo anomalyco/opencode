@@ -65,6 +65,7 @@ export const ClosedTab = Persistence.struct({
   tab: SessionCodec,
   index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   info: Persistence.optional(Info),
+  closed: Persistence.optional(Schema.Finite),
 })
 
 export const Closed = Persistence.array(ClosedTab)
