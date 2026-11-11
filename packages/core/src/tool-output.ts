@@ -80,17 +80,18 @@ const layer = Layer.effect(
       // One cut: the end of the last line allowed, or the byte limit, whichever comes first. A line longer than what
       // is left (a long log line, or a whole JSON result on one line) shows its start instead of vanishing.
       const byLines = lineEnd(text, limits.maxLines)
-      const cut = Math.min(byLines, byteBoundary(text, limits.maxBytes))
+      const cut = withoutLineBreak(text, Math.min(byLines, byteBoundary(text, limits.maxBytes)))
       const shown = text.slice(0, cut)
       const file = path.join(directory, fileName())
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
       const shownLines = shown === "" ? 0 : shown.split("\n").length
-      const lineCut = cut < text.length && text[cut] !== "\n"
+      const range = shownLines === 0 ? "0 lines" : `lines 1-${shownLines}`
+      const lineCut = cut < text.length && !/^\r?\n/.test(text.slice(cut, cut + 2))
       const marker =
         cut === byLines
-          ? `[showing lines 1-${shownLines} of ${lines.length}; full output saved to ${file}]`
-          : `[showing ${Buffer.byteLength(shown, "utf-8")} of ${totalBytes} bytes (${shownLines === 0 ? "0 lines" : `lines 1-${shownLines}`} of ${lines.length}${lineCut ? ", last line cut" : ""}); full output saved to ${file}]`
+          ? `[showing lines 1-${Math.min(limits.maxLines, lines.length)} of ${lines.length}; full output saved to ${file}]`
+          : `[showing ${Buffer.byteLength(shown, "utf-8")} of ${totalBytes} bytes (${range} of ${lines.length}${lineCut ? ", last line cut" : ""}); full output saved to ${file}]`
       const bounded: Tool.Content[] = []
       let remaining = shown.length
       let seenText = false
@@ -102,7 +103,8 @@ const layer = Layer.effect(
         }
         if (seenText && remaining > 0) remaining--
         seenText = true
-        if (remaining >= item.text.length) {
+        // Parts after the cut, empty ones included, are left out.
+        if (!marked && remaining >= item.text.length) {
           bounded.push(item)
           remaining -= item.text.length
           continue
@@ -159,32 +161,37 @@ export const node = makeLocationNode({
   deps: [FSUtil.node, Global.node, cleanupNode],
 })
 
-/** The index just before the newline that ends line `count`, or the end of `text` when it has no more lines. */
+/** The index where line `count` ends, before its line break, or the end of `text` when it has no more lines. */
 function lineEnd(text: string, count: number) {
+  if (count <= 0) return 0
   let index = -1
   for (let line = 0; line < count; line++) {
     index = text.indexOf("\n", index + 1)
     if (index === -1) return text.length
   }
-  return index
+  return text[index - 1] === "\r" ? index - 1 : index
 }
 
+/** `index`, moved back before a line break that ends right at it, so the shown text never ends in one. */
+function withoutLineBreak(text: string, index: number) {
+  if (text[index - 1] !== "\n") return index
+  return text[index - 2] === "\r" ? index - 2 : index - 1
+}
+
+const encoder = new TextEncoder()
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
 /**
  * The longest prefix of `text`, as a string index, that fits in `budget` UTF-8 bytes and ends between user-perceived
- * characters, so a cut never splits a code point, a surrogate pair, or a multi-code-point emoji (ZWJ sequences, skin
- * tones, flags, keycaps).
+ * characters, so a cut never splits a code point, a surrogate pair or a multi-code-point emoji (ZWJ sequences, skin
+ * tones, flags). A single character bigger than the whole budget still shows its first code points.
  */
 function byteBoundary(text: string, budget: number) {
-  const bytes = Buffer.from(text, "utf-8")
-  if (bytes.length <= budget) return text.length
-  let end = Math.max(0, budget)
-  // Back up over UTF-8 continuation bytes to a code point boundary.
-  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end--
-  const index = bytes.subarray(0, end).toString("utf-8").length
-  // Then back up to a grapheme boundary. Clusters are short, so a window before the cut is enough to find it.
-  const start = Math.max(0, index - 64)
-  const boundaries = Array.from(graphemes.segment(text.slice(start, index + 64)), (segment) => start + segment.index)
-  return boundaries.findLast((boundary) => boundary <= index) ?? index
+  // encodeInto writes whole code points only, so `read` never ends inside a surrogate pair.
+  const index = encoder.encodeInto(text, new Uint8Array(Math.max(0, budget))).read
+  if (index === text.length) return index
+  // Segmenting from the start of the text keeps flag pairing and long clusters exact; one code point past the cut
+  // shows the segmenter what follows it.
+  const start = graphemes.segment(text.slice(0, index + 2)).containing(index)?.index ?? index
+  return start > 0 ? start : index
 }

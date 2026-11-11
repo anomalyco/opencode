@@ -112,6 +112,83 @@ describe("ToolOutput", () => {
     ),
   )
 
+  it.live("keeps flags and long clusters whole however long the text before them", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const flags = yield* output.truncate({ content: [{ type: "text", text: "a" + "🇯🇵".repeat(40) }] })
+          expect(flags.content[0]).toEqual({ type: "text", text: "a" + "🇯🇵".repeat(20) })
+          const cluster = "👍" + "🏽\u0301".repeat(60)
+          const long = yield* output.truncate({ content: [{ type: "text", text: `ab${cluster}z` }] })
+          expect(long.content[0]).toEqual({ type: "text", text: "ab" })
+        }),
+      { maxLines: 100, maxBytes: 165 },
+    ),
+  )
+
+  it.live("cuts inside a later text part and leaves out the parts after it", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const inside = yield* output.truncate({
+            content: [
+              { type: "text", text: "" },
+              { type: "text", text: "abc" },
+              { type: "text", text: "defgh" },
+              { type: "text", text: "" },
+            ],
+          })
+          expect(inside.content).toEqual([
+            { type: "text", text: "" },
+            { type: "text", text: "abc" },
+            { type: "text", text: "d" },
+            {
+              type: "text",
+              text: expect.stringMatching(/^\[showing 6 of 11 bytes \(lines 1-3 of 3, last line cut\);/),
+            },
+          ])
+          const between = yield* output.truncate({
+            content: [
+              { type: "text", text: "abcde" },
+              { type: "text", text: "fgh" },
+            ],
+          })
+          expect(between.content).toEqual([
+            { type: "text", text: "abcde" },
+            { type: "text", text: expect.stringMatching(/^\[showing 5 of 9 bytes \(lines 1-1 of 2\);/) },
+          ])
+        }),
+      { maxLines: 100, maxBytes: 6 },
+    ),
+  )
+
+  it.live("ends a line cut before its line break", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const crlf = yield* output.truncate({ content: [{ type: "text", text: "one\r\ntwo\r\nthree" }] })
+          expect(crlf.content).toEqual([
+            { type: "text", text: "one" },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 3;/) },
+          ])
+          const blank = yield* output.truncate({ content: [{ type: "text", text: "\nfoo\nbar" }] })
+          expect(blank.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 3;/) }])
+        }),
+      { maxLines: 1, maxBytes: 1_000 },
+    ),
+  )
+
+  it.live("shows nothing under a zero line limit", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const result = yield* output.truncate({ content: [{ type: "text", text: "secret" }] })
+          expect(result.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing lines 1-0 of 1;/) }])
+        }),
+      { maxLines: 0, maxBytes: 1_000 },
+    ),
+  )
+
   it.live("preserves mixed content ordering", () =>
     withStore(
       (output) =>
@@ -172,7 +249,10 @@ describe("ToolOutput", () => {
           const result = yield* output.truncate({ content: [{ type: "text", text: "one\n" }] })
           expect(result.content).toEqual([
             { type: "text", text: "one" },
-            { type: "text", text: expect.stringMatching(/^\[showing 3 of 4 bytes \(lines 1-1 of 1\); full output saved to /) },
+            {
+              type: "text",
+              text: expect.stringMatching(/^\[showing 3 of 4 bytes \(lines 1-1 of 1\); full output saved to /),
+            },
           ])
         }),
       { maxLines: 2, maxBytes: 3 },
