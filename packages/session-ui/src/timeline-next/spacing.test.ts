@@ -84,7 +84,7 @@ describe("timelineGaps", () => {
         context("context:edited"),
         part("part:text-1", "assistant:text:1"),
       ]),
-    ).toEqual(["-", "xl", "m", "m", "m"])
+    ).toEqual(["-", "l", "m", "m", "m"])
   })
 
   test("the agent's words sit a little apart from its activity, a command included", () => {
@@ -97,7 +97,7 @@ describe("timelineGaps", () => {
     ).toEqual(["-", "m", "m"])
   })
 
-  test("a card stands a large gap from the rows beside it in a reply", () => {
+  test("a file sits as any row of activity does", () => {
     expect(
       gaps([
         part("part:text-0", "assistant:text:0"),
@@ -108,7 +108,7 @@ describe("timelineGaps", () => {
         }),
         context("context:next"),
       ]),
-    ).toEqual(["-", "l", "l"])
+    ).toEqual(["-", "m", "s"])
   })
 
   test("each thing the user did stands apart, even from another thing they did", () => {
@@ -119,7 +119,7 @@ describe("timelineGaps", () => {
         new TimelineRow.Notice({ userMessageID: "shell-turn", messageID: goal.id }),
         context("context:next"),
       ]),
-    ).toEqual(["-", "xl", "xl", "xl"])
+    ).toEqual(["-", "l", "l", "l"])
   })
 
   test("session events sit together, apart from the work around them", () => {
@@ -130,6 +130,6 @@ describe("timelineGaps", () => {
         new TimelineRow.Notice({ userMessageID: "user", messageID: switched.id }),
         new TimelineRow.UserMessage({ userMessageID: "next" }),
       ]),
-    ).toEqual(["-", "xl", "s", "xl"])
+    ).toEqual(["-", "l", "s", "l"])
   })
 })

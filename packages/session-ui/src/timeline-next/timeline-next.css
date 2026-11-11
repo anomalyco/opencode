@@ -387,8 +387,7 @@
 [data-timeline="next"] {
   --timeline-gap-s: 16px;
   --timeline-gap-m: 20px;
-  --timeline-gap-l: 24px;
-  --timeline-gap-xl: 32px;
+  --timeline-gap-l: 32px;
 }
 
 [data-timeline="next"][data-timeline-gap="s"] {
@@ -401,10 +400,6 @@
 
 [data-timeline="next"][data-timeline-gap="l"] {
   padding-top: var(--timeline-gap-l);
-}
-
-[data-timeline="next"][data-timeline-gap="xl"] {
-  padding-top: var(--timeline-gap-xl);
 }
 
 /* The user's message actions show in the large gap below it rather than adding to it, above the row that follows so
@@ -515,18 +510,6 @@
     min-height: var(--line-height-compact);
   }
 
-  /* A file's card takes the large gap where it meets a row of activity, as it does in the timeline; between cards, and
-     at the start or end of a list, the list's own small gap is all there is. A command is a row however it is opened,
-     so opening one never moves it. */
-  [data-component="context-tool-group-list"] {
-    [data-slot="context-tool-group-item"]:has([data-component="accordion"])
-      + [data-slot="context-tool-group-item"]:not(:has([data-component="accordion"])),
-    [data-slot="context-tool-group-item"]:not(:has([data-component="accordion"]))
-      + [data-slot="context-tool-group-item"]:has([data-component="accordion"]) {
-      margin-top: calc(var(--timeline-gap-l) - var(--timeline-gap-s));
-    }
-  }
-
   [data-component="context-tool-group-list"]
     [data-slot="context-tool-group-item"]
     > [data-component="tool-part-wrapper"]
@@ -585,10 +568,6 @@
 
   &[data-spacing="l"] {
     --timeline-status-space: var(--timeline-gap-l);
-  }
-
-  &[data-spacing="xl"] {
-    --timeline-status-space: var(--timeline-gap-xl);
   }
 
   &[data-collapsed] {
