@@ -80,14 +80,15 @@ pub fn show(tui: &Tui, checks: bool) {
                     command("tab", "Next update action", |buttons| buttons.step(1)),
                 ]));
                 // The dialog owns the drawing; a check that ends after it closed is dropped.
-                let (weak, owner) = (tui.weak(), draw.clone());
-                cx.on_close(Disposer::new(move || {
-                    drop(owner);
+                let owner = draw.clone();
+                cx.on_close(Disposer::new(move || drop(owner)));
+                let weak = tui.weak();
+                cx.on_dismiss(move || {
                     if let Some(tui) = weak.upgrade() {
                         tui.updates.generation.set(tui.updates.generation.get() + 1);
                         tui.updates.dialog.borrow_mut().take();
                     }
-                }));
+                });
                 root
             }
         },

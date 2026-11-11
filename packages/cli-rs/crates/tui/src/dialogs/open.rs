@@ -181,7 +181,7 @@ impl Open {
                 props.placeholder = Some(
                     if worktrees.is_some() { "Search worktrees…" } else { "Search sessions and projects…" }.into(),
                 );
-                props.current = current;
+                props.current = current.clone();
                 props.focus_current = selection.selected.is_some();
                 props.section_navigation = true;
                 props.on_move =
@@ -237,12 +237,13 @@ impl Open {
                 }));
                 props.footer = Some(open.footer.as_any());
                 let (view, select) = select::select(cx, props);
-                if !selection.filter.is_empty() {
+                if !selection.filter.is_empty() && !cx.rebuilt() {
                     select.set_filter(&selection.filter);
                 }
-                if let Some(target) = &selection.selected {
+                if let Some(target) = selection.selected.as_ref().filter(|_| !cx.rebuilt()) {
                     select.move_to(target);
                 }
+
                 *open.select.borrow_mut() = Some(select);
                 open.render_footer();
                 let owner = open.clone();
@@ -711,13 +712,11 @@ impl Open {
 
     /// `ctrl+n`: the new worktree prompt.
     fn new_worktree(self: &Rc<Self>) {
-        let Some(tui) = self.tui() else { return };
         let Some(id) = self.worktree_project() else {
             return;
         };
         let previous = self.snapshot();
         let title = format!("{} / New worktree", self.project_title(&id));
-        let theme = dialog_theme(&tui);
         let open = self.clone();
         self.defer(move || {
             let Some(tui) = open.tui() else { return };
@@ -733,17 +732,19 @@ impl Open {
             let built = open.clone();
             tui.dialogs.replace(
                 move |cx| {
+                    let (weak, id) = (weak.clone(), id.clone());
                     let (view, handle) = prompt(
                         cx,
                         PromptProps {
-                            title,
+                            title: title.clone(),
                             size: DialogSize::Large,
                             placeholder: Some("Worktree name (optional)".into()),
                             description: Some(Rc::new(move |cx| {
-                                Text::new(&cx.app, "Leave blank for a random name.").fg(theme.text.muted).as_any()
+                                Text::new(&cx.app, "Leave blank for a random name.").fg(cx.theme.text.muted).as_any()
                             })),
                             busy_text: Some("Creating worktree…".into()),
-                            on_cancel: Some(Rc::new(cancel)),
+                            on_cancel: Some(Rc::new(cancel.clone())),
+
                             on_confirm: Some(Rc::new(bind!(weak, |open, value: &str| open
                                 .create_worktree(id.clone(), value.trim().to_owned())))),
                             ..PromptProps::default()

@@ -56,11 +56,10 @@ impl Live {
 pub fn show(tui: &Tui, part: SessionMessageAssistantTool) -> Weak<Live> {
     let live = Rc::new(Live { part: RefCell::new(part), copied: Cell::new(None), draw: RefCell::default() });
     let handle = Rc::downgrade(&live);
-    let page = tui.page();
     let weak = tui.weak();
     let keep = live.clone();
     tui.dialogs.replace(
-        move |cx| view(cx, weak, &live, page),
+        move |cx| view(cx, weak.clone(), &live, cx.theme.page()),
         Some(Box::new(move || drop(keep))),
         DialogOptions::new(DialogSize::XLarge).key("execute"),
     );
@@ -162,6 +161,7 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
     };
     *live.draw.borrow_mut() = Some(draw.clone());
     draw();
+    cx.keep_scroll(&scroll);
 
     let scroll_by = |rows: f64| {
         let scroll = scroll.clone();

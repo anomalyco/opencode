@@ -64,7 +64,7 @@ pub fn show(tui: &Tui) {
     let built = list.clone();
     tui.dialogs.replace(
         move |cx| {
-            let list = built;
+            let list = built.clone();
             let weak = Rc::downgrade(&list);
             let mut props = SelectProps::dynamic(
                 "Sessions",
@@ -77,7 +77,7 @@ pub fn show(tui: &Tui) {
             props.search_in_title = true;
             props.title_placeholder = Some(list.placeholder());
             props.skip_filter = true;
-            props.current = current;
+            props.current = current.clone();
             props.on_filter = Some(Rc::new(bind!(weak, |list, _: &str| list.debounce_search())));
             props.on_move = Some(Rc::new(bind!(weak, |list, _: &SelectOption<SessionID>| {
                 if list.state.borrow_mut().to_delete.take().is_some() {
@@ -157,12 +157,13 @@ pub fn show(tui: &Tui) {
             *list.select.borrow_mut() = Some(select);
             list.render_title(&cx.theme);
             // The dialog owns the list; handlers hold weak references.
-            cx.on_close(opentui::keymap::Disposer::new(move || {
+            cx.on_dismiss(move || {
                 if let Some(timer) = list.timer.take() {
                     list.app().map(|app| app.cancel_timer(timer));
                 }
                 list.select.borrow_mut().take();
-            }));
+            });
+
             view
         },
         None,

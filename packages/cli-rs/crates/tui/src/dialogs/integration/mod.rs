@@ -230,7 +230,7 @@ fn open_list(flow: Flow, only: Option<IntegrationID>) {
     if local.integrations().is_none() || only.as_ref().is_some_and(|id| flow.latest(id).is_none()) {
         local.load_integrations();
     }
-    local.dialogs.replace(move |cx| build_list(cx, flow, only), None, DialogOptions::default());
+    local.dialogs.replace(move |cx| build_list(cx, flow.clone(), only.clone()), None, DialogOptions::default());
 }
 
 fn build_list(cx: &Rc<DialogCx>, flow: Flow, only: Option<IntegrationID>) -> View {
@@ -371,7 +371,7 @@ fn manage(flow: &Flow, integration: IntegrationInfo, methods: Vec<Method>) {
 fn open_manage(flow: Flow, integration: IntegrationInfo, methods: Vec<Method>, focus: Option<Account>, filter: String) {
     let dialogs = flow.local.dialogs.clone();
     dialogs.replace(
-        move |cx| build_manage(cx, flow, integration, methods, focus, &filter),
+        move |cx| build_manage(cx, flow.clone(), integration.clone(), methods.clone(), focus.clone(), &filter),
         None,
         DialogOptions::default(),
     );
@@ -404,6 +404,9 @@ fn build_manage(
         reopened: Cell::new(false),
         theme: cx.theme.clone(),
     });
+    let weak = Rc::downgrade(&state);
+    *state.deleting.borrow_mut() =
+        cx.keep(move || weak.upgrade().and_then(|state| state.deleting.borrow().clone())).flatten();
     let options: select::Options<Account> = {
         let state = Rc::downgrade(&state);
         let theme = cx.theme.clone();
@@ -462,7 +465,7 @@ fn build_manage(
         },
     ];
     let (view, handle) = select::select(cx, props);
-    if !filter.is_empty() {
+    if !filter.is_empty() && !cx.rebuilt() {
         handle.set_filter(filter);
     }
     *state.select.borrow_mut() = Some(handle);
@@ -589,6 +592,7 @@ impl Manage {
         let id = id.clone();
         self.flow.local.dialogs.replace(
             move |cx| {
+                let (flow, integration, methods, id) = (flow.clone(), integration.clone(), methods.clone(), id.clone());
                 let on_confirm = Rc::new(move |value: &str| {
                     let label = value.trim().to_owned();
                     if label.is_empty() {
@@ -614,7 +618,7 @@ impl Manage {
                     PromptProps {
                         title: "Rename account".into(),
                         placeholder: Some("Account name".into()),
-                        value: label,
+                        value: label.clone(),
                         on_confirm: Some(on_confirm),
                         ..PromptProps::default()
                     },
@@ -680,6 +684,7 @@ fn select_method(flow: &Flow, integration: IntegrationInfo, methods: Vec<Method>
                 methods.iter().enumerate().map(|(index, method)| SelectOption::new(method.label(), index)).collect();
             let mut props = SelectProps::new(format!("Connect {}", integration.name), options);
             props.render_filter = false;
+            let (flow, integration, methods) = (flow.clone(), integration.clone(), methods.clone());
             props.on_select = Some(Rc::new(move |option: &SelectOption<usize>| {
                 open_method(&flow, integration.clone(), methods[option.value].clone());
             }));
@@ -742,6 +747,7 @@ fn key_prompt(flow: &Flow, integration: IntegrationInfo, title: String, answer: 
     dialogs.replace(
         move |cx| {
             let (slot, set_error) = error_slot(cx, false);
+            let (flow, integration, answer) = (flow.clone(), integration.clone(), answer.clone());
             let on_confirm = Rc::new(move |key: &str| {
                 if key.is_empty() {
                     return;
@@ -765,7 +771,7 @@ fn key_prompt(flow: &Flow, integration: IntegrationInfo, title: String, answer: 
             prompt(
                 cx,
                 PromptProps {
-                    title,
+                    title: title.clone(),
                     placeholder: Some("API key".into()),
                     description: Some(Rc::new(move |_| slot.as_any())),
                     on_confirm: Some(on_confirm),
@@ -789,12 +795,17 @@ fn error_slot(cx: &Rc<DialogCx>, boxed: bool) -> (View, Rc<dyn Fn(String)>) {
     }
     let shown = slot.clone();
     let app = cx.app.clone();
+    let kept = line.clone();
+    let message = cx.keep(move || kept.is_visible().then(|| kept.text())).flatten();
     let set: Rc<dyn Fn(String)> = Rc::new(move |message: String| {
         line.set_text(message);
         line.visible(true);
         shown.visible(true);
         app.request_redraw();
     });
+    if let Some(message) = message {
+        set(message);
+    }
     (slot, set)
 }
 
@@ -846,11 +857,12 @@ fn oauth_starting(
         let (closed, handed_off) = (closed.clone(), handed_off.clone());
         flow.local.dialogs.replace(
             move |cx| {
-                cx.on_close(Disposer::new(move || {
+                let (closed, handed_off) = (closed.clone(), handed_off.clone());
+                cx.on_dismiss(move || {
                     if !handed_off.get() {
                         closed.set(true);
                     }
-                }));
+                });
                 oauth_view(cx, &title, None, "Starting authorization…", None)
             },
             None,
@@ -939,7 +951,7 @@ impl Oauth {
                     .group("Dialog"),
                 ]));
                 let closing = me.clone();
-                cx.on_close(Disposer::new(move || closing.close()));
+                cx.on_dismiss(move || closing.close());
                 oauth_view(
                     cx,
                     &me.title,
@@ -1004,7 +1016,7 @@ impl Oauth {
         self.flow.local.dialogs.replace(
             move |cx| {
                 let closing = me.clone();
-                cx.on_close(Disposer::new(move || closing.close()));
+                cx.on_dismiss(move || closing.close());
                 let app = &cx.app;
                 let open = Rc::downgrade(&me);
                 let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(open, |me| me.open()))));
@@ -1015,6 +1027,10 @@ impl Oauth {
                 )
                 .fg(cx.theme.text.muted);
                 let error = Text::new(app, "").fg(cx.theme.text.feedback.error.base).visible(false);
+                let kept = error.clone();
+                if let Some(message) = cx.keep(move || kept.is_visible().then(|| kept.text())).flatten() {
+                    error.set_text(message).visible(true);
+                }
                 let instructions = Text::new(app, me.attempt.instructions.clone()).fg(cx.theme.text.muted);
                 let description = View::new(app).gap(1).child(&instructions).child(&link).child(&waiting).child(&error);
                 let on_confirm = Rc::new(bind!(me, |me, value: &str| {
@@ -1073,7 +1089,7 @@ impl Oauth {
         self.flow.local.dialogs.replace(
             move |cx| {
                 let closing = me.clone();
-                cx.on_close(Disposer::new(move || closing.close()));
+                cx.on_dismiss(move || closing.close());
                 let (errors, set_error) = error_slot(cx, false);
                 let open = Rc::downgrade(&me);
                 let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(open, |me| me.open()))));
@@ -1239,11 +1255,12 @@ fn command_starting(flow: &Flow, integration: IntegrationInfo, method: Integrati
         let (closed, handed_off) = (closed.clone(), handed_off.clone());
         flow.local.dialogs.replace(
             move |cx| {
-                cx.on_close(Disposer::new(move || {
+                let (closed, handed_off) = (closed.clone(), handed_off.clone());
+                cx.on_dismiss(move || {
                     if !handed_off.get() {
                         closed.set(true);
                     }
-                }));
+                });
                 command_view(cx, &title, "Starting command…").0
             },
             None,
@@ -1296,9 +1313,12 @@ impl Command {
         self.flow.local.dialogs.replace(
             move |cx| {
                 let (view, output) = command_view(cx, &title, "Waiting for command to finish…");
+                if let Some(shown) = me.output.borrow().as_ref() {
+                    output.set_text(shown.text());
+                }
                 *me.output.borrow_mut() = Some(output);
                 let closing = me.clone();
-                cx.on_close(Disposer::new(move || closing.close()));
+                cx.on_dismiss(move || closing.close());
                 view
             },
             None,

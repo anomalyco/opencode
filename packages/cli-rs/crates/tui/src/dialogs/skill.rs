@@ -69,6 +69,7 @@ fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
             let mut props = SelectProps::new("Skills", options);
             props.render_filter = loaded;
             props.locked = !loaded;
+            let on_select = on_select.clone();
             props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<SkillID>| {
                 let (id, on_select, weak) = (option.value.clone(), on_select.clone(), tui.weak());
                 tui.app.defer(bind!(weak, |tui, _| {
@@ -97,7 +98,9 @@ fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
             let no_match = inset(vec![Text::new(&app, "No skills found").fg(theme.text.muted).as_any()]);
             props.no_match_view = Some(Rc::new(move || no_match.clone()));
             let (view, _) = select::select(cx, props);
-            cx.on_close(opentui::keymap::Disposer::new(move || flag.set(false)));
+            let flag = flag.clone();
+            cx.on_dismiss(move || flag.set(false));
+
             view
         },
         None,

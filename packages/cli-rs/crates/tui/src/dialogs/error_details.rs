@@ -14,6 +14,7 @@ use opentui::prelude::*;
 use crate::app::Tui;
 
 /// `DialogErrorDetails` props.
+#[derive(Clone)]
 pub struct Props {
     pub title: String,
     /// A path or package shown under the title (TS `FilePath`).
@@ -36,6 +37,8 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     let weak = tui.weak();
 
     let copied = Rc::new(Cell::new(false));
+    let kept = copied.clone();
+    copied.set(cx.keep(move || kept.get()).unwrap_or(false));
     let hook: Rc<Hook> = Rc::default();
     let copy: Rc<dyn Fn()> = {
         let (weak, copied, text, hook) = (weak.clone(), copied.clone(), details.text, hook.clone());
@@ -98,6 +101,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     let scroll = ScrollBox::new(app).scrollbars(false).max_height(20);
     scroll.content_view().min_height(0);
     scroll.add(&Text::new(app, props.error.clone()).fg(theme.text.base).wrap(WrapMode::Word));
+    cx.keep_scroll(&scroll);
     let body = View::new(app).child(&scroll);
     if let Some(reference) = &props.diagnostic_ref {
         body.add(&Text::new(app, format!("Reference: {reference}")).fg(theme.text.muted));

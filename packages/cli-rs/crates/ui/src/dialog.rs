@@ -14,6 +14,7 @@ use crate::keymap::{KeymapLayer, TuiKeymap};
 use crate::theme::{Surface, Theme};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -68,10 +69,13 @@ impl DialogOptions {
 }
 
 type OnClose = Box<dyn FnOnce()>;
+type Build = Rc<dyn Fn(&Rc<DialogCx>) -> View>;
+type Keeper = Box<dyn Fn() -> Box<dyn Any>>;
 
 struct Entry {
     on_close: Option<OnClose>,
     key: Option<String>,
+    build: Build,
     content: View,
     cx: Rc<DialogCx>,
 }
@@ -90,6 +94,9 @@ struct Inner {
     layer: RefCell<Option<Disposer>>,
     focus: RefCell<Option<AnyWidget>>,
     dismiss: Cell<bool>,
+    /// A rebuild in the new theme is queued.
+    restyle: Cell<bool>,
+    rebuilding: Cell<bool>,
 }
 
 /// The dialog stack (`DialogProvider` and `useDialog()`). Cloning is cheap.
@@ -126,6 +133,8 @@ impl Dialogs {
             layer: RefCell::new(None),
             focus: RefCell::new(None),
             dismiss: Cell::new(false),
+            restyle: Cell::new(false),
+            rebuilding: Cell::new(false),
         }));
         dialogs.install();
         dialogs
@@ -197,9 +206,13 @@ impl Dialogs {
     }
 
     /// Replaces the stack with one dialog, closing the ones open before (TS `replace`).
+    ///
+    /// `build` runs again when the theme changes while the dialog is open, so the dialog takes the new colors as
+    /// TS dialogs do reactively. The disposers of the old build run first, except [`DialogCx::on_dismiss`], and
+    /// what it put in [`DialogCx::keep`] carries over.
     pub fn replace(
         &self,
-        build: impl FnOnce(&Rc<DialogCx>) -> View,
+        build: impl Fn(&Rc<DialogCx>) -> View + 'static,
         on_close: Option<OnClose>,
         options: DialogOptions,
     ) {
@@ -213,7 +226,27 @@ impl Dialogs {
         self.close_all();
         self.0.size.set(options.size);
         self.0.centered.set(false);
-        let cx = Rc::new(DialogCx {
+        let cx = self.cx(None);
+        // The mode goes first, so layers registered while building see it.
+        if self.0.mode.borrow().is_none() {
+            *self.0.mode.borrow_mut() = Some(self.0.keymap.push_mode(MODAL_MODE, Condition::Always));
+        }
+        let build: Build = Rc::new(build);
+        let content = build(&cx);
+        cx.built.set(true);
+        self.0.panel.add(&content);
+        let focus = cx.focus.borrow_mut().take();
+        self.0.stack.borrow_mut().push(Entry { on_close, key: options.key, build, content, cx });
+        self.layout_frame();
+        if let Some(widget) = focus {
+            widget.focus();
+        }
+    }
+
+    fn cx(&self, kept: Option<Vec<Box<dyn Any>>>) -> Rc<DialogCx> {
+        let rebuilt = kept.is_some();
+        let kept = kept.unwrap_or_default();
+        Rc::new(DialogCx {
             app: self.0.app.clone(),
             dialogs: self.clone(),
             keymap: self.0.keymap.clone(),
@@ -221,17 +254,49 @@ impl Dialogs {
             layers: RefCell::new(Vec::new()),
             editors: RefCell::new(Vec::new()),
             focus: RefCell::new(None),
-        });
-        // The mode goes first, so layers registered while building see it.
-        if self.0.mode.borrow().is_none() {
-            *self.0.mode.borrow_mut() = Some(self.0.keymap.push_mode(MODAL_MODE, Condition::Always));
+            kept: RefCell::new(kept.into_iter().map(Some).collect()),
+            keepers: RefCell::new(Vec::new()),
+            rebuilt,
+            built: Cell::new(false),
+        })
+    }
+
+    /// Builds the open dialog again in the current theme, in place, with the state it kept.
+    fn restyle(&self) {
+        self.0.restyle.set(false);
+        let Some((build, old)) = self.0.stack.borrow().last().map(|entry| (entry.build.clone(), entry.cx.clone()))
+        else {
+            return;
+        };
+        if old.theme == self.0.theme.borrow().surface(Surface::Dialog) {
+            return;
         }
+        let kept = old.keepers.borrow().iter().map(|save| save()).collect();
+        let focused = self.0.app.focused().is_some_and(|widget| {
+            let content = self.0.stack.borrow().last().map(|entry| entry.content.id());
+            std::iter::successors(Some(widget), |widget| widget.parent()).any(|widget| Some(widget.id()) == content)
+        });
+        self.0.rebuilding.set(true);
+        let layers = std::mem::take(&mut *old.layers.borrow_mut());
+        drop(layers);
+        old.editors.borrow_mut().clear();
+        let cx = self.cx(Some(kept));
         let content = build(&cx);
+        cx.built.set(true);
+        self.0.rebuilding.set(false);
+        let previous = {
+            let mut stack = self.0.stack.borrow_mut();
+            let Some(entry) = stack.last_mut() else {
+                return;
+            };
+            entry.cx = cx.clone();
+            std::mem::replace(&mut entry.content, content.clone())
+        };
+        previous.detach();
         self.0.panel.add(&content);
-        let focus = cx.focus.borrow_mut().take();
-        self.0.stack.borrow_mut().push(Entry { on_close, key: options.key, content, cx });
         self.layout_frame();
-        if let Some(widget) = focus {
+        let focus = cx.focus.borrow_mut().take();
+        if let Some(widget) = focus.filter(|_| focused) {
             widget.focus();
         }
     }
@@ -297,8 +362,8 @@ impl Dialogs {
             .justify(if centered { Justify::Center } else { Justify::Start })
             .padding_edge(Edge::Top, if centered { 0.0 } else { f32::from(height) / 4.0 })
             .visible(open);
-        // The open dialog drew its rows in the theme it was built in, so the panel keeps that background until the
-        // dialog is built again.
+        // The open dialog drew its rows in the theme it was built in, so the panel keeps that background until it
+        // is built again.
         let background = match self.0.stack.borrow().last() {
             Some(entry) => entry.cx.theme.background.base,
             None => self.0.theme.borrow().surface(Surface::Dialog).background.base,
@@ -341,10 +406,18 @@ impl Dialogs {
         self.layout_frame();
     }
 
-    /// The page theme for dialogs opened from now on.
+    /// The page theme. The open dialog is built again in it after the current event, which may be a key the dialog
+    /// is still handling (TS restyles in place).
     pub fn set_theme(&self, theme: Theme) {
         *self.0.theme.borrow_mut() = theme;
-        self.layout_frame();
+        if self.is_open() && !self.0.restyle.replace(true) {
+            let weak = Rc::downgrade(&self.0);
+            self.0.app.defer(move |_| {
+                if let Some(inner) = weak.upgrade() {
+                    Dialogs(inner).restyle();
+                }
+            });
+        }
     }
 
     pub fn keymap(&self) -> &Rc<DialogKeymap> {
@@ -376,9 +449,41 @@ pub struct DialogCx {
     layers: RefCell<Vec<Disposer>>,
     editors: RefCell<Vec<Box<dyn Fn() -> bool>>>,
     focus: RefCell<Option<AnyWidget>>,
+    /// What the previous build put in [`DialogCx::keep`], by call.
+    kept: RefCell<Vec<Option<Box<dyn Any>>>>,
+    keepers: RefCell<Vec<Keeper>>,
+    rebuilt: bool,
+    /// The build returned: [`DialogCx::keep`] keeps nothing made later, such as a redrawn part.
+    built: Cell<bool>,
 }
 
 impl DialogCx {
+    /// Carries state over when the dialog is built again in a new theme: `save` runs before that build, and the
+    /// build's call at the same position gets what it returned. `None` on the first build.
+    pub fn keep<T: 'static>(&self, save: impl Fn() -> T + 'static) -> Option<T> {
+        if self.built.get() {
+            return None;
+        }
+        let mut keepers = self.keepers.borrow_mut();
+        let slot = keepers.len();
+        keepers.push(Box::new(move || Box::new(save())));
+        let kept = self.kept.borrow_mut().get_mut(slot).and_then(Option::take)?;
+        kept.downcast().ok().map(|kept| *kept)
+    }
+
+    /// Keeps where `scroll` is scrolled through a build in a new theme.
+    pub fn keep_scroll(&self, scroll: &ScrollBox) {
+        let kept = scroll.clone();
+        if let Some((x, y)) = self.keep(move || kept.scroll_position()) {
+            scroll.scroll_to(x, y);
+        }
+    }
+
+    /// Whether this build replaces one in an older theme, so the state it would set up at opening is kept instead.
+    pub fn rebuilt(&self) -> bool {
+        self.rebuilt
+    }
+
     /// Registers a keymap layer for as long as the dialog is open. A layer without a mode gets [`MODAL_MODE`].
     pub fn layer(&self, mut layer: KeymapLayer<FocusId>) {
         if layer.mode.is_none() {
@@ -390,9 +495,19 @@ impl DialogCx {
         }
     }
 
-    /// Ties a disposer to the dialog's lifetime.
+    /// Ties a disposer to this build of the dialog: it runs when the dialog closes or is built again.
     pub fn on_close(&self, disposer: Disposer) {
         self.layers.borrow_mut().push(disposer);
+    }
+
+    /// Runs `run` when the dialog closes, but not when it is built again in a new theme.
+    pub fn on_dismiss(&self, run: impl FnOnce() + 'static) {
+        let dialogs = Rc::downgrade(&self.dialogs.0);
+        self.on_close(Disposer::new(move || {
+            if !dialogs.upgrade().is_some_and(|inner| inner.rebuilding.get()) {
+                run();
+            }
+        }));
     }
 
     /// Registers an editor for Ctrl+C: `clear` empties it and returns `true` when it has focus and text.
@@ -685,6 +800,10 @@ impl DialogButtons {
             })
             .collect();
         let state = Rc::new(ButtonsState { buttons, active: Cell::new(active), theme: cx.theme.clone() });
+        let weak = Rc::downgrade(&state);
+        if let Some(active) = cx.keep(move || weak.upgrade().map(|state| state.active.get())).flatten() {
+            state.active.set(active);
+        }
         // The handlers hold the state weakly: it holds the views that hold them.
         for (index, (_, item, _)) in state.buttons.iter().enumerate() {
             let weak = Rc::downgrade(&state);

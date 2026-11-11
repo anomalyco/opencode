@@ -83,6 +83,12 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
     });
     let owner = inner.clone();
     cx.on_close(Disposer::new(move || drop(owner)));
+    let weak = Rc::downgrade(&inner);
+    let kept = cx.keep(move || weak.upgrade().map(|inner| (inner.field.text(), inner.field.cursor_offset())));
+    if let Some((text, cursor)) = kept.flatten() {
+        inner.field.set_text(&text);
+        inner.field.set_cursor_offset(cursor);
+    }
     let prompt = Prompt(inner);
     prompt.register_layers();
 

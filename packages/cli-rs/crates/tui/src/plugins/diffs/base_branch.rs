@@ -62,7 +62,7 @@ pub fn open(viewer: &Viewer) {
     let built = picker.clone();
     tui.dialogs.replace(
         move |cx| {
-            let picker = built;
+            let picker = built.clone();
             let weak = Rc::downgrade(&picker);
             let mut props = SelectProps::dynamic(
                 "Base branch",
@@ -73,7 +73,7 @@ pub fn open(viewer: &Viewer) {
             );
             props.placeholder = Some("Search local and remote branches".to_owned());
             props.skip_filter = true;
-            props.current = current;
+            props.current = current.clone();
             props.on_filter = Some(Rc::new(bind!(weak, |picker, filter: &str| {
                 *picker.filter.borrow_mut() = filter.to_owned();
                 picker.debounce();
@@ -113,12 +113,13 @@ pub fn open(viewer: &Viewer) {
             props.footer = Some(Text::new(&cx.app, "Remembered until the TUI exits").fg(cx.theme.text.muted).as_any());
             let (view, select) = select::select(cx, props);
             *picker.select.borrow_mut() = Some(select);
-            cx.on_close(opentui::keymap::Disposer::new(move || {
+            cx.on_dismiss(move || {
                 if let (Some(timer), Some(tui)) = (picker.timer.take(), picker.tui.upgrade()) {
                     tui.app.cancel_timer(timer);
                 }
                 picker.select.borrow_mut().take();
-            }));
+            });
+
             view
         },
         None,

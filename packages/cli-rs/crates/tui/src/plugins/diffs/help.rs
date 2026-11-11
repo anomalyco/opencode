@@ -50,6 +50,7 @@ pub fn open(viewer: &Viewer) {
             let height = (rows as i64 - 1).min(i64::from(app.size().1) - 6).max(1);
             let scroll = ScrollBox::new(app).scrollbars(false).height(height as u32);
             scroll.add(&content);
+            cx.keep_scroll(&scroll);
             cx.focus(&scroll);
             layout(cx, &head, &scroll, None)
         },

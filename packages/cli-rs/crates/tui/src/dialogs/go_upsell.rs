@@ -138,7 +138,7 @@ pub fn show(local: &Rc<Local>, offer: Offer) {
     let weak = Rc::downgrade(local);
     local.dialogs.replace(
         move |cx| match weak.upgrade() {
-            Some(local) => build(cx, &local, offer),
+            Some(local) => build(cx, &local, offer.clone()),
             None => View::new(&cx.app),
         },
         None,
@@ -160,6 +160,10 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     let text_bg = Color::rgba(base.r, base.g, base.b, 186);
     let primary = theme.background.action.primary.focused;
     let selected = Rc::new(Cell::new(2usize));
+    let kept = selected.clone();
+    if let Some(index) = cx.keep(move || kept.get()) {
+        selected.set(index);
+    }
     let buttons: Rc<RefCell<Vec<(View, Text)>>> = Rc::default();
 
     let paint = {
@@ -302,6 +306,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         scroll.add(&used);
         scroll.add(&pitch);
         scroll.add(&link);
+        cx.keep_scroll(&scroll);
         root.add(&scroll);
     } else {
         root.add(&View::new(app).child(&used).child(&pitch));
@@ -357,24 +362,29 @@ fn dont_show_again(local: &Rc<Local>) {
 /// `DialogGoUpsellConnect`: signs in to OpenCode Console with its device OAuth method, then switches to an
 /// OpenCode Go model and resends the prompt.
 fn connect(local: &Rc<Local>, offer: Offer) {
-    let weak = Rc::downgrade(local);
-    local.dialogs.replace(
-        move |cx| match weak.upgrade() {
-            Some(local) => build_connect(cx, &local, offer),
-            None => View::new(&cx.app),
-        },
-        None,
-        DialogOptions::default(),
-    );
+    // The attempt outlives a build of the dialog in a new theme; the dialog owns it.
+    let state = Rc::new_cyclic(|me| Connect {
+        local: local.clone(),
+        offer,
+        ui: RefCell::new(None),
+        label: RefCell::new(None),
+        me: me.clone(),
+        attempt: RefCell::new(None),
+        started: Cell::new(false),
+        settled: Cell::new(false),
+        closed: Cell::new(false),
+        timer: Cell::new(None),
+    });
+    local.dialogs.replace(move |cx| build_connect(cx, &state), None, DialogOptions::default());
 }
 
 struct Connect {
     local: Rc<Local>,
     offer: Offer,
-    title: Text,
-    body: View,
-    footer: View,
-    cx: Rc<DialogCx>,
+    /// The widgets of the current build.
+    ui: RefCell<Option<ConnectUi>>,
+    /// The method's label once it started, which replaces the title.
+    label: RefCell<Option<String>>,
     // For the footer actions, which outlive a render.
     me: Weak<Connect>,
     attempt: RefCell<Option<IntegrationAttempt>>,
@@ -384,37 +394,32 @@ struct Connect {
     timer: Cell<Option<TimerId>>,
 }
 
-fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
+struct ConnectUi {
+    cx: Rc<DialogCx>,
+    title: Text,
+    body: View,
+    footer: View,
+}
+
+fn build_connect(cx: &Rc<DialogCx>, state: &Rc<Connect>) -> View {
     let app = &cx.app;
-    let title = Text::new(app, "Connect an integration").fg(cx.theme.text.base);
+    let label = state.label.borrow().clone();
+    let title = Text::new(app, label.unwrap_or_else(|| "Connect an integration".to_owned())).fg(cx.theme.text.base);
     let head = header(cx, HeaderProps { title_view: Some(title.as_any()), ..HeaderProps::default() });
     let body = View::new(app).gap(1);
     let footer_slot = View::new(app);
-    let state = Rc::new_cyclic(|me| Connect {
-        local: local.clone(),
-        offer,
-        title,
-        body: body.clone(),
-        footer: footer_slot.clone(),
-        cx: cx.clone(),
-        me: me.clone(),
-        attempt: RefCell::new(None),
-        started: Cell::new(false),
-        settled: Cell::new(false),
-        closed: Cell::new(false),
-        timer: Cell::new(None),
-    });
+    *state.ui.borrow_mut() = Some(ConnectUi { cx: cx.clone(), title, body: body.clone(), footer: footer_slot.clone() });
     state.render();
     let open = {
-        let state = Rc::downgrade(&state);
+        let state = Rc::downgrade(state);
         bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| state.open())
     };
     let copy = {
-        let state = Rc::downgrade(&state);
+        let state = Rc::downgrade(state);
         bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| state.copy())
     };
     let enabled = {
-        let state = Rc::downgrade(&state);
+        let state = Rc::downgrade(state);
         Condition::when(move || state.upgrade().is_some_and(|state| state.attempt.borrow().is_some()))
     };
     cx.layer(
@@ -426,7 +431,7 @@ fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     );
     // Closing cancels a pending attempt.
     let closing = state.clone();
-    cx.on_close(opentui::keymap::Disposer::new(move || closing.close()));
+    cx.on_dismiss(move || closing.close());
     state.start();
     layout_view(cx, &head, &body, Some(&footer_slot), DIALOG_INSET, 1)
 }
@@ -437,10 +442,12 @@ impl Connect {
     }
 
     fn render(&self) {
-        let app = &self.cx.app;
-        let theme = &self.cx.theme;
-        self.body.clear();
-        self.footer.clear();
+        let ui = self.ui.borrow();
+        let Some(ui) = ui.as_ref() else { return };
+        let app = &ui.cx.app;
+        let theme = &ui.cx.theme;
+        ui.body.clear();
+        ui.footer.clear();
         let attempt = self.attempt.borrow().clone();
         if let Some(attempt) = &attempt {
             let link = Text::new(app, vec![attempt.url.as_str().fg(theme.markdown.link).link(attempt.url.clone())])
@@ -450,7 +457,7 @@ impl Connect {
             if !attempt.instructions.is_empty() {
                 details.add(&Text::new(app, attempt.instructions.clone()).fg(theme.text.muted));
             }
-            self.body.add(&details);
+            ui.body.add(&details);
         }
         let action = |title: &str, key: &str, run: fn(&Connect)| {
             let me = self.me.clone();
@@ -467,8 +474,8 @@ impl Connect {
             ],
             None => Vec::new(),
         };
-        self.footer.add(&footer(&self.cx, FooterProps { primary, ..FooterProps::default() }));
-        self.body.add(
+        ui.footer.add(&footer(&ui.cx, FooterProps { primary, ..FooterProps::default() }));
+        ui.body.add(
             &Text::new(app, if attempt.is_some() { "Waiting for authorization…" } else { "Starting authorization…" })
                 .fg(theme.text.muted),
         );
@@ -509,14 +516,20 @@ impl Connect {
         }
         let Some((label, form)) = self.method() else {
             // Wait for the integrations, which the dialog asks for again.
-            self.cx.on_close(self.local.subscribe(bind!(self, |state| state.start())));
+            if let Some(ui) = self.ui.borrow().as_ref() {
+                ui.cx.on_close(self.local.subscribe(bind!(self, |state| state.start())));
+            }
             if self.local.integrations().is_none() {
                 self.local.load_integrations();
             }
             return;
         };
         self.started.set(true);
-        self.title.set_text(label);
+        if let Some(ui) = self.ui.borrow().as_ref() {
+            ui.title.set_text(label.clone());
+        }
+        *self.label.borrow_mut() = Some(label);
+
         if self.valid() {
             let weak = Rc::downgrade(self);
             self.sync(false, move |outcome| {

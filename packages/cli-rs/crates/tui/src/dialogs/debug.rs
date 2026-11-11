@@ -69,6 +69,8 @@ pub fn show(tui: &Tui) {
             let text = rows.iter().map(|(label, value)| format!("{label}: {value}")).collect::<Vec<_>>().join("\n");
             let slot = View::new(&cx.app);
             let copied = Rc::new(Cell::new(false));
+            let kept = copied.clone();
+            copied.set(cx.keep(move || kept.get()).unwrap_or(false));
             // Draws the footer; after a copy the action reads `✓ copied` in the success color.
             let hook: Rc<Hook> = Rc::default();
             let draw: Rc<dyn Fn()> = {
