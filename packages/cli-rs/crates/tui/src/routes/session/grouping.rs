@@ -23,9 +23,9 @@ use opencode_ui::tool_info::{canonical_tool_name, tool_display_metadata};
 use opentui::prelude::*;
 use opentui::widget::Markdown;
 
-use super::messages::footer::duration;
 use super::messages::list::{Context, Part, Row, Spec};
 use super::messages::reasoning;
+use opencode_ui::locale::duration;
 
 /// A group's kind (`GroupKind`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

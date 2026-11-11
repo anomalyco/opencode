@@ -11,10 +11,10 @@ use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use super::assistant::titlecase;
 use super::list::Context;
 use crate::app::Tui;
 use crate::routes::Route;
+use opencode_ui::locale::titlecase;
 
 pub struct Notice(Rc<Inner>);
 
