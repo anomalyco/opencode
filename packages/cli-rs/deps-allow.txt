@@ -64,7 +64,6 @@ rand_core
 regex
 regex-automata
 regex-syntax
-regress
 reqwest
 ring build cc
 rustix build

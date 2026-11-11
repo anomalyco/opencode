@@ -49,8 +49,6 @@ notify = "8"
 percent-encoding = "2"
 rand = "0.10"
 regex = "1"
-# Form patterns are JavaScript regular expressions (`new RegExp` in `packages/tui/src/util/form.ts`).
-regress = "0.12"
 ring = "0.17"
 # TLS is rustls on ring with the platform's roots, configured once in `opencode_api::transport`, for HTTP/1.1 only, as
 # Bun's fetch speaks.
