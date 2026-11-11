@@ -1,5 +1,6 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
-import { toolRule } from "./rules"
+import type { TimelineDetail } from "../timeline/detail"
+import { liveThinkingShows, toolRule } from "./rules"
 
 type Content = SessionMessageAssistant["content"][number]
 
@@ -42,4 +43,11 @@ export function timelineStatus(input: {
   )
 
   return running.length > 1 ? "waitingAgents" : "waitingAgent"
+}
+
+/** Whether the model is writing a thought that shows, which then stands in for the status line's Working. */
+export function timelineThinking(detail: TimelineDetail, content: readonly Content[]) {
+  const last = content.at(-1)
+
+  return liveThinkingShows(detail) && last?.type === "reasoning" && last.time?.completed === undefined
 }
