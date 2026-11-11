@@ -35,7 +35,7 @@ import {
   type SessionHeaderTitleEvent,
 } from "./header-actions-machine"
 import { createTimelineProjection } from "./projection"
-import { createNextTimelineProjection } from "@opencode/session-ui/timeline-next/projection"
+import { createNextTimelineProjection } from "@opencode/session-ui/timeline-next"
 import { useServer } from "@/runtime/server/current"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
