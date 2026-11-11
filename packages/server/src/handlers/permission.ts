@@ -60,6 +60,9 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
         "session.permission.list",
         Effect.fn(function* (ctx) {
           const session = yield* sessionInfo(sessions, ctx.params.sessionID)
+          // Pending requests live in a loaded Location's memory, so an unloaded one has none to report.
+          // Answering must not boot it: clients poll whole subagent trees, including deleted worktrees.
+          if (instances.live && !(yield* instances.live(session))) return { data: [] }
           const requests = yield* Permission.Service.use((permission) =>
             permission.forSession(ctx.params.sessionID),
           ).pipe(instances.provide(session), locationErrors)

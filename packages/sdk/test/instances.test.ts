@@ -88,10 +88,10 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   expect(await second.sessions.get({ sessionID })).toEqual(separateHost)
   expect(configured).toEqual([])
   expect(setups).toEqual([])
-  // Permission and form lists read instance services, so they acquire the Session's instance.
+  // Pending permissions and forms live only in a loaded instance, so listing them never acquires one.
   expect(await first.permission.list({ sessionID })).toEqual([])
   expect(await first.session.form.list({ sessionID })).toEqual([])
-  expect(configured).toEqual(["first:alpha"])
+  expect(configured).toEqual([])
 
   await Promise.all(
     [

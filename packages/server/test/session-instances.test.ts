@@ -145,6 +145,7 @@ it.live(
                 )
                 const selector = Instance.Service.of({
                   provide: (session) => Effect.provide(instances.get(session.id)),
+                  live: (session) => RcMap.has(instances.rcMap, session.id),
                 })
                 const bindings: LayerNode.Replacements = [
                   ...replacements,
@@ -197,8 +198,13 @@ it.live(
           expect(yield* Effect.promise<unknown>(() => response.json())).toEqual({ data: [] })
         }
       }
-      // Reading permissions or forms builds the Session's Instance and starts its plugin activation at once; the
-      // ordering assertion after the prompts is what proves each Session boots exactly once.
+      // Pending permissions and forms live only in a loaded Instance, so listing them for these cold Sessions
+      // must answer without acquiring one. `live` is the immediate signal; plugin activation and `boots` land later.
+      for (const config of configs) {
+        const session = yield* sessions.get(config.id)
+        expect(yield* instances.live!(session)).toBe(false)
+      }
+      expect(boots).toEqual([])
 
       for (const config of configs) {
         const session = yield* sessions.get(config.id)
