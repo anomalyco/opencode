@@ -12,7 +12,7 @@ import { Glob } from "bun"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { rm } from "node:fs/promises"
-import { EmbeddedTerminalRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable, type CapturedLine } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { startFakeServer, type FakeServer, type Options } from "../lib/fake-server"
 import {
@@ -42,6 +42,8 @@ export type PtyStep = {
   settle?: number
   // Records the screen under this name.
   checkpoint?: string
+  // Records each row's background runs under this name (see `backgrounds`).
+  backgrounds?: string
   // With `checkpoint`, also records this many scrollback rows above the screen as `<name>:scrollback`.
   scrollback?: number
   // Resizes the pseudo-terminal and the emulator before the keys.
@@ -57,6 +59,9 @@ export type PtyCase = {
   env?: Record<string, string>
   cols?: number
   rows?: number
+  // The terminal's colors, as `#rrggbb`: the harness answers OSC 10, 11 and 4 queries with them instead of the
+  // emulator, whose answers are fixed. `colors` are slots 0-15; the others answer xterm's.
+  palette?: { foreground: string; background: string; colors: string[] }
   steps: PtyStep[]
   // The OSC kinds the comparison keeps. Terminal queries (colors, pointer shape) are `other`.
   osc?: OscKind[]
@@ -93,6 +98,9 @@ export async function runPty(side: Side, value: PtyCase) {
     onData: (data) => proc.terminal?.write(data),
   })
   setup.renderer.root.add(terminal)
+  // The emulator draws palette slots in the terminal's colors; its default background stays its own, so
+  // `backgrounds` can tell it from an explicit color.
+  if (value.palette) terminal.write(value.palette.colors.map((color, index) => `\x1b]4;${index};${color}\x07`).join(""))
   const closed = Promise.withResolvers<void>()
   const proc = Bun.spawn(value.command?.(side, server?.url) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
@@ -101,8 +109,16 @@ export async function runPty(side: Side, value: PtyCase) {
       cols,
       rows,
       data(_terminal, data) {
-        output.text += decoder.decode(data, { stream: true })
-        terminal.write(data)
+        const text = decoder.decode(data, { stream: true })
+        output.text += text
+        if (!value.palette) return terminal.write(data)
+        const palette = value.palette
+        terminal.write(
+          text.replace(/\x1b\]((?:10|11|4);[^\x07\x1b]*\?)(\x07|\x1b\\)/g, (_match, query: string, end: string) => {
+            proc.terminal?.write(colorReplies(query, palette, end))
+            return ""
+          }),
+        )
       },
       exit: () => closed.resolve(),
     },
@@ -145,6 +161,10 @@ export async function runPty(side: Side, value: PtyCase) {
       break
     }
     if (step.checkpoint) checkpoints[step.checkpoint] = await screen()
+    if (step.backgrounds) {
+      await setup.renderOnce()
+      checkpoints[step.backgrounds] = backgrounds(setup.captureSpans().lines.slice(0, terminal.height), terminal.width)
+    }
     if (step.checkpoint && step.scrollback) checkpoints[`${step.checkpoint}:scrollback`] = await back(step.scrollback)
   }
   const exit =
@@ -202,6 +222,48 @@ function oscKind(data: string): OscKind {
   if (code === "99" && /[:;]p=\?/.test(data)) return "other"
   if (["9", "99", "777"].includes(code)) return "notify"
   return "other"
+}
+
+// The replies to one OSC 10, 11 or 4 query; OSC 4 may ask for several slots.
+function colorReplies(query: string, palette: NonNullable<PtyCase["palette"]>, end: string) {
+  const rgb = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((at) => hex.slice(at, at + 2).repeat(2))
+    return `rgb:${r}/${g}/${b}`
+  }
+  const [code, ...rest] = query.split(";")
+  if (code === "10") return `\x1b]10;${rgb(palette.foreground)}${end}`
+  if (code === "11") return `\x1b]11;${rgb(palette.background)}${end}`
+  return rest
+    .flatMap((part, index) => (index % 2 === 0 && rest[index + 1] === "?" ? [Number(part)] : []))
+    .map((slot) => `\x1b]4;${slot};${rgb(palette.colors[slot] ?? xterm(slot))}${end}`)
+    .join("")
+}
+
+// xterm's color for a slot above 15.
+function xterm(slot: number) {
+  const hex = (value: number) => value.toString(16).padStart(2, "0")
+  if (slot >= 232) return `#${hex(8 + (slot - 232) * 10).repeat(3)}`
+  const cube = [0, 95, 135, 175, 215, 255]
+  const index = slot - 16
+  return `#${[Math.floor(index / 36), Math.floor(index / 6) % 6, index % 6].map((step) => hex(cube[step])).join("")}`
+}
+
+// Each row's background runs as `<from>-<to> <color>`, columns end-exclusive. The emulator's default background
+// (black) reads `default`; a color the program wrote reads `#rrggbb`.
+function backgrounds(lines: CapturedLine[], width: number) {
+  return lines.map((line) => {
+    const runs = line.spans.reduce<{ from: number; to: number; color: string }[]>((all, span) => {
+      const [r, g, b] = span.bg.toInts()
+      const color =
+        r + g + b === 0 ? "default" : `#${[r, g, b].map((value) => value.toString(16).padStart(2, "0")).join("")}`
+      const from = all.at(-1)?.to ?? 0
+      const to = Math.min(width, from + span.width)
+      if (from >= width) return all
+      if (all.at(-1)?.color === color) return all.with(-1, { ...all.at(-1)!, to })
+      return [...all, { from, to, color }]
+    }, [])
+    return runs.map((run) => `${run.from}-${run.to} ${run.color}`).join(", ")
+  })
 }
 
 type Probe = {
