@@ -78,6 +78,8 @@ impl Responded {
 struct Outgoing {
     message: Value,
     response_to: Option<(String, bool)>,
+    /// Told once the message is written.
+    written: Option<oneshot::Sender<()>>,
 }
 
 /// The agent's side of the connection. Cheap to clone.
@@ -133,11 +135,15 @@ impl Connection {
     }
 
     fn send(&self, message: Value, response_to: Option<(String, bool)>) -> Result<(), Failure> {
+        self.queue(Outgoing { message, response_to, written: None })
+    }
+
+    fn queue(&self, outgoing: Outgoing) -> Result<(), Failure> {
         if self.inner.closed.is_cancelled() {
             return Err(closed_failure());
         }
         self.inner.unwritten.fetch_add(1, Ordering::SeqCst);
-        self.inner.out.send(Outgoing { message, response_to }).map_err(|_| closed_failure())
+        self.inner.out.send(outgoing).map_err(|_| closed_failure())
     }
 
     pub fn notify(&self, method: &str, params: Value) -> Result<(), Failure> {
@@ -147,6 +153,19 @@ impl Connection {
     /// `session/update`.
     pub fn session_update(&self, session_id: &str, update: Value) -> Result<(), Failure> {
         self.notify("session/update", json!({ "sessionId": session_id, "update": update }))
+    }
+
+    /// `session/update`, resolving once it is written, as the SDK's `notify` does: a client that stops
+    /// reading holds the caller back instead of letting the queue grow.
+    pub async fn session_update_written(&self, session_id: &str, update: Value) -> Result<(), Failure> {
+        let (written, receiver) = oneshot::channel();
+        let message = json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": session_id, "update": update } });
+        self.queue(Outgoing { message, response_to: None, written: Some(written) })?;
+        tokio::select! {
+            biased;
+            result = receiver => result.map_err(|_| closed_failure()),
+            () = self.inner.closed.cancelled() => Err(closed_failure()),
+        }
     }
 
     /// Sends a request to the client. Dropping the future before the answer sends
@@ -363,6 +382,9 @@ async fn write_loop<W: AsyncWrite + Unpin>(
         }
         connection.inner.unwritten.fetch_sub(1, Ordering::SeqCst);
         connection.inner.written.notify_waiters();
+        if let Some(written) = outgoing.written {
+            let _ = written.send(());
+        }
         if let Some((id, ok)) = outgoing.response_to
             && let Some(sender) = lock(&connection.inner.responded).remove(&id)
         {
@@ -505,6 +527,21 @@ mod tests {
                 json!({ "jsonrpc": "2.0", "id": 3, "result": { "a": 1 } }),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn a_written_update_waits_for_the_writer() {
+        let (connection, writer) = Connection::new();
+        let update = connection.session_update_written("ses", json!({}));
+        tokio::pin!(update);
+        assert!(tokio::time::timeout(Duration::from_millis(20), &mut update).await.is_err(), "nothing was written");
+        let (client, agent) = tokio::io::duplex(1 << 16);
+        let (agent_read, agent_write) = tokio::io::split(agent);
+        let served = tokio::spawn(run(connection.clone(), writer, agent_read, agent_write, Arc::new(Echo)));
+        update.await.unwrap();
+        drop(client);
+        served.await.unwrap();
+        assert!(connection.session_update_written("ses", json!({})).await.is_err(), "closed");
     }
 
     #[tokio::test]
