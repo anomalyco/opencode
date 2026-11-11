@@ -69,6 +69,14 @@ const encodeMove = Schema.encodeSync(MovePayload)
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 
+const queuedUser = (ref: PendingRef) =>
+  and(
+    eq(SessionInboxTable.id, ref.id),
+    eq(SessionInboxTable.session_id, ref.sessionID),
+    eq(SessionInboxTable.type, "user"),
+    eq(SessionInboxTable.delivery, "queue"),
+  )
+
 export const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
   inboxLocks.withLock(sessionID)(effect)
 
@@ -263,10 +271,18 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     publishMutation(
       input,
       Effect.gen(function* () {
-        const original = yield* find(db, input.id)
-        if (original?.type !== "user" || original.sessionID !== input.sessionID || original.delivery !== "queue")
-          return yield* new LifecycleConflict({ id: input.id })
-        yield* bus.publish(SessionEvent.InboxEdited, { ...original, ...item })
+        const original = yield* db
+          .select({ created: SessionInboxTable.time_created })
+          .from(SessionInboxTable)
+          .where(queuedUser(input))
+          .get()
+          .pipe(Effect.orDie)
+        if (!original) return yield* new LifecycleConflict({ id: input.id })
+        yield* bus.publish(SessionEvent.InboxEdited, {
+          ...input,
+          ...item,
+          time: original,
+        })
       }),
     ),
   )
@@ -388,19 +404,15 @@ const delivered = (row: typeof SessionInboxTable.$inferSelect): Delivered => {
   return { id: row.id, type: row.type }
 }
 
-export const projectEdited = Effect.fn("SessionInbox.projectEdited")(function* (db: DatabaseService, item: User) {
+export const projectEdited = Effect.fn("SessionInbox.projectEdited")(function* (
+  db: DatabaseService,
+  item: SessionEvent.InboxEdited["data"],
+) {
   const payload = encodeStoredUser(yield* SessionBlob.externalizePayload(db, item.payload))
   const updated = yield* db
     .update(SessionInboxTable)
     .set({ payload, delivery: item.delivery })
-    .where(
-      and(
-        eq(SessionInboxTable.id, item.id),
-        eq(SessionInboxTable.session_id, item.sessionID),
-        eq(SessionInboxTable.type, "user"),
-        eq(SessionInboxTable.delivery, "queue"),
-      ),
-    )
+    .where(queuedUser(item))
     .returning({ seq: SessionInboxTable.enqueued_seq })
     .get()
     .pipe(Effect.orDie)

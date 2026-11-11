@@ -28383,7 +28383,15 @@
                 "type": "object",
                 "properties": {
                   "created": {
-                    "type": "number"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN", "Infinity", "-Infinity"]
+                      }
+                    ]
                   }
                 },
                 "required": ["created"],

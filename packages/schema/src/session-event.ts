@@ -230,7 +230,7 @@ export type InboxEnqueued = typeof InboxEnqueued.Type
 export const InboxEdited = Event.durable({
   type: "session.inbox.edited",
   ...options,
-  schema: SessionInbox.User.fields,
+  schema: { ...SessionInbox.User.fields, time: Schema.Struct({ created: Schema.Number }) },
 })
 export type InboxEdited = typeof InboxEdited.Type
 
