@@ -1,6 +1,6 @@
-//! The background hint (E.6b): `BackgroundToolHint` (`routes/session/index.tsx:1897-1929`). Once a shell or
-//! subagent call of the running step has run for three seconds, the transcript ends with how to move it to the
-//! background.
+//! The background hint (E.6b): `BackgroundToolHint` (`routes/session/index.tsx:1897-1929`). Once a shell call of
+//! the running step has run for three seconds, the transcript ends with how to move it to the background.
+//! Subagents always run in the background.
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -116,7 +116,7 @@ impl Inner {
     }
 }
 
-/// The running shell or subagent call of the newest unfinished step, and when it started running.
+/// The running shell call of the newest unfinished step, and when it started running.
 fn running(messages: &[SessionMessageInfo]) -> Option<(String, f64)> {
     let current = messages.iter().rev().find_map(|message| match message {
         SessionMessageInfo::Assistant(assistant) if assistant.time.completed.is_none() => Some(assistant),
@@ -125,7 +125,7 @@ fn running(messages: &[SessionMessageInfo]) -> Option<(String, f64)> {
     current.content.iter().find_map(|item| match item {
         SessionMessageAssistantContentItem::Tool(tool)
             if matches!(tool.state, SessionMessageAssistantToolState::Running(_))
-                && matches!(canonical_tool_name(&tool.name), "shell" | "subagent") =>
+                && canonical_tool_name(&tool.name) == "shell" =>
         {
             Some((format!("{}:{}", current.id.as_str(), tool.id), tool.time.ran.unwrap_or(tool.time.created)))
         }

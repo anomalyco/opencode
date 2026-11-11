@@ -15,7 +15,6 @@ pub enum Id {
     Escape,
     Queued,
     Subagents,
-    Background,
     Agent,
     Model,
     Context,
@@ -53,7 +52,7 @@ pub struct Input {
     /// The status text and its wider form.
     pub status: Option<(String, Option<String>)>,
     pub escape: Option<Action>,
-    /// `queued`, `subagents`, and `background` hints.
+    /// `queued` and `subagents` hints.
     pub work: Vec<(Id, Action)>,
     /// The model's name and variant.
     pub model: Option<(String, Option<String>)>,

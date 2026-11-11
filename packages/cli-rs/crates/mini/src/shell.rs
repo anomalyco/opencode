@@ -1979,16 +1979,12 @@ impl Mini {
             }
             _ => Vec::new(),
         };
-        let (running, foreground) = self.footers.running_subagents();
+        let running = self.footers.running_subagents();
         if let Some(key) = shortcut("session.child.first").filter(|_| shown && running > 0) {
             let plural = if running == 1 { "" } else { "s" };
             let label = format!("{running} sub");
             let expanded = Some(format!("{running} subagent{plural}"));
             work.push((status::Id::Subagents, status::Action { key, label, expanded }));
-        }
-        if let Some(key) = shortcut("session.background").filter(|_| shown && foreground) {
-            let action = status::Action { key, label: "bg".into(), expanded: Some("background".into()) };
-            work.push((status::Id::Background, action));
         }
         let usage = state.usage.as_ref().filter(|_| details);
         status::policy(&status::Input {
@@ -2060,7 +2056,7 @@ impl Mini {
         if queued > 0 {
             details.push(format!("{queued} pending"));
         }
-        let (running, _) = self.footers.running_subagents();
+        let running = self.footers.running_subagents();
         if running > 0 {
             details.push(format!("{running} subagent{}", if running == 1 { "" } else { "s" }));
         }
