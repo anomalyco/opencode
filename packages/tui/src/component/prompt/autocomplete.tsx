@@ -110,10 +110,14 @@ export function Autocomplete(props: {
   const [positionTick, setPositionTick] = createSignal(0)
   const [dismissedValue, setDismissedValue] = createSignal<string>()
   const [confirming, setConfirming] = createSignal<string>()
+  const [focused, setFocused] = createSignal(renderer.currentFocusedRenderable)
+  const focus = () => setFocused(renderer.currentFocusedRenderable)
+  renderer.on("focused_renderable", focus)
+  onCleanup(() => renderer.off("focused_renderable", focus))
 
   createEffect(() => {
     if (!store.visible) return
-    const popMode = keymap.mode.push("autocomplete")
+    const popMode = keymap.mode.push("autocomplete", () => focused() === props.input())
     onCleanup(popMode)
   })
 
