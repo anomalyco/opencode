@@ -199,7 +199,7 @@ export const Plugin = {
               const target = yield* access.resolve({ path: input.directory, kind: "directory" })
               yield* permission.assert({
                 action: "edit",
-                resources: [target.resource],
+                resources: target.ruleResources,
                 save: ["*"],
                 ...Permission.invocation(context),
               })
