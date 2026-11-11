@@ -22,6 +22,7 @@ import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
+import { Sandbox } from "../../sandbox.js"
 import { toolFailure } from "../runtime.js"
 
 export const name = "shell"
@@ -40,7 +41,7 @@ const OS =
       : process.platform === "linux"
         ? "Linux"
         : process.platform
-const description = (shell?: string, codeMode = false) =>
+const description = (shell?: string, codeMode = false, sandbox = false, fullDiskRead = false) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
@@ -52,6 +53,15 @@ const description = (shell?: string, codeMode = false) =>
     // Code Mode has no background parameter.
     ...(codeMode ? [] : ["Background commands return immediately, and you will be notified when they complete."]),
     "The current session ID is available in the OPENCODE_SESSION_ID environment variable.",
+    ...(sandbox
+      ? [
+          "Shell commands run in an OS sandbox with no network access. Writes are limited to the workspace, scratch and configured roots.",
+          fullDiskRead
+            ? "Disk reads are broadly allowed except protected paths."
+            : "Reads are restricted to the workspace, system runtime and configured roots.",
+          "Other tools and integrations are not confined by this shell sandbox. Running a command outside it is not supported.",
+        ]
+      : []),
   ].join(" ")
 
 const timeoutInput = (foreground: number) =>
@@ -310,6 +320,7 @@ export const Plugin = {
     // Internal plugins are not re-run on config changes, so reload the tool transform instead.
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
+    const sandbox = yield* Sandbox.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
@@ -322,13 +333,26 @@ export const Plugin = {
           kind: "directory",
         }),
       )
-      yield* access.authorizeExternal([target, ...directories], context)
-      if (parsed.commands.length > 0)
+      if (!sandbox.enabled) yield* access.authorizeExternal([target, ...directories], context)
+      if (sandbox.enabled) {
+        const resources = [target, ...directories].flatMap((item) =>
+          item.externalDirectory ? [item.externalDirectory.resource] : [],
+        )
+        if (resources.length)
+          yield* permission.assert({
+            action: "external_directory",
+            resources,
+            ...Permission.invocation(context),
+            prompt: "skip",
+          })
+      }
+      if (parsed.commands.length > 0 || sandbox.enabled)
         yield* permission.assert({
           action: name,
-          resources: parsed.commands.map((command) => command.resource),
+          resources: parsed.commands.length ? parsed.commands.map((command) => command.resource) : [invocation.command],
           save: parsed.commands.map((command) => command.save),
           ...Permission.invocation(context),
+          prompt: sandbox.enabled ? "skip" : undefined,
         })
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
@@ -380,7 +404,7 @@ export const Plugin = {
           // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool, and is
           // pinned so the Code Mode catalog always lists it, however many other tools there are.
           options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
-          description: description(undefined, codeMode),
+          description: description(undefined, codeMode, sandbox.enabled, sandbox.fullDiskRead),
           input: codeMode ? CodeModeInput : Input,
           output: StructuredOutput,
           execute: (input, context) => {
@@ -439,6 +463,7 @@ export const Plugin = {
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
                         if (!background) invocation.timeout = 0
+                        if (sandbox.enabled) return yield* sandbox.prepare(invocation)
                       }),
                   )
                   yield* context.progress({ shellID: info.id })
@@ -522,7 +547,12 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        tool.description = description(ShellSelect.name(yield* compatibleShell))
+        tool.description = description(
+          ShellSelect.name(yield* compatibleShell),
+          flags.resolve(loaded.entries).full_codemode.enabled,
+          sandbox.enabled,
+          sandbox.fullDiskRead,
+        )
       })
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)

@@ -1,6 +1,7 @@
 import { Database } from "@opencode/core/database/database"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { PersistentPty } from "@opencode/core/persistent-pty"
+import { Sandbox } from "@opencode/core/sandbox"
 import { Schema } from "effect"
 import type { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 
@@ -19,6 +20,7 @@ export const ServerOptions = Schema.Struct({
   simulation: Schema.optional(Schema.Boolean),
   database: Schema.optional(Database.Options),
   pty: Schema.optional(PersistentPty.Options),
+  sandbox: Schema.optional(Sandbox.Options),
   events: Schema.optional(
     Schema.Struct({
       persist: Schema.optional(Schema.Boolean),

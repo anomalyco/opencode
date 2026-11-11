@@ -38,6 +38,7 @@ import { SessionSchema } from "./session/schema.js"
 import { Config } from "./config.js"
 import { ToolOutput } from "./tool-output.js"
 import { ShellResult } from "./shell/result.js"
+import type { SandboxPolicy } from "./sandbox/policy.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -149,7 +150,7 @@ type Ended = {
 export interface Interface {
   readonly create: <E = never, R = never>(
     input: CreateInput,
-    before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
+    before?: (input: ShellCreateBefore) => Effect.Effect<void | SandboxPolicy.Launch, E, R>,
   ) => Effect.Effect<Shell.Info, E | AppProcess.AppProcessError, R>
   // Currently running commands only; exited shells are retained for get/output but excluded here.
   readonly list: () => Effect.Effect<Shell.Info[]>
@@ -883,7 +884,7 @@ const layer = () =>
 
       const create = Effect.fn("Shell.create")(function* <E = never, R = never>(
         input: CreateInput,
-        before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
+        before?: (input: ShellCreateBefore) => Effect.Effect<void | SandboxPolicy.Launch, E, R>,
       ) {
         const sessionID = input.metadata?.sessionID
         const baseEnv =
@@ -902,12 +903,12 @@ const layer = () =>
           },
         }
         yield* hooks.trigger("shell", "create.before", invocation)
-        if (before) yield* before(invocation)
+        const launch = before ? yield* before(invocation) : undefined
         // Absolute for local commands, so the command reports the same cwd wherever it runs.
         if (location.workspaceID === undefined) invocation.cwd = path.resolve(location.directory, invocation.cwd)
 
         const id = Shell.ID.ascending()
-        const args = ShellSelect.args(invocation.shell, invocation.command)
+        const args = launch ? launch.args : ShellSelect.args(invocation.shell, invocation.command)
         const file = path.join(outputDir, `${id}.out`)
 
         const info: Info = {
@@ -922,7 +923,9 @@ const layer = () =>
         }
         yield* annotate(info)
 
-        if (runs) {
+        // The daemon outlives the Location and its temporary sandbox directory.
+        // Keep confined processes Location-scoped until the daemon owns their lifetime.
+        if (runs && !launch) {
           const created = yield* runs
             .create({
               info,
@@ -959,9 +962,10 @@ const layer = () =>
             Effect.gen(function* () {
               const handle = yield* environment.spawner
                 .spawn(
-                  ChildProcess.make(invocation.shell, args, {
+                  ChildProcess.make(launch ? launch.command : invocation.shell, args, {
                     cwd: invocation.cwd,
-                    env: invocation.env,
+                    env: launch ? launch.env : invocation.env,
+                    extendEnv: launch ? false : undefined,
                     stdin: "ignore",
                     detached: process.platform !== "win32",
                     forceKillAfter: STOP_GRACE,

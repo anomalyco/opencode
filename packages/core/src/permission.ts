@@ -34,6 +34,8 @@ export type Reply = typeof Reply.Type
 export interface AssertInput extends Omit<Request, "id" | "message"> {
   readonly id?: ID
   readonly agent?: Agent.ID
+  /** Internal callers may skip ordinary prompts when OS confinement applies. Denies still apply. */
+  readonly prompt?: "skip"
 }
 
 /** The requester fields of a permission request made by a tool call. */
@@ -203,7 +205,7 @@ const layer = Layer.effect(
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
+      const effect: Permission.Effect = input.prompt === "skip" ? "allow" : effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
         agent: input.agent,

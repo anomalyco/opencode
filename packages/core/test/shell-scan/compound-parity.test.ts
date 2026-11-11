@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { ShellParse } from "../../src/shell/parse.js"
 import { ShellScan } from "../../src/shell/scan.js"
+import { bash32 } from "../fixture/bash"
 
 const contexts = [
   (source: string) => source,
@@ -104,28 +105,32 @@ describe("Zsh parenthesized loop acceptance", () => {
 describe("real-shell compound syntax", () => {
   for (const shell of ["bash", "zsh"]) {
     const executable = Bun.which(shell)
-    test
-      .skipIf(!executable)
-      .each([
-        ...bodies.map((body) => `probe() ${body}; probe`),
-        ...bodies.map((body) => `printf '%s' "$(probe() ${body}; probe)"`),
-        ...(shell === "zsh" ? loops.map((fixture) => fixture.source) : []),
-      ])(`${shell}: %s`, (source) => {
-      if (!executable) throw new Error(`${shell} is unavailable`)
-      const execution = Bun.spawnSync(
-        [
-          executable,
-          ...(shell === "bash" ? ["--noprofile", "--norc"] : ["-f"]),
-          "-c",
-          `scan_probe() { printf 'executed\\n' >&2; }; ${source}; wait`,
-        ],
-        { env: { PATH: "/usr/bin:/bin", LC_ALL: "C" }, timeout: 2_000 },
+    for (const source of [
+      ...bodies.map((body) => `probe() ${body}; probe`),
+      ...bodies.map((body) => `printf '%s' "$(probe() ${body}; probe)"`),
+      ...(shell === "zsh" ? loops.map((fixture) => fixture.source) : []),
+    ]) {
+      // Bash 3.2 misparses this case command substitution; retain all parser-only coverage above.
+      test.skipIf(!executable || (shell === "bash" && bash32 && source.includes("$(probe() case ")))(
+        `${shell}: ${source}`,
+        () => {
+          if (!executable) throw new Error(`${shell} is unavailable`)
+          const execution = Bun.spawnSync(
+            [
+              executable,
+              ...(shell === "bash" ? ["--noprofile", "--norc"] : ["-f"]),
+              "-c",
+              `scan_probe() { printf 'executed\\n' >&2; }; ${source}; wait`,
+            ],
+            { env: { PATH: "/usr/bin:/bin", LC_ALL: "C" }, timeout: 2_000 },
+          )
+          expect(execution.exitCode).toBe(0)
+          expect(execution.stderr.toString()).toEqual(
+            source.includes("value ()") ? "" : expect.stringContaining("executed\n"),
+          )
+          expect(ShellScan.scan(source).kind).toBe("scanned")
+        },
       )
-      expect(execution.exitCode).toBe(0)
-      expect(execution.stderr.toString()).toEqual(
-        source.includes("value ()") ? "" : expect.stringContaining("executed\n"),
-      )
-      expect(ShellScan.scan(source).kind).toBe("scanned")
-    })
+    }
   }
 })

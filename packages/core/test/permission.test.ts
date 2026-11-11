@@ -99,6 +99,18 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  it.effect("skips ordinary sandbox prompts but retains explicit denies", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "shell", resource: "*", effect: "ask" }])
+      const service = yield* Permission.Service
+      const input = assertion({ action: "shell", resources: ["pwd"], prompt: "skip" })
+      expect((yield* service.ask(input)).effect).toBe("allow")
+      expect((yield* service.ask(input).pipe(Effect.provideService(Permission.Unattended, []))).effect).toBe("allow")
+      expect(yield* service.list()).toEqual([])
+      yield* setRules([{ action: "shell", resource: "*", effect: "deny" }])
+      expect((yield* service.ask(input)).effect).toBe("deny")
+    }),
+  )
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
@@ -799,10 +811,7 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [
-        ["printf *"],
-        ["FOO=bar > *", "printf *"],
-      ],
+      grants: [["printf *"], ["FOO=bar > *", "printf *"]],
       repeat: [
         ["ask", "allow"],
         ["ask", "allow"],
@@ -814,10 +823,7 @@ describe("shell scanner permission impact", () => {
       name: "PowerShell method prefix",
       shell: "pwsh",
       command: '[IO.File]::Delete("C:\\first")',
-      grants: [
-        ["[IO.File]::Delete(*"],
-        ["[IO.File]::Delete(*"],
-      ],
+      grants: [["[IO.File]::Delete(*"], ["[IO.File]::Delete(*"]],
       repeat: [
         ["allow", "allow"],
         ["allow", "allow"],
