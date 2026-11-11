@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   const dev = mode === "dev"
   return {
     // Anomaly
-    accountId: "15d29c8639fd3733b1b5486a2acfd968",
+    accountId: dev ? "d8e944f537ceef3f06a5bd3aec1d7a53" : "15d29c8639fd3733b1b5486a2acfd968",
     worker: {
       name: dev ? "opencode-legacy-dev" : "opencode-legacy-production",
       compatibilityDate: "2026-07-25",
@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
       },
       workersDev: false,
       previewUrls: false,
-      logpush: true,
+      logpush: !dev,
       observability: { enabled: true },
     },
   }

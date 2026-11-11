@@ -99,7 +99,7 @@ jobs:
       # It is a step output, so only the Deploy step gets it.
       - name: Cloudflare token
         id: cloudflare-token
-        run: bash .github/release/cloudflare-token.sh
+        run: bash .github/release/cloudflare-token.sh "$GITHUB_REF_NAME"
         env:
           CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
 
