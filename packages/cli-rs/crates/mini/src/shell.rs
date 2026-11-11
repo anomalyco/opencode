@@ -155,7 +155,21 @@ pub fn run(input: Input) -> error::Result<()> {
         let mini = mini.clone();
         move |_, _: &signals::ThemeReload| mini.refresh_theme()
     });
+    app.on_message({
+        let mini = mini.clone();
+        move |cx, line: &crate::stderr::Line| {
+            if mini.footer.is_split() {
+                mini.write(cx, Commit::system(line.0.clone()));
+            }
+        }
+    });
+    let stderr = crate::stderr::Capture::start(&app)
+        .inspect_err(|error| log::warn!("mini could not capture stderr: {error}"))
+        .ok();
     let result = app.run();
+    if let Some(stderr) = stderr {
+        stderr.stop();
+    }
     mini.stop();
     if !mini.exit_splash.get() {
         println!();
