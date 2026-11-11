@@ -219,13 +219,15 @@ function outputText(state: SessionMessageAssistantTool["state"]) {
   return text || undefined
 }
 
-// The tool prints a JSON result, optionally followed by "\n\nWarnings:" and "\n\nLogs:".
+// The tool prints a compact JSON result, optionally followed by "\n\nWarnings:" and "\n\nLogs:". The dialog shows
+// it indented.
 function highlightedOutput(text: string) {
   if (!text.startsWith("{") && !text.startsWith("[")) return
   const end = text.search(/\n\n(Warnings|Logs):\n/)
-  const json = end === -1 ? text : text.slice(0, end)
-  if (Option.isNone(decodeJson(json))) return
-  return { json, rest: text.slice(json.length).trim() || undefined }
+  const raw = end === -1 ? text : text.slice(0, end)
+  const decoded = decodeJson(raw)
+  if (Option.isNone(decoded)) return
+  return { json: JSON.stringify(decoded.value, null, 2), rest: text.slice(raw.length).trim() || undefined }
 }
 
 function lineCount(text: string | undefined) {

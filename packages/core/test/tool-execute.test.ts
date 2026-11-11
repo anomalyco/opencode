@@ -330,7 +330,7 @@ describe.each([
         { tool: "slack.admin.create", status: "completed" },
       ],
     })
-    expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
+    expect(result.content).toEqual([{ type: "text", text: '["admin","created"]' }])
   })
 
   test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {

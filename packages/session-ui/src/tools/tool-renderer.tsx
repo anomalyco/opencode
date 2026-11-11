@@ -2014,9 +2014,16 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
   const lineCount = (text: string) => text.split("\n").length
   const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
 
+  // Code Mode returns structured results as compact JSON; show those indented and highlighted, anything else plain.
+  const output = createMemo(() => {
+    const decoded = decodeJson(props.output)
+    if (Option.isNone(decoded)) return { text: props.output, json: false }
+    return { text: JSON.stringify(decoded.value, null, 2), json: true }
+  })
+
   // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
   const numberDigits = () =>
-    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(props.output) : 0)).length
+    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(output().text) : 0)).length
 
   return (
     <Dialog fit containerClass="!w-[min(calc(100vw_-_32px),720px)] max-h-[calc(100vh_-_92px)]">
@@ -2052,26 +2059,23 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
             when={props.error}
             fallback={
               <Show when={props.output}>
-                {(output) => (
-                  <ExecuteDetailsSection
-                    label={i18n.t("ui.tool.execute.output")}
-                    meta={lines(output())}
-                    copy={output()}
-                    copyLabel={i18n.t("ui.tool.execute.copyOutput")}
-                  >
-                    <Dynamic
-                      component={fileComponent}
-                      mode="text"
-                      file={{
-                        // Code Mode returns structured results as JSON; highlight those, leave anything else plain.
-                        name: Option.isSome(decodeJson(output())) ? "output.json" : "output.txt",
-                        contents: output(),
-                        cacheKey: checksum(output()),
-                      }}
-                      overflow="wrap"
-                    />
-                  </ExecuteDetailsSection>
-                )}
+                <ExecuteDetailsSection
+                  label={i18n.t("ui.tool.execute.output")}
+                  meta={lines(output().text)}
+                  copy={output().text}
+                  copyLabel={i18n.t("ui.tool.execute.copyOutput")}
+                >
+                  <Dynamic
+                    component={fileComponent}
+                    mode="text"
+                    file={{
+                      name: output().json ? "output.json" : "output.txt",
+                      contents: output().text,
+                      cacheKey: checksum(output().text),
+                    }}
+                    overflow="wrap"
+                  />
+                </ExecuteDetailsSection>
               </Show>
             }
           >
