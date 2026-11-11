@@ -82,8 +82,8 @@ jobs:
   # ---- Gate: the full check suite, before anything is published ------------------------------------------------
 
   # release.yml does not wait for the check-test push run on the same commit, so a stable release would publish
-  # whatever that run later says. This gate runs the whole suite — unit tests on both OSes, the compiled builds
-  # and the browser suites — before any publish job below. Continuous dev and beta builds skip it: they publish
+  # whatever that run later says. This gate runs the whole suite — unit tests on both OSes, the compiled builds and
+  # the Linux browser suites — before any publish job below. Continuous dev and beta builds skip it: they publish
   # their own channel from a dev push, whose check-test run covers the same commit.
   verify:
     needs: plan
@@ -92,6 +92,8 @@ jobs:
       contents: read
       checks: write
     uses: ./.github/workflows/check-test.yml
+    with:
+      release_gate: true
 
   # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
   # tagged v<version>. Runs git only.

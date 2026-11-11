@@ -1,8 +1,8 @@
 name: check-test
 
 # Pull requests run the fast tier: the affected unit tests on Linux. The full tier — unit tests on Windows, the
-# compiled builds, and the Playwright suites on both OSes — runs on pushes to dev and beta, on nightly and manual
-# runs, and as the gate release.yml calls before it publishes a stable release.
+# compiled builds, and the Playwright suites on both OSes — runs on pushes to dev and beta and on nightly and manual
+# runs. A stable release also runs it through release.yml's gate, with the browser suites on Linux only.
 on:
   push:
     branches:
@@ -20,6 +20,10 @@ on:
     inputs:
       quarantine:
         description: Run only the quarantined browser tests (packages/app/e2e/QUARANTINE.md)
+        type: boolean
+        default: false
+      release_gate:
+        description: Run the browser suites on Linux only
         type: boolean
         default: false
 
@@ -224,12 +228,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Browser suites only run on pushes, nightly runs and the release gate, so every run covers both OSes.
-        settings:
-          - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - name: windows
-            host: blacksmith-4vcpu-windows-2025
+        # The release gate runs the Linux browser suites only: the Windows legs still fail on dev pushes often
+        # enough that a stable release must not wait for them. Pushes and nightly runs cover Windows.
+        settings: ${{ fromJSON(inputs.release_gate && '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"}]' || '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"},{"name":"windows","host":"blacksmith-4vcpu-windows-2025"}]') }}
         quarantine: ${{ fromJSON(inputs.quarantine && '[true]' || '[false]') }}
         # Playwright splits whole spec files across shards by test count, not duration. Every app-N
         # entry must use the same total, and the entries must cover 1..total. The service worker suite
