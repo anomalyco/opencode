@@ -5,9 +5,14 @@ import { Effect, FileSystem, Path } from "effect"
 const execFilePromise = util.promisify(execFile)
 
 export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function* (appName: string) {
-  if (process.platform === "win32") return true
+  // Launch runs the resolved path on Windows and the bare command on Linux, so an app is installed only if that resolves.
+  if (process.platform === "win32")
+    return yield* resolveWindowsAppPath(appName).pipe(
+      Effect.map((path) => path !== null),
+      Effect.orElseSucceed(() => false),
+    )
 
-  if (process.platform === "linux") return true
+  if (process.platform === "linux") return yield* isOnPath(appName)
 
   return yield* checkMacosApp(appName)
 })
@@ -30,10 +35,7 @@ const checkMacosApp = Effect.fn("DesktopFiles.checkMacosApp")(function* (appName
     if (yield* exists(fs, location)) return true
   }
 
-  return yield* Effect.tryPromise(() => execFilePromise("which", [appName])).pipe(
-    Effect.as(true),
-    Effect.orElseSucceed(() => false),
-  )
+  return yield* isOnPath(appName)
 })
 
 const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(function* (appName: string) {
@@ -150,6 +152,13 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
 
   return paths[0] ?? null
 })
+
+function isOnPath(appName: string) {
+  return Effect.tryPromise(() => execFilePromise("which", [appName])).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+  )
+}
 
 function exists(fs: FileSystem.FileSystem, path: string) {
   return fs.exists(path).pipe(Effect.orElseSucceed(() => false))
