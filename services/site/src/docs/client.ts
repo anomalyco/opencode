@@ -128,6 +128,23 @@ function enter(menu: HTMLElement) {
   menu.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "ease-out" })
 }
 
+// The versions flyout appears softly beside "Docs": a 140ms fade with a 3px nudge from the row it opens
+// from, on the strong ease-out, transform and opacity only. Only its first showing in an open menu
+// animates; coming back to "Docs" shows it at once, and it hides at once. Reduced motion shows it at once.
+let flown = false
+function flyIn(submenu: HTMLElement) {
+  if (flown || matchMedia("(prefers-reduced-motion: reduce)").matches) return
+  flown = true
+  const from = `translateX(${html.dir === "rtl" ? 3 : -3}px)`
+  submenu.animate(
+    [
+      { opacity: 0, transform: from },
+      { opacity: 1, transform: "translateX(0)" },
+    ],
+    { duration: 140, easing: "cubic-bezier(0.23, 1, 0.32, 1)" },
+  )
+}
+
 // The docs lockup (component/site/docs-lockup.tsx): the chevron opens the sections menu, where "Docs"
 // has its versions in a flyout beside it, or nested under it on phones and touch screens. An older
 // version adds a second menu, of the versions, so each dropdown in it opens on its own.
@@ -177,6 +194,7 @@ function openLockup(root: HTMLElement, focus?: "first" | "last" | "current") {
 }
 
 function closeLockup(refocus?: boolean) {
+  flown = false
   if (!lockup) return
   const root = lockup
   lockup = undefined
@@ -185,7 +203,10 @@ function closeLockup(refocus?: boolean) {
   $$("[aria-haspopup=menu]:not([role=menuitem], [data-nav-product])", root).forEach((button) =>
     button.setAttribute("aria-expanded", "false"),
   )
-  if (refocus) ($("[data-slot=toggle]", root) ?? $("[data-slot=trigger]", root))?.focus()
+  if (refocus)
+    $$("[data-slot=toggle], [data-slot=trigger]", root)
+      .find((button) => button.offsetParent)
+      ?.focus()
 }
 
 function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
@@ -196,7 +217,7 @@ function toggleSub(root: HTMLElement, open: boolean, focus?: boolean) {
   parent.toggleAttribute("data-open", open)
   const submenu = $("[data-slot=submenu]", parent)!
   submenu.hidden = !open
-  if (opening && menuOf(root).dataset.submenu === "flyout") enter(submenu)
+  if (opening && menuOf(root).dataset.submenu === "flyout") flyIn(submenu)
   $$("[aria-expanded]", parent).forEach((item) => item.setAttribute("aria-expanded", String(open)))
   if (open && focus)
     ($('[aria-current="page"]', $("[data-slot=submenu]", parent)!) ?? $("[data-slot=submenu] a", parent))?.focus()
