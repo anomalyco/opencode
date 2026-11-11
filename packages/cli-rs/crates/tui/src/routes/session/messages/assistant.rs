@@ -1,7 +1,7 @@
 //! Assistant parts (E.6a): text as Markdown (`TextPart`, `message-parts.tsx:173-200`). Tool rows
 //! are `tools::dispatch::Tool` (E.7a).
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantText};
 use opentui::prelude::*;
@@ -14,7 +14,6 @@ use super::list::Context;
 pub struct TextPart {
     root: View,
     markdown: Markdown,
-    text: RefCell<String>,
     streaming: Cell<bool>,
 }
 
@@ -22,7 +21,7 @@ impl TextPart {
     pub fn new(cx: &Context<'_>) -> Self {
         let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true);
         let root = View::new(cx.app).padding_edge(Edge::Left, 3).shrink(0.0).child(&markdown);
-        Self { root, markdown, text: RefCell::default(), streaming: Cell::new(true) }
+        Self { root, markdown, streaming: Cell::new(true) }
     }
 
     pub fn root(&self) -> &View {
@@ -32,18 +31,20 @@ impl TextPart {
     pub fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantText) {
         let text = part.text.trim();
         self.root.visible(!text.is_empty());
-        // Content goes in before streaming ends, so completion keeps the final tokens.
-        let mut current = self.text.borrow_mut();
-        if *current != text {
-            match text.strip_prefix(current.as_str()) {
-                Some(rest) if !current.is_empty() => {
-                    self.markdown.append(rest);
-                }
-                _ => {
-                    self.markdown.set_markdown(text);
-                }
+        // Content goes in before streaming ends, so completion keeps the final tokens. The widget's source is the
+        // text shown so far. Read it in place for the bytes `text` keeps (0 replaces them all), and change it only
+        // after the read ends.
+        let kept = self
+            .markdown
+            .with_markdown(|shown| (shown != text).then(|| if text.starts_with(shown) { shown.len() } else { 0 }));
+        match kept {
+            Some(0) => {
+                self.markdown.set_markdown(text);
             }
-            text.clone_into(&mut current);
+            Some(len) => {
+                self.markdown.append(&text[len..]);
+            }
+            None => {}
         }
         let streaming = message.time.completed.is_none();
         if self.streaming.replace(streaming) != streaming {

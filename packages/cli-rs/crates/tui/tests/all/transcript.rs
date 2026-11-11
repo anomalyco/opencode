@@ -252,10 +252,19 @@ fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
     let screen = h.wait_for("The plan has two steps.");
     assert!(!screen.contains("Build ·"), "no footer while streaming:\n{screen}");
 
+    // The final text does not extend what streamed, so it replaces it.
+    h.apply(event(
+        "session.text.ended",
+        4,
+        json!({ "sessionID": "ses_s", "assistantMessageID": "msg_2", "ordinal": 0, "text": "The plan has three steps." }),
+    ));
+    let screen = h.wait_for("The plan has three steps.");
+    assert!(!screen.contains("two steps"), "{screen}");
+
     // The step ends: the message completes, the reasoning is done, and the footer shows.
     h.apply(event(
         "session.step.ended",
-        4,
+        5,
         json!({
             "sessionID": "ses_s", "assistantMessageID": "msg_2", "finish": "stop", "cost": 0,
             "tokens": { "input": 10, "output": 20, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
@@ -265,7 +274,7 @@ fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
     assert!(screen.contains("Build · provider/model · 9.0s"), "{screen}");
     // The group's duration counts finished parts only, so this part adds none.
     assert!(screen.lines().any(|line| line.trim() == "+ Thought"), "{screen}");
-    assert!(screen.contains("The plan has two steps."), "{screen}");
+    assert!(screen.contains("The plan has three steps."), "{screen}");
 }
 
 /// 50 turns of 6 rows each; the first page (20 messages) is 60 rows, 40 of them mounted.
