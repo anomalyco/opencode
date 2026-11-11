@@ -566,9 +566,34 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
         cx.focus(input);
     }
     handle.render();
+    let weak = Rc::downgrade(&handle.0);
+    let kept = cx.keep(move || weak.upgrade().map(|inner| Kept::of(&Select(inner))));
+    if let Some(kept) = kept.flatten() {
+        handle.reapply(kept);
+    }
     let root =
         layout_view(cx, &head, &handle.0.body, Some(&handle.0.footer_slot), DIALOG_INSET, handle.0.props.footer_gap);
     (root, handle)
+}
+
+/// What a select built again in a new theme takes over: the filter with the input's cursor, the selection, and
+/// the scroll offset.
+struct Kept<T> {
+    filter: String,
+    cursor: u32,
+    selected: Option<T>,
+    top: f64,
+}
+
+impl<T: Clone + PartialEq + 'static> Kept<T> {
+    fn of(select: &Select<T>) -> Self {
+        Self {
+            filter: select.filter(),
+            cursor: select.0.input.as_ref().map_or(0, |input| input.cursor_offset()),
+            selected: select.selected().map(|option| option.value),
+            top: select.scroll_top(),
+        }
+    }
 }
 
 impl<T: Clone + PartialEq + 'static> Select<T> {
@@ -625,14 +650,27 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         self.0.scroll.scroll_position().1
     }
 
-    /// Selects `value` and scrolls the list to `top` without running `on_move`, so a dialog built again shows
-    /// the rows the old one showed.
-    pub fn restore(&self, value: &T, top: f64) {
-        if let Some(index) = self.index_of(value) {
+    /// Takes over the filter, selection and scroll of the select this one replaces, without running `on_filter` or
+    /// `on_move`, so a dialog built again shows the rows the old one showed.
+    fn reapply(&self, kept: Kept<T>) {
+        if !kept.filter.is_empty() {
+            if let Some(input) = &self.0.input {
+                input.set_value(&kept.filter);
+                input.set_cursor_offset(kept.cursor);
+            }
+            let options = (self.props().options)(&kept.filter);
+            {
+                let mut state = self.0.state.borrow_mut();
+                state.filter = kept.filter;
+                state.options = options;
+            }
+            self.recompute();
+        }
+        if let Some(index) = kept.selected.and_then(|value| self.index_of(&value)) {
             self.0.state.borrow_mut().selected = index;
             self.remember_selection();
         }
-        self.0.scroll.scroll_to(0.0, top);
+        self.0.scroll.scroll_to(0.0, kept.top);
         self.update_overflow();
         self.render();
     }

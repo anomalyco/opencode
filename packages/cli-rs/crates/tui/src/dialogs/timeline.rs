@@ -32,7 +32,10 @@ pub fn show(tui: &Tui, session: SessionID, on_move: OnMove) {
     let weak = tui.weak();
     tui.dialogs.replace(
         move |cx| {
-            let mut props = SelectProps::new("Timeline", options);
+            let mut props = SelectProps::new("Timeline", options.clone());
+            let weak = weak.clone();
+            let on_move = on_move.clone();
+
             props.search_in_title = true;
             props.title_placeholder = Some("Search timeline".to_owned());
             props.on_move =

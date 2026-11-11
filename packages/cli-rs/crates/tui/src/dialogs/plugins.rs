@@ -148,7 +148,7 @@ impl Manager {
                 );
                 props.preserve_selection = true;
                 props.locked = manager.locked.get();
-                props.focus_target = focus;
+                props.focus_target = focus.clone();
                 props.bindings = vec![
                     TuiCommand::inline(
                         "ctrl+a",
@@ -548,7 +548,12 @@ impl Manager {
         };
         // The select is still handling the key that opened the error.
         tui.app.defer(bind!(tui, |tui, _| {
-            tui.dialogs.replace(|cx| error_details::view(&tui, cx, props), None, DialogOptions::new(DialogSize::Large));
+            let weak = tui.weak();
+            tui.dialogs.replace(
+                bind!(weak, |tui, cx| error_details::view(&tui, cx, props.clone()), else View::new(&cx.app)),
+                None,
+                DialogOptions::new(DialogSize::Large),
+            );
         }));
     }
 }

@@ -393,6 +393,69 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     assert_eq!(footer(&app, "Mouse"), "off");
 }
 
+// Expected (O-89): a theme change from outside an open dialog restyles it in place, as TS `useTheme()` does. Each kind
+// (a select, a prompt, Settings), open with a filter or typed text and a moved selection or cursor, draws what it
+// draws when opened in the new theme after the same keys, and goes on from there. The change comes from the terminal
+// turning light, and from `cli.json` (the write and the outside reload apply a config the same way).
+#[test]
+fn an_outside_theme_change_restyles_each_kind_of_open_dialog_in_place() {
+    use opencode_api::generated::SessionID;
+    use opencode_tui::dialogs::rename;
+    use opentui::prelude::Event;
+    use opentui::theme::ThemeMode;
+
+    type Open = fn(&TestApp, &opencode_tui::app::Tui);
+    let cases: [(&str, Open); 3] = [
+        ("select", |app, tui| {
+            experiments::show(tui);
+            app.type_text("e");
+            app.press("down");
+        }),
+        ("prompt", |app, tui| {
+            rename::show(tui, SessionID("ses_1".into()), Some("Old title".into()));
+            app.type_text(" new");
+            app.press("left");
+        }),
+        ("settings", |app, tui| {
+            settings::show(tui, None);
+            app.type_text("mo");
+            app.press("down");
+        }),
+    ];
+    let info =
+        || opencode_local::cli_config::merge(&[Some(json!({ "theme": { "name": "opencode" }, "animations": false }))]);
+    // The rows' cells, but the prompt's: the home route mounts again in the new theme with another placeholder.
+    let rows = |screen: &opentui::native::Capture| -> Vec<Vec<opentui::native::Cell>> {
+        (0..screen.height)
+            .filter(|&y| !screen.row(y).contains("Ask anything"))
+            .map(|y| (0..screen.width).map(|x| screen.cell(x, y).unwrap().clone()).collect())
+            .collect()
+    };
+    let light = |app: &TestApp, tui: &opencode_tui::app::Tui, file: bool| match file {
+        true => settings::update(tui, |draft| settings::set_path(draft, &["theme", "mode"], json!("light"))),
+        false => app.event(Event::ThemeMode(ThemeMode::Light)),
+    };
+    for file in [false, true] {
+        for (name, open) in cases {
+            let app = TestApp::new(80, 30);
+            let tui = support::mount_empty(&app, info(), None);
+            open(&app, &tui);
+            let dark = app.render();
+            light(&app, &tui, file);
+            let restyled = app.render();
+            assert_ne!(restyled, dark, "{name}: the dialog kept its theme");
+            let fresh = TestApp::new(80, 30);
+            let twin = support::mount_empty(&fresh, info(), None);
+            light(&fresh, &twin, file);
+            open(&fresh, &twin);
+            assert_eq!(rows(&restyled), rows(&fresh.render()), "{name} (cli.json: {file})");
+            app.type_text("x");
+            fresh.type_text("x");
+            assert_eq!(rows(&app.render()), rows(&fresh.render()), "{name} (cli.json: {file}) after typing");
+        }
+    }
+}
+
 // Expected (r2 review, carbon-ui-3): the open settings dialog takes the theme that changing the color mode chose, as
 // TS `useTheme()` restyles it in place; it keeps the setting selected and the filter typed.
 #[test]

@@ -76,5 +76,5 @@ pub fn palette(cx: &Rc<DialogCx>, settings: Vec<SelectOption<String>>) -> View {
 
 /// Opens the palette in place of any open dialog.
 pub fn show(dialogs: &Dialogs, settings: Vec<SelectOption<String>>) {
-    dialogs.replace(|cx| palette(cx, settings), None, DialogOptions::default());
+    dialogs.replace(move |cx| palette(cx, settings.clone()), None, DialogOptions::default());
 }

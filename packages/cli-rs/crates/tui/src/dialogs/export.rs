@@ -68,15 +68,18 @@ enum Row {
 /// Space change the value; Enter saves to a file and `c` copies.
 pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
     let confirm: Rc<dyn Fn(Choice)> = Rc::new(bind!(tui, |tui, choice| on_confirm(&tui, choice)));
+    // Outside the build, so a build in a new theme keeps the values.
+    let state = Rc::new(State {
+        format: Cell::new(Format::Markdown),
+        thinking: Cell::new(default_thinking),
+        tools: Cell::new(true),
+        sanitize: Cell::new(false),
+    });
+    let selected = Rc::new(Cell::new(Row::Format));
     tui.dialogs.replace(
         move |cx| {
-            let state = Rc::new(State {
-                format: Cell::new(Format::Markdown),
-                thinking: Cell::new(default_thinking),
-                tools: Cell::new(true),
-                sanitize: Cell::new(false),
-            });
-            let selected = Rc::new(Cell::new(Row::Format));
+            let (state, selected, confirm) = (state.clone(), selected.clone(), confirm.clone());
+
             // `DialogSelectChoice`: the selected row shows `‹ value ›`; the others pad the value to the same width.
             let options: Rc<dyn Fn() -> Vec<SelectOption<Row>>> = {
                 let state = state.clone();

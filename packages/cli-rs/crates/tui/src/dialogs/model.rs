@@ -70,7 +70,7 @@ pub fn show(local: &Rc<Local>, provider: Option<String>) {
 fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
     local.dialogs.replace(
         bind!(local, |local, cx| {
-            build(cx, &local, provider, &filter)
+            build(cx, &local, provider.clone(), &filter)
         }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),
@@ -79,8 +79,10 @@ fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
 
 // The select of `DialogConnectedModels`.
 fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Option<String>, filter: &str) -> View {
-    // Favoriting does not reorder the list until the dialog is reopened.
-    let favorites_at_open = local.favorite();
+    // Favoriting does not reorder the list until the dialog is reopened, which a build in a new theme is not.
+    let favorites = Rc::new(local.favorite());
+    let saved = favorites.clone();
+    let favorites_at_open = cx.keep(move || saved.clone()).unwrap_or(favorites);
     let marker = cx.theme.text.formfield.selected;
     let options: select::Options<Model> = {
         let weak = Rc::downgrade(local);
@@ -127,9 +129,10 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
         },
     ];
     let (view, handle) = select::select(cx, props);
-    if !filter.is_empty() {
+    if !filter.is_empty() && !cx.rebuilt() {
         handle.set_filter(filter);
     }
+
     // Refresh the rows as the catalog, the favorites, or the connections change. When the connected state would
     // change the footer, the dialog opens again with the same filter.
     let reopened = Rc::new(Cell::new(false));

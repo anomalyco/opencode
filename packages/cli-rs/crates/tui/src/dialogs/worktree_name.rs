@@ -26,10 +26,12 @@ pub fn show(tui: &Tui, on_name: Rc<dyn Fn(Option<String>)>) {
     let confirm = resolve.clone();
     tui.dialogs.replace(
         move |cx| {
+            let confirm = confirm.clone();
             prompt(
                 cx,
                 PromptProps {
                     title: "Name worktree".into(),
+
                     placeholder: Some("Worktree name".into()),
                     actions: vec![PromptAction {
                         title: "generate name".into(),

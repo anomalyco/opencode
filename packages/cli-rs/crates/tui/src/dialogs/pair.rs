@@ -9,7 +9,8 @@ use opencode_ui::bind;
 use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, HeaderProps, header, layout};
 use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opentui::prelude::*;
-use std::rc::Rc;
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
 use crate::app::Tui;
 
@@ -33,21 +34,28 @@ pub fn install(tui: &Rc<Tui>) {
 
 /// `DialogPair`, large and centered, in place of any open dialog.
 pub fn show(tui: &Tui) {
-    let weak = tui.weak();
+    // Read once: a build in a new theme draws the same code again.
+    let loaded: Loaded = Rc::default();
+    let shown: Shown = Rc::default();
+    let (result, target) = (loaded.clone(), shown.clone());
     tui.dialogs.replace(
         move |cx| {
             cx.dialogs.set_centered(true);
             let body = View::new(&cx.app);
-            body.add(&Text::new(&cx.app, "Loading server information…").fg(cx.theme.text.muted));
-            if let Some(tui) = weak.upgrade() {
-                load(&tui, cx, &body);
-            }
+            fill(cx, &body, result.borrow().as_ref());
+            *target.borrow_mut() = Some((Rc::downgrade(cx), body.clone()));
             layout(cx, &header(cx, HeaderProps::new("Pair")), &body, None)
         },
         None,
         DialogOptions::new(DialogSize::Large),
     );
+    load(tui, loaded, shown);
 }
+
+/// The pairing once read, or why it could not be.
+type Loaded = Rc<RefCell<Option<Result<Pairing, String>>>>;
+/// The body of the dialog's current build.
+type Shown = Rc<RefCell<Option<(Weak<DialogCx>, View)>>>;
 
 /// What the links come from.
 pub struct Pairing {
@@ -79,34 +87,41 @@ pub fn pairing(server: &ServerInfo, pairing: &PairingCode) -> Pairing {
     }
 }
 
-fn load(tui: &Tui, cx: &Rc<DialogCx>, body: &View) {
+fn load(tui: &Tui, loaded: Loaded, shown: Shown) {
     let client = tui.data.client().clone();
-    let (cx, body) = (Rc::downgrade(cx), body.clone());
     tui.app.spawn(
         async move {
             let (server, code) = futures_util::future::join(client.server_info(), client.server_pair()).await;
             Ok::<_, opencode_api::error::Error>(pairing(&server?, &code?))
         },
-        bind!(cx, |cx, _, result| {
-            body.clear();
-            match result {
-                Ok(value) => {
-                    body.add(&content(&cx, &value));
-                }
-                Err(error) => {
-                    let theme = &cx.theme;
-                    body.add(
-                        &Text::new(&cx.app, "Could not load server information")
-                            .fg(theme.text.feedback.error.base)
-                            .bold(),
-                    );
-                    body.add(&Text::new(&cx.app, error.to_string()).fg(theme.text.muted));
-                    body.add(&Text::new(&cx.app, "Close and reopen Pair to try again.").fg(theme.text.muted));
-                }
-            }
+        move |_, result| {
+            *loaded.borrow_mut() = Some(result.map_err(|error| error.to_string()));
+            let Some((cx, body)) = shown.borrow().clone() else { return };
+            let Some(cx) = cx.upgrade() else { return };
+            fill(&cx, &body, loaded.borrow().as_ref());
             cx.app.request_redraw();
-        }),
+        },
     );
+}
+
+fn fill(cx: &DialogCx, body: &View, loaded: Option<&Result<Pairing, String>>) {
+    let theme = &cx.theme;
+    body.clear();
+    match loaded {
+        None => {
+            body.add(&Text::new(&cx.app, "Loading server information…").fg(theme.text.muted));
+        }
+        Some(Ok(value)) => {
+            body.add(&content(cx, value));
+        }
+        Some(Err(error)) => {
+            body.add(
+                &Text::new(&cx.app, "Could not load server information").fg(theme.text.feedback.error.base).bold(),
+            );
+            body.add(&Text::new(&cx.app, error.clone()).fg(theme.text.muted));
+            body.add(&Text::new(&cx.app, "Close and reopen Pair to try again.").fg(theme.text.muted));
+        }
+    }
 }
 
 /// The links and the QR code: side by side from 96 columns, else stacked; in a scroll box below 36 rows.
@@ -170,5 +185,6 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
     let scroll =
         ScrollBox::new(app).scrollbars(false).height((8.max(i32::from(height) - i32::from(height) / 4 - 6)) as u32);
     scroll.add(&row);
+    cx.keep_scroll(&scroll);
     View::new(app).child(&scroll)
 }

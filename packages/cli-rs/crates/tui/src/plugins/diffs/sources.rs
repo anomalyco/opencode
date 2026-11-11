@@ -37,10 +37,11 @@ pub fn open(viewer: &Viewer) {
     let weak = viewer.weak();
     tui.dialogs.replace(
         move |cx| {
-            let mut props = SelectProps::new("Diff source", options);
+            let mut props = SelectProps::new("Diff source", options.clone());
             props.skip_filter = true;
             props.render_filter = false;
             props.current = Some(current);
+            let weak = weak.clone();
             props.on_select = Some(Rc::new(bind!(weak, |viewer, option: &SelectOption<Choice>| {
                 let Some(tui) = viewer.tui() else { return };
                 let choice = option.value;
