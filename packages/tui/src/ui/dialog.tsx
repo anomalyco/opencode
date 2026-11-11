@@ -33,6 +33,11 @@ export function dialogWidth(size: DialogSize) {
   return 60
 }
 
+export function dialogBodyMaxHeight(height: number) {
+  // Reserve the top spacer, header, prompt, footer and shared layout spacing.
+  return Math.max(1, height - Math.floor(height / 4) - 10)
+}
+
 export function Dialog(
   props: ParentProps<{
     size?: DialogSize
@@ -69,7 +74,7 @@ export function Dialog(
         backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
       >
         <Show when={!props.centered}>
-          <box height={dimensions().height / 4} flexShrink={1} />
+          <box height={dimensions().height < 22 ? 0 : dimensions().height / 4} flexShrink={1} minHeight={0} />
         </Show>
         <box
           onMouseUp={(e: { stopPropagation(): void }) => {

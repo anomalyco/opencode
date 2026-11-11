@@ -25,6 +25,7 @@ import { useTheme } from "../context/theme"
 import {
   DIALOG_INSET,
   DIALOG_LIST_INSET,
+  dialogBodyMaxHeight,
   DialogBleed,
   DialogFooter,
   DialogHeader,
@@ -667,6 +668,7 @@ function OAuthAuto(props: {
   const clipboard = useClipboard()
   const newDesigns = useNewDesigns()
   const theme = useTheme().surface("dialog")
+  const dimensions = useTerminalDimensions()
   let scroll: ScrollBoxRenderable | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
@@ -804,9 +806,8 @@ function OAuthAuto(props: {
           <scrollbox
             id="oauth-paste-description"
             ref={(value: ScrollBoxRenderable) => (scroll = value)}
+            maxHeight={dialogBodyMaxHeight(dimensions().height)}
             flexShrink={1}
-            flexGrow={1}
-            flexBasis={0}
             minHeight={1}
           >
             <box gap={1}>
