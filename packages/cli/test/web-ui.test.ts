@@ -163,6 +163,13 @@ describe("web UI", () => {
         `${origin}/opencode`,
       ])
 
+      // Another site opening an API URL under the prefix is still rejected.
+      const crossSite = yield* get("/opencode/api/info", {
+        headers: { ...authorization, "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate" },
+      })
+      expect(crossSite.status).toBe(403)
+      yield* Effect.promise(() => crossSite.arrayBuffer())
+
       const pairing = yield* get("/opencode/api/pair", { method: "POST", headers: authorization }).pipe(
         Effect.flatMap((response) => Effect.promise(() => response.json() as Promise<{ code: string }>)),
       )
