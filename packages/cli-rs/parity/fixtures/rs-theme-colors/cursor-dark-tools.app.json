@@ -187,13 +187,6 @@
     {
       "checkpoint": "open",
       "until": "unused variable",
-      "deviation": [
-        {
-          "file": "H06-pinned-theme-diff-syntax",
-          "cells": 34,
-          "styleOnly": true
-        }
-      ],
       "fixture": "rs-theme-colors/cursor-dark-tools/open"
     }
   ],
