@@ -191,6 +191,10 @@ process.exit(0)
     #[tokio::test]
     async fn a_standalone_server_lives_as_long_as_the_connection() {
         if std::process::Command::new("bun").arg("--version").output().is_err() {
+            assert!(
+                std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+                "OPENCODE_RS_REQUIRE_TS is set, but skipped: bun is not on PATH"
+            );
             eprintln!("skipped: bun is not on PATH");
             return;
         }

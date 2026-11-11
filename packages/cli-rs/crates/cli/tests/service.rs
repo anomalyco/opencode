@@ -43,6 +43,10 @@ struct Sandbox {
 impl Sandbox {
     fn new() -> Option<Self> {
         if Command::new("bun").arg("--version").output().is_err() {
+            assert!(
+                std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+                "OPENCODE_RS_REQUIRE_TS is set, but skipped: bun is not on PATH"
+            );
             eprintln!("skipped: bun is not on PATH");
             return None;
         }
@@ -283,6 +287,10 @@ fn interop_with_a_typescript_service() {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../..")));
     if !root.join("node_modules").is_dir() || !root.join("packages/cli/src/index.ts").is_file() {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: no TypeScript checkout with node_modules; set OPENCODE_TS_ROOT"
+        );
         eprintln!("skipped: no TypeScript checkout with node_modules; set OPENCODE_TS_ROOT");
         return;
     }

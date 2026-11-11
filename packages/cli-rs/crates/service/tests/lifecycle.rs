@@ -27,6 +27,10 @@ fn bun() -> bool {
     let found =
         Command::new("bun").arg("--version").stdout(Stdio::null()).status().is_ok_and(|status| status.success());
     if !found {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: bun is not on PATH"
+        );
         eprintln!("skipped: bun is not on PATH");
     }
     found

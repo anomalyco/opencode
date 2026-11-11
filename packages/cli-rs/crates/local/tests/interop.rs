@@ -2,8 +2,8 @@
 //! TypeScript code, through `parity/oracle/F.4-local.ts`.
 //!
 //! The TypeScript side comes from `OPENCODE_TS_ROOT`, else this checkout. Lock tests need only `bun`;
-//! the others also need the root's `node_modules` and are skipped, with a note, without it. Every
-//! test uses temporary directories.
+//! the others also need the root's `node_modules` and are skipped, with a note, without it.
+//! `OPENCODE_RS_REQUIRE_TS` turns every skip into a failure. Every test uses temporary directories.
 
 use std::ffi::OsString;
 use std::fs;
@@ -31,6 +31,10 @@ fn script() -> PathBuf {
 
 fn bun(args: &[&str]) -> Option<Command> {
     if Command::new("bun").arg("--version").output().is_err() {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: bun is not on PATH"
+        );
         eprintln!("skipped: bun is not on PATH");
         return None;
     }
@@ -42,6 +46,11 @@ fn bun(args: &[&str]) -> Option<Command> {
 fn with_modules() -> bool {
     let present = ts_root().join("node_modules").is_dir();
     if !present {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: {} has no node_modules; set OPENCODE_TS_ROOT",
+            ts_root().display()
+        );
         eprintln!("skipped: {} has no node_modules; set OPENCODE_TS_ROOT", ts_root().display());
     }
     present
