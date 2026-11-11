@@ -246,7 +246,7 @@ describe("snapshots", () => {
 
 describe("suspend", () => {
   test("a sync program suspended mid-loop resumes where it stopped, in a new runtime", async () => {
-    const runtime = CodeMode.make({ tools: {}, engine: "vm" })
+    const runtime = CodeMode.make({ tools: {} })
     const code = `
       const seen = []
       let n = 0

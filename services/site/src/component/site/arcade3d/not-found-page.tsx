@@ -1,3 +1,5 @@
+// Ahead of the arcade's own stylesheets, as the shell is on other pages.
+import "./not-found-page.css"
 import { Meta, Title } from "@solidjs/meta"
 import { HttpStatusCode } from "@solidjs/start"
 import { createSignal, Match, onMount, Switch } from "solid-js"

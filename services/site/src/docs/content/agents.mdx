@@ -115,7 +115,10 @@ Set `mode` according to where the agent should run:
 | `subagent` | Runs only in a child session through the `subagent` tool. |
 | `all` | Runs either as a primary agent or a subagent. |
 
-Subagents run with fresh context in foreground or background child sessions. The parent agent's `subagent` permissions control which agents it may launch; the child uses its own configured permissions.
+Subagents run with fresh context in their own child sessions. They always run in
+the background: the parent receives a report when a child goes idle, and again
+after each later round of work. The parent agent's `subagent` permissions control
+which agents it may launch; the child uses its own configured permissions.
 
 ```jsonc
 {

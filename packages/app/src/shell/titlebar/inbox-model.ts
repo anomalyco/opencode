@@ -12,6 +12,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { sessionBusy, sessionRequests, type SessionRequests } from "@/shell/layout/project-avatar-state"
 import { pathKey } from "@/workspaces/path-key"
 import { parseHomeSessionIndex } from "@/home/sessions/index"
+import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -192,16 +193,16 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
         }
 
         // Locally known sessions come last so live archive and unarchive events win over cached indexes.
-        const sessions = new Map(
+        const sessions = mergeRootSessionIndex(
           [
             ...(queries[index]?.data?.() ?? []),
             ...(options.archived ? (archivedQueries[index]?.data?.() ?? []) : []),
-            ...data.session.list(),
-          ].map((session) => [session.id, session] as const),
+          ],
+          data.session.known(),
         )
 
         return data.session
-          .apply([...sessions.values()].filter((session) => !session.parentID))
+          .apply(sessions)
           .map((session): InboxEntry => {
             const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
             const requests = sessionRequests(item.ctx, session.id, true, settings.permissions.autoApproves(project))
@@ -397,7 +398,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     })
     void startTransition(() => {
       tabs.select(tabs.addSessionTab({ server: entry.server, sessionId: entry.session.id }))
-      entry.ctx.data.session.remember(entry.session)
+      entry.ctx.data.session.remember(entry.ctx.data.session.get(entry.session.id) ?? entry.session)
       entry.ctx.projects.touch(directory)
     })
   }

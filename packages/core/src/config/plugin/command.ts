@@ -94,7 +94,6 @@ export const Plugin = define({
                     description: command.description ?? name,
                   }
                   yield* subagents.start(recovery)
-                  yield* subagents.background(recovery)
                   return
                 }
                 if (agent !== undefined) {

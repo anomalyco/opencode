@@ -65,6 +65,8 @@ const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
 const ConsoleInstructions = Schema.Struct({
   instructions: Schema.Array(Schema.Struct({ id: Schema.String, content: Schema.String })),
 })
+/** The `GET /api/v2/config` response header Console sends while the caller has workspace instructions and skills. */
+const listsHeader = "x-opencode-instructions-skills"
 const ConsoleSkills = Schema.Struct({
   skills: Schema.Array(Schema.Struct({ slug: Schema.String, version: Schema.String })),
 })
@@ -259,7 +261,7 @@ export const OpencodePlugin = define<
                 "failed" in result ? Effect.fail(result.failed) : Effect.succeed(result.remote),
               ),
               Effect.flatMap((remote) =>
-                remote
+                remote?.lists
                   ? Effect.all(
                       {
                         instructions: list(
@@ -277,7 +279,7 @@ export const OpencodePlugin = define<
                       },
                       { concurrency: 2 },
                     ).pipe(Effect.map((lists): ConsoleConfig => ({ ...remote, ...lists })))
-                  : Effect.succeed(undefined),
+                  : Effect.succeed(remote && { ...remote, instructions: [], skills: [] }),
               ),
               Effect.map((remote) => ({
                 remote,
@@ -604,8 +606,9 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
               })
           }
           const watches = response.headers[OpencodeWatches.header] !== undefined
+          const lists = response.headers[listsHeader] !== undefined
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
-          return { ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)), watches }
+          return { ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)), watches, lists }
         }),
       ),
       Effect.scoped,

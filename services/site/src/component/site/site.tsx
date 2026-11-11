@@ -125,9 +125,9 @@ const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*
 function clientPage(pathname: string) {
   return clientPages.test(strip(pathname))
 }
-// The full page loads a link here can lead to on this domain (this site's other pages, in any
-// language, the static ones among them, the docs and Stats), fetched once the pointer rests on the
-// link so the page opens sooner.
+// The full page loads a link here can lead to on this domain (this site's pages, in any language,
+// the docs and Stats), fetched once the pointer rests on the link so the page opens sooner. The
+// development server prefetches none of the site's pages.
 // Only addresses that are safe to request ahead of time: never the Console or a download, and never a
 // language link (hreflang), whose page sets the language cookie. Browsers without Speculation Rules
 // ignore it.
@@ -140,8 +140,6 @@ const speculationRules = JSON.stringify({
         and: [
           {
             href_matches: [
-              "{/:locale}?/:page(product|ide|mini|font)",
-              "{/:locale}?/product/*",
               "{/:locale}?/extensions/*",
               // The home page is "/" and "/ja", not "/ja/".
               ...(import.meta.env.DEV

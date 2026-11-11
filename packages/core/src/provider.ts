@@ -5,7 +5,6 @@ import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { HttpTimeout, type ProviderPackage } from "@opencode/ai/effect"
-import { isRecord } from "@opencode/util/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
 import { importModule, resolveModule } from "@opencode/util/runtime-import"
@@ -18,25 +17,10 @@ import { Location } from "./location.js"
 import { freeze } from "immer"
 import { AISDKNative } from "./aisdk-native.js"
 
+export { AISDK_PREFIX, aisdk, isAISDK, mergeHeaders, mergeOverlay, packageName } from "./aisdk-native.js"
+
 export const ID = Provider.ID
 export type ID = typeof ID.Type
-
-export const AISDK_PREFIX = "aisdk:"
-export const isAISDK = (value: string | undefined): value is string => value?.startsWith(AISDK_PREFIX) ?? false
-export const aisdk = (value: string) => (isAISDK(value) ? value : `${AISDK_PREFIX}${value}`)
-export function packageName(value: string): string
-export function packageName(value: undefined): undefined
-export function packageName(value: string | undefined): string | undefined
-export function packageName(value: string | undefined) {
-  // Native provider entrypoints can persist in user configuration across the npm scope migration.
-  if (value?.startsWith("@opencode-ai/ai/")) return value.replace("@opencode-ai/", "@opencode/")
-  if (value === undefined || !isAISDK(value)) return value
-  return value.slice(AISDK_PREFIX.length)
-}
-
-type Json = Schema.Schema.Type<typeof Schema.Json>
-const JsonRecord = Schema.Record(Schema.String, Schema.Json)
-const decodeJsonRecord = Schema.decodeUnknownSync(JsonRecord)
 
 export class LoadError extends Schema.TaggedError<LoadError>()("Provider.LoadError", {
   package: Schema.String,
@@ -104,6 +88,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/fireworks", () => import("@opencode/ai/providers/fireworks")],
   ["@opencode/ai/providers/fireworks/embeddings", () => import("@opencode/ai/providers/fireworks/embeddings")],
   ["@opencode/ai/providers/google", () => import("@opencode/ai/providers/google")],
+  ["@opencode/ai/providers/google/decisions", () => import("@opencode/ai/providers/google/decisions")],
   ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
   ["@opencode/ai/providers/google/embeddings", () => import("@opencode/ai/providers/google/embeddings")],
   ["@opencode/ai/providers/google/images", () => import("@opencode/ai/providers/google/images")],
@@ -147,6 +132,10 @@ const builtins = new Map<string, () => Promise<unknown>>([
     () => import("@opencode/ai/providers/openai-compatible/responses"),
   ],
   ["@opencode/ai/providers/openai-compatible/images", () => import("@opencode/ai/providers/openai-compatible/images")],
+  [
+    "@opencode/ai/providers/openai-compatible/decisions",
+    () => import("@opencode/ai/providers/openai-compatible/decisions"),
+  ],
   [
     "@opencode/ai/providers/openai-compatible/embeddings",
     () => import("@opencode/ai/providers/openai-compatible/embeddings"),
@@ -202,7 +191,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
 export const builtinPackages: ReadonlySet<string> = new Set(builtins.keys())
 
 export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: string, npm?: Npm.Interface) {
-  const specifier = packageName(input)
+  const specifier = AISDKNative.packageName(input)
   const builtin = builtins.get(specifier)
   if (builtin) return yield* importPackage(specifier, specifier, builtin)
   const resolved = yield* Effect.sync(() => {
@@ -274,46 +263,6 @@ const decodeEncoding = Schema.decodeUnknownOption(Provider.Encoding)
 /** Request body encoding from provider or model settings; invalid values are dropped. */
 export function encoding(settings: Readonly<Record<string, unknown>>) {
   return Option.getOrUndefined(decodeEncoding(settings.encoding))
-}
-
-export function mergeOverlay(
-  base: Readonly<Record<string, unknown>> | undefined,
-  overlay: Readonly<Record<string, unknown>> | undefined,
-): Record<string, Json> | undefined {
-  if (base === undefined) return overlay && decodeJsonRecord({ ...overlay })
-  if (overlay === undefined) return decodeJsonRecord({ ...base })
-  return decodeJsonRecord(mergeRecord(base, overlay))
-}
-
-function mergeRecord(
-  base: Readonly<Record<string, unknown>>,
-  overlay: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
-  return Object.fromEntries(
-    new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
-      const left = base[key]
-      const right = overlay[key]
-      if (right === undefined) return [key, left]
-      if (isRecord(left) && isRecord(right)) return [key, mergeRecord(left, right)]
-      return [key, right]
-    }),
-  )
-}
-
-export function mergeHeaders(
-  base: Readonly<Record<string, string>> | undefined,
-  overlay: Readonly<Record<string, string>> | undefined,
-) {
-  if (base === undefined) return overlay && { ...overlay }
-  if (overlay === undefined) return { ...base }
-  return Object.fromEntries(
-    [...Object.entries(base), ...Object.entries(overlay)]
-      .reduce((result, entry) => {
-        result.set(entry[0].toLowerCase(), entry)
-        return result
-      }, new Map<string, [string, string]>())
-      .values(),
-  )
 }
 
 export const Request = Provider.Request
@@ -447,6 +396,7 @@ const layer = Layer.effect(
             update(record.provider)
             record.provider.id = id
             AISDKNative.rewrite(record.provider, {
+              builtins: builtinPackages,
               specifier: record.provider.package,
               providerID: id,
               canonical: record.provider.canonical,
@@ -475,6 +425,7 @@ const layer = Layer.effect(
               model.id = modelID
               model.providerID = providerID
               AISDKNative.rewrite(model, {
+                builtins: builtinPackages,
                 specifier: model.package ?? record.provider.package,
                 providerID,
                 canonical: model.canonical ?? record.provider.canonical,

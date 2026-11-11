@@ -9,8 +9,16 @@ import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { useLocale } from "@kobalte/core/i18n"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
+import { prefersReducedMotion } from "@opencode/ui/motion"
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from "solid-js"
 import { getWorkerPool } from "../../pierre/worker"
+import {
+  SIDEBAR_EXIT_TIMEOUT_MS,
+  createSidebarPresenceState,
+  selectSidebarMounted,
+  transitionSidebarPresence,
+  type SidebarPresenceEvent,
+} from "./sidebar-presence-machine"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "./session-file-panel-v2"
 
 export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT = 240
@@ -69,15 +77,48 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   const width = () => props.width ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT
   const minWidth = () => props.minWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN
   const maxWidth = () => props.maxWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX
+  const [presence, setPresence] = createSignal(createSidebarPresenceState(untrack(() => props.open)))
+  let exitTimer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: SidebarPresenceEvent) => {
+    const next = transitionSidebarPresence(untrack(presence), event)
+
+    setPresence(next.state)
+    next.effects.forEach((effect) => {
+      clearTimeout(exitTimer)
+      exitTimer = setTimeout(
+        () => dispatch({ type: "exit.timed-out", attempt: effect.attempt }),
+        SIDEBAR_EXIT_TIMEOUT_MS,
+      )
+    })
+  }
+
+  createEffect(
+    on(
+      () => props.open,
+      (open) =>
+        dispatch({ type: "open.changed", open, animate: untrack(() => props.transition) && !prefersReducedMotion() }),
+      { defer: true },
+    ),
+  )
+  onCleanup(() => clearTimeout(exitTimer))
+
+  const closing = () => presence().status === "closing"
 
   return (
     <div data-component="session-review-v2-sidebar-root">
-      <Show when={props.open}>
+      <Show when={selectSidebarMounted(presence())}>
         <aside
           data-slot="session-review-v2-sidebar"
+          data-presence={presence().status}
           data-transition={props.transition ? "" : undefined}
           data-resizing={resizing() ? "" : undefined}
-          style={{ width: `${width()}px` }}
+          aria-hidden={closing() || undefined}
+          inert={closing() || undefined}
+          style={{ "--session-review-v2-sidebar-width": `${width()}px` }}
+          onTransitionEnd={(event) => {
+            if (event.target === event.currentTarget && event.propertyName === "width") dispatch({ type: "exit.ended" })
+          }}
         >
           <div data-slot="session-review-v2-sidebar-header">
             <div data-slot="session-review-v2-sidebar-title">{props.title}</div>

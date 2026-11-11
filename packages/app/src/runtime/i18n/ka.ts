@@ -337,7 +337,6 @@ export const dict = {
   "session.new.project.search": "პროექტების ძიება",
   "session.new.project.add": "პროექტის დამატება",
   "session.new.workspace.runIn": "სესიის გაშვება",
-  "session.new.workspace.triggerLocal": "ადგილობრივი",
   "session.new.workspace.local": "ადგილობრივი საცავი",
   "session.new.git.none": "Git-ის გარეშე",
   "session.header.open.finder": "Finder",

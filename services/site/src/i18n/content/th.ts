@@ -18,11 +18,6 @@ export const content = {
       action: "ติดตั้ง",
     },
     sdk: { name: "SDK", body: "ควบคุม OpenCode จากสคริปต์ งาน CI และเครื่องมือของคุณเอง", action: "อ่านเอกสาร" },
-    ide: {
-      name: "ส่วนขยาย IDE",
-      body: "เปิด OpenCode ใน VS Code, Cursor และ Windsurf หรือใน Zed และ JetBrains IDE ผ่าน ACP",
-      action: "ติดตั้ง",
-    },
     mini: {
       name: "Mini",
       body: "อินเทอร์เฟซเทอร์มินัลแบบมินิมอล คำตอบจะพิมพ์ลงใน scrollback ของคุณ โดยมีพรอมต์เดียวอยู่ด้านล่าง",
@@ -154,26 +149,6 @@ export const content = {
         "in-your-process": {
           title: "ในโปรเซสของคุณ",
           body: "รัน OpenCode ภายในโปรเซสของคุณ ด้วยการตั้งค่าและโมเดลของคุณ",
-        },
-      },
-    },
-    ide: {
-      title: "OpenCode | การเชื่อมต่ออีดิเตอร์สำหรับ VS Code, Cursor และ Zed",
-      description:
-        "ใช้ OpenCode ในอีดิเตอร์ของคุณ ด้วยส่วนขยายสำหรับ VS Code, Cursor, Windsurf และ VSCodium และ opencode acp สำหรับ Zed, JetBrains IDE และอีดิเตอร์ ACP อื่นๆ",
-      intro:
-        "ใช้ OpenCode ในอีดิเตอร์ของคุณ ใน VS Code, Cursor, Windsurf และ VSCodium ให้รัน opencode ในเทอร์มินัลในตัว แล้วส่วนขยายจะติดตั้งเอง Zed, JetBrains IDE และอีดิเตอร์อื่นที่รองรับ Agent Client Protocol จะรัน OpenCode ด้วย opencode acp",
-      features: {
-        "quick-launch": { title: "เปิดด่วน", body: "Cmd+Esc หรือ Ctrl+Esc เปิด OpenCode ในเทอร์มินัลแบบแยกหน้าจอ" },
-        "new-session": { title: "เซสชันใหม่", body: "Cmd+Shift+Esc หรือ Ctrl+Shift+Esc เริ่มอีกเซสชัน" },
-        context: { title: "บริบท", body: "แชร์ส่วนที่เลือกหรือแท็บปัจจุบันกับ OpenCode" },
-        "file-references": { title: "อ้างอิงไฟล์", body: "Cmd+Option+K หรือ Alt+Ctrl+K แทรก @File#L37-42" },
-        "installs-itself": { title: "ติดตั้งเอง", body: "รัน opencode ในเทอร์มินัลในตัวเพื่อเพิ่มส่วนขยาย" },
-        "acp-editors": { title: "อีดิเตอร์ ACP", body: "Zed, JetBrains IDE, Avante.nvim และ CodeCompanion.nvim" },
-        "open-vsx": { title: "Open VSX", body: "มีบน Open VSX สำหรับ Cursor, Windsurf และ VSCodium ด้วย" },
-        "same-agent": {
-          title: "เอเจนต์เดียวกัน",
-          body: "OpenCode ตัวเดียวกับที่คุณใช้ในเทอร์มินัล อยู่ข้างโค้ดของคุณ",
         },
       },
     },
@@ -670,14 +645,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "สคริปต์" } } },
     sdk: { more: { label: "อ่านเอกสาร SDK" } },
-    ide: {
-      lead: "รัน opencode ในเทอร์มินัลในตัวของอีดิเตอร์ แล้วส่วนขยายจะติดตั้งเอง หรือติดตั้งด้วยตัวเองก็ได้",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      more: { label: "ตั้งค่า Zed, JetBrains IDE และอีดิเตอร์ ACP อื่นๆ" },
-    },
     mini: {
       commands: { curl: { name: "สคริปต์" } },
       lead: "Mini มาพร้อมกับ OpenCode CLI ติดตั้งด้วยวิธีใดก็ได้ด้านล่าง แล้วรัน opencode mini",

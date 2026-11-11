@@ -19,6 +19,7 @@ import { SessionBlob } from "./blob.js"
 import { SessionInboxTable, SessionMessageTable, SessionPartTable, SessionTable, type SessionPartData } from "./sql.js"
 import { SessionStored } from "./stored.js"
 import { InstructionEntry } from "./instruction-entry.js"
+import { SubagentMetadata } from "./subagent-metadata.js"
 import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core/query-builders/update"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -174,7 +175,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       title: forkTitle(parent.title ?? undefined),
       agent: parent.agent,
       model: parent.model,
-      metadata: parent.metadata,
+      metadata: SubagentMetadata.inherit(parent.metadata ?? undefined) ?? null,
       permission: parent.permission,
       version: parent.version,
       cost: 0,
@@ -1084,6 +1085,7 @@ const layer = Layer.effectDiscard(
         yield* touch(db, event)
       }),
     )
+    yield* bus.project(SessionEvent.Step.FirstToken, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {

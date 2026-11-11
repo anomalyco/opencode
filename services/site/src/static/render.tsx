@@ -42,6 +42,14 @@ const answered = (path: string, method: string) =>
       !route.page && (route[`$${method}`] || (method === "HEAD" && route.$GET)) && matches(route.path, path),
   )
 
+/** The methods an address takes: an API route's handlers (HEAD with GET), else a page's GET and HEAD. */
+const allowed = (path: string) => {
+  const methods = pages
+    .filter((route) => !route.page && matches(route.path, path))
+    .flatMap((route) => Object.keys(route).flatMap((key) => (/^\$[A-Z]+$/.test(key) ? [key.slice(1)] : [])))
+  return [...new Set(methods.includes("GET") || !methods.length ? [...methods, "GET", "HEAD"] : methods)].join(", ")
+}
+
 /**
  * Production only: the static routes (routes.ts) as plain HTML with no hydration, and the not-found
  * page (`[...404].tsx`, with its 404 status) for every address no route answers. The page renders
@@ -53,16 +61,25 @@ const answered = (path: string, method: string) =>
  */
 export const staticPages: Middleware = async (_event, next) => {
   const event = getRequestEvent()
-  if (import.meta.env.DEV || !event || (event.request.method !== "GET" && event.request.method !== "HEAD"))
-    return next()
+  if (import.meta.env.DEV || !event) return next()
   const url = new URL(event.request.url)
   const path = strip(url.pathname)
+  // Pages only answer GET and HEAD. A method nothing handles gets a 405 listing the methods the address takes,
+  // not the app's document, whose scripts production no longer ships.
+  if (event.request.method !== "GET" && event.request.method !== "HEAD")
+    return answered(path, event.request.method)
+      ? next()
+      : new Response(null, { status: 405, headers: { Allow: allowed(path) } })
   const pattern = staticPath(path) ?? (answered(path, event.request.method) ? undefined : "/*404")
   const load =
     pattern && pages.find((route) => route.page && route.path.replace(/(.)\/$/, "$1") === pattern)?.$component?.import
   if (!load) return next()
   const page = await load()
-  const styles = stylesheets(["src/entry-client.tsx", page.id$$ ?? ""])
+  const shell = stylesheets(["src/entry-client.tsx"])
+  const own = stylesheets([page.id$$ ?? ""]).filter((file) => !shell.includes(file))
+  // The not-found page has no frame: its own stylesheet copies what it needs of the shell's
+  // (arcade3d/not-found-page.css).
+  const styles = pattern === "/*404" ? own : [...shell, ...own]
   const pass: StaticPass = { collect: true, pending: [], values: [], next: 0 }
   event.locals.staticPass = pass
   // HttpStatusCode (the changelog's missing releases) keeps its status only on a completed render.
