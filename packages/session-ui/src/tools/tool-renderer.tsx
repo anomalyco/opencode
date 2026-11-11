@@ -38,6 +38,7 @@ import { createImagePreview } from "../components/image-preview"
 import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
+import { formatExecuteOutput } from "@opencode/util/execute-output"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
@@ -2006,22 +2007,14 @@ ToolRegistry.register({
   },
 })
 
-const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
-
 function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const lineCount = (text: string) => text.split("\n").length
   const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
 
-  // Code Mode returns structured results as compact JSON; show those indented and highlighted, anything else plain.
-  const output = createMemo(() => {
-    const decoded = decodeJson(props.output)
-
-    if (Option.isNone(decoded)) return { text: props.output, json: false }
-
-    return { text: JSON.stringify(decoded.value, null, 2), json: true }
-  })
+  // Code Mode returns structured results as compact JSON; show those indented, and highlight a bare JSON result.
+  const output = createMemo(() => formatExecuteOutput(props.output))
 
   // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
   const numberDigits = () =>
@@ -2071,7 +2064,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
                     component={fileComponent}
                     mode="text"
                     file={{
-                      name: output().json ? "output.json" : "output.txt",
+                      name: output().json !== undefined && output().rest === undefined ? "output.json" : "output.txt",
                       contents: output().text,
                       cacheKey: checksum(output().text),
                     }}
@@ -2130,6 +2123,7 @@ function ExecuteDetailsSection(props: {
 function ExecuteOutputRow(props: { output: string }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
+  const text = createMemo(() => formatExecuteOutput(props.output).text)
 
   const toggle = () => {
     if (window.getSelection()?.toString()) return
@@ -2156,12 +2150,12 @@ function ExecuteOutputRow(props: { output: string }) {
         </span>
         <span data-slot="execute-tool-call-name">{i18n.t("ui.tool.execute.output")}</span>
         <span data-slot="execute-tool-call-args">
-          {i18n.plural("ui.tool.execute.lines", props.output.split("\n").length)}
+          {i18n.plural("ui.tool.execute.lines", text().split("\n").length)}
         </span>
       </div>
       <Show when={open()}>
         <div data-slot="execute-tool-output">
-          <ConsoleOutput output={props.output} />
+          <ConsoleOutput output={text()} />
         </div>
       </Show>
     </div>
