@@ -29,6 +29,7 @@ import path from "path"
 import { SessionRunner } from "./session/runner/index.js"
 import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
+import { SubagentMetadata } from "./session/subagent-metadata.js"
 import {
   AttachmentError,
   BusyError,
@@ -312,7 +313,9 @@ const layer = Layer.effect(
               agent: input.agent,
               // Children inherit metadata and permissions the way they inherit
               // location, so host policies that read them treat the family uniformly.
-              metadata: input.metadata ?? parent?.metadata,
+              // The per-link subagent switch is not host metadata, though: a silent
+              // child must not silence the sessions created beneath it.
+              metadata: input.metadata ?? SubagentMetadata.inherit(parent?.metadata),
               permissions: input.permissions ?? parent?.permissions,
               model: input.model,
             },
@@ -406,10 +409,13 @@ const layer = Layer.effect(
         yield* jobs.cancelSession(sessionID)
         yield* transport.close(sessionID)
         const children = yield* store.list({ parentID: sessionID })
-        yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
+        // Delete the parent before its children: an interrupted child settles through the report
+        // path, and a report admitted just before the parent's deletion wakes an execution whose
+        // lifecycle write then fails on the deleted row.
         yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
         yield* bus.remove(sessionID)
+        yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
       }),
       list: Effect.fn("Session.list")(function* (input = {}) {
         const filter =
