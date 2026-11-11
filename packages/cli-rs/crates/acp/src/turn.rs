@@ -65,7 +65,8 @@ struct Turn {
 struct Background {
     attached: Weak<Attached>,
     state: Arc<Mutex<TurnState>>,
-    stop: Option<CancellationToken>,
+    /// The follower's stop token, and the token cancelled once it has ended.
+    follower: Option<(CancellationToken, CancellationToken)>,
 }
 
 /// How `execute` ended.
@@ -217,16 +218,18 @@ impl Turns {
         let attached = self.sessions.require(session_id)?;
         let prepared = prompt::prepare(&self.catalogs.get(&attached.cwd).await?, content).await?;
         let capabilities = *lock(&self.capabilities);
-        let turn = self.open(
-            &attached,
-            TurnContext {
-                session_id: attached.id.clone(),
-                cwd: attached.cwd.clone(),
-                start: Some(prepared.start.clone()),
-                child_updates: capabilities.child_session_updates,
-                compaction: capabilities.compaction,
-            },
-        );
+        let turn = self
+            .open(
+                &attached,
+                TurnContext {
+                    session_id: attached.id.clone(),
+                    cwd: attached.cwd.clone(),
+                    start: Some(prepared.start.clone()),
+                    child_updates: capabilities.child_session_updates,
+                    compaction: capabilities.compaction,
+                },
+            )
+            .await;
         let exit = if cancel.is_cancelled() {
             Exit::Interrupted
         } else {
@@ -238,13 +241,15 @@ impl Turns {
     }
 
     // Parented to the agent scope; the session scope may already be closed.
-    fn open(self: &Arc<Self>, attached: &Arc<Attached>, ctx: TurnContext) -> Turn {
+    async fn open(self: &Arc<Self>, attached: &Arc<Attached>, ctx: TurnContext) -> Turn {
         let mut state = TurnState::default();
         let previous = lock(&self.backgrounds).remove(&attached.id);
         if let Some(previous) = previous.filter(|previous| Weak::ptr_eq(&previous.attached, &Arc::downgrade(attached)))
         {
-            if let Some(stop) = previous.stop {
+            // Inherit only once the follower has ended, so an event it is folding is not lost (TS: `Fiber.interrupt`).
+            if let Some((stop, ended)) = previous.follower {
                 stop.cancel();
+                ended.cancelled().await;
             }
             let inherited = lock(&previous.state);
             state.children = inherited.children.clone();
@@ -484,7 +489,7 @@ impl Turns {
         if state.open_children.is_empty() {
             if !state.children.is_empty() {
                 let background =
-                    Background { attached: Arc::downgrade(attached), state: turn.state.clone(), stop: None };
+                    Background { attached: Arc::downgrade(attached), state: turn.state.clone(), follower: None };
                 backgrounds.insert(attached.id.clone(), background);
             }
             close.cancel();
@@ -493,9 +498,9 @@ impl Turns {
         // Children outlive a cancelled turn, so their asks and the parent turns their reports start still reach
         // the client.
         let next = Arc::new(Mutex::new(TurnState { started: false, ..state }));
-        let stop = CancellationToken::new();
-        let background =
-            Background { attached: Arc::downgrade(attached), state: next.clone(), stop: Some(stop.clone()) };
+        let (stop, ended) = (CancellationToken::new(), CancellationToken::new());
+        let follower = Some((stop.clone(), ended.clone()));
+        let background = Background { attached: Arc::downgrade(attached), state: next.clone(), follower };
         backgrounds.insert(attached.id.clone(), background);
         drop(backgrounds);
         let background = Turn {
@@ -506,8 +511,11 @@ impl Turns {
         };
         let this = self.clone();
         let guard = close.clone().drop_guard();
+        // Dropped with the work, however it ends: stopped, its session closed, or never forked.
+        let ended = ended.drop_guard();
         let work = async move {
             let _guard = guard;
+            let _ended = ended;
             let follow = async {
                 // The prompt's response goes first.
                 let _ = responded.wait_for(|done| *done).await;
