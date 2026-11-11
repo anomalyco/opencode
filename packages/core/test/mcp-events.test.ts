@@ -199,17 +199,22 @@ describe("MCP events", () => {
   it.effect("fails a stream that sends nothing for a minute", () =>
     Effect.gen(function* () {
       const server = yield* eventServer()
-      const collected = yield* Stream.runCollect(required(server.events).stream({ name: "job.finished" })).pipe(
-        Effect.forkChild({ startImmediately: true }),
-      )
+      const received: string[] = []
+      const collected = yield* required(server.events)
+        .stream({ name: "job.finished" })
+        .pipe(
+          Stream.tap((message) => Effect.sync(() => received.push(message.type))),
+          Stream.runCollect,
+          Effect.forkChild({ startImmediately: true }),
+        )
       yield* until(() => server.state.streams.length === 1)
       const id = server.state.streams[0].id
-      const settle = Effect.promise(() => Bun.sleep(5))
       yield* TestClock.adjust("59 seconds")
       yield* server.notify("heartbeat", id, { cursor: "c1" })
-      yield* settle
+      // The heartbeat restarts the idle timer only once the stream has taken it.
+      yield* until(() => received.includes("heartbeat"))
       yield* TestClock.adjust("59 seconds")
-      yield* settle
+      yield* Effect.yieldNow
       expect(collected.pollUnsafe()).toBeUndefined()
       yield* TestClock.adjust("2 seconds")
       const exit = yield* Fiber.await(collected)
