@@ -515,14 +515,15 @@
     min-height: var(--line-height-compact);
   }
 
-  /* A card (a shell or a file) takes the medium gap where it meets a row of text, so it never crowds the text beside
-     it; between cards, and at the start or end of a list, the list's own small gap is all there is. */
+  /* A file's card takes the large gap where it meets a row of activity, as it does in the timeline; between cards, and
+     at the start or end of a list, the list's own small gap is all there is. A command is a row however it is opened,
+     so opening one never moves it. */
   [data-component="context-tool-group-list"] {
-    [data-slot="context-tool-group-item"]:has([data-component="bash-output"], [data-component="accordion"])
-      + [data-slot="context-tool-group-item"]:not(:has([data-component="bash-output"], [data-component="accordion"])),
-    [data-slot="context-tool-group-item"]:not(:has([data-component="bash-output"], [data-component="accordion"]))
-      + [data-slot="context-tool-group-item"]:has([data-component="bash-output"], [data-component="accordion"]) {
-      margin-top: calc(var(--timeline-gap-m) - var(--timeline-gap-s));
+    [data-slot="context-tool-group-item"]:has([data-component="accordion"])
+      + [data-slot="context-tool-group-item"]:not(:has([data-component="accordion"])),
+    [data-slot="context-tool-group-item"]:not(:has([data-component="accordion"]))
+      + [data-slot="context-tool-group-item"]:has([data-component="accordion"]) {
+      margin-top: calc(var(--timeline-gap-l) - var(--timeline-gap-s));
     }
   }
 
@@ -667,4 +668,10 @@
     background-color: var(--surface-raised-base-hover);
     box-shadow: 0 0 0 4px var(--surface-raised-base-hover);
   }
+}
+
+/* A command set in its monospace face sits on the line's top rather than its baseline, so the row stays one line tall
+   with it as without it, and opening the row never moves its label. */
+[data-timeline="next"] [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
+  vertical-align: top;
 }
