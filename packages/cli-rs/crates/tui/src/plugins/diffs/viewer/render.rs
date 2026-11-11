@@ -525,17 +525,17 @@ impl Viewer {
                 source: self.mode().label(),
                 detail: detail.as_deref(),
                 help: tui.keymap.shortcut("diff.help"),
+                on_help,
             },
             &tree,
             on_row,
             on_source,
             on_menu,
-            on_help,
         );
         slot.add(&pane);
         // The rebuilt tree keeps its offset; a new selection or new rows scroll the selected row into view
-        // (`scrollFileTreeRowIntoView`).
-        // A tree rebuilt again before a frame drew it has no layout yet: it keeps the offset and height last known.
+        // (`scrollFileTreeRowIntoView`). A tree rebuilt again before a frame drew it has no layout yet: it keeps the
+        // offset and height last known.
         let previous = self.tree_scroll.borrow_mut().take();
         let (mut top, height) = match &previous {
             Some(last) if last.scroll.rect().height > 0.0 => {

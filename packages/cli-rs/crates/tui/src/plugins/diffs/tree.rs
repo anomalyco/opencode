@@ -214,6 +214,8 @@ pub struct Pane<'a> {
     pub source: &'a str,
     pub detail: Option<&'a str>,
     pub help: Option<String>,
+    /// A click on the help footer (`HelpShortcut`).
+    pub on_help: Rc<dyn Fn()>,
 }
 
 /// What a row click does.
@@ -231,7 +233,6 @@ pub fn pane(
     on_row: OnRow,
     on_source: Rc<dyn Fn()>,
     on_menu: OnMenu,
-    on_help: Rc<dyn Fn()>,
 ) -> (View, ScrollBox) {
     let surface = theme.background.raised.base;
     let faint = tint(theme.text.muted, surface, 0.45);
@@ -350,6 +351,7 @@ pub fn pane(
         // `HelpShortcut`: a left click opens the help.
         let text =
             Text::new(app, vec![help.clone().fg(theme.text.base), " help".fg(theme.text.muted)]).wrap(WrapMode::None);
+        let on_help = input.on_help.clone();
         text.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
             cx.stop_propagation();
             on_help();

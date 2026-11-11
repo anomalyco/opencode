@@ -209,10 +209,7 @@ fn experiments_toggle_and_new_designs_graduated() {
 #[test]
 fn debug_names_the_model_and_plugin_copies_drop_nul() {
     let fake = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
-    let deps = opencode_tui::Deps {
-        route: opencode_tui::Route::Home,
-        ..support::deps(std::sync::Arc::new(fake))
-    };
+    let deps = opencode_tui::Deps { route: opencode_tui::Route::Home, ..support::deps(std::sync::Arc::new(fake)) };
     let harness = support::mount(100, 30, deps);
     harness.wait_for("Model M");
     let entries = debug::entries(&harness.tui);
