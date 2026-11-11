@@ -6,6 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::hash::Hash;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -110,20 +111,20 @@ pub struct State {
     pub(crate) settling: HashMap<String, (u64, AbortHandle)>,
     /// The permission read in flight per session, with the asks and replies that overtook it.
     pub(crate) permission_reads: HashMap<SessionID, Overlay<PermissionRequest>>,
-    /// Forms created and settled by events, for list reads in flight.
-    pub(crate) form_live: Live,
+    /// The form read in flight per owner (and location, for [`crate::forms::GLOBAL`]), with the
+    /// forms created and settled that overtook it.
+    pub(crate) form_reads: HashMap<crate::forms::Read, Overlay<Form>>,
     /// Messages events created or changed, for transcript reads in flight.
     pub(crate) message_live: Live,
 }
 
-/// Items that events added to or removed from a pending list, by event sequence, so a list read
-/// can apply what overtook it (deviation O89-list-snapshots). Both maps keep the newest
-/// [`DELETED_LIMIT`] IDs; a read that more events overtake than that is a reconnect's business.
+/// Messages that events added or changed, by event sequence, so a transcript read can keep what
+/// overtook it (deviation O89-transcript-refresh). It keeps the newest [`DELETED_LIMIT`] IDs; a
+/// read that more events overtake than that is a reconnect's business.
 #[derive(Default)]
 pub(crate) struct Live {
     seq: u64,
     added: IndexMap<String, u64>,
-    removed: IndexMap<String, u64>,
 }
 
 impl Live {
@@ -134,33 +135,19 @@ impl Live {
 
     pub(crate) fn add(&mut self, id: &str) {
         self.seq += 1;
-        Self::record(&mut self.added, id, self.seq);
-    }
-
-    pub(crate) fn remove(&mut self, id: &str) {
-        self.seq += 1;
-        Self::record(&mut self.removed, id, self.seq);
+        if let Some(at) = self.added.get_mut(id) {
+            *at = self.seq;
+            return;
+        }
+        self.added.insert(id.to_owned(), self.seq);
+        if self.added.len() > DELETED_LIMIT {
+            self.added.shift_remove_index(0);
+        }
     }
 
     /// Whether an event added `id` after the read that started at `started`.
     pub(crate) fn added_since(&self, id: &str, started: u64) -> bool {
         self.added.get(id).is_some_and(|at| *at > started)
-    }
-
-    /// Whether an event removed `id` after the read that started at `started`.
-    pub(crate) fn removed_since(&self, id: &str, started: u64) -> bool {
-        self.removed.get(id).is_some_and(|at| *at > started)
-    }
-
-    fn record(map: &mut IndexMap<String, u64>, id: &str, seq: u64) {
-        if let Some(at) = map.get_mut(id) {
-            *at = seq;
-            return;
-        }
-        map.insert(id.to_owned(), seq);
-        if map.len() > DELETED_LIMIT {
-            map.shift_remove_index(0);
-        }
     }
 }
 
@@ -172,7 +159,7 @@ const OVERLAY_LIMIT: usize = 1024;
 /// ticket it carries publishes. More than [`OVERLAY_LIMIT`] changes overflow it: the read then
 /// publishes nothing and reads again, so the bound costs a read, never an item.
 pub(crate) struct Overlay<V> {
-    pub(crate) ticket: u64,
+    ticket: u64,
     /// `None` once overflowed.
     changes: Option<IndexMap<String, Option<V>>>,
 }
@@ -180,6 +167,14 @@ pub(crate) struct Overlay<V> {
 impl<V> Overlay<V> {
     pub(crate) fn new(ticket: u64) -> Self {
         Self { ticket, changes: Some(IndexMap::new()) }
+    }
+
+    /// Ends the read `ticket` of `key`: its overlay, while that read is still the current one.
+    pub(crate) fn take<K: Hash + Eq>(reads: &mut HashMap<K, Self>, key: &K, ticket: u64) -> Option<Self> {
+        if reads.get(key)?.ticket != ticket {
+            return None;
+        }
+        reads.remove(key)
     }
 
     pub(crate) fn record(&mut self, id: &str, change: Option<V>) {

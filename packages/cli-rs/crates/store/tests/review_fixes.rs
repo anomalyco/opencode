@@ -546,6 +546,49 @@ async fn a_form_list_keeps_forms_created_and_settled_while_it_was_read() {
     assert_eq!(ids, ["frm_kept", "frm_new"]);
 }
 
+/// More forms than the overlay holds overtake a form read: it publishes nothing and reads again
+/// (model M1, O-92 Q1).
+#[tokio::test]
+async fn an_overflowed_form_read_reads_again() {
+    let slot = Slot::<Value>::default();
+    let release = slot.clone();
+    let reads = Arc::new(AtomicUsize::new(0));
+    let counted = reads.clone();
+    let created: Vec<String> = (0..1100).map(|n| format!("frm_{n:04}")).collect();
+    let server: Vec<Value> = std::iter::once("frm_old").chain(created.iter().map(String::as_str)).map(form).collect();
+    let data = data(
+        handler(move |_: Req| {
+            let release = release.clone();
+            let server = server.clone();
+            let first = counted.fetch_add(1, Ordering::SeqCst) == 0;
+            async move {
+                if first {
+                    return ok(json!({ "data": release.wait().await }));
+                }
+                ok(json!({ "data": server }))
+            }
+        }),
+        Options::default(),
+    );
+    let running = tokio::spawn(data.form_sync("ses_f", None));
+    settle().await;
+    for (n, created) in created.iter().enumerate() {
+        emit(
+            &data,
+            json!({
+                "id": format!("evt_{n}"), "created": n, "type": "form.created",
+                "location": { "directory": "/project" }, "data": { "form": form(created) },
+            }),
+        );
+    }
+    slot.resolve(json!([form("frm_old")]));
+    running.await.unwrap().unwrap();
+    wait(|| reads.load(Ordering::SeqCst) == 2).await;
+    wait(|| data.read(|state| state.forms("ses_f", None).unwrap().len() == 1101)).await;
+    let first = data.read(|state| state.forms("ses_f", None).unwrap()[0].info.id.0.clone());
+    assert_eq!(first, "frm_old");
+}
+
 fn streamed(kind: &str, event: &str, mut data: Value) -> Value {
     data["sessionID"] = "ses_m".into();
     data["assistantMessageID"] = "msg_a".into();
