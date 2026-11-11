@@ -27,6 +27,11 @@ fn fake(session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Fake {
             ("GET", p) if p == format!("{path}/inbox") => (200, json!({ "data": inbox })),
             ("GET", p) if p == format!("{path}/permission") => (200, json!({ "data": [] })),
             ("DELETE", p) if p == format!("{path}/revert") => (204, Value::Null),
+            // A subagent's session, which a completion opens; one the server lacks would close again.
+            ("GET", "/api/session/ses_child") => (
+                200,
+                json!({ "data": support::merge(support::session("ses_child", "Explore"), json!({ "parentID": ID })) }),
+            ),
             _ => support::not_found(),
         }
     })
