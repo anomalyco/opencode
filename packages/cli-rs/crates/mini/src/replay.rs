@@ -43,7 +43,8 @@ pub const DEFAULT_REPLAY_LIMIT: u32 = 200;
 pub const LOCAL_ROW_LIMIT: usize = 100;
 /// `RESIZE_DELAY`.
 pub const RESIZE_DELAY: Duration = Duration::from_millis(250);
-/// The events a resize replay holds while it lists. TS holds any number.
+/// The events a resize replay holds while it lists. TS holds any number
+/// (`parity/deviations/O92-mini-relist-overflow.md`).
 pub const RELIST_LIMIT: usize = 4096;
 
 /// A part of a message whose text arrives in pieces (`FragmentRef`).
