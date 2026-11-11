@@ -349,7 +349,11 @@ export const layer = Layer.effect(
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
         headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
       }
-      const http = yield* ModelHttp.middleware(hooks, { model: model.ref, kind, session: { id: session.id, agent: input.agent } })
+      const http = yield* ModelHttp.middleware(hooks, {
+        model: model.ref,
+        kind,
+        session: { id: session.id, agent: input.agent },
+      })
       // HTTP hooks wrap every HTTP request, including the WebSocket fallback path. The route decides
       // which transport actually carries the request, so both hook families are always offered.
       const webSocket =

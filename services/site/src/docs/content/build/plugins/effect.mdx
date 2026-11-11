@@ -1291,8 +1291,9 @@ The `system` part that holds OpenCode's instructions also lists each source in `
 `{ key, text }`, such as `core/date` or `core/environment`, so a hook can tell the sources apart. The list is a copy:
 editing the part's `text` does not update it. This is experimental and may change.
 
-Modify model request settings and optionally scope the hook to one provider. The event carries the same `kind` as
-the HTTP hooks below.
+Modify model request settings and optionally scope the hook to one provider. Its `kind` is `"primary"`,
+`"compaction"`, `"title"` or `"generate"`. It only runs for Session requests; to change the URL or headers of any model
+call, use the model HTTP hooks below.
 
 ```ts
 effect: (ctx) =>
@@ -1309,7 +1310,7 @@ effect: (ctx) =>
 Modify native provider requests or responses with the experimental model HTTP hooks. They run for every HTTP request
 to a model provider, including Generate text, image and decision calls made outside a Session. Bodies are one-shot
 streams; clone or replace a body before reading it. `event.kind` says why the call was made, and `event.session` is set
-exactly when a Session made it. The session `http.request` and `http.response` hooks are deprecated; they still run, as
+for a Session's own model requests. The session `http.request` and `http.response` hooks are deprecated; they still run, as
 model hooks that skip calls without a Session.
 
 ```ts
@@ -1434,6 +1435,20 @@ interface SessionRetry {
 
 interface SessionHookDomain {
   readonly hook: ModelHooks<SessionHooks>
+}
+
+type ModelRequestScope = { readonly model: { providerID: string; id: string; variant?: string } } & (
+  | { readonly kind: "primary" | "compaction" | "title" | "generate"; readonly session: { id: string; agent: string } }
+  | { readonly kind: "text" | "image" | "decision"; readonly session?: undefined }
+)
+
+interface ModelRequestHooks {
+  readonly "experimental.http.request": ModelRequestScope & { request: Request }
+  readonly "experimental.http.response": ModelRequestScope & { readonly request: Request; response: Response }
+}
+
+interface ModelHookDomain {
+  readonly hook: ModelHooks<ModelRequestHooks>
 }
 ```
 

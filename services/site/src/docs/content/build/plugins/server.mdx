@@ -1488,8 +1488,9 @@ await ctx.session.hook(
 
 #### Model request
 
-Modify model request settings and optionally scope the hook to one provider. The event carries the same `kind`
-as the HTTP hooks below.
+Modify model request settings and optionally scope the hook to one provider. Its `kind` is `"primary"`,
+`"compaction"`, `"title"` or `"generate"`. It only runs for Session requests; to change the URL or headers of any model
+call, use the [model HTTP hooks](#model-http-experimental).
 
 ```ts
 await ctx.session.hook(
@@ -1503,7 +1504,7 @@ await ctx.session.hook(
 
 #### Native HTTP
 
-`http.request` and `http.response` are deprecated. Use the [model HTTP hooks](#models-experimental), which run for
+`http.request` and `http.response` are deprecated. Use the [model HTTP hooks](#model-http-experimental), which run for
 the same requests and for calls made outside a Session. The session hooks still work: each one is registered as a
 model hook that skips calls without a Session, so both kinds run in plugin order.
 
@@ -1689,7 +1690,7 @@ interface SessionHookContext {
 }
 ```
 
-### Models (experimental)
+### Model HTTP (experimental)
 
 Model HTTP hooks run for every HTTP request to a model provider, whichever Session or API makes it: Session steps,
 compaction, titles and cache warming, and [Generate](#generate-experimental) text, image and decision calls. Use them to
@@ -1698,7 +1699,8 @@ streams; clone or replace a body before reading it. WebSocket traffic doesn't pa
 [Native WebSocket](#native-websocket-experimental).
 
 `event.kind` says why the call was made: `"primary"`, `"compaction"`, `"title"` or `"generate"` for Session requests,
-and `"text"`, `"image"` or `"decision"` for Generate. `event.session` is set exactly when a Session made the call.
+and `"text"`, `"image"` or `"decision"` for Generate. `event.session` is set for a Session's own model requests. A
+tool that calls Generate from inside a Session, like the built-in image tool, makes a Generate call with no `session`.
 Generate calls made through the HTTP API run in the global config location, so only globally configured plugins see
 them.
 
@@ -1731,7 +1733,7 @@ interface ModelHookContext {
   ): Promise<Registration>
 }
 
-type ModelRequestScope = { model: { providerID: string; id: string } } & (
+type ModelRequestScope = { model: { providerID: string; id: string; variant?: string } } & (
   | { kind: "primary" | "compaction" | "title" | "generate"; session: { id: string; agent: string } }
   | { kind: "text" | "image" | "decision"; session?: undefined }
 )

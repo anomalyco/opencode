@@ -219,8 +219,9 @@ export default Plugin.define({
 ```
 
 Use semantic provider options in `event.options`. Use `model.request` for model request headers and raw request settings,
-and use `http.request` or `http.response` only when the plugin needs the native provider HTTP exchange. Provider-specific
-hooks can pass `{ providerID: "..." }` as the third argument to `ctx.session.hook`.
+and use `ctx.model.hook("experimental.http.request")` or `"experimental.http.response"` only when the plugin needs the
+native provider HTTP exchange. Provider-specific hooks can pass `{ providerID: "..." }` as the third argument to
+`ctx.session.hook` and `ctx.model.hook`.
 
 ## Migrate custom tools
 

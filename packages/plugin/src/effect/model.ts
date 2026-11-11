@@ -25,12 +25,6 @@ export interface ModelEditor {
   }
 }
 
-/**
- * Why a model request is being made. Session requests use `primary`, `compaction`, `title` and `generate`; the
- * stateless generate API uses `text`, `image` and `decision`. Experimental.
- */
-export type ModelRequestKind = SessionRequestKind | "text" | "image" | "decision"
-
 /** The Session that made a model request. Experimental. */
 export interface ModelRequestSession {
   readonly id: Session.ID
@@ -38,8 +32,9 @@ export interface ModelRequestSession {
 }
 
 /**
- * Which model is called and why. `session` is set exactly when a Session makes the request, so checking it narrows
- * `kind` to the Session kinds. Experimental.
+ * Which model is called and why. `session` is set for a Session's own model requests, so checking it narrows `kind`
+ * to the Session kinds. A tool that calls Generate from inside a Session makes a Generate call with no `session`.
+ * Experimental.
  */
 export type ModelRequestScope = { readonly model: Model.Ref } & (
   | { readonly kind: SessionRequestKind; readonly session: ModelRequestSession }

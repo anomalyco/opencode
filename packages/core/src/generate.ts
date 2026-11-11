@@ -80,6 +80,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Generate") {}
 
+// Image and decision clients are built here, on the shared request executor, so only Generate depends on them.
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -88,14 +89,11 @@ export const layer = Layer.effect(
     const models = yield* Model.Service
     const executor = yield* RequestExecutor.Service
     const hooks = yield* PluginHooks.Service
-    // Image and decision clients are built per call so the model HTTP hooks wrap every provider request they make.
-    const clients = (http: HttpMiddleware | undefined) =>
-      Layer.provide(
-        Layer.merge(ImageClient.layer, DecisionClient.layer),
-        http === undefined
-          ? Layer.succeed(RequestExecutor.Service, executor)
-          : RequestExecutor.middleware(http, Layer.succeed(RequestExecutor.Service, executor)),
-      )
+    const images = yield* ImageClient.Service
+    const decisionClient = yield* DecisionClient.Service
+    // With model HTTP hooks, the call gets a fresh client (not the memoized one) on an executor that runs them.
+    const hooked = (http: HttpMiddleware) =>
+      RequestExecutor.middleware(http, Layer.succeed(RequestExecutor.Service, executor))
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
       const resolved = yield* resolver.resolve(input.model).pipe(
@@ -171,7 +169,9 @@ export const layer = Layer.effect(
         aspect: input.aspect,
         resolution: input.resolution,
       }).pipe(
-        Effect.provide(clients(http)),
+        http === undefined
+          ? Effect.provideService(ImageClient.Service, images)
+          : Effect.provide(Layer.fresh(ImageClient.layer).pipe(Layer.provide(hooked(http)))),
         ModelRetry.retryOneShot,
         Effect.mapError((error) => providerError(input.model, error)),
       )
@@ -211,7 +211,9 @@ export const layer = Layer.effect(
         ),
         questions: input.questions,
       }).pipe(
-        Effect.provide(clients(http)),
+        http === undefined
+          ? Effect.provideService(DecisionClient.Service, decisionClient)
+          : Effect.provide(Layer.fresh(DecisionClient.layer).pipe(Layer.provide(hooked(http)))),
         ModelRetry.retryOneShot,
         Effect.mapError((error) => providerError(input.model, error)),
       )
@@ -240,7 +242,7 @@ export const layer = Layer.effect(
       decisions: (input) => credentials(decisions(input)),
     })
   }),
-)
+).pipe(Layer.provide([ImageClient.layer, DecisionClient.layer]))
 
 // Provider metadata may hold undefined fields, which the JSON response schema rejects.
 function plainJson(value: Record<string, unknown>): Record<string, unknown> {
