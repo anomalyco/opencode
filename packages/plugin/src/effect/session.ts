@@ -136,6 +136,7 @@ export interface SessionRetry {
 }
 
 export interface SessionHooks {
+  readonly fork: { readonly sessionID: Session.ID }
   readonly prompt: SessionPrompt
   readonly context: SessionContext
   readonly compaction: SessionCompaction
