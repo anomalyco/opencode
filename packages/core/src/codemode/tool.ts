@@ -437,9 +437,10 @@ function formatResult(result: CodeMode.Result) {
   return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
+// Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
 function formatValue(value: CodeMode.DataValue) {
   if (typeof value === "string") return value
-  return JSON.stringify(value, null, 2) ?? String(value)
+  return JSON.stringify(value) ?? String(value)
 }
 
 function outputFiles(content: ReadonlyArray<Content>): Array<typeof ExecuteFile.Type> {
