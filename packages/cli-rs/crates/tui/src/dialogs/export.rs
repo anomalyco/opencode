@@ -203,7 +203,7 @@ fn result_with(tui: &Tui, path: String, copied: bool) {
             let copy: Rc<dyn Fn()> = {
                 let path = path.clone();
                 Rc::new(bind!(weak, |tui| {
-                    if tui.app.copy_to_clipboard(&path) {
+                    if crate::features::selection::put(&tui.app, &path) {
                         result_with(&tui, path.clone(), true);
                     } else {
                         tui.toasts.error("Failed to copy to clipboard");

@@ -1150,7 +1150,7 @@ impl Oauth {
 
     fn copy(&self) {
         let value = oauth_code(&self.attempt.instructions).unwrap_or(self.attempt.url.clone());
-        if self.flow.local.app.copy_to_clipboard(&value) {
+        if crate::features::selection::put(&self.flow.local.app, &value) {
             self.flow.local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
             return;
         }
