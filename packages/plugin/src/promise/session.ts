@@ -1,4 +1,4 @@
-import type { ExperimentalSessionApi, SessionApi } from "@opencode/client/promise/api"
+import type { ExperimentalSessionApi, MessageApi, SessionApi } from "@opencode/client/promise/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
@@ -232,5 +232,6 @@ export type SessionDomain = Pick<
   | "context"
 > &
   Pick<ExperimentalSessionApi, "wait" | "instructions"> & {
+    readonly message: Pick<MessageApi, "list">
     readonly hook: ModelHooks<SessionHooks>
   }

@@ -4,6 +4,7 @@ import { Plugin } from "@opencode/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode/plugin/effect/integration"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import type { Event } from "@opencode/schema/event"
+import { PublicLocationSwitched, SessionMessagesQuery } from "@opencode/schema/session-message-page"
 import { ServerConfig } from "@opencode/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
@@ -21,6 +22,7 @@ import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
+import { MessagePage } from "../session/message-page.js"
 import { InstructionEntry } from "../session/instruction-entry.js"
 import { PersistentPty } from "../persistent-pty.js"
 import { Provider } from "../provider.js"
@@ -41,6 +43,8 @@ import type { Interface } from "../plugin.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
+const decodeMessageQuery = Schema.decodeUnknownEffect(Schema.toType(SessionMessagesQuery))
+const publicLocationSwitch = Schema.decodeSync(Schema.toType(PublicLocationSwitched))
 type RpcEvent = Event.Payload & {
   readonly type: `rpc.${string}`
   readonly location: Location.Ref
@@ -607,6 +611,18 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      message: {
+        list: Effect.fn(function* (input) {
+          const query = yield* decodeMessageQuery(input)
+          const page = yield* MessagePage.list(sessions.messages, { ...query, sessionID: input.sessionID })
+          return {
+            cursor: page.cursor,
+            data: page.data.map((message) =>
+              message.type === "location-switched" ? publicLocationSwitch(message) : message,
+            ),
+          }
+        }),
+      },
       instructions: {
         entry: {
           list: Effect.fn(function* (input) {

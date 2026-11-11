@@ -840,6 +840,13 @@ effect: (ctx) =>
   }),
 ```
 
+Read projected messages newest first, or pass `order: "asc"` for oldest first. When following `cursor.next` or `cursor.previous`, omit `order` and repeat any `type` filter.
+
+```ts
+const input = { sessionID, type: "user", limit: 20 } as const
+const page = yield* ctx.session.message.list(input)
+```
+
 Remove a temporary session with `remove`. Removal stops active execution and recursively deletes child sessions.
 
 ```ts
@@ -897,10 +904,11 @@ type SessionDomain = Pick<
   | "interrupt"
   | "update"
   | "move"
-  | "wait"
   | "context"
-  | "instructions"
->
+> & Pick<ExperimentalSessionApi<unknown>, "wait" | "instructions"> & {
+  readonly message: Pick<MessageApi<unknown>, "list">
+  readonly hook: ModelHooks<SessionHooks>
+}
 ```
 
 ### Skills
