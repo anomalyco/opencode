@@ -8,6 +8,7 @@ import { FetchHttpClient } from "effect/http"
 import { AISDKNative } from "@opencode/core/aisdk-native"
 import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
+import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
 import { UsageLimits } from "@opencode/core/usage-limits"
 import { Compatibility, ID, Info, Model, VariantID } from "@opencode/core/model"
@@ -408,9 +409,10 @@ describe("ModelResolver", () => {
       get: () => Effect.succeed(undefined),
       go: () => Effect.succeed(undefined),
     })
+    const bus = Layer.mock(Bus.Service, { publish: (() => Effect.void) as any })
     const layer = ModelResolver.layer.pipe(
       Layer.provide(
-        Layer.mergeAll(providers, models, integrations, config, usageLimits, npm, aisdk, FetchHttpClient.layer),
+        Layer.mergeAll(providers, models, integrations, config, usageLimits, bus, npm, aisdk, FetchHttpClient.layer),
       ),
     )
 
@@ -1637,7 +1639,7 @@ describe("ModelResolver", () => {
 })
 
 describe("ModelResolver auto-balance", () => {
-  it.effect("picks the opencode go account with the least usage per remaining time", () =>
+  const run = (usage: (key: string) => any) =>
     Effect.gen(function* () {
       const providerID = Provider.ID.make("opencode-go")
       const provider = Provider.Info.make({
@@ -1646,97 +1648,7 @@ describe("ModelResolver auto-balance", () => {
         activation: "enabled",
         package: "",
       })
-      const providers = Layer.mock(Provider.Service, { get: () => Effect.succeed(provider) })
       const selected = model(Provider.aisdk("@ai-sdk/openai"), { providerID })
-      const models = Layer.mock(Model.Service, { get: () => Effect.succeed(selected) })
-      const now = Date.now()
-      const conn1 = { type: "credential" as const, id: "cred1", label: "a", method: "key" as const, status: undefined }
-      const conn2 = { type: "credential" as const, id: "cred2", label: "b", method: "key" as const, status: undefined }
-      let active: any = conn1
-      let lastResolved: string | undefined
-      const integrations = Layer.mock(Integration.Service, {
-        revision: () => 0,
-        get: () => Effect.succeed({ connections: [conn1, conn2] } as any),
-        connection: {
-          active: () => Effect.succeed(active as any),
-          resolve: (conn: any) => {
-            lastResolved = conn.id
-            return Effect.succeed({
-              type: "key" as const,
-              key: conn.id === "cred1" ? "k1" : "k2",
-              metadata: { orgID: "org" },
-            })
-          },
-          key: (conn: any) => conn.id,
-          activate: (id: any) => {
-            active = id === "cred1" ? conn1 : conn2
-            return Effect.void
-          },
-          external: () => Effect.die("unused"),
-          update: () => Effect.die("unused"),
-          remove: () => Effect.die("unused"),
-          status: () => Effect.die("unused"),
-        },
-        oauth: {
-          connect: () => Effect.die("unused"),
-          status: () => Effect.die("unused"),
-          complete: () => Effect.die("unused"),
-          cancel: () => Effect.die("unused"),
-        },
-        command: {
-          connect: () => Effect.die("unused"),
-          status: () => Effect.die("unused"),
-          cancel: () => Effect.die("unused"),
-        },
-      })
-      const usage1 = {
-        rolling: { percent: 90, limited: false, resetsAt: now + 1000 },
-        weekly: { percent: 90, limited: false, resetsAt: now + 1000 },
-        monthly: { percent: 90, limited: false, resetsAt: now + 100000 },
-      }
-      const usage2 = {
-        rolling: { percent: 10, limited: false, resetsAt: now + 1000 },
-        weekly: { percent: 10, limited: false, resetsAt: now + 1000 },
-        monthly: { percent: 10, limited: false, resetsAt: now + 100000 },
-      }
-      const usageLimits = Layer.mock(UsageLimits.Service, {
-        get: () => Effect.succeed(undefined),
-        go: (cred: any) => Effect.succeed(cred.key === "k1" ? usage1 : usage2),
-      })
-      const config = Layer.mock(Config.Service)({
-        entries: () =>
-          Effect.succeed([{ type: "document", info: { experimental: { auto_balance_accounts: true } } }] as any),
-      })
-      const npm = Layer.mock(Npm.Service, { add: () => Effect.die("unused"), which: () => Effect.die("unused") })
-      const aisdk = Layer.mock(AISDK.Service, {
-        hook: { sdk: () => Effect.die("unused"), language: () => Effect.die("unused") },
-        model: () => Effect.die("unused"),
-      })
-      const layer = ModelResolver.layer.pipe(
-        Layer.provide(
-          Layer.mergeAll(providers, models, integrations, config, usageLimits, npm, aisdk, FetchHttpClient.layer),
-        ),
-      )
-      const resolver = yield* Effect.provide(ModelResolver.Service, layer)
-      const resolved = yield* resolver.resolveModel(selected)
-      expect(resolved).toBeDefined()
-      expect(lastResolved).toBe("cred2")
-    }),
-  )
-
-  it.effect("skips rate-limited windows when balancing opencode go accounts", () =>
-    Effect.gen(function* () {
-      const providerID = Provider.ID.make("opencode-go")
-      const provider = Provider.Info.make({
-        ...Provider.Info.empty(providerID),
-        integrationID: Integration.ID.make("opencode"),
-        activation: "enabled",
-        package: "",
-      })
-      const providers = Layer.mock(Provider.Service, { get: () => Effect.succeed(provider) })
-      const selected = model(Provider.aisdk("@ai-sdk/openai"), { providerID })
-      const models = Layer.mock(Model.Service, { get: () => Effect.succeed(selected) })
-      const now = Date.now()
       const conn1 = { type: "credential" as const, id: "cred1", label: "a", method: "key" as const, status: undefined }
       const conn2 = { type: "credential" as const, id: "cred2", label: "b", method: "key" as const, status: undefined }
       let lastResolved: string | undefined
@@ -1772,38 +1684,59 @@ describe("ModelResolver auto-balance", () => {
           cancel: () => Effect.die("unused"),
         },
       })
-      const limited = {
-        rolling: { percent: 100, limited: true, resetsAt: now + 1000 },
-        weekly: { percent: 5, limited: false, resetsAt: now + 1000 },
-        monthly: { percent: 5, limited: false, resetsAt: now + 100000 },
-      }
-      const healthy = {
-        rolling: { percent: 40, limited: false, resetsAt: now + 1000 },
-        weekly: { percent: 40, limited: false, resetsAt: now + 1000 },
-        monthly: { percent: 40, limited: false, resetsAt: now + 100000 },
-      }
-      const usageLimits = Layer.mock(UsageLimits.Service, {
-        get: () => Effect.succeed(undefined),
-        go: (cred: any) => Effect.succeed(cred.key === "k1" ? limited : healthy),
-      })
-      const config = Layer.mock(Config.Service)({
-        entries: () =>
-          Effect.succeed([{ type: "document", info: { experimental: { auto_balance_accounts: true } } }] as any),
-      })
-      const npm = Layer.mock(Npm.Service, { add: () => Effect.die("unused"), which: () => Effect.die("unused") })
-      const aisdk = Layer.mock(AISDK.Service, {
-        hook: { sdk: () => Effect.die("unused"), language: () => Effect.die("unused") },
-        model: () => Effect.die("unused"),
-      })
       const layer = ModelResolver.layer.pipe(
         Layer.provide(
-          Layer.mergeAll(providers, models, integrations, config, usageLimits, npm, aisdk, FetchHttpClient.layer),
+          Layer.mergeAll(
+            Layer.mock(Provider.Service, { get: () => Effect.succeed(provider) }),
+            Layer.mock(Model.Service, { get: () => Effect.succeed(selected) }),
+            integrations,
+            Layer.mock(Config.Service, {
+              entries: () =>
+                Effect.succeed([{ type: "document", info: { experimental: { auto_balance_accounts: true } } }] as any),
+            }),
+            Layer.mock(UsageLimits.Service, {
+              get: () => Effect.succeed(undefined),
+              go: (cred: any) => Effect.succeed(usage(cred.key)),
+            }),
+            Layer.mock(Bus.Service, { publish: (() => Effect.void) as any }),
+            Layer.mock(Npm.Service, { add: () => Effect.die("unused"), which: () => Effect.die("unused") }),
+            Layer.mock(AISDK.Service, {
+              hook: { sdk: () => Effect.die("unused"), language: () => Effect.die("unused") },
+              model: () => Effect.die("unused"),
+            }),
+            FetchHttpClient.layer,
+          ),
         ),
       )
       const resolver = yield* Effect.provide(ModelResolver.Service, layer)
       const resolved = yield* resolver.resolveModel(selected)
       expect(resolved).toBeDefined()
-      expect(lastResolved).toBe("cred2")
-    }),
-  )
+      return lastResolved
+    })
+
+  it.effect("picks the opencode go account with the least usage per remaining time", () => {
+    const now = Date.now()
+    return run((key) => ({
+      rolling: { percent: key === "k1" ? 90 : 10, limited: false, resetsAt: now + 1000 },
+      weekly: { percent: key === "k1" ? 90 : 10, limited: false, resetsAt: now + 1000 },
+      monthly: { percent: key === "k1" ? 90 : 10, limited: false, resetsAt: now + 100000 },
+    })).pipe(Effect.map((id) => expect(id).toBe("cred2")))
+  })
+
+  it.effect("skips rate-limited windows when balancing opencode go accounts", () => {
+    const now = Date.now()
+    return run((key) =>
+      key === "k1"
+        ? {
+            rolling: { percent: 100, limited: true, resetsAt: now + 1000 },
+            weekly: { percent: 5, limited: false, resetsAt: now + 1000 },
+            monthly: { percent: 5, limited: false, resetsAt: now + 100000 },
+          }
+        : {
+            rolling: { percent: 40, limited: false, resetsAt: now + 1000 },
+            weekly: { percent: 40, limited: false, resetsAt: now + 1000 },
+            monthly: { percent: 40, limited: false, resetsAt: now + 100000 },
+          },
+    ).pipe(Effect.map((id) => expect(id).toBe("cred2")))
+  })
 })

@@ -17,6 +17,7 @@ import { TestLLM } from "@opencode/ai/testing"
 import { AISDK } from "@opencode/core/aisdk"
 import { Credential } from "@opencode/core/credential"
 import { Generate } from "@opencode/core/generate"
+import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Integration } from "@opencode/core/integration"
 import { UsageLimits } from "@opencode/core/usage-limits"
@@ -79,6 +80,7 @@ const usageLimits = Layer.mock(UsageLimits.Service)({
   get: () => Effect.succeed(undefined),
   go: () => Effect.succeed(undefined),
 })
+const bus = Layer.mock(Bus.Service, { publish: (() => Effect.void) as any })
 const aisdk = Layer.mock(AISDK.Service, {
   hook: {
     sdk: () => Effect.die("unused"),
@@ -90,7 +92,7 @@ const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 
 const resolver = ModelResolver.layer.pipe(
   Layer.provide(
-    Layer.mergeAll(providers, models, integrations, config, usageLimits, npm, aisdk, FetchHttpClient.layer),
+    Layer.mergeAll(providers, models, integrations, config, usageLimits, bus, npm, aisdk, FetchHttpClient.layer),
   ),
 )
 const generateDeps = Layer.mergeAll(models, RequestExecutor.fetchLayer)
@@ -446,6 +448,7 @@ describe("image and decision generation", () => {
     get: () => Effect.succeed(undefined),
     go: () => Effect.succeed(undefined),
   })
+  const mediaBus = Layer.mock(Bus.Service, { publish: (() => Effect.void) as any })
   const mediaResolver = ModelResolver.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -454,6 +457,7 @@ describe("image and decision generation", () => {
         mediaIntegrations,
         mediaConfig,
         mediaUsageLimits,
+        mediaBus,
         npm,
         aisdk,
         FetchHttpClient.layer,

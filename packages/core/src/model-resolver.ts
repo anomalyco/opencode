@@ -13,7 +13,9 @@ import {
 } from "@opencode/ai/effect"
 import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
+import { TuiEvent } from "@opencode/schema/tui-event"
 import { AISDK } from "./aisdk.js"
+import { Bus } from "./bus.js"
 import { Config } from "./config.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
@@ -468,6 +470,7 @@ export const layer = Layer.effect(
     const integrations = yield* Integration.Service
     const config = yield* Config.Service
     const usageLimits = yield* UsageLimits.Service
+    const bus = yield* Bus.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
     const dependencies: Dependencies = {
@@ -477,7 +480,8 @@ export const layer = Layer.effect(
     const prepare = Effect.fn("ModelResolver.prepare")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* providers.get(selected.providerID)
       const integrationID = provider?.integrationID ?? Integration.ID.make(selected.providerID)
-      let connection = yield* integrations.connection.active(integrationID)
+      const active = yield* integrations.connection.active(integrationID)
+      let connection = active
       // Auto-balance OpenCode Go accounts when enabled and more than one is available.
       const entries = yield* config.entries()
       const toggle = Config.latest(entries, "experimental")?.auto_balance_accounts === true
@@ -514,7 +518,6 @@ export const layer = Layer.effect(
             if (!duplicate) {
               connection = best[0].conn
             } else {
-              const active = yield* integrations.connection.active(integrationID)
               const activeMatch = active
                 ? scored.find((item) => IntegrationConnection.key(item.conn) === IntegrationConnection.key(active))
                 : undefined
@@ -522,6 +525,25 @@ export const layer = Layer.effect(
             }
           }
         }
+      }
+      if (
+        toggle &&
+        selected.providerID === "opencode-go" &&
+        connection &&
+        active &&
+        IntegrationConnection.key(connection) !== IntegrationConnection.key(active)
+      ) {
+        const label = "label" in connection ? connection.label : undefined
+        yield* bus
+          .publish(TuiEvent.ToastShow, {
+            title: "OpenCode Go",
+            message: label
+              ? `Auto-balanced to account "${label}" for this request.`
+              : "Auto-balanced to another account for this request.",
+            variant: "info",
+            duration: 5000,
+          })
+          .pipe(Effect.catch(() => Effect.void))
       }
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const selectedVariant = yield* withVariant(selected, variant)
@@ -662,5 +684,5 @@ function usesAPIKeyAuth(packageName: string | undefined) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Provider.node, Model.node, Integration.node, Config.node, UsageLimits.node, Npm.node, AISDK.node],
+  deps: [Provider.node, Model.node, Integration.node, Config.node, UsageLimits.node, Bus.node, Npm.node, AISDK.node],
 })
