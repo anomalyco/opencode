@@ -629,6 +629,7 @@ All experimental settings live under the `experimental` key:
   "experimental": {
     "todo": true,
     "subagent_depth": 2,
+    "subagent_concurrency": 2,
     "background_compaction": true,
     "image_generate": { "model": "openai/gpt-image-2" },
     "location_idle_timeout": "4 hours",
@@ -644,6 +645,38 @@ Set `todo` to `true` to give agents a `todowrite` tool for tracking multi-step w
 
 `subagent_depth` sets how deeply subagents can start their own subagents. Defaults to `1`, so a subagent cannot
 start another subagent.
+
+### Subagent concurrency
+
+`subagent_concurrency` caps how many of one session's subagents run at once. Omit it or set `-1` for no cap, `0` for
+none at all, or any positive count. Defaults to unlimited.
+
+```jsonc
+{
+  "experimental": {
+    "subagent_concurrency": 2,
+  },
+}
+```
+
+A call that would exceed the cap fails with a tool error. Set `subagent_over_limit` to `"wait"` to queue those calls
+until a slot frees instead.
+
+```jsonc
+{
+  "experimental": {
+    "subagent_concurrency": 2,
+    "subagent_over_limit": "wait",
+  },
+}
+```
+
+`OPENCODE_SUBAGENT_CONCURRENCY` sets the same cap when OpenCode starts and outranks every config file, which is handy
+for scripted runs.
+
+```bash
+opencode service set env OPENCODE_SUBAGENT_CONCURRENCY 2
+```
 
 ### Background compaction
 
