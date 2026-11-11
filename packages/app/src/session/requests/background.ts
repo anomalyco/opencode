@@ -14,14 +14,12 @@ type Subagent = {
   id: string
   type: "subagent"
   sessionID: string
-  label: string | undefined
+  label: string
   agent?: string
   started: number
 }
 
-type Task =
-  | (Omit<Subagent, "label"> & { label: string })
-  | { id: string; type: "shell"; label: string; started: number }
+type Task = Subagent | { id: string; type: "shell"; label: string; started: number }
 
 const decodeString = Schema.decodeUnknownOption(Schema.String)
 
@@ -140,8 +138,8 @@ export function createSessionBackground(input: {
       return [{ id: shell.id, type: "shell" as const, label: shell.command, started: shell.time.started }]
     })
 
-    return [...subagents().map((task) => ({ ...task, label: task.label ?? task.id })), ...shells]
+    return [...subagents(), ...shells]
   })
 
-  return { blocking, subagents, tasks }
+  return { blocking, tasks }
 }

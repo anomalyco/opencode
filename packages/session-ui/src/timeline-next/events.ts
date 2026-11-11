@@ -45,8 +45,8 @@ export const launchKeys = {
 const decodeText = Schema.decodeUnknownOption(Schema.NonEmptyString)
 
 /**
- * What a call says happened. A call still being written has nothing to count yet. A subagent that returns while it
- * keeps running was started in the background; one that returned with its work done ran in the foreground.
+ * What a call says happened. A call still being written has nothing to count yet. Older sessions marked a
+ * foreground subagent's result as completed; current subagent calls only launch the work.
  */
 export function toolEvent(tool: SessionMessageAssistantTool): TimelineEvent | undefined {
   const kind = toolRule(tool).name === "shell" ? "shell" : "subagent"
@@ -66,10 +66,10 @@ export function toolEvent(tool: SessionMessageAssistantTool): TimelineEvent | un
 
   if (state.status === "running") return { ...item, verb: "started", failed: false }
 
-  const background = metadata.status === "running" || input.background === true
+  const background =
+    kind === "subagent" ? metadata.status !== "completed" : metadata.status === "running" || input.background === true
 
   if (state.status === "error") {
-    // An interrupted turn stops the work it was waiting on.
     if (state.error.type === "aborted") return { ...item, verb: "stopped", failed: false }
 
     return { ...item, verb: background ? "started" : "ran", failed: true }

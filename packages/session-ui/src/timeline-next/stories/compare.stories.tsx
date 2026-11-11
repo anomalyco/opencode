@@ -56,8 +56,6 @@ const statusLabels = {
   waitingApproval: "Waiting for approval",
   waitingAnswer: "Waiting for your answer",
   waitingShell: "Waiting for shell",
-  waitingAgent: "Waiting for subagent",
-  waitingAgents: "Waiting for subagents",
   working: "Working",
 } as const
 
