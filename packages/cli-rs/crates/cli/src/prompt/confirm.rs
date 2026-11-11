@@ -13,7 +13,12 @@ pub struct Confirm {
 }
 
 pub fn confirm(message: impl Into<String>) -> Confirm {
-    Confirm { message: message.into(), active: "Yes".to_string(), inactive: "No".to_string(), initial_value: true }
+    Confirm {
+        message: super::clean(message),
+        active: "Yes".to_string(),
+        inactive: "No".to_string(),
+        initial_value: true,
+    }
 }
 
 impl Confirm {

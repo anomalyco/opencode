@@ -21,7 +21,7 @@ pub fn run(context: &Context) -> error::Result<()> {
     if models.is_empty() {
         return Ok(());
     }
-    crate::output::print(&(models.join("\n") + "\n"))
+    crate::output::print(&opencode_ui::terminal_text(&(models.join("\n") + "\n")))
 }
 
 /// `response.data` of a `{ location, data: [...] }` list.
