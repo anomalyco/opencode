@@ -572,8 +572,10 @@ pub fn entry_body(commit: &Commit, raw: &str, options: BodyOptions) -> Option<Bo
         if commit.phase == Phase::Start {
             return None;
         }
+        // A launch completes while its child keeps running: its output is instructions, so the card shows.
         if commit.phase == Phase::Final
             && frame.status == "completed"
+            && frame.meta.get("status").and_then(Value::as_str) != Some("running")
             && let Some(result) = task_result(&frame.output)
         {
             return Some(Body::Markdown(result));
@@ -970,6 +972,19 @@ mod tests {
         assert_eq!(body(&commit(&task, "m", Phase::Final, None, None, 0)), Some(Body::Markdown("Found.".into())));
         let frame = tool_frame(&commit(&task, "m", Phase::Final, None, None, 0), "");
         assert_eq!(task_final(&frame), "# Explore Subagent\nFind it");
+        // `renders a task card for a completed background subagent launch` (`entry.body.test.ts`).
+        let launch = part(
+            "subagent",
+            json!({ "status": "completed", "input": { "agent": "explore", "description": "Inspect reducer" },
+                "metadata": { "sessionID": "ses-child-1", "status": "running" },
+                "content": [{ "type": "text", "text": "The subagent is working in the background (sessionID: ses-child-1)." }] }),
+        );
+        let card = Snapshot::Task {
+            title: "# Explore Subagent".into(),
+            rows: vec!["Inspect reducer".into()],
+            tail: String::new(),
+        };
+        assert_eq!(body(&commit(&launch, "m", Phase::Final, None, None, 0)), Some(Body::Structured(card)));
         let patch = part(
             "apply_patch",
             json!({ "status": "completed", "input": {}, "content": [],
