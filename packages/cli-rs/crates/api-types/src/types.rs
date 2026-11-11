@@ -12569,6 +12569,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub portable_shell_scanner: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codemode_vm: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_flags: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub todo: Option<bool>,
@@ -12580,8 +12582,6 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub schedules: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codemode_vm: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell_timeout_background: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
