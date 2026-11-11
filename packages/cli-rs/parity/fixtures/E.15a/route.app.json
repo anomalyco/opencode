@@ -68,6 +68,20 @@
   ],
   "steps": [
     {
+      "checkpoint": "ready",
+      "until": "Ask anything",
+      "masks": [
+        {
+          "x": 26,
+          "y": 16,
+          "width": 94,
+          "height": 1,
+          "reason": "the placeholder example: random in TS and Rust"
+        }
+      ],
+      "fixture": "E.15a/route/ready"
+    },
+    {
       "type": "/diff"
     },
     {

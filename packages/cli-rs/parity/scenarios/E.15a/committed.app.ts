@@ -11,6 +11,20 @@ export default defineApp({
   config: { experimental: { "new-designs": true }, diffs: { source: "committed" } },
   routes: [{ path: "/api/vcs/base", json: { location: here, data: null } }],
   steps: [
+    // Typing before the prompt is mounted loses the keys.
+    {
+      checkpoint: "home",
+      until: "Ask anything",
+      masks: [
+        {
+          x: 16,
+          y: 16,
+          width: 84,
+          height: 1,
+          reason: "the placeholder example: random in TS and Rust",
+        },
+      ],
+    },
     { type: "/diff" },
     { keys: ["enter"] },
     { checkpoint: "unavailable", until: "Committed comparison unavailable" },
