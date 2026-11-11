@@ -43,5 +43,5 @@ pub fn alert(cx: &Rc<DialogCx>, props: AlertProps) -> View {
 
 /// Opens an alert in place of any open dialog.
 pub fn show(dialogs: &Dialogs, props: AlertProps) {
-    dialogs.replace(|cx| alert(cx, props), None, DialogOptions::default());
+    dialogs.replace(move |cx| alert(cx, props.clone()), None, DialogOptions::default());
 }

@@ -21,10 +21,10 @@ pub struct Highlight {
 pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
     let title = format!("What's new in {version}");
     let items = items.to_vec();
-    // The band and the text use the page theme (TS `overlay`), the frame the dialog surface.
-    let overlay = tui.page();
     tui.dialogs.replace(
         move |cx| {
+            // The band and the text use the page theme (TS `overlay`), the frame the dialog surface.
+            let overlay = cx.theme.page();
             cx.dialogs.set_centered(true);
             let app = &cx.app;
             let (_, height) = app.size();
@@ -53,6 +53,8 @@ pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
             let scroll = ScrollBox::new(app).scrollbars(false).max_height(max_height);
             scroll.content_view().min_height(0);
             scroll.add(&list);
+            cx.keep_scroll(&scroll);
+
             // The band owns the vertical padding so it stays visible while the highlights scroll.
             let band = View::new(app)
                 .margin_edge(Edge::Left, -(DIALOG_INSET as i32))

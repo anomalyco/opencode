@@ -24,7 +24,7 @@ pub fn show(tui: &Tui, on_select: OnSelect) {
     let built = list.clone();
     tui.dialogs.replace(
         move |cx| {
-            let list = built;
+            let list = built.clone();
             let weak = Rc::downgrade(&list);
             let mut props = SelectProps::new("Stash", list.options());
             props.on_move = Some(Rc::new(bind!(weak, |list, _: &SelectOption<usize>| {
@@ -33,7 +33,7 @@ pub fn show(tui: &Tui, on_select: OnSelect) {
                 }
             })));
             props.on_select = Some(Rc::new({
-                let weak = weak.clone();
+                let (weak, on_select) = (weak.clone(), on_select.clone());
                 move |option: &SelectOption<usize>| {
                     let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else {
                         return;

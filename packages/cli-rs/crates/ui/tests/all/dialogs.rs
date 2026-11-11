@@ -77,7 +77,8 @@ fn alert_confirms_on_enter_and_closes() {
 fn open_confirm(kit: &Kit, log: &Rc<RefCell<Vec<&'static str>>>) {
     let (yes, no) = (log.clone(), log.clone());
     kit.dialogs.replace(
-        |cx| {
+        move |cx| {
+            let (yes, no) = (yes.clone(), no.clone());
             confirm::confirm(
                 cx,
                 confirm::ConfirmProps {
@@ -294,7 +295,7 @@ fn open_models(kit: &Kit) -> Rc<RefCell<Option<select::Select<&'static str>>>> {
     let handle = Rc::new(RefCell::new(None));
     let slot = handle.clone();
     kit.dialogs.replace(
-        |cx| {
+        move |cx| {
             let mut props = SelectProps::new("Select model", models());
             props.current = Some("haiku");
             props.actions = vec![SelectAction::new("model.dialog.favorite", "favorite", |_| {})];
@@ -332,7 +333,7 @@ fn select_matches_typescript_when_opened_moved_and_filtered() {
 
 // The list of parity/component/U.3-select-scroll.tsx: 30 options in three categories, one with a detail row.
 fn open_long(kit: &Kit) {
-    let options = ["Alpha", "Beta", "Gamma"]
+    let options: Vec<_> = ["Alpha", "Beta", "Gamma"]
         .iter()
         .enumerate()
         .flat_map(|(c, category)| {
@@ -346,7 +347,7 @@ fn open_long(kit: &Kit) {
         })
         .collect();
     kit.dialogs.replace(
-        move |cx| select::select(cx, SelectProps::new("Long list", options)).0,
+        move |cx| select::select(cx, SelectProps::new("Long list", options.clone())).0,
         None,
         Default::default(),
     );
@@ -484,8 +485,8 @@ fn open_prompt(kit: &Kit, props: prompt::PromptProps) -> Rc<RefCell<Option<promp
     let handle = Rc::new(RefCell::new(None));
     let slot = handle.clone();
     kit.dialogs.replace(
-        |cx| {
-            let (view, prompt) = prompt::prompt(cx, props);
+        move |cx| {
+            let (view, prompt) = prompt::prompt(cx, props.clone());
             *slot.borrow_mut() = Some(prompt);
             view
         },
@@ -611,8 +612,9 @@ fn clicks_select_rows_and_the_backdrop_closes_the_dialog() {
     let chosen = Rc::new(RefCell::new(Vec::new()));
     let log = chosen.clone();
     kit.dialogs.replace(
-        |cx| {
+        move |cx| {
             let mut props = SelectProps::new("Select model", models());
+            let log = log.clone();
             props.on_select = Some(Rc::new(move |option| log.borrow_mut().push(option.value)));
             select::select(cx, props).0
         },
@@ -639,7 +641,7 @@ fn open_select(kit: &Kit, options: Vec<SelectOption<usize>>) -> select::Select<u
     let slot = handle.clone();
     kit.dialogs.replace(
         move |cx| {
-            let mut props = SelectProps::new("Pick", options);
+            let mut props = SelectProps::new("Pick", options.clone());
             props.actions = vec![SelectAction::new("model.dialog.favorite", "favorite", |_| {})];
             let (view, select) = select::select(cx, props);
             *slot.borrow_mut() = Some(select);
@@ -713,27 +715,45 @@ fn multi_line_titles_scroll_by_the_rows_they_draw() {
     assert!(screen.contains('…'), "{screen}");
 }
 
-// Expected (r2 review, carbon-ui-3): a theme set while a dialog is open does not repaint the panel under rows drawn
-// in the old theme; the next dialog opens in the new one.
+// Expected (O-89): TS dialogs read the theme reactively (`ui/dialog.tsx:44,82`), so a theme set while a dialog is
+// open restyles it in place. Built again in the new theme, each kind draws what it draws when opened in that theme
+// after the same keys: filter, selection, scroll, typed text and cursor, the active button and focus carry over.
 #[test]
-fn a_theme_change_keeps_the_open_dialog_in_one_theme() {
-    let kit = kit(72, 30);
-    open_models(&kit);
+fn a_theme_change_restyles_the_open_dialog_in_place() {
     let light = Catalog::default().load("opencode", ThemeMode::Light).unwrap().theme;
-    kit.dialogs.set_theme(light.clone());
-    let background = |kit: &Kit| {
-        let screen = kit.app.render();
-        let y = (0..screen.height).find(|&y| screen.row(y).contains("Select model")).unwrap();
-        screen.cell(column(&screen.row(y), "Select model") as u32, y).unwrap().bg
-    };
-    assert_eq!(background(&kit), theme().surface(opencode_ui::theme::Surface::Dialog).background.base);
-    kit.dialogs.clear();
-    open_models(&kit);
-    assert_eq!(background(&kit), light.surface(opencode_ui::theme::Surface::Dialog).background.base);
-}
-
-fn column(line: &str, needle: &str) -> u16 {
-    line[..line.find(needle).unwrap()].chars().count() as u16
+    type Open = fn(&Kit);
+    let cases: [(&str, Open); 3] = [
+        ("select", |kit| {
+            open_long(kit);
+            kit.app.type_text("a");
+            press(kit, "down", 12, true);
+        }),
+        ("prompt", |kit| {
+            open_prompt(kit, prompt::PromptProps { title: "Rename".into(), ..prompt::PromptProps::default() });
+            kit.app.type_text("new name");
+            kit.app.press("left");
+        }),
+        ("confirm", |kit| {
+            open_confirm(kit, &Rc::default());
+            kit.app.press("left");
+        }),
+    ];
+    for (name, open) in cases {
+        let kit = kit(72, 30);
+        open(&kit);
+        let dark = kit.app.render();
+        kit.dialogs.set_theme(light.clone());
+        let restyled = kit.app.render();
+        assert_ne!(restyled, dark, "{name}");
+        let fresh = self::kit(72, 30);
+        fresh.dialogs.set_theme(light.clone());
+        open(&fresh);
+        assert_eq!(restyled, fresh.app.render(), "{name}");
+        // The kept state still works: typing goes on where the cursor was.
+        kit.app.type_text("x");
+        fresh.app.type_text("x");
+        assert_eq!(kit.app.render(), fresh.app.render(), "{name} after typing");
+    }
 }
 
 // Expected (r2 review, carbon-ui-7): a toast queued behind a hovered one updates `+N more` in the same surface (TS

@@ -12,7 +12,6 @@ use opencode_ui::dialog::{
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::prompt::{PromptProps, prompt};
 use opencode_ui::select::{SelectOption, SelectProps};
-use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
@@ -27,7 +26,8 @@ pub struct Live {
     content: View,
     fit: Rc<RefCell<Option<Fit>>>,
     footer: View,
-    body: RefCell<abi::Node>,
+    /// The panel as last shown, which a build in a new theme shows again.
+    shown: RefCell<abi::Panel>,
     binds: Rc<RefCell<Option<Disposer>>>,
     /// The texts the body's hover handlers change.
     hovers: RefCell<Vec<Rc<Text>>>,
@@ -79,6 +79,7 @@ fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: 
     let (weak, clear, id) = (tui.weak(), tui.dialogs.clone(), id.to_owned());
     tui.dialogs.replace(
         move |cx| {
+            let (weak, clear, id, action) = (weak.clone(), clear.clone(), id.clone(), action.clone());
             let on_confirm = move |value: &str| {
                 let Some(tui) = weak.upgrade() else { return };
                 tui.dialogs.clear();
@@ -87,8 +88,8 @@ fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: 
             let (view, _) = prompt(
                 cx,
                 PromptProps {
-                    title,
-                    placeholder,
+                    title: title.clone(),
+                    placeholder: placeholder.clone(),
                     on_confirm: Some(Rc::new(on_confirm)),
                     on_cancel: Some(Rc::new(move || clear.clear())),
                     ..PromptProps::default()
@@ -152,26 +153,28 @@ fn panel(tui: &Tui, id: &str, panel: abi::Panel) {
             return;
         }
     }
-    let built: Rc<RefCell<Option<Live>>> = Rc::default();
-    let into = built.clone();
-    let (page, plugin) = (tui.page(), id.to_owned());
+    let plugin = id.to_owned();
     let (weak, options) = (tui.weak(), DialogOptions::new(size).key(key.clone()));
     tui.dialogs.replace(
         move |cx| {
             let Some(tui) = weak.upgrade() else { return View::new(&cx.app) };
-            let (view, live) = build(&tui, cx, &page, key, plugin, panel);
-            *into.borrow_mut() = Some(live);
+            // Built again in a new theme, the panel shows what the plugin sent last.
+            let live = tui.reads.panel.borrow_mut().take_if(|live| live.key == key);
+            let shown = live.as_ref().map_or_else(|| panel.clone(), |live| live.shown.borrow().clone());
+            tui.app.defer(move |_| drop(live));
+            let (view, live) = build(&tui, cx, key.clone(), plugin.clone(), shown);
+            *tui.reads.panel.borrow_mut() = Some(live);
             view
         },
         None,
         options,
     );
     tui.dialogs.set_centered(centered);
-    *tui.reads.panel.borrow_mut() = built.borrow_mut().take();
 }
 
-fn build(tui: &Tui, cx: &Rc<DialogCx>, page: &Theme, key: String, plugin: String, panel: abi::Panel) -> (View, Live) {
+fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, plugin: String, panel: abi::Panel) -> (View, Live) {
     let app = &cx.app;
+    let page = cx.theme.page();
     let title = View::new(app).row().gap(2).grow(1.0).min_width(0);
     let header =
         dialog::header(cx, HeaderProps { gap: Some(2), title_view: Some(title.as_any()), ..HeaderProps::default() });
@@ -224,15 +227,18 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, page: &Theme, key: String, plugin: String
         }
     });
     let binds: Rc<RefCell<Option<Disposer>>> = Rc::default();
-    let (held, emptied, weak, closed, app) = (binds.clone(), fit.clone(), tui.weak(), key.clone(), app.clone());
+    let (held, emptied, resizes) = (binds.clone(), fit.clone(), app.clone());
     cx.on_close(Disposer::new(move || {
         drop(held.borrow_mut().take());
         drop(emptied.borrow_mut().take());
-        app.remove_handler(resize);
+        resizes.remove_handler(resize);
+    }));
+    let (weak, closed, app) = (tui.weak(), key.clone(), app.clone());
+    cx.on_dismiss(move || {
         let Some(tui) = weak.upgrade() else { return };
         let live = tui.reads.panel.borrow_mut().take_if(|live| live.key == closed);
         app.defer(move |_| drop(live));
-    }));
+    });
     let live = Live {
         key,
         plugin,
@@ -241,12 +247,13 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, page: &Theme, key: String, plugin: String
         content,
         fit,
         footer,
-        body: RefCell::new(panel.body.clone()),
+        shown: RefCell::new(panel.clone()),
         binds,
         hovers: RefCell::default(),
     };
     live.fill_body(tui, &panel.body);
     live.update(tui, panel);
+    cx.keep_scroll(&scroll);
     (layout, live)
 }
 
@@ -254,6 +261,8 @@ impl Live {
     /// Shows `panel`'s header, actions and keys, and its body when that changed, which keeps where it is scrolled.
     fn update(&self, tui: &Tui, panel: abi::Panel) {
         let theme = &self.cx.theme;
+        let refill = self.shown.borrow().body != panel.body;
+        *self.shown.borrow_mut() = panel.clone();
         let mut title = vec![abi::Node::text(panel.title).layout(abi::Layout::default().shrink(false))];
         if let Some(subtitle) = panel.subtitle {
             let subtitle = abi::Node::text([abi::Span::new(subtitle.split_whitespace().collect::<Vec<_>>().join(" "))]);
@@ -280,10 +289,10 @@ impl Live {
                 &mut |_, _| {},
             );
         }
-        if *self.body.borrow() != panel.body {
+        if refill {
             self.fill_body(tui, &panel.body);
-            *self.body.borrow_mut() = panel.body;
         }
+
         let actions = panel
             .actions
             .into_iter()

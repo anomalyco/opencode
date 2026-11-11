@@ -35,7 +35,7 @@ const END: i64 = 9_007_199_254_740_991;
 pub fn show(tui: &Tui, shell: ShellInfo, location: Location) {
     let weak = tui.weak();
     tui.dialogs.replace(
-        move |cx| build(&weak, cx, shell, location),
+        move |cx| build(&weak, cx, shell.clone(), location.clone()),
         None,
         DialogOptions::new(DialogSize::XLarge).key("shell-output"),
     );
@@ -131,6 +131,23 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         scroll: scroll.clone(),
         foot: View::new(app),
     });
+    // Built again in a new theme, the dialog keeps what it read and goes on reading from there.
+    let weak = Rc::downgrade(&poll);
+    let kept = cx.keep(move || {
+        weak.upgrade().map(|poll| {
+            let read = (poll.info.borrow().clone(), poll.output.borrow().clone(), poll.omitted.get());
+            (read, poll.error.borrow().clone(), poll.cursor.get(), poll.copied.get(), poll.scroll.scroll_position())
+        })
+    });
+    if let Some(((info, output, omitted), error, cursor, copied, (x, y))) = kept.flatten() {
+        *poll.info.borrow_mut() = info;
+        *poll.output.borrow_mut() = output;
+        poll.omitted.set(omitted);
+        *poll.error.borrow_mut() = error;
+        poll.cursor.set(cursor);
+        poll.copied.set(copied);
+        scroll.scroll_to(x, y);
+    }
 
     let page = f64::from(height);
     let scroll_command = |key: &str, title: &str, run: fn(&ScrollBox, f64)| {

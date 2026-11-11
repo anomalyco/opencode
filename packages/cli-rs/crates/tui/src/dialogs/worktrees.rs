@@ -456,7 +456,7 @@ impl Workspaces {
                     props.render_filter = !show_error;
                     props.flat = true;
                     props.locked = locked;
-                    props.current = current;
+                    props.current = current.clone();
                     let error = built.state.borrow().load_error.clone();
                     let loading = {
                         let state = built.state.borrow();
@@ -512,12 +512,13 @@ impl Workspaces {
                         props.actions = actions(&weak, session);
                     }
                     let (view, select) = select::select(cx, props);
-                    if !filter.is_empty() {
+                    if !filter.is_empty() && !cx.rebuilt() {
                         select.set_filter(&filter);
                     }
-                    if let Some(selected) = &selected {
+                    if let Some(selected) = selected.as_ref().filter(|_| !cx.rebuilt()) {
                         select.move_to(selected);
                     }
+
                     *built.select.borrow_mut() = Some(select);
                     built.shown.set(true);
                     let owner = built.clone();

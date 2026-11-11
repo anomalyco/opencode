@@ -17,12 +17,14 @@ pub fn show(tui: &Tui, session: SessionID, title: Option<String>) {
     let clear = tui.dialogs.clone();
     tui.dialogs.replace(
         move |cx| {
+            let (weak, clear, session) = (weak.clone(), clear.clone(), session.clone());
             let (view, _) = prompt(
                 cx,
                 PromptProps {
                     title: "Rename session".into(),
                     placeholder: Some("Session title".into()),
-                    value: title,
+                    value: title.clone(),
+
                     on_confirm: Some(Rc::new(move |value: &str| {
                         let title = value.trim().to_owned();
                         let Some(tui) = weak.upgrade() else { return };

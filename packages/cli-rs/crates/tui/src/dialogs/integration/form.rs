@@ -193,7 +193,7 @@ fn when_string(value: &FormWhenValue) -> String {
 }
 
 /// Replaces the dialog; closing it cancels the step.
-fn replace(local: &Local, resolve: &Resolve, build: impl FnOnce(&Rc<DialogCx>) -> View + 'static) {
+fn replace(local: &Local, resolve: &Resolve, build: impl Fn(&Rc<DialogCx>) -> View + 'static) {
     let cancel = resolve.clone();
     local.dialogs.replace(build, Some(Box::new(move || cancel(Outcome::Cancel))), DialogOptions::default());
 }
@@ -220,9 +220,11 @@ fn select_values(
         values.push(None);
     }
     let pick = resolve.clone();
+    let values = Rc::new(values);
     replace(local, &resolve, move |cx| {
-        let mut props = SelectProps::new(title, options);
+        let mut props = SelectProps::new(title.clone(), options.clone());
         props.current = current;
+        let (pick, values) = (pick.clone(), values.clone());
         props.on_select = Some(Rc::new(move |option: &SelectOption<usize>| {
             pick(Outcome::Value(values[option.value].clone()));
         }));
@@ -271,9 +273,10 @@ fn text(local: &Local, title: String, field: FormField, resolve: Resolve) {
     let confirm = resolve.clone();
     replace(local, &resolve, move |cx| {
         let (errors, set_error) = super::error_slot(cx, true);
-        if let Some(description) = description {
+        if let Some(description) = description.clone() {
             errors.insert(0, &Text::new(&cx.app, description).fg(cx.theme.text.muted));
         }
+        let (field, confirm) = (field.clone(), confirm.clone());
         let on_confirm = Rc::new(move |input: &str| {
             let text = input.trim();
             let value = if text.is_empty() && !required(&field) {
@@ -293,9 +296,9 @@ fn text(local: &Local, title: String, field: FormField, resolve: Resolve) {
         prompt(
             cx,
             PromptProps {
-                title,
-                placeholder,
-                value: initial,
+                title: title.clone(),
+                placeholder: placeholder.clone(),
+                value: initial.clone(),
                 description: Some(Rc::new(move |_| errors.as_any())),
                 on_confirm: Some(on_confirm),
                 ..PromptProps::default()
@@ -357,7 +360,9 @@ fn multiselect(
     });
     local.dialogs.replace(
         move |cx| {
-            let mut props = SelectProps::new(title.clone(), options);
+            let mut props = SelectProps::new(title.clone(), options.clone());
+            let (step, pick, selected, local_pick, title, field) =
+                (step.clone(), pick.clone(), selected.clone(), local_pick.clone(), title.clone(), field.clone());
             props.on_select = Some(Rc::new(move |option: &SelectOption<Pick>| {
                 step.set(true);
                 match &option.value {
@@ -385,6 +390,8 @@ fn custom(local: &Rc<Local>, title: String, field: Rc<FormMultiselectField>, sel
     local.dialogs.replace(
         move |cx| {
             let confirm_title = title.clone();
+            let (done, selected, back, field, resolve) =
+                (done.clone(), selected.clone(), back.clone(), field.clone(), resolve.clone());
             let on_confirm = Rc::new(move |value: &str| {
                 if value.is_empty() {
                     return;
@@ -399,7 +406,7 @@ fn custom(local: &Rc<Local>, title: String, field: Rc<FormMultiselectField>, sel
             prompt(
                 cx,
                 PromptProps {
-                    title,
+                    title: title.clone(),
                     placeholder: Some("Type your own answer".into()),
                     on_confirm: Some(on_confirm),
                     ..PromptProps::default()
@@ -429,7 +436,9 @@ fn external(local: &Rc<Local>, title: String, field: FormExternalField, opened: 
     let again = local.clone();
     local.dialogs.replace(
         move |cx| {
-            let mut props = SelectProps::new(title.clone(), vec![open, finished]);
+            let mut props = SelectProps::new(title.clone(), vec![open.clone(), finished.clone()]);
+            let (resolve, step, again, title, field) =
+                (resolve.clone(), step.clone(), again.clone(), title.clone(), field.clone());
             props.on_select = Some(Rc::new(move |option: &SelectOption<bool>| {
                 if !option.value {
                     resolve(Outcome::Value(Some(FormValue::Bool(true))));
@@ -527,20 +536,40 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
             .cursor_color(focused);
         let state = Rc::new(Choice {
             cx: cx.clone(),
-            field,
-            rows,
+            field: field.clone(),
+            rows: rows.clone(),
             count,
             selected: Cell::new(selected),
             editing: Cell::new(false),
-            text: RefCell::new(text),
+            text: RefCell::new(text.clone()),
             error: RefCell::new(String::new()),
             list: list.clone(),
             height: Cell::new(height),
             error_line: Text::new(app, "").fg(theme.text.feedback.error.base),
             footer: View::new(app),
             textarea,
-            resolve: resolve_build,
+            resolve: resolve_build.clone(),
         });
+        let weak = Rc::downgrade(&state);
+        let kept = cx.keep(move || {
+            weak.upgrade().map(|state| {
+                let editing = state.editing.get();
+                let text = if editing { state.textarea.text() } else { state.text.borrow().clone() };
+                let error = state.error.borrow().clone();
+                (state.selected.get(), editing.then(|| state.textarea.cursor_offset()), text, error)
+            })
+        });
+        if let Some((selected, editing, text, error)) = kept.flatten() {
+            state.selected.set(selected);
+            *state.text.borrow_mut() = text;
+            *state.error.borrow_mut() = error;
+            if let Some(cursor) = editing {
+                state.editing.set(true);
+                state.textarea.set_text(state.text.borrow().as_str());
+                state.textarea.set_cursor_offset(cursor);
+                cx.focus(&state.textarea);
+            }
+        }
         state.layers();
         let back = Rc::downgrade(&state);
         let head = header(

@@ -39,7 +39,10 @@ pub fn show(tui: &Tui, session: SessionID, message: Option<String>, on_move: OnM
     let weak = tui.weak();
     tui.dialogs.replace(
         move |cx| {
-            let mut props = SelectProps::new("Fork session", options);
+            let mut props = SelectProps::new("Fork session", options.clone());
+            let weak = weak.clone();
+            let on_move = on_move.clone();
+
             // TS passes no `current`, and `undefined === undefined` marks "Full session" with `●`.
             props.current = Some(None);
             props.on_move = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<Option<String>>| on_move(
