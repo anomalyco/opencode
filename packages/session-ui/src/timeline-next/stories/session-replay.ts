@@ -754,12 +754,9 @@ export const scenarios = {
 
 export type ScenarioName = keyof typeof scenarios
 
-export function replayScript(
-  script: Beat[],
-  limit: number,
-  start: number,
-): { document: SessionDocument; caption: string } {
+export function replayScript(script: Beat[], limit: number, start: number) {
   const messages: SessionMessageInfo[] = []
+  // SAFETY: no step is open yet; the assertion names the step this holds once one starts.
   const state = { used: 0, busy: false, caption: "Start", assistant: undefined as SessionMessageAssistant | undefined }
   const at = () => start + state.used * 1_500
   const id = (prefix: string) => `${prefix}_${messages.length}_${state.used}`
@@ -771,6 +768,7 @@ export function replayScript(
 
   const assistant = () => {
     if (state.assistant) return state.assistant
+
     const message: SessionMessageAssistant = {
       id: id("msg_assistant"),
       type: "assistant",
@@ -779,6 +777,7 @@ export function replayScript(
       content: [],
       time: { created: at() },
     }
+
     messages.push(message)
     state.assistant = message
 
@@ -844,9 +843,14 @@ export function replayScript(
         metadata: {
           source: beat.source,
           state: beat.state,
-          ...(beat.agent ? { agent: beat.agent } : {}),
-          ...(beat.childID ? { childID: beat.childID } : {}),
-          ...(beat.shellID ? { shellID: beat.shellID } : {}),
+          // Only the fields the report carries, as core writes them.
+          ...Object.fromEntries(
+            [
+              ["agent", beat.agent],
+              ["childID", beat.childID],
+              ["shellID", beat.shellID],
+            ].flatMap(([key, value]) => (value ? [[key, value]] : [])),
+          ),
         },
         time: { created: at() },
       })
@@ -869,7 +873,7 @@ export function replayScript(
       assistant().content.push({
         type: "reasoning",
         // An empty thought shows that the model is thinking before its first words arrive.
-        text: progress === 1 ? "" : progress === 2 ? beat.text.slice(0, Math.ceil(beat.text.length / 2)) : beat.text,
+        text: thoughtSoFar(beat.text, progress),
         time: { created: at(), completed: done ? at() + 1_000 : undefined },
       })
 
@@ -911,7 +915,7 @@ export function replayScript(
       messages: structuredClone(messages),
       status: { type: state.busy ? "busy" : "idle" },
       diffs: [],
-    },
+    } satisfies SessionDocument,
     caption: state.caption,
   }
 }
@@ -962,25 +966,44 @@ function tool(
   }
 }
 
+// How much of a thought shows at each step: nothing yet, then half, then all of it.
+function thoughtSoFar(text: string, progress: number) {
+  if (progress === 1) return ""
+
+  if (progress === 2) return text.slice(0, Math.ceil(text.length / 2))
+
+  return text
+}
+
 // A running Code Mode script is still inside its last call.
 function running(metadata: Record<string, JsonValue>) {
   const calls = metadata.toolCalls
 
   if (!Array.isArray(calls) || calls.length === 0) return metadata
 
+  // SAFETY: Code Mode records each call as an object; the spread only copies its fields.
   return { ...metadata, toolCalls: [...calls.slice(0, -1), { ...(calls.at(-1) as object), status: "running" }] }
 }
 
 function caption(beat: Beat, done: boolean) {
   if (beat.kind === "user") return "You sent a message"
+
   if (beat.kind === "shell") return done ? `You ran ${beat.command}` : `Running ${beat.command}`
+
   if (beat.kind === "goal") return "You set a goal"
+
   if (beat.kind === "report") return `${beat.source} ${beat.state}`
+
   if (beat.kind === "model") return "You switched models"
+
   if (beat.kind === "think") return done ? "Finished thinking" : "Thinking"
+
   if (beat.kind === "say") return done ? "Answered" : "Writing"
+
   if (beat.kind === "tool") return done ? `${beat.name} finished` : `${beat.name} running`
+
   if (beat.kind === "interrupt") return "You interrupted the turn"
+
   if (beat.kind === "idle") return "Turn finished"
 
   return "Next step"
@@ -998,11 +1021,7 @@ export function sessionSteps(messages: readonly SessionMessageInfo[]) {
  * An exported session up to a step of the playhead. The step's message is live: its assistant message is not finished,
  * the part the step lands on is a thought still streaming or a call still running, and the session is busy.
  */
-export function replaySession(
-  sessionID: string,
-  messages: readonly SessionMessageInfo[],
-  limit: number,
-): { document: SessionDocument; caption: string } {
+export function replaySession(sessionID: string, messages: readonly SessionMessageInfo[], limit: number) {
   const out: SessionMessageInfo[] = []
   const state = { used: 0, caption: "Start", live: false }
 
@@ -1022,6 +1041,7 @@ export function replaySession(
     const length = Math.max(1, message.content.length)
     const shown = Math.min(available, length)
     const finished = shown === length && available > length
+
     const content = message.content
       .slice(0, shown)
       .map((part, index) => (finished || index < shown - 1 ? part : livePart(part)))
@@ -1040,7 +1060,7 @@ export function replaySession(
       messages: structuredClone(out),
       status: { type: state.live || (last?.type !== "idle" && state.used < sessionSteps(messages)) ? "busy" : "idle" },
       diffs: [],
-    },
+    } satisfies SessionDocument,
     caption: state.caption,
   }
 }

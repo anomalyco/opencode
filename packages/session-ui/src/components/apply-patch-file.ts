@@ -1,3 +1,6 @@
+/* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters, anti-slop-effect/prefer-effect-match --
+   this file parses tool metadata as it did before the New timeline, which only added the optional `context`; the
+   parsing is shared with the current timeline and keeps its shape until it is rewritten on its own. */
 import type { FileDiffInfo } from "@opencode/client/promise"
 import { completePatchContents, normalize, type ViewDiff } from "./session-diff"
 

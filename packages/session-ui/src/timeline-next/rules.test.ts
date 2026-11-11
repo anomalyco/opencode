@@ -115,6 +115,7 @@ describe("stopped calls", () => {
       expect(toolStopped(call)).toBe(true)
       expect(toolFailed(call)).toBe(false)
     }
+
     expect(toolFailed(errored("shell", { type: "tool.execution", message: "boom" }, { command: "x" }))).toBe(true)
   })
 

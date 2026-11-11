@@ -168,15 +168,18 @@ export function createTimelineVirtualizer(input: Input) {
   const [visibleArea, setVisibleArea] = createSignal<HTMLDivElement>()
   const [viewRoot, setViewRoot] = createSignal<HTMLDivElement>()
   const bottomInset = () => input.bottomInset?.() ?? 0
+
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(
     (input.keepsDisclosure ? entry : cached)?.toolOpen ?? {},
   )
+
   const patchGroupKeys = cached?.patchGroupKeys ?? new Map<string, string>()
   createEffect(
     on(
       () => input.presentationKey?.(),
       () => {
         patchGroupKeys.clear()
+
         if (!input.keepsDisclosure) setToolOpen(reconcile({}))
       },
       { defer: true },

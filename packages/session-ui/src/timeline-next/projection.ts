@@ -218,6 +218,7 @@ export function workedDuration(user: SessionMessageUser | undefined, steps: read
   const stopped = steps.find((step) => isInterruptedError(step.error))
 
   if (start === undefined || !stopped) return undefined
+
   const end =
     stopped.time.completed ??
     Math.max(
@@ -699,6 +700,7 @@ function joins(
 ) {
   const notices = (group: Exclude<PartGroup, { type: "part" }>) =>
     group.refs.every((ref) => ref.messageID === ref.partID)
+
   const thoughts = (group: Exclude<PartGroup, { type: "part" }>) =>
     group.refs.every((ref) => resolveContent(messageByID.get(ref.messageID), ref.partID)?.type === "reasoning")
 

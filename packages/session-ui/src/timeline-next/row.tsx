@@ -129,7 +129,7 @@ export function createNextTimelineRowRenderer(input: {
       row.group.refs.forEach((ref) => {
         const content = resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
 
-        if (content?.type !== "tool" || toolRule(content).shape !== "file" || content.state.status === "error") return
+        if (content?.type !== "tool" || toolRule(content).layout !== "file" || content.state.status === "error") return
         const part = `${ref.messageID}:${ref.partID}`
         const key = patchGroupKeys.get(part)
 
@@ -418,6 +418,7 @@ export function createNextTimelineRowRenderer(input: {
         return group.refs.flatMap((ref) => {
           const message = input.projection.messageByID().get(ref.messageID)
           const content = contents.get(ref.messageID)?.get(ref.partID)
+
           const event =
             ref.messageID === ref.partID
               ? message && noticeEvent(message)
@@ -1251,6 +1252,7 @@ export function createNextTimelineRowRenderer(input: {
       const label = createMemo(() => {
         const id = current().userMessageID
         const user = input.projection.messageByID().get(id)
+
         const ms = workedDuration(
           user?.type === "user" ? user : undefined,
           input.projection.assistantMessagesByParent().get(id) ?? emptyAssistantMessages,

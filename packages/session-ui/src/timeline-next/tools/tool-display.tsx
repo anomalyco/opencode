@@ -19,15 +19,15 @@ import { PatchTool } from "./patch"
 import { ShellTool } from "./shell"
 
 /** The tools the New timeline draws its own way. Every other tool draws as it does in the current timeline. */
-const tools: Record<string, Component<ToolProps>> = {
-  list: ListTool,
-  glob: GlobTool,
-  grep: GrepTool,
-  webfetch: WebFetchTool,
-  websearch: WebSearchTool,
-  shell: ShellTool,
-  patch: PatchTool,
-}
+const tools = new Map<string, Component<ToolProps>>([
+  ["list", ListTool],
+  ["glob", GlobTool],
+  ["grep", GrepTool],
+  ["webfetch", WebFetchTool],
+  ["websearch", WebSearchTool],
+  ["shell", ShellTool],
+  ["patch", PatchTool],
+])
 
 /**
  * One call. A call that failed shows as an error card. One the user stopped (`stopped`, from the rules) shows as one
@@ -57,7 +57,7 @@ export function ToolDisplay(props: ToolProps & { id: string; error?: string; sto
   const errorSubtitle = createMemo(() => toolErrorSubtitle(props, i18n))
   const error = createMemo(() => toolDisplayError(props))
   const stopped = createMemo(() => stoppedShell({ ...props, metadata: toolMetadata(props.metadata) }))
-  const render = createMemo(() => tools[props.tool] ?? ToolRegistry.render(props.tool) ?? GenericTool)
+  const render = createMemo(() => tools.get(props.tool) ?? ToolRegistry.render(props.tool) ?? GenericTool)
 
   return (
     <Show when={!hideQuestion()}>

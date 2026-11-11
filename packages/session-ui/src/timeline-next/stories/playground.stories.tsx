@@ -20,6 +20,13 @@ export default {
 
 type PresetID = (typeof timelinePresets)[number]["id"]
 
+const defaultPreset: PresetID = "compact"
+
+const defaultScenario: ScenarioName = "Feature work"
+
+// SAFETY: the keys of the scenarios object are exactly its scenario names.
+const scenarioNames = Object.keys(scenarios) as ScenarioName[]
+
 // The status line the app shows below a working turn, in the New timeline.
 const statusLabels = {
   waitingApproval: "Waiting for approval",
@@ -45,8 +52,8 @@ export const Playground = {
   args: { embedded: false },
   render: (args: { embedded: boolean }) => {
     const [state, setState] = createStore({
-      scenario: "Feature work" as ScenarioName,
-      preset: "compact" as PresetID,
+      scenario: defaultScenario,
+      preset: defaultPreset,
       activity: true,
       tick: Number.MAX_SAFE_INTEGER,
       playing: false,
@@ -98,10 +105,12 @@ export const Playground = {
 
     createEffect(() => {
       if (!state.playing) return
+
       const timer = setInterval(() => {
         if (tick() >= total()) return setState("playing", false)
         setState("tick", tick() + 1)
       }, 700)
+
       onCleanup(() => clearInterval(timer))
     })
 
@@ -127,7 +136,7 @@ export const Playground = {
           </label>
           <Segmented
             label="Session"
-            options={Object.keys(scenarios) as ScenarioName[]}
+            options={scenarioNames}
             value={state.scenario}
             onChange={(scenario) => setState({ scenario, tick: Number.MAX_SAFE_INTEGER, playing: false })}
           />

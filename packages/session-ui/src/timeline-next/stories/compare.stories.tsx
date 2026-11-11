@@ -23,7 +23,18 @@ export default {
 
 type PresetID = (typeof timelinePresets)[number]["id"]
 
-type View = "side" | "swipe" | "onion"
+type Side = "base" | "head"
+
+const views = ["side", "swipe", "onion"] as const
+
+type View = (typeof views)[number]
+
+const defaultView: View = "side"
+
+const defaultPreset: PresetID = "compact"
+
+// Scripted sessions by name; a name with no script is an exported session.
+const scripts = new Map(Object.entries(scenarios))
 
 // Sessions exported with `script/timeline-compare.ts export <id>`. The folder is ignored by git: they hold real code.
 const exported = Object.entries(
@@ -67,7 +78,7 @@ export const Compare = {
 
     const [state, setState] = createStore({
       session: sessions.find((session) => session === query.get("session")) ?? sessions[0]!,
-      preset: presetIDs.find((preset) => preset === query.get("preset")) ?? ("compact" as PresetID),
+      preset: presetIDs.find((preset) => preset === query.get("preset")) ?? defaultPreset,
       next: query.get("next") !== "false",
       baseNext: query.get("baseNext") === "true",
       tick: number("step") ?? Number.MAX_SAFE_INTEGER,
@@ -75,7 +86,7 @@ export const Compare = {
       width: ([480, 720, 960] as const).find((width) => width === number("width")) ?? 720,
       theme: query.get("theme") === "light" ? ("light" as const) : ("dark" as const),
       turnDiffs: query.get("files") === "true",
-      view: (["side", "swipe", "onion"] as const).find((view) => view === query.get("view")) ?? ("side" as View),
+      view: views.find((view) => view === query.get("view")) ?? defaultView,
       mix: 50,
     })
 
@@ -103,7 +114,7 @@ export const Compare = {
 
       if (session) return sessionSteps(session.messages)
 
-      return scenarios[state.session as keyof typeof scenarios].reduce((sum, beat) => sum + ticks(beat), 0)
+      return (scripts.get(state.session) ?? []).reduce((sum, beat) => sum + ticks(beat), 0)
     })
 
     const tick = createMemo(() => Math.min(state.tick, total()))
@@ -114,7 +125,7 @@ export const Compare = {
 
       if (session) return replaySession(session.info.id, session.messages, tick())
 
-      return replayScript(scenarios[state.session as keyof typeof scenarios], tick(), Date.now() - tick() * 1_500)
+      return replayScript(scripts.get(state.session) ?? [], tick(), Date.now() - tick() * 1_500)
     })
 
     const detail = createMemo(() => timelinePresets.find((preset) => preset.id === state.preset)!.value)
@@ -171,13 +182,10 @@ export const Compare = {
 
     const next = (side: "base" | "head") => (side === "head" ? state.next : state.baseNext)
 
-    const frames = {
-      base: undefined as HTMLIFrameElement | undefined,
-      head: undefined as HTMLIFrameElement | undefined,
-    }
+    const frames = new Map<Side, HTMLIFrameElement>()
 
-    const send = (side: keyof typeof frames) =>
-      frames[side]?.contentWindow?.postMessage(
+    const send = (side: Side) =>
+      frames.get(side)?.contentWindow?.postMessage(
         {
           type: "timeline-compare:render",
           document: replay().document,
@@ -203,9 +211,9 @@ export const Compare = {
     // A frame that loads, or reloads for a theme, asks for the session. A scroll in one lines the other up with it.
     const receive = (event: MessageEvent<{ type: string; anchor: string; offset: number }>) => {
       const side =
-        event.source === frames.base?.contentWindow
+        event.source === frames.get("base")?.contentWindow
           ? "base"
-          : event.source === frames.head?.contentWindow
+          : event.source === frames.get("head")?.contentWindow
             ? "head"
             : undefined
 
@@ -214,10 +222,12 @@ export const Compare = {
       if (event.data?.type === "timeline-compare:ready") return send(side)
 
       if (event.data?.type !== "timeline-compare:scroll") return
-      frames[side === "base" ? "head" : "base"]?.contentWindow?.postMessage(
-        { type: "timeline-compare:scroll-to", anchor: event.data.anchor, offset: event.data.offset },
-        "*",
-      )
+      frames
+        .get(side === "base" ? "head" : "base")
+        ?.contentWindow?.postMessage(
+          { type: "timeline-compare:scroll-to", anchor: event.data.anchor, offset: event.data.offset },
+          "*",
+        )
     }
 
     onMount(() => window.addEventListener("message", receive))
@@ -225,20 +235,22 @@ export const Compare = {
 
     createEffect(() => {
       if (!state.playing) return
+
       const timer = setInterval(() => {
         if (tick() >= total()) return setState("playing", false)
         setState("tick", tick() + 1)
       }, 700)
+
       onCleanup(() => clearInterval(timer))
     })
 
     const src = (page: string) => `${page}?id=timeline-compare-renderer--renderer&globals=theme:${state.theme}`
 
-    const frame = (side: keyof typeof frames, origin: string, style?: JSX.CSSProperties) => (
+    const frame = (side: Side, origin: string, style?: JSX.CSSProperties) => (
       <Show when={state.theme} keyed>
         {(_) => (
           <iframe
-            ref={(element) => (frames[side] = element)}
+            ref={(element) => frames.set(side, element)}
             title={side === "base" ? baseLabel : headLabel}
             src={src(origin)}
             class="absolute inset-0 h-full w-full border-0"

@@ -119,6 +119,7 @@ function MountedTimeline(props: MessageTimelineProps & { next: boolean }) {
     active: () => props.active !== false,
     next: props.next,
   })
+
   const tail = props.follow.following() ? controller.data.projection.rows().at(-1) : undefined
 
   if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
@@ -349,6 +350,7 @@ function MessageTimelineView(
       )
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
+
   // The New timeline's button to move work to the background waits until the shell or subagent has run for a moment,
   // so a quick command does not flash it. The wait counts from when the call started, so a call already running when
   // the timeline opens shows it at once.

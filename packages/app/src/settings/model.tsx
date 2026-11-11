@@ -349,7 +349,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
 
-    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
+    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(
+      usePlatform().platform,
+      import.meta.env.VITE_OPENCODE_CHANNEL,
+    )
       ? ["list", "projects", "customize", "recent"]
       : ["list", "projects", "customize"]
 

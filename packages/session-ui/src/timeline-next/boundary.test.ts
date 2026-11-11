@@ -8,6 +8,7 @@ import path from "node:path"
  */
 
 const packages = path.resolve(import.meta.dir, "../../..")
+
 const folder = path.join(packages, "session-ui/src/timeline-next")
 
 // The places that choose which timeline to show.
@@ -41,6 +42,7 @@ describe("New timeline boundary", () => {
 
   test("every style in the folder is scoped to the New timeline", async () => {
     const files = await Array.fromAsync(new Bun.Glob("**/*.css").scan({ cwd: folder, absolute: true }))
+
     const unscoped = await Promise.all(
       files.map(async (file) =>
         topLevelSelectors(await Bun.file(file).text())
@@ -60,6 +62,7 @@ async function sources() {
     "ui/src/**/*.{ts,tsx}",
     "stories/src/**/*.{ts,tsx}",
   ]
+
   const paths = (
     await Promise.all(globs.map((glob) => Array.fromAsync(new Bun.Glob(glob).scan({ cwd: packages, absolute: true }))))
   ).flat()
@@ -123,5 +126,9 @@ function splitSelectors(text: string) {
     parts[parts.length - 1] += char
   }
 
-  return parts.map((part) => part.trim().replace(/\s+/g, " ")).filter(Boolean)
+  return parts.flatMap((part) => {
+    const value = part.trim().replace(/\s+/g, " ")
+
+    return value ? [value] : []
+  })
 }

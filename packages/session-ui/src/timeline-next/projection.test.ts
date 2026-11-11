@@ -7,6 +7,7 @@ import { createNextTimelineProjection, workedDuration } from "./projection"
 import { replayScript, scenarios } from "./stories/session-replay"
 
 const messagesOnly = timelinePresets.find((preset) => preset.id === "text-only")!.value
+
 const detailed = timelinePresets.find((preset) => preset.id === "detailed")!.value
 
 const step = (id: string, created: number, rest: Partial<SessionMessageAssistant> = {}): SessionMessageAssistant => ({
@@ -29,6 +30,7 @@ describe("New timeline projection", () => {
         status: () => document.status,
         timelineDetail: () => messagesOnly,
       })
+
       const rows = projection.rows().map((row) => row._tag)
       dispose()
 
@@ -48,6 +50,7 @@ describe("New timeline projection", () => {
         content: [{ type: "reasoning", text: "Checking the folder.", time: { created, completed: created + 1 } }],
         time: { created, completed: created + 1 },
       })
+
     const messages: SessionMessageInfo[] = [
       { id: "user", type: "user", text: "Go", time: { created: 0 } },
       thought("first", 1),
@@ -68,6 +71,7 @@ describe("New timeline projection", () => {
         status: () => ({ type: "idle" }),
         timelineDetail: () => detailed,
       })
+
       const result = projection
         .rows()
         .flatMap((row) =>
@@ -75,6 +79,7 @@ describe("New timeline projection", () => {
             ? [row.group.refs.map((ref) => ref.messageID).join("+")]
             : [],
         )
+
       dispose()
 
       return result
@@ -106,6 +111,7 @@ describe("workedDuration", () => {
 
   test("a turn the user started runs from their message", () => {
     const user = { id: "user", type: "user", text: "Go", time: { created: 500 } } satisfies SessionMessageUser
+
     const stopped = step("stopped", 1_000, {
       error: { type: "aborted", message: "The user interrupted the turn" },
       time: { created: 1_000, completed: 4_500 },

@@ -1,4 +1,5 @@
 import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import { Option, Schema } from "effect"
 import { currentToolInput, currentToolMetadata } from "../message/current-tool-state"
 import { toolRule } from "./rules"
 
@@ -7,6 +8,7 @@ import { toolRule } from "./rules"
  * kind. Titles and commands stay in the background panel above the composer.
  */
 export type TimelineEventKind = "subagent" | "shell"
+
 export type TimelineEventVerb = "started" | "ran" | "finished" | "stopped"
 
 export type TimelineEvent = {
@@ -39,7 +41,8 @@ export const launchKeys = {
   ran: { shell: "ui.timeline.activity.commands", subagent: "ui.timeline.activity.subagents" },
 } as const
 
-const text = (value: unknown) => (typeof value === "string" && value ? value : undefined)
+// Text a call or notice carries, where it is not empty.
+const decodeText = Schema.decodeUnknownOption(Schema.NonEmptyString)
 
 /**
  * What a call says happened. A call still being written has nothing to count yet. A subagent that returns while it
@@ -55,10 +58,10 @@ export function toolEvent(tool: SessionMessageAssistantTool): TimelineEvent | un
 
   const item = {
     kind,
-    title: text(kind === "shell" ? input.command : input.description),
-    agent: kind === "subagent" ? text(input.agent) : undefined,
-    sessionID: kind === "subagent" ? text(metadata.sessionID) : undefined,
-    shellID: kind === "shell" ? text(metadata.shellID) : undefined,
+    title: Option.getOrUndefined(decodeText(kind === "shell" ? input.command : input.description)),
+    agent: kind === "subagent" ? Option.getOrUndefined(decodeText(input.agent)) : undefined,
+    sessionID: kind === "subagent" ? Option.getOrUndefined(decodeText(metadata.sessionID)) : undefined,
+    shellID: kind === "shell" ? Option.getOrUndefined(decodeText(metadata.shellID)) : undefined,
   } as const
 
   if (state.status === "running") return { ...item, verb: "started", failed: false }
@@ -85,10 +88,10 @@ export function noticeEvent(message: SessionMessageInfo): TimelineEvent | undefi
 
   const item = {
     kind: source,
-    title: text(message.description),
-    agent: text(message.metadata?.agent),
-    sessionID: text(message.metadata?.childID),
-    shellID: text(message.metadata?.shellID),
+    title: Option.getOrUndefined(decodeText(message.description)),
+    agent: Option.getOrUndefined(decodeText(message.metadata?.agent)),
+    sessionID: Option.getOrUndefined(decodeText(message.metadata?.childID)),
+    shellID: Option.getOrUndefined(decodeText(message.metadata?.shellID)),
   } as const
 
   if (state === "cancelled") return { ...item, verb: "stopped", failed: false }

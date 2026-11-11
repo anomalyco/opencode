@@ -2,6 +2,7 @@ import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessa
 import { currentToolFailed, currentToolGroupedRead, currentToolInput } from "../message/current-tool-state"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "../timeline/detail"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
+import { Predicate } from "effect"
 
 /**
  * What the New timeline shows, where, and how. The projection and the rows ask these questions; nothing else reads the
@@ -21,53 +22,60 @@ export type ToolMode = "explore" | "edit" | "run" | "tool"
  * - `event`: work that runs on: a subagent, or a shell started in the background. Grouped, starting it is counted in
  *   the group's label; on its own, it is counted with others like it: Started 2 subagents.
  */
-export type ToolShape = "line" | "file" | "event"
+export type ToolLayout = "line" | "file" | "event"
 
 export type ToolRule = {
   /** The detail setting that shows or hides it. */
   category: "shell" | "edit" | "subagents" | "tools"
   mode: ToolMode
-  shape: ToolShape
+  layout: ToolLayout
   /** Shows only once settled, and never folds into a group. */
   alone?: boolean
   /** Never shows. */
   hidden?: boolean
 }
 
-const explore: ToolRule = { category: "tools", mode: "explore", shape: "line" }
-const file: ToolRule = { category: "edit", mode: "edit", shape: "file" }
+const explore: ToolRule = { category: "tools", mode: "explore", layout: "line" }
+
+const file: ToolRule = { category: "edit", mode: "edit", layout: "file" }
 
 /** Every tool the timeline knows, by its current name. Any other tool is a line of activity under Tools. */
-const tools: Record<string, ToolRule> = {
-  read: explore,
-  list: explore,
-  glob: explore,
-  grep: explore,
-  webfetch: explore,
-  websearch: explore,
-  skill: explore,
-  edit: file,
-  write: file,
-  patch: file,
-  shell: { category: "shell", mode: "run", shape: "line" },
-  execute: { category: "shell", mode: "run", shape: "line" },
-  subagent: { category: "subagents", mode: "tool", shape: "event" },
-  question: { category: "tools", mode: "tool", shape: "line", alone: true },
-  todowrite: { category: "tools", mode: "tool", shape: "line", hidden: true },
-}
+const tools = new Map<string, ToolRule>(
+  Object.entries({
+    read: explore,
+    list: explore,
+    glob: explore,
+    grep: explore,
+    webfetch: explore,
+    websearch: explore,
+    skill: explore,
+    edit: file,
+    write: file,
+    patch: file,
+    shell: { category: "shell", mode: "run", layout: "line" },
+    execute: { category: "shell", mode: "run", layout: "line" },
+    subagent: { category: "subagents", mode: "tool", layout: "event" },
+    question: { category: "tools", mode: "tool", layout: "line", alone: true },
+    todowrite: { category: "tools", mode: "tool", layout: "line", hidden: true },
+  } satisfies Record<string, ToolRule>),
+)
 
-const other: ToolRule = { category: "tools", mode: "tool", shape: "line" }
+const other: ToolRule = { category: "tools", mode: "tool", layout: "line" }
 
 // Sessions migrated from v1 keep the tools' old names.
-const renamed: Record<string, string | undefined> = { bash: "shell", task: "subagent", apply_patch: "patch" }
+const renamed = new Map([
+  ["bash", "shell"],
+  ["task", "subagent"],
+  ["apply_patch", "patch"],
+])
 
 /** A call's rule, under the tool's current name. */
 export function toolRule(tool: SessionMessageAssistantTool): ToolRule & { name: string } {
-  const name = renamed[tool.name] ?? tool.name
-  const rule = tools[name] ?? other
+  const name = renamed.get(tool.name) ?? tool.name
+  const rule = tools.get(name) ?? other
 
   // A shell the agent started in the background reports back like a subagent.
-  if (name === "shell" && currentToolInput(tool).background === true) return { ...rule, name, shape: "event" }
+  if (name === "shell" && currentToolInput(tool).background === true) return { ...rule, name, layout: "event" }
 
   return { ...rule, name }
 }
@@ -127,7 +135,7 @@ export function contentGroup(detail: TimelineDetail, content: Content, commentar
 
   // Starting work that runs on is an action like any other, so it joins the activity group where its setting groups
   // it. A launch that failed keeps its own row, as failures do.
-  if (rule.shape === "event")
+  if (rule.layout === "event")
     return detail[rule.category].placement === "grouped" && !toolFailed(content)
       ? ("context" as const)
       : ("events" as const)
@@ -140,7 +148,7 @@ export function contentGroup(detail: TimelineDetail, content: Content, commentar
 
   if (toolFailed(content)) return undefined
 
-  return rule.shape === "file" ? ("file" as const) : undefined
+  return rule.layout === "file" ? ("file" as const) : undefined
 }
 
 /**
@@ -155,7 +163,7 @@ export function contentOpens(detail: TimelineDetail, content: Content) {
   const rule = toolRule(content)
 
   // A stopped call shows as one that ran, so it opens as one would.
-  if (rule.shape === "file" && (content.state.status !== "error" || toolStopped(content))) return false
+  if (rule.layout === "file" && (content.state.status !== "error" || toolStopped(content))) return false
 
   if (rule.category === "shell" || rule.category === "edit") return detail[rule.category].details === "expanded"
 
@@ -193,7 +201,7 @@ export function echoesUserShell(message: SessionMessageInfo, userShellIDs: Reado
   return (
     message.type === "synthetic" &&
     message.metadata?.source === "shell" &&
-    typeof shellID === "string" &&
+    Predicate.isString(shellID) &&
     userShellIDs.has(shellID)
   )
 }
@@ -206,12 +214,9 @@ export function echoesUserShell(message: SessionMessageInfo, userShellIDs: Reado
 export function noticePlacement(detail: TimelineDetail, message: SessionMessageInfo): TimelinePlacement {
   if (sessionEvent(message)) return "separate"
   const source = message.type === "synthetic" ? message.metadata?.source : undefined
-  const placement =
-    source === "subagent"
-      ? detail.subagents.placement
-      : source === "shell"
-        ? detail.shell.placement
-        : detail.notices.placement
+
+  const background = { subagent: detail.subagents.placement, shell: detail.shell.placement }
+  const placement = source === "subagent" || source === "shell" ? background[source] : detail.notices.placement
 
   if (placement === "hidden") return timelineNoticeRequired(message) ? "separate" : "hidden"
 

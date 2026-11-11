@@ -286,6 +286,7 @@ function trimContext(patch: string, context: number) {
 
           return result
         }
+
         const end = lines.findIndex((next, at) => at > index && !/^[ +\-\\]/.test(next))
         const body = lines.slice(index + 1, end === -1 ? lines.length : end)
         const first = body.findIndex((row) => row.startsWith("+") || row.startsWith("-"))
@@ -293,12 +294,15 @@ function trimContext(patch: string, context: number) {
         const lead = first === -1 ? 0 : Math.max(0, first - context)
         // The first lines of trailing context, each with the no-newline marker that may annotate it.
         const tail = body.slice(last + 1)
+
         const keepTail = tail.filter(
           (row, at) =>
             tail.slice(0, at + (row.startsWith("\\") ? 0 : 1)).filter((item) => item.startsWith(" ")).length <= context,
         )
+
         const dropTail =
           tail.filter((row) => row.startsWith(" ")).length - keepTail.filter((row) => row.startsWith(" ")).length
+
         const kept = first === -1 ? body : [...body.slice(lead, last + 1), ...keepTail]
         const shrink = first === -1 ? 0 : lead + dropTail
         const oldStart = Number(header[1]) + (first === -1 ? 0 : lead)

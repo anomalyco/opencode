@@ -90,6 +90,7 @@ export function trackNestedRails(root: HTMLElement) {
 
 function inkBounds(content: HTMLElement) {
   const bounds = { top: Infinity, bottom: -Infinity }
+
   const add = (rect: DOMRect) => {
     if (!rect.height) return
     bounds.top = Math.min(bounds.top, rect.top)

@@ -62,6 +62,7 @@ export const Renderer = {
         </div>
       </Show>
     )
+
     let scroller: HTMLDivElement | undefined
     // A scroll this frame made to follow the other side is not reported back, so the two never chase each other.
     let following = 0

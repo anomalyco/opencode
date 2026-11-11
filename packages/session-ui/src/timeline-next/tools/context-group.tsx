@@ -348,6 +348,7 @@ function SearchItem(props: { tool: SessionMessageAssistantTool }) {
 
 function SkillsItem(props: { tools: SessionMessageAssistantTool[] }) {
   const i18n = useI18n()
+
   const skills = createMemo(() =>
     props.tools.flatMap((tool) => {
       const name = currentSkillName(tool)
@@ -355,6 +356,7 @@ function SkillsItem(props: { tools: SessionMessageAssistantTool[] }) {
       return name ? [name] : []
     }),
   )
+
   const marker = "__OPENCODE_LOADED_SKILL__"
   const loaded = createMemo(() => i18n.plural("ui.tool.loadedSkills", skills().length, { name: marker }))
 
@@ -466,19 +468,22 @@ const decodeChangedPath = Schema.decodeUnknownOption(Schema.Struct({ file: Schem
  * only that reads like an events row: "Started 2 subagents".
  */
 function activityLabel(group: SessionMessageAssistantTool[], i18n: UiI18n) {
-  const tools = group.filter((tool) => toolRule(tool).shape !== "event")
+  const tools = group.filter((tool) => toolRule(tool).layout !== "event")
+
   const launches = summarizeEvents(
     group.flatMap((tool) => {
-      const event = toolRule(tool).shape === "event" ? toolEvent(tool) : undefined
+      const event = toolRule(tool).layout === "event" ? toolEvent(tool) : undefined
 
       return event ? [event] : []
     }),
   ).verbs
+
   const launched = launches.flatMap((bucket) => {
-    const keys = bucket.verb === "started" ? launchKeys.started : bucket.verb === "ran" ? launchKeys.ran : undefined
+    const keys = bucket.verb === "started" || bucket.verb === "ran" ? launchKeys[bucket.verb] : undefined
 
     return keys ? bucket.kinds.map((item) => i18n.plural(keys[item.kind], item.count)) : []
   })
+
   const modes = new Set(tools.map((tool) => toolRule(tool).mode))
   const mode = modePriority.find((item) => modes.has(item))
 
@@ -504,6 +509,7 @@ function activityLabel(group: SessionMessageAssistantTool[], i18n: UiI18n) {
         const changed = (toolMetadata(currentToolMetadata(tool)).files ?? []).flatMap((file) =>
           Option.toArray(decodeChangedPath(file)).map((value) => value.file),
         )
+
         const path = toolInput(currentToolInput(tool)).path
 
         return changed.length ? changed : path ? [path] : []
@@ -612,7 +618,7 @@ function joins(previous: SessionMessageAssistantTool, tool: SessionMessageAssist
 }
 
 function changesFiles(tool: SessionMessageAssistantTool) {
-  return tool.state.status !== "error" && toolRule(tool).shape === "file"
+  return tool.state.status !== "error" && toolRule(tool).layout === "file"
 }
 
 function loadsSkill(tool: SessionMessageAssistantTool) {

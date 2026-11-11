@@ -1,4 +1,5 @@
 import type { SessionMessageShell } from "@opencode/client/promise"
+import { Predicate } from "effect"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { Badge } from "@opencode/ui/badge"
 import { Icon } from "@opencode/ui/icon"
@@ -185,7 +186,7 @@ function shellOutcome(metadata: ToolProps["metadata"], i18n: UiI18n) {
   if (metadata.timeout === true || metadata.status === "timeout")
     return { tone: "danger" as const, label: i18n.t("ui.timeline.shell.timedOut") }
 
-  if (typeof metadata.exit === "number" && metadata.exit !== 0)
+  if (Predicate.isNumber(metadata.exit) && metadata.exit !== 0)
     return { tone: "danger" as const, label: i18n.t("ui.timeline.shell.exit", { code: metadata.exit }) }
 }
 
