@@ -922,7 +922,7 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
-test("home startup prompt waits for server plugins and submits the refreshed default agent exactly once", async () => {
+test.each([false, true])("home startup prompt waits for plugins unless explicitly submitted (manual: %s)", async (manual) => {
   await using state = await tmpdir()
   const cwd = process.cwd()
   const location = { directory: cwd, project: { id: "project", directory: cwd, canonical: cwd } }
@@ -986,6 +986,12 @@ test("home startup prompt waits for server plugins and submits the refreshed def
   })
 
   await setup.ready
+  if (manual) {
+    // Home prefills CLI input only once per process; also exercise this fixture on its own.
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+    for (let i = 0; i < "HOME_READY".length; i++) await setup.mockInput.pressKey("BACKSPACE")
+    await setup.mockInput.typeText("HOME_READY")
+  }
   // The unfixed client submits Build instead of consulting the server inventory.
   await Promise.race([requested.promise, submitted.promise])
   expect(bodies).toHaveLength(0)
@@ -994,6 +1000,14 @@ test("home startup prompt waits for server plugins and submits the refreshed def
     setup.waitForFrame((frame) => frame.includes("Could not load plugins") && frame.includes("Enter")),
   ])
   expect(bodies).toHaveLength(0)
+  if (manual) {
+    await setup.mockInput.pressKey("RETURN")
+    await submitted.promise
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toMatchObject({ text: "HOME_READY" })
+    expect(session).toMatchObject({ agent: "build" })
+    return
+  }
   failed = false
   setup.events.emit({ id: "evt_plugin_retry", type: "plugin.updated", created: 1, location, data: {} })
   await setup.waitForFrame((frame) => frame.includes("Waiting for plugins before sending"))

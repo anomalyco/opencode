@@ -130,9 +130,12 @@ export function Home() {
           <Prompt ref={bind} placeholders={placeholder} disabled={forms().length > 0} />
           <Show when={args.prompt && ref()?.current.text === args.prompt && startup() !== "ready"}>
             <text fg={theme.text.muted} paddingLeft={2}>
-              {startup() === "error"
-                ? "Could not load plugins. Press Enter to send manually."
-                : "Waiting for plugins before sending. Press Enter to send manually."}
+              {startup() === "error" ? "Could not load plugins." : "Waiting for plugins before sending."}
+              <Show
+                when={local.model.ready && local.model.catalogReady && local.agent.current() && local.model.current()}
+              >
+                {" Press Enter to send manually."}
+              </Show>
             </text>
           </Show>
         </box>
