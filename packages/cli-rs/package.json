@@ -1,7 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/cli-rs",
-  "version": "2.2.5",
   "private": true,
   "type": "module",
   "scripts": {
