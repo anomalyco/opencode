@@ -82,6 +82,7 @@ import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH 
 import { createPaneResize } from "./ui/pane-resize"
 import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { clickedLink } from "./ui/link"
+import { clickedSession } from "./ui/session-link"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
@@ -1418,6 +1419,12 @@ function App() {
       onMouseUp={(event) => {
         const url = clickedLink(renderer, event)
         if (url) return void openUrl(url).catch(toast.error)
+        const sessionID = clickedSession(renderer, event)
+        if (sessionID)
+          return void client.api.session.get({ sessionID }).then(
+            () => route.navigate({ type: "session", sessionID }),
+            () => toast.show({ message: "Session not found", variant: "error" }),
+          )
         if (copyOnSelectEnabled()) Selection.copyOnSelectRelease(event, renderer, toast, clipboard)
       }}
     >
