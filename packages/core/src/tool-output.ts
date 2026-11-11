@@ -77,41 +77,95 @@ const layer = Layer.effect(
       if (lines.length <= limits.maxLines && totalBytes <= limits.maxBytes)
         return { ...result, metadata: { ...result.metadata, truncated: false } }
 
-      const kept: string[] = []
-      let bytes = 0
-      for (const line of lines.slice(0, limits.maxLines)) {
-        const size = Buffer.byteLength(line, "utf-8") + (kept.length > 0 ? 1 : 0)
-        if (bytes + size > limits.maxBytes) break
-        kept.push(line)
-        bytes += size
-      }
       const file = path.join(directory, fileName())
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
-      const shown = kept.length > 0 ? `lines 1-${kept.length}` : "0 lines"
-      const marker = `[showing ${shown} of ${lines.length}; full output saved to ${file}]`
+
+      // Keep both ends: the head carries setup/context, the tail carries the result (often an error) that matters most.
+      // When the marker alone would not fit, keep the old behavior and give the whole byte budget to content.
+      const markerBytes = Buffer.byteLength(
+        `[showing lines ${lines.length}-${lines.length} and ${lines.length}-${lines.length} of ${lines.length}; full output saved to ${file}]`,
+        "utf-8",
+      )
+      const budget = markerBytes + 2 <= limits.maxBytes ? limits.maxBytes - markerBytes - 2 : limits.maxBytes
+      const headBudget = Math.floor(budget / 2)
+      const headLineBudget = Math.ceil(limits.maxLines / 2)
+
+      const head: string[] = []
+      let headBytes = 0
+      for (const line of lines.slice(0, headLineBudget)) {
+        const size = Buffer.byteLength(line, "utf-8") + (head.length > 0 ? 1 : 0)
+        if (headBytes + size > headBudget) break
+        head.push(line)
+        headBytes += size
+      }
+
+      const tail: string[] = []
+      let tailBytes = 0
+      const tailLineBudget = limits.maxLines - head.length
+      for (let i = lines.length - 1; i >= head.length && tail.length < tailLineBudget; i--) {
+        const line = lines[i]
+        const size = Buffer.byteLength(line, "utf-8") + (tail.length > 0 ? 1 : 0)
+        if (tailBytes + size > budget - headBytes) break
+        tail.unshift(line)
+        tailBytes += size
+      }
+
+      const tailStart = lines.length - tail.length
+
+      // The tail often ends early (a single oversized line), so give the head whatever budget is left.
+      for (let i = head.length; i < tailStart && head.length + tail.length < limits.maxLines; i++) {
+        const line = lines[i]
+        const size = Buffer.byteLength(line, "utf-8") + (head.length > 0 ? 1 : 0)
+        if (headBytes + tailBytes + size > budget) break
+        head.push(line)
+        headBytes += size
+      }
+
+      const shown = [
+        ...(head.length > 0 ? [`1-${head.length}`] : []),
+        ...(tail.length > 0 ? [`${tailStart + 1}-${lines.length}`] : []),
+      ].join(" and ")
+      const marker = `[showing ${shown ? `lines ${shown}` : "0 lines"} of ${lines.length}; full output saved to ${file}]`
+
+      // Each kept line goes back into the text item it came from, so attachments stay between the same lines.
+      const ranges: { index: number; start: number; end: number }[] = []
+      let lineIndex = 0
+      content.forEach((item, index) => {
+        if (item.type !== "text") return
+        const start = lineIndex
+        lineIndex += item.text.split("\n").length
+        ranges.push({ index, start, end: lineIndex })
+      })
+      if (text.endsWith("\n") && ranges.length > 0) ranges[ranges.length - 1].end -= 1
+
+      const markerIndex =
+        head.length > 0
+          ? ranges.find((range) => head.length - 1 >= range.start && head.length - 1 < range.end)?.index
+          : ranges[0]?.index
       const bounded: Tool.Content[] = []
-      let remaining = kept.join("\n").length
-      let seenText = false
       let marked = false
-      for (const item of content) {
+      content.forEach((item, index) => {
         if (item.type === "file") {
           bounded.push(item)
-          continue
+          return
         }
-        if (seenText && remaining > 0) remaining--
-        seenText = true
-        if (remaining >= item.text.length) {
-          bounded.push(item)
-          remaining -= item.text.length
-          continue
+        const range = ranges.find((candidate) => candidate.index === index)
+        if (!range) return
+        const parts: string[] = []
+        const headLines = lines.slice(range.start, Math.min(range.end, head.length))
+        if (headLines.length > 0) parts.push(headLines.join("\n"))
+        if (!marked && (markerIndex === undefined || markerIndex === index)) {
+          parts.push(marker)
+          marked = true
         }
-        if (remaining > 0) bounded.push({ ...item, text: item.text.slice(0, remaining) })
-        if (!marked) bounded.push({ type: "text", text: marker })
-        remaining = 0
-        marked = true
-      }
-      if (!marked) bounded.push({ type: "text", text: marker })
+        if (tail.length > 0) {
+          const tailLines = lines.slice(Math.max(range.start, tailStart), range.end)
+          if (tailLines.length > 0) parts.push(tailLines.join("\n"))
+        }
+        const itemText = parts.filter((part) => part.length > 0).join("\n")
+        if (itemText) bounded.push({ ...item, text: itemText })
+      })
       return {
         ...result,
         content: bounded,
