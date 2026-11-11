@@ -15,7 +15,7 @@ export const register = Effect.fn("ClaudeAISDK.register")(function* (ctx: Contex
   yield* ctx.aisdk.hook(
     "sdk",
     (evt) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         if (evt.package !== ClaudeProvider.PACKAGE) return
         // opencode spreads the model's settings into options, next to the configured headers and body
         const connection = ClaudeQueryOptions.connectionEnv({
@@ -25,6 +25,9 @@ export const register = Effect.fn("ClaudeAISDK.register")(function* (ctx: Contex
         })
         const configDirs = ClaudeQueryOptions.configDirs(evt.options.configDir)
         const strategy = ClaudeQueryOptions.strategy(evt.options.strategy)
+        if (evt.options.strategy !== undefined && evt.options.strategy !== strategy) {
+          yield* Effect.logWarning("Unknown Claude Agent strategy, using ordered", { strategy: evt.options.strategy })
+        }
         const dependencies: ClaudeAgentLanguageModel.Dependencies = {
           run: (request, signal) => run(accounts.run(request, configDirs, strategy), { signal }),
         }
