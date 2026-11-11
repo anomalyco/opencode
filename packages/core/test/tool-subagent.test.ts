@@ -118,7 +118,11 @@ const subagentPluginSupervisor = makeLocationNode({
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      yield* registerToolPlugin(SubagentTool.Plugin, {}, (name, callback) => hooks.register("tool", name, callback))
+      yield* registerToolPlugin(
+        SubagentTool.Plugin,
+        { session: { hook: (kind, callback) => hooks.register("session", kind, callback) } },
+        (name, callback) => hooks.register("tool", name, callback),
+      )
     }),
   ),
   deps: [
@@ -150,6 +154,13 @@ const replacements = [
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
+)
+// Same graph with a startup OPENCODE_SUBAGENT_CONCURRENCY, to check it outranks the config file.
+const overrideIt = testEffect(
+  Layer.merge(
+    AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
+    Layer.succeed(SubagentJob.Concurrency, "1"),
+  ),
 )
 const completionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
@@ -873,6 +884,323 @@ describe("SubagentTool", () => {
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
           expect(synthetic[0]?.text).toContain(childText)
+        }),
+      ),
+    ),
+  )
+
+  it.live("fails a call over the configured cap and frees the slot when the child settles", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ experimental: { subagent_concurrency: 1 } }),
+            ),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          const held = yield* sessions.create({
+            parentID: parent.id,
+            title: "review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const bus = yield* Bus.Service
+          const gate = yield* Deferred.make<void>()
+          yield* jobs.start({ id: held.id, type: SubagentTool.name, run: Deferred.await(gate).pipe(Effect.as("done")) })
+          const notified = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const call = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call" as const, id, name: SubagentTool.name, input },
+            })
+
+          // The backgrounded child holds the only slot until its job settles.
+          expect(
+            yield* call("cap-held", {
+              agent: "reviewer",
+              description: "follow up",
+              prompt: "continue",
+              sessionID: held.id,
+              background: true,
+            }),
+          ).toMatchObject({ status: "completed", metadata: { sessionID: held.id, status: "running" } })
+          expect(yield* call("cap-blocked", { agent: "reviewer", description: "next", prompt: "should fail" })).toEqual(
+            {
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: expect.stringContaining('Subagent concurrency limit reached (1). Increase "experimental.subagent_concurrency"'),
+              },
+            },
+          )
+          // A rejected call creates no session, and a follow-up on the running child needs no second slot.
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
+          expect(
+            yield* call("cap-repeat", {
+              agent: "reviewer",
+              description: "follow up",
+              prompt: "continue again",
+              sessionID: held.id,
+              background: true,
+            }),
+          ).toMatchObject({ status: "completed", metadata: { sessionID: held.id } })
+
+          yield* Deferred.succeed(gate, undefined)
+          yield* Fiber.join(notified).pipe(Effect.timeout("2 seconds"))
+          expect(yield* call("cap-after-settle", { agent: "reviewer", description: "next", prompt: "should run" })).toEqual(
+            expect.objectContaining({
+              status: "completed",
+              metadata: expect.objectContaining({ status: "completed" }),
+            }),
+          )
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(2)
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps the tool listed while the cap allows subagents", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_concurrency: 2 } })),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const prepared = yield* hooks.trigger("session", "context", {
+            ...toolIdentity,
+            sessionID: parent.id,
+            model: parentModel,
+            system: [],
+            messages: [],
+            options: {},
+            tools: { [SubagentTool.name]: { description: SubagentTool.description, input: { type: "object" } } },
+          })
+          expect(prepared.tools[SubagentTool.name]?.description).toContain("Available subagents:")
+        }),
+      ),
+    ),
+  )
+
+  it.live("offers no subagent tool at a cap of zero", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_concurrency: 0 } })),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const prepared = yield* hooks.trigger("session", "context", {
+            ...toolIdentity,
+            sessionID: parent.id,
+            model: parentModel,
+            system: [],
+            messages: [],
+            options: {},
+            tools: { [SubagentTool.name]: { description: SubagentTool.description, input: { type: "object" } } },
+          })
+          expect(prepared.tools).not.toHaveProperty(SubagentTool.name)
+
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-zero-subagent",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "review", prompt: "should not run" },
+              },
+            }),
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: expect.stringContaining("Subagent concurrency limit reached (0)"),
+            },
+          })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(0)
+        }),
+      ),
+    ),
+  )
+
+  it.live("runs a queued call once a slot frees in wait mode", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ experimental: { subagent_concurrency: 1, subagent_over_limit: "wait" } }),
+            ),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          const held = yield* sessions.create({
+            parentID: parent.id,
+            title: "review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const gate = yield* Deferred.make<void>()
+          yield* jobs.start({ id: held.id, type: SubagentTool.name, run: Deferred.await(gate).pipe(Effect.as("done")) })
+          const call = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call" as const, id, name: SubagentTool.name, input },
+            })
+
+          const running = yield* call("wait-held", {
+            agent: "reviewer",
+            description: "review",
+            prompt: "continue",
+            sessionID: held.id,
+          }).pipe(Effect.forkScoped({ startImmediately: true }))
+          const queued = yield* call("wait-next", { agent: "reviewer", description: "queued", prompt: "runs second" }).pipe(
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          yield* Deferred.succeed(gate, undefined)
+
+          expect(yield* Fiber.join(running)).toMatchObject({
+            status: "completed",
+            metadata: { sessionID: held.id, status: "completed" },
+          })
+          expect(yield* Fiber.join(queued)).toMatchObject({
+            status: "completed",
+            metadata: { status: "completed" },
+          })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(2)
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps fan-out unlimited without a cap", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          const held = yield* sessions.create({
+            parentID: parent.id,
+            title: "review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const gate = yield* Deferred.make<void>()
+          // One job stays running for this parent throughout, as a backgrounded child would.
+          yield* jobs.start({ id: held.id, type: SubagentTool.name, run: Deferred.await(gate).pipe(Effect.as("done")) })
+          const call = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: { type: "tool-call" as const, id, name: SubagentTool.name, input },
+            })
+
+          expect(
+            yield* call("unlimited-first", { agent: "reviewer", description: "first", prompt: "one" }),
+          ).toMatchObject({ status: "completed", metadata: { status: "completed" } })
+          expect(
+            yield* call("unlimited-second", { agent: "reviewer", description: "second", prompt: "two" }),
+          ).toMatchObject({ status: "completed", metadata: { status: "completed" } })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(3)
+          yield* Deferred.succeed(gate, undefined)
+        }),
+      ),
+    ),
+  )
+
+  overrideIt.live("prefers the startup override over the configured cap", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_concurrency: 5 } })),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          const held = yield* sessions.create({
+            parentID: parent.id,
+            title: "review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const gate = yield* Deferred.make<void>()
+          yield* jobs.start({ id: held.id, type: SubagentTool.name, run: Deferred.await(gate).pipe(Effect.as("done")) })
+
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "override-held",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "follow up", prompt: "continue", sessionID: held.id, background: true },
+              },
+            }),
+          ).toMatchObject({ status: "completed", metadata: { sessionID: held.id, status: "running" } })
+          // The layer's OPENCODE_SUBAGENT_CONCURRENCY of 1 outranks the file's 5.
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "override-blocked",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "next", prompt: "should fail" },
+              },
+            }),
+          ).toEqual({
+            status: "error",
+            error: { type: "tool.execution", message: expect.stringContaining("Subagent concurrency limit reached (1)") },
+          })
+          yield* Deferred.succeed(gate, undefined)
         }),
       ),
     ),
