@@ -4,8 +4,6 @@ import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Hash } from "@opencode/util/hash"
 import { Effect, Schedule, Schema, Scope, Stream } from "effect"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { McpClient } from "../../mcp/client.js"
 import { Mcp } from "../../mcp/index.js"
@@ -31,18 +29,13 @@ const reopen = Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(3
 export const Plugin = {
   id: "opencode.tools.mcp-events",
   effect: Effect.fn("McpEventTools.Plugin")(function* (ctx: Context) {
-    const config = yield* Config.Service
+    if (!(yield* Flag.enabled("mcp_events"))) return
     const mcp = yield* Mcp.Service
     const permission = yield* Permission.Service
     const scope = yield* Scope.Scope
-    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
-    const flags = yield* Flag.Service
-    const enabled = () => flags.resolve(loaded.entries).mcp_events.enabled
 
     yield* ctx.tool
       .transform((editor) => {
-        if (!enabled()) return
         editor.add({
           name: "watch_mcp_event",
           options: { namespace: "opencode", codemode: true },
@@ -78,8 +71,6 @@ export const Plugin = {
           }),
           execute: (input, context) =>
             Effect.gen(function* () {
-              // A request keeps the tools it started with after config reloads, so each call rechecks the flag.
-              if (!enabled()) return yield* new ToolFailure({ message: "MCP events are turned off" })
               const servers =
                 input.server === undefined
                   ? (yield* mcp.servers()).flatMap((server) =>
