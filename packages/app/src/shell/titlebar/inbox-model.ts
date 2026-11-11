@@ -12,6 +12,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { sessionBusy, sessionRequests, type SessionRequests } from "@/shell/layout/project-avatar-state"
 import { pathKey } from "@/workspaces/path-key"
 import { parseHomeSessionIndex } from "@/home/sessions/index"
+import { rawTime } from "@/runtime/server/data"
 import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { notifySessionTabsRemoved } from "./session-events"
@@ -411,7 +412,11 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
   // Move the session between the cached indexes so it changes section before either refetches.
   const move = (entry: InboxEntry, archivedAt: number | undefined) => {
-    const session = { ...entry.session, time: { ...entry.session.time, archived: archivedAt } }
+    // The cached index goes back through `apply`, so it keeps the server time rather than a send bump.
+    const session = {
+      ...entry.session,
+      time: { ...entry.session.time, updated: rawTime(entry.session), archived: archivedAt },
+    }
 
     forget(entry.conn, entry.session.id)
     queryClient.setQueryData<SessionInfo[]>(

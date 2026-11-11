@@ -17,6 +17,7 @@ import { arrayMove } from "@/runtime/array-move"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { rawTime } from "@/runtime/server/data"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
@@ -315,6 +316,9 @@ export function RecentSessions() {
   }
 
   function load(item: Connection, kind: "first" | "next" | "refresh") {
+    // A first page or reconnect refresh is already a fresh snapshot, so a pending reload would only repeat it.
+    if (kind !== "next") cancelReload(item.server)
+
     dispatch(item, { type: "load", kind, attempt: ++attempt })
   }
 
@@ -364,7 +368,11 @@ export function RecentSessions() {
       // A replaced controller owns no old requests or pin snapshots, even before it reconnects.
       if (replaced) dropServer(item.server)
 
-      if (status !== "connected") return
+      if (status !== "connected") {
+        cancelReload(item.server)
+
+        return
+      }
 
       if (!untrack(() => pages[item.server])) {
         load(item, "first")
@@ -755,7 +763,12 @@ export function RecentSessions() {
         if (state.pins.includes(item.key)) {
           setHydration(item.key, {
             ...item.session,
-            time: { ...item.session.time, archived: item.session.time.archived ?? Date.now() },
+            // The row's time may be a send bump; the snapshot goes back through `apply` and must stay raw.
+            time: {
+              ...item.session.time,
+              updated: rawTime(item.session),
+              archived: item.session.time.archived ?? Date.now(),
+            },
           })
         }
 

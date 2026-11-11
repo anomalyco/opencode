@@ -11,6 +11,7 @@ import {
   RECENT_WINDOW_MS,
   mergeRecentSessions,
   partitionRecentSessions,
+  recentPageHasMore,
   recentPageLoadingMore,
   recentSessionEndpoints,
   recentSessionKey,
@@ -152,10 +153,19 @@ test.each([
   expect(order(reloaded.state.sessions)).toEqual(["ses_b", "ses_a"])
 })
 
-test("a session created since the last reload appears at its live time", () => {
-  expect(
-    mergeRecentSessions("server", [session("ses_a", 20)], [session("ses_new", 30)]).map((entry) => entry.session.id),
-  ).toEqual(["ses_new", "ses_a"])
+test("a session created since the last reload ranks by its live time, an older one outside the pages never above them", () => {
+  // Another client renamed an old session, and the live store loaded it with the rename time.
+  const renamed = session("ses_renamed", 300, { time: { created: 5, updated: 300 } })
+  const created = session("ses_created", 200, { time: { created: 200, updated: 200 } })
+
+  const merged = mergeRecentSessions("server", [session("ses_a", 100), session("ses_b", 90)], [renamed, created])
+
+  expect(merged.map((entry) => [entry.session.id, entry.session.time.updated])).toEqual([
+    ["ses_created", 200],
+    ["ses_a", 100],
+    ["ses_b", 90],
+    ["ses_renamed", 90],
+  ])
 })
 
 test("sessions with equal timestamps order by id, and missing updates fall back to creation", () => {
@@ -545,6 +555,15 @@ test("a reload waits for the first page, and otherwise starts page one again", (
   expect(reloaded.state).toMatchObject({ status: "loading", kind: "reload", cursor: "cursor-2" })
   expect(reloaded.effects[0]).toEqual({ type: "fetch", attempt: 5, cursor: undefined })
   expect(recentPageLoadingMore(reloaded.state)).toBe(false)
+})
+
+test("Show more stays while a snapshot reload runs, and gives way to the loader for its own page", () => {
+  const state = readyPage([session("ses_a", 20)], { cursor: "cursor-2" })
+  const reload = transitionRecentPage(state, { type: "reload", attempt: 1 })
+  const refresh = transitionRecentPage(state, { type: "load", kind: "refresh", attempt: 2 })
+  const next = transitionRecentPage(state, { type: "load", kind: "next", attempt: 3 })
+
+  expect([state, reload.state, refresh.state, next.state].map(recentPageHasMore)).toEqual([true, true, true, false])
 })
 
 test("a reload supersedes Show more's page and keeps the older rows already loaded", () => {

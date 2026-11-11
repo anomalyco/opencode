@@ -357,14 +357,19 @@ export function recentPageLoadingMore(state: RecentPageState | undefined) {
 }
 
 export function recentPageHasMore(state: RecentPageState | undefined) {
-  return !!state && (state.status === "ready" || state.status === "failed") && !state.exhausted && !!state.cursor
+  if (!state || state.exhausted || !state.cursor) return false
+
+  // A snapshot reload keeps the pages and cursor it started with, so Show more stays while it runs.
+  return state.status !== "idle" && (state.status !== "loading" || state.kind === "reload" || state.kind === "refresh")
 }
 
 /**
  * One server's fetched pages plus the live store, keeping root, unarchived sessions. Live entries supply every field
- * except `time.updated`: a fetched row keeps the time from its page until the next reload, as the iOS app does, so
- * steps, renames and model or agent changes never reorder it. Sessions the pages do not hold, such as one created
- * since, use their live time. `apply` adds the local send bump.
+ * except `time.updated`: a fetched row keeps the time from its page until the next reload, so steps, renames and
+ * model or agent changes never reorder it. A session created since the last reload uses its live time. One that
+ * existed then but is outside the loaded pages was older than all of them, so it never ranks above them before a
+ * reload includes it, even when the live store loaded it with a newer time (a rename from another client).
+ * `apply` adds the local send bump.
  */
 export function mergeRecentSessions(
   server: string,
@@ -372,14 +377,16 @@ export function mergeRecentSessions(
   known: readonly SessionInfo[],
   apply: (rows: SessionInfo[]) => SessionInfo[] = (rows) => rows,
 ) {
+  const snapshot = new Map(fetched.map((info) => [info.id, info.time.updated]))
   const rows = new Map(fetched.map((info) => [info.id, info]))
+  const newest = fetched.reduce((value, info) => Math.max(value, info.time.updated), -Infinity)
+  const oldest = fetched.reduce((value, info) => Math.min(value, info.time.updated), Infinity)
 
   for (const info of known) {
-    const updated = rows.get(info.id)?.time.updated
-    rows.set(
-      info.id,
-      updated === undefined || updated === info.time.updated ? info : { ...info, time: { ...info.time, updated } },
-    )
+    const updated =
+      snapshot.get(info.id) ?? (info.time.created <= newest ? Math.min(info.time.updated, oldest) : info.time.updated)
+
+    rows.set(info.id, updated === info.time.updated ? info : { ...info, time: { ...info.time, updated } })
   }
 
   const sessions = apply([...rows.values()].filter((info) => !info.parentID && info.time.archived === undefined))

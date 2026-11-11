@@ -4,6 +4,7 @@ import { createData, type CreateDataInput } from "@opencode/client/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInfo } from "@opencode/client/promise"
 import { mergeRecentSessions } from "@/shell/titlebar/recent-sessions-model"
 import { createDesktopData, createSessionMutations, createSessionRecency, createSessionRefresh } from "./data"
+import { mergeRootSessionIndex } from "./session-index"
 
 const session: SessionInfo = {
   id: "ses_test",
@@ -194,6 +195,60 @@ test("after a reload, Recent shows the order a restarted window shows for the sa
   } finally {
     running.dispose()
     restarted.dispose()
+  }
+})
+
+// The live record lags the server after a rename, model or agent change, step or metadata update, while list
+// snapshots and events carry the newer time. A send must still bump past both until a newer record arrives.
+test.each(["a rename event", "a reloaded list"] as const)(
+  "a send after %s that is ahead of the live record still bumps until the server passes it",
+  (source) => {
+    const live = { ...session, time: { created: 0, updated: 10 } }
+    const setup = setupDesktop(async () => Response.json({ data: live }))
+
+    try {
+      setup.seed(10)
+
+      if (source === "a rename event") setup.emit("session.renamed", 50, { title: "Renamed" })
+      else setup.data.session.apply([{ ...session, time: { created: 0, updated: 50 } }], { reloads: true })
+
+      setSystemTime(new Date(1_000))
+      setup.data.session.acceptSend(session.id)
+
+      const at = (updated: number) =>
+        setup.data.session.apply([{ ...session, time: { created: 0, updated } }], { reloads: true })[0].time.updated
+
+      // A snapshot taken before the send, or one that only shows the earlier change, keeps the bump.
+      expect(at(50)).toBe(1_000)
+      expect(at(51)).toBe(51)
+    } finally {
+      setup.dispose()
+    }
+  },
+)
+
+test("a projected send bump merged through an index never becomes a server time", () => {
+  const setup = setupDesktop(async () => Response.json({ data: session }))
+
+  try {
+    setup.seed(10)
+    setSystemTime(new Date(1_000))
+    setup.data.session.acceptSend(session.id)
+
+    // A list rendered the projected row, then merged it with a fetched copy whose idle did not advance.
+    const projected = setup.data.session.apply([{ ...session, time: { created: 0, updated: 10 } }])
+    expect(projected[0].time.updated).toBe(1_000)
+
+    const merged = mergeRootSessionIndex(projected, [
+      { ...session, title: "Fetched", time: { created: 0, updated: 20 } },
+    ])
+
+    expect(setup.data.session.apply(merged)[0].time.updated).toBe(1_000)
+
+    // The server caught up behind the local clock. A laundered 1,000 would have pinned the session there.
+    expect(setup.data.session.apply([{ ...session, time: { created: 0, updated: 150 } }])[0].time.updated).toBe(150)
+  } finally {
+    setup.dispose()
   }
 })
 

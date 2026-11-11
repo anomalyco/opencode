@@ -42,6 +42,16 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
       mutation.deleted(event.data.sessionID)
     }),
   )
+  // Most session events advance the server's `time.updated` (rename, model or agent selection, steps, metadata)
+  // without touching the live record. A send needs that newer time so a snapshot that already carries it cannot
+  // settle the send. Events that do not advance it only delay settling until the send's own bump arrives.
+  onCleanup(
+    input.data.listen(({ details }) => {
+      if (details.type === "session.deleted" || !("created" in details) || !("sessionID" in details.data)) return
+
+      recency.seen(details.data.sessionID, details.created)
+    }),
+  )
   // The SDK invalidates and syncs loaded sessions on execution end. Desktop also needs a fresh record for roots
   // that only appear in an index that does not reload itself at run end (Home, Inbox, the project sidebars).
   // Coalesce those reads across overlapping ends.
@@ -111,6 +121,9 @@ export function createSessionRecency() {
   const sends = new Map<string, SendRecency>()
   // The newest server value a send's catch-up has taught us. Stale list fetches must not drop below it.
   const floors = new Map<string, number>()
+  // The newest server time any list or event has shown, which can be ahead of the live record. Only a send reads
+  // it, so nothing reorders on it.
+  const latest = new Map<string, number>()
   // Run-end refresh eligibility comes from reads of lists that do not reload themselves.
   const listedRoots = new Map<string, true>()
   let mutated = false
@@ -127,9 +140,10 @@ export function createSessionRecency() {
   }
 
   const grow = (map: Map<string, number>, sessionID: string, value: number) => {
-    if (value <= (map.get(sessionID) ?? Number.NEGATIVE_INFINITY)) return
+    if (value <= (map.get(sessionID) ?? Number.NEGATIVE_INFINITY)) return false
     keep(map, sessionID, value)
-    mutated = true
+
+    return true
   }
 
   // Reading live metadata for status must not settle a send or change another list's ordering.
@@ -143,6 +157,9 @@ export function createSessionRecency() {
   return {
     project,
     wasListedRoot: (sessionID: string) => listedRoots.has(sessionID),
+    seen(sessionID: string, updated: number) {
+      grow(latest, sessionID, updated)
+    },
     acceptSend(sessionID: string, info: SessionInfo | undefined, sentAt: number) {
       keep(sends, sessionID, {
         sentAt,
@@ -151,6 +168,7 @@ export function createSessionRecency() {
           sends.get(sessionID)?.serverUpdatedAt ?? 0,
           info ? rawTime(info) : 0,
           floors.get(sessionID) ?? 0,
+          latest.get(sessionID) ?? 0,
         ),
       })
     },
@@ -160,7 +178,11 @@ export function createSessionRecency() {
 
       // Settle from the whole batch first, so [stale, fresh] and [fresh, stale] compute the same values.
       for (const [index, info] of infos.entries()) {
-        if (listed && index < RECENCY_SESSION_LIMIT && !info.parentID) keep(listedRoots, info.id, true)
+        if (index < RECENCY_SESSION_LIMIT) {
+          if (listed && !info.parentID) keep(listedRoots, info.id, true)
+
+          grow(latest, info.id, rawTime(info))
+        }
 
         if (!sends.has(info.id)) continue
 
@@ -189,12 +211,14 @@ export function createSessionRecency() {
     forget(sessionID: string) {
       sends.delete(sessionID)
       floors.delete(sessionID)
+      latest.delete(sessionID)
       listedRoots.delete(sessionID)
     },
   }
 }
 
-function rawTime(info: SessionInfo) {
+/** The server's `time.updated` behind a row `apply` or `list` may have projected. Copy it when cloning a row's time. */
+export function rawTime(info: SessionInfo) {
   return syntheticTimes.get(info.time) ?? info.time.updated
 }
 
