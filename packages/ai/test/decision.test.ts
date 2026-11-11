@@ -579,6 +579,30 @@ describe("Decision", () => {
       ),
   )
 
+  it.effect("sends an ultra_high resolution to Google Decisions images but not video", () =>
+    ai.decision
+      .generate({
+        model: Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1"),
+        input: [
+          { type: "media", media: png },
+          { type: "media", media: Media.url("https://assets.test/clip.mp4", { mediaType: "video/mp4" }) },
+        ],
+        questions: [{ name: "match", type: "predicate", instructions: "Does the clip match the image?" }],
+        providerOptions: { mediaResolution: "ultra_high" },
+      })
+      .pipe(
+        Effect.provide(
+          client((input) => {
+            expect(JSON.parse(input.text).input).toEqual([
+              { type: "image", mime_type: "image/png", resolution: "ultra_high", data: "AQID" },
+              { type: "video", mime_type: "video/mp4", uri: "https://assets.test/clip.mp4" },
+            ])
+            return Effect.succeed(json(input, { answers: { match: { type: "noul", noul: 0.5, confidence: 0.5 } } }))
+          }),
+        ),
+      ),
+  )
+
   it.effect("reports Google Decisions safety blocks as content policy errors", () =>
     Effect.gen(function* () {
       const error = yield* ai.decision

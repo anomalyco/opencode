@@ -115,7 +115,10 @@ const mediaPart = (request: DecisionRequest, asset: Media.Asset, resolution: str
   const block = {
     type,
     mime_type: asset.mediaType.toLowerCase(),
-    ...(resolution !== undefined && (type === "image" || type === "video") ? { resolution } : {}),
+    // `ultra_high` is image-only, so video keeps Google's default for it.
+    ...(resolution !== undefined && (type === "image" || (type === "video" && resolution !== "ultra_high"))
+      ? { resolution }
+      : {}),
   }
   const inline = asset.inline()
   if (inline) return Effect.succeed({ ...block, data: inline.base64 })

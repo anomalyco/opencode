@@ -211,7 +211,7 @@ export const layer = Layer.effect(
           Effect.mapError((error) => providerError(input.model, error)),
         )
       const usage = response.usage
-      // Hosts that don't report what they charged are priced from the catalog, as sessions are.
+      // Hosts that don't report what they charged are priced from the catalog, as sessions are, when it has a price.
       const catalog =
         usage === undefined || usage.cost !== undefined
           ? undefined
@@ -221,7 +221,8 @@ export const layer = Layer.effect(
       const cost =
         usage?.cost !== undefined
           ? Money.USD.make(usage.cost)
-          : catalog && usage
+          : // An unpriced catalog entry decodes to all-zero prices, which would read as a real $0.
+            catalog?.cost.some((price) => price.input > 0 || price.output > 0) && usage
             ? SessionUsage.calculateCost(catalog.cost, {
                 input: usage.inputTokens ?? 0,
                 output: usage.outputTokens ?? 0,
