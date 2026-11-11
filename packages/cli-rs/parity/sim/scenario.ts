@@ -42,6 +42,9 @@ export type SimScenario = {
   sessions?: { title?: string; prompts: string[] }[]
   // Rules after the allow-all rule; the last matching rule wins.
   permissions?: { action: string; resource: string; effect: "allow" | "deny" | "ask" }[]
+  // The instant, in milliseconds since the epoch, at which the server's and both clients' clocks start
+  // (`sim/clock.ts`), for screens that show today's date.
+  now?: number
   // Files under the working directory, written before the server starts.
   files?: Record<string, string>
   // The replies to the session's model calls, in order. Title requests get a fixed title.

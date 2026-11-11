@@ -3,7 +3,7 @@
 //! which reads `TZ` and `/etc/localtime`. Instants are milliseconds since the Unix epoch.
 
 use std::fmt;
-use std::sync::Once;
+use std::sync::{LazyLock, Once};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -226,8 +226,16 @@ pub fn iso(ms: i64) -> Option<String> {
     UTC.at(ms).map(|time| time.iso())
 }
 
+/// Milliseconds since the epoch. With `OPENCODE_DRIVE_NOW` (milliseconds), the clock starts at that instant and runs
+/// on, as `parity/sim/clock.ts` makes the TS side's: P-TUI scenarios whose screens show today's date set it.
 pub fn now_ms() -> i64 {
-    millis(SystemTime::now())
+    static OFFSET: LazyLock<i64> = LazyLock::new(|| {
+        std::env::var("OPENCODE_DRIVE_NOW")
+            .ok()
+            .and_then(|start| start.parse::<i64>().ok())
+            .map_or(0, |start| start - millis(SystemTime::now()))
+    });
+    millis(SystemTime::now()) + *OFFSET
 }
 
 /// Milliseconds since the epoch, rounded down.
