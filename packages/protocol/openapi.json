@@ -16672,6 +16672,9 @@
               "console_watches": {
                 "type": "boolean"
               },
+              "mcp_events": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },
