@@ -103,13 +103,6 @@ const cards: Card[] = [
     shot: angled(`${covers}/sdk.webp`, [100, 420, 964, 440], 300),
   },
   {
-    path: "/ide",
-    title: "IDE extensions",
-    description: "Open OpenCode in VS Code, Cursor, Windsurf, Zed and JetBrains IDEs.",
-    shows: "the OpenCode terminal UI that the extensions open beside your code, at an angle",
-    shot: angled("public/product-videos/heroes/terminal-landscape-dark.webp", [430, 380, 1100, 560], 270),
-  },
-  {
     path: "/mini",
     title: "Mini",
     description: "A minimal terminal interface. Replies print into your own scrollback.",
