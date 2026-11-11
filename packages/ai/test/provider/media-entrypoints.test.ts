@@ -265,6 +265,21 @@ const decisions: ReadonlyArray<Case<DecisionModel>> = [
     provider: "openrouter",
   },
   {
+    name: "openai-compatible",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openai-compatible/decisions")
+      return model("clef-flash", {
+        ...shared,
+        apiKey: "local-key",
+        baseURL: "http://127.0.0.1:1234/v1",
+        provider: "lmstudio",
+      })
+    },
+    url: "http://127.0.0.1:1234/v1/systemone",
+    auth: ["authorization", "Bearer local-key"],
+    provider: "lmstudio",
+  },
+  {
     name: "baseten",
     load: async () => {
       const { model } = await import("@opencode/ai/providers/baseten/decisions")

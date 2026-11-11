@@ -301,6 +301,11 @@ describe("image and decision generation", () => {
       type: "decision",
       package: "@opencode/ai/providers/openrouter/decisions",
     }),
+    Info.make({
+      ...Info.default(Provider.ID.make("lmstudio"), ID.make("openjev")),
+      type: "decision",
+      package: "@opencode/ai/providers/openai-compatible/decisions",
+    }),
   ].concat(
     decisionCatalog(),
     (() => {
@@ -318,7 +323,11 @@ describe("image and decision generation", () => {
         Provider.Info.make({
           ...Provider.Info.empty(providerID),
           activation: "enabled",
-          settings: { apiKey: `${providerID}-key` },
+          settings: 
+            // A local host like LM Studio is enabled with no key.
+            providerID === "lmstudio"
+              ? { baseURL: "http://127.0.0.1:1234/v1", provider: "lmstudio", apiKey: "" }
+              : { apiKey: `${providerID}-key` },
         }),
       ),
   })
@@ -398,6 +407,11 @@ describe("image and decision generation", () => {
               usage: { input_tokens: 9, output_tokens: 272 },
             }),
           )
+        if (request.url === "http://127.0.0.1:1234/v1/systemone")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ model: "openjev", answers: { photo: { type: "noul", noul: 0.7 } } }),
+          )
         if (request.url === "https://api.typesafe.ai/v1/systemone")
           return HttpClientResponse.fromWeb(
             request,
@@ -466,6 +480,30 @@ describe("image and decision generation", () => {
       const generate = yield* Generate.Service
       const result = yield* generate.image({ model: ref("zai", "glm-image"), prompt: "A fox" })
       expect(result.images).toEqual([{ type: "image", data: Buffer.from(PNG).toString("base64"), mime: "image/png" }])
+    }),
+  )
+
+  mediaIt.effect("sends keyless local decisions without auth, with images at the body root", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      const result = yield* generate.decisions({
+        model: ref("lmstudio", "openjev"),
+        input: [
+          { type: "text", text: "A cat" },
+          { type: "file", data: Buffer.from(PNG).toString("base64"), mime: "image/png" },
+        ],
+        questions: [{ type: "predicate", name: "photo", instructions: "Is this a photo?" }],
+      })
+      expect(requests[0]?.url).toBe("http://127.0.0.1:1234/v1/systemone")
+      expect(requests[0]?.headers.authorization).toBeUndefined()
+      expect(requests[0]?.body).toStrictEqual({
+        model: "openjev",
+        state: "A cat",
+        images: [`data:image/png;base64,${Buffer.from(PNG).toString("base64")}`],
+        questions: { photo: { type: "noul", instructions: "Is this a photo?" } },
+      })
+      expect(result.answers).toEqual([{ type: "predicate", name: "photo", probability: 0.7 }])
     }),
   )
 

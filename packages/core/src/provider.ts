@@ -132,6 +132,10 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ],
   ["@opencode/ai/providers/openai-compatible/images", () => import("@opencode/ai/providers/openai-compatible/images")],
   [
+    "@opencode/ai/providers/openai-compatible/decisions",
+    () => import("@opencode/ai/providers/openai-compatible/decisions"),
+  ],
+  [
     "@opencode/ai/providers/openai-compatible/embeddings",
     () => import("@opencode/ai/providers/openai-compatible/embeddings"),
   ],
