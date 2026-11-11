@@ -108,7 +108,8 @@ async fn execute(
         }
     };
     if let Some(worktree) = &worktree {
-        ui::println(&[&format!("{}worktree {}{}", ui::TEXT_DIM, worktree.root, ui::TEXT_NORMAL)]);
+        let root = opencode_ui::terminal_text(&worktree.root);
+        ui::println(&[&format!("{}worktree {root}{}", ui::TEXT_DIM, ui::TEXT_NORMAL)]);
     }
     let target = target::resolve_session_target(
         client,

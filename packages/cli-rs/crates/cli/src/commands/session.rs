@@ -39,7 +39,7 @@ fn caught(result: error::Result<()>) -> error::Result<()> {
     if error.is::<Exit>() {
         return Err(error);
     }
-    eprintln!("{}", message(&error));
+    eprintln!("{}", opencode_ui::terminal_text(&message(&error)));
     Err(Exit(1).into())
 }
 
@@ -108,6 +108,7 @@ fn table(sessions: &[Value]) -> String {
         .iter()
         .map(|session| {
             let title = session["title"].as_str().unwrap_or("Untitled session").replace(['\r', '\n', '\t'], " ");
+            let title = opencode_ui::terminal_text(&title);
             format!("{}\t{title}\t{}", text(&session["id"]), locale_string(&session["time"]["updated"]))
         })
         .collect::<Vec<_>>()
@@ -326,6 +327,8 @@ mod tests {
         let rows: Vec<_> = rows.split('\n').collect();
         assert!(rows[0].starts_with("ses_a\tone two three\t"));
         assert_eq!(rows[1], "ses_b\tUntitled session\tInvalid Date");
+        let titled = table(&[json!({ "id": "ses_c", "title": "x\x1b]52;c;cHduZWQ=\x07y", "time": {} })]);
+        assert_eq!(titled, "ses_c\txy\tInvalid Date");
     }
 
     #[test]

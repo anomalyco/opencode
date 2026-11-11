@@ -24,6 +24,7 @@ pub fn empty() {
 }
 
 pub fn error(message: &str) {
-    let message = message.strip_prefix("Error: ").unwrap_or(message);
+    let message = opencode_ui::terminal_text(message);
+    let message = message.strip_prefix("Error: ").unwrap_or(&message);
     println(&[&format!("{TEXT_DANGER_BOLD}Error: {TEXT_NORMAL}{message}")]);
 }

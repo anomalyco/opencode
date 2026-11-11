@@ -28,7 +28,7 @@ pub fn autocomplete<T: Clone + PartialEq + ToString>(
     options: Vec<Choice<T>>,
 ) -> Autocomplete<'static, T> {
     Autocomplete {
-        message: message.into(),
+        message: super::clean(message),
         options,
         max_items: None,
         validate: None,
