@@ -74,7 +74,7 @@ describe("LMStudioPlugin", () => {
                   key: "clef-flash",
                   display_name: "Clef Flash",
                   loaded_instances: [],
-                  max_context_length: 262_144,
+                  max_context_length: null,
                 },
               ],
             }),
