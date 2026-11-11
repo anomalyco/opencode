@@ -49,7 +49,6 @@ it.live("serves turn diffs by user message with range validation", () =>
             }),
           interrupt: () => Effect.succeed(false),
           awaitIdle: () => Effect.void,
-          periodStartSeq: () => Effect.succeed(undefined),
         })
       }),
     )

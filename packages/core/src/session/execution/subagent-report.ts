@@ -53,8 +53,6 @@ export const make = (deps: Deps) => {
     periods.delete(sessionID)
   }
 
-  const periodStartSeq = (sessionID: SessionSchema.ID) => Effect.succeed(periods.get(sessionID)?.startedSeq)
-
   const resolveBody = Effect.fnUntraced(function* (
     sessionID: SessionSchema.ID,
     outcome: Exclude<Outcome, { readonly type: "interrupted"; readonly reason: "shutdown" }>,
@@ -207,5 +205,5 @@ export const make = (deps: Deps) => {
     return { commit, deliver }
   })
 
-  return { started, clear, periodStartSeq, prepare }
+  return { started, clear, prepare }
 }

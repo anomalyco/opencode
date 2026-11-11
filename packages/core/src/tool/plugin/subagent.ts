@@ -234,7 +234,7 @@ export const Plugin = {
                 agent: agent.name,
                 description: input.description,
               }
-              yield* subagents.start(recovery, { background: true })
+              yield* subagents.start(recovery)
               return backgroundResult(child.id, notify)
             }).pipe(
               Effect.map((output) => ({
