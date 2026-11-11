@@ -25,6 +25,10 @@ fn ts_root() -> Option<PathBuf> {
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
     let ready = root.join("node_modules").is_dir() && root.join("packages/cli/src/index.ts").is_file();
     if !ready {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: no TypeScript checkout with node_modules; set OPENCODE_TS_ROOT"
+        );
         eprintln!("skipped: no TypeScript checkout with node_modules; set OPENCODE_TS_ROOT");
     }
     ready.then_some(root)

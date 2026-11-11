@@ -314,6 +314,11 @@ pub fn ts_root() -> Option<PathBuf> {
     let present =
         root.join("node_modules").is_dir() && std::process::Command::new("bun").arg("--version").output().is_ok();
     if !present {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
+            root.display()
+        );
         eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", root.display());
     }
     present.then_some(root)
@@ -351,6 +356,10 @@ pub fn ts_config(home: &Path, op: Value) -> Option<Value> {
     use std::process::{Command, Stdio};
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap();
     if !root.join("node_modules").is_dir() || Command::new("bun").arg("--version").output().is_err() {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped the TypeScript side: needs bun and node_modules"
+        );
         eprintln!("skipped the TypeScript side: needs bun and node_modules");
         return None;
     }
