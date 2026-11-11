@@ -27,7 +27,7 @@ for dir in "$root"/*/; do
   for pair in ${OPENCODE_DIGESTS:-}; do
     if [ "${pair%%=*}" = "$name" ]; then digest=${pair#*=}; fi
   done
-  if [ -n "${OPENCODE_REQUIRE_DIGESTS:-}" ]; then
+  if [ "${OPENCODE_REQUIRE_DIGESTS:-false}" = true ]; then
     [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || die "Missing digest for $name"
   else
     case "$name" in sign-*) [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || die "Missing digest for $name" ;; esac
