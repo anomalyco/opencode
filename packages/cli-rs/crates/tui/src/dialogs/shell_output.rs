@@ -283,7 +283,7 @@ impl Poll {
         if value.is_empty() {
             return;
         }
-        if !tui.app.copy_to_clipboard(&value) {
+        if !crate::features::selection::put(&tui.app, &value) {
             tui.toasts.error("Failed to copy to clipboard");
             return;
         }

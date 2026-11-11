@@ -205,6 +205,25 @@ fn experiments_toggle_and_new_designs_graduated() {
     assert!(!tui.settings.experiment("client-mcp"));
 }
 
+// Expected (carbon-dialogs-8): Debug names the current model, and a plugin's copy drops NUL as `clipboard.write` does.
+#[test]
+fn debug_names_the_model_and_plugin_copies_drop_nul() {
+    let fake = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
+    let deps = opencode_tui::Deps {
+        route: opencode_tui::Route::Home,
+        ..support::deps(std::sync::Arc::new(fake))
+    };
+    let harness = support::mount(100, 30, deps);
+    harness.wait_for("Model M");
+    let entries = debug::entries(&harness.tui);
+    assert_eq!(entries.last(), Some(&("Model", "p/m".to_owned())));
+
+    let capture = opencode_tui::features::links::testing::capture();
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    assert!(host.copy("a\0b"));
+    assert_eq!(*capture.0.copied.borrow(), ["ab"]);
+}
+
 #[test]
 fn slash_and_palette_commands_open_settings_and_debug() {
     let app = TestApp::new(100, 30);

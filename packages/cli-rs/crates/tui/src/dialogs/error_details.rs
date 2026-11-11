@@ -40,7 +40,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     let copy: Rc<dyn Fn()> = {
         let (weak, copied, text, hook) = (weak.clone(), copied.clone(), details.text, hook.clone());
         Rc::new(bind!(weak, |tui| {
-            if !tui.app.copy_to_clipboard(&text) {
+            if !crate::features::selection::put(&tui.app, &text) {
                 tui.toasts.error("Failed to copy to clipboard");
                 return;
             }

@@ -76,19 +76,25 @@ pub fn copy(tui: &Tui, text: &str, message: &str) -> bool {
 /// `clipboard.write`: writes `text` to every clipboard destination, or shows an error toast when none took it.
 /// Returns whether one did.
 pub fn write(tui: &Tui, text: &str) -> bool {
-    // OpenTUI rejects NUL before any destination; host clipboard text cannot hold it.
-    let text = text.replace('\0', "");
-    let written = match crate::features::links::testing::sink() {
-        Some(sink) => {
-            sink.copied.borrow_mut().push(text.clone());
-            true
-        }
-        None => tui.app.copy_to_clipboard(&text),
-    };
+    let written = put(&tui.app, text);
     if !written {
         tui.toasts.error("Clipboard write failed");
     }
     written
+}
+
+/// Writes `text` to the clipboard as `clipboard.write` does (`clipboard.ts:55-59`), for callers that report a failure
+/// themselves. Returns whether a destination took it.
+pub fn put(app: &App, text: &str) -> bool {
+    // OpenTUI rejects NUL before any destination; host clipboard text cannot hold it.
+    let text = text.replace('\0', "");
+    match crate::features::links::testing::sink() {
+        Some(sink) => {
+            sink.copied.borrow_mut().push(text);
+            true
+        }
+        None => app.copy_to_clipboard(&text),
+    }
 }
 
 /// `Selection.handleSelectionKey`.

@@ -220,13 +220,7 @@ impl Host for Tui {
     }
 
     fn copy(&self, text: &str) -> bool {
-        let copied = match crate::features::links::testing::sink() {
-            Some(sink) => {
-                sink.copied.borrow_mut().push(text.to_owned());
-                true
-            }
-            None => self.app.copy_to_clipboard(text),
-        };
+        let copied = crate::features::selection::put(&self.app, text);
         if !copied {
             self.toasts.error("Failed to copy to clipboard");
         }
