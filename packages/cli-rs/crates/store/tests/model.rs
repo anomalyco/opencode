@@ -3,6 +3,8 @@
 //! The reference is a small server. Per session it holds pending permissions and forms in arrival order, and a
 //! transcript in server order (a per-session sequence, as `SessionStore` orders by `seq`). Message IDs deliberately
 //! do not sort in that order (`msg_watch_*`, `msg_sch_*`, descending numbers), so no fold may rely on ID order.
+//! It also holds the running shells of one location, read by the location's `Catalog::Shell` read; their exits
+//! settle them as replies settle requests.
 //!
 //! Commands change the server (each change queues its events), start the store's reads (each answered from the
 //! server state when the request arrives, then held), release or fail held responses by identity, deliver queued
@@ -1330,9 +1332,27 @@ fn transcripts_are_a_gapless_suffix_of_the_server() {
 }
 
 #[test]
-#[ignore = "red until plan step 3b (S1); run with --ignored"]
 fn shells_converge_to_the_server() {
     assert_converges(Mix { permissions: false, forms: false, messages: false, shells: true });
+}
+
+/// An overflowed shell overlay reads again by itself. The search cannot show it, as its view syncs every read again
+/// in the drain; the TUI reads shells only with the whole location.
+#[test]
+fn an_overflowed_shell_read_reads_again() {
+    let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    runtime.block_on(async {
+        let mut run = Run::new(Mutant::None);
+        run.step(Op::SyncShells).await.unwrap();
+        run.step(Op::ShellBurst).await.unwrap();
+        while !run.server.lock().unwrap().events.is_empty() {
+            run.step(Op::Deliver(u8::MAX)).await.unwrap();
+        }
+        run.step(Op::Release(Read::Shell, 0)).await.unwrap();
+        assert!(run.server.lock().unwrap().held.iter().any(|held| held.read == Read::Shell), "no second read");
+        run.step(Op::Release(Read::Shell, 0)).await.unwrap();
+        assert_eq!(run.shells.map(|shells| shells.len()), Some(SHELL_BURST as usize));
+    });
 }
 
 #[test]
@@ -1518,6 +1538,12 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "missing ses_1",
         &[Op::Ask(1), Op::Delete(1), Op::SyncPermissions(1), Op::Release(Read::Permissions, 1)],
     ),
+    // S1 (carbon-4, O92-shell-list): a `Catalog::Shell` read replaced the location's shells, losing a
+    // `shell.created` and bringing back a shell whose `shell.exited` arrived while it was in flight.
+    ("shell created during the shell read", "shells", &[Op::SyncShells, Op::ShellCreate]),
+    ("shell exited during the shell read", "settled shells", &[Op::ShellCreate, Op::SyncShells, Op::ShellExit(0)]),
+    // More shells start during the read than its overlay holds: it publishes its list and reads again.
+    ("shell overlay overflows", "shells", &[Op::SyncShells, Op::ShellBurst]),
 ];
 
 const OPEN: &[(&str, &str, &[Op])] = &[
@@ -1570,10 +1596,6 @@ const OPEN: &[(&str, &str, &[Op])] = &[
         "missing ses_0",
         &[Op::Open(0), Op::Delete(0), Op::SyncForms(0), Op::Release(Read::Forms, 0)],
     ),
-    // S1 (carbon-4): a `Catalog::Shell` read replaces the location's shells, losing a `shell.created` and bringing
-    // back a shell whose `shell.exited` arrived while it was in flight.
-    ("shell created during the shell read", "shells", &[Op::SyncShells, Op::ShellCreate]),
-    ("shell exited during the shell read", "settled shells", &[Op::ShellCreate, Op::SyncShells, Op::ShellExit(0)]),
 ];
 
 #[test]
