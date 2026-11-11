@@ -42,37 +42,35 @@ export function WindowsAppMenu(props: {
   const language = useLanguage()
   const menubar = useMenubarItems()
   const [openMenu, setOpenMenu] = createSignal<string>()
-  const [pointerMenu, setPointerMenu] = createSignal<string>()
-  const [ignoredPointerMenu, setIgnoredPointerMenu] = createSignal<string>()
+  let pointerMenu: string | undefined
   let pointerSettleTimeout: number | undefined
 
   const clearPendingPointerMenu = () => {
     window.clearTimeout(pointerSettleTimeout)
     pointerSettleTimeout = undefined
-    setPointerMenu(undefined)
+    pointerMenu = undefined
   }
 
   const activateMenu = (id: string) => {
-    if (pointerMenu() && pointerMenu() !== id) setIgnoredPointerMenu(pointerMenu())
-    clearPendingPointerMenu()
+    window.clearTimeout(pointerSettleTimeout)
+    pointerSettleTimeout = undefined
     setOpenMenu(id)
   }
 
   const pointerMove = (id: string) => {
     if (!openMenu() || openMenu() === id) return
     window.clearTimeout(pointerSettleTimeout)
-    setPointerMenu(id)
+    pointerMenu = id
     pointerSettleTimeout = window.setTimeout(() => {
       pointerSettleTimeout = undefined
-      if (pointerMenu() !== id) return
-      setPointerMenu(undefined)
+      if (pointerMenu !== id) return
+      pointerMenu = undefined
       if (openMenu() && openMenu() !== id) setOpenMenu(id)
     }, SUBMENU_POINTER_SETTLE_DELAY)
   }
 
   const pointerLeave = (id: string) => {
-    if (ignoredPointerMenu() === id) setIgnoredPointerMenu(undefined)
-    if (pointerMenu() !== id) return
+    if (pointerMenu !== id) return
     clearPendingPointerMenu()
   }
 
@@ -173,11 +171,10 @@ export function WindowsAppMenu(props: {
                   onPointerLeave={() => pointerLeave(menu.id)}
                   onActivate={() => activateMenu(menu.id)}
                   onOpenChange={(open) => {
-                    if (open && ignoredPointerMenu() === menu.id) {
-                      setIgnoredPointerMenu(undefined)
+                    if (open && pointerMenu === menu.id) {
+                      if (!pointerSettleTimeout) pointerMenu = undefined
                       return
                     }
-                    if (open && openMenu() && openMenu() !== menu.id && pointerMenu() === menu.id) return
                     setOpenMenu((current) => {
                       if (open) return menu.id
                       // A delayed close from a previous submenu must not clear the section that opened after it.
