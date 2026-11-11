@@ -8,9 +8,12 @@ import { timelineStatus, timelineThinking } from "../status"
 import { replayScript, replaySession, scenarios, sessionSteps, ticks } from "./session-replay"
 
 /**
- * Compares the same session in two builds of the timeline: `base`, another checkout's stories server, and `head`, this
- * one. Every control drives both sides, so the only difference between them is the code. With the New timeline on
- * both sides, it compares this build's New timeline with another build's, such as timeline-policy.
+ * Compares the same session drawn two ways, side by side. On its own it shows this build's current timeline beside its
+ * New timeline, which is the page to share with the team: `?id=timeline-compare--compare`. With `?base=` set to another
+ * checkout's stories server it compares that build with this one instead, such as dev with the New timeline off.
+ *
+ * Every control drives both sides, so the only difference between them is the timeline. The controls live in the
+ * address, so a link opens on the same session, setting and step.
  */
 export default {
   title: "OpenCode/Timeline/Compare",
@@ -50,23 +53,47 @@ const statusLabels = {
 export const Compare = {
   render: () => {
     const query = new URLSearchParams(location.search)
-    const base = query.get("base")
-    const baseLabel = query.get("baseLabel") ?? "base"
-    const headLabel = query.get("headLabel") ?? "head"
+    // Without another build to compare, the page compares this build's two timelines.
+    const other = query.get("base")
+    // This build's own page, wherever it is hosted, and the other build's stories server.
+    const self = location.href.split("?")[0]!
+    const base = other ? `${other.replace(/\/$/, "")}/` : self
+    const baseLabel = query.get("baseLabel") ?? (other ? "base" : "Current timeline")
+    const headLabel = query.get("headLabel") ?? (other ? "head" : "New timeline")
     const sessions = [...Object.keys(scenarios), ...exported.map((session) => session.name)]
 
+    const presetIDs = timelinePresets.map((preset) => preset.id)
+    const number = (key: string) => (query.has(key) ? Number(query.get(key)) : undefined)
+
     const [state, setState] = createStore({
-      session: sessions[0]!,
-      preset: "compact" as PresetID,
-      activity: true,
-      baseActivity: false,
-      tick: Number.MAX_SAFE_INTEGER,
+      session: sessions.find((session) => session === query.get("session")) ?? sessions[0]!,
+      preset: presetIDs.find((preset) => preset === query.get("preset")) ?? ("compact" as PresetID),
+      next: query.get("next") !== "false",
+      baseNext: query.get("baseNext") === "true",
+      tick: number("step") ?? Number.MAX_SAFE_INTEGER,
       playing: false,
-      width: 720,
-      theme: "dark" as "light" | "dark",
-      turnDiffs: false,
-      view: "side" as View,
+      width: ([480, 720, 960] as const).find((width) => width === number("width")) ?? 720,
+      theme: query.get("theme") === "light" ? ("light" as const) : ("dark" as const),
+      turnDiffs: query.get("files") === "true",
+      view: (["side", "swipe", "onion"] as const).find((view) => view === query.get("view")) ?? ("side" as View),
       mix: 50,
+    })
+
+    // The address follows the controls, so a link opens where it was copied.
+    createEffect(() => {
+      const address = new URLSearchParams(location.search)
+      address.set("session", state.session)
+      address.set("preset", state.preset)
+      address.set("theme", state.theme)
+      address.set("width", String(state.width))
+      address.set("view", state.view)
+
+      if (state.turnDiffs) address.set("files", "true")
+      else address.delete("files")
+
+      if (state.tick < Number.MAX_SAFE_INTEGER) address.set("step", String(state.tick))
+      else address.delete("step")
+      history.replaceState(history.state, "", `?${address}`)
     })
 
     const real = createMemo(() => exported.find((session) => session.name === state.session)?.data)
@@ -142,7 +169,7 @@ export const Compare = {
       return !nextStatus() && timelineThinking(detail(), last?.type === "assistant" ? last.content : [])
     })
 
-    const next = (side: "base" | "head") => (side === "head" ? state.activity : state.baseActivity)
+    const next = (side: "base" | "head") => (side === "head" ? state.next : state.baseNext)
 
     const frames = {
       base: undefined as HTMLIFrameElement | undefined,
@@ -205,7 +232,7 @@ export const Compare = {
       onCleanup(() => clearInterval(timer))
     })
 
-    const src = (origin: string) => `${origin}/?id=timeline-compare-renderer--renderer&globals=theme:${state.theme}`
+    const src = (page: string) => `${page}?id=timeline-compare-renderer--renderer&globals=theme:${state.theme}`
 
     const frame = (side: keyof typeof frames, origin: string, style?: JSX.CSSProperties) => (
       <Show when={state.theme} keyed>
@@ -232,20 +259,22 @@ export const Compare = {
           />
           <Choice
             label="Preset"
-            options={timelinePresets.map((preset) => preset.id)}
+            options={presetIDs}
             value={state.preset}
             onChange={(preset) => setState("preset", preset)}
           />
-          <Check
-            label={`New timeline (${headLabel})`}
-            checked={state.activity}
-            onChange={(activity) => setState("activity", activity)}
-          />
-          <Check
-            label={`New timeline (${baseLabel})`}
-            checked={state.baseActivity}
-            onChange={(activity) => setState("baseActivity", activity)}
-          />
+          <Show when={other}>
+            <Check
+              label={`New timeline (${headLabel})`}
+              checked={state.next}
+              onChange={(next) => setState("next", next)}
+            />
+            <Check
+              label={`New timeline (${baseLabel})`}
+              checked={state.baseNext}
+              onChange={(next) => setState("baseNext", next)}
+            />
+          </Show>
           <Choice
             label="Width"
             options={[480, 720, 960] as const}
@@ -319,59 +348,46 @@ export const Compare = {
           </span>
         </div>
         <Show
-          when={base}
+          when={state.view === "side"}
           fallback={
-            <p class="p-6 text-13-regular text-v2-text-text-muted">
-              Open this page with <code>?base=</code> set to another checkout's stories server.
-            </p>
+            <div class="relative min-h-0 flex-1">
+              {frame("base", base)}
+              {frame(
+                "head",
+                self,
+                state.view === "swipe" ? { "clip-path": `inset(0 0 0 ${state.mix}%)` } : { opacity: state.mix / 100 },
+              )}
+              <Show when={state.view === "swipe"}>
+                <div
+                  class="pointer-events-none absolute inset-y-0 w-px bg-v2-state-fg-danger"
+                  style={{ left: `${state.mix}%` }}
+                />
+              </Show>
+              <div class="pointer-events-none absolute top-2 left-2 rounded bg-v2-background-bg-layer-03 px-2 py-0.5 text-12-regular">
+                {state.view === "swipe" ? `${baseLabel} | ${headLabel}` : `${baseLabel} under ${headLabel}`}
+              </div>
+            </div>
           }
         >
-          {(origin) => (
-            <Show
-              when={state.view === "side"}
-              fallback={
-                <div class="relative min-h-0 flex-1">
-                  {frame("base", origin())}
-                  {frame(
-                    "head",
-                    location.origin,
-                    state.view === "swipe"
-                      ? { "clip-path": `inset(0 0 0 ${state.mix}%)` }
-                      : { opacity: state.mix / 100 },
-                  )}
-                  <Show when={state.view === "swipe"}>
-                    <div
-                      class="pointer-events-none absolute inset-y-0 w-px bg-v2-state-fg-danger"
-                      style={{ left: `${state.mix}%` }}
-                    />
-                  </Show>
-                  <div class="pointer-events-none absolute top-2 left-2 rounded bg-v2-background-bg-layer-03 px-2 py-0.5 text-12-regular">
-                    {state.view === "swipe" ? `${baseLabel} | ${headLabel}` : `${baseLabel} under ${headLabel}`}
-                  </div>
-                </div>
+          <div class="grid min-h-0 flex-1 grid-cols-2 divide-x divide-v2-border-border-base">
+            <For
+              each={
+                [
+                  ["base", base],
+                  ["head", self],
+                ] as const
               }
             >
-              <div class="grid min-h-0 flex-1 grid-cols-2 divide-x divide-v2-border-border-base">
-                <For
-                  each={
-                    [
-                      ["base", origin()],
-                      ["head", location.origin],
-                    ] as const
-                  }
-                >
-                  {([side, address]) => (
-                    <div class="flex min-h-0 flex-col">
-                      <div class="border-b border-v2-border-border-base px-4 py-1.5 text-12-medium text-v2-text-text-muted">
-                        {side === "base" ? baseLabel : headLabel}
-                      </div>
-                      <div class="relative min-h-0 flex-1">{frame(side, address)}</div>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-          )}
+              {([side, address]) => (
+                <div class="flex min-h-0 flex-col">
+                  <div class="border-b border-v2-border-border-base px-4 py-1.5 text-12-medium text-v2-text-text-muted">
+                    {side === "base" ? baseLabel : headLabel}
+                  </div>
+                  <div class="relative min-h-0 flex-1">{frame(side, address)}</div>
+                </div>
+              )}
+            </For>
+          </div>
         </Show>
       </div>
     )
