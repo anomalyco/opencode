@@ -12,7 +12,7 @@
   "scripts": {
     "typecheck": "bun check --no-script -b",
     "typecheck:tsc": "tsc -b",
-    "test": "bun test --isolate --timeout 30000",
+    "test": "bun test --timeout 30000",
     "dev": "bun run script/dev.ts",
     "migration": "bun run script/migration.ts",
     "build": "bun run script/build.ts",
