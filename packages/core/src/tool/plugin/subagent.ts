@@ -12,21 +12,18 @@ import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentJob } from "../../session/subagent-job.js"
-import { SubagentMetadata } from "../../session/subagent-metadata.js"
 
 export const name = "subagent"
 
-const backgroundResult = (sessionID: SessionSchema.ID, notify: boolean) => ({
+const backgroundResult = (sessionID: SessionSchema.ID) => ({
   sessionID,
   status: "running" as const,
-  output: notify
-    ? [
-        `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
-        "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
-        "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
-        "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
-      ].join("\n")
-    : `The subagent is working in the background (sessionID: ${sessionID}) and will not notify you when it finishes, so you won't receive its result. Only use notify=false for work whose result you don't need. To send it more work, call subagent again with this sessionID.`,
+  output: [
+    `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
+    "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
+    "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+    "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
+  ].join("\n"),
 })
 
 export const Input = Schema.Struct({
@@ -43,10 +40,6 @@ export const Input = Schema.Struct({
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description: "Send a follow-up to an existing subagent, running or finished. Omit to start a new one.",
   }),
-  notify: Schema.optionalKey(Schema.Boolean).annotate({
-    description:
-      "Send you a `<subagent>` message each time this subagent goes idle. Defaults to true for new subagents. On follow-ups (sessionID), keeps the subagent's current setting unless you pass it.",
-  }),
 })
 
 export const Output = Schema.Struct({
@@ -60,7 +53,6 @@ export const description = [
   "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll for progress, or ask the child for status.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Pass the returned sessionID to continue that specific child conversation. A follow-up to a running child joins its current run.",
-  "Pass notify=false for a new subagent only if you don't need its results: you won't receive its idle reports.",
 ].join("\n")
 
 export const Plugin = {
@@ -173,13 +165,9 @@ export const Plugin = {
               if (existing !== undefined) {
                 const switched = existing.agent !== agent.id
                 const model = override ?? (switched ? agent.model : undefined)
-                // Omitted notify keeps the child's current link state; only an explicit value writes.
-                const metadata =
-                  input.notify === undefined ? undefined : SubagentMetadata.update(existing.metadata, input.notify)
                 yield* Effect.all([
                   switched ? sessions.switchAgent({ sessionID: existing.id, agent: agent.id }) : Effect.void,
                   model === undefined ? Effect.void : sessions.switchModel({ sessionID: existing.id, model }),
-                  metadata === undefined ? Effect.void : sessions.setMetadata({ sessionID: existing.id, metadata }),
                 ]).pipe(
                   Effect.mapError(
                     (error) => new ToolFailure({ message: `Failed to switch subagent session: ${existing.id}`, error }),
@@ -196,7 +184,6 @@ export const Plugin = {
                     title: input.description,
                     agent: agent.id,
                     model,
-                    metadata: SubagentMetadata.withNotify(parent.metadata, input.notify !== false),
                   })
                   .pipe(
                     Effect.mapError(
@@ -204,7 +191,6 @@ export const Plugin = {
                     ),
                   ))
 
-              const notify = input.notify ?? SubagentMetadata.notify(child.metadata)
               // A child that is not draining yet must be admitted without waking: the job's resume
               // owns the start, so the period cannot run before its boundary is registered.
               const running =
@@ -235,7 +221,7 @@ export const Plugin = {
                 description: input.description,
               }
               yield* subagents.start(recovery)
-              return backgroundResult(child.id, notify)
+              return backgroundResult(child.id)
             }).pipe(
               Effect.map((output) => ({
                 output,

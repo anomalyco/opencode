@@ -20,7 +20,6 @@ import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
 import { SubagentJob } from "../subagent-job.js"
-import { SubagentMetadata } from "../subagent-metadata.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -338,15 +337,9 @@ export const layer = (options?: Options) =>
           yield* jobs.completeBackground(background.notificationID)
           return false
         }
-        const silent = !SubagentMetadata.notify(child.metadata)
 
         if (background.status !== "running") {
-          // The outbox row already holds the formatted result; replay it without touching
-          // the child. A silent link owes no report, so only the marker needs clearing.
-          if (silent) {
-            yield* jobs.completeBackground(background.notificationID)
-            return false
-          }
+          // The outbox row already holds the formatted result; replay it without touching the child.
           yield* deliverSubagentSafe(notices, background.notificationID, recovery, background)
           return false
         }
@@ -355,10 +348,6 @@ export const layer = (options?: Options) =>
         // prepareResume publishes Execution.Failed directly on the bus outside the
         // coordinator, so the settle hook never reports an exhausted child.
         if (!(yield* prepareResume(recovery.childSessionID))) {
-          if (silent) {
-            yield* jobs.completeBackground(background.notificationID)
-            return false
-          }
           yield* deliverSubagentSafe(notices, background.notificationID, recovery, {
             status: "error",
             error: RESUME_EXHAUSTED.message,
