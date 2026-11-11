@@ -132,6 +132,84 @@ async fn sends_nested_and_background_child_work_through_the_extension() {
 }
 
 #[tokio::test]
+async fn streams_resumed_parent_turns_after_background_children_report_across_prompts() {
+    let acp = start_session(
+        WireOptions {
+            on_prompt: Some(events(|call| {
+                let session = call.session_id.as_str();
+                match call.text.as_str() {
+                    "launch" => turn(
+                        session,
+                        &call.id,
+                        vec![
+                            child_created("ses_first", session, "First"),
+                            child_created("ses_second", session, "Second"),
+                        ],
+                    ),
+                    "followup" => turn(
+                        session,
+                        &call.id,
+                        vec![durable_event("session.execution.started", json!({ "sessionID": "ses_first" }))],
+                    ),
+                    _ => turn(
+                        session,
+                        &call.id,
+                        vec![
+                            text_delta("ses_second", "msg_child_2", "older child during chat", 0),
+                            text_delta(session, "msg_chat", "chat reply", 0),
+                        ],
+                    ),
+                }
+            })),
+            permission: Some(Arc::new(|_| {
+                Reply::Result(json!({ "outcome": { "outcome": "selected", "optionId": "once" } }))
+            })),
+            ..WireOptions::default()
+        },
+        json!({}),
+    )
+    .await;
+    let session = acp.session_id.clone();
+    let reaction = |text: &'static str| move |item: &Value| item.to_string().contains(text);
+
+    assert_eq!(acp.prompt(&session, "launch").await.unwrap()["stopReason"], "end_turn");
+    let mut report = vec![text_delta("ses_first", "msg_child", "child only", 0), succeeded("ses_first")];
+    report.extend(turn(&session, "msg_report_1", vec![text_delta(&session, "msg_reaction_1", "first reaction", 0)]));
+    report.push(text_delta(&session, "msg_stale", "stale", 0));
+    acp.server.send(&report);
+    acp.wait_for_update("first reaction", reaction("first reaction")).await;
+
+    assert_eq!(acp.prompt(&session, "chat").await.unwrap()["stopReason"], "end_turn");
+    let mut report =
+        vec![permission_asked("ses_second", "perm_second", json!({ "action": "read" })), succeeded("ses_second")];
+    report.extend(turn(&session, "msg_report_2", vec![text_delta(&session, "msg_reaction_2", "second reaction", 0)]));
+    acp.server.send(&report);
+    acp.wait_for_update("second reaction", reaction("second reaction")).await;
+    acp.until("second child permission reply", || (acp.server.state().replies.len() == 1).then_some(())).await;
+
+    assert_eq!(acp.prompt(&session, "followup").await.unwrap()["stopReason"], "end_turn");
+    let mut report = vec![succeeded("ses_first")];
+    report.extend(turn(&session, "msg_report_3", vec![text_delta(&session, "msg_reaction_3", "followup reaction", 0)]));
+    acp.server.send(&report);
+    acp.wait_for_update("followup reaction", reaction("followup reaction")).await;
+
+    assert_eq!(
+        acp.server.state().replies,
+        vec![json!({ "sessionID": "ses_second", "requestID": "perm_second", "decision": "once" })]
+    );
+    let updates: Vec<Value> = acp.turn_updates().into_iter().map(|item| item["update"].clone()).collect();
+    assert_matches(
+        &json!(updates),
+        &json!([
+            { "messageId": "msg_reaction_1", "content": { "text": "first reaction" } },
+            { "messageId": "msg_chat", "content": { "text": "chat reply" } },
+            { "messageId": "msg_reaction_2", "content": { "text": "second reaction" } },
+            { "messageId": "msg_reaction_3", "content": { "text": "followup reaction" } },
+        ]),
+    );
+}
+
+#[tokio::test]
 async fn cancels_unsupported_session_forms_so_execution_can_continue() {
     let acp = start_session(
         WireOptions {

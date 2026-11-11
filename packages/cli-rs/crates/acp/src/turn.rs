@@ -4,10 +4,14 @@
 //! A turn runs as its own task, so a cancelled prompt request still settles and responds. Cancellation
 //! lands only while the turn waits on the server (`execute`) and in the last check of `settle`, as the
 //! TS turn's interruptible regions do.
+//!
+//! Children that are still open when a prompt responds are followed in the background, and so are the
+//! parent turns their reports start. The session's next prompt stops that follower and inherits its
+//! children.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Duration;
 
 use futures_util::StreamExt;
@@ -32,7 +36,7 @@ use crate::error::Failure;
 use crate::permission;
 use crate::prompt::{self, Prepared};
 use crate::sessions::{Attached, Sessions};
-use crate::translate::{self, Folded, Output, StartKind, Terminal, TurnContext, TurnState};
+use crate::translate::{self, Output, StartKind, Terminal, TurnContext, TurnState};
 
 /// Core acknowledges an interrupt before its cleanup settles, and its shell tool waits 3 s before SIGKILL.
 pub const CANCEL_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -55,7 +59,13 @@ struct Turn {
     subscription: Arc<Subscription>,
     /// Cancelled when the turn winds down; queued asks then answer with their fallback.
     cancelled: CancellationToken,
-    background: bool,
+}
+
+/// The state a session's next turn inherits its children from, and the follower that still folds into it.
+struct Background {
+    attached: Weak<Attached>,
+    state: Arc<Mutex<TurnState>>,
+    stop: Option<CancellationToken>,
 }
 
 /// How `execute` ended.
@@ -78,6 +88,7 @@ pub struct Turns {
     catalogs: Arc<Catalogs>,
     capabilities: Arc<Mutex<Capabilities>>,
     turns: Mutex<HashMap<String, Handle>>,
+    backgrounds: Mutex<HashMap<String, Background>>,
     serial: AtomicU64,
     drain_timeout: Duration,
     scope: CancellationToken,
@@ -116,6 +127,7 @@ impl Turns {
             catalogs,
             capabilities,
             turns: Mutex::default(),
+            backgrounds: Mutex::default(),
             serial: AtomicU64::new(0),
             drain_timeout,
             scope,
@@ -143,12 +155,13 @@ impl Turns {
         let serial = self.serial.fetch_add(1, Ordering::Relaxed);
         let cancel = request.child_token();
         let (done_sender, done) = watch::channel(false);
+        let responded_watch = done.clone();
         turns.insert(session_id.clone(), Handle { serial, cancel: cancel.clone(), done });
         drop(turns);
         let (result_sender, result) = oneshot::channel();
         let this = self.clone();
         tokio::spawn(async move {
-            let response = this.run(&session_id, &content, &cancel).await;
+            let response = this.run(&session_id, &content, &cancel, responded_watch).await;
             {
                 let mut turns = lock(&this.turns);
                 if turns.get(&session_id).is_some_and(|handle| handle.serial == serial) {
@@ -199,29 +212,44 @@ impl Turns {
         session_id: &str,
         content: &[Value],
         cancel: &CancellationToken,
+        responded: watch::Receiver<bool>,
     ) -> Result<Value, Failure> {
         let attached = self.sessions.require(session_id)?;
         let prepared = prompt::prepare(&self.catalogs.get(&attached.cwd).await?, content).await?;
         let capabilities = *lock(&self.capabilities);
-        let turn = self.open(TurnContext {
-            session_id: attached.id.clone(),
-            cwd: attached.cwd.clone(),
-            start: prepared.start.clone(),
-            child_updates: capabilities.child_session_updates,
-            compaction: capabilities.compaction,
-        });
+        let turn = self.open(
+            &attached,
+            TurnContext {
+                session_id: attached.id.clone(),
+                cwd: attached.cwd.clone(),
+                start: Some(prepared.start.clone()),
+                child_updates: capabilities.child_session_updates,
+                compaction: capabilities.compaction,
+            },
+        );
         let exit = if cancel.is_cancelled() {
             Exit::Interrupted
         } else {
             self.execute(&attached, &prepared, &turn, cancel).await
         };
-        self.handoff(&attached, &turn, &exit);
+        self.handoff(&attached, &turn, &exit, responded);
         let current = lock(&turn.state).clone();
         self.settle(&attached, &current, exit, cancel).await
     }
 
     // Parented to the agent scope; the session scope may already be closed.
-    fn open(self: &Arc<Self>, ctx: TurnContext) -> Turn {
+    fn open(self: &Arc<Self>, attached: &Arc<Attached>, ctx: TurnContext) -> Turn {
+        let mut state = TurnState::default();
+        let previous = lock(&self.backgrounds).remove(&attached.id);
+        if let Some(previous) = previous.filter(|previous| Weak::ptr_eq(&previous.attached, &Arc::downgrade(attached)))
+        {
+            if let Some(stop) = previous.stop {
+                stop.cancel();
+            }
+            let inherited = lock(&previous.state);
+            state.children = inherited.children.clone();
+            state.open_children = inherited.open_children.clone();
+        }
         let scope = self.scope.child_token();
         let (event_sender, events) = mpsc::unbounded_channel();
         let client = self.client.clone();
@@ -257,7 +285,7 @@ impl Turns {
         });
         Turn {
             ctx: Arc::new(ctx),
-            state: Arc::new(Mutex::new(TurnState::default())),
+            state: Arc::new(Mutex::new(state)),
             subscription: Arc::new(Subscription {
                 scope,
                 events: tokio::sync::Mutex::new(events),
@@ -265,7 +293,6 @@ impl Turns {
                 settled: Mutex::default(),
             }),
             cancelled: CancellationToken::new(),
-            background: false,
         }
     }
 
@@ -440,30 +467,56 @@ impl Turns {
         }
     }
 
-    fn handoff(self: &Arc<Self>, attached: &Arc<Attached>, turn: &Turn, exit: &Exit) {
+    fn handoff(
+        self: &Arc<Self>,
+        attached: &Arc<Attached>,
+        turn: &Turn,
+        exit: &Exit,
+        mut responded: watch::Receiver<bool>,
+    ) {
         let close = turn.subscription.scope.clone();
         if matches!(exit, Exit::Failed(_)) {
             close.cancel();
             return;
         }
         let state = lock(&turn.state).clone();
+        let mut backgrounds = lock(&self.backgrounds);
         if state.open_children.is_empty() {
+            if !state.children.is_empty() {
+                let background =
+                    Background { attached: Arc::downgrade(attached), state: turn.state.clone(), stop: None };
+                backgrounds.insert(attached.id.clone(), background);
+            }
             close.cancel();
             return;
         }
-        // Children outlive a cancelled turn, so their asks still reach the client.
+        // Children outlive a cancelled turn, so their asks and the parent turns their reports start still reach
+        // the client.
+        let next = Arc::new(Mutex::new(TurnState { started: false, ..state }));
+        let stop = CancellationToken::new();
+        let background =
+            Background { attached: Arc::downgrade(attached), state: next.clone(), stop: Some(stop.clone()) };
+        backgrounds.insert(attached.id.clone(), background);
+        drop(backgrounds);
         let background = Turn {
-            ctx: turn.ctx.clone(),
-            state: Arc::new(Mutex::new(state)),
+            ctx: Arc::new(TurnContext { start: None, ..(*turn.ctx).clone() }),
+            state: next,
             subscription: turn.subscription.clone(),
             cancelled: CancellationToken::new(),
-            background: true,
         };
         let this = self.clone();
         let guard = close.clone().drop_guard();
         let work = async move {
             let _guard = guard;
-            let _ = this.follow_children(&background).await;
+            let follow = async {
+                // The prompt's response goes first.
+                let _ = responded.wait_for(|done| *done).await;
+                let _ = this.follow_children(&background).await;
+            };
+            tokio::select! {
+                () = follow => {}
+                () = stop.cancelled() => {}
+            }
         };
         if self.sessions.fork(attached, work).is_err() {
             close.cancel();
@@ -522,11 +575,7 @@ impl Turns {
         let event = take(&turn.subscription).await?;
         let (folded, children_open) = {
             let mut state = lock(&turn.state);
-            let folded = if turn.background && !translate::from_tracked_child(&state, &event) {
-                Folded::default()
-            } else {
-                translate::fold(&mut state, &event, &turn.ctx)
-            };
+            let folded = translate::fold(&mut state, &event, &turn.ctx);
             (folded, !state.open_children.is_empty())
         };
         for output in folded.outputs {
@@ -545,10 +594,11 @@ impl Turns {
         }
     }
 
+    /// Until a parent turn ends with no child open.
     async fn follow_children(self: &Arc<Self>, turn: &Turn) -> Result<(), Failure> {
         loop {
-            let (_, children_open) = self.advance(turn).await?;
-            if !children_open {
+            let (terminal, children_open) = self.advance(turn).await?;
+            if terminal.is_some() && !children_open {
                 asks_settled(&turn.subscription).await;
                 return Ok(());
             }
@@ -558,9 +608,6 @@ impl Turns {
     async fn interpret(self: &Arc<Self>, turn: &Turn, output: Output) -> Result<(), Failure> {
         match output {
             Output::SessionUpdate { update, diff } => {
-                if turn.background {
-                    return Ok(());
-                }
                 let update = permission::with_completed_diffs(update, diff.as_ref(), &turn.ctx.cwd).await;
                 self.connection.session_update(&turn.ctx.session_id, update)
             }
@@ -608,7 +655,7 @@ impl Turns {
                     return Ok(());
                 };
                 let id = form.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
-                let tool_call_sent = !turn.background && (child.is_none() || !turn.ctx.child_updates);
+                let tool_call_sent = child.as_ref().is_none_or(|child| translate::project_child(&turn.ctx, child));
                 let input = Arc::new(elicitation::Input {
                     client: self.client.clone(),
                     connection: self.connection.clone(),

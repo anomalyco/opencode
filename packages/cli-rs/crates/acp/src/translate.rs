@@ -37,7 +37,8 @@ pub enum Terminal {
 pub struct TurnContext {
     pub session_id: String,
     pub cwd: String,
-    pub start: TurnStart,
+    /// None while following children after the prompt responded: any delivery then starts a parent turn.
+    pub start: Option<TurnStart>,
     pub child_updates: bool,
     pub compaction: bool,
 }
@@ -153,9 +154,10 @@ pub fn fold(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded {
     let data = data(event);
     let session_id = session_id_from_event(event);
     let child = session_id.and_then(|id| state.children.get(id)).cloned();
+    let open_child = child.clone().filter(|child| state.open_children.contains(&child.id));
 
     match kind(event) {
-        "permission.asked" if text(data, "sessionID") == Some(ctx.session_id.as_str()) || child.is_some() => {
+        "permission.asked" if text(data, "sessionID") == Some(ctx.session_id.as_str()) || open_child.is_some() => {
             let tool = data
                 .get("source")
                 .and_then(|source| text(source, "id"))
@@ -163,13 +165,13 @@ pub fn fold(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded {
                 .and_then(|id| state.tools.get(&tool_key(text(data, "sessionID").unwrap_or_default(), id)))
                 .cloned();
             state.asks.insert(text(data, "id").unwrap_or_default().to_owned());
-            return Folded::new(vec![Output::PermissionAsk { event: event.clone(), tool, child }]);
+            return Folded::new(vec![Output::PermissionAsk { event: event.clone(), tool, child: open_child }]);
         }
         "form.created" => {
             let form = data.get("form").cloned().unwrap_or(Value::Null);
-            if text(&form, "sessionID") == Some(ctx.session_id.as_str()) || child.is_some() {
+            if text(&form, "sessionID") == Some(ctx.session_id.as_str()) || open_child.is_some() {
                 state.asks.insert(text(&form, "id").unwrap_or_default().to_owned());
-                return Folded::new(vec![Output::FormAsk { form, child }]);
+                return Folded::new(vec![Output::FormAsk { form, child: open_child }]);
             }
         }
         _ => {}
@@ -188,11 +190,14 @@ pub fn fold(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded {
     if session_id != ctx.session_id && child.is_none() {
         return Folded::default();
     }
-    if kind(event) == "session.inbox.delivered" && text(data, "inboxID") == Some(&ctx.start.id) {
+    if session_id == ctx.session_id
+        && kind(event) == "session.inbox.delivered"
+        && ctx.start.as_ref().is_none_or(|start| text(data, "inboxID") == Some(&start.id))
+    {
         state.started = true;
         return Folded::default();
     }
-    if !state.started {
+    if child.is_none() && !state.started {
         return Folded::default();
     }
     match child {
@@ -201,10 +206,9 @@ pub fn fold(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded {
     }
 }
 
-pub fn from_tracked_child(state: &TurnState, event: &Value) -> bool {
-    let session_id =
-        if kind(event) == "session.created" { text(data(event), "parentID") } else { session_id_from_event(event) };
-    session_id.is_some_and(|id| state.children.contains_key(id))
+/// `projectChild`: without the child capability, only the prompt turn that started a child shows its work.
+pub fn project_child(ctx: &TurnContext, child: &child::Session) -> bool {
+    !ctx.child_updates && ctx.start.as_ref().is_some_and(|start| child.turn_id.as_ref() == Some(&start.id))
 }
 
 pub fn failure(state: &TurnState) -> Option<Failure> {
@@ -318,6 +322,10 @@ fn child_created(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Fol
         parent_id: parent_id.to_owned(),
         depth: parent.map_or(1, |parent| parent.depth + 1),
         title: text(data, "title").map(str::to_owned),
+        turn_id: match parent {
+            Some(parent) => parent.turn_id.clone(),
+            None => ctx.start.as_ref().map(|start| start.id.clone()),
+        },
     };
     let outputs = child_status(ctx, &child, child::status("created", None));
     state.open_children.insert(child.id.clone());
@@ -344,23 +352,28 @@ fn root_event(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded
             state.step_error = data.get("error").cloned();
             Folded::default()
         }
-        "session.execution.succeeded" => terminal(Terminal::Succeeded),
-        "session.execution.interrupted" => terminal(Terminal::Interrupted),
+        // Following children, the next delivery starts the next parent turn.
+        "session.execution.succeeded" => terminal(state, ctx, Terminal::Succeeded),
+        "session.execution.interrupted" => terminal(state, ctx, Terminal::Interrupted),
         "session.execution.failed" => {
             state.execution_error = data.get("error").cloned();
-            terminal(Terminal::Failed)
+            terminal(state, ctx, Terminal::Failed)
         }
         _ => session_event(state, event, ctx, None),
     }
 }
 
-fn terminal(terminal: Terminal) -> Folded {
+fn terminal(state: &mut TurnState, ctx: &TurnContext, terminal: Terminal) -> Folded {
+    state.started = ctx.start.is_some();
     Folded { outputs: Vec::new(), terminal: Some(terminal) }
 }
 
 fn child_event(state: &mut TurnState, event: &Value, ctx: &TurnContext, child: &child::Session) -> Folded {
     match kind(event) {
-        "session.execution.started" => Folded::new(child_status(ctx, child, child::status("running", None))),
+        "session.execution.started" => {
+            state.open_children.insert(child.id.clone());
+            Folded::new(child_status(ctx, child, child::status("running", None)))
+        }
         "session.execution.succeeded" => child_ended(state, ctx, child, child::status("completed", None)),
         "session.execution.interrupted" => child_ended(state, ctx, child, child::status("interrupted", None)),
         "session.execution.failed" => {
@@ -522,6 +535,9 @@ fn route(ctx: &TurnContext, child: Option<&child::Session>, update: Value) -> Ve
     let projected = child::project(update, child);
     if ctx.child_updates {
         return child_status(ctx, child, child::update_event(projected));
+    }
+    if !project_child(ctx, child) {
+        return Vec::new();
     }
     vec![Output::SessionUpdate { update: projected, diff: None }]
 }
