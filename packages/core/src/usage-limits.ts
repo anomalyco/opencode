@@ -77,7 +77,10 @@ export const layer = Layer.effect(
       const cached = cache.get(cacheKey)
       if (cached && now - cached.at < ttl) return cached.value
       const result = yield* readGo(http, server, credential, workspaceID).pipe(
-        Effect.timeoutOrElse({ duration: Duration.seconds(15), orElse: () => Effect.succeed(undefined) }),
+        Effect.timeoutOrElse({
+          duration: Duration.seconds(15),
+          orElse: () => Effect.fail(new UnavailableError({ message: "OpenCode Go usage timed out" })),
+        }),
         Effect.result,
       )
       if (result._tag === "Success") {

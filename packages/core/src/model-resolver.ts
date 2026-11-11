@@ -478,7 +478,6 @@ export const layer = Layer.effect(
       const provider = yield* providers.get(selected.providerID)
       const integrationID = provider?.integrationID ?? Integration.ID.make(selected.providerID)
       let connection = yield* integrations.connection.active(integrationID)
-      const originalConnection = connection
       // Auto-balance OpenCode Go accounts when enabled and more than one is available.
       const entries = yield* config.entries()
       const toggle = Config.latest(entries, "experimental")?.auto_balance_accounts === true
@@ -523,18 +522,6 @@ export const layer = Layer.effect(
             }
           }
         }
-      }
-      // Make the auto-balanced choice visible instead of switching accounts silently.
-      if (
-        toggle &&
-        selected.providerID === "opencode-go" &&
-        connection &&
-        originalConnection &&
-        IntegrationConnection.key(connection) !== IntegrationConnection.key(originalConnection)
-      ) {
-        yield* integrations.connection
-          .activate((connection as { type: "credential"; id: any }).id)
-          .pipe(Effect.catch(() => Effect.void))
       }
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const selectedVariant = yield* withVariant(selected, variant)
