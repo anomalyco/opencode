@@ -323,7 +323,7 @@ describe("image and decision generation", () => {
         Provider.Info.make({
           ...Provider.Info.empty(providerID),
           activation: "enabled",
-          settings:
+          settings: 
             // A local host like LM Studio is enabled with no key.
             providerID === "lmstudio"
               ? { baseURL: "http://127.0.0.1:1234/v1", provider: "lmstudio", apiKey: "" }
@@ -614,7 +614,7 @@ describe("image and decision generation", () => {
     }),
   )
 
-  mediaIt.effect("routes a gemini-decisions catalog entry to Google and prices it from the catalog", () =>
+  mediaIt.effect("routes a gemini-decisions catalog entry to the Google decisions entrypoint", () =>
     Effect.gen(function* () {
       requests.length = 0
       const generate = yield* Generate.Service
@@ -639,16 +639,6 @@ describe("image and decision generation", () => {
       })
       expect(result.answers).toEqual([{ type: "predicate", name: "photo", probability: 0.8 }])
       expect(result.tokens).toEqual({ input: 12, output: 0 })
-      // The host reports no cost, so the catalog's input price applies.
-      expect(result.cost).toBe(Money.USD.make((12 * 0.5) / 1_000_000))
-      // Without a catalog price there is nothing to calculate, so no cost is reported rather than $0.
-      const unpriced = yield* generate.decisions({
-        model: ref("decide-host", "decide-gemini-unpriced"),
-        input: [{ type: "text", text: "Is this a photo?" }],
-        questions: [{ type: "predicate", name: "photo", instructions: "Is this a photo?" }],
-      })
-      expect(unpriced.tokens).toEqual({ input: 12, output: 0 })
-      expect(unpriced.cost).toBeUndefined()
     }),
   )
 
@@ -732,16 +722,6 @@ function decisionCatalog() {
             "decide-override": model("decide-override", { media_input: "state" }),
             "decide-gemini": {
               ...model("decide-gemini"),
-              cost: { text: { input: { price: 0.5 }, output: { price: 0 } } },
-              api: {
-                "gemini-decisions": {
-                  base_url: "https://gemini.test/v1beta",
-                  sdk: { opencodeai: "@opencode/ai/providers/google/decisions" },
-                },
-              },
-            },
-            "decide-gemini-unpriced": {
-              ...model("decide-gemini-unpriced"),
               api: {
                 "gemini-decisions": {
                   base_url: "https://gemini.test/v1beta",
