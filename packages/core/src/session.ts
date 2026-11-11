@@ -13,6 +13,8 @@ import { SessionMessage } from "./session/message.js"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
+import { Plugin } from "./plugin/service.js"
+import { PluginHooks } from "./plugin/hooks.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
@@ -379,7 +381,16 @@ const layer = Layer.effect(
             ...inherited,
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
-        return yield* result.get(sessionID).pipe(Effect.orDie)
+        const forked = yield* result.get(sessionID).pipe(Effect.orDie)
+        yield* Effect.gen(function* () {
+          yield* Plugin.awaitActivation
+          const hooks = yield* PluginHooks.Service
+          yield* hooks.trigger("session", "fork", { sessionID })
+        }).pipe(
+          instances.provide(forked),
+          Effect.catchCause((cause) => Effect.logWarning("fork hook failed", { sessionID, cause })),
+        )
+        return forked
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),
       environment: Effect.fn("Session.environment")(function* (input) {

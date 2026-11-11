@@ -79,6 +79,22 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_RELEASE_NOTES: ${{ inputs.release_notes }}
 
+  # ---- Gate: the full check suite, before anything is published ------------------------------------------------
+
+  # release.yml does not wait for the check-test push run on the same commit, so a stable release would publish
+  # whatever that run later says. This gate runs the whole suite — unit tests on both OSes, the compiled builds and
+  # the Linux browser suites — before any publish job below. Continuous dev and beta builds skip it: they publish
+  # their own channel from a dev push, whose check-test run covers the same commit.
+  verify:
+    needs: plan
+    if: needs.plan.outputs.channel == 'latest'
+    permissions:
+      contents: read
+      checks: write
+    uses: ./.github/workflows/check-test.yml
+    with:
+      release_gate: true
+
   # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
   # tagged v<version>. Runs git only.
   tag:
@@ -585,7 +601,7 @@ jobs:
 
   # Build provenance for the npm tarballs and Linux archives. No secrets; id-token only for Sigstore.
   publish-attestations:
-    needs: [plan, build-npm]
+    needs: [plan, build-npm, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' && needs.plan.outputs.dry_run != 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -606,7 +622,7 @@ jobs:
             ${{ runner.temp }}/in/build-archives/opencode*
 
   publish-npm:
-    needs: [plan, sign-macos, sign-windows, publish-attestations]
+    needs: [plan, sign-macos, sign-windows, publish-attestations, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -633,7 +649,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   publish-cli:
-    needs: [plan, sign-macos, sign-windows, publish-npm]
+    needs: [plan, sign-macos, sign-windows, publish-npm, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -664,7 +680,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
 
   publish-desktop:
-    needs: [plan, sign-macos, sign-desktop-windows-installer]
+    needs: [plan, sign-macos, sign-desktop-windows-installer, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.desktop == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -699,7 +715,7 @@ jobs:
         env: *cloudflare
 
   publish-docker:
-    needs: [plan, build-docker]
+    needs: [plan, build-docker, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -719,7 +735,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   publish-homebrew:
-    needs: [plan, sign-macos, sign-windows, publish-cli]
+    needs: [plan, sign-macos, sign-windows, publish-cli, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -748,7 +764,7 @@ jobs:
 
   # The AUR package installs the published npm tarballs, so it follows the npm publish.
   publish-aur:
-    needs: [plan, sign-macos, sign-windows, publish-npm]
+    needs: [plan, sign-macos, sign-windows, publish-npm, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -777,7 +793,7 @@ jobs:
 
   # WinGet manifests as data. Submission to microsoft/winget-pkgs stays paused until the packages are accepted.
   publish-winget:
-    needs: [plan, sign-windows, sign-desktop-windows-installer]
+    needs: [plan, sign-windows, sign-desktop-windows-installer, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     env: *env
@@ -797,7 +813,7 @@ jobs:
           path: ${{ runner.temp }}/out
 
   publish-github-release:
-    needs: [plan, sign-macos, sign-windows, sign-desktop-windows-installer, publish-cli, publish-desktop]
+    needs: [plan, sign-macos, sign-windows, sign-desktop-windows-installer, publish-cli, publish-desktop, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -821,7 +837,7 @@ jobs:
           OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
 
   publish-discord:
-    needs: [plan, publish-github-release]
+    needs: [plan, publish-github-release, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -851,7 +867,7 @@ jobs:
 
   # Brings the release commit back to dev. Pushing to dev is blocked by rulesets, so it opens a PR.
   publish-version-pr:
-    needs: [plan, tag, publish-npm, publish-cli, publish-desktop, publish-github-release]
+    needs: [plan, tag, publish-npm, publish-cli, publish-desktop, publish-github-release, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.channel == 'latest' }}
     runs-on: ubuntu-24.04
     permissions:

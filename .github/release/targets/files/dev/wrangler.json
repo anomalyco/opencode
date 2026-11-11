@@ -1,0 +1,11 @@
+{
+  "name": "opencode-dev-files",
+  "main": "index.js",
+  "no_bundle": true,
+  "compatibility_date": "2026-08-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": { "STAGE": "dev" },
+  "routes": [{ "pattern": "dev.opencode.ai/files/*", "zone_name": "opencode.ai" }],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "opencode-dev-files" }]
+}
