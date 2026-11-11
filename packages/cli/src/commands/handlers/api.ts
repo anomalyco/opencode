@@ -4,6 +4,8 @@ import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ServerConnection } from "../../services/server-connection"
+import { OpenCode } from "@opencode/client"
+import { waitForPlugins } from "../../services/plugin-startup"
 
 const methods = new Set(["delete", "get", "head", "options", "patch", "post", "put"])
 
@@ -22,6 +24,7 @@ export default Runtime.handler(
       mismatch: "ignore",
     })
     const endpoint = server.endpoint
+    yield* waitForPlugins(OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) }), process.cwd())
     const params = Option.getOrElse(input.param, () => ({}))
     const request = yield* resolveRequest(endpoint, input.request, params)
     const headers = new Headers(Service.headers(endpoint))
