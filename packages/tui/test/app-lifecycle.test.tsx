@@ -931,6 +931,7 @@ test("home startup prompt waits for server plugins and submits the refreshed def
   const requested = Promise.withResolvers<void>()
   const refreshing = Promise.withResolvers<void>()
   const refreshed = Promise.withResolvers<Response>()
+  let failed = true
   let activated = false
   let session: unknown
   await using setup = await createAppFixture({
@@ -942,6 +943,7 @@ test("home startup prompt waits for server plugins and submits the refreshed def
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
       if (url.pathname === "/api/plugin") {
         requested.resolve()
+        if (failed) return json({ message: "Plugin inventory unavailable" }, { status: 503 })
         return json({
           location,
           data: activated
@@ -989,8 +991,12 @@ test("home startup prompt waits for server plugins and submits the refreshed def
   expect(bodies).toHaveLength(0)
   await Promise.race([
     submitted.promise,
-    setup.waitForFrame((frame) => frame.includes("HOME_READY") && frame.includes("Build")),
+    setup.waitForFrame((frame) => frame.includes("Could not load plugins") && frame.includes("Enter")),
   ])
+  expect(bodies).toHaveLength(0)
+  failed = false
+  setup.events.emit({ id: "evt_plugin_retry", type: "plugin.updated", created: 1, location, data: {} })
+  await setup.waitForFrame((frame) => frame.includes("Waiting for plugins before sending"))
   expect(bodies).toHaveLength(0)
   activated = true
   setup.events.emit({ id: "evt_plugins", type: "plugin.updated", created: 1, location, data: {} })
