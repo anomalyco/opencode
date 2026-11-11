@@ -16647,6 +16647,9 @@
               "portable_shell_scanner": {
                 "type": "boolean"
               },
+              "codemode_vm": {
+                "type": "boolean"
+              },
               "all_flags": {
                 "type": "boolean"
               },
@@ -16663,9 +16666,6 @@
                 "type": "boolean"
               },
               "artifacts": {
-                "type": "boolean"
-              },
-              "codemode_vm": {
                 "type": "boolean"
               },
               "shell_timeout_background": {

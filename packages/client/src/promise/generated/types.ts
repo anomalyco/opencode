@@ -2564,13 +2564,13 @@ export type ConfigEntry =
         }
         experimental?: {
           portable_shell_scanner?: boolean
+          codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
-          codemode_vm?: boolean
           shell_timeout_background?: boolean
           console_watches?: boolean
           mcp_events?: boolean

@@ -18,7 +18,7 @@ import type { Effect } from "effect"
 export type Extension<Globals extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> = {
   readonly name: string
   readonly globals: Globals
-  /** How a suspended run saves the values this extension's functions returned (`engine: "vm"` only); see `Snapshot`. */
+  /** How a suspended run saves the values this extension's functions returned; see `Snapshot`. */
   readonly snapshot?: Snapshot | undefined
 }
 
