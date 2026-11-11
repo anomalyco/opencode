@@ -42,7 +42,7 @@ import { ShellSelect } from "@opencode/core/shell/select"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Context, Deferred, Effect, Exit, Layer, Logger, Ref, Schema, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Logger, Ref, Schedule, Schema, Scope } from "effect"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -297,20 +297,20 @@ const claims = (app: { readonly database: Database.Interface }) =>
       Effect.map((rows) => Object.fromEntries(rows.map((row) => [row.id, row.claimed !== null]))),
     )
 
-const eventually = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  predicate: (value: A) => boolean,
-): Effect.Effect<A, E, R> =>
-  Effect.suspend(() => effect).pipe(
-    Effect.flatMap((value) =>
-      predicate(value) ? Effect.succeed(value) : Effect.sleep(20).pipe(Effect.andThen(eventually(effect, predicate))),
-    ),
+const waitForReports = Effect.fnUntraced(function* (
+  app: { readonly sessions: Session.Interface },
+  sessionID: Session.ID,
+  count: number,
+) {
+  const reports = yield* deliveredReports(app, sessionID).pipe(
+    Effect.repeat({ until: (reports) => reports.length >= count, times: 500, schedule: Schedule.spaced(20) }),
   )
-
-const waitForReports = (app: { readonly sessions: Session.Interface }, sessionID: Session.ID, count: number) =>
-  eventually(deliveredReports(app, sessionID), (value) => value.length >= count).pipe(
-    Effect.andThen(app.sessions.wait(sessionID)),
-  )
+  expect(
+    reports.length,
+    `Session ${sessionID}: expected at least ${count} reports, got ${reports.length}`,
+  ).toBeGreaterThanOrEqual(count)
+  yield* app.sessions.wait(sessionID)
+})
 
 describe("subagent idle reports end to end", () => {
   e2e.live(
@@ -554,10 +554,7 @@ describe("subagent idle reports end to end", () => {
         const report = (yield* deliveredReports(h, childID))[0]!
         const grandchildID = Schema.decodeUnknownSync(Session.ID)(report.metadata?.childID)
         expect((yield* h.sessions.get(grandchildID)).metadata).toBeUndefined()
-        yield* eventually(h.sessions.context(childID), (messages) =>
-          messages.some((message) => messageText(message).includes("silent child saw grandchild")),
-        )
-        yield* h.sessions.wait(childID)
+        expect((yield* h.sessions.context(childID)).map(messageText)).toContain("silent child saw grandchild")
 
         // The grandchild reported to the silent child, and the silent child never reported up.
         expect(yield* deliveredReports(h, h.parent.id)).toEqual([])

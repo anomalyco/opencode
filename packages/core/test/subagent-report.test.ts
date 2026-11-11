@@ -25,8 +25,8 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Context, DateTime, Deferred, Effect, Exit, Layer, LayerMap, Schema, Scope } from "effect"
-import { eq } from "drizzle-orm"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Layer, LayerMap, Schema, Scope } from "effect"
+import { eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -564,6 +564,30 @@ describe("SubagentReport settlement", () => {
 })
 
 describe("SubagentReport outbox", () => {
+  it.effect("rolls back the idle projection and claim release when the report insert fails", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const parent = sessionID("ses_rollback_parent")
+      const child = sessionID("ses_rollback_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      const context = yield* buildExecution(yield* Scope.Scope, () =>
+        seedAssistant(database, child, 100, "Answer to report").pipe(Effect.asVoid),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* Effect.acquireRelease(
+        database.db.run(sql`CREATE TRIGGER fail_report BEFORE INSERT ON job BEGIN SELECT RAISE(ABORT, 'forced'); END`),
+        () => database.db.run(sql`DROP TRIGGER fail_report`).pipe(Effect.orDie),
+      )
+
+      const exit = yield* execution.resume(child).pipe(Effect.exit)
+      expect(Exit.isFailure(exit) && Cause.pretty(exit.cause)).toContain("forced")
+      const row = yield* database.db.select().from(SessionTable).where(eq(SessionTable.id, child)).get()
+      expect(row).toMatchObject({ time_suspended: expect.any(Number), time_idle: null, idle_outcome: null })
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+    }),
+  )
+
   it.effect("commits the report and release before delivery, then acknowledges and wakes the parent", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -765,7 +789,7 @@ function text(item: SessionInbox.Info | undefined) {
 }
 
 /** Builds the local execution layer against the harness services and a stubbed runner. */
-function buildExecution(scope: Scope.Closeable, drain: Drain) {
+function buildExecution(scope: Scope.Scope, drain: Drain) {
   return Effect.gen(function* () {
     const database = yield* Database.Service
     const bus = yield* Bus.Service

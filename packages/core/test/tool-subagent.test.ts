@@ -997,19 +997,29 @@ describe("SubagentTool reporting", () => {
       const jobs = yield* Job.Service
       const spawned = yield* fixture.call("call-silent-spawn", { background: true, notify: false })
       const childID = outputSessionID(spawned.metadata)
+      expect(spawned.content).toEqual([
+        {
+          type: "text",
+          text: `The subagent is working in the background (sessionID: ${childID}) and will not notify you when it finishes. To check on it, call the subagent tool with this sessionID or read the session.`,
+        },
+      ])
       expect((yield* fixture.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
       yield* fixture.sessions.wait(childID)
       yield* fixture.sessions.wait(fixture.parent.id)
       expect(yield* fixture.notices).toEqual([])
 
       // Omitted notify keeps the child silent across follow-ups.
-      yield* fixture.call("call-silent-follow", { sessionID: childID, background: true })
+      const silent = yield* fixture.call("call-silent-follow", { sessionID: childID, background: true })
+      expect(silent.content).toEqual(spawned.content)
       yield* fixture.sessions.wait(childID)
       yield* fixture.sessions.wait(fixture.parent.id)
       expect((yield* fixture.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
       expect(yield* fixture.notices).toEqual([])
 
-      yield* fixture.call("call-loud-follow", { sessionID: childID, background: true, notify: true })
+      const loud = yield* fixture.call("call-loud-follow", { sessionID: childID, background: true, notify: true })
+      expect(loud.content).toEqual([
+        { type: "text", text: expect.stringContaining("You will be notified automatically when it finishes.") },
+      ])
       yield* fixture.sessions.wait(childID)
       yield* fixture.sessions.wait(fixture.parent.id)
       expect((yield* fixture.sessions.get(childID)).metadata).toEqual({})

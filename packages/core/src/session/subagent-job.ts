@@ -51,12 +51,7 @@ const make = Effect.gen(function* () {
           recovery,
           background: options?.background,
           run: Effect.gen(function* () {
-            // A joining period already owns its boundary; otherwise the child was admitted but not
-            // resumed, so the latest durable sequence precedes everything this period will write.
-            const startedSeq =
-              (yield* execution.periodStartSeq(recovery.childSessionID)) ??
-              (yield* Bus.latestSequence(db, recovery.childSessionID))
-            yield* execution.resume(recovery.childSessionID).pipe(
+            const resume = execution.resume(recovery.childSessionID).pipe(
               // Only an explicit caller cancel releases the child's claim. A server shutdown
               // interrupts this job but must leave the child resumable on the next start.
               Effect.onInterrupt(() =>
@@ -69,6 +64,13 @@ const make = Effect.gen(function* () {
                   ),
               ),
             )
+            if (options?.background) return yield* resume.pipe(Effect.as(""))
+            // A joining period already owns its boundary; otherwise the child was admitted but not
+            // resumed, so the latest durable sequence precedes everything this period will write.
+            const startedSeq =
+              (yield* execution.periodStartSeq(recovery.childSessionID)) ??
+              (yield* Bus.latestSequence(db, recovery.childSessionID))
+            yield* resume
             const assistant = yield* store.lastAssistantAfter({
               sessionID: recovery.childSessionID,
               afterSeq: startedSeq,

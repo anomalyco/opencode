@@ -17,15 +17,17 @@ import { SubagentMetadata } from "../../session/subagent-metadata.js"
 
 export const name = "subagent"
 
-const backgroundResult = (sessionID: SessionSchema.ID) => ({
+const backgroundResult = (sessionID: SessionSchema.ID, notify: boolean) => ({
   sessionID,
   status: "running" as const,
-  output: [
-    `The subagent is working in the background (sessionID: ${sessionID}). You will be notified automatically when it finishes.`,
-    "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
-    "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
-    "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
-  ].join("\n"),
+  output: notify
+    ? [
+        `The subagent is working in the background (sessionID: ${sessionID}). You will be notified automatically when it finishes.`,
+        "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
+        "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+        "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
+      ].join("\n")
+    : `The subagent is working in the background (sessionID: ${sessionID}) and will not notify you when it finishes. To check on it, call the subagent tool with this sessionID or read the session.`,
 })
 
 export const Input = Schema.Struct({
@@ -208,6 +210,7 @@ export const Plugin = {
                   ))
 
               const background = input.background === true
+              const notify = input.notify ?? SubagentMetadata.notify(child.metadata)
               // A child that is not draining yet must be admitted without waking: the job's resume
               // owns the start, so the period cannot run before its boundary is registered.
               const running =
@@ -239,7 +242,7 @@ export const Plugin = {
               }
               yield* subagents.start(recovery, { background })
 
-              if (background) return backgroundResult(child.id)
+              if (background) return backgroundResult(child.id, notify)
 
               const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
                 Effect.onInterrupt(() =>
@@ -248,7 +251,7 @@ export const Plugin = {
                   }),
                 ),
               )
-              if (result?.type === "backgrounded") return backgroundResult(child.id)
+              if (result?.type === "backgrounded") return backgroundResult(child.id, notify)
               // Failure surfaces keep the sessionID visible so the model can continue the child.
               if (result?.info.status === "error")
                 return yield* new ToolFailure({

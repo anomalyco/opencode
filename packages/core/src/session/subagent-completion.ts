@@ -57,7 +57,6 @@ export const deliver = Effect.fnUntraced(function* <E>(
   input: Pick<Job.Info, "status" | "output" | "error" | "notificationID"> & {
     recovery: Extract<Job.Recovery, { kind: "subagent" }>
     resume?: boolean
-    background?: ReadonlyArray<RunningBackgroundItem>
   },
 ) {
   if (input.status === "running") return
@@ -73,7 +72,7 @@ export const deliver = Effect.fnUntraced(function* <E>(
     sessionID: recovery.parentSessionID,
     ...(input.resume === false ? { resume: false } : {}),
     description: recovery.description,
-    text: `<subagent sessionID="${recovery.childSessionID}" state="${input.status}" description="${recovery.description}">\n${formatBody(body, recovery.childSessionID, input.background)}\n</subagent>`,
+    text: `<subagent sessionID="${recovery.childSessionID}" state="${input.status}" description="${recovery.description}">\n${body}\n</subagent>`,
     metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },
   })
   if (input.notificationID) yield* jobs.completeBackground(input.notificationID)
