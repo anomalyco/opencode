@@ -33,6 +33,7 @@ import { Cause, Clock, Duration, Effect, Exit, PlatformError, Queue, Schedule, S
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
+import { TraceContext } from "@opencode/util/observability/trace-context"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
@@ -538,13 +539,24 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
     const listed = new Map<string, Tool>()
     const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
-    const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
-      Effect.tryPromise({ try: run, catch: failure }).pipe(
-        Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
-      )
+    const request = <A>(
+      what: string,
+      run: (signal: AbortSignal, headers: Record<string, string> | undefined) => Promise<A>,
+    ) =>
+      Effect.flatMap(TraceContext.current, (headers) =>
+        Effect.tryPromise({ try: (signal) => run(signal, headers), catch: failure }),
+      ).pipe(Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })))
     // Listing is read-only, so a transient failure is safe to retry.
-    const list = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
-      retrying(what, Effect.tryPromise({ try: run, catch: (error) => error })).pipe(
+    const list = <A>(
+      what: string,
+      run: (signal: AbortSignal, headers: Record<string, string> | undefined) => Promise<A>,
+    ) =>
+      retrying(
+        what,
+        Effect.flatMap(TraceContext.current, (headers) =>
+          Effect.tryPromise({ try: (signal) => run(signal, headers), catch: (error) => error }),
+        ),
+      ).pipe(
         Effect.mapError(failure),
         Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
       )
@@ -625,8 +637,13 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       // relisted an expired list before a call either.
       tools: () =>
         advertised("tools")
-          ? list("list MCP tools", (signal) =>
-              client.listTools(undefined, { ...catalog, cacheMode: "bypass", signal }),
+          ? list("list MCP tools", (signal, headers) =>
+              client.listTools(headers ? { _meta: headers } : undefined, {
+                ...catalog,
+                cacheMode: "bypass",
+                signal,
+                headers,
+              }),
             ).pipe(
               // Our SDK patch leaves the listed tools unchecked, so one malformed tool doesn't fail the
               // whole list; each is checked here and copied, dropping fields of the wrong type.
@@ -677,63 +694,72 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           : Effect.succeed([]),
       prompts: () =>
         advertised("prompts")
-          ? list("list MCP prompts", (signal) => client.listPrompts(undefined, { ...catalog, signal })).pipe(
-              Effect.map((r) => r.prompts),
-            )
+          ? list("list MCP prompts", (signal, headers) =>
+              client.listPrompts(headers ? { _meta: headers } : undefined, { ...catalog, signal, headers }),
+            ).pipe(Effect.map((r) => r.prompts))
           : Effect.succeed([]),
       resources: () =>
         advertised("resources")
-          ? list("list MCP resources", (signal) => client.listResources(undefined, { ...catalog, signal })).pipe(
-              Effect.map((r) => r.resources),
-            )
+          ? list("list MCP resources", (signal, headers) =>
+              client.listResources(headers ? { _meta: headers } : undefined, { ...catalog, signal, headers }),
+            ).pipe(Effect.map((r) => r.resources))
           : Effect.succeed([]),
       resourceTemplates: () =>
         advertised("resources")
-          ? list("list MCP resource templates", (signal) =>
-              client.listResourceTemplates(undefined, { ...catalog, signal }),
+          ? list("list MCP resource templates", (signal, headers) =>
+              client.listResourceTemplates(headers ? { _meta: headers } : undefined, { ...catalog, signal, headers }),
             ).pipe(Effect.map((r) => r.resourceTemplates))
           : Effect.succeed([]),
       readResource: (input) => {
         if (!advertised("resources")) return Effect.succeed(undefined)
-        return request("read MCP resource", (signal) =>
-          client.readResource({ uri: input.uri }, { signal: claim(signal, input), timeout: execution }),
+        return request("read MCP resource", (signal, headers) =>
+          client.readResource(
+            { uri: input.uri, _meta: headers },
+            { signal: claim(signal, input), timeout: execution, headers },
+          ),
         )
       },
       prompt: (input) =>
-        request("get MCP prompt", (signal) =>
+        request("get MCP prompt", (signal, headers) =>
           client.getPrompt(
-            { name: input.name, arguments: input.args ?? {} },
-            { signal: claim(signal, input), timeout: execution },
+            { name: input.name, arguments: input.args ?? {}, _meta: headers },
+            { signal: claim(signal, input), timeout: execution, headers },
           ),
         ),
       callTool: (input) => {
-        const call = Effect.tryPromise({
-          try: (signal) =>
-            client.callTool(
-              {
-                name: input.name,
-                arguments: input.args ?? {},
-                ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-              },
-              {
-                signal: claim(signal, input),
-                timeout: execution,
-                // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
-                // The SDK timeout does not reset on progress; execution is the hard wall.
-                onprogress: () => {},
-                // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
-                // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
-                // a string `$schema`); ours keep the server's values. Leaving out `outputSchema` skips the
-                // SDK's output check: servers return results that miss or break their own schema (Zoom
-                // answers a 204 with nothing), and failing the call would report a completed action as failed.
-                toolDefinition: {
-                  ...(listed.get(input.name) ?? { name: input.name, inputSchema: { type: "object" } }),
-                  outputSchema: undefined,
-                } as CallToolRequestOptions["toolDefinition"],
-              },
-            ),
-          catch: (error) => error,
-        })
+        const call = Effect.flatMap(TraceContext.current, (headers) =>
+          Effect.tryPromise({
+            try: (signal) =>
+              client.callTool(
+                {
+                  name: input.name,
+                  arguments: input.args ?? {},
+                  _meta: {
+                    ...headers,
+                    ...(input.sessionID === undefined ? {} : { "ai.opencode/sessionID": input.sessionID }),
+                  },
+                },
+                {
+                  signal: claim(signal, input),
+                  timeout: execution,
+                  headers,
+                  // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
+                  // The SDK timeout does not reset on progress; execution is the hard wall.
+                  onprogress: () => {},
+                  // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
+                  // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
+                  // a string `$schema`); ours keep the server's values. Leaving out `outputSchema` skips the
+                  // SDK's output check: servers return results that miss or break their own schema (Zoom
+                  // answers a 204 with nothing), and failing the call would report a completed action as failed.
+                  toolDefinition: {
+                    ...(listed.get(input.name) ?? { name: input.name, inputSchema: { type: "object" } }),
+                    outputSchema: undefined,
+                  } as CallToolRequestOptions["toolDefinition"],
+                },
+              ),
+            catch: (error) => error,
+          }),
+        )
         // A modern server rejects headers mirrored from a stale definition before running the tool,
         // so relist and retry once with the fresh definition.
         return call.pipe(
