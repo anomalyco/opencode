@@ -52,6 +52,9 @@ const allow: { case: string; field: string; deviation: string }[] = [
     field: "messages.ses_a",
     deviation: "O89-model-switch-previous.md",
   },
+  // The loaded message already holds text and reasoning part 0, so the minimal start (ordinal 0) is a replay.
+  { case: "session.text.started@loaded", field: "messages.ses_a", deviation: "O5-text-started-replay.md" },
+  { case: "session.reasoning.started@loaded", field: "messages.ses_a", deviation: "O5-text-started-replay.md" },
 ]
 
 const SESSIONS = ["ses_a", "ses_b"]
