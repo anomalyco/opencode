@@ -26,6 +26,8 @@ import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
 
+const lastBalanced = new Map<string, string | undefined>()
+
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
   {
@@ -526,24 +528,27 @@ export const layer = Layer.effect(
           }
         }
       }
-      if (
-        toggle &&
-        selected.providerID === "opencode-go" &&
-        connection &&
-        active &&
-        IntegrationConnection.key(connection) !== IntegrationConnection.key(active)
-      ) {
-        const label = "label" in connection ? connection.label : undefined
-        yield* bus
-          .publish(TuiEvent.ToastShow, {
-            title: "OpenCode Go",
-            message: label
-              ? `Auto-balanced to account "${label}" for this request.`
-              : "Auto-balanced to another account for this request.",
-            variant: "info",
-            duration: 5000,
-          })
-          .pipe(Effect.catch(() => Effect.void))
+      const balanceKey = connection ? IntegrationConnection.key(connection) : undefined
+      const activeKey = active ? IntegrationConnection.key(active) : undefined
+      if (toggle && selected.providerID === "opencode-go" && connection && active && balanceKey !== activeKey) {
+        if (lastBalanced.get(integrationID) !== balanceKey) {
+          lastBalanced.set(integrationID, balanceKey)
+          const label = "label" in connection ? connection.label : undefined
+          yield* bus
+            .publish(TuiEvent.ToastShow, {
+              title: "OpenCode Go",
+              message: label
+                ? `Auto-balanced to account "${label}" for this request.`
+                : "Auto-balanced to another account for this request.",
+              variant: "info",
+              duration: 5000,
+            })
+            .pipe(Effect.catch(() => Effect.void))
+        }
+      } else if (!toggle || selected.providerID !== "opencode-go") {
+        lastBalanced.delete(integrationID)
+      } else if (balanceKey && activeKey && balanceKey === activeKey) {
+        lastBalanced.set(integrationID, balanceKey)
       }
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const selectedVariant = yield* withVariant(selected, variant)
