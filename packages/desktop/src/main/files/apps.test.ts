@@ -11,6 +11,7 @@ const installed = (appName: string) =>
 
 describe("open-in app detection", () => {
   const app = "opencode-test-editor"
+  const plain = "opencode-plain-file"
   const path = process.env.PATH
   let dir = ""
 
@@ -20,6 +21,8 @@ describe("open-in app detection", () => {
     const file = join(dir, process.platform === "win32" ? `${app}.exe` : app)
     writeFileSync(file, "#!/bin/sh\n")
     chmodSync(file, 0o755)
+    writeFileSync(join(dir, plain), "")
+    chmodSync(join(dir, plain), 0o644)
     process.env.PATH = `${dir}${delimiter}${path ?? ""}`
   })
 
@@ -31,6 +34,10 @@ describe("open-in app detection", () => {
   test.each([
     { name: "an app whose command is on PATH", appName: app, expected: true },
     { name: "an app that is not installed", appName: "opencode-missing-editor", expected: false },
+    // Windows has no execute bit: `where` lists any file on PATH, so only POSIX can reject a non-executable one.
+    ...(process.platform === "win32"
+      ? []
+      : [{ name: "a non-executable file on PATH", appName: plain, expected: false }]),
   ])("reports $name", async ({ appName, expected }) => {
     expect(await installed(appName)).toBe(expected)
   })
