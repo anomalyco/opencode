@@ -56,15 +56,30 @@ export function createEmbeds() {
       height: Math.round(layout.height + dy),
     }
 
-    const placed = !!entry.layout?.visible && !!bounds && bounds.width > 0 && bounds.height > 0
+    // A native view paints above the DOM, so a stale box would draw the page over the app beside
+    // the panel. The renderer only re-measures on a size change, so a layout that moves the panel
+    // without resizing it leaves the last bounds in place. Clamp the box to the window, so a stale
+    // one stays inside the window rather than over the chat column.
+    const clamp = (start: number, size: number, limit: number) => {
+      const at = Math.max(0, Math.min(start, limit))
 
-    if (placed && bounds) {
-      entry.view.setBounds(bounds)
+      return { at, size: Math.max(0, Math.min(size, limit - at)) }
+    }
+
+    const horizontal = bounds ? clamp(bounds.x, bounds.width, width) : undefined
+    const vertical = bounds ? clamp(bounds.y, bounds.height, height) : undefined
+    const clamped = horizontal &&
+      vertical && { x: horizontal.at, y: vertical.at, width: horizontal.size, height: vertical.size }
+
+    const placed = !!entry.layout?.visible && !!clamped && clamped.width > 0 && clamped.height > 0
+
+    if (placed && clamped) {
+      entry.view.setBounds(clamped)
 
       const size = Math.min(
         Math.round(entry.layout?.radius ?? 0),
-        Math.floor(bounds.width / 2),
-        Math.floor(bounds.height / 2),
+        Math.floor(clamped.width / 2),
+        Math.floor(clamped.height / 2),
       )
 
       const background = entry.layout?.background
@@ -83,8 +98,8 @@ export function createEmbeds() {
       // which exposes a square page corner whenever the panel moves.
       entry.corners.forEach((corner, index) =>
         corner.setBounds({
-          x: bounds.x + (index ? bounds.width - size : 0),
-          y: bounds.y + bounds.height - size,
+          x: clamped.x + (index ? clamped.width - size : 0),
+          y: clamped.y + clamped.height - size,
           width: size,
           height: size,
         }),

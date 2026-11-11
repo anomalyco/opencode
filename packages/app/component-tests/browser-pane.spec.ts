@@ -929,3 +929,21 @@ story("zooms the page from the browser options in view and keeps its zoom in the
   await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
   await expect(zoom).toBeHidden()
 })
+
+story("moves the native page with the pane when a layout shifts it without resizing it", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const native = root.getByTestId("native-Alpha")
+
+  const before = Number(await native.getAttribute("data-bounds-x"))
+  expect(before).toBeGreaterThan(0)
+
+  // A layout shift moves the pane without resizing it. No resize on the pane follows, and a shift
+  // reports neither a resize nor a transition, so the pane stays where it was and the native view
+  // keeps the bounds it had, drawing the page over the app beside it.
+  await root.getByRole("button", { name: "Shift pane", exact: true }).click()
+
+  // The native view takes the pane's new place, so the page does not stay over the app.
+  await expect
+    .poll(async () => Number(await native.getAttribute("data-bounds-x")), { timeout: 5_000 })
+    .toBe(before + 60)
+})

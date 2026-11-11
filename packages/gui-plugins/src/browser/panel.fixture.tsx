@@ -88,6 +88,10 @@ type PaneFixtureState = {
   moving: boolean
   /** The pane box's width, which its resize handle drags. */
   width: number
+  /** An offset that moves the pane box without resizing it, as a layout shift does. */
+  offset: number
+  /** A shift that moves the pane box with an offset, which no resize reports. */
+  shift: number
   /** Whether a host dialog is open over the app. */
   dialog: boolean
   captures: number
@@ -136,6 +140,8 @@ export function mountBrowserPane(input: PaneHost) {
   host.dataset.testid = "browser-pane-fixture"
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
   document.body.appendChild(host)
+  // The shift is a custom property on the root, so moving the pane changes one style attribute
+  // and nothing else: no child list mutation and no resize on the pane.
 
   function Fixture() {
     const language = input.useLanguage()
@@ -169,6 +175,8 @@ export function mountBrowserPane(input: PaneHost) {
       cookies: 3,
       failSite: false,
       selection: "default",
+      offset: 0,
+      shift: 0,
     })
 
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
@@ -546,6 +554,7 @@ export function mountBrowserPane(input: PaneHost) {
               )}
             </For>
             <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
+            <button onClick={() => setStore("shift", (shift) => (shift === 0 ? 1 : 0))}>Shift pane</button>
             <button onClick={pick}>Pick element</button>
             <button onClick={() => setStore("dropInspect", true)}>Drop picker requests</button>
             <select
@@ -575,19 +584,44 @@ export function mountBrowserPane(input: PaneHost) {
           </For>
           <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
           <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
-          <div style={{ position: "relative", width: `${store.width}px`, height: "360px", border: "1px solid #555" }}>
-            <Show when={store.mounted && session()}>
-              {(view) => <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />}
-            </Show>
-            <ResizeHandle
-              data-testid="pane-resize-handle"
-              direction="horizontal"
-              size={store.width}
-              min={320}
-              max={800}
-              onResize={(width) => setStore("width", width)}
-              onDraggingChange={input.panelMotion.setPanelResizing}
-            />
+          <div
+            style={{
+              display: "flex",
+            }}
+          >
+            <div style={{ width: "0px", "flex-shrink": 0, "margin-left": store.shift === 0 ? "0px" : "60px" }} />
+            <div
+              style={{
+                position: "relative",
+                width: `${store.width}px`,
+                height: "360px",
+                border: "1px solid #555",
+                "flex-shrink": 0,
+              }}
+            >
+              <div
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  height: "100%",
+                }}
+              >
+                <Show when={store.mounted && session()}>
+                  {(view) => (
+                    <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />
+                  )}
+                </Show>
+                <ResizeHandle
+                  data-testid="pane-resize-handle"
+                  direction="horizontal"
+                  size={store.width}
+                  min={320}
+                  max={800}
+                  onResize={(width) => setStore("width", width)}
+                  onDraggingChange={input.panelMotion.setPanelResizing}
+                />
+              </div>
+            </div>
           </div>
           <ul data-testid="fixture-comments">
             <For each={store.comments}>
@@ -622,6 +656,10 @@ export function mountBrowserPane(input: PaneHost) {
               <div
                 data-testid={`native-${tab.title}`}
                 data-visible={!!store.layouts[`embed-${tab.title}`]?.visible}
+                data-bounds-x={store.layouts[`embed-${tab.title}`]?.bounds?.x}
+                data-bounds-y={store.layouts[`embed-${tab.title}`]?.bounds?.y}
+                data-bounds-width={store.layouts[`embed-${tab.title}`]?.bounds?.width}
+                data-bounds-height={store.layouts[`embed-${tab.title}`]?.bounds?.height}
                 style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
               >
                 {tab.title}: {store.layouts[`embed-${tab.title}`]?.visible ? "visible" : "hidden"}
@@ -766,6 +804,8 @@ export function mountBrowserRegion(input: RegionHost) {
   host.dataset.testid = "browser-region-fixture"
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
   document.body.appendChild(host)
+  // The shift is a custom property on the root, so moving the pane changes one style attribute
+  // and nothing else: no child list mutation and no resize on the pane.
 
   function Fixture() {
     const alpha = "browser-test\nses_alpha"

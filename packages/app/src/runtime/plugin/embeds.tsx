@@ -402,6 +402,39 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   createEventListener(document, ["transitionend", "transitioncancel"], (event) => {
     if (geometry.test(event.propertyName)) schedule()
   })
+  // A scroll moves the box without resizing it, and no resize or transition event follows it. The
+  // native view would keep the bounds it had before the scroll and draw the page over the app.
+  createEventListener(document, "scroll", () => schedule(300), { capture: true, passive: true })
+  // A layout that moves the pane without resizing it reports no size change on the pane, and an
+  // offset or a transform moves it without a resize on any ancestor, so no observer reports it.
+  // The native view would keep the bounds it had and draw the page over the app beside the pane.
+  // Watch the box's own place on screen and re-measure when it moves.
+  let watcher: number | undefined
+
+  const watchPlace = (target: HTMLDivElement) => {
+    if (watcher !== undefined) cancelAnimationFrame(watcher)
+
+    let last = target.getBoundingClientRect()
+
+    const check = () => {
+      const rect = target.getBoundingClientRect()
+
+      const moved =
+        rect.left !== last.left || rect.top !== last.top || rect.width !== last.width || rect.height !== last.height
+
+      last = rect
+
+      if (moved) schedule(300)
+
+      watcher = requestAnimationFrame(check)
+    }
+
+    watcher = requestAnimationFrame(check)
+  }
+
+  onCleanup(() => {
+    if (watcher !== undefined) cancelAnimationFrame(watcher)
+  })
   // Floating content portals directly into <body>; keep measuring briefly so
   // the positioner has settled before the overlap check runs.
   const portals = new MutationObserver(() => schedule(300))
@@ -442,7 +475,14 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   const flightStill = createMemo(() => selectFlightStill(embedState().flight, embedState().still, props.id, props.page))
 
   return (
-    <div ref={element} class={props.class}>
+    <div
+      ref={(target) => {
+        element = target
+
+        if (target) watchPlace(target)
+      }}
+      class={props.class}
+    >
       <Show when={flightStill()} keyed>
         {(still) => {
           const image = decodedStills.get(still.url)
