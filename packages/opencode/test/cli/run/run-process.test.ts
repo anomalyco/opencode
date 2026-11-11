@@ -336,4 +336,46 @@ describe("opencode run (non-interactive subprocess)", () => {
       }),
     30_000,
   )
+
+  // A sub-agent runs in a child session. Before the fix only the root session's
+  // parts were mirrored, so everything the sub-agent said or did was missing
+  // from the headless output — a reader of the log saw the task start and then
+  // the parent's conclusion, with nothing in between. Child output is now
+  // mirrored, indented with "↳ " so it stays distinguishable from the parent's.
+  cliIt.concurrent(
+    "mirrors sub-agent (child session) output, indented, in non-interactive mode",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        // 1st LLM request: the parent delegates.
+        yield* llm.push(
+          reply().tool("task", {
+            description: "Report a fact",
+            prompt: "say the child report line",
+            subagent_type: "general",
+          }),
+        )
+        // 2nd LLM request comes from the child session.
+        yield* llm.push(
+          reply().text("child report").tool("bash", {
+            command: "printf child-tool-output",
+            description: "Child runs a tool",
+          }),
+        )
+        yield* llm.text("child done")
+        // 4th LLM request: the parent continues after the task result.
+        yield* llm.text("parent done")
+
+        const result = yield* opencode.run("delegate", {
+          extraArgs: ["--dangerously-skip-permissions"],
+        })
+
+        opencode.expectExit(result, 0)
+        // Text parts land on stdout; the child's are prefixed, the parent's are not.
+        expect(result.stdout).toBe("↳ child report\n↳ child done\nparent done\n")
+        // Tool lines land on stderr; the child's tool call is present and indented.
+        expect(result.stderr).toContain("↳ ")
+        expect(result.stderr).toMatch(/↳ .*general/)
+      }),
+    90_000,
+  )
 })
