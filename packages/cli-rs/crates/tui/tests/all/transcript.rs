@@ -425,6 +425,23 @@ fn the_footer_spans_a_turn_whose_prompt_is_on_an_older_page() {
     assert_eq!(h.older.load(Ordering::SeqCst), 1);
 }
 
+/// `app-lifecycle.test.tsx` (#63321): tokens per second count from the first streamed token, and the footer adds
+/// the time to it from 36 columns on.
+#[test]
+fn the_footer_measures_throughput_from_the_first_token() {
+    let mut reply = assistant("msg_2", 2000, json!([{ "type": "text", "text": "Original answer" }]), Some(5000));
+    reply["time"] = json!({ "created": 2000, "firstToken": 2500, "streamed": 3000, "completed": 5000 });
+    reply["tokens"]["output"] = json!(20);
+    let messages = vec![user("msg_1", 1000, "Current input"), reply];
+    let info = || Info { session: Some(medium()), ..Info::default() };
+    let h = open(80, 20, "ses_f", messages.clone(), info());
+    let screen = h.wait_for("ttft");
+    assert!(screen.contains("4.0s · 40.0 tok/s · 500ms ttft"), "{screen}");
+    let h = open(35, 20, "ses_f", messages, info());
+    let screen = h.wait_for("tok/s");
+    assert!(!screen.contains("ttft"), "{screen}");
+}
+
 /// The built-in `opencode.latex` plugin (P.2) draws `latex` fences in assistant text as Unicode math.
 #[test]
 fn mermaid_fences_render_as_diagrams() {
