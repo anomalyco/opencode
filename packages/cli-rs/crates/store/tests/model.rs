@@ -30,9 +30,11 @@
 //! - `MODEL_REPORT=1` prints the verdict of every `KNOWN` and `OPEN` entry.
 //! - `MODEL_DUMP=<path>` (and `MODEL_DUMP_OPEN=1`) write traces for `round2/models-pilot/model-differential.ts`.
 //!
-//! The four random searches are `#[ignore]`d until the plan step that fixes their open defects un-ignores them:
+//! `permissions_converge_to_the_server` runs by default. The other random searches are `#[ignore]`d until the plan
+//! step that fixes their open defects un-ignores them. Before a store change, run the searches at 5,000 cases:
 //!
 //! ```sh
+//! MODEL_CASES=5000 cargo test -p opencode-store --test model -- permissions_converge
 //! MODEL_CASES=5000 cargo test -p opencode-store --test model -- --ignored --nocapture
 //! MODEL_CASES=5000 cargo test -p opencode-store --test model -- --ignored everything_together
 //! ```
@@ -1210,7 +1212,6 @@ fn assert_converges(mix: Mix) {
 }
 
 #[test]
-#[ignore = "red until plan step 2 (O7, O8, O9); run with --ignored"]
 fn permissions_converge_to_the_server() {
     assert_converges(Mix { permissions: true, forms: false, messages: false });
 }
@@ -1388,6 +1389,16 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
     ),
     // carbon-data-2.
     ("delete keeps forms", "deleted ses_0", &[Op::Open(0), Op::Deliver(1), Op::Delete(0), Op::Deliver(1)]),
+    // O7, O8 (bigboi-4, models review): the global 512-ID `state::Live` window evicted what overtook a read, in the
+    // same session or another (fixed by the per-read overlay, models step 2).
+    ("burst in the same session", "permissions ses_1", &[Op::SyncPermissions(1), Op::Burst(1)]),
+    ("burst in another session", "permissions ses_0", &[Op::SyncPermissions(0), Op::Ask(0), Op::Burst(1)]),
+    // O9, permission half: a late ask for a session the store found missing recreated its permissions.
+    (
+        "late ask for a missing session",
+        "missing ses_1",
+        &[Op::Ask(1), Op::Delete(1), Op::SyncPermissions(1), Op::Release(Read::Permissions, 1)],
+    ),
 ];
 
 const OPEN: &[(&str, &str, &[Op])] = &[
@@ -1410,10 +1421,6 @@ const OPEN: &[(&str, &str, &[Op])] = &[
         "deleted ses_0",
         &[Op::Step(0), Op::Model(0), Op::Deliver(4), Op::Delete(0)],
     ),
-    // bigboi-4 (models review): `state::Live` keeps the newest 512 IDs across all sessions, so a burst evicts what
-    // overtook a read, in the same session or another.
-    ("burst in the same session", "permissions ses_1", &[Op::SyncPermissions(1), Op::Burst(1)]),
-    ("burst in another session", "permissions ses_0", &[Op::SyncPermissions(0), Op::Ask(0), Op::Burst(1)]),
     // New: a row loaded before the head read and edited during it (the next step completes it) is kept as
     // "changed" but appended after the page.
     (
@@ -1438,16 +1445,11 @@ const OPEN: &[(&str, &str, &[Op])] = &[
         &[Op::Step(1), Op::Text(1), Op::SyncMessages(1), Op::Release(Read::Head, 1), Op::End(1)],
     ),
     // New: events for a session the store already found missing (a read answered `SessionNotFoundError`) recreate
-    // its permissions or forms.
+    // its forms.
     (
         "late form for a missing session",
         "missing ses_0",
         &[Op::Open(0), Op::Delete(0), Op::SyncForms(0), Op::Release(Read::Forms, 0)],
-    ),
-    (
-        "late ask for a missing session",
-        "missing ses_1",
-        &[Op::Ask(1), Op::Delete(1), Op::SyncPermissions(1), Op::Release(Read::Permissions, 1)],
     ),
 ];
 

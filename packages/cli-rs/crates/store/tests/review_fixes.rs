@@ -474,6 +474,47 @@ async fn a_permission_list_keeps_asks_and_replies_that_overtook_it() {
     assert_eq!(ids, ["per_kept", "per_new"]);
 }
 
+/// More changes than the overlay holds overtake a permission read: it publishes nothing and reads
+/// again, so the bound costs a read, never an ask (model M1, O-92 Q1).
+#[tokio::test]
+async fn an_overflowed_permission_read_reads_again() {
+    let slot = Slot::<Value>::default();
+    let release = slot.clone();
+    let reads = Arc::new(AtomicUsize::new(0));
+    let counted = reads.clone();
+    let asked: Vec<String> = (0..1100).map(|n| format!("per_{n:04}")).collect();
+    let server: Vec<Value> =
+        std::iter::once("per_old").chain(asked.iter().map(String::as_str)).map(permission).collect();
+    let data = data(
+        handler(move |_: Req| {
+            let release = release.clone();
+            let server = server.clone();
+            let first = counted.fetch_add(1, Ordering::SeqCst) == 0;
+            async move {
+                if first {
+                    return ok(json!({ "data": release.wait().await }));
+                }
+                ok(json!({ "data": server }))
+            }
+        }),
+        Options::default(),
+    );
+    let running = tokio::spawn(data.permission_sync(&id("ses_p")));
+    settle().await;
+    for (n, ask) in asked.iter().enumerate() {
+        emit(
+            &data,
+            json!({ "id": format!("evt_{n}"), "created": n, "type": "permission.asked", "data": permission(ask) }),
+        );
+    }
+    slot.resolve(json!([permission("per_old")]));
+    running.await.unwrap().unwrap();
+    wait(|| reads.load(Ordering::SeqCst) == 2).await;
+    wait(|| data.read(|state| state.permissions(&id("ses_p")).unwrap().len() == 1101)).await;
+    let first = data.read(|state| state.permissions(&id("ses_p")).unwrap()[0].id.0.clone());
+    assert_eq!(first, "per_old");
+}
+
 fn form(id: &str) -> Value {
     json!({ "id": id, "sessionID": "ses_f", "title": "Ask", "fields": [] })
 }

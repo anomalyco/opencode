@@ -108,8 +108,8 @@ pub struct State {
     pub(crate) deleted_at: IndexMap<SessionID, u64>,
     /// Trailing refetch timers by key, with the token of the newest.
     pub(crate) settling: HashMap<String, (u64, AbortHandle)>,
-    /// Permission requests asked and settled by events, for list reads in flight.
-    pub(crate) permission_live: Live,
+    /// The permission read in flight per session, with the asks and replies that overtook it.
+    pub(crate) permission_reads: HashMap<SessionID, Overlay<PermissionRequest>>,
     /// Forms created and settled by events, for list reads in flight.
     pub(crate) form_live: Live,
     /// Messages events created or changed, for transcript reads in flight.
@@ -161,6 +161,48 @@ impl Live {
         if map.len() > DELETED_LIMIT {
             map.shift_remove_index(0);
         }
+    }
+}
+
+/// Changes one list read may record before it overflows (O-92 Q1).
+const OVERLAY_LIMIT: usize = 1024;
+
+/// What overtook one list read (model M1, deviation O89-list-snapshots): the items events added
+/// (`Some`) or settled (`None`) while it was in flight, by ID in arrival order. Only the read whose
+/// ticket it carries publishes. More than [`OVERLAY_LIMIT`] changes overflow it: the read then
+/// publishes nothing and reads again, so the bound costs a read, never an item.
+pub(crate) struct Overlay<V> {
+    pub(crate) ticket: u64,
+    /// `None` once overflowed.
+    changes: Option<IndexMap<String, Option<V>>>,
+}
+
+impl<V> Overlay<V> {
+    pub(crate) fn new(ticket: u64) -> Self {
+        Self { ticket, changes: Some(IndexMap::new()) }
+    }
+
+    pub(crate) fn record(&mut self, id: &str, change: Option<V>) {
+        let Some(changes) = &mut self.changes else {
+            return;
+        };
+        changes.insert(id.to_owned(), change);
+        if changes.len() > OVERLAY_LIMIT {
+            self.changes = None;
+        }
+    }
+
+    /// Applies the changes over the snapshot `list`, keeping its order and appending new items in
+    /// arrival order. `None` when the overlay overflowed.
+    pub(crate) fn apply(self, mut list: Vec<V>, id: impl Fn(&V) -> &str) -> Option<Vec<V>> {
+        for (key, change) in self.changes? {
+            match change {
+                Some(item) if list.iter().all(|old| id(old) != key) => list.push(item),
+                Some(_) => {}
+                None => list.retain(|old| id(old) != key),
+            }
+        }
+        Some(list)
     }
 }
 
