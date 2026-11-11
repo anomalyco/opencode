@@ -495,7 +495,7 @@ describe("Decision", () => {
           apiKey: "google-key",
           baseURL: "https://google.test/v1beta",
           http: { query: { trace: "1" } },
-        }).decision("gemini-decision-eap"),
+        }).decision("gemini-decision-1"),
         input: [
           { type: "text", text: "Ticket:" },
           { type: "json", value: { ticket: "Please refund the duplicate charge." } },
@@ -503,6 +503,7 @@ describe("Decision", () => {
           { type: "media", media: Media.base64("AAAA", "audio/wav") },
           { type: "media", media: Media.url("https://assets.test/clip.mp4", { mediaType: "video/mp4" }) },
           { type: "media", media: Media.base64("JVBERi0=", "application/pdf") },
+          { type: "media", media: Media.ref("google", "https://google.test/v1beta/files/abc", "image/png") },
         ],
         questions: [
           ...questions.slice(0, 2),
@@ -529,14 +530,20 @@ describe("Decision", () => {
             expect(input.request.headers["x-goog-api-key"]).toBe("google-key")
             expect(JSON.parse(input.text)).toEqual({
               labels: { team: "support" },
-              model: "gemini-decision-eap",
+              model: "gemini-decision-1",
               input: [
                 { type: "text", text: "Ticket:" },
-                { type: "text", text: '{"ticket":"Please refund the duplicate charge."}' },
+                { type: "text", text: '\n{"ticket":"Please refund the duplicate charge."}' },
                 { type: "image", mime_type: "image/png", resolution: "low", data: "AQID" },
                 { type: "audio", mime_type: "audio/wav", data: "AAAA" },
                 { type: "video", mime_type: "video/mp4", resolution: "low", uri: "https://assets.test/clip.mp4" },
                 { type: "document", mime_type: "application/pdf", data: "JVBERi0=" },
+                {
+                  type: "image",
+                  mime_type: "image/png",
+                  resolution: "low",
+                  uri: "https://google.test/v1beta/files/abc",
+                },
               ],
               questions: {
                 department: {
@@ -576,30 +583,36 @@ describe("Decision", () => {
     Effect.gen(function* () {
       const error = yield* ai.decision
         .generate({
-          model: Google.configure({ apiKey: "google-key" }).decision("gemini-decision-eap"),
+          model: Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1"),
           input: [{ type: "text", text: "blocked" }],
           questions: [{ name: "safe", type: "predicate", instructions: "Is this safe?" }],
         })
         .pipe(Effect.flip)
       expect(error.reason._tag).toBe("ContentPolicy")
-      expect(error.message).toContain("Input was blocked")
     }).pipe(
       Effect.provide(
         client((input) =>
           Effect.succeed(
-            json(input, {
-              prompt_feedback: { block_reason: "SAFETY", block_reason_message: "Input was blocked" },
-              usage: { total_input_tokens: 4, total_output_tokens: 0, total_tokens: 4 },
-            }),
+            json(
+              input,
+              {
+                error: {
+                  code: "safety",
+                  message:
+                    "Request blocked due to safety violations (harmful content). Please modify your input and retry.",
+                },
+              },
+              { status: 400 },
+            ),
           ),
         ),
       ),
     ),
   )
 
-  it.effect("rejects Google Decisions media Google can't read before network I/O", () =>
+  it.effect("rejects media Google Decisions can't read before network I/O", () =>
     Effect.gen(function* () {
-      const model = Google.configure({ apiKey: "google-key" }).decision("gemini-decision-eap")
+      const model = Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1")
       const question = [{ name: "readable", type: "predicate", instructions: "Is it readable?" }] as const
       const csv = yield* ai.decision
         .generate({ model, input: [{ type: "media", media: Media.base64("YSxi", "text/csv") }], questions: question })
@@ -608,7 +621,7 @@ describe("Decision", () => {
       const files = yield* ai.decision
         .generate({
           model,
-          input: [{ type: "media", media: Media.ref("google", "files/abc", "image/png") }],
+          input: [{ type: "media", media: Media.ref("openai", "file-abc", "image/png") }],
           questions: question,
         })
         .pipe(Effect.flip)

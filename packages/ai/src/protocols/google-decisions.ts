@@ -4,10 +4,17 @@ import type { Media } from "../media.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
-import { AIError, UnsupportedOperationError, mergeJsonRecords, type ProviderOptions } from "../schema/index.js"
+import {
+  AIError,
+  ProviderID,
+  UnsupportedOperationError,
+  mergeJsonRecords,
+  type ProviderOptions,
+} from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { JsonObject, knownString, ProviderShared } from "./shared.js"
 import { SystemOne } from "./system-one.js"
+import { MediaInput } from "./utils/media-input.js"
 
 const ID = "google-decisions"
 const NAME = "Google Decisions"
@@ -29,14 +36,8 @@ const Usage = Schema.StructWithRest(
   [JsonObject],
 )
 const Response = Schema.Struct({
-  answers: Schema.optional(Schema.Record(Schema.String, SystemOne.Answer)),
+  answers: Schema.Record(Schema.String, SystemOne.Answer),
   usage: Schema.optional(Usage),
-  prompt_feedback: Schema.optional(
-    Schema.Struct({
-      block_reason: Schema.optional(Schema.String),
-      block_reason_message: Schema.optional(Schema.String),
-    }),
-  ),
 })
 
 const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))
@@ -47,7 +48,9 @@ const fromRequest = Effect.fn("GoogleDecisions.fromRequest")(function* (request:
   return {
     ...mergeJsonRecords(native, request.http?.body),
     model: request.model.id,
-    input: yield* Effect.forEach(request.input, (part) => inputPart(request, part, options.mediaResolution)),
+    input: separateText(
+      yield* Effect.forEach(request.input, (part) => inputPart(request, part, options.mediaResolution)),
+    ),
     questions: {
       ...(yield* SystemOne.encodeQuestions(request.questions)),
       // Google names System One's predicate criteria `true_description` and `false_description`.
@@ -85,6 +88,12 @@ const inputPart = (
   return mediaPart(request, part.media, resolution)
 }
 
+// Google joins adjacent text blocks with no separator, so each one after another starts on a new line.
+const separateText = (blocks: ReadonlyArray<Record<string, unknown>>) =>
+  blocks.map((block, index) =>
+    block.type === "text" && blocks[index - 1]?.type === "text" ? { ...block, text: `\n${block.text}` } : block,
+  )
+
 const mediaPart = (request: DecisionRequest, asset: Media.Asset, resolution: string | undefined) => {
   const type =
     asset.kind === "image" || asset.kind === "audio" || asset.kind === "video"
@@ -113,9 +122,11 @@ const mediaPart = (request: DecisionRequest, asset: Media.Asset, resolution: str
   // Google fetches URLs itself, so one that needs our download credentials can't be forwarded.
   if (asset.source.type === "url" && /^https:\/\//i.test(asset.source.url) && asset.headers === undefined)
     return Effect.succeed({ ...block, uri: asset.source.url })
+  const file = MediaInput.refID(asset, ProviderID.make("google"))
+  if (file !== undefined) return Effect.succeed({ ...block, uri: file })
   return Effect.fail(
     ProviderShared.invalidRequest(
-      `${NAME} accepts inline media or public HTTPS URLs; materialize ${asset.source.type} media first`,
+      `${NAME} accepts inline media, public HTTPS URLs and Google Files API URIs; materialize ${asset.source.type} media first`,
     ),
   )
 }
@@ -131,13 +142,6 @@ export const protocol = DecisionRoute.protocol({
       const output = yield* decodeDocument(response)
       const data = output.value
       const answers = data.answers
-      if (answers === undefined) {
-        if (data.prompt_feedback === undefined) return yield* output.invalid(`${NAME} returned no answers`)
-        return yield* output.contentPolicy(
-          data.prompt_feedback.block_reason_message ??
-            `${NAME} blocked the input${data.prompt_feedback.block_reason ? `: ${data.prompt_feedback.block_reason}` : ""}`,
-        )
-      }
       const names = context.request.questions.map((question) => question.name)
       if (Object.keys(answers).length !== names.length || !names.every((name) => Object.hasOwn(answers, name)))
         return yield* output.invalid(`${NAME} answers do not match the requested questions`)

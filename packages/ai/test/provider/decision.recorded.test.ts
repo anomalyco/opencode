@@ -77,7 +77,7 @@ const google = recordedTests({
   provider: "google",
   protocol: "google-decisions",
   requires: ["GOOGLE_API_KEY"],
-  metadata: { model: "gemini-decision-eap" },
+  metadata: { model: "gemini-decision-1" },
 })
 
 const cloudflareOptions = {
@@ -147,7 +147,7 @@ describe("Decision recorded", () => {
 
   google.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      Google.configure({ apiKey: process.env.GOOGLE_API_KEY ?? "fixture" }).decision("gemini-decision-eap"),
+      Google.configure({ apiKey: process.env.GOOGLE_API_KEY ?? "fixture" }).decision("gemini-decision-1"),
     ).pipe(
       Effect.map((response) => {
         expect(response.usage?.outputTokens).toBe(0)
