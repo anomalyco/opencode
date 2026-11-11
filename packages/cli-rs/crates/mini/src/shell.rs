@@ -1516,7 +1516,7 @@ impl Mini {
         let summary = crate::scrollback::TurnSummary {
             agent: self.agent_label(&self.state.borrow().agent),
             model,
-            duration: duration(started.elapsed().as_millis() as u64),
+            duration: opencode_ui::locale::duration(started.elapsed().as_millis() as f64),
         };
         let mut commit = Commit::system(format!("{} · {} · {}", summary.agent, summary.model, summary.duration));
         commit.summary = Some(summary);
@@ -2096,21 +2096,6 @@ fn directory_label(directory: &str, home: &std::path::Path) -> String {
     display.replace('\\', "/")
 }
 
-/// `Locale.duration`.
-pub fn duration(ms: u64) -> String {
-    match ms {
-        0..1_000 => format!("{ms}ms"),
-        // `toFixed(1)` rounds the exact decimal half up; `{:.1}` would round half to even.
-        1_000..60_000 => {
-            let tenths = (ms + 50) / 100;
-            format!("{}.{}s", tenths / 10, tenths % 10)
-        }
-        60_000..3_600_000 => format!("{}m {}s", ms / 60_000, ms % 60_000 / 1000),
-        3_600_000..86_400_000 => format!("{}h {}m", ms / 3_600_000, ms % 3_600_000 / 60_000),
-        _ => format!("{}d {}h", ms / 86_400_000, ms % 86_400_000 / 3_600_000),
-    }
-}
-
 fn capitalize(text: &str) -> String {
     let mut chars = text.chars();
     match chars.next() {
@@ -2176,9 +2161,5 @@ mod tests {
         assert_eq!(directory_label("/home/me/src", home), "~/src");
         assert_eq!(directory_label("/home/meow", home), "/home/meow");
         assert_eq!(capitalize("build"), "Build");
-        assert_eq!(duration(950), "950ms");
-        assert_eq!(duration(1_250), "1.3s");
-        assert_eq!(duration(61_000), "1m 1s");
-        assert_eq!(duration(3_660_000), "1h 1m");
     }
 }
