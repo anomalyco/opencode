@@ -1,7 +1,7 @@
 //! Pending permissions (F.7).
 use opencode_api::generated::*;
 
-use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
+use crate::state::{Data, Error, Overlay, State, Task, evict_missing, is_tag};
 
 impl State {
     /// Pending permission requests of a session; none until read or asked.
@@ -15,11 +15,11 @@ impl State {
     }
 
     pub(crate) fn on_permission_asked(&mut self, data: &PermissionAskedData) {
-        let requests = self.permission.entry(data.session_id.clone()).or_default();
-        if requests.iter().any(|request| request.id == data.id) {
+        // A session the store found missing shows nothing, whatever arrives late (model O9).
+        if self.missing.contains(&data.session_id) {
             return;
         }
-        requests.push(PermissionRequest {
+        let request = PermissionRequest {
             id: data.id.clone(),
             session_id: data.session_id.clone(),
             action: data.action.clone(),
@@ -28,13 +28,22 @@ impl State {
             metadata: data.metadata.clone(),
             source: data.source.clone(),
             message: data.message.clone(),
-        });
-        self.permission_live.add(&data.id.0);
+        };
+        if let Some(read) = self.permission_reads.get_mut(&data.session_id) {
+            read.record(&data.id.0, Some(request.clone()));
+        }
+        let requests = self.permission.entry(data.session_id.clone()).or_default();
+        if requests.iter().any(|item| item.id == data.id) {
+            return;
+        }
+        requests.push(request);
         self.log.permissions(&data.session_id);
     }
 
     pub(crate) fn remove_permission(&mut self, session: &SessionID, request: &PermissionID) {
-        self.permission_live.remove(&request.0);
+        if let Some(read) = self.permission_reads.get_mut(session) {
+            read.record(&request.0, None);
+        }
         let Some(requests) = self.permission.get_mut(session) else {
             return;
         };
@@ -44,35 +53,57 @@ impl State {
             self.log.permissions(session);
         }
     }
+
+    /// Ends the read `ticket` of `session`; its overlay, while that read is still the current one.
+    fn take_permission_read(&mut self, session: &SessionID, ticket: u64) -> Option<Overlay<PermissionRequest>> {
+        if self.permission_reads.get(session)?.ticket != ticket {
+            return None;
+        }
+        self.permission_reads.remove(session)
+    }
 }
 
 impl Data {
     /// Reads pending permissions once per invalidation (`permission.sync`). Requests asked or
     /// settled while the read was in flight win over the snapshot (deviation O89-list-snapshots).
     pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
+        let key = format!("session.permission:{}", session.0);
+        let begin = session.clone();
         let session = session.clone();
         self.sync_start(
-            format!("session.permission:{}", session.0),
-            |state| (state.deletion_epoch, state.permission_live.now()),
-            move |data, (started, seq)| async move {
-                let mut list = data
-                    .client()
-                    .permission_list(&PermissionListInput { session_id: session.clone() })
-                    .await
-                    .map_err(|error| evict_missing(&data, error))?;
-                data.write(|state| {
+            key.clone(),
+            move |state| {
+                let ticket = state.token();
+                state.permission_reads.insert(begin, Overlay::new(ticket));
+                (state.deletion_epoch, ticket)
+            },
+            move |data, (started, ticket)| async move {
+                let list =
+                    match data.client().permission_list(&PermissionListInput { session_id: session.clone() }).await {
+                        Ok(list) => list,
+                        Err(error) => {
+                            data.write(|state| state.take_permission_read(&session, ticket));
+                            return Err(evict_missing(&data, error));
+                        }
+                    };
+                let reread = data.write(|state| {
+                    let Some(read) = state.take_permission_read(&session, ticket) else {
+                        return false;
+                    };
                     if state.deleted_since(&session, started) {
-                        return;
+                        return false;
                     }
-                    let live = &state.permission_live;
-                    list.retain(|request| !live.removed_since(&request.id.0, seq));
-                    let newer = state.permission.get(&session).into_iter().flatten().filter(|request| {
-                        live.added_since(&request.id.0, seq) && list.iter().all(|item| item.id != request.id)
-                    });
-                    list.extend(newer.cloned().collect::<Vec<_>>());
+                    let Some(list) = read.apply(list, |request| &request.id.0) else {
+                        state.syncs.invalidate(&key);
+                        return true;
+                    };
                     state.permission.insert(session.clone(), list);
                     state.log.permissions(&session);
+                    false
                 });
+                if reread {
+                    data.refresh(|data| data.permission_sync(&session));
+                }
                 Ok(())
             },
         )
