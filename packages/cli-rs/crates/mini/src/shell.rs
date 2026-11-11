@@ -865,12 +865,19 @@ impl Mini {
         };
         let connected =
             output.patch.is_some() && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected);
+        let relist = output.relist;
         self.output(cx, output);
+        let session = self.transcript.borrow().as_ref().map(|transcript| transcript.session_id.clone());
+        if let (Some(ticket), Some(session)) = (relist, session) {
+            self.relist(session, ticket);
+        }
         if let Some((messages, active, inbox, reconnect)) = hydrated {
             self.queued(&inbox);
             self.footers.subagent_hydrate(&messages, &active, reconnect);
-            // A resize that came during a relist the drop abandoned replays after the reconnect's list.
-            if self.resize_queued.take() {
+            // A resize that came during a relist the drop abandoned replays after the reconnect's list, and so do
+            // events an overflow dropped, which the reconnect's list prints only in part.
+            let lost = self.transcript.borrow().as_ref().is_some_and(Transcript::lost);
+            if self.resize_queued.take() || lost {
                 self.replay_on_resize(cx);
             }
         }
@@ -1698,6 +1705,11 @@ impl Mini {
             return;
         }
         self.apply_height();
+        self.schedule_replay();
+    }
+
+    /// Replays the transcript after 250 ms of quiet, replacing one already scheduled.
+    fn schedule_replay(self: &Rc<Self>) {
         if let Some(timer) = self.resize.take() {
             self.app.cancel_timer(timer);
         }
@@ -1730,6 +1742,11 @@ impl Mini {
             }
             (transcript.session_id.clone(), transcript.begin_replay())
         };
+        self.relist(session, ticket);
+    }
+
+    /// Lists `session` again for the resize replay of `ticket`, then clears the terminal and writes the transcript.
+    fn relist(self: &Rc<Self>, session: String, ticket: u64) {
         self.trace("replay.resize", json!({ "sessionID": session }));
         let client = self.client.clone();
         let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
@@ -1743,10 +1760,11 @@ impl Mini {
                 mini.resize_queued.set(false);
                 return;
             }
-            // A drop abandoned this relist; the reconnect's list replaced it.
+            // A drop abandoned this relist, or its events overflowed and a newer read replaced it.
             if mini.transcript.borrow().as_ref().is_some_and(|transcript| !transcript.relisting(ticket)) {
                 return;
             }
+            let lost = mini.transcript.borrow().as_ref().is_some_and(Transcript::lost);
             let output = match result {
                 Ok((messages, active, inbox, requests)) => {
                     mini.reset_for_replay(cx);
@@ -1756,6 +1774,10 @@ impl Mini {
                         transcript.inbox(&inbox);
                         transcript.replayed(&messages, active.contains(&transcript.session_id))
                     });
+                    // The dropped events included the children's: they follow as after a reconnect.
+                    if lost {
+                        mini.footers.subagent_hydrate(&messages, &active, true);
+                    }
                     output.map(|output| mini.blocked(output))
                 }
                 // Nothing was cleared; the events that waited still apply.
@@ -1769,6 +1791,9 @@ impl Mini {
             }
             if mini.resize_queued.take() {
                 mini.replay_on_resize(cx);
+            } else if mini.transcript.borrow().as_ref().is_some_and(Transcript::lost) {
+                // A failed read leaves dropped events unshown: try again after a pause.
+                mini.schedule_replay();
             }
         });
     }
