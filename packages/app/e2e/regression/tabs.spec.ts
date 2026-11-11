@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import {
   NO_PROVIDER,
@@ -1735,6 +1735,35 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await expect(paste).toHaveText("PasteCtrl+V")
   await paste.click()
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
+})
+
+// Hovering down the parent items must switch submenus, not stack them (#63095).
+test("the Windows titlebar menu closes a submenu when hovering another parent item", async ({ page }) => {
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+
+  // A hand crosses each trigger through intermediate points; a teleporting hover fires pointerleave
+  // at the destination and Kobalte's grace polygon swallows the move before the submenu can open.
+  const hoverCenter = async (locator: Locator) => {
+    const box = (await locator.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 })
+  }
+
+  const file = page.getByRole("menuitem", { name: "File", exact: true })
+  const edit = page.getByRole("menuitem", { name: "Edit", exact: true })
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+
+  await hoverCenter(file)
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+
+  await hoverCenter(edit)
+  await expect(edit).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toHaveAttribute("aria-expanded", "false")
+
+  await hoverCenter(view)
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  await expect(edit).toHaveAttribute("aria-expanded", "false")
 })
 
 test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {

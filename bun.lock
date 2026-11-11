@@ -1003,6 +1003,7 @@
     "@corvu/drawer@0.2.4": "patches/@corvu%2Fdrawer@0.2.4.patch",
     "@dnd-kit/dom@0.5.0": "patches/@dnd-kit%2Fdom@0.5.0.patch",
     "solid-js@1.9.17": "patches/solid-js@1.9.17.patch",
+    "@kobalte/core@0.13.13": "patches/@kobalte%2Fcore@0.13.13.patch",
   },
   "overrides": {
     "@effect/platform-node-shared": "catalog:",
