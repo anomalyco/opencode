@@ -30,7 +30,7 @@ use super::autocomplete::{self, Autocomplete, parts};
 use super::draft::{Draft, Drafts};
 use super::editor_context::{self, LabelState, Selection};
 use super::history::{self, History};
-use super::metadata::{self, Catalog, Display, Preferences, Row};
+use super::metadata::{self, Catalog, Display, Row};
 use crate::app::Tui;
 
 /// How long an armed interrupt waits for the second Escape.
@@ -57,11 +57,10 @@ impl Mode {
     }
 }
 
-/// Prompt state the whole app shares: history, drafts, and model preferences.
+/// Prompt state the whole app shares: history, drafts, and stashes.
 pub struct Shared {
     pub history: History,
     pub drafts: Drafts,
-    pub preferences: Preferences,
     /// Frecency, directory recents, and the home `/cd` location (E.3).
     pub complete: autocomplete::Shared,
     /// The IDE's file and selection (E.5).
@@ -77,9 +76,8 @@ impl Shared {
         Self {
             history: History::load(app, state.clone()),
             drafts: Drafts::default(),
-            stash: super::stash::Stash::load(app, state.clone()),
+            stash: super::stash::Stash::load(app, state),
             current: RefCell::new(Weak::new()),
-            preferences: Preferences::load(app, state),
             complete: autocomplete::Shared::default(),
             editor: editor_context::Context::default(),
         }
@@ -583,8 +581,7 @@ impl Inner {
     /// Rebuilds the catalog from the store and repaints.
     fn read_catalog(&self, tui: &Tui) {
         let location = self.location(tui);
-        let startup = tui.local.startup_model.borrow().clone();
-        let catalog = tui.data.read(|state| Catalog::read(state, &location, &tui.prompt.preferences, startup));
+        let catalog = tui.data.read(|state| Catalog::read(state, &location));
         if let Some(catalog) = catalog {
             *self.catalog.borrow_mut() = Some(Rc::new(catalog));
             self.refresh(tui);
@@ -621,10 +618,7 @@ impl Inner {
     pub(crate) fn refresh(&self, tui: &Tui) {
         let theme = tui.page();
         let catalog = self.catalog.borrow().clone();
-        let session = self.session_info(tui);
-        let selection = catalog
-            .as_ref()
-            .and_then(|catalog| crate::dialogs::model::prompt_selection(tui, catalog, session.as_ref()));
+        let selection = catalog.as_ref().and_then(|_| crate::dialogs::model::prompt_selection(tui));
         let agent_color =
             selection.as_ref().and_then(|selection| catalog.as_ref()?.color(&theme, selection.agent.id.as_str()));
         let mode = self.mode.get();
@@ -636,7 +630,7 @@ impl Inner {
             (Some(catalog), Some(selection)) => {
                 let (model, provider) = catalog.labels(selection.model.as_ref());
                 Display {
-                    agent: Some(metadata::titlecase(selection.agent.id.as_str())),
+                    agent: Some(opencode_ui::tool_info::titlecase(selection.agent.id.as_str())),
                     auto: tui.config().permissions == Permissions::Autoaccept,
                     model,
                     provider,

@@ -1,17 +1,12 @@
 //! Prompt metadata (E.2, row P15): the agent, model, and variant the prompt submits with, and the
 //! row under the textarea that shows them (`component/prompt/metadata.tsx`).
 //!
-//! The selection follows `context/local.tsx` over a [`Catalog`]: the location's agents, models,
-//! providers, configured model, commands, and branch from the store (F.8), plus `model.json`.
-
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+//! The selection is `Local`'s (`context/local.tsx`); a [`Catalog`] labels it with the location's
+//! agents, models, providers, commands, and branch from the store (F.8).
 
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
-    SessionInfo,
+    AgentInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
 };
-use opencode_local::model_pref::{Model, ModelPreferences, Preference, normalize_variant};
 use opencode_store::location::{Catalog as Read, Location};
 use opencode_store::{Data, State, Task};
 use opencode_ui::theme::Theme;
@@ -29,15 +24,10 @@ pub struct Catalog {
     pub agents: Vec<AgentInfo>,
     pub models: Vec<ModelInfo>,
     pub providers: Vec<ProviderInfo>,
-    /// The last config document's `model` (`configuredModel`).
-    pub configured: Option<Choice>,
     /// Server command names, for `/name args` submits.
     pub commands: Vec<String>,
     /// The current VCS branch, for the footer.
     pub branch: Option<String>,
-    pub preference: Preference,
-    /// `--model` (`args.model`).
-    pub startup: Option<Model>,
 }
 
 /// A model with its variant (`ModelSelection`).
@@ -70,132 +60,23 @@ pub fn sync(data: &Data, location: &Location) -> Vec<Task<()>> {
     READS.iter().map(|read| data.catalog_sync(*read, Some(location))).collect()
 }
 
-/// `model.json`, read once on a blocking thread and shared by every prompt.
-#[derive(Clone, Default)]
-pub struct Preferences(Arc<Mutex<Option<Preference>>>);
-
-impl Preferences {
-    pub fn load(app: &App, state: Option<PathBuf>) -> Self {
-        let preferences = Self::default();
-        if let Some(state) = state {
-            let slot = preferences.0.clone();
-            app.runtime().spawn_blocking(move || {
-                let loaded = ModelPreferences::new(&state).load();
-                if let Ok(mut slot) = slot.lock() {
-                    *slot = Some(loaded);
-                }
-            });
-        }
-        preferences
-    }
-
-    fn get(&self) -> Preference {
-        self.0.lock().ok().and_then(|slot| slot.clone()).unwrap_or_default()
-    }
-}
-
 impl Catalog {
     /// The catalog of `location` once its agents and models are read (`promptDisplay` waits for
-    /// both); the rest only label or refine the selection.
-    pub fn read(state: &State, location: &Location, preferences: &Preferences, startup: Option<Model>) -> Option<Self> {
+    /// both); the rest only label the selection.
+    pub fn read(state: &State, location: &Location) -> Option<Self> {
         let data = state.location(Some(location))?;
         Some(Self {
             agents: data.agent.clone()?,
             models: data.model.clone()?,
             providers: data.provider.clone().unwrap_or_default(),
-            configured: data.config.as_deref().and_then(configured),
             commands: data.command.iter().flatten().map(|command| command.name.clone()).collect(),
             branch: data.vcs.as_ref().and_then(|vcs| vcs.branch.current.clone()),
-            preference: preferences.get(),
-            startup,
         })
-    }
-
-    /// Primary, visible agents (`agent.list()`).
-    fn primary(&self) -> impl Iterator<Item = &AgentInfo> {
-        self.agents.iter().filter(|agent| agent.mode != AgentInfoMode::Subagent && !agent.hidden)
-    }
-
-    /// `agent.current()`: the session's agent when it is listed, else the first.
-    pub fn agent(&self, session: Option<&SessionInfo>) -> Option<&AgentInfo> {
-        let selected = session.and_then(|session| session.agent.as_ref());
-        self.primary().find(|agent| Some(&agent.id) == selected).or_else(|| self.primary().next())
-    }
-
-    /// `model.selection()` for `agent`: a session's durable model when its agent matches, else
-    /// the new-session model.
-    pub fn selection(&self, session: Option<&SessionInfo>) -> Option<Selection> {
-        let agent = self.agent(session)?.clone();
-        let durable = session
-            .filter(|session| session.agent.as_ref().is_none_or(|id| *id == agent.id))
-            .and_then(|session| session.model.as_ref())
-            .map(|model| {
-                let variant = normalize_variant(model.variant.as_deref()).map(str::to_owned);
-                let info = self.info(model.provider_id.as_str(), &model.id);
-                Choice {
-                    provider_id: model.provider_id.0.clone(),
-                    model_id: model.id.clone(),
-                    variant: variant
-                        .filter(|variant| info.is_none_or(|info| info.variants.iter().any(|item| item.id == *variant))),
-                }
-            });
-        let model = durable.or_else(|| {
-            let model = self.new_session_model(&agent)?;
-            Some(self.preferred(&agent, model))
-        });
-        Some(Selection { agent, model })
     }
 
     /// `available(model)`.
     pub fn available(&self, choice: &Choice) -> bool {
         self.info(&choice.provider_id, &choice.model_id).is_some()
-    }
-
-    /// `newSessionModel`: the agent's model, then `fallbackModel` (`--model`, configured, recent, first).
-    fn new_session_model(&self, agent: &AgentInfo) -> Option<Model> {
-        let valid = |model: &Model| self.info(&model.provider_id, &model.model_id).is_some();
-        agent
-            .model
-            .as_ref()
-            .map(|model| Model::new(model.provider_id.as_str(), &model.id))
-            .filter(valid)
-            .or_else(|| self.startup.clone().filter(valid))
-            .or_else(|| {
-                self.configured.as_ref().map(|choice| Model::new(&choice.provider_id, &choice.model_id)).filter(valid)
-            })
-            .or_else(|| self.preference.recent.iter().find(|model| valid(model)).cloned())
-            .or_else(|| self.models.first().map(|model| Model::new(model.provider_id.as_str(), &model.id)))
-    }
-
-    /// `preferredSelection`: the saved variant, else the agent's or the config's, if the model has it.
-    fn preferred(&self, agent: &AgentInfo, model: Model) -> Choice {
-        let matches = |provider: &str, id: &str| provider == model.provider_id && id == model.model_id;
-        let variant = self
-            .preference
-            .variant
-            .get(&model.key())
-            .cloned()
-            .or_else(|| {
-                agent
-                    .model
-                    .as_ref()
-                    .filter(|configured| matches(configured.provider_id.as_str(), &configured.id))
-                    .and_then(|configured| configured.variant.clone())
-            })
-            .or_else(|| {
-                self.configured
-                    .as_ref()
-                    .filter(|configured| matches(&configured.provider_id, &configured.model_id))
-                    .and_then(|configured| configured.variant.clone())
-            });
-        let info = self.info(&model.provider_id, &model.model_id);
-        Choice {
-            variant: normalize_variant(variant.as_deref())
-                .filter(|variant| info.is_some_and(|info| info.variants.iter().any(|item| item.id == *variant)))
-                .map(str::to_owned),
-            provider_id: model.provider_id,
-            model_id: model.model_id,
-        }
     }
 
     fn info(&self, provider: &str, model: &str) -> Option<&ModelInfo> {
@@ -433,17 +314,6 @@ fn truncate(text: &str, width: usize) -> String {
     format!("{}…", out.trim_end())
 }
 
-/// `Locale.titlecase`: each word's first letter upper case.
-pub fn titlecase(text: &str) -> String {
-    text.split(' ')
-        .map(|word| {
-            let mut chars = word.chars();
-            chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,11 +360,5 @@ mod tests {
         let narrow = layout(30, 100, &full);
         assert_eq!(narrow.model, "Claude S…");
         assert_eq!(narrow.limit, full.limit);
-    }
-
-    #[test]
-    fn titlecase_capitalizes_each_word() {
-        assert_eq!(titlecase("build"), "Build");
-        assert_eq!(titlecase("deep review"), "Deep Review");
     }
 }
