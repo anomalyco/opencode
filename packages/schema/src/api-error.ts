@@ -1,5 +1,15 @@
 import { Schema } from "effect"
 
+export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
+  "InvalidRequestError",
+  {
+    message: Schema.String,
+    kind: Schema.optional(Schema.String),
+    field: Schema.optional(Schema.String),
+  },
+  { httpApiStatus: 400 },
+) {}
+
 export class InvalidCursorError extends Schema.TaggedError<InvalidCursorError>()(
   "InvalidCursorError",
   { message: Schema.String },

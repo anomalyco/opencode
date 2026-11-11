@@ -42,7 +42,8 @@ it.live("Promise and Effect plugins can follow the same filtered transcript page
       expect(move.previous?.location).toEqual({ directory: location.directory })
     }
     expect(yield* host.session.message.list({ ...input, limit: 201 }).pipe(Effect.flip)).toMatchObject({
-      _tag: "SchemaError",
+      _tag: "InvalidRequestError",
+      kind: "Query",
     })
     expect(yield* host.session.message.list({ ...input, cursor: "invalid" }).pipe(Effect.flip)).toMatchObject({
       _tag: "InvalidCursorError",

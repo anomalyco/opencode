@@ -1,6 +1,7 @@
 export * as PluginHost from "./host.js"
 
 import { Plugin } from "@opencode/plugin/effect"
+import { InvalidRequestError } from "@opencode/schema/api-error"
 import type { IntegrationMethodRegistration } from "@opencode/plugin/effect/integration"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import type { Event } from "@opencode/schema/event"
@@ -613,7 +614,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       context: (input) => sessions.context(input.sessionID),
       message: {
         list: Effect.fn(function* (input) {
-          const query = yield* decodeMessageQuery(input)
+          const query = yield* decodeMessageQuery(input).pipe(
+            Effect.mapError((error) => new InvalidRequestError({ kind: "Query", message: error.message })),
+          )
           const page = yield* MessagePage.list(sessions.messages, { ...query, sessionID: input.sessionID })
           return {
             cursor: page.cursor,

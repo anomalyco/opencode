@@ -2,22 +2,12 @@ import { Schema } from "effect"
 import { Skill } from "@opencode/schema/skill"
 import { Location } from "@opencode/schema/location"
 
-export { InvalidCursorError, SessionNotFoundError, UnknownError } from "@opencode/schema/api-error"
+export { InvalidCursorError, InvalidRequestError, SessionNotFoundError, UnknownError } from "@opencode/schema/api-error"
 
 export class LocationNotFoundError extends Schema.TaggedError<LocationNotFoundError>()(
   "LocationNotFoundError",
   { location: Location.PublicRef, message: Schema.String },
   { httpApiStatus: 404 },
-) {}
-
-export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
-  "InvalidRequestError",
-  {
-    message: Schema.String,
-    kind: Schema.optional(Schema.String),
-    field: Schema.optional(Schema.String),
-  },
-  { httpApiStatus: 400 },
 ) {}
 
 export class RpcError extends Schema.TaggedError<RpcError>()(
