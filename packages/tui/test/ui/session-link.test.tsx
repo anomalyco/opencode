@@ -16,6 +16,7 @@ import { useSessionLinks } from "../../src/ui/session-link"
 import { ToastProvider } from "../../src/ui/toast"
 import { emptyThemeSource, tmpdir } from "../fixture/fixture"
 import { createApi, createFetch, directory, json } from "../fixture/tui-client"
+import { waitForHighlightedFrame } from "../fixture/frame"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
@@ -39,10 +40,12 @@ test.each(["top-level", "coalesced"] as const)("session links in %s markdown", a
   await using state = await tmpdir()
   const lookup = Promise.withResolvers<void>()
   const requested: string[] = []
+  const fetched = new Map([missing, unknown].map((sessionID) => [sessionID, Promise.withResolvers<void>()]))
   const calls = createFetch(async (url) => {
     const sessionID = url.pathname.match(/^\/api\/session\/(ses_\w+)$/)?.[1]
     if (!sessionID) return
     requested.push(sessionID)
+    fetched.get(sessionID)?.resolve()
     if (sessionID === unknown) return lookup.promise.then(() => json({ data: session(unknown, "Looked up") }))
     return json(
       { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` },
@@ -93,16 +96,12 @@ test.each(["top-level", "coalesced"] as const)("session links in %s markdown", a
       .filter((span) => span.attributes & TextAttributes.UNDERLINE)
       .map((span) => span.text.trim())
       .join(" ")
-  const until = async (done: () => boolean) => {
-    for (let attempt = 0; attempt < 200 && !done(); attempt++) {
-      await app.renderOnce()
-      await Bun.sleep(5)
-    }
-    expect(done()).toBe(true)
-  }
 
   try {
-    await until(() => linked().length > 0 && data.session.missing(missing))
+    await Promise.all([...fetched.values()].map((request) => request.promise))
+    // The client marks the session missing once it has read the 404.
+    await app.waitFor(() => data.session.missing(missing))
+    await waitForHighlightedFrame(app, () => linked().length > 0)
     const frame = app.captureCharFrame()
     // The long title wraps; the current, archived, missing and still-loading sessions stay IDs.
     expect(linked()).toBe("@Fix the flaky reconnect test on Windows")
@@ -110,9 +109,11 @@ test.each(["top-level", "coalesced"] as const)("session links in %s markdown", a
     expect(requested.toSorted()).toEqual([missing, unknown])
 
     lookup.resolve()
-    await until(() => linked().includes("@Looked up"))
+    // Joins the lookup already in flight rather than fetching again.
+    await data.session.sync(unknown)
+    await waitForHighlightedFrame(app, () => linked().includes("@Looked up"))
     data.session.remember({ ...known, title: "Renamed" })
-    await until(() => linked() === "@Renamed @Looked up")
+    await waitForHighlightedFrame(app, () => linked() === "@Renamed @Looked up")
     // Lookups are cached, misses included.
     expect(requested.toSorted()).toEqual([missing, unknown])
 
@@ -150,10 +151,7 @@ test("a wrapped title opens its session from either row, and plain text does not
   const app = await mount(state.path, calls.fetch, () => <Transcript />, 30, 6)
 
   try {
-    for (let attempt = 0; attempt < 200 && !app.captureCharFrame().includes("@Fix"); attempt++) {
-      await app.renderOnce()
-      await Bun.sleep(5)
-    }
+    await waitForHighlightedFrame(app, (frame) => frame.includes("@Fix"))
     const rows = app.captureCharFrame().split("\n")
     const head = rows.findIndex((row) => row.includes("@Fix"))
     const tail = rows.findIndex((row) => row.includes("Windows"))
@@ -195,10 +193,7 @@ test("clicking a session link in a dialog closes it and opens the session", asyn
   const app = await mount(state.path, calls.fetch, () => <Probe />, 80, 12)
 
   try {
-    for (let attempt = 0; attempt < 200 && !app.captureCharFrame().includes("@Fix"); attempt++) {
-      await app.renderOnce()
-      await Bun.sleep(5)
-    }
+    await waitForHighlightedFrame(app, (frame) => frame.includes("@Fix"))
     const rows = app.captureCharFrame().split("\n")
     const y = rows.findIndex((row) => row.includes("@Fix"))
     await app.mockMouse.click(rows[y]!.indexOf("@Fix") + 2, y)
@@ -238,10 +233,7 @@ test.each([true, false])("code spans link only when they are exactly an ID, conc
       .map((span) => span.text.trim())
 
   try {
-    for (let attempt = 0; attempt < 200 && linked().length === 0; attempt++) {
-      await app.renderOnce()
-      await Bun.sleep(5)
-    }
+    await waitForHighlightedFrame(app, () => linked().length > 0)
     expect(linked()).toEqual([conceal ? `@${known.title}` : known.id])
     expect(app.captureCharFrame()).toContain(`opencode --session ${known.id}`)
   } finally {
@@ -249,8 +241,14 @@ test.each([true, false])("code spans link only when they are exactly an ID, conc
   }
 })
 
-function mount(state: string, fetch: typeof globalThis.fetch, view: () => JSX.Element, width: number, height: number) {
-  return testRender(
+async function mount(
+  state: string,
+  fetch: typeof globalThis.fetch,
+  view: () => JSX.Element,
+  width: number,
+  height: number,
+) {
+  const app = await testRender(
     () => (
       <TestTuiContexts paths={{ state }}>
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
@@ -276,4 +274,7 @@ function mount(state: string, fetch: typeof globalThis.fetch, view: () => JSX.El
     ),
     { width, height },
   )
+  // Frame waits need the render loop; highlights and lookups land between frames.
+  app.renderer.start()
+  return app
 }
