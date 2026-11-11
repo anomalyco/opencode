@@ -5,6 +5,7 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
+import { randomUUID } from "crypto"
 import path from "path"
 import { Bom } from "@opencode/util/bom"
 import { toolFailure } from "../runtime.js"
@@ -231,13 +232,17 @@ export const Plugin = {
                     const target = moveTarget ?? change.target
                     // On a case-insensitive filesystem a move that only changes case (of the name or a directory)
                     // names the same file, so writing the new path and removing the old one would delete it.
-                    // Rename it first, then write the content. The parent is created for case-sensitive filesystems.
+                    // Rename it first, then write the content. The rename goes through a temporary name because
+                    // some filesystems (Linux vfat) ignore a single case-only rename. The parent is created for
+                    // case-sensitive filesystems.
                     const caseRename =
                       moveTarget !== undefined &&
                       moveTarget.absolute.toLowerCase() === change.target.absolute.toLowerCase()
+                    const staging = `${change.target.absolute}.${randomUUID()}`
                     if (caseRename)
                       yield* environment.files.mkdir(path.dirname(moveTarget.absolute)).pipe(
-                        Effect.andThen(environment.files.move(change.target.absolute, moveTarget.absolute)),
+                        Effect.andThen(environment.files.move(change.target.absolute, staging)),
+                        Effect.andThen(environment.files.move(staging, moveTarget.absolute)),
                         Effect.mapError((error) =>
                           fail(`Failed to rename ${change.target.resource} to ${moveTarget.resource}`, error),
                         ),
