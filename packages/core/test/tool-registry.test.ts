@@ -520,7 +520,7 @@ describe("Tool", () => {
         },
       })
       expect(callable.output).toMatchObject({
-        output: expect.stringContaining('"text": "sales"'),
+        output: expect.stringContaining('"text":"sales"'),
         toolCalls: [
           { tool: "registry.search", status: "completed" },
           { tool: "registry.search.sales", status: "completed" },
@@ -589,7 +589,7 @@ describe("Tool", () => {
           },
         },
       })
-      expect(result.output).toMatchObject({ output: expect.stringContaining('"text": "sales"') })
+      expect(result.output).toMatchObject({ output: expect.stringContaining('"text":"sales"') })
     }),
   )
 

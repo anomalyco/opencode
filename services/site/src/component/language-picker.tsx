@@ -4,6 +4,7 @@ import { IconChevron } from "~/component/icon"
 import { openLanguageSheet } from "~/component/language-sheet"
 import { onCloseMenus } from "~/component/site/menu-open"
 import { prefersSheet } from "~/component/site/sheet"
+import { keepUnderHeader } from "~/component/site/under-header"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { loadLanguage } from "~/i18n/content"
@@ -13,9 +14,10 @@ import "./language-picker.css"
 
 /**
  * The language control. Pointers get a dropdown: a popover anchored to the trigger that flips and
- * shrinks to stay on screen (CSS anchor positioning, no script). Touch phones get the site's bottom
- * sheet (language-sheet.tsx). Every row is a link to the page in that language, so both work
- * without JavaScript and tell search engines about the other languages.
+ * shrinks to stay on screen (CSS anchor positioning) and scrolls under the pinned header
+ * (under-header.ts). Touch phones get the site's bottom sheet (language-sheet.tsx). Every row is a
+ * link to the page in that language, so both work without JavaScript and tell search engines about
+ * the other languages. The static pages drive the same markup from src/client/menus.ts.
  */
 export function LanguagePicker(props: { align?: "left" | "right" } = {}) {
   const language = useLanguage()
@@ -28,6 +30,7 @@ export function LanguagePicker(props: { align?: "left" | "right" } = {}) {
   const [open, setOpen] = createSignal(false)
   const href = (locale: Locale) => `${route(locale, strip(location.pathname))}${location.search}${location.hash}`
   let menu!: HTMLDivElement
+  let trigger!: HTMLButtonElement
   onCloseMenus(() => {
     if (menu.matches(":popover-open")) menu.hidePopover()
   })
@@ -36,6 +39,7 @@ export function LanguagePicker(props: { align?: "left" | "right" } = {}) {
     const toggle = (event: Event) => {
       if (!(event instanceof ToggleEvent)) return
       setOpen(event.newState === "open")
+      if (event.newState === "open") keepUnderHeader(menu, trigger)
       // Opened from the keyboard: focus moves to the current language.
       if (event.newState === "open" && menu.previousElementSibling?.matches(":focus-visible"))
         menu.querySelector<HTMLElement>('[aria-current="true"]')?.focus()
@@ -48,6 +52,7 @@ export function LanguagePicker(props: { align?: "left" | "right" } = {}) {
     <div data-component="language-picker" data-design="menuActive menuColor">
       <div data-component="dropdown">
         <button
+          ref={trigger}
           data-slot="trigger"
           type="button"
           popovertarget={menuId}

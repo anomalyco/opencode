@@ -50,7 +50,7 @@ Locale guidance does not override code/command preservation rules or the global 
 
 # Do-Not-Translate Terms (OpenCode Docs)
 
-Generated from: `packages/web/src/content/docs/*.mdx` (default English docs)
+Generated from: `services/site/src/docs/v1/content/*.mdx` (default English docs)
 Generated on: 2026-02-10
 
 Use this as a translation QA checklist / glossary. Preserve listed terms exactly (spelling, casing, punctuation).

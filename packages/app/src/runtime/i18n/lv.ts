@@ -339,7 +339,6 @@ export const dict = {
   "session.new.project.search": "Meklēt projektus",
   "session.new.project.add": "Pievienot projektu",
   "session.new.workspace.runIn": "Palaist sesiju iekš",
-  "session.new.workspace.triggerLocal": "Lokāli",
   "session.new.workspace.local": "Lokālais repozitorijs",
   "session.new.git.none": "Nav Git",
   "session.header.open.finder": "Finder",

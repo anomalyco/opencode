@@ -16,5 +16,10 @@ export const registry = {
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
+  shell_timeout_background: "Move foreground shell commands to the background when their timeout expires.",
+  console_watches:
+    "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
+  mcp_events:
+    "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

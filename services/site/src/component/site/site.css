@@ -107,6 +107,17 @@ html:has([data-site][data-theme="dark"]) {
     0 1px 1px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.3)),
     0 2px 4px -1px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.35)),
     0 6px 12px -4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+  /* Cards fanned out with no panel (the section menus' fan style, the press gallery's fan): like the
+     icons in a macOS Dock stack, each casts only a small, soft shadow close to itself, and a hairline
+     ring carries the edge, which matters most in the dark theme. Lifted while one drops. */
+  --fan-shadow:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1)),
+    0 1px 2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4)),
+    0 2px 5px -2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  --fan-shadow-lifted:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1)),
+    0 2px 4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4)),
+    0 4px 8px -4px light-dark(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.5));
   /* The brand greys: the logo ink at 20% / 70% on white (light) and 28% / 72% on #0b0b0b (dark). */
   --logo-inner: light-dark(#d2d2d2, #4b4b4b);
   --logo-open: light-dark(#626262, #aeaeae);
@@ -591,6 +602,17 @@ html:has([data-site][data-theme="dark"]) {
     flex-direction: column;
   }
 
+  /* The page stays mounted under the Markdown view (markdown-view.tsx, whose styles load with it), so
+     its state survives a round trip. It's hidden while the view shows, and on a reload in the view
+     until the view has loaded (site.tsx). */
+  [data-component="content"] > [data-slot="page"] {
+    display: contents;
+  }
+
+  &:is([data-markdown], [data-markdown-boot]) [data-component="content"] > [data-slot="page"] {
+    display: none;
+  }
+
   [data-component="site-button"] {
     display: inline-flex;
     align-items: center;
@@ -822,6 +844,11 @@ html:has([data-site][data-theme="dark"]) {
       box-shadow: var(--popover-shadow);
       transform-origin: bottom var(--x-start, left);
       animation: menu-in 160ms var(--ease-out);
+
+      /* Closed: in the page (site-menu.tsx), but not shown. */
+      &[hidden] {
+        display: none;
+      }
 
       [data-slot="install"],
       [data-slot="store"],
@@ -1069,10 +1096,6 @@ html:has([data-site][data-theme="dark"]) {
       font-size: var(--fs-large);
 
       /* Draw the icon with two bars so the vertical one can collapse into a minus. */
-      svg {
-        display: none;
-      }
-
       &::before,
       &::after {
         content: "";
@@ -1372,7 +1395,7 @@ html:has([data-site][data-theme="dark"]) {
   }
 
   /* The label (Design mode can swap in longer wording) stays on one line beside the bars. */
-  [data-component="status"] [data-design-copy] {
+  [data-component="status"] [data-slot="status-label"] {
     white-space: nowrap;
   }
 
@@ -3314,11 +3337,95 @@ html:has([data-site][data-theme="dark"]) {
   }
 }
 
+/* The two blue bars, the announcement banner above and the footer's letters bar, share
+   one look: a highlight in solid white ("NEW", "Like letters?") and a body at 92% white (the message
+   or the font line, with its chevron, and the banner's ×), 4.5:1 on the blue. Hover and keyboard
+   focus bring the body to full white in 150ms and nudge the chevron 2px right; focus adds a white
+   ring inset in the bar; a press dims the blue a little. Here in the shell, not in site-banner.css,
+   which production leaves out while the banner is off. */
+:is([data-component="letters-bar"], [data-component="announcement-banner"]) {
+  --bar-highlight: #fff;
+  --bar-body: rgb(255 255 255 / 0.92);
+
+  a {
+    color: var(--bar-highlight);
+  }
+
+  [data-slot="body"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    color: var(--bar-body);
+    transition: color 150ms ease;
+  }
+
+  /* The home announcement's light chevron (icons.tsx), drawn for 13px text, scaled to the 15px
+     text (10/13 em) with its stroke kept at 1px. */
+  [data-slot="chevron-right"] {
+    flex-shrink: 0;
+    width: calc(1em * 10 / 13);
+    height: calc(1em * 10 / 13);
+    transition: translate 150ms var(--ease-out, ease-out);
+
+    path {
+      vector-effect: non-scaling-stroke;
+    }
+  }
+
+  [data-slot="dismiss"] {
+    color: var(--bar-body);
+    transition: color 150ms ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    a:hover [data-slot="body"],
+    [data-slot="dismiss"]:hover {
+      color: var(--bar-highlight);
+    }
+
+    a:hover [data-slot="chevron-right"] {
+      translate: calc(2px * var(--x-dir, 1)) 0;
+    }
+  }
+
+  a:focus-visible [data-slot="body"],
+  [data-slot="dismiss"]:focus-visible {
+    color: var(--bar-highlight);
+  }
+
+  a:focus-visible [data-slot="chevron-right"] {
+    translate: calc(2px * var(--x-dir, 1)) 0;
+  }
+
+  a:focus-visible {
+    outline: 2px solid var(--bar-highlight);
+    outline-offset: -6px;
+  }
+
+  [data-slot="dismiss"]:focus-visible {
+    outline: 2px solid var(--bar-highlight);
+    outline-offset: -8px;
+  }
+
+  a:active {
+    background-color: color-mix(in srgb, var(--bar-blue) 90%, #000);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="body"],
+    [data-slot="chevron-right"],
+    [data-slot="dismiss"] {
+      transition: none;
+    }
+  }
+}
+
 /* "Like letters?": a full-width blue bar at the very end of the page (after the footer, in the flow),
    which grows open and pushes the page up while the wordmark's letters are out of order. */
 [data-site] {
   --letters-bar-height: 3.25rem;
-  /* The blue bars' shared look (site-banner.css): the link blue, the same as the blue buttons and
+  /* The blue bars' shared look (above): the link blue, the same as the blue buttons and
      the announcement banner (dark mode keeps the deeper light-mode blue, so white keeps 4.5:1). */
   --bar-blue: light-dark(var(--link), #3b5cf6);
 }
@@ -3382,7 +3489,7 @@ html:has([data-site][data-theme="dark"]) {
     gap: 0.25rem;
     height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    /* The blue bars' shared look (--bar-blue above, site-banner.css): a highlight and a 92% body. */
+    /* The blue bars' shared look (--bar-blue and the shared rules above): a highlight and a 92% body. */
     background: var(--bar-blue);
     font-family: var(--font-sans);
     font-size: var(--fs-ui);

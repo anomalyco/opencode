@@ -5,6 +5,11 @@ run-name: "${{ format('release {0}{1}', inputs.bump, inputs.version) }}"
 # - build-* jobs run repository code (`bun run build`, `bun run pack`) with no environment, secrets or id-token.
 # - sign-* and publish-* jobs run in the release environment, check out only .github/release/, and run those
 #   scripts on verified artifacts, which they treat as data. They never execute repository code.
+# - sign-* and publish-* jobs read their secrets from AWS Secrets Manager: they assume
+#   arn:aws:iam::604439173067:role/github/opencode-release over GitHub OIDC in the release environment. The Azure
+#   trusted signing ids are repository variables.
+# - publish-cli and publish-desktop upload to R2 with a 30-minute token minted by the token issuer from that role
+#   (.github/release/cloudflare-token.sh), not with a long-lived Cloudflare token from Secrets Manager.
 # - plan decides version, channel and npm dist-tag from the event, inputs and ref; only a dispatch with a bump or
 #   version on dev reaches latest.
 # .github/release/ and this file are the security boundary for releases.
@@ -74,6 +79,22 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_RELEASE_NOTES: ${{ inputs.release_notes }}
 
+  # ---- Gate: the full check suite, before anything is published ------------------------------------------------
+
+  # release.yml does not wait for the check-test push run on the same commit, so a stable release would publish
+  # whatever that run later says. This gate runs the whole suite — unit tests on both OSes, the compiled builds and
+  # the Linux browser suites — before any publish job below. Continuous dev and beta builds skip it: they publish
+  # their own channel from a dev push, whose check-test run covers the same commit.
+  verify:
+    needs: plan
+    if: needs.plan.outputs.channel == 'latest'
+    permissions:
+      contents: read
+      checks: write
+    uses: ./.github/workflows/check-test.yml
+    with:
+      release_gate: true
+
   # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
   # tagged v<version>. Runs git only.
   tag:
@@ -83,6 +104,7 @@ jobs:
     environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
     permissions:
       contents: read
+      id-token: write
     env: &env
       OPENCODE_VERSION: ${{ needs.plan.outputs.version }}
       OPENCODE_CHANNEL: ${{ needs.plan.outputs.channel }}
@@ -91,11 +113,28 @@ jobs:
     outputs:
       sha: ${{ steps.tag.outputs.sha || github.sha }}
     steps:
+      # The tag is pushable only with the release deploy key, so without the release environment there is nothing
+      # to fetch and the checkout below falls back to the workflow token.
+      - name: Configure AWS credentials
+        if: needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Read release tag key
+        if: needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: RELEASE_TAG_KEY,opencode/release/RELEASE_TAG_KEY
+          parse-json-secrets: false
+
       - name: Check out
         if: needs.plan.outputs.channel == 'latest'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ssh-key: ${{ secrets.RELEASE_TAG_KEY }}
+          ssh-key: ${{ env.RELEASE_TAG_KEY }}
       - id: tag
         name: Tag
         if: needs.plan.outputs.channel == 'latest'
@@ -391,6 +430,9 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 90
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
     env: *env
     outputs:
       digest: ${{ steps.upload.outputs.digest }}
@@ -400,6 +442,21 @@ jobs:
         uses: ./.github/release/download
         with:
           pattern: "{build-npm,build-desktop-darwin-*}"
+      - name: Configure AWS credentials
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Read signing secrets
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: |
+            APPLE_SIGNING_CERTIFICATE,shared/APPLE_SIGNING_CERTIFICATE
+            APPLE_NOTARY_KEY,shared/APPLE_NOTARY_KEY
+          parse-json-secrets: false
       # The certificate has no password, which apple-actions/import-codesign-certs rejects. The sign scripts look up
       # the identity in build.keychain, and codesign finds the key through the user search list.
       - name: Import certificate
@@ -415,8 +472,6 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" build.keychain > /dev/null
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           rm -f "$cert"
-        env:
-          APPLE_SIGNING_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
       - name: Sign CLI
         if: needs.plan.outputs.cli == 'true'
         run: bash .github/release/sign-cli-macos.sh "$RUNNER_TEMP/in/build-npm" "$RUNNER_TEMP/out"
@@ -426,7 +481,6 @@ jobs:
           bash .github/release/sign-desktop-macos.sh "$RUNNER_TEMP/out" \
             "$RUNNER_TEMP"/in/build-desktop-darwin-*/opencode-desktop-mac-*.app.tar
         env:
-          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
           APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
           APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID }}
       - id: upload
@@ -466,17 +520,17 @@ jobs:
         if: needs.plan.outputs.dry_run != 'true'
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - &azure-sign
         name: Sign
         if: needs.plan.outputs.dry_run != 'true'
         uses: azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1.2.0
         with:
-          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+          endpoint: ${{ vars.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ vars.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
           files-folder: ${{ runner.temp }}\work
           files-folder-filter: exe,node
           files-folder-recurse: true
@@ -547,7 +601,7 @@ jobs:
 
   # Build provenance for the npm tarballs and Linux archives. No secrets; id-token only for Sigstore.
   publish-attestations:
-    needs: [plan, build-npm]
+    needs: [plan, build-npm, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' && needs.plan.outputs.dry_run != 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -568,7 +622,7 @@ jobs:
             ${{ runner.temp }}/in/build-archives/opencode*
 
   publish-npm:
-    needs: [plan, sign-macos, sign-windows, publish-attestations]
+    needs: [plan, sign-macos, sign-windows, publish-attestations, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -595,7 +649,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   publish-cli:
-    needs: [plan, sign-macos, sign-windows, publish-npm]
+    needs: [plan, sign-macos, sign-windows, publish-npm, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -606,14 +660,27 @@ jobs:
     steps:
       - *checkout-release
       - *download-signed-cli
+      - name: Configure AWS credentials
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Cloudflare token
+        id: cloudflare-token
+        if: needs.plan.outputs.dry_run != 'true'
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
       - name: Publish
         run: bash .github/release/publish-cli.sh "$RUNNER_TEMP/in/build-archives" "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/sign-windows"
         env: &cloudflare
           CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
 
   publish-desktop:
-    needs: [plan, sign-macos, sign-desktop-windows-installer]
+    needs: [plan, sign-macos, sign-desktop-windows-installer, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.desktop == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -628,6 +695,19 @@ jobs:
         with:
           pattern: "{sign-macos,sign-desktop-windows-installer,build-desktop-linux-*}"
           digests: sign-macos=${{ needs.sign-macos.outputs.digest }} sign-desktop-windows-installer=${{ needs.sign-desktop-windows-installer.outputs.digest }}
+      - name: Configure AWS credentials
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Cloudflare token
+        id: cloudflare-token
+        if: needs.plan.outputs.dry_run != 'true'
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
       - name: Publish
         run: |
           bash .github/release/publish-desktop.sh "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/sign-desktop-windows-installer" \
@@ -635,7 +715,7 @@ jobs:
         env: *cloudflare
 
   publish-docker:
-    needs: [plan, build-docker]
+    needs: [plan, build-docker, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -655,7 +735,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   publish-homebrew:
-    needs: [plan, sign-macos, sign-windows, publish-cli]
+    needs: [plan, sign-macos, sign-windows, publish-cli, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -666,14 +746,25 @@ jobs:
     steps:
       - *checkout-release
       - *download-signed-cli
+      - name: Configure AWS credentials
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Read publish secrets
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: HOMEBREW_TAP_DEPLOY_KEY,shared/HOMEBREW_TAP_DEPLOY_KEY
+          parse-json-secrets: false
       - name: Publish
         run: bash .github/release/publish-homebrew.sh "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/build-archives"
-        env:
-          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
 
   # The AUR package installs the published npm tarballs, so it follows the npm publish.
   publish-aur:
-    needs: [plan, sign-macos, sign-windows, publish-npm]
+    needs: [plan, sign-macos, sign-windows, publish-npm, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -684,14 +775,25 @@ jobs:
     steps:
       - *checkout-release
       - *download-signed-cli
+      - name: Configure AWS credentials
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Read publish secrets
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: AUR_KEY,shared/AUR_SSH_KEY
+          parse-json-secrets: false
       - name: Publish
         run: bash .github/release/publish-aur.sh "$RUNNER_TEMP/in/build-npm"
-        env:
-          AUR_KEY: ${{ secrets.AUR_KEY }}
 
   # WinGet manifests as data. Submission to microsoft/winget-pkgs stays paused until the packages are accepted.
   publish-winget:
-    needs: [plan, sign-windows, sign-desktop-windows-installer]
+    needs: [plan, sign-windows, sign-desktop-windows-installer, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     env: *env
@@ -711,7 +813,7 @@ jobs:
           path: ${{ runner.temp }}/out
 
   publish-github-release:
-    needs: [plan, sign-macos, sign-windows, sign-desktop-windows-installer, publish-cli, publish-desktop]
+    needs: [plan, sign-macos, sign-windows, sign-desktop-windows-installer, publish-cli, publish-desktop, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -735,24 +837,37 @@ jobs:
           OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
 
   publish-discord:
-    needs: [plan, publish-github-release]
+    needs: [plan, publish-github-release, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
     permissions:
       contents: read
+      id-token: write
     env: *env
     steps:
       - *checkout-release
+      - name: Configure AWS credentials
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Read publish secrets
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: DISCORD_WEBHOOK,opencode/release/DISCORD_WEBHOOK
+          parse-json-secrets: false
       - name: Publish
         run: bash .github/release/publish-discord.sh
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
 
   # Brings the release commit back to dev. Pushing to dev is blocked by rulesets, so it opens a PR.
   publish-version-pr:
-    needs: [plan, tag, publish-npm, publish-cli, publish-desktop, publish-github-release]
+    needs: [plan, tag, publish-npm, publish-cli, publish-desktop, publish-github-release, verify]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.channel == 'latest' }}
     runs-on: ubuntu-24.04
     permissions:

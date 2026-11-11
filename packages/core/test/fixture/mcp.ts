@@ -24,6 +24,7 @@ export const emptyMcp = Mcp.Service.of({
   resourceCatalog: () => Effect.succeed(Mcp.ResourceCatalog.make({ resources: [], templates: [] })),
   resources: () => Effect.succeed(Mcp.ResourceCatalog.make({ resources: [], templates: [] })),
   readResource: () => Effect.undefined,
+  events: () => Effect.undefined,
 })
 
 export const emptyMcpLayer = Layer.succeed(Mcp.Service, emptyMcp)

@@ -96,6 +96,7 @@ export type Tool<R = never> = {
   readonly _tag: "CodeModeTool"
   readonly description: string
   readonly input: SchemaType
+  readonly freeform?: boolean
   readonly output: SchemaType | undefined
   readonly execute: (input: unknown, context?: ToolContext) => Effect.Effect<unknown, unknown, R>
   readonly mode?: Idempotent<unknown, unknown, R> | Durable<unknown, unknown, R> | undefined
@@ -109,6 +110,11 @@ type ResultType<S> = S extends undefined ? void : S extends Schema.Decoder<unkno
 export type Options<I extends SchemaType, O extends SchemaType | undefined, R = never> = {
   readonly description: string
   readonly input: I
+  /**
+   * The tool's input is one required string field that programs pass directly, as in `tools.patch("...")`.
+   * The object form still works, and the executor receives the object either way.
+   */
+  readonly freeform?: boolean
   readonly output?: O
   readonly execute:
     | ExecuteFn<InputType<I>, ResultType<O>, R>
@@ -172,6 +178,7 @@ export const make = <I extends SchemaType, const O extends SchemaType | undefine
     _tag: "CodeModeTool",
     description: options.description,
     input: options.input,
+    ...(options.freeform && { freeform: true }),
     output: options.output,
     ...(mode === undefined ? {} : { mode }),
     execute: (input, context = { key: crypto.randomUUID() }) => spec(input as InputType<I>, context),

@@ -75,6 +75,8 @@ export interface Snapshot {
     readonly messageID: SessionMessage.ID
     readonly call: ToolCall
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
+    /** Completes when the user asks the call to stop; see `Tool.Context.cancel`. */
+    readonly cancel?: Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
@@ -140,6 +142,7 @@ const layer = Layer.effect(
         "gen_ai.tool.name": name,
         "gen_ai.tool.call.id": context.id,
         "session.id": context.sessionID,
+        "gen_ai.agent.name": context.agent,
       })
       const execution = yield* execute(tool, input, context).pipe(
         Effect.map((value) => ({ value })),
@@ -306,6 +309,7 @@ const layer = Layer.effect(
                 messageID: input.messageID,
                 id: Tool.CallID.make(input.call.id),
                 progress: input.progress ?? (() => Effect.void),
+                cancel: input.cancel,
               }
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)

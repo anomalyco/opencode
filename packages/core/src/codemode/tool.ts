@@ -75,8 +75,9 @@ export type Inventory = {
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+  "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
   "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+  "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
   "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
@@ -92,6 +93,7 @@ export const create = (
     name: "execute",
     description,
     input: CodeMode.Input,
+    freeform: { type: "text" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
@@ -132,6 +134,8 @@ export const create = (
                     ...context,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
+                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
+                    cancel: undefined,
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
@@ -322,6 +326,7 @@ function inventoryTools(inventory: Inventory) {
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
+      freeform: registration.freeform !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
@@ -432,9 +437,10 @@ function formatResult(result: CodeMode.Result) {
   return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
+// Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
 function formatValue(value: CodeMode.DataValue) {
   if (typeof value === "string") return value
-  return JSON.stringify(value, null, 2) ?? String(value)
+  return JSON.stringify(value) ?? String(value)
 }
 
 function outputFiles(content: ReadonlyArray<Content>): Array<typeof ExecuteFile.Type> {

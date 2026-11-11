@@ -30,6 +30,8 @@ import { ID, type Payload } from "@opencode/schema/event"
 import { Form } from "@opencode/core/form"
 import { Integration } from "@opencode/core/integration"
 import { Environment } from "@opencode/core/environment/index"
+import { App } from "@opencode/core/app"
+import { Flag } from "@opencode/core/flag"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -126,6 +128,8 @@ function resourceServer(
     elicitationTimeout?: number
     /** Lists a `roots` tool that asks for the client's roots (2026-07-28 only) and returns them. */
     roots?: boolean
+    /** Advertises MCP Events; answer its requests through `respond`. */
+    events?: boolean
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
@@ -168,6 +172,7 @@ function resourceServer(
               tools: { listChanged: input.listChanged },
               prompts: {},
               ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
+              ...(input.events ? { extensions: { "io.modelcontextprotocol/events": {} } } : {}),
             },
             instructions: "Use the resources tools.",
           },
@@ -368,6 +373,8 @@ function resourceMcpLayer(
     name?: string
     credentials?: Partial<Credential.Interface>
     bus?: Layer.Layer<Bus.Service>
+    /** `OPENCODE_FLAGS`, such as `-mcp_events`. */
+    flags?: string
   },
 ) {
   const directory = AbsolutePath.make(overrides?.directory ?? import.meta.dir)
@@ -386,6 +393,7 @@ function resourceMcpLayer(
   ).pipe(
     Layer.provideMerge(Mcp.layer(options)),
     Layer.provideMerge(Form.layer),
+    Layer.provideMerge(Flag.layer),
     Layer.provide(
       Layer.mergeAll(
         overrides?.pool ?? poolLayer,
@@ -414,6 +422,8 @@ function resourceMcpLayer(
               }),
             ]),
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
+        App.layer(),
+        Layer.succeed(Flag.Overrides, overrides?.flags),
         overrides?.bus ??
           Layer.mock(Bus.Service, {
             subscribe: overrides?.subscribe ?? (() => Stream.never),
@@ -2308,6 +2318,7 @@ const shutdownIt = testEffect(
       Form.node,
       Environment.node,
       Location.node,
+      Flag.node,
       McpPool.node,
     ]),
     [
@@ -3937,6 +3948,72 @@ describe("MCP pool", () => {
       expect(Array.from(collected).toSorted()).toEqual(["forms", "mcp"])
       expect(yield* status(second.mcp)).toEqual({ status: "connected" })
       expect(server.state.toolLists).toBe(1)
+    }),
+  )
+})
+
+describe("MCP events", () => {
+  // Answers `events/stream` with one `active` notification, then closes the stream.
+  const eventServer = (input: { events?: boolean } = {}) => {
+    const streams: Array<{ name: string | null; params: unknown }> = []
+    return resourceServer({
+      modern: true,
+      events: input.events,
+      respond: async (request) => {
+        if (request.method !== "POST") return undefined
+        const body: unknown = await request.clone().json()
+        if (!isRecord(body) || body.method !== "events/stream") return undefined
+        streams.push({ name: request.headers.get("mcp-name"), params: body.params })
+        const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
+        const frame = (message: Record<string, unknown>) =>
+          `data: ${JSON.stringify({ jsonrpc: "2.0", ...message })}\n\n`
+        return new Response(
+          frame({ method: "notifications/events/active", params: { cursor: "c1", truncated: false, _meta: meta } }) +
+            frame({ id: body.id, result: { resultType: "complete", _meta: meta } }),
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+    }).pipe(Effect.map((server) => ({ ...server, streams })))
+  }
+  const layer = (url: string, flags: string) =>
+    resourceMcpLayer(
+      new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
+      undefined,
+      undefined,
+      {
+        flags,
+      },
+    )
+
+  testEffect(Layer.empty).live("streams a server's events over Streamable HTTP, naming the event in Mcp-Name", () =>
+    Effect.gen(function* () {
+      const server = yield* eventServer({ events: true })
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* settled(mcp)).toEqual({ status: "connected" })
+        const events = yield* mcp.events("resources")
+        if (!events) throw new Error("expected MCP events")
+        const messages = yield* Stream.runCollect(events.stream({ name: "job.finished", arguments: { job: "j1" } }))
+        expect(messages).toEqual([{ type: "active", cursor: "c1", truncated: false }])
+        expect(server.streams).toEqual([
+          { name: "job.finished", params: expect.objectContaining({ name: "job.finished", arguments: { job: "j1" } }) },
+        ])
+      }).pipe(Effect.provide(layer(server.url, "mcp_events")))
+    }),
+  )
+
+  testEffect(Layer.empty).live("offers no events with the mcp_events flag off, or from a server without them", () =>
+    Effect.gen(function* () {
+      const offering = yield* eventServer({ events: true })
+      const plain = yield* eventServer()
+      const events = (url: string, flags: string) =>
+        Effect.gen(function* () {
+          const mcp = yield* Mcp.Service
+          expect(yield* settled(mcp)).toEqual({ status: "connected" })
+          return yield* mcp.events("resources")
+        }).pipe(Effect.provide(layer(url, flags)))
+      expect(yield* events(offering.url, "-mcp_events")).toBeUndefined()
+      expect(yield* events(plain.url, "mcp_events")).toBeUndefined()
     }),
   )
 })

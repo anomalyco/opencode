@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
+import { draftHref, expectPath, holdRoute, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import {
   newSessionLocation,
@@ -82,7 +82,7 @@ test("the location shortcuts choose worktrees from every state and keep cycling"
   await expect(page.locator('[data-slot="new-session-location-icon"]')).toHaveCount(0)
   await view.editor.press(`${modifier}+Alt+KeyO`)
   await expect(search).toBeFocused()
-  await page.getByRole("option", { name: /LocationShortcut C:\/OpenCode\/LocationShortcut$/ }).click()
+  await page.getByRole("option", { name: /LocationShortcut main C:\/OpenCode\/LocationShortcut$/ }).click()
   await view.editor.press(`${modifier}+Alt+KeyL`)
   await expect(newSessionWorktree(page)).toContainText("New worktree")
   await view.editor.press(`${modifier}+Alt+KeyO`)
@@ -92,7 +92,7 @@ test("the location shortcuts choose worktrees from every state and keep cycling"
   await expect(view.editor).toBeFocused()
 })
 
-test("Local shows and targets the main checkout when the draft opened in a worktree", async ({ page }) => {
+test("the main checkout shows its branch and is targeted when the draft opened in a worktree", async ({ page }) => {
   const root = "C:/OpenCode/LocalFromWorktree"
 
   const worktree = `${root}/.worktrees/quiet-river`
@@ -113,12 +113,39 @@ test("Local shows and targets the main checkout when the draft opened in a workt
 
   const screen = page.locator('[data-component="new-session"]')
 
-  await expect(newSessionWorktree(page)).toHaveText("Local")
-  await expect(screen.getByText("checkout-branch", { exact: true })).toBeVisible()
+  await expect(newSessionWorktree(page)).toHaveText("checkout-branch")
+  await expect(screen.getByText("checkout-branch", { exact: true })).toHaveCount(1)
   await expect(screen.getByText("worktree-branch", { exact: true })).toHaveCount(0)
   await view.editor.fill("Run in the main checkout")
   await submit(page).click()
   await expect.poll(() => created).toEqual([{ directory: root }])
+})
+
+test("the main checkout trigger holds a placeholder while its branch loads, then shows the icon alone without one", async ({
+  page,
+}) => {
+  const vcs = Promise.withResolvers<Awaited<ReturnType<typeof holdRoute>>>()
+
+  await openDraft(page, {
+    name: "DetachedCheckout",
+    vcs: { default: "main" },
+    beforeOpen: async () => {
+      vcs.resolve(await holdRoute(page, /\/api\/vcs\?/))
+    },
+  })
+
+  const held = await vcs.promise
+  const trigger = newSessionWorktree(page)
+
+  await held.arrived
+  await expect(trigger).toHaveAttribute("aria-busy", "true")
+  await expect(trigger).toHaveAccessibleName("Choose worktree")
+  held.release()
+  await expect(trigger).toHaveAttribute("aria-busy", "false")
+  await expect(trigger).toHaveText("")
+  await expect(trigger).toHaveAccessibleName("Choose worktree")
+  await trigger.click()
+  await expect(page.getByRole("combobox", { name: "Search worktrees", exact: true })).toBeFocused()
 })
 
 for (const binding of ["custom", "none"]) {
@@ -154,7 +181,7 @@ for (const binding of ["custom", "none"]) {
     if (binding === "none") {
       await view.editor.press(`${modifier}+Alt+o`)
       await expect(page.getByRole("dialog")).toHaveCount(0)
-      await expect(newSessionWorktree(page)).toHaveText("Local")
+      await expect(newSessionWorktree(page)).toHaveText("main")
 
       return
     }
@@ -354,12 +381,10 @@ test("the combined location picker shows checkout branches and chooses the base 
   await page.getByRole("combobox", { name: "Search projects", exact: true }).press("ArrowRight")
   await page.getByRole("combobox", { name: "Search worktrees", exact: true }).fill("Custom project")
   await expect(page.getByRole("option")).toHaveCount(1)
-  await page.getByRole("option", { name: /Custom project C:\/OpenCode\/BranchContext/ }).click()
+  await page.getByRole("option", { name: /Custom project timeline-quotes C:\/OpenCode\/BranchContext$/ }).click()
   await expect(view.editor).toBeFocused()
-  await expect(screen.getByRole("button", { name: "Local", exact: true })).toBeVisible()
-  // The local checkout's branch is context, not a control: the app cannot switch it.
-  await expect(screen.getByText("timeline-quotes", { exact: true })).toBeVisible()
-  await expect(screen.getByRole("button", { name: "timeline-quotes", exact: true })).toHaveCount(0)
+  await expect(newSessionWorktree(page)).toHaveText("timeline-quotes")
+  await expect(screen.getByText("timeline-quotes", { exact: true })).toHaveCount(1)
   await expect(screen.getByRole("button", { name: /from / })).toHaveCount(0)
   await select(/^New worktree/)
   await expect(base).toBeVisible()
@@ -388,13 +413,13 @@ test("the worktree trigger opens the current project's worktree step", async ({ 
   })
 
   const screen = page.locator('[data-component="new-session"]')
-  // The app cannot switch the checkout branch, so the local checkout names the mode instead of "dev".
   const local = newSessionWorktree(page)
   const dialog = page.getByRole("dialog")
   const search = dialog.getByRole("combobox", { name: "Search worktrees", exact: true })
   const options = dialog.getByRole("option")
   const back = dialog.getByRole("button", { name: "Back to projects", exact: true })
 
+  await expect(local).toHaveText("dev")
   await local.click()
   await expect(search).toBeFocused()
   await expect(back).toHaveText("Run session in")
@@ -441,7 +466,7 @@ test("the worktree trigger opens the current project's worktree step", async ({ 
   await expect(view.editor).toBeFocused()
 })
 
-test("the branch shortcut chooses a base branch and stays inactive on Local", async ({ page }) => {
+test("the branch shortcut chooses a base branch and stays inactive on the main checkout", async ({ page }) => {
   const view = await openWorktreeDraft(page, {
     name: "BranchShortcut",
     vcs: () => ({ current: "dev", default: "dev" }),
@@ -475,7 +500,7 @@ test("the branch shortcut chooses a base branch and stays inactive on Local", as
   await expect(view.editor).toBeFocused()
 
   await view.editor.press(`${modifier}+Alt+KeyL`)
-  await expect(newSessionWorktree(page)).toHaveText("Local")
+  await expect(newSessionWorktree(page)).toHaveText("dev")
   await view.editor.press(shortcut)
   await expect(search).toHaveCount(0)
   await expect(view.editor).toBeFocused()
