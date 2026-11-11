@@ -3,8 +3,8 @@
 //! a plain click on it opens that session. The current session, archived sessions and sessions that cannot be loaded
 //! stay plain IDs. When a title changes, only the blocks that mention that session are drawn again.
 //!
-//! The transcript's text parts, the compaction summary and the Markdown of plugin dialogs (the `/btw` answer) use
-//! it, through [`attach`].
+//! The transcript's text parts, the compaction summary and the `/btw` answer use it, through [`attach`]; other
+//! plugins' Markdown does not, as in TS.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -28,12 +28,10 @@ pub struct Links {
     pressed: Cell<Option<(u16, u16)>>,
 }
 
-/// The TUI's linked Markdown documents, for label changes. Plugin dialogs own nothing that could hold theirs, so
-/// those are kept here until they leave the screen.
+/// The TUI's linked Markdown documents, for label changes.
 #[derive(Default)]
 pub struct Registry {
     links: RefCell<Vec<Weak<Links>>>,
-    pinned: RefCell<Vec<Rc<Links>>>,
 }
 
 /// Makes `markdown` show session links: registers the inline hook and the click handler.
@@ -65,20 +63,11 @@ pub fn attach(tui: &Tui, markdown: &Markdown) -> Rc<Links> {
     links
 }
 
-/// [`attach`] for a Markdown nothing else owns, such as one in a plugin dialog: kept until it leaves the screen.
-pub fn pin(tui: &Tui, markdown: &Markdown) {
-    let links = attach(tui, markdown);
-    let mut pinned = tui.session_links.pinned.borrow_mut();
-    pinned.retain(|links| shown(&tui.app, &links.markdown));
-    pinned.push(links);
-}
-
 /// Draws again the blocks that mention a session whose label changed (#63247).
 pub fn sync(tui: &Tui, changes: &Changes) {
     if !changes.all && changes.session.is_empty() {
         return;
     }
-    tui.session_links.pinned.borrow_mut().retain(|links| shown(&tui.app, &links.markdown));
     let live: Vec<Rc<Links>> = tui.session_links.links.borrow().iter().filter_map(Weak::upgrade).collect();
     for links in live {
         let changed: HashSet<SessionID> = links
@@ -216,15 +205,6 @@ pub fn display_label(title: Option<&str>, child: bool) -> String {
         _ if child => "Child session".to_owned(),
         _ => "New session".to_owned(),
     }
-}
-
-/// Whether `widget` is on the screen: its ancestors reach the root.
-fn shown(app: &App, widget: &Markdown) -> bool {
-    let mut top = widget.as_any();
-    while let Some(parent) = top.parent() {
-        top = parent;
-    }
-    top.id() == app.root().id()
 }
 
 /// One session mention: the byte range of its text, with the optional `@session:` prefix.

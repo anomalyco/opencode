@@ -16,6 +16,7 @@ use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::app::Tui;
+use crate::features::session_links::{self, Links};
 
 /// The panel on screen, which a panel of the same key changes in place.
 pub struct Live {
@@ -31,6 +32,8 @@ pub struct Live {
     binds: Rc<RefCell<Option<Disposer>>>,
     /// The texts the body's hover handlers change.
     hovers: RefCell<Vec<Rc<Text>>>,
+    /// The session links of the body's Markdown (`/btw` only).
+    links: RefCell<Vec<Rc<Links>>>,
 }
 
 /// What sizes the body's box. Its resize handlers reach it through a slot that closing the panel empties, so a closed
@@ -250,6 +253,7 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, plugin: String, panel: abi::
         shown: RefCell::new(panel.clone()),
         binds,
         hovers: RefCell::default(),
+        links: RefCell::default(),
     };
     live.fill_body(tui, &panel.body);
     live.update(tui, panel);
@@ -337,6 +341,7 @@ impl Live {
         self.content.clear();
         let act = self.act(tui);
         let mut hovers = Vec::new();
+        let links = RefCell::new(Vec::new());
         node::add(
             &self.cx.app,
             &self.cx.theme,
@@ -344,12 +349,21 @@ impl Live {
             body,
             &act,
             &mut hovers,
-            &|text| tui.markdown(text),
+            &|text| {
+                // As in TS, of the plugins' Markdown only the `/btw` answer links sessions (`btw.tsx`).
+                if self.plugin != super::btw::ID {
+                    return tui.markdown(text);
+                }
+                let markdown = super::host::markdown(tui);
+                links.borrow_mut().push(session_links::attach(tui, &markdown));
+                markdown.set_markdown(text).as_any()
+            },
             &mut |_, path| {
                 log::warn!("a plugin panel cannot show slot {path}");
             },
         );
         *self.hovers.borrow_mut() = hovers;
+        *self.links.borrow_mut() = links.into_inner();
         for child in self.content.children() {
             let fit = self.fit.clone();
             child.on_resize(move |cx, _| {
