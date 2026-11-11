@@ -212,7 +212,7 @@ jobs:
         include:
           - { target: linux-arm64, host: blacksmith-4vcpu-ubuntu-2404-arm }
           - { target: linux-x64, host: blacksmith-4vcpu-ubuntu-2404 }
-          - { target: darwin-arm64, host: macos-26 }
+          - { target: darwin-arm64, host: blacksmith-6vcpu-macos-26 }
           - { target: windows-arm64, host: blacksmith-4vcpu-windows-2025 }
           - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
     runs-on: ${{ matrix.host }}
@@ -323,9 +323,9 @@ jobs:
       matrix:
         include:
           - target: darwin-x64
-            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'macos-26' || 'macos-26-intel' }}
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-6vcpu-macos-26' || 'macos-26-intel' }}
             install: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && '--os=darwin --cpu=*' || '--os=darwin --cpu=x64' }}
-          - { target: darwin-arm64, host: macos-26, install: --os=darwin --cpu=arm64 }
+          - { target: darwin-arm64, host: blacksmith-6vcpu-macos-26, install: --os=darwin --cpu=arm64 }
           # github-hosted: blacksmith lacks the ARM64 MSVC cross-compilation toolchain
           - target: windows-arm64
             host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
