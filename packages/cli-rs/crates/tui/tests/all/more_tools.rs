@@ -245,13 +245,12 @@ fn a_subagent_row_opens_its_child_session() {
     let screen = h.wait_for("Resume");
     for line in [
         "   ⋯ Explore Subagent — Survey the views · provider/model (high)\n",
-        "   ✓ General Subagent — Check the docs  Background\n",
+        "   ✓ General Subagent — Check the docs\n",
         "   ↳ Continue subagent — Resume\n",
     ] {
         assert!(screen.contains(line), "{line:?} missing:\n{screen}");
     }
-    let theme = h.tui.page();
-    assert_eq!(h.fg("Background"), theme.text.muted);
+    assert!(!screen.contains("Background"), "{screen}");
 
     h.click("Check the docs");
     let found = h.app.wait_until(WAIT, || h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
@@ -261,7 +260,7 @@ fn a_subagent_row_opens_its_child_session() {
 }
 
 #[test]
-fn a_background_subagent_row_follows_its_child_status() {
+fn a_subagent_row_follows_its_child_status() {
     let messages = turn(vec![tool(
         "c1",
         "task",
@@ -272,14 +271,14 @@ fn a_background_subagent_row_follows_its_child_status() {
         ),
     )]);
     let h = open(100, 30, messages);
-    h.wait_for("   ✓ General Subagent — Check the docs  Background\n");
+    h.wait_for("   ✓ General Subagent — Check the docs\n");
     let child = support::merge(session("ses_child", "Child work"), json!({ "parentID": "ses_t" }));
     h.tui.data.remember(serde_json::from_value(child).unwrap());
     let child = SessionID("ses_child".into());
     h.tui.data.set_status(&child, opencode_store::SessionStatus::Running);
-    h.wait_for("   ⋯ General Subagent — Check the docs  Background\n");
+    h.wait_for("   ⋯ General Subagent — Check the docs\n");
     h.tui.data.set_status(&child, opencode_store::SessionStatus::Idle);
-    h.wait_for("   ✓ General Subagent — Check the docs  Background\n");
+    h.wait_for("   ✓ General Subagent — Check the docs\n");
 }
 
 #[test]

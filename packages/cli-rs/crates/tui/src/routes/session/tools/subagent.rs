@@ -9,7 +9,7 @@ use opencode_store::SessionStatus;
 use opencode_ui::bind;
 use opencode_ui::tool_info::titlecase;
 use opentui::prelude::*;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use super::dispatch::{Inline, InlineTool, Props, Status};
 use crate::app::Tui;
@@ -77,7 +77,6 @@ impl Subagent {
             // `running` hides the error while the child still works.
             error: inline.error.clone().filter(|_| !running),
             clickable: true,
-            badge: background(&props.metadata, status).then(|| "Background".to_owned()),
             ..inline
         });
         *self.session.borrow_mut() = session.filter(|id| !id.is_empty());
@@ -100,11 +99,6 @@ pub fn model_label(value: Option<&str>, models: &[ModelInfo]) -> Option<String> 
         Some(variant) => format!("{name} ({variant})"),
         None => name.to_owned(),
     })
-}
-
-/// `isBackgroundSubagent`: the call returned while the child keeps running.
-fn background(metadata: &Map<String, Value>, status: Status) -> bool {
-    status == Status::Completed && metadata.get("status").and_then(Value::as_str) == Some("running")
 }
 
 #[cfg(test)]

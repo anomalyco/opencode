@@ -54,7 +54,6 @@ pub struct Tab {
     pub label: String,
     pub description: String,
     pub status: Status,
-    pub background: bool,
     pub title: Option<String>,
 }
 
@@ -92,7 +91,6 @@ struct Child {
     label: String,
     description: String,
     status: Status,
-    background: bool,
     title: Option<String>,
     updated: f64,
     frames: Vec<(String, Commit)>,
@@ -116,7 +114,6 @@ impl Child {
             label: FALLBACK_LABEL.to_owned(),
             description: String::new(),
             status: Status::Running,
-            background: false,
             title: None,
             updated: 0.0,
             frames: Vec::new(),
@@ -144,7 +141,6 @@ impl Child {
                 self.description.clone()
             },
             status: self.status,
-            background: self.background,
             title: self.title.clone(),
         }
     }
@@ -164,7 +160,7 @@ impl Child {
         }
     }
 
-    /// `applyMeta`: the subagent call's input names the agent, the task, and whether it runs in the background.
+    /// `applyMeta`: the subagent call's input names the agent and the task.
     fn apply_meta(&mut self, meta: Option<&IndexMap<String, Value>>) {
         let Some(meta) = meta else { return };
         if let Some(agent) = text(meta.get("agent")) {
@@ -172,9 +168,6 @@ impl Child {
         }
         if let Some(description) = text(meta.get("description")) {
             self.description = description.to_owned();
-        }
-        if meta.get("background") == Some(&Value::Bool(true)) {
-            self.background = true;
         }
     }
 
@@ -541,7 +534,6 @@ impl Tracker {
         };
         child.apply_meta(call.as_ref());
         if success == Some(true) && running {
-            child.background = true;
             child.status = Status::Running;
         }
         if success == Some(true) && !running && child.status == Status::Running {
@@ -776,13 +768,9 @@ impl Tracker {
             _ => return,
         };
         let Some((session, running)) = child_session(metadata) else { return };
-        let completed = matches!(tool.state, ToolPartState::Completed(_));
         let alive = self.active.contains(&session);
         let Some(child) = self.admit(&session) else { return };
         child.apply_meta(Some(input));
-        if completed && running {
-            child.background = true;
-        }
         if child.status == Status::Running {
             child.status = if running && alive { Status::Running } else { Status::Completed };
         }
@@ -1238,7 +1226,7 @@ mod tests {
             event(kind, "ses_root", data)
         };
         assert!(tracker.main(&call("session.tool.input.started", json!({ "name": "subagent" }))).is_empty());
-        let input = json!({ "agent": "general", "description": "Read the docs", "background": true });
+        let input = json!({ "agent": "general", "description": "Read the docs" });
         assert!(tracker.main(&call("session.tool.called", json!({ "input": input, "executed": false }))).is_empty());
         let metadata = json!({ "sessionID": "ses_child", "status": "running" });
         let fetches = tracker.main(&call("session.tool.progress", json!({ "metadata": metadata })));
@@ -1252,7 +1240,7 @@ mod tests {
         assert!(tracker.take_changed());
         let tab = &tracker.tabs()[0];
         assert_eq!((tab.label.as_str(), tab.description.as_str()), ("General", "Read the docs"));
-        assert_eq!((tab.status, tab.background), (Status::Running, true));
+        assert_eq!(tab.status, Status::Running);
         // A metadata without a child session names nothing.
         let other = json!({ "assistantMessageID": "msg_1", "id": "call_2", "metadata": { "status": "running" } });
         assert!(tracker.main(&event("session.tool.progress", "ses_root", other)).is_empty());
@@ -1269,8 +1257,8 @@ mod tests {
         assert_eq!(tracker.hydrate(&messages, &["ses_b".into(), "ses_c".into()], false), [Fetch::Family]);
         let tabs = tracker.tabs();
         assert_eq!(tabs.len(), 2);
-        // `ses_b` still runs and was started in the background; `ses_a` finished.
-        assert_eq!((tabs[0].session_id.as_str(), tabs[0].status, tabs[0].background), ("ses_b", Status::Running, true));
+        // `ses_b` still runs; `ses_a` finished.
+        assert_eq!((tabs[0].session_id.as_str(), tabs[0].status), ("ses_b", Status::Running));
         assert_eq!((tabs[1].session_id.as_str(), tabs[1].status), ("ses_a", Status::Completed));
         let fetches = tracker.family(vec![session("ses_d", "ses_root", "plan", 9.0)]);
         assert!(fetches.iter().any(|fetch| matches!(fetch, Fetch::Discover { session, .. } if session == "ses_c")));
