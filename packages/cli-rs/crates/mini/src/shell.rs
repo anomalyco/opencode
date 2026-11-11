@@ -851,7 +851,7 @@ impl Mini {
                 }
                 Incoming::Disconnected(error) => {
                     self.trace("recv.reconnect", json!({ "error": error }));
-                    transcript.connected = false;
+                    transcript.disconnected();
                     Output {
                         patch: Some(replay::Patch {
                             running: Some(true),
@@ -869,6 +869,10 @@ impl Mini {
         if let Some((messages, active, inbox, reconnect)) = hydrated {
             self.queued(&inbox);
             self.footers.subagent_hydrate(&messages, &active, reconnect);
+            // A resize that came during a relist the drop abandoned replays after the reconnect's list.
+            if self.resize_queued.take() {
+                self.replay_on_resize(cx);
+            }
         }
         if connected {
             self.send_waiting(cx);
@@ -1711,7 +1715,7 @@ impl Mini {
 
     /// `replayOnResize`: clear, list the messages again, and write the transcript at the new width.
     fn replay_on_resize(self: &Rc<Self>, _cx: &mut Cx<'_>) {
-        let session = {
+        let (session, ticket) = {
             let mut transcript = self.transcript.borrow_mut();
             let Some(transcript) = transcript.as_mut() else {
                 return;
@@ -1724,8 +1728,7 @@ impl Mini {
                 self.resize_queued.set(true);
                 return;
             }
-            transcript.begin_replay();
-            transcript.session_id.clone()
+            (transcript.session_id.clone(), transcript.begin_replay())
         };
         self.trace("replay.resize", json!({ "sessionID": session }));
         let client = self.client.clone();
@@ -1738,6 +1741,10 @@ impl Mini {
             // Another session opened meanwhile.
             if mini.transcript.borrow().as_ref().is_none_or(|transcript| transcript.session_id != session) {
                 mini.resize_queued.set(false);
+                return;
+            }
+            // A drop abandoned this relist; the reconnect's list replaced it.
+            if mini.transcript.borrow().as_ref().is_some_and(|transcript| !transcript.relisting(ticket)) {
                 return;
             }
             let output = match result {
