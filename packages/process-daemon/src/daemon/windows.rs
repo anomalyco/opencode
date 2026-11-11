@@ -20,6 +20,7 @@ use windows_sys::Win32::Storage::FileSystem::{
     GetFileInformationByHandle, GetFinalPathNameByHandleW, OPEN_ALWAYS, OPEN_EXISTING,
     READ_CONTROL, SetFileInformationByHandle, WRITE_DAC,
 };
+use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
 use windows_sys::Win32::System::Threading::{
     OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
 };
@@ -67,6 +68,7 @@ pub(super) struct Runtime {
 
 impl Runtime {
     pub fn bind(directory: &Path) -> Result<(Self, Listener)> {
+        enable_ctrl_c()?;
         if !directory.is_absolute() {
             bail!("PTY runtime directory must be an absolute path");
         }
@@ -169,6 +171,16 @@ impl Cleanup {
         // this registration cleanup has completed, then all handles are closed.
         Ok(())
     }
+}
+
+fn enable_ctrl_c() -> Result<()> {
+    // Detached OpenCode processes inherit an ignore-Ctrl+C attribute that would
+    // otherwise propagate through ConPTY into every shell. Restoring default
+    // handling keeps registered handlers intact.
+    if unsafe { SetConsoleCtrlHandler(None, 0) } == 0 {
+        return Err(std::io::Error::last_os_error()).context("enable PTY daemon Ctrl+C handling");
+    }
+    Ok(())
 }
 
 pub(super) fn process_exists(pid: u32) -> bool {
