@@ -377,6 +377,13 @@ impl Footers {
         self.0.sync();
     }
 
+    /// Shows or hides the reasoning the children send from now on (`/settings`).
+    pub fn set_thinking(&self, thinking: bool) {
+        if let Some(tracker) = self.0.tracker.borrow_mut().as_mut() {
+            tracker.set_thinking(thinking);
+        }
+    }
+
     /// The session's pending requests and the forms of no session at its location, as a hydration listed them
     /// after the stream subscribed (connect, reconnect, and resize). They replace what was known; the events that
     /// followed the subscription apply after them (`hydrate`).
