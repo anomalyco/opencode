@@ -40,10 +40,7 @@
         "POST /api/session/<ses>/view {\"idle\":<epoch>}"
       ]
     },
-    "onlyA": [
-      "GET /api/fs/list",
-      "GET /api/plugin"
-    ],
+    "onlyA": [],
     "onlyB": []
   },
   "model": [
@@ -66,6 +63,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -84,6 +82,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -109,6 +108,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -127,6 +127,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
