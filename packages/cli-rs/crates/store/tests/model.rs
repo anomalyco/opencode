@@ -1557,6 +1557,13 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "transcript ses_1",
         &[Op::Step(1), Op::Text(1), Op::SyncMessages(1), Op::Release(Read::Head, 1), Op::End(1)],
     ),
+    // O6 (bigboi-2): the held single-message refetch after `session.model.selected` upserted through
+    // `transcript_mut` after `session.deleted` (fixed by the transcript incarnation, O6-held-message-read).
+    (
+        "held single-message read after a delete",
+        "deleted ses_0",
+        &[Op::Step(0), Op::Model(0), Op::Deliver(4), Op::Delete(0)],
+    ),
 ];
 
 const OPEN: &[(&str, &str, &[Op])] = &[
@@ -1571,13 +1578,6 @@ const OPEN: &[(&str, &str, &[Op])] = &[
         "text.ended during the first head read",
         "transcript ses_1",
         &[Op::Model(1), Op::Step(1), Op::Reconnect, Op::SyncMessages(1), Op::Text(1), Op::End(1)],
-    ),
-    // bigboi-2 (models review): the held single-message refetch after `session.model.selected` upserts through
-    // `transcript_mut` after `session.deleted` (`sessions.rs` `fetch_message`).
-    (
-        "held single-message read after a delete",
-        "deleted ses_0",
-        &[Op::Step(0), Op::Model(0), Op::Deliver(4), Op::Delete(0)],
     ),
     // New: a row loaded before the head read and edited during it (the next step completes it) is kept as
     // "changed" but appended after the page.
