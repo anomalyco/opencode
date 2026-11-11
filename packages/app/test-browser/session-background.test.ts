@@ -93,7 +93,6 @@ describe("createSessionBackground", () => {
       expect(background.tasks().map((task) => task.id)).toEqual(["stuck", "noticed"])
       setStore("status", { stuck: "idle", noticed: "idle" })
       expect(background.tasks()).toEqual([])
-      expect(background.subagents()).toEqual([])
       dispose()
     })
   })
@@ -103,16 +102,12 @@ describe("createSessionBackground", () => {
       const background = createSessionBackground({
         sessionID: () => "root",
         messages: () => [],
-        sessions: () => [
-          session("child"),
-          session("grandchild", "child"),
-          session("other-child", "other"),
-        ],
+        sessions: () => [session("child"), session("grandchild", "child"), session("other-child", "other")],
         status: () => "running",
         shells: () => [],
       })
 
-      expect(background.subagents().map((task) => task.id)).toEqual(["child", "grandchild"])
+      expect(background.tasks().map((task) => task.id)).toEqual(["child", "grandchild"])
       dispose()
     })
   })
@@ -150,11 +145,10 @@ describe("createSessionBackground", () => {
 
       // Subagents always run in the background, so a leftover running call blocks nothing.
       expect(background.blocking()).toEqual([])
-      expect(background.subagents()).toEqual([])
       expect(background.tasks()).toEqual([])
 
       setStore("sessions", [session("child")])
-      expect(background.subagents()).toEqual([])
+      expect(background.tasks()).toEqual([])
       setStore("status", "child", "running")
 
       const task = {
@@ -166,7 +160,6 @@ describe("createSessionBackground", () => {
         started: 6,
       }
 
-      expect(background.subagents()).toEqual([task])
       expect(background.tasks()).toEqual([task])
       dispose()
     })

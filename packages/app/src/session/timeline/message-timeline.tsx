@@ -95,7 +95,6 @@ type MessageTimelineProps = {
   setVisibleRef?: (el: HTMLDivElement | undefined) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
-  setRevealPart?: (fn: (target: string) => boolean) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: TimelineRouteReveal
@@ -264,7 +263,6 @@ function MessageTimelineView(
       )
     },
     setRevealMessage: props.setRevealMessage,
-    setRevealPart: props.setRevealPart,
     setScrollToEnd: props.setScrollToEnd,
     setPage: props.setPage,
     reveal: props.reveal,
@@ -351,7 +349,7 @@ function MessageTimelineView(
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
 
-  // The New timeline's button to move work to the background waits until the shell or subagent has run for a moment,
+  // The New timeline's button to move work to the background waits until the shell has run for a moment,
   // so a quick command does not flash it. The wait counts from when the call started, so a call already running when
   // the timeline opens shows it at once.
   const [settledBlockingPartID, setSettledBlockingPartID] = createSignal<string>()
@@ -444,7 +442,7 @@ function MessageTimelineView(
         if (content.state.status === "streaming" || content.state.status === "running") return true
         const taskID = content.state.metadata?.[content.name === "subagent" ? "sessionID" : "shellID"]
 
-        return background.has(content.id) || (Predicate.isString(taskID) && background.has(taskID))
+        return Predicate.isString(taskID) && background.has(taskID)
       })
     })
   })
