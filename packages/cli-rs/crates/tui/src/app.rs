@@ -90,6 +90,8 @@ pub struct Tui {
     pub(crate) location: crate::features::location::LocationState,
     pub(crate) overlays: crate::features::overlays::Overlays,
     pub(crate) title: crate::features::title::Title,
+    /// Markdown documents that link session IDs (#63224).
+    pub(crate) session_links: crate::features::session_links::Registry,
     pub(crate) events: crate::features::events::Events,
     /// Focus and program status (E.19a).
     pub attention: crate::features::attention::notify::Attention,
@@ -241,6 +243,8 @@ impl Tui {
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &changes);
         }
+        // After the view, whose new text records the labels it draws.
+        crate::features::session_links::sync(self, &changes);
         crate::frame::sync_app(self, &changes);
         crate::features::title::sync(self, &changes);
         crate::features::events::sync(self, &changes);
@@ -409,6 +413,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         location: Default::default(),
         overlays: Default::default(),
         title: Default::default(),
+        session_links: Default::default(),
         events: Default::default(),
         attention: Default::default(),
         tabs: Default::default(),
