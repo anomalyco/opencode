@@ -48,20 +48,59 @@ describe("ToolOutput", () => {
     ),
   )
 
-  it.live("reports lines shown under the byte limit", () =>
+  it.live("fills the byte limit with the start of the line that does not fit", () =>
     withStore(
       (output) =>
         Effect.gen(function* () {
           const result = yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })
           expect(result.content).toEqual([
-            { type: "text", text: "one" },
+            { type: "text", text: "one\nt" },
             {
               type: "text",
-              text: expect.stringMatching(/^\[showing lines 1-1 of 2; full output saved to .+\]$/),
+              text: expect.stringMatching(
+                /^\[showing lines 1-1 of 2 and the first 1 of 3 bytes of line 2; full output saved to .+\]$/,
+              ),
             },
           ])
         }),
       { maxLines: 100, maxBytes: 5 },
+    ),
+  )
+
+  it.live("shows the start of a single line longer than the byte limit", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const text = JSON.stringify({ items: Array.from({ length: 50 }, (_, index) => index) })
+          const result = yield* output.truncate({ content: [{ type: "text", text }] })
+          expect(result.content).toEqual([
+            { type: "text", text: text.slice(0, 20) },
+            {
+              type: "text",
+              text: expect.stringMatching(
+                new RegExp(`^\\[showing the first 20 of ${text.length} bytes of line 1 of 1; full output saved to .+\\]$`),
+              ),
+            },
+          ])
+        }),
+      { maxLines: 100, maxBytes: 20 },
+    ),
+  )
+
+  it.live("cuts a long line on a character boundary", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const result = yield* output.truncate({ content: [{ type: "text", text: "ab✓✓✓" }] })
+          expect(result.content).toEqual([
+            { type: "text", text: "ab✓" },
+            {
+              type: "text",
+              text: expect.stringMatching(/^\[showing the first 5 of 11 bytes of line 1 of 1; full output saved to /),
+            },
+          ])
+        }),
+      { maxLines: 100, maxBytes: 7 },
     ),
   )
 

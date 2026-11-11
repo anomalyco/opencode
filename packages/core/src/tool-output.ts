@@ -79,17 +79,35 @@ const layer = Layer.effect(
 
       const kept: string[] = []
       let bytes = 0
+      let partial: { line: number; shown: number; total: number } | undefined
       for (const line of lines.slice(0, limits.maxLines)) {
-        const size = Buffer.byteLength(line, "utf-8") + (kept.length > 0 ? 1 : 0)
-        if (bytes + size > limits.maxBytes) break
-        kept.push(line)
-        bytes += size
+        const separator = kept.length > 0 ? 1 : 0
+        const size = Buffer.byteLength(line, "utf-8")
+        if (bytes + separator + size <= limits.maxBytes) {
+          kept.push(line)
+          bytes += separator + size
+          continue
+        }
+        // A line longer than the space left (a long log line, or a whole JSON result on one line) shows as much of
+        // its start as fits rather than vanishing.
+        const prefix = utf8Prefix(line, limits.maxBytes - bytes - separator)
+        if (prefix.length > 0) {
+          kept.push(prefix)
+          partial = { line: kept.length, shown: Buffer.byteLength(prefix, "utf-8"), total: size }
+        }
+        break
       }
       const file = path.join(directory, fileName())
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
-      const shown = kept.length > 0 ? `lines 1-${kept.length}` : "0 lines"
-      const marker = `[showing ${shown} of ${lines.length}; full output saved to ${file}]`
+      const whole = partial === undefined ? kept.length : kept.length - 1
+      const lineRange = whole > 0 ? `lines 1-${whole} of ${lines.length}` : undefined
+      const cut =
+        partial === undefined
+          ? undefined
+          : `the first ${partial.shown} of ${partial.total} bytes of line ${partial.line}${lineRange === undefined ? ` of ${lines.length}` : ""}`
+      const shown = [lineRange, cut].filter((part) => part !== undefined).join(" and ") || `0 lines of ${lines.length}`
+      const marker = `[showing ${shown}; full output saved to ${file}]`
       const bounded: Tool.Content[] = []
       let remaining = kept.join("\n").length
       let seenText = false
@@ -157,3 +175,13 @@ export const node = makeLocationNode({
   layer,
   deps: [FSUtil.node, Global.node, cleanupNode],
 })
+
+/** The longest start of `line` that fits in `budget` UTF-8 bytes without splitting a character. */
+function utf8Prefix(line: string, budget: number) {
+  if (budget <= 0) return ""
+  const bytes = Buffer.from(line, "utf-8")
+  let end = Math.min(budget, bytes.length)
+  // Back up over continuation bytes so the cut lands on a character boundary.
+  while (end > 0 && end < bytes.length && (bytes[end]! & 0xc0) === 0x80) end--
+  return bytes.subarray(0, end).toString("utf-8")
+}
