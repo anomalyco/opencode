@@ -69,7 +69,11 @@ const layer = Layer.effect(
     const truncate = Effect.fnUntraced(function* (result: Result) {
       if (result.metadata?.truncated !== undefined) return result
       const content = result.content
-      const text = content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")
+      const text = content.reduce(
+        (joined, item) =>
+          item.type !== "text" ? joined : needsBreak(joined) ? `${joined}\n${item.text}` : joined + item.text,
+        "",
+      )
       const limits = state.get()
       const lines = text.split("\n")
       if (text.endsWith("\n")) lines.pop()
@@ -94,15 +98,16 @@ const layer = Layer.effect(
           : `[showing ${Buffer.byteLength(shown, "utf-8")} of ${totalBytes} bytes (${range} of ${lines.length}${lineCut ? ", last line cut" : ""}); full output saved to ${file}]`
       const bounded: Tool.Content[] = []
       let remaining = shown.length
-      let seenText = false
+      // Whether a line break joins the next text part to the text before it, as when `text` was built.
+      let pending = false
       let marked = false
       for (const item of content) {
         if (item.type === "file") {
           bounded.push(item)
           continue
         }
-        if (seenText && remaining > 0) remaining--
-        seenText = true
+        if (pending && remaining > 0) remaining--
+        pending = item.text !== "" && !item.text.endsWith("\n")
         // Parts after the cut, empty ones included, are left out.
         if (!marked && remaining >= item.text.length) {
           bounded.push(item)
@@ -160,6 +165,11 @@ export const node = makeLocationNode({
   layer,
   deps: [FSUtil.node, Global.node, cleanupNode],
 })
+
+/** Whether text joined so far needs a line break before the next part: it has text and doesn't end in one. */
+function needsBreak(joined: string) {
+  return joined !== "" && !joined.endsWith("\n")
+}
 
 /** The index where line `count` ends, before its line break, or the end of `text` when it has no more lines. */
 function lineEnd(text: string, count: number) {

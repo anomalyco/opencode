@@ -141,10 +141,10 @@ describe("ToolOutput", () => {
           expect(inside.content).toEqual([
             { type: "text", text: "" },
             { type: "text", text: "abc" },
-            { type: "text", text: "d" },
+            { type: "text", text: "de" },
             {
               type: "text",
-              text: expect.stringMatching(/^\[showing 6 of 11 bytes \(lines 1-3 of 3, last line cut\);/),
+              text: expect.stringMatching(/^\[showing 6 of 10 bytes \(lines 1-2 of 2, last line cut\);/),
             },
           ])
           const between = yield* output.truncate({
@@ -186,6 +186,31 @@ describe("ToolOutput", () => {
           expect(result.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing lines 1-0 of 1;/) }])
         }),
       { maxLines: 0, maxBytes: 1_000 },
+    ),
+  )
+
+  it.live("joins text parts with a line break only where one is missing", () =>
+    withStore(
+      (output, fs) =>
+        Effect.gen(function* () {
+          const result = yield* output.truncate({
+            content: [
+              { type: "text", text: "one\n" },
+              { type: "text", text: "two" },
+              { type: "text", text: "three" },
+            ],
+          })
+          const outputPath = result.metadata?.outputPath
+          expect(typeof outputPath).toBe("string")
+          if (typeof outputPath !== "string") return
+          expect(yield* fs.readFileString(outputPath)).toBe("one\ntwo\nthree")
+          expect(result.content).toEqual([
+            { type: "text", text: "one\n" },
+            { type: "text", text: "two" },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-2 of 3;/) },
+          ])
+        }),
+      { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 
