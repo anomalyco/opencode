@@ -5,7 +5,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
-import { createServer } from "node:http"
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { MDNS } from "./mdns"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
@@ -198,6 +198,7 @@ function forceClose(state: ListenerState) {
 
 function serverLayer(opts: { port: number; hostname: string }) {
   const server = createServer()
+  holdEarlyRequests(server)
   const serverRef = { closeStarted: false, forceStop: false }
   const close = server.close.bind(server)
   // Keep shutdown owned by NodeHttpServer, but honor listener.stop(true) by
@@ -221,6 +222,28 @@ function serverLayer(opts: { port: number; hostname: string }) {
       }),
     ),
   )
+}
+
+// NodeHttpServer starts listening before HttpRouter.serve attaches the "request" listener, and the
+// route layers built in between take a few hundred ms. Node emits a request that arrives in that
+// window to no listener and drops it, leaving the client waiting on an open socket forever. Hold
+// those requests and replay them once the real listener is attached.
+function holdEarlyRequests(server: ReturnType<typeof createServer>) {
+  const pending: Array<[IncomingMessage, ServerResponse]> = []
+  const hold = (req: IncomingMessage, res: ServerResponse) => {
+    pending.push([req, res])
+  }
+  const release = (event: string | symbol, listener: unknown) => {
+    if (event !== "request" || listener === hold) return
+    server.off("request", hold)
+    server.off("newListener", release)
+    // newListener fires before the listener is added, so replay on the next tick.
+    process.nextTick(() => {
+      for (const [req, res] of pending.splice(0)) server.emit("request", req, res)
+    })
+  }
+  server.on("request", hold)
+  server.on("newListener", release)
 }
 
 export * as Server from "./server"
