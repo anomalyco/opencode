@@ -11,7 +11,9 @@
 use opentui::syntax::tree_sitter::{Language, QueryErrorKind};
 use opentui::syntax::{self, CompiledGrammar, Grammar, GrammarError};
 use std::borrow::Cow;
-use std::sync::Once;
+use std::collections::BTreeSet;
+use std::sync::{Mutex, Once, PoisonError};
+use std::thread;
 
 /// One grammar: its filetype, language, query file under `assets/queries`, and the aliases `parsers-config.ts` gives
 /// it.
@@ -128,6 +130,37 @@ pub fn register() {
             }
         }
     });
+}
+
+/// Compiles the grammars `filetypes` name (filetypes, or info strings as fences give them) on worker threads, one each,
+/// so the first highlight that needs one waits for less of its compile, or none. A query costs 2 to 50 ms and about
+/// 1.5 MB, so callers name only grammars about to show. Highlights stay synchronous: one that needs a grammar still
+/// compiling waits for it. Names without a grammar, or asked for before, start nothing.
+pub fn prewarm<'a>(filetypes: impl IntoIterator<Item = &'a str>) {
+    static ASKED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+    register();
+    let mut asked = ASKED.lock().unwrap_or_else(PoisonError::into_inner);
+    for filetype in filetypes {
+        if !syntax::has_grammar(filetype) || !asked.insert(filetype.to_owned()) {
+            continue;
+        }
+        let filetype = filetype.to_owned();
+        let spawned = thread::Builder::new().name("grammar".into()).spawn(move || syntax::prewarm(&filetype));
+        if let Err(error) = spawned {
+            log::warn!("grammar prewarm: {error}");
+        }
+    }
+}
+
+/// The language each fenced code block in Markdown `text` names: the first word of its info string.
+pub fn fence_languages(text: &str) -> impl Iterator<Item = &str> {
+    text.lines().filter_map(|line| {
+        let fence = line.trim_start_matches(' ');
+        let mark = fence.chars().next().filter(|mark| matches!(mark, '`' | '~'))?;
+        let info = fence.trim_start_matches(mark);
+        let fenced = line.len() - fence.len() <= 3 && fence.len() - info.len() >= 3;
+        fenced.then(|| info.split_whitespace().next()).flatten()
+    })
 }
 
 /// Compiles one entry. tree-sitter 0.27 rejects a pattern it proves can never match, where Core's web-tree-sitter
@@ -255,6 +288,21 @@ mod tests {
         }
         assert_eq!(loads("zig"), 1);
         assert_eq!(loads("rust"), 0);
+    }
+
+    /// A prewarmed grammar compiles once, off the caller's thread, and the highlight that needs it uses that compile.
+    /// TypeScript, because another test highlights it anyway (see above).
+    #[test]
+    fn prewarm_compiles_each_grammar_once() {
+        prewarm(["ts", "ts", "cobol", "typescript"]);
+        assert!(syntax::highlights("const a = 1\n", "typescript").is_some());
+        assert_eq!(loads("typescript"), 1);
+    }
+
+    #[test]
+    fn fence_languages_reads_each_opening_fence() {
+        let text = "a\n```rust\nfn main() {}\n```\n   ~~~~ ts title=x\nb\n~~~~\n    ```go\n``python\n```\n";
+        assert_eq!(fence_languages(text).collect::<Vec<_>>(), ["rust", "ts"]);
     }
 
     #[test]

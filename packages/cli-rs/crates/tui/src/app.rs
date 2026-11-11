@@ -495,8 +495,18 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
     // Only the TUI on the real terminal plays sounds out loud; tests and harnesses mix them without a device.
     run_on(App::new(options)?, launch, |tui| {
         tui.attention.sound.set_output(crate::features::attention::sound::Output::Device);
+        prewarm_common(&tui.app);
         Ok(())
     })
+}
+
+/// After the first frame, compiles on workers the grammars replies show most and that cost the most to compile, so the
+/// first fence in one of them does not stall a frame. Each costs about 1.5 MB, so the list stays short.
+fn prewarm_common(app: &App) {
+    if app.frame_number() > 0 {
+        return opencode_ui::grammars::prewarm(["typescript", "tsx", "bash"]);
+    }
+    app.set_timeout(Duration::from_millis(16), |cx| prewarm_common(cx.app()));
 }
 
 /// Runs the TUI on `app` until it quits; `started` runs once the TUI is mounted.

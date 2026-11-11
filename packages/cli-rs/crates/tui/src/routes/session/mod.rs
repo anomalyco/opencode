@@ -23,9 +23,10 @@ pub mod scroll;
 pub mod sidebar;
 pub mod tools;
 
-use opencode_api::generated::SessionID;
+use opencode_api::generated::{SessionID, SessionMessageAssistantContentItem, SessionMessageInfo};
 use opencode_store::{Changes, Task};
 use opentui::prelude::*;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::RouteView;
@@ -114,6 +115,7 @@ impl Session {
         let synced = (tui.data.session_sync(&id, true), tui.data.message_sync(&id));
         missing(tui, &id, synced.0.clone());
         load(tui, synced.1.clone());
+        prewarm(tui, &id, synced.1.clone());
         // `restoreScrollPosition` waits for the first sync (`synced`, `rowsSynced`).
         let weak = Rc::downgrade(&scroll.0);
         tui.app.spawn(
@@ -196,6 +198,33 @@ impl RouteView for Session {
 /// Awaits a store read; a failure shows as an error toast.
 pub(super) fn load(tui: &Tui, task: Task<()>) {
     tui.request(task, |_, ()| {});
+}
+
+/// Once the page lands, compiles the grammars its code fences name on workers while the UI builds the rows, so the
+/// first frame waits for less of each compile. It reads the store off the UI thread.
+fn prewarm(tui: &Tui, id: &SessionID, task: Task<()>) {
+    let (data, id) = (tui.data.clone(), id.clone());
+    tui.app.runtime().spawn(async move {
+        if task.await.is_err() {
+            return;
+        }
+        let languages: BTreeSet<String> = data.read(|state| {
+            let texts = state.messages(&id).iter().flat_map(|message| match message {
+                SessionMessageInfo::Assistant(assistant) => assistant.content.as_slice(),
+                _ => &[],
+            });
+            texts
+                .filter_map(|content| match content {
+                    SessionMessageAssistantContentItem::Text(text) => Some(text.text.as_str()),
+                    SessionMessageAssistantContentItem::Reasoning(reasoning) => Some(reasoning.text.as_str()),
+                    _ => None,
+                })
+                .flat_map(opencode_ui::grammars::fence_languages)
+                .map(str::to_owned)
+                .collect()
+        });
+        opencode_ui::grammars::prewarm(languages.iter().map(String::as_str));
+    });
 }
 
 /// Awaits the session's read (`routes/session/index.tsx:340-370`). A failure shows as an error toast; a session the
