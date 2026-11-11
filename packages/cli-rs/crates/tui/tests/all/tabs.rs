@@ -243,6 +243,37 @@ fn a_held_tabs_lock_does_not_block_the_ui() {
     });
 }
 
+// Another client writing `tabs.json` while this one's writes wait on its lock: the reload replays them over the
+// file, so the tab and its normalized title stay, and land in the file once the lock is free.
+#[test]
+fn a_reload_keeps_the_writes_held_behind_the_lock() {
+    let h = mount(120, json!({ "animations": false, "tabs": { "layout": "vertical" } }));
+    h.wait_file("tabs", |file| !file.is_null());
+    let storage = h.state.join(CHANNEL).join("tui");
+    let file = storage.join("tabs.json");
+    let locks = h.state.join(CHANNEL).join("locks");
+    let lock = opencode_local::lock::acquire(&locks, &file.to_string_lossy(), &Default::default()).unwrap();
+    let title = |id: &str| {
+        let tabs = h.tui.tabs.tabs(&h.tui);
+        tabs.into_iter().find(|tab| tab.session_id == id).and_then(|tab| tab.title)
+    };
+    h.tui.navigate(support::session_route("ses_b"));
+    let titled = h.app.wait_until(WAIT, || title("ses_b").as_deref() == Some("Write the docs"));
+    assert!(titled, "{:?}", h.tui.tabs.tabs(&h.tui));
+
+    // The other client, holding the lock, writes its tabs and then the layout; the rail shows the reload.
+    let mut other = json!({ "cwd": {} });
+    other["cwd"][cwd()] = json!({ "tabs": [{ "sessionID": "ses_a", "title": "Fix the parser" }] });
+    std::fs::write(&file, other.to_string()).unwrap();
+    std::fs::write(storage.join("layout.json"), json!({ "verticalTabsWidth": 50 }).to_string()).unwrap();
+    let reloaded = h.app.wait_until(WAIT, || h.tui.frame.rail_width(&h.tui) == 50);
+    assert!(reloaded, "rail {}", h.tui.frame.rail_width(&h.tui));
+    assert_eq!(title("ses_b").as_deref(), Some("Write the docs"), "{:?}", h.tui.tabs.tabs(&h.tui));
+
+    lock.release().unwrap();
+    h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
+}
+
 // `TabPulse` unmounts with its tab: closing a busy tab leaves no pulse that keeps the frame ticking.
 #[test]
 fn a_closed_busy_tab_stops_the_pulse_ticks() {

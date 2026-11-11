@@ -240,7 +240,11 @@ pub fn install(tui: &Rc<Tui>) {
         });
         tui.app.on_message(bind!(tui, |tui, _, _: &Reload| {
             if let Some(storage) = tui.storage() {
-                let file = load(&storage);
+                let mut file = load(&storage);
+                // Writes still waiting on the lock land over this file, so the memory copy keeps them.
+                if let Ok(pending) = tui.tabs.pending.lock() {
+                    pending.iter().for_each(|(_, write)| write(&mut file));
+                }
                 if *tui.tabs.file.borrow() != file {
                     *tui.tabs.file.borrow_mut() = file;
                     changed(&tui);
@@ -697,8 +701,9 @@ fn select_index(tui: &Tui, index: usize) {
 /// thread, so the writes land in the order they were made. The written file then replaces the memory copy,
 /// unless a newer write was sent meanwhile.
 ///
-/// Each job writes every pending mutation at once. The queue is held only to take them: a job waiting on
-/// another client's lock must not block the UI thread that queues the next one.
+/// Each job writes every pending mutation at once. The queue is held only to copy them: a job waiting on
+/// another client's lock must not block the UI thread that queues the next one. They leave the queue once
+/// written, so a reload meanwhile replays them.
 fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let mutation: Mutation = Arc::new(mutation);
     let cwd = tui.tabs.cwd.borrow().clone();
@@ -724,7 +729,7 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let pending = tui.tabs.pending.clone();
     let proxy = tui.app.proxy();
     tui.tabs.writer.get_or_init(|| opencode_local::serial::Serial::new("tabs")).run(move || {
-        let Ok(batch) = pending.lock().map(|mut pending| std::mem::take(&mut *pending)) else {
+        let Ok(batch) = pending.lock().map(|pending| pending.clone()) else {
             return;
         };
         // An earlier job already wrote this one.
@@ -738,6 +743,9 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
             }
             *value = serde_json::to_value(&file).unwrap_or_default();
         });
+        if let Ok(mut pending) = pending.lock() {
+            pending.retain(|(written, _)| *written > revision);
+        }
         match result {
             Ok(value) => {
                 let file = serde_json::from_value(value).unwrap_or_default();
