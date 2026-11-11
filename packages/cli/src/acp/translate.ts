@@ -3,11 +3,14 @@ import type { OpenCodeEvent } from "@opencode/client/effect"
 import type { Session } from "@opencode/schema/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import type { SessionMessage } from "@opencode/schema/session-message"
+import { Shell } from "@opencode/schema/shell"
 import { TokenUsage } from "@opencode/schema/token-usage"
+import { Schema } from "effect"
 import { ACPChild } from "./child"
 import { ACPCompaction } from "./compaction"
 import { ACPError } from "./error"
 import {
+  canonicalName,
   completedToolUpdate,
   errorToolUpdate,
   pendingToolCall,
@@ -17,6 +20,7 @@ import {
 } from "./tool"
 
 const RetryMeta = "opencode/retry"
+const isShellID = Schema.is(Shell.ID)
 
 export type TurnStart = { readonly type: "input" | "compaction"; readonly id: SessionMessage.ID }
 
@@ -30,7 +34,7 @@ export type TurnContext = {
   readonly compaction: boolean
 }
 
-type Tool = {
+export type Tool = {
   readonly sessionID: string
   readonly id: string
   readonly name: string
@@ -73,6 +77,16 @@ export type Output =
     }
   | { readonly _tag: "FormAsk"; readonly form: FormEvent["data"]["form"]; readonly child?: ACPChild.Session }
   | { readonly _tag: "AskSettled"; readonly id: string }
+  | { readonly _tag: "ShellFollow"; readonly shell: FollowedShell }
+  | { readonly _tag: "ShellStop"; readonly key: string }
+
+/** A running shell tool whose output the client is shown as it runs. */
+export type FollowedShell = {
+  readonly key: string
+  readonly shellID: Shell.ID
+  readonly tool: Tool
+  readonly child?: ACPChild.Session
+}
 
 export type Folded = {
   readonly state: TurnState
@@ -172,6 +186,7 @@ export function abandon(state: TurnState, ctx: TurnContext): Folded {
   return {
     state: { ...state, tools: new Map(), compactions: without(state.compactions, ctx.sessionID) },
     outputs: [
+      ...[...state.tools.values()].flatMap(shellStop),
       ...[...state.tools.values()].flatMap((tool) =>
         route(ctx, state.children.get(tool.sessionID), {
           sessionUpdate: "tool_call_update",
@@ -353,17 +368,24 @@ function sessionEvent(
       const key = toolKey(event.data.sessionID, event.data.id)
       const current = state.tools.get(key)
       if (!current) return { state, outputs: [] }
+      const tool = { ...current, metadata: event.data.metadata }
+      const shellID = canonicalName(tool.name) === "shell" ? tool.metadata.shellID : undefined
       return {
-        state: { ...state, tools: new Map(state.tools).set(key, { ...current, metadata: event.data.metadata }) },
-        outputs: send({
-          sessionUpdate: "tool_call_update",
-          ...runningToolUpdate({
-            toolCallId: event.data.id,
-            toolName: current.name,
-            state: { input: current.input },
-            cwd: ctx.cwd,
+        state: { ...state, tools: new Map(state.tools).set(key, tool) },
+        outputs: [
+          ...send({
+            sessionUpdate: "tool_call_update",
+            ...runningToolUpdate({
+              toolCallId: event.data.id,
+              toolName: tool.name,
+              state: { input: tool.input },
+              cwd: ctx.cwd,
+            }),
           }),
-        }),
+          ...(isShellID(shellID) && shellID !== current.metadata.shellID
+            ? [{ _tag: "ShellFollow" as const, shell: { key, shellID, tool, child } }]
+            : []),
+        ],
       }
     }
     case "session.tool.success": {
@@ -371,20 +393,23 @@ function sessionEvent(
       const tool = state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)
       return {
         state: { ...state, tools: without(state.tools, key) },
-        outputs: send({
-          sessionUpdate: "tool_call_update",
-          ...completedToolUpdate({
-            toolCallId: event.data.id,
-            toolName: tool.name,
-            input: tool.input,
-            metadata: event.data.metadata,
-            content: event.data.content,
-            cwd: ctx.cwd,
-          }),
-        }).map((output) => ({
-          ...output,
-          diff: { toolName: tool.name, input: tool.input, metadata: event.data.metadata },
-        })),
+        outputs: [
+          ...shellStop(tool),
+          ...send({
+            sessionUpdate: "tool_call_update",
+            ...completedToolUpdate({
+              toolCallId: event.data.id,
+              toolName: tool.name,
+              input: tool.input,
+              metadata: event.data.metadata,
+              content: event.data.content,
+              cwd: ctx.cwd,
+            }),
+          }).map((output) => ({
+            ...output,
+            diff: { toolName: tool.name, input: tool.input, metadata: event.data.metadata },
+          })),
+        ],
       }
     }
     case "session.tool.failed": {
@@ -392,23 +417,44 @@ function sessionEvent(
       const tool = state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)
       return {
         state: { ...state, tools: without(state.tools, key) },
-        outputs: send({
-          sessionUpdate: "tool_call_update",
-          ...errorToolUpdate({
-            toolCallId: event.data.id,
-            toolName: tool.name,
-            input: tool.input,
-            metadata: event.data.metadata ?? tool.metadata,
-            content: event.data.content ?? [],
-            error: event.data.error.message,
-            cwd: ctx.cwd,
+        outputs: [
+          ...shellStop(tool),
+          ...send({
+            sessionUpdate: "tool_call_update",
+            ...errorToolUpdate({
+              toolCallId: event.data.id,
+              toolName: tool.name,
+              input: tool.input,
+              metadata: event.data.metadata ?? tool.metadata,
+              content: event.data.content ?? [],
+              error: event.data.error.message,
+              cwd: ctx.cwd,
+            }),
           }),
-        }),
+        ],
       }
     }
     default:
       return { state, outputs: [] }
   }
+}
+
+/** The running update that shows a shell tool's output so far. */
+export function shellOutput(ctx: TurnContext, shell: FollowedShell, output: string): Output[] {
+  return route(ctx, shell.child, {
+    sessionUpdate: "tool_call_update",
+    ...runningToolUpdate({
+      toolCallId: shell.tool.id,
+      toolName: shell.tool.name,
+      state: { input: shell.tool.input },
+      output,
+      cwd: ctx.cwd,
+    }),
+  })
+}
+
+function shellStop(tool: Tool): Output[] {
+  return isShellID(tool.metadata.shellID) ? [{ _tag: "ShellStop", key: toolKey(tool.sessionID, tool.id) }] : []
 }
 
 function newTool(sessionID: string, id: string, name = "tool"): Tool {

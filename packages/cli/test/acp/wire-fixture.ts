@@ -152,6 +152,7 @@ export type WireOptions = {
     signal: AbortSignal,
   ) => CreateElicitationResponse | Promise<CreateElicitationResponse>
   readonly cancelDrainTimeout?: Duration.Input
+  readonly shellOutputInterval?: Duration.Input
 }
 
 type FormReply = {
@@ -442,6 +443,10 @@ export async function startWire(options: WireOptions = {}) {
         options.cancelDrainTimeout === undefined
           ? effect
           : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout),
+      (effect) =>
+        options.shellOutputInterval === undefined
+          ? effect
+          : Effect.provideService(effect, ACPTurn.ShellOutputInterval, options.shellOutputInterval),
       Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))])),
     ),
   )
