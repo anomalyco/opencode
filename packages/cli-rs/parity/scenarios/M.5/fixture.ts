@@ -1,6 +1,6 @@
-// M.3's `ses_mini` server with two child sessions its subagent calls started: `ses_run` still runs in the
-// foreground, and `ses_done` finished. The children's reads (messages, inbox, permissions, forms), the family index,
-// and the writes the subagent views make (background, interrupt) are routed here.
+// M.3's `ses_mini` server with two child sessions its subagent calls started: `ses_run` still runs, and `ses_done`
+// finished. The children's reads (messages, inbox, permissions, forms), the family index, and the write the
+// subagent views make (interrupt) are routed here.
 import type { Logged, Options, Route } from "../../lib/fake-server"
 import { assistant, directory, history, user } from "../M.1/fixture"
 import { server as base } from "../M.3/fixture"
@@ -69,7 +69,6 @@ export function server(script: Script = {}): Options {
     { path: "/api/form", json: { location, data: script.globalForms ?? [] } },
     ...reads("ses_run", script.childPermissions),
     ...reads("ses_done"),
-    { method: "POST", path: "/api/session/ses_mini/background", status: 204 },
     { method: "POST", path: "/api/session/ses_run/interrupt", json: { interrupted: true } },
     {
       method: "POST",
