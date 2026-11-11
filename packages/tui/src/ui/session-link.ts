@@ -11,7 +11,7 @@ import {
 } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, untrack } from "solid-js"
-import { sessionMentions } from "@opencode/util/session-mention"
+import { parseSessionMention, sessionMentions } from "@opencode/util/session-mention"
 import { displayLabel } from "@opencode/util/session-title-fallback"
 import { useData } from "../context/data"
 import { useRoute } from "../context/route"
@@ -48,8 +48,25 @@ export function useSessionLinks() {
   // OpenTUI calls this as a method of each prose block, so `this` is the block. Fenced code never gets it.
   function linkChunks(this: CodeRenderable, chunks: TextChunk[], context: ChunkRenderContext) {
     const style = context.syntaxStyle.mergeStyles("markup.link.url")
+    // Like the web app, a code span links only when it is exactly a session ID, so a command such
+    // as `opencode --session ses_…` stays copyable. Marked by displayed offset, since detectLinks
+    // can split chunks.
+    const raw = context.highlights.filter(([, , group]) => group === "markup.raw" || group.startsWith("markup.raw."))
+    let position = 0
+    const code = chunks.flatMap((chunk, index) => {
+      const start = position
+      position += chunk.text.length
+      const source = context.sourceRanges?.[index]
+      const span = source && raw.find(([from, to]) => from <= source.start && source.end <= to)
+      const text = span && context.content.slice(span[0], span[1]).replace(/^`+\s?|\s?`+$/g, "")
+      return text !== undefined && !parseSessionMention(text) ? [{ start, end: position }] : []
+    })
+    position = 0
     const parts = detectLinks(chunks, context).flatMap((chunk): { chunk: TextChunk; sessionID?: string }[] => {
-      const mentions = chunk.link ? [] : sessionMentions(chunk.text)
+      const start = position
+      position += chunk.text.length
+      const plain = chunk.link || code.some((range) => range.start <= start && start < range.end)
+      const mentions = plain ? [] : sessionMentions(chunk.text)
       if (mentions.length === 0) return [{ chunk }]
       // Odd parts are the mentions.
       const cuts = [0, ...mentions.flatMap((mention) => [mention.start, mention.end]), chunk.text.length]

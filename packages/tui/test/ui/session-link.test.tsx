@@ -209,6 +209,46 @@ test("clicking a session link in a dialog closes it and opens the session", asyn
   }
 })
 
+test.each([true, false])("code spans link only when they are exactly an ID, conceal %p", async (conceal) => {
+  await using state = await tmpdir()
+  const calls = createFetch(async () => undefined)
+
+  function Transcript() {
+    useData().session.remember({ ...known })
+    const renderer = useRenderer()
+    const syntaxStyle = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, renderer.nativeScene)
+    onCleanup(() => syntaxStyle.destroy())
+    return (
+      <markdown
+        ref={useSessionLinks()}
+        internalBlockMode="top-level"
+        conceal={conceal}
+        syntaxStyle={syntaxStyle}
+        content={`Run \`opencode --session ${known.id}\` or open \`${known.id}\`.`}
+      />
+    )
+  }
+
+  const app = await mount(state.path, calls.fetch, () => <Transcript />, 120, 4)
+  const linked = () =>
+    app
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .filter((span) => span.attributes & TextAttributes.UNDERLINE)
+      .map((span) => span.text.trim())
+
+  try {
+    for (let attempt = 0; attempt < 200 && linked().length === 0; attempt++) {
+      await app.renderOnce()
+      await Bun.sleep(5)
+    }
+    expect(linked()).toEqual([conceal ? `@${known.title}` : known.id])
+    expect(app.captureCharFrame()).toContain(`opencode --session ${known.id}`)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 function mount(state: string, fetch: typeof globalThis.fetch, view: () => JSX.Element, width: number, height: number) {
   return testRender(
     () => (
