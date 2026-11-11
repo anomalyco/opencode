@@ -514,7 +514,29 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
     })
   }
 
+  // Gemini rejects contents that end with a model turn
+  if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
+    msgs = geminiTail(msgs)
+  }
+
   return msgs
+}
+
+// Gemini rejects any request whose contents end with a model turn (400 INVALID_ARGUMENT
+// "Requests ending with a model turn are not supported."). The replayed transcript can end with an
+// assistant message: parts minted across a backward clock step sort a tool call ahead of its own
+// step-start, which strands that step's reasoning as a trailing assistant block, and a continued
+// turn can replay a finished assistant message with no user input behind it. Thought text carries
+// nothing to continue from (thought signatures travel with the tool call), so a reasoning-only tail
+// is dropped; any other assistant tail gets a primed user turn, mirroring the synthetic "Done."
+// assistant turn normalizeMessages inserts for tool -> user. Outbound only: the stored transcript
+// is never changed.
+function geminiTail(msgs: ModelMessage[]): ModelMessage[] {
+  const last = msgs.at(-1)
+  if (last?.role !== "assistant") return msgs
+  const parts = typeof last.content === "string" ? undefined : last.content
+  if (parts?.every((part) => part.type === "reasoning")) return geminiTail(msgs.slice(0, -1))
+  return [...msgs, { role: "user", content: "Continue." }]
 }
 
 const GEMINI_2_5_RE = /gemini-2[.-]5(?:[.-]|$)/i

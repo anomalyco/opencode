@@ -18,6 +18,10 @@ const LENGTH = 26
 // State for monotonic ID generation
 let lastTimestamp = 0
 let counter = 0
+// The wall clock is not monotonic (NTP corrections, VM or WSL2 resume). Parts and messages are
+// replayed in ID order, so an ID minted after a backward step must still sort after every ID
+// this process handed out before it. `last` is the highest value minted so far.
+let last = BigInt(0)
 
 export function ascending(prefix: keyof typeof prefixes, given?: string) {
   return generateID(prefix, "ascending", given)
@@ -59,6 +63,11 @@ export function create(prefix: string, direction: "descending" | "ascending", ti
 
   let now = BigInt(currentTimestamp) * BigInt(0x1000) + BigInt(counter)
 
+  // Keep wall-clock IDs strictly ascending through a backward clock step
+  if (timestamp === undefined) {
+    if (now <= last) now = last + BigInt(1)
+    last = now
+  }
   now = direction === "descending" ? ~now : now
 
   const timeBytes = Buffer.alloc(6)
