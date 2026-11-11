@@ -49,6 +49,12 @@ const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface,
   )
 })
 
+// The system error message ("ENOSPC: no space left on device, write") without the stack or wrapper text.
+const describe = (error: FSUtil.Error) => {
+  const cause = error._tag === "PlatformError" ? error.reason.cause : error.cause
+  return cause instanceof Error ? cause.message.split("\n")[0] : error.message
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -86,10 +92,19 @@ const layer = Layer.effect(
         bytes += size
       }
       const file = path.join(directory, fileName())
-      yield* fs.ensureDir(directory).pipe(Effect.orDie)
-      yield* fs.writeFileString(file, text).pipe(Effect.orDie)
+      const failure = yield* fs.ensureDir(directory).pipe(
+        Effect.andThen(fs.writeFileString(file, text)),
+        Effect.as(undefined),
+        Effect.catch((error) =>
+          Effect.logWarning("failed to save full tool output", { file, cause: error }).pipe(
+            Effect.as(describe(error)),
+          ),
+        ),
+      )
       const shown = kept.length > 0 ? `lines 1-${kept.length}` : "0 lines"
-      const marker = `[showing ${shown} of ${lines.length}; full output saved to ${file}]`
+      const marker = `[showing ${shown} of ${lines.length}; ${
+        failure === undefined ? `full output saved to ${file}` : `full output could not be saved: ${failure}`
+      }]`
       const bounded: Tool.Content[] = []
       let remaining = kept.join("\n").length
       let seenText = false
@@ -115,7 +130,7 @@ const layer = Layer.effect(
       return {
         ...result,
         content: bounded,
-        metadata: { ...result.metadata, truncated: true, outputPath: file },
+        metadata: { ...result.metadata, truncated: true, ...(failure === undefined && { outputPath: file }) },
       }
     })
 
