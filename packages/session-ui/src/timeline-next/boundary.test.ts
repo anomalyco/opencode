@@ -68,7 +68,12 @@ async function sources() {
   ).flat()
 
   return Promise.all(
-    paths.map(async (file) => ({ path: file, name: path.relative(packages, file), text: await Bun.file(file).text() })),
+    // Named with forward slashes on every platform, as the lists above are.
+    paths.map(async (file) => ({
+      path: file,
+      name: path.relative(packages, file).split(path.sep).join("/"),
+      text: await Bun.file(file).text(),
+    })),
   )
 }
 
