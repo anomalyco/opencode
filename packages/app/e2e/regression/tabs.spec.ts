@@ -703,6 +703,60 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
 })
 
+test("Recent and Pinned rows show the side tabs' status dots and shortcuts for sessions that aren't open as tabs", async ({
+  page,
+}) => {
+  const d = { id: "ses_tab_d", title: "Tab D session" }
+
+  await mockWorkspace(page, {
+    name: "RecentUnread",
+    sessions: [
+      { ...a, time: { created: T0 + 3, updated: T0 + 3 } },
+      { ...b, outcome: "failed", time: { created: T0 + 1, updated: T0 + 1, idle: T0 + 1 } },
+      { ...c, outcome: "succeeded", time: { created: T0 + 2, updated: T0 + 2, idle: T0 + 2 } },
+      { ...d, time: { created: T0, updated: T0 } },
+    ],
+    sessionStatus: { [d.id]: { type: "running" } },
+    sessionPermissions: {
+      [d.id]: [
+        { id: "permission-recent-d", sessionID: d.id, action: "shell", resources: ["ls"], metadata: {}, save: [] },
+      ],
+    },
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+  // Recent is offered only on desktop, whose fixture names the server "sidecar".
+  const href = (id: string) => sessionHref(id, "sidecar")
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: href(a.id) })}`)
+  const sidebar = page.locator('[data-slot="sidebar-recent"]')
+  const row = (id: string) => sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${href(id)}"])`)
+  const link = (id: string) => row(id).locator("[data-titlebar-tab-link]")
+
+  await expect(link(a.id)).toHaveAttribute("aria-current", "page")
+  await expect(row(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(row(c.id).locator('[data-mark="failed"]')).toBeHidden()
+  // A permission asked before the window connected marks the running session, as on an unselected side tab.
+  await expect(row(d.id).locator('[data-mark="attention"]')).toBeVisible()
+
+  await link(b.id).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
+  const pinned = page.getByRole("group", { name: "Pinned", exact: true })
+  await expect(pinned.locator(`a[href="${href(b.id)}"]`)).toHaveCount(1)
+  await expect(row(b.id).locator('[data-mark="failed"]')).toBeVisible()
+  await expect(row(b.id).locator('[data-mark="unread"]')).toBeHidden()
+
+  // The next-unread shortcut steps through Recent rows like side tabs; opening the finished session clears its dot.
+  await page.keyboard.press("Shift+Alt+ArrowDown")
+  await expect(link(c.id)).toHaveAttribute("aria-current", "page")
+  await expect(row(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await link(a.id).click()
+  await expect(link(a.id)).toHaveAttribute("aria-current", "page")
+  await expect(row(c.id).locator('[data-mark="unread"]')).toBeHidden()
+  await expect(row(b.id).locator('[data-mark="failed"]')).toBeVisible()
+})
+
 test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {
   // Playwright emulates focus for each page, so model a background window explicitly.
   await page.addInitScript(() => {

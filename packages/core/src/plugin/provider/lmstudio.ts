@@ -11,7 +11,8 @@ const RemoteModel = Schema.Struct({
       config: Schema.Struct({ context_length: Schema.Int }),
     }),
   ),
-  max_context_length: Schema.Int,
+  // Null for decision models whose context is unknown.
+  max_context_length: Schema.NullOr(Schema.Int),
   capabilities: Schema.Struct({
     vision: Schema.Boolean,
     trained_for_tool_use: Schema.Boolean,

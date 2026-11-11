@@ -31,7 +31,7 @@ import { useTabs, type Tab } from "@/shell/tabs/tabs"
 import { pathKey } from "@/workspaces/path-key"
 import "./tab-nav.css"
 import { ProjectSessionRow } from "./project-session-row"
-import { createSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
+import { isSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
 
 const SidebarState = Persistence.struct({
   projectsCollapsed: Schema.Boolean,
@@ -45,34 +45,29 @@ export function createSidebarActivityListener() {
 
   const global = useGlobal()
 
-  const activity = createSidebarSessionActivity()
-
+  // Keep a preview tab once its session shows activity. Ordering comes from the shared data layer, so this listener
+  // only decides when a preview has become worth keeping.
   createEffect(() => {
     global.servers.list().forEach((conn) => {
       const server = ServerConnection.key(conn)
-
       const ctx = global.serverCtx(server)
 
       if (!ctx) return
       onCleanup(
-        ctx.data.listen(({ details: event }) => {
-          const updated = activity.update(server, event)
-
-          if (!updated) return
+        ctx.data.listen(({ details }) => {
+          if (!isSidebarSessionActivity(details)) return
+          const sessionID = details.data.sessionID
           const preview = tabs.preview()
 
           if (
             preview?.server === server &&
-            (preview.sessionId === updated.data.sessionID ||
-              preview.sessionId === ctx.data.session.root(updated.data.sessionID))
+            (preview.sessionId === sessionID || preview.sessionId === ctx.data.session.root(sessionID))
           )
             tabs.keepPreview()
         }),
       )
     })
   })
-
-  return activity
 }
 
 export function SidebarOrganized(props: {
@@ -83,7 +78,7 @@ export function SidebarOrganized(props: {
 
   const tabs = useTabs()
 
-  const activity = createSidebarActivityListener()
+  createSidebarActivityListener()
 
   const [local, setLocal] = createStore<{
     projectSession: { server: ServerConnection.Key; sessionId: string } | undefined
@@ -145,7 +140,6 @@ export function SidebarOrganized(props: {
               <div class="flex min-w-0 flex-col gap-1">
                 <ProjectList
                   currentTab={props.currentTab}
-                  lastActivity={activity.get}
                   isOpenTab={isOpenTab}
                   highlightActive={projectSelected()}
                   onSelect={(session) => setLocal("projectSession", session)}
@@ -172,7 +166,6 @@ export function SidebarOrganized(props: {
 
 function ProjectList(props: {
   currentTab: Tab | undefined
-  lastActivity: (server: ServerConnection.Key, sessionId: string) => number | undefined
   isOpenTab: (server: ServerConnection.Key, sessionId: string) => boolean
   highlightActive: boolean
   onSelect: (session: { server: ServerConnection.Key; sessionId: string }) => void
@@ -250,10 +243,7 @@ function ProjectList(props: {
     return buildHomeSessionRecords({
       sessions: () =>
         current.data.session.apply(
-          mergeSidebarSessions(sessions.isPending ? [] : (sessions.data?.() ?? []), current.data.session.list(), (id) =>
-            props.lastActivity(ServerConnection.key(current.sdk.server), id),
-          ),
-          { activity: false },
+          mergeSidebarSessions(sessions.isPending ? [] : (sessions.data?.() ?? []), current.data.session.known()),
         ),
       projects,
       projectDirectories: () => undefined,
