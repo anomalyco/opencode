@@ -233,16 +233,20 @@ impl Inner {
                     set(tui, "grouping", Value::from(if grouping { "none" } else { "auto" }));
                 },
             ),
-            command("session.verbosity.cycle", &format!("Verbosity: {}", titlecase(verbosity.as_str())), |_, tui| {
-                let current =
-                    tui.settings.info().session.and_then(|session| session.verbosity).unwrap_or(DEFAULT_VERBOSITY);
-                let next = match current {
-                    Verbosity::Low => "medium",
-                    Verbosity::Medium => "high",
-                    Verbosity::High => "low",
-                };
-                set(tui, "verbosity", Value::from(next));
-            })
+            command(
+                "session.verbosity.cycle",
+                &format!("Verbosity: {}", opencode_ui::locale::titlecase(verbosity.as_str())),
+                |_, tui| {
+                    let current =
+                        tui.settings.info().session.and_then(|session| session.verbosity).unwrap_or(DEFAULT_VERBOSITY);
+                    let next = match current {
+                        Verbosity::Low => "medium",
+                        Verbosity::Medium => "high",
+                        Verbosity::High => "low",
+                    };
+                    set(tui, "verbosity", Value::from(next));
+                },
+            )
             .palette(),
             command("session.messages_last_user", "Jump to last user message", Inner::last_user),
             command("session.message.next", "Next message", |inner, tui| inner.to_message(tui, true, false)),
@@ -467,11 +471,6 @@ impl Inner {
 /// Writes `session.<key>` to `cli.json`; the settings listener applies it.
 fn set(tui: &Tui, key: &'static str, value: Value) {
     settings::update(tui, move |root| settings::set_path(root, &["session", key], value));
-}
-
-fn titlecase(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
 }
 
 /// Runs `continuation` once the next frame is laid out (`scroll.afterLayout`): the first step runs
