@@ -82,14 +82,9 @@ export const outstanding = Effect.fnUntraced(function* (
   const children = new Set(items.flatMap((item) => (item.kind === "subagent" ? [item.childSessionID] : [])))
   for (const activeID of active) {
     if (activeID === sessionID || children.has(activeID)) continue
-    // Foreground-blocking work is the caller's inline result, and cancelled work is
-    // acknowledged elsewhere: neither is still running for this report.
+    // A cancelled child may still be draining while it cleans up.
     const tracked = jobs.get ? yield* jobs.get(activeID) : undefined
-    if (
-      tracked &&
-      ((tracked.status === "running" && tracked.notificationID === undefined) || tracked.status === "cancelled")
-    )
-      continue
+    if (tracked?.status === "cancelled") continue
     if (!(yield* descends(store, parents, activeID, sessionID))) continue
     const info = yield* store.get(activeID)
     if (!info?.parentID) continue
