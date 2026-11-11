@@ -4,7 +4,7 @@ use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::location::Location;
-use crate::state::{Data, Error, State, Task, evict_missing};
+use crate::state::{Data, Error, Live, State, Task, evict_missing};
 
 /// The owner of global MCP elicitations. They temporarily use "global" instead of a real session
 /// ID, so the server cannot recover their location when settling them; the store keeps the event
@@ -59,11 +59,13 @@ impl State {
             },
             location: (form.session_id == GLOBAL).then(|| location.clone()),
         });
+        self.form_live.add(&form.id.0);
         self.log.forms(&form.session_id);
     }
 
     /// Removes a form; a global form only at `location`, when given. True when one was removed.
     pub(crate) fn remove_form(&mut self, owner: &str, id: &FormID, location: Option<&Location>) -> bool {
+        self.form_live.remove(&id.0);
         let Some(forms) = self.forms.get_mut(owner) else {
             return false;
         };
@@ -87,15 +89,16 @@ impl State {
 
 impl Data {
     /// Reads pending forms once per invalidation: a session's, or the global forms of a location
-    /// (the default one for `None`).
+    /// (the default one for `None`). Forms created or settled while the read was in flight win over
+    /// the snapshot (deviation O89-list-snapshots).
     pub fn form_sync(&self, owner: &str, location: Option<&Location>) -> Task<()> {
         let location = location.cloned().unwrap_or_else(|| self.read(|state| state.default_location().clone()));
         let owner = owner.to_owned();
         let key = sync_key(&owner, &location);
         self.sync_start(
             key,
-            |state| state.deletion_epoch,
-            move |data, started| async move {
+            |state| (state.deletion_epoch, state.form_live.now()),
+            move |data, (started, seq)| async move {
                 if owner == GLOBAL {
                     let response = data
                         .client()
@@ -104,15 +107,17 @@ impl Data {
                         .map_err(Error::new)?;
                     let at = Location::from(&response.location);
                     data.write(|state| {
+                        let live = &state.form_live;
                         let forms = state.forms.entry(owner.clone()).or_default();
+                        let read = response
+                            .data
+                            .into_iter()
+                            .filter(|form| form.session_id == GLOBAL && !live.removed_since(&form.id.0, seq))
+                            .map(|info| Form { info, location: Some(at.clone()) });
+                        let snapshot =
+                            merge(read.collect(), forms, live, seq, |form| form.location.as_ref() == Some(&at));
                         forms.retain(|form| form.location.as_ref().is_some_and(|item| *item != at));
-                        forms.extend(
-                            response
-                                .data
-                                .into_iter()
-                                .filter(|form| form.session_id == GLOBAL)
-                                .map(|info| Form { info, location: Some(at.clone()) }),
-                        );
+                        forms.extend(snapshot);
                         state.log.forms(&owner);
                     });
                     return Ok(());
@@ -126,7 +131,13 @@ impl Data {
                     if state.deleted_since(&SessionID(owner.clone()), started) {
                         return;
                     }
-                    let forms = list.into_iter().map(|info| Form { info, location: None }).collect();
+                    let live = &state.form_live;
+                    let read = list
+                        .into_iter()
+                        .filter(|info| !live.removed_since(&info.id.0, seq))
+                        .map(|info| Form { info, location: None });
+                    let current = state.forms.get(&owner).map(Vec::as_slice).unwrap_or_default();
+                    let forms = merge(read.collect(), current, live, seq, |_| true);
                     state.forms.insert(owner.clone(), forms);
                     state.log.forms(&owner);
                 });
@@ -179,6 +190,22 @@ impl Data {
         drop(self.form_sync(owner, location));
         Ok(())
     }
+}
+
+/// A form list read with the forms in `current` (those `scope` accepts) that an event created after
+/// the read started at `seq`.
+fn merge(mut read: Vec<Form>, current: &[Form], live: &Live, seq: u64, scope: impl Fn(&Form) -> bool) -> Vec<Form> {
+    let newer: Vec<Form> = current
+        .iter()
+        .filter(|form| {
+            scope(form)
+                && live.added_since(&form.info.id.0, seq)
+                && read.iter().all(|item| item.info.id != form.info.id)
+        })
+        .cloned()
+        .collect();
+    read.extend(newer);
+    read
 }
 
 /// Global forms name their location in a header (`formRequestOptions`).
