@@ -248,6 +248,64 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("ignores a staged revert that lands after a commit deleted its boundary", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const boundary = SessionMessage.ID.make("msg_boundary")
+      const earlier = SessionMessage.ID.make("msg_earlier")
+      yield* db
+        .insert(SessionMessageTable)
+        .values([assistantRow(earlier, 0), assistantRow(boundary, 1)])
+        .run()
+      yield* db
+        .insert(InstructionStateTable)
+        .values({
+          session_id: sessionID,
+          epoch_start: 0,
+          through_seq: 0,
+          initial_values: {},
+          current_values: {},
+        })
+        .run()
+      const bus = yield* Bus.Service
+
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary, files: [] },
+      })
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: boundary })
+      expect(
+        (yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).all()).map((row) => row.id),
+      ).toEqual([earlier])
+
+      // A stage that was still snapshotting when the commit ran publishes afterwards.
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary, files: [] },
+      })
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
+    }),
+  )
+
+  it.effect("clears a revert whose boundary is already gone when it commits", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const boundary = SessionMessage.ID.make("msg_boundary")
+      yield* db.insert(SessionMessageTable).values([assistantRow(boundary, 0)]).run()
+      const bus = yield* Bus.Service
+
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary, files: [] },
+      })
+      // A store poisoned before the staged guard existed.
+      yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.id, boundary)).run()
+
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: boundary })
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
+    }),
+  )
+
   it.effect("orders projected messages and context by durable aggregate sequence", () =>
     Effect.gen(function* () {
       yield* seedSession()
