@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
-use opencode_store::{Catalog, CreateSession, Data, Options};
+use opencode_store::{Catalog, CreateSession, Data, LoadMore, MessageExt, Options};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
@@ -436,7 +436,7 @@ fn held(path: &'static str) -> (Data, Slot<Value>) {
             let release = release.clone();
             async move {
                 if req.path == path {
-                    return ok(json!({ "data": release.wait().await }));
+                    return ok(json!({ "data": release.wait().await, "cursor": {} }));
                 }
                 ok(json!({ "data": [] }))
             }
@@ -503,4 +503,51 @@ async fn a_form_list_keeps_forms_created_and_settled_while_it_was_read() {
         state.forms("ses_f", None).unwrap().iter().map(|form| form.info.id.0.clone()).collect::<Vec<_>>()
     });
     assert_eq!(ids, ["frm_kept", "frm_new"]);
+}
+
+fn streamed(kind: &str, event: &str, mut data: Value) -> Value {
+    data["sessionID"] = "ses_m".into();
+    data["assistantMessageID"] = "msg_a".into();
+    durable(kind, event, data)
+}
+
+fn text(data: &Data, message: &str) -> Option<String> {
+    data.read(|state| {
+        let value = serde_json::to_value(state.message(&id("ses_m"), message)?).unwrap();
+        value["content"][0]["text"].as_str().map(str::to_owned)
+    })
+}
+
+/// A latest-page read that started before a step must not erase the assistant row the step's
+/// events created, with or without an older copy of it in the page.
+#[tokio::test]
+async fn a_transcript_refresh_keeps_the_reply_that_streamed_meanwhile() {
+    let user = json!({ "id": "msg_u", "type": "user", "text": "hi", "time": { "created": 1 } });
+    let stale = json!({
+        "id": "msg_a", "type": "assistant", "agent": "build", "model": { "providerID": "p", "id": "m" },
+        "content": [], "time": { "created": 2 },
+    });
+    // Pages list the newest first.
+    for page in [json!([user]), json!([stale, user])] {
+        let (data, release) = held("/api/session/ses_m/message");
+        let running = tokio::spawn(data.message_sync(&id("ses_m")));
+        settle().await;
+        emit(
+            &data,
+            streamed(
+                "session.step.started",
+                "evt_step",
+                json!({ "agent": "build", "model": { "providerID": "p", "id": "m" }, "started": 2 }),
+            ),
+        );
+        emit(&data, streamed("session.text.started", "evt_text", json!({ "ordinal": 0 })));
+        emit(&data, streamed("session.text.delta", "evt_delta", json!({ "ordinal": 0, "delta": "Hel" })));
+        release.resolve(page.clone());
+        running.await.unwrap().unwrap();
+        emit(&data, streamed("session.text.delta", "evt_delta2", json!({ "ordinal": 0, "delta": "lo" })));
+        let ids: Vec<String> =
+            data.read(|state| state.messages(&id("ses_m")).iter().map(|item| item.id().to_owned()).collect());
+        assert_eq!(ids, ["msg_u", "msg_a"], "{page}");
+        assert_eq!(text(&data, "msg_a").as_deref(), Some("Hello"), "{page}");
+    }
 }

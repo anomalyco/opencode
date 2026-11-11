@@ -263,9 +263,17 @@ impl State {
         self.messages.entry(session.clone()).or_default()
     }
 
+    /// Logs an event's change to a message and records it for transcript reads in flight.
+    pub(crate) fn message_changed(&mut self, session: &SessionID, message: &SessionMessageID) {
+        self.message_live.add(&message.0);
+        self.log.message(session, message);
+    }
+
     /// Appends `item` unless present (`message.insert`).
     pub(crate) fn insert_message(&mut self, session: &SessionID, item: SessionMessageInfo) {
+        let id = item.id().to_owned();
         if self.transcript_mut(session).append(item) {
+            self.message_live.add(&id);
             self.log.messages(session);
         }
     }
@@ -275,10 +283,11 @@ impl State {
         let transcript = self.transcript_mut(session);
         if transcript.contains(&id.0) {
             transcript.upsert(item);
-            self.log.message(session, &id);
+            self.message_changed(session, &id);
             return;
         }
         transcript.append(item);
+        self.message_live.add(&id.0);
         self.log.messages(session);
     }
 
@@ -295,7 +304,7 @@ impl State {
             return;
         };
         f(assistant);
-        self.log.message(session, message);
+        self.message_changed(session, message);
     }
 
     /// Edits the latest tool part with `tool` (`editTool`).
@@ -376,14 +385,14 @@ impl State {
             if let Some(snapshot) = &data.snapshot {
                 existing.snapshot.get_or_insert_default().start = Some(snapshot.clone());
             }
-            self.log.message(session, &data.assistant_message_id);
+            self.message_changed(session, &data.assistant_message_id);
             return;
         }
         if let Some(current) = transcript.active_assistant() {
             current.retry = None;
             current.time.completed = Some(event.created);
             let id = current.id.clone();
-            self.log.message(session, &id);
+            self.message_changed(session, &id);
         }
         let assistant = SessionMessageAssistant {
             id: data.assistant_message_id.clone(),
@@ -610,7 +619,7 @@ impl State {
         };
         if current.retry.take().is_some() {
             let id = current.id.clone();
-            self.log.message(session, &id);
+            self.message_changed(session, &id);
         }
     }
 
@@ -669,7 +678,7 @@ impl State {
         shell.output = Some(event.data.output.clone());
         shell.time.completed = Some(event.created);
         let id = shell.id.clone();
-        self.log.message(session, &id);
+        self.message_changed(session, &id);
     }
 
     /// `session.revert.committed`: drops messages at or after the boundary.
@@ -697,7 +706,7 @@ impl State {
         };
         current.summary.push_str(&data.text);
         let id = current.id.clone();
-        self.log.message(session, &id);
+        self.message_changed(session, &id);
     }
 
     pub(crate) fn on_compaction_ended(&mut self, event: &SessionCompactionEnded) {
@@ -728,7 +737,7 @@ impl State {
             let id = current.id.clone();
             let next = completed(id.clone(), current.metadata.clone(), current.time.clone());
             transcript.items_mut()[position] = next;
-            self.log.message(session, &id);
+            self.message_changed(session, &id);
             return;
         }
         let item = completed(from_event(&event.id), None, SessionInboxUserTime { created: event.created });
@@ -760,7 +769,7 @@ impl State {
         };
         if let Some((position, current)) = running {
             transcript.items_mut()[position] = failed(current.id.clone(), current.metadata, current.time);
-            self.log.message(session, &current.id);
+            self.message_changed(session, &current.id);
             return;
         }
         let id = data.input_id.clone().unwrap_or_else(|| from_event(&event.id));
@@ -783,14 +792,16 @@ fn merge_native(target: &mut Option<SessionMessageNative>, next: &Option<Session
 }
 
 impl Data {
-    /// Reads the newest page of a transcript once per invalidation (`message.sync`).
+    /// Reads the newest page of a transcript once per invalidation (`message.sync`). Messages that
+    /// events created or changed while the read was in flight keep their local rows (deviation
+    /// O89-transcript-refresh).
     pub fn message_sync(&self, session: &SessionID) -> Task<()> {
         let session = session.clone();
         let limit = self.inner.options.initial_message_limit.unwrap_or(MESSAGE_PAGE);
         self.sync_start(
             format!("session.message:{}", session.0),
-            |state| state.deletion_epoch,
-            move |data, started| async move {
+            |state| (state.deletion_epoch, state.message_live.now()),
+            move |data, (started, seq)| async move {
                 let input = MessageListInput {
                     session_id: session.clone(),
                     limit: Some(limit),
@@ -802,7 +813,15 @@ impl Data {
                     if state.deleted_since(&session, started) {
                         return;
                     }
-                    let fetched: Vec<_> = response.data.into_iter().rev().map(|item| state.stored(item)).collect();
+                    let newer = |id: &str| {
+                        state.message_live.added_since(id, seq).then(|| state.message(&session, id).cloned()).flatten()
+                    };
+                    let fetched: Vec<_> = response
+                        .data
+                        .into_iter()
+                        .rev()
+                        .map(|item| newer(item.id()).unwrap_or_else(|| state.stored(item)))
+                        .collect();
                     // A read racing an admission must not wipe its local transcript row.
                     let ids: HashSet<&str> = fetched.iter().map(MessageExt::id).collect();
                     let admitted: HashSet<&str> = state
@@ -818,7 +837,9 @@ impl Data {
                         .iter()
                         .filter(|item| {
                             !ids.contains(item.id())
-                                && (state.outbox.contains(item.id()) || admitted.contains(item.id()))
+                                && (state.outbox.contains(item.id())
+                                    || admitted.contains(item.id())
+                                    || state.message_live.added_since(item.id(), seq))
                         })
                         .cloned()
                         .collect();
