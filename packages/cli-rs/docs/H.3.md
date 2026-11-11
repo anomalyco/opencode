@@ -34,7 +34,7 @@ P-CLI compares the exit code, stdout, stderr, and the requests: writes in order,
 (P-REQ).
 
 ```ts
-// parity/scenarios/E.1/title.pty.ts
+// parity/scenarios/<step>/<name>.pty.ts: an example, not a file in the tree
 import { definePty } from "../../pty/run"
 
 export default definePty({
