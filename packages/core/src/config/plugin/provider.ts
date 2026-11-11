@@ -4,7 +4,6 @@ import { define } from "../../plugin/internal"
 import { Effect } from "effect"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
-import { ProviderV2 } from "../../provider"
 
 export const Plugin = define({
   id: "config-provider",
