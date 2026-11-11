@@ -189,9 +189,23 @@ describe("ToolOutput", () => {
             { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 3;/) },
           ])
           const blank = yield* output.truncate({ content: [{ type: "text", text: "\nfoo\nbar" }] })
-          expect(blank.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing 0 lines of 3;/) }])
+          expect(blank.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 3;/) }])
         }),
       { maxLines: 1, maxBytes: 1_000 },
+    ),
+  )
+
+  it.live("counts a blank last line of the preview", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const result = yield* output.truncate({ content: [{ type: "text", text: "a\n\n\nb" }] })
+          expect(result.content).toEqual([
+            { type: "text", text: "a\n" },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-2 of 4;/) },
+          ])
+        }),
+      { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 

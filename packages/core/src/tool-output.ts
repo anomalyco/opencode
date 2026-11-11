@@ -102,7 +102,8 @@ const layer = Layer.effect(
           Effect.logWarning("failed to save full tool output", { file, cause: error }).pipe(Effect.as(describe(error))),
         ),
       )
-      const shownLines = countLines(shown)
+      // Counted before the final line break is stripped, so a blank last line still counts.
+      const shownLines = countLines(text.slice(0, end))
       const lastLineCut =
         shownLines > 0 &&
         shown.length < text.length &&
