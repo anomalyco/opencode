@@ -57,7 +57,7 @@ export type Json = null | boolean | number | string | ReadonlyArray<Json> | { re
  * - `["s", name]` an interpreter symbol;
  * - `["i", name]` a built-in or host global, unchanged since the runtime was made;
  * - `["a", source, index]` an AST node (a call site, an error's location);
- * - `["x", data]` something the engine names itself (the VM's compiled code, by source and function index);
+ * - `["x", data]` something the VM names itself (compiled code, by source and function index);
  * - `["r", id]` another record.
  */
 export type Encoded = string | number | boolean | null | ReadonlyArray<Json>
@@ -110,9 +110,9 @@ export type EncodeEnv = {
   readonly lost: Array<string>
   readonly strict: boolean
   readonly hosts?: HostBridge | undefined
-  /** More classes to save, an engine's own (the VM's frames and closures), after the built-in ones. */
+  /** More classes to save (the VM's frames and closures), after the built-in ones. */
   readonly specs?: ReadonlyArray<ClassSpec> | undefined
-  /** The data an engine names an object or symbol by, saved as `["x", data]`, instead of copying it. */
+  /** The data the VM names an object or symbol by, saved as `["x", data]`, instead of copying it. */
   readonly external?: ((value: object | symbol) => Json | undefined) | undefined
 }
 

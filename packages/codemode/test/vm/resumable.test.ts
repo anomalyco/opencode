@@ -4,7 +4,7 @@ import { parseProgram } from "../../src/runtime/execute.js"
 import { Interpreter } from "../../src/runtime/interpreter.js"
 import { createBuiltins } from "../../src/runtime/intrinsics.js"
 import { getOwn, Native, nativeRule, Obj, remove, set } from "../../src/runtime/objects.js"
-import { CodeMode } from "../lib/index.js"
+import { CodeMode } from "../../src/index.js"
 import { decode, encode } from "../../src/snapshot/codec.js"
 import { Lost, PendingThrow } from "../../src/runtime/model.js"
 import { normalizeError } from "../../src/runtime/errors.js"
@@ -320,7 +320,6 @@ describe("lost values", () => {
     unchanged: () => false,
     anchorOf: () => undefined,
     nodeId: () => undefined,
-    astArray: () => undefined,
     lost,
     strict: false,
   })
@@ -328,7 +327,6 @@ describe("lost values", () => {
     named: () => undefined,
     anchor: () => undefined,
     node: () => undefined,
-    astArray: () => undefined,
     interruption: () => {
       throw new Error("no interruption is saved")
     },

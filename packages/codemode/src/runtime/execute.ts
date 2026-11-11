@@ -47,17 +47,6 @@ export const finishExecution = <E, R>(outcome: Effect.Effect<Outcome, E, R>): Ef
     }
   })
 
-export const executeProgram = <R>(
-  code: string,
-  prepared: ToolRuntime.Prepared<R>,
-  limits: ResolvedExecutionLimits,
-  hooks: ToolRuntime.Hooks<R>,
-  globals?: Globals<R>,
-  bindings?: Globals<R>,
-  lossy = false,
-): Effect.Effect<Result, never, R> =>
-  finishExecution(startProgram({ prepared, limits, hooks, globals, lossy }, code, bindings).run())
-
 /** A program ready to run on the VM: nothing runs until `run`. */
 export const startProgram = <R>(
   setup: Setup<R>,

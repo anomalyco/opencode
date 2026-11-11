@@ -16,7 +16,7 @@ export const fromBytes = (bytes: Uint8Array): unknown => {
   }
 }
 
-/** The snapshot format this build writes and reads: the bytecode VM's (see `src/vm/snapshot.ts`). */
+/** The snapshot format this build writes and reads (see `src/snapshot.ts`). */
 export const FORMAT = 2
 
 /**

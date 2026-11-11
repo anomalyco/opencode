@@ -1,5 +1,3 @@
-export * as Data from "./data.js"
-
 import type { Json } from "./snapshot/codec.js"
 import type { Interpreter } from "./runtime/interpreter.js"
 import { Arr, define, Obj, type Value } from "./runtime/objects.js"

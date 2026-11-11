@@ -1,14 +1,15 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { parse, type Program } from "acorn"
+import type { Program } from "acorn"
 import type { DataValue, Diagnostic, Result } from "../../src/codemode.js"
 import { normalizeError } from "../../src/runtime/errors.js"
+import { parseProgram } from "../../src/runtime/execute.js"
 import { createBuiltins } from "../../src/runtime/intrinsics.js"
 import { Interpreter } from "../../src/runtime/interpreter.js"
-import { formatLocation, PendingThrow, sourceLocation } from "../../src/runtime/model.js"
+import { PendingThrow } from "../../src/runtime/model.js"
 import type { Value } from "../../src/runtime/objects.js"
 import { Interruption } from "../../src/runtime/signals.js"
-import { Source } from "../../src/runtime/source.js"
+import type { Source } from "../../src/runtime/source.js"
 import type { ToolRuntime } from "../../src/tool-runtime.js"
 import type { Snapshot } from "../../src/snapshot/snapshot.js"
 
@@ -36,7 +37,6 @@ export type RunOptions = {
 
 export const parseVmSource = (
   code: string,
-  id = "main",
 ):
   | { readonly ok: true; readonly program: Program; readonly source: Source }
   | { readonly ok: false; readonly error: Diagnostic } => {
@@ -44,38 +44,8 @@ export const parseVmSource = (
     return { ok: false, error: { kind: "ParseError", message: "Code cannot be empty." } }
   }
   try {
-    const program = parse(code, {
-      ecmaVersion: "latest",
-      sourceType: "script",
-      allowReturnOutsideFunction: true,
-      allowAwaitOutsideFunction: true,
-      allowImportExportEverywhere: true,
-      locations: true,
-    })
-    const exported = program.body.find((statement) => statement.type.startsWith("Export"))
-    if (exported) {
-      const location = sourceLocation(exported)
-      return {
-        ok: false,
-        error: {
-          kind: "ParseError",
-          message: `SyntaxError: Exports aren't available. Return the result instead.${formatLocation(location)}`,
-          location,
-        },
-      }
-    }
-    return { ok: true, program, source: new Source(id, code, program) }
+    return parseProgram(code)
   } catch (error) {
-    if (error instanceof SyntaxError && "loc" in error) {
-      const loc = (error as SyntaxError & { readonly loc: { readonly line: number; readonly column: number } }).loc
-      const location = { line: loc.line, column: loc.column + 1 }
-      const reason = error.message.replace(/ \(\d+:\d+\)$/, "")
-      const text = `${reason.endsWith(".") ? reason : `${reason}.`} Code must be plain JavaScript written as a program body.`
-      return {
-        ok: false,
-        error: { kind: "ParseError", message: `SyntaxError: ${text}${formatLocation(location)}`, location },
-      }
-    }
     if (error instanceof RangeError) {
       return { ok: false, error: normalizeError(error) }
     }
@@ -171,51 +141,5 @@ export const runProgram = (code: string, options?: RunOptions): Result => {
       ...(ctx.logs.length > 0 ? { logs: [...ctx.logs] } : {}),
       toolCalls: [],
     }
-  }
-}
-
-const WARMUP_SCRIPT = `
-function fib(n) { return n < 2 ? n : fib(n - 1) + fib(n - 2) }
-let sum = 0
-for (let i = 0; i < 400; i++) sum = (sum + i * 3) % 10007
-const closures = []
-for (let i = 0; i < 16; i++) {
-  let s = "v" + i
-  let o = { x: i, y: s }
-  closures.push(() => o.x + s.length)
-}
-for (const fn of closures) sum += fn()
-const arr = Array.from({ length: 64 }, (_, i) => (i * 17) % 64)
-const mapped = arr.map((x) => x * 2).filter((x) => x % 3 !== 0)
-sum += mapped.reduce((a, b) => a + b, 0)
-const sorted = mapped.slice(0, 32).sort((a, b) => a - b)
-sum += sorted.length + fib(8)
-outer: for (let i = 0; i < 3; i++) {
-  try {
-    for (const x of [1, 2, 3]) {
-      try {
-        if (x === 2) continue
-        if (i === 1 && x === 3) break outer
-        sum += x
-      } finally { sum += 1 }
-    }
-  } catch (e) { sum -= 1 } finally { sum += 2 }
-}
-const { a = 1, b: [c = 2, ...rest] = [3, 4, 5] } = { b: [10, 20, 30] }
-return sum + a + c + rest.length
-`
-
-let warmed = false
-
-/**
- * Startup training program (J3): exercises the VM dispatch loop with diverse types
- * (numbers, strings, objects, arrays, closures, cells, try/catch/finally, iteration, destructuring)
- * so JSC's DFG/FTL tiers up `Vm.prototype.exec` with polymorphic value profiles.
- */
-export const warmupVm = (rounds = 8): void => {
-  if (warmed) return
-  warmed = true
-  for (let i = 0; i < rounds; i++) {
-    runProgram(WARMUP_SCRIPT)
   }
 }

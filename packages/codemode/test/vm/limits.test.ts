@@ -534,8 +534,9 @@ describe("per-function wide jumps past 65,535 words and snapshot round-trips", (
       mainRes: [21, 10, expectedPadA * 2, 378, 13, 7, "late-reject", "ok"],
       gSteps: [1, 10, 20, expectedGenPad + 4, 18],
     })
-  })
+  }, 15_000)
 
+  // Compiling a >65,535-word program and round-tripping 8 full snapshots takes ~8-9s on loaded Windows runners.
   test("top-level script >65,535 words runs correctly and survives snapshot round-trips at pc > 65,535", () => {
     const src = `
       function hoistedTop(n) { return n + 42 }
@@ -602,5 +603,5 @@ describe("per-function wide jumps past 65,535 words and snapshot round-trips", (
     expect(roundTripped).toEqual({ ok: true, value: expected, toolCalls: [] })
     expect(trips).toBeGreaterThan(2)
     expect(sawHighPc).toBe(true)
-  })
+  }, 15_000)
 })

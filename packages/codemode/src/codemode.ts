@@ -173,7 +173,7 @@ export type Runtime<R = never> = {
 }
 
 /**
- * One run of a program on the VM. `run()` runs it in the current fiber until it ends or is suspended, and owns its host
+ * One run of a program. `run()` runs it in the current fiber until it ends or is suspended, and owns its host
  * calls: interrupting `run()` interrupts them. A program runs once: running it again is a defect.
  */
 export type Program<R = never, E = never> = {

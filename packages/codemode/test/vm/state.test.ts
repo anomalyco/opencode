@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Glob } from "bun"
 import path from "node:path"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "../lib/index.js"
+import { CodeMode, Tool } from "../../src/index.js"
 import { parseProgram } from "../../src/runtime/execute.js"
 import { Interpreter } from "../../src/runtime/interpreter.js"
 import { createBuiltins } from "../../src/runtime/intrinsics.js"
@@ -16,7 +16,7 @@ import { Cell, CodeFlags } from "../../src/opcodes.js"
 import type { Stop } from "../../src/scheduler.js"
 import { CustomIter, Frame, Mode, Vm } from "../../src/vm.js"
 
-// The VM (`src/vm`) runs programs as bytecode frames, and keeps the jobs, promises, and host calls they wait on as
+// The VM (`src/vm.ts`) runs programs as bytecode frames, and keeps the jobs, promises, and host calls they wait on as
 // data: a frame is its code, pc, and registers, and every suspension point is one. The Effect driver only does what
 // the VM's stops ask.
 
@@ -218,6 +218,7 @@ describe("vm", () => {
     expect(next).toEqual({ kind: "done", completion: normal(2450) })
   })
 
+  // Sorting 300,000 strings (to cross multiple 65,536-item merge steps) with tripEvery = 1 takes ~7s on Windows CI.
   test("a large default sort runs in bounded native steps, and sorts as JS does", () => {
     const words = Array.from({ length: 300_000 }, (_, i) => ((i * 7919) % 300_007).toString(36))
     const vm = vmFor(`
@@ -246,7 +247,7 @@ describe("vm", () => {
         9100 in sorted,
       ]),
     })
-  })
+  }, 15_000)
 
   test("concurrent tool calls stop the VM once, with every call in one batch", () => {
     const vm = vmFor(`return await Promise.all([1, 2, 3].map((value) => tools.echo({ value })))`)

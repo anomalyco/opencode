@@ -3,7 +3,7 @@ import { disassembleSource } from "../../script/disasm.js"
 import { hashOf } from "../../src/code.js"
 import { compileSource } from "../../src/compiler/compile.js"
 import { verifyAll } from "./verify.js"
-import { parseVmSource, runProgram, warmupVm } from "./run.js"
+import { parseVmSource, runProgram } from "./run.js"
 
 const val = (code: string) => {
   const parsed = parseVmSource(code)
@@ -496,7 +496,6 @@ describe("generators, async functions, async generators, yield*, and for-await",
 
 describe("built-ins, prelude, and coercion", () => {
   test("array callbacks, sort, Map/Set, Object.groupBy, JSON reviver/replacer, and ToPrimitive", () => {
-    warmupVm(2)
     expect(
       val(`
         const arr = Array.from({ length: 6 }, (_, i) => i + 1)
