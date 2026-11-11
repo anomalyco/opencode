@@ -57,10 +57,13 @@ export function TimelineEventRow(props: {
                     </>
                   )}
                 </For>
+                {/* Where every one failed, the tag says so without counting them again. */}
                 <Show when={summary().failed}>
                   {(count) => (
                     <Badge data-slot="timeline-event-failed" variant="danger">
-                      {i18n.t("ui.timeline.event.failed", { count: count() })}
+                      {count() === props.events.length
+                        ? i18n.t("ui.timeline.event.allFailed")
+                        : i18n.t("ui.timeline.event.failed", { count: count() })}
                     </Badge>
                   )}
                 </Show>

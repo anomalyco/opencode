@@ -182,6 +182,7 @@ const source = {
   "ui.timeline.event.shells.one": "{{count}} shell",
   "ui.timeline.event.shells.other": "{{count}} shells",
   "ui.timeline.event.failed": "{{count}} failed",
+  "ui.timeline.event.allFailed": "Failed",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",

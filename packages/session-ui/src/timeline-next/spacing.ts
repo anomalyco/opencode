@@ -7,8 +7,8 @@ import { goal, toolRule } from "./rules"
 type Content = SessionMessageAssistant["content"][number]
 
 /**
- * Rows are spaced by the block they belong to: what the user did, what the agent did in reply, and what happened to the
- * session.
+ * Rows are spaced by who did what: each thing the user did (a message, a command, a goal) stands apart, the agent's reply
+ * reads as one stretch, and what happened to the session (Interrupted, a switch) sits together.
  */
 export type TimelineBlock = "user" | "agent" | "event"
 
@@ -19,15 +19,16 @@ export type TimelineBlock = "user" | "agent" | "event"
 export type TimelineItem = "prose" | "card" | "line"
 
 /**
- * The space above a row: small within its block, medium where it changes from one kind of item to another, large
- * where a new block starts.
+ * The space above a row: small within a reply or a run of session events, medium between a card and the rows beside it
+ * in a reply, large around each thing the user did and wherever a new block starts.
  */
 export type TimelineGap = "s" | "m" | "l"
 
 /**
  * Each row's gap above it, by key; the first row gets none. Background work reporting back always starts a block, which
  * the agent's reply continues. Turn gaps stay out of it: they only hold the user's consecutive messages together, so a
- * row after one compares with the row before it.
+ * row after one compares with the row before it. A message joining the one above in a run sits closer still, which the
+ * row renderer applies.
  */
 export function timelineGaps(
   rows: readonly TimelineRow.TimelineRow[],
@@ -41,11 +42,7 @@ export function timelineGaps(
     if (!block) return previous
     const item = rowItem(row, messageByID)
 
-    if (previous)
-      gaps.set(
-        TimelineRow.key(row),
-        previous.block !== block || reportsBack(row) ? "l" : previous.item !== item ? "m" : "s",
-      )
+    if (previous) gaps.set(TimelineRow.key(row), gap(previous, { block, item }, reportsBack(row)))
 
     return { block, item }
   }, undefined)
@@ -67,6 +64,20 @@ export function laneGap(
   if (!last) return undefined
 
   return rowBlock(last, messageByID) === "agent" ? "s" : "l"
+}
+
+function gap(
+  previous: { block: TimelineBlock; item: TimelineItem },
+  current: { block: TimelineBlock; item: TimelineItem },
+  starts: boolean,
+): TimelineGap {
+  // Each thing the user did stands on its own, apart from the reply before it and the one after.
+  if (starts || previous.block !== current.block || current.block === "user") return "l"
+
+  // A card stands a little apart from the lines and paragraphs around it; anything else in a reply reads together.
+  if (previous.item !== current.item && (previous.item === "card" || current.item === "card")) return "m"
+
+  return "s"
 }
 
 /** What one part shows, so an opened group spaces its items as the timeline spaces rows. */
