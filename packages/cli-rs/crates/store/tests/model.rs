@@ -52,7 +52,7 @@ use std::sync::{Arc, Mutex};
 use common::*;
 use futures_util::FutureExt;
 use opencode_api::generated::SessionID;
-use opencode_store::{Data, LoadMore, MessageExt, Options, Task};
+use opencode_store::{Data, LoadMore, Location, MessageExt, Options, Task};
 use serde_json::{Value, json};
 use tokio::sync::oneshot;
 
@@ -92,6 +92,8 @@ enum Read {
     Older,
     /// The single-message refetch after `session.model.selected`.
     One,
+    /// The location's running shells (`Catalog::Shell`); held under session 0, since it has no session.
+    Shell,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -130,6 +132,14 @@ enum Op {
     Release(Read, u8),
     /// The oldest held response of this read and session fails (HTTP 500).
     Fail(Read, u8),
+    /// Server: a shell starts in the location.
+    ShellCreate,
+    /// Server: the k-th running shell exits.
+    ShellExit(u8),
+    /// Server: more shells start at once than a shell read's overlay holds. Not generated (1,100 events).
+    ShellBurst,
+    /// The view opens or syncs the location's shell list.
+    SyncShells,
 }
 
 #[derive(Clone, Copy)]
@@ -137,9 +147,14 @@ struct Mix {
     permissions: bool,
     forms: bool,
     messages: bool,
+    shells: bool,
 }
 
-const ALL: Mix = Mix { permissions: true, forms: true, messages: true };
+const ALL: Mix = Mix { permissions: true, forms: true, messages: true, shells: true };
+/// Where the model's shells run; every reply and event names it.
+const PROJECT: &str = "/project";
+/// Shells in one [`Op::ShellBurst`]: more than the store's 1,024-change overlay.
+const SHELL_BURST: u32 = 1_100;
 
 /// One weighted arm per command, so every command is generated whatever the mix (models-review carbon-2).
 fn generate(rng: &mut Rng, mix: Mix, len: usize) -> Vec<Op> {
@@ -150,6 +165,7 @@ fn generate(rng: &mut Rng, mix: Mix, len: usize) -> Vec<Op> {
         (mix.messages, Read::Head),
         (mix.messages, Read::Older),
         (mix.messages, Read::One),
+        (mix.shells, Read::Shell),
     ]
     .into_iter()
     .filter_map(|(on, read)| on.then_some(read))
@@ -160,7 +176,8 @@ fn generate(rng: &mut Rng, mix: Mix, len: usize) -> Vec<Op> {
         let s = rng.below(SESSIONS as u64) as u8;
         let k = rng.below(4) as u8;
         let read = reads[rng.below(reads.len() as u64) as usize];
-        let arms: [(bool, u64, Op); 18] = [
+        let held = if read == Read::Shell { 0 } else { s };
+        let arms: [(bool, u64, Op); 21] = [
             (mix.permissions, 6, Op::Ask(s)),
             (mix.permissions, 4, Op::Answer(s, k)),
             (mix.permissions, 1, Op::Burst(s)),
@@ -177,8 +194,11 @@ fn generate(rng: &mut Rng, mix: Mix, len: usize) -> Vec<Op> {
             (mix.forms, 5, Op::SyncForms(s)),
             (mix.messages, 5, Op::SyncMessages(s)),
             (mix.messages, 4, Op::LoadOlder(s)),
-            (true, 12, Op::Release(read, s)),
-            (true, 2, Op::Fail(read, s)),
+            (true, 12, Op::Release(read, held)),
+            (true, 2, Op::Fail(read, held)),
+            (mix.shells, 4, Op::ShellCreate),
+            (mix.shells, 3, Op::ShellExit(k)),
+            (mix.shells, 3, Op::SyncShells),
         ];
         let arms = arms.map(|(on, weight, op)| (on && !no.split(',').any(|name| name == self::name(op)), weight, op));
         let total: u64 = arms.iter().filter(|arm| arm.0).map(|arm| arm.1).sum();
@@ -218,6 +238,8 @@ struct Server {
     messages: Vec<Vec<Message>>,
     deleted: Vec<bool>,
     seq: Vec<u64>,
+    /// Running shells of [`PROJECT`], in start order.
+    shells: Vec<u32>,
     next: u32,
     /// Events not yet delivered, oldest first.
     events: VecDeque<Value>,
@@ -294,6 +316,10 @@ impl Server {
 
     /// The answer to a read, from the state at the moment it arrives; `None` for reads the model does not hold.
     fn answer(&self, req: &Req) -> Option<(Read, u8, Reply)> {
+        if req.path == "/api/shell" {
+            let data: Vec<Value> = self.shells.iter().map(|n| shell(*n)).collect();
+            return Some((Read::Shell, 0, ok(json!({ "location": { "directory": PROJECT }, "data": data }))));
+        }
         let rest = req.path.strip_prefix("/api/session/ses_")?;
         let (s, kind) = rest.split_once('/')?;
         let s: usize = s.parse().ok()?;
@@ -324,6 +350,7 @@ impl Server {
                     ),
                 }
             }
+            Read::Shell => unreachable!("answered above"),
             Read::Head | Read::Older => {
                 let limit: usize = req.param("limit").and_then(|v| v.parse().ok()).unwrap_or(20);
                 let all = &self.messages[s];
@@ -352,6 +379,18 @@ fn permission(session: &str, n: u32) -> Value {
 
 fn form(session: &str, n: u32) -> Value {
     json!({ "id": format!("frm_{n}"), "sessionID": session, "title": format!("Ask {n}"), "fields": [] })
+}
+
+fn shell(n: u32) -> Value {
+    json!({
+        "id": format!("sh_{n}"), "status": "running", "command": format!("run {n}"), "cwd": PROJECT,
+        "shell": "/bin/sh", "file": "/shell-output", "metadata": {}, "time": { "started": n },
+    })
+}
+
+fn shell_created(n: u32) -> Value {
+    json!({ "id": format!("evt_{n}"), "created": n, "type": "shell.created", "location": { "directory": PROJECT },
+        "data": { "info": shell(n) } })
 }
 
 fn message_json(message: &Message) -> Value {
@@ -537,6 +576,19 @@ struct Run {
     sticky: HashMap<u8, Vec<(String, String)>>,
     /// Per-command counts, and per-side counts of the responses released, for coverage.
     counts: HashMap<&'static str, usize>,
+    /// The running shells of [`PROJECT`] the store shows, by ID; `None` until anything put them there.
+    shells: Option<Vec<String>>,
+    /// Shells whose `shell.exited` was delivered.
+    exited: HashSet<String>,
+}
+
+fn project() -> Location {
+    Location::new(PROJECT)
+}
+
+fn observe_shells(state: &opencode_store::State) -> Option<Vec<String>> {
+    let shells = state.location(Some(&project()))?.shell.as_ref()?;
+    Some(shells.keys().map(|id| id.0.clone()).collect())
 }
 
 impl Run {
@@ -587,6 +639,8 @@ impl Run {
             grown: HashSet::new(),
             sticky: HashMap::new(),
             counts: HashMap::new(),
+            shells: None,
+            exited: HashSet::new(),
         }
     }
 
@@ -596,7 +650,8 @@ impl Run {
 
     fn sync(&mut self, read: Read, s: u8) {
         // A view closes once its session is gone: deleted by an event, or found missing by a read.
-        if self.deleted.contains(&s) || self.data.read(|state| state.is_missing(&Self::id(s))) {
+        let gone = || self.deleted.contains(&s) || self.data.read(|state| state.is_missing(&Self::id(s)));
+        if read != Read::Shell && gone() {
             return;
         }
         self.viewed.insert((read, s));
@@ -604,6 +659,7 @@ impl Run {
             Read::Permissions => self.data.permission_sync(&Self::id(s)),
             Read::Forms => self.data.form_sync(&format!("ses_{s}"), None),
             Read::Head => self.data.message_sync(&Self::id(s)),
+            Read::Shell => self.data.shell_sync(Some(&project())),
             Read::Older | Read::One => return,
         };
         self.tasks.push((format!("{read:?} ses_{s}"), task));
@@ -725,6 +781,27 @@ impl Run {
                 drop(server);
                 self.data.apply(&[event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
             }
+            Op::ShellCreate | Op::ShellBurst => {
+                let mut server = self.server.lock().unwrap();
+                let count = if op == Op::ShellBurst { SHELL_BURST } else { 1 };
+                for _ in 0..count {
+                    let n = server.id();
+                    server.shells.push(n);
+                    server.events.push_back(shell_created(n));
+                }
+            }
+            Op::ShellExit(k) => {
+                let mut server = self.server.lock().unwrap();
+                if !server.shells.is_empty() {
+                    let at = k as usize % server.shells.len();
+                    let shell = server.shells.remove(at);
+                    let n = server.id();
+                    server.events.push_back(json!({ "id": format!("evt_{n}"), "created": n, "type": "shell.exited",
+                        "location": { "directory": PROJECT },
+                        "data": { "id": format!("sh_{shell}"), "exit": 0, "status": "completed" } }));
+                }
+            }
+            Op::SyncShells => self.sync(Read::Shell, 0),
             Op::SyncPermissions(s) => self.sync(Read::Permissions, s),
             Op::SyncForms(s) => self.sync(Read::Forms, s),
             Op::SyncMessages(s) => self.sync(Read::Head, s),
@@ -762,7 +839,10 @@ impl Run {
                         (false, true, true) => "response: across a delete, after its event",
                     };
                     *self.counts.entry(replaced).or_default() += 1;
-                    *self.counts.entry(delete).or_default() += 1;
+                    // A shell read belongs to no session.
+                    if read != Read::Shell {
+                        *self.counts.entry(delete).or_default() += 1;
+                    }
                     if std::env::var("MODEL_TRACE").is_ok() {
                         eprintln!("  reply {:?}", held.reply);
                     }
@@ -788,6 +868,9 @@ impl Run {
             }
             "form.cancelled" => {
                 self.settled.insert(data["id"].as_str().unwrap().to_owned());
+            }
+            "shell.exited" => {
+                self.exited.insert(data["id"].as_str().unwrap().to_owned());
             }
             "session.deleted" => {
                 let s: u8 = data["sessionID"].as_str().unwrap()["ses_".len()..].parse().unwrap();
@@ -918,6 +1001,14 @@ impl Run {
             }
         }
         drop(server);
+        let shells = self.data.read(observe_shells);
+        if shells != self.shells && !changes.location(&project()) {
+            fail("changes shells", format!("shells changed unreported: {shells:?}"))?;
+        }
+        if let Some(id) = shells.iter().flatten().find(|id| self.exited.contains(*id)) {
+            fail("settled shells", format!("{id} shows after its shell.exited arrived"))?;
+        }
+        self.shells = shells;
         self.seen_revision = revision;
         if std::env::var("MODEL_TRACE").is_ok() {
             eprintln!("  seen {:?}", now.iter().map(|seen| (&seen.messages, seen.more)).collect::<Vec<_>>());
@@ -975,6 +1066,12 @@ impl Run {
             }
         }
         let server = self.server.lock().unwrap();
+        let want: Vec<String> = server.shells.iter().map(|n| format!("sh_{n}")).collect();
+        let shown = self.shells.clone().unwrap_or_default();
+        if self.viewed.contains(&(Read::Shell, 0)) && shown != want {
+            let short = |list: &[String]| ids(&list.iter().map(|id| (id.clone(), String::new())).collect::<Vec<_>>());
+            fail("shells", format!("shells: store {}, server {}", short(&shown), short(&want)))?;
+        }
         for s in 0..SESSIONS {
             let seen = &self.seen[s as usize];
             // A deleted session converges to nothing; the safety checks hold the store to that once it knows.
@@ -1060,6 +1157,10 @@ fn name(op: Op) -> &'static str {
         Op::LoadOlder(_) => "LoadOlder",
         Op::Release(..) => "Release",
         Op::Fail(..) => "Fail",
+        Op::ShellCreate => "ShellCreate",
+        Op::ShellExit(_) => "ShellExit",
+        Op::ShellBurst => "ShellBurst",
+        Op::SyncShells => "SyncShells",
     }
 }
 
@@ -1213,19 +1314,25 @@ fn assert_converges(mix: Mix) {
 
 #[test]
 fn permissions_converge_to_the_server() {
-    assert_converges(Mix { permissions: true, forms: false, messages: false });
+    assert_converges(Mix { permissions: true, forms: false, messages: false, shells: false });
 }
 
 #[test]
 #[ignore = "red until plan step 3 (O9); run with --ignored"]
 fn forms_converge_to_the_server() {
-    assert_converges(Mix { permissions: false, forms: true, messages: false });
+    assert_converges(Mix { permissions: false, forms: true, messages: false, shells: false });
 }
 
 #[test]
 #[ignore = "red until plan step 4 to 6 (O1 to O6); run with --ignored"]
 fn transcripts_are_a_gapless_suffix_of_the_server() {
-    assert_converges(Mix { permissions: false, forms: false, messages: true });
+    assert_converges(Mix { permissions: false, forms: false, messages: true, shells: false });
+}
+
+#[test]
+#[ignore = "red until plan step 3b (S1); run with --ignored"]
+fn shells_converge_to_the_server() {
+    assert_converges(Mix { permissions: false, forms: false, messages: false, shells: true });
 }
 
 #[test]
@@ -1247,7 +1354,19 @@ fn the_generator_covers_every_command() {
     let mut names: Vec<_> = counts.iter().collect();
     names.sort();
     eprintln!("commands in 200 cases of 30: {names:?}");
-    for op in ["Reconnect", "Delete", "Fail", "Burst", "Model", "Text", "End", "LoadOlder"] {
+    for op in [
+        "Reconnect",
+        "Delete",
+        "Fail",
+        "Burst",
+        "Model",
+        "Text",
+        "End",
+        "LoadOlder",
+        "ShellCreate",
+        "ShellExit",
+        "SyncShells",
+    ] {
         assert!(counts.get(op).copied().unwrap_or(0) >= 20, "{op} is generated too rarely: {counts:?}");
     }
 }
@@ -1293,12 +1412,12 @@ const RESPONSE_CASES: usize = 50;
 #[test]
 fn the_checker_catches_wrong_clients() {
     let mutants = [
-        (Mutant::HeadEmpty, Mix { permissions: false, forms: false, messages: true }),
-        (Mutant::NoMore, Mix { permissions: false, forms: false, messages: true }),
-        (Mutant::BlankText, Mix { permissions: false, forms: false, messages: true }),
-        (Mutant::NoOlder, Mix { permissions: false, forms: false, messages: true }),
-        (Mutant::Reversed, Mix { permissions: true, forms: false, messages: false }),
-        (Mutant::Sticky, Mix { permissions: true, forms: false, messages: false }),
+        (Mutant::HeadEmpty, Mix { permissions: false, forms: false, messages: true, shells: false }),
+        (Mutant::NoMore, Mix { permissions: false, forms: false, messages: true, shells: false }),
+        (Mutant::BlankText, Mix { permissions: false, forms: false, messages: true, shells: false }),
+        (Mutant::NoOlder, Mix { permissions: false, forms: false, messages: true, shells: false }),
+        (Mutant::Reversed, Mix { permissions: true, forms: false, messages: false, shells: false }),
+        (Mutant::Sticky, Mix { permissions: true, forms: false, messages: false, shells: false }),
         (Mutant::Silent, ALL),
     ];
     let mut missed = Vec::new();
@@ -1451,6 +1570,10 @@ const OPEN: &[(&str, &str, &[Op])] = &[
         "missing ses_0",
         &[Op::Open(0), Op::Delete(0), Op::SyncForms(0), Op::Release(Read::Forms, 0)],
     ),
+    // S1 (carbon-4): a `Catalog::Shell` read replaces the location's shells, losing a `shell.created` and bringing
+    // back a shell whose `shell.exited` arrived while it was in flight.
+    ("shell created during the shell read", "shells", &[Op::SyncShells, Op::ShellCreate]),
+    ("shell exited during the shell read", "settled shells", &[Op::ShellCreate, Op::SyncShells, Op::ShellExit(0)]),
 ];
 
 #[test]
@@ -1516,6 +1639,8 @@ fn op_json(op: Op) -> Value {
             json!({ "op": name(op), "s": s })
         }
         Op::Release(r, s) | Op::Fail(r, s) => json!({ "op": name(op), "read": read(r), "s": s }),
+        Op::ShellCreate | Op::ShellBurst | Op::SyncShells => json!({ "op": name(op) }),
+        Op::ShellExit(k) => json!({ "op": name(op), "k": k }),
     }
 }
 
