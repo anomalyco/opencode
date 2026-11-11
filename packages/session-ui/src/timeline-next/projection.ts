@@ -673,7 +673,7 @@ function groupNotices(
       previous.userMessageID === current.userMessageID &&
       previous.group.type !== "part" &&
       current.group.type !== "part" &&
-      joins(previous.group, current.group)
+      joins(previous.group, current.group, messageByID)
     ) {
       result[result.length - 1] = new TimelineRow.AssistantPart({
         ...previous,
@@ -689,15 +689,23 @@ function groupNotices(
   }, [])
 }
 
-// Activity groups next to each other read as one. Notices reporting back join each other, never the calls that
+// Activity groups next to each other read as one, except that notices never join a run of thoughts: the thoughts stay
+// thought rows, and the notices a row of their own. Notices reporting back join each other, never the calls that
 // started the work, which count separately.
-function joins(previous: Exclude<PartGroup, { type: "part" }>, current: Exclude<PartGroup, { type: "part" }>) {
-  if (previous.type === "context" && current.type === "context") return true
+function joins(
+  previous: Exclude<PartGroup, { type: "part" }>,
+  current: Exclude<PartGroup, { type: "part" }>,
+  messageByID: ReadonlyMap<string, SessionMessageInfo>,
+) {
+  const notices = (group: Exclude<PartGroup, { type: "part" }>) =>
+    group.refs.every((ref) => ref.messageID === ref.partID)
+  const thoughts = (group: Exclude<PartGroup, { type: "part" }>) =>
+    group.refs.every((ref) => resolveContent(messageByID.get(ref.messageID), ref.partID)?.type === "reasoning")
 
-  const reports = (group: Exclude<PartGroup, { type: "part" }>) =>
-    group.type === "events" && group.refs.every((ref) => ref.messageID === ref.partID)
+  if (previous.type === "context" && current.type === "context")
+    return !((notices(previous) && thoughts(current)) || (thoughts(previous) && notices(current)))
 
-  return reports(previous) && reports(current)
+  return previous.type === "events" && current.type === "events" && notices(previous) && notices(current)
 }
 
 function noticeGroup(detail: TimelineDetail, message: SessionMessageInfo) {
