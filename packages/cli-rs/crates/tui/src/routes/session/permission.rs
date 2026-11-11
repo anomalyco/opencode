@@ -39,30 +39,44 @@ struct Inner {
     region: View,
     /// The full-screen host, above the route and below dialogs.
     overlay: View,
-    prompted: RefCell<Prompted>,
-    layer: RefCell<Option<Disposer>>,
-    reject: RefCell<Option<Textarea>>,
+    prompt: RefCell<Prompt>,
     /// The family last read (`descendantSessionIDs`).
     family: RefCell<Vec<SessionID>>,
-    /// Requests answered by `autoaccept`.
+    /// Requests answered by `autoaccept`. It outlives the prompt, so a mode toggle while a reply is in flight
+    /// does not send it again; a failed reply removes its ID.
     approved: RefCell<HashSet<PermissionID>>,
     resize: Cell<Option<HandlerId>>,
     settings: RefCell<Option<Disposer>>,
 }
 
+/// What the prompt shows. A shown variant owns its request and its keys, so replacing it releases both.
 #[derive(Default)]
-struct Prompted {
-    request: Option<PermissionRequest>,
-    stage: Stage,
-    selected: usize,
-    expanded: bool,
+enum Prompt {
+    #[default]
+    Hidden,
+    /// `SessionQuestion` for the family's first request.
+    Asking { request: PermissionRequest, selected: usize, expanded: bool, _layer: DeferredDisposer },
+    /// `RejectPrompt`: a subagent's request asks what to do differently.
+    Rejecting { request: PermissionRequest, view: View, field: Textarea, _layer: DeferredDisposer },
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum Stage {
-    #[default]
-    Permission,
-    Reject,
+impl Prompt {
+    fn request(&self) -> Option<&PermissionRequest> {
+        match self {
+            Prompt::Hidden => None,
+            Prompt::Asking { request, .. } | Prompt::Rejecting { request, .. } => Some(request),
+        }
+    }
+}
+
+/// A key layer that goes once the current event is done: the prompt changes inside its own layer's commands, and
+/// the keymap must not lose a layer while it runs one.
+struct DeferredDisposer(App, Option<Disposer>);
+
+impl Drop for DeferredDisposer {
+    fn drop(&mut self) {
+        super::form::dispose_later(&self.0, self.1.take().into_iter().collect());
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -99,9 +113,7 @@ impl Permission {
             session: session.clone(),
             region: View::new(&tui.app).column().shrink(0.0),
             overlay,
-            prompted: RefCell::default(),
-            layer: RefCell::default(),
-            reject: RefCell::default(),
+            prompt: RefCell::default(),
             family: RefCell::default(),
             approved: RefCell::default(),
             resize: Cell::new(None),
@@ -110,8 +122,7 @@ impl Permission {
         // Turning `autoaccept` on answers the shown request and hides it; the route syncs the prompt back in.
         let weak = Rc::downgrade(&inner);
         *inner.settings.borrow_mut() = Some(tui.settings.subscribe(move |tui| {
-            if tui.config().permissions == Permissions::Autoaccept
-                && weak.upgrade().is_some_and(|inner| inner.prompted.borrow().request.is_some())
+            if tui.config().permissions == Permissions::Autoaccept && weak.upgrade().is_some_and(|inner| inner.shown())
             {
                 tui.app.defer(bind!(tui.weak(), |tui, _| tui.sync_view()));
             }
@@ -119,7 +130,7 @@ impl Permission {
         let weak = Rc::downgrade(&inner);
         inner.resize.set(Some(tui.app.on_resize(move |_, _, _| {
             if let Some(inner) = weak.upgrade()
-                && inner.prompted.borrow().stage == Stage::Permission
+                && matches!(*inner.prompt.borrow(), Prompt::Asking { .. })
             {
                 inner.render();
             }
@@ -133,7 +144,7 @@ impl Permission {
 
     /// Whether a request is prompted; the session prompt hides meanwhile.
     pub fn active(&self) -> bool {
-        self.0.prompted.borrow().request.is_some()
+        self.0.shown()
     }
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
@@ -155,27 +166,27 @@ impl Permission {
         }
         if tui.config().permissions == Permissions::Autoaccept {
             // `prompted` is empty in this mode (`index.tsx:208-215`): a request shown before it began goes.
-            if inner.prompted.borrow().request.is_some() {
-                *inner.prompted.borrow_mut() = Prompted::default();
-                inner.stage_changed();
+            if inner.shown() {
+                inner.show(tui, Prompt::Hidden);
             }
             inner.auto_approve(tui, &requests);
             return;
         }
         let head = requests.into_iter().next();
-        let current = inner.prompted.borrow().request.as_ref().map(|r| r.id.clone());
-        if head.as_ref().map(|r| &r.id) != current.as_ref() {
-            *inner.prompted.borrow_mut() = Prompted { request: head, ..Prompted::default() };
-            inner.stage_changed();
+        let current = inner.prompt.borrow().request().map(|request| request.id.clone());
+        if head.as_ref().map(|request| &request.id) != current.as_ref() {
+            inner.ask(tui, head);
             return;
         }
         // The presentation reads the tool call's input, which may still be arriving.
-        let stage = inner.prompted.borrow().stage;
-        if let Some(request) = head
-            && stage == Stage::Permission
-            && changes.any_message(&request.session_id)
-        {
-            inner.prompted.borrow_mut().request = Some(request);
+        let refreshed = match (head, &mut *inner.prompt.borrow_mut()) {
+            (Some(head), Prompt::Asking { request, .. }) if changes.any_message(&head.session_id) => {
+                *request = head;
+                true
+            }
+            _ => false,
+        };
+        if refreshed {
             inner.render();
         }
     }
@@ -185,10 +196,10 @@ impl Drop for Permission {
     fn drop(&mut self) {
         let inner = &self.0;
         inner.overlay.detach();
+        inner.prompt.take();
         let Some(tui) = inner.tui.upgrade() else {
             return;
         };
-        super::form::dispose_later(&tui.app, inner.layer.take().into_iter().collect());
         if let Some(id) = inner.resize.take() {
             tui.app.remove_handler(id);
         }
@@ -236,47 +247,51 @@ impl Inner {
         }
     }
 
-    fn choices(&self) -> Vec<Choice> {
-        let prompted = self.prompted.borrow();
-        let save =
-            prompted.request.as_ref().and_then(|request| request.save.as_ref()).is_some_and(|save| !save.is_empty());
-        if save {
-            return vec![Choice::Once, Choice::Always, Choice::Reject];
-        }
-        vec![Choice::Once, Choice::Reject]
+    fn shown(&self) -> bool {
+        !matches!(*self.prompt.borrow(), Prompt::Hidden)
     }
 
-    /// Registers the stage's keys and draws it.
-    fn stage_changed(self: &Rc<Self>) {
-        self.reject.take();
-        let Some(tui) = self.tui.upgrade() else {
-            return;
+    /// Asks `request` from the start, as TS remounts the question, or hides the prompt.
+    fn ask(self: &Rc<Self>, tui: &Tui, request: Option<PermissionRequest>) {
+        let next = match request {
+            Some(request) => Prompt::Asking {
+                _layer: self.layer(tui, self.question_layer(&request)),
+                request,
+                selected: 0,
+                expanded: false,
+            },
+            None => Prompt::Hidden,
         };
-        super::form::dispose_later(&tui.app, self.layer.take().into_iter().collect());
-        let stage = self.prompted.borrow().stage;
-        let prompting = self.prompted.borrow().request.is_some();
-        if prompting {
-            let layer = match stage {
-                Stage::Permission => self.question_layer(),
-                Stage::Reject => self.reject_layer(),
-            };
-            match tui.keymap.layer(layer) {
-                Ok(disposer) => *self.layer.borrow_mut() = Some(disposer),
-                Err(error) => log::error!("permission keymap layer: {error}"),
-            }
-            // The session prompt hides; it must not keep the keys. An open dialog keeps its own.
-            if !tui.dialogs.is_open() {
-                tui.app.blur();
-            }
+        self.show(tui, next);
+    }
+
+    fn reject(self: &Rc<Self>, tui: &Tui, request: PermissionRequest) {
+        let (view, field) = self.reject_view(tui, &tui.page(), tui.app.size().0 < 80);
+        let _layer = self.layer(tui, self.reject_layer());
+        self.show(tui, Prompt::Rejecting { request, view, field, _layer });
+    }
+
+    fn layer(&self, tui: &Tui, layer: KeymapLayer<u32>) -> DeferredDisposer {
+        let disposer = tui.keymap.layer(layer).inspect_err(|error| log::error!("permission keymap layer: {error}"));
+        DeferredDisposer(tui.app.clone(), disposer.ok())
+    }
+
+    /// Replaces the prompt, which drops the keys of the one before, and draws it.
+    fn show(self: &Rc<Self>, tui: &Tui, next: Prompt) {
+        let prompting = !matches!(next, Prompt::Hidden);
+        drop(self.prompt.replace(next));
+        // The session prompt hides; it must not keep the keys. An open dialog keeps its own.
+        if prompting && !tui.dialogs.is_open() {
+            tui.app.blur();
         }
         self.render();
-        if let Some(field) = self.reject.borrow().as_ref() {
+        if let Prompt::Rejecting { field, .. } = &*self.prompt.borrow() {
             field.focus();
         }
     }
 
     /// `SessionQuestion`'s layer.
-    fn question_layer(self: &Rc<Self>) -> KeymapLayer<u32> {
+    fn question_layer(self: &Rc<Self>, request: &PermissionRequest) -> KeymapLayer<u32> {
         let run = |action: fn(&Rc<Inner>)| bind!(self, |inner, _: Option<&str>, _: Option<&KeyEvent>| action(&inner));
         let mut commands = vec![
             TuiCommand::new("app.exit", run(Inner::dismiss))
@@ -288,7 +303,7 @@ impl Inner {
                 .group("Permission")
                 .bind(Bind::Off),
         ];
-        if self.choices().len() > 1 {
+        if choices(request).len() > 1 {
             commands.push(
                 TuiCommand::inline("left,h", run(|inner| inner.move_selection(-1)))
                     .title("Previous option")
@@ -304,8 +319,11 @@ impl Inner {
             TuiCommand::inline(
                 "return",
                 run(|inner| {
-                    let selected = inner.prompted.borrow().selected;
-                    inner.select(inner.choices()[selected]);
+                    let choice = match &*inner.prompt.borrow() {
+                        Prompt::Asking { request, selected, .. } => choices(request)[*selected],
+                        _ => return,
+                    };
+                    inner.select(choice);
                 }),
             )
             .title("Select option")
@@ -322,7 +340,10 @@ impl Inner {
                 "app.exit",
                 bind!(self, |inner, _, event: Option<&KeyEvent>| {
                     let ctrl_c = event.is_some_and(|event| event.matches("ctrl+c"));
-                    let field = inner.reject.borrow().clone();
+                    let field = match &*inner.prompt.borrow() {
+                        Prompt::Rejecting { field, .. } => Some(field.clone()),
+                        _ => None,
+                    };
                     if let Some(field) = field.filter(|field| ctrl_c && !field.text().is_empty()) {
                         field.set_text("");
                         return;
@@ -342,8 +363,14 @@ impl Inner {
     }
 
     fn dismiss(self: &Rc<Self>) {
-        if self.prompted.borrow().expanded {
-            self.prompted.borrow_mut().expanded = false;
+        let minimized = match &mut *self.prompt.borrow_mut() {
+            Prompt::Asking { expanded, .. } if *expanded => {
+                *expanded = false;
+                true
+            }
+            _ => false,
+        };
+        if minimized {
             self.render();
             return;
         }
@@ -351,18 +378,16 @@ impl Inner {
     }
 
     fn toggle_fullscreen(self: &Rc<Self>) {
-        {
-            let mut prompted = self.prompted.borrow_mut();
-            prompted.expanded = !prompted.expanded;
+        if let Prompt::Asking { expanded, .. } = &mut *self.prompt.borrow_mut() {
+            *expanded = !*expanded;
         }
         self.render();
     }
 
     fn move_selection(self: &Rc<Self>, by: isize) {
-        let count = self.choices().len() as isize;
-        {
-            let mut prompted = self.prompted.borrow_mut();
-            prompted.selected = (prompted.selected as isize + by).rem_euclid(count) as usize;
+        if let Prompt::Asking { request, selected, .. } = &mut *self.prompt.borrow_mut() {
+            let count = choices(request).len() as isize;
+            *selected = (*selected as isize + by).rem_euclid(count) as usize;
         }
         self.render();
     }
@@ -371,7 +396,7 @@ impl Inner {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let Some(request) = self.prompted.borrow().request.clone() else {
+        let Some(request) = self.prompt.borrow().request().cloned() else {
             return;
         };
         let decision = match choice {
@@ -383,8 +408,7 @@ impl Inner {
                     .data
                     .read(|state| state.session(&request.session_id).is_some_and(|info| info.parent_id.is_some()));
                 if child {
-                    self.prompted.borrow_mut().stage = Stage::Reject;
-                    self.stage_changed();
+                    self.reject(&tui, request);
                     return;
                 }
                 PermissionReply::Reject
@@ -395,22 +419,23 @@ impl Inner {
 
     /// Back to the question, which starts over as TS remounts it.
     fn cancel_reject(self: &Rc<Self>) {
-        let mut prompted = self.prompted.borrow_mut();
-        prompted.stage = Stage::Permission;
-        prompted.selected = 0;
-        prompted.expanded = false;
-        drop(prompted);
-        self.stage_changed();
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
+        let request = self.prompt.borrow().request().cloned();
+        self.ask(&tui, request);
     }
 
     fn confirm_reject(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let Some(request) = self.prompted.borrow().request.clone() else {
-            return;
+        let (request, message) = match &*self.prompt.borrow() {
+            Prompt::Rejecting { request, field, .. } => {
+                (request.clone(), Some(field.text()).filter(|text| !text.is_empty()))
+            }
+            _ => return,
         };
-        let message = self.reject.borrow().as_ref().map(Textarea::text).filter(|text| !text.is_empty());
         reply(&tui, &request, PermissionReply::Reject, message, Box::new(|| {}));
     }
 
@@ -421,24 +446,16 @@ impl Inner {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let prompted = self.prompted.borrow();
-        let Some(request) = prompted.request.clone() else {
-            return;
+        let (request, selected, expanded) = match &*self.prompt.borrow() {
+            Prompt::Hidden => return,
+            Prompt::Rejecting { view, .. } => {
+                self.region.add(view);
+                tui.app.request_redraw();
+                return;
+            }
+            Prompt::Asking { request, selected, expanded, .. } => (request.clone(), *selected, *expanded),
         };
-        let theme = tui.page();
-        let narrow = tui.app.size().0 < 80;
-        if prompted.stage == Stage::Reject {
-            let (view, field) = self.reject_view(&tui, &theme, narrow);
-            self.region.add(&view);
-            *self.reject.borrow_mut() = Some(field);
-            tui.app.request_redraw();
-            return;
-        }
-        let choices = self.choices();
-        let selected = choices[prompted.selected.min(choices.len() - 1)];
-        let expanded = prompted.expanded;
-        drop(prompted);
-        let view = self.question_view(&tui, &theme, &request, &choices, selected, narrow);
+        let view = self.question_view(&tui, &request, selected, expanded);
         if expanded {
             // TS sets `top: -height + 1` from the region at the bottom of the screen, which keeps the first row.
             view.absolute()
@@ -454,16 +471,12 @@ impl Inner {
         tui.app.request_redraw();
     }
 
-    fn question_view(
-        self: &Rc<Self>,
-        tui: &Tui,
-        theme: &Theme,
-        request: &PermissionRequest,
-        choices: &[Choice],
-        selected: Choice,
-        narrow: bool,
-    ) -> View {
+    fn question_view(self: &Rc<Self>, tui: &Tui, request: &PermissionRequest, selected: usize, expanded: bool) -> View {
         let app = &tui.app;
+        let theme = &tui.page();
+        let narrow = tui.app.size().0 < 80;
+        let choices = choices(request);
+        let selected = choices[selected.min(choices.len() - 1)];
         let current = tui.data.read(|state| {
             let (input, metadata) = source(state, request);
             let directory = state.session(&request.session_id).map(|info| info.location.directory.0.clone());
@@ -528,19 +541,26 @@ impl Inner {
                     theme.text.action.primary.base
                 }));
             option.on_hover(bind!(self, |inner, _, over| {
-                if over && inner.prompted.borrow().selected != index {
-                    inner.prompted.borrow_mut().selected = index;
+                let moved = match &mut *inner.prompt.borrow_mut() {
+                    Prompt::Asking { selected, .. } if over && *selected != index => {
+                        *selected = index;
+                        true
+                    }
+                    _ => false,
+                };
+                if moved {
                     inner.render();
                 }
             }));
             option.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| {
-                inner.prompted.borrow_mut().selected = index;
+                if let Prompt::Asking { selected, .. } = &mut *inner.prompt.borrow_mut() {
+                    *selected = index;
+                }
                 inner.select(choice);
             }));
             actions.add(&option);
         }
         let hints = View::new(app).row().gap(2).shrink(0.0);
-        let expanded = self.prompted.borrow().expanded;
         if let Some(key) = tui.keymap.shortcut(FULLSCREEN) {
             hints.add(&hint(app, theme, &key, if expanded { "minimize" } else { "fullscreen" }));
         }
@@ -604,6 +624,13 @@ impl Inner {
             .child(&footer(app, theme, narrow).child(&field).child(&actions));
         (view, field)
     }
+}
+
+fn choices(request: &PermissionRequest) -> Vec<Choice> {
+    if request.save.as_ref().is_some_and(|save| !save.is_empty()) {
+        return vec![Choice::Once, Choice::Always, Choice::Reject];
+    }
+    vec![Choice::Once, Choice::Reject]
 }
 
 /// Sends the reply; the store drops the request once the server took it. A failure shows as a toast.
