@@ -393,7 +393,7 @@ function DialogPairing(props: {
             {(current) => (
               <>
                 <div
-                  class={`${frame} bg-white p-6 [&>svg]:size-full`}
+                  class={`${frame} bg-v2-background-bg-base p-6 [&>svg]:size-full`}
                   role="img"
                   aria-label={ctx.t("qr")}
                   innerHTML={qr()}
