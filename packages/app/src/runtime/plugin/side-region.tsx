@@ -43,8 +43,6 @@ export function SideRegion(props: {
   region: Region
   sidebar: PanelSidebar
   present?: boolean
-  /** Shows the region on a screen without a session id, such as an unsent draft. */
-  show?: boolean
   size: Sizing
   /**
    * The width the contents keep, the side region's open width, which a close keeps as the far end of its travel. Set
@@ -56,7 +54,7 @@ export function SideRegion(props: {
 }) {
   const layout = useLayout()
   const language = useLanguage()
-  const { view, params } = useSessionLayout()
+  const { view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const tabsOpen = createMemo(() => isDesktop() && view().side.opened())
@@ -100,7 +98,7 @@ export function SideRegion(props: {
   })
 
   return (
-    <Show when={isDesktop() && (props.show || !!params.id)}>
+    <Show when={isDesktop()}>
       <aside
         ref={setRoot}
         id="review-panel"

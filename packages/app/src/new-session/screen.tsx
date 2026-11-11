@@ -192,7 +192,6 @@ export default function NewSessionPage(props: { draftId: string }) {
                 screen={mounted.screen}
                 region={region}
                 sidebar={sidebar}
-                show
                 size={screen.size}
                 contentWidth={screen.side.contentWidth}
                 drag={drag}
