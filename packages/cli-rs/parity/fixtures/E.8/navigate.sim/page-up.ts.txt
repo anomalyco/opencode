@@ -7,7 +7,7 @@
   ┃  Question 7
   ┃
 
-     → Explored: 2 reads
+     + 2 reads
 
      Answer 7 one.
 

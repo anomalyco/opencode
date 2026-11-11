@@ -3,7 +3,7 @@
   ┃  Question 8
   ┃
 
-     → Explored: 2 reads
+     + 2 reads
 
      Answer 8 one.
 
