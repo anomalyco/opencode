@@ -7,9 +7,8 @@
 //! `queued_prompt.delete` cancels a prompt, and `queued_prompt.undo` takes it back into the draft.
 //!
 //! Child sessions (`crate::subagents`) add their permissions and forms after the session's own, and global forms
-//! come last. `session.child.first` opens the subagent panel, which leads to the inspector of one child;
-//! `session.background` backgrounds the running subagents, and `composer.subagent.interrupt` interrupts the
-//! inspected one.
+//! come last. `session.child.first` opens the subagent panel, which leads to the inspector of one child, and
+//! `composer.subagent.interrupt` interrupts the inspected one.
 
 pub mod form;
 pub mod menu;
@@ -26,9 +25,9 @@ use std::time::Duration;
 use opencode_api::client::Client;
 use opencode_api::generated::{
     FormID, FormInfo, FormListInput, LocationQueryInput, PermissionAskedData, PermissionListInput,
-    PermissionReplyInput, PermissionRequest, SessionBackgroundInput, SessionFormCancelInput, SessionFormListInput,
-    SessionFormReplyInput, SessionGetInput, SessionID, SessionInboxListInput, SessionInfo, SessionInterruptInput,
-    SessionListInput, SessionListInputOrder, SessionMessageGetInput, SessionMessageInfo, V2Event,
+    PermissionReplyInput, PermissionRequest, SessionFormCancelInput, SessionFormListInput, SessionFormReplyInput,
+    SessionGetInput, SessionID, SessionInboxListInput, SessionInfo, SessionInterruptInput, SessionListInput,
+    SessionListInputOrder, SessionMessageGetInput, SessionMessageInfo, V2Event,
 };
 use opencode_local::cli_config::Visibility;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
@@ -535,8 +534,8 @@ impl Footers {
         self.0.subagents_changed();
     }
 
-    /// The running children, and whether one of them runs in the foreground, blocking the session.
-    pub fn running_subagents(&self) -> (usize, bool) {
+    /// The running children.
+    pub fn running_subagents(&self) -> usize {
         self.0.running()
     }
 }
@@ -838,17 +837,6 @@ impl Inner {
         self.app.spawn(async move { target.client.session_interrupt(&input).await }, |_, result| {
             if let Err(error) = result {
                 log::warn!("mini subagent interrupt failed: {error}");
-            }
-        });
-    }
-
-    /// `onBackground`: the session's running subagents go to the background.
-    fn background(self: &Rc<Self>) {
-        let Some(target) = self.target.borrow().clone() else { return };
-        let input = SessionBackgroundInput { session_id: SessionID(target.session.clone()) };
-        self.app.spawn(async move { target.client.session_background(&input).await }, |_, result| {
-            if let Err(error) = result {
-                log::warn!("mini background failed: {error}");
             }
         });
     }
@@ -2324,13 +2312,6 @@ fn install_layers(inner: &Rc<Inner>) {
         ])
         .enabled(when(|inner| composer(inner) && !inner.prompt.queued().is_empty())),
         KeymapLayer::new(vec![
-            TuiCommand::new("session.background", run(Inner::background))
-                .title("Background subagents")
-                .group("Session"),
-        ])
-        .enabled(when(|inner| composer(inner) && inner.running().1))
-        .priority(1),
-        KeymapLayer::new(vec![
             TuiCommand::new("session.child.first", run(Inner::open_subagents)).title("View subagents").group("Session"),
         ])
         .enabled(when(|inner| composer(inner) && !inner.state.borrow().tabs.is_empty())),
@@ -2425,11 +2406,9 @@ fn install_layers(inner: &Rc<Inner>) {
 }
 
 impl Inner {
-    /// The running children, and whether one runs in the foreground (`foregroundSubagents`).
-    fn running(&self) -> (usize, bool) {
-        let state = self.state.borrow();
-        let running: Vec<&Tab> = state.tabs.iter().filter(|tab| tab.status == Status::Running).collect();
-        (running.len(), running.iter().any(|tab| !tab.background))
+    /// The running children.
+    fn running(&self) -> usize {
+        self.state.borrow().tabs.iter().filter(|tab| tab.status == Status::Running).count()
     }
 
     fn cycle_variant_rc(self: &Rc<Self>) {
