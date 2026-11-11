@@ -18,6 +18,7 @@ import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
+import { createNextTimelineRowRenderer } from "@opencode/session-ui/timeline-next/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import type { TimelineFollow } from "./follow"
@@ -101,7 +102,22 @@ type MessageTimelineProps = {
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
-  const controller = createTimelineController({ session: props.session, active: () => props.active !== false })
+  const settings = useSettings()
+
+  // The New timeline experiment builds its own projection and rows, so turning it on or off mounts the timeline again.
+  return (
+    <Show when={settings.general.newTimeline()} fallback={<MountedTimeline {...props} next={false} />}>
+      <MountedTimeline {...props} next />
+    </Show>
+  )
+}
+
+function MountedTimeline(props: MessageTimelineProps & { next: boolean }) {
+  const controller = createTimelineController({
+    session: props.session,
+    active: () => props.active !== false,
+    next: props.next,
+  })
   const tail = props.follow.following() ? controller.data.projection.rows().at(-1) : undefined
 
   if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
@@ -124,6 +140,7 @@ export function MessageTimeline(props: MessageTimelineProps) {
 
 function MessageTimelineView(
   props: MessageTimelineProps & {
+    next: boolean
     data: TimelineController["data"]
     action: TimelineController["action"]
     title: TimelineController["title"]
@@ -280,7 +297,7 @@ function MessageTimelineView(
 
   const settings = useSettings()
 
-  const rowRenderer = createSessionTimelineRowRenderer({
+  const rowRenderer = (props.next ? createNextTimelineRowRenderer : createSessionTimelineRowRenderer)({
     foldUserMessages: settings.general.foldUserMessages,
     sessionID: () => sessionID()!,
     status: sessionStatus,
