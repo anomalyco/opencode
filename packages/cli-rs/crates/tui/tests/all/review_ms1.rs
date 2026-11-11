@@ -47,6 +47,17 @@ fn routes() -> Vec<MemoryRoute> {
         MemoryRoute::json("GET", "/api/agent", 200, &list(json!([agent]))),
         MemoryRoute::json("GET", "/api/model", 200, &list(json!([model]))),
         MemoryRoute::json("POST", "/api/session", 200, &json!({ "data": session("ses_new", DIRECTORY) })),
+        // The submit commits its model; a failed setup would close the new tab and go back to `ses_gone`.
+        MemoryRoute::json("POST", "/api/session/:id/model", 204, &Value::Null),
+        MemoryRoute::json(
+            "POST",
+            "/api/session/:id/prompt",
+            200,
+            &json!({ "data": {
+                "id": "msg_1", "sessionID": "ses_new", "time": { "created": 1 }, "type": "user",
+                "payload": { "text": "hello" }, "delivery": "steer",
+            } }),
+        ),
         MemoryRoute::json("GET", "/api/session/ses_new", 200, &json!({ "data": session("ses_new", DIRECTORY) })),
         MemoryRoute::json("GET", "/api/session/ses_a", 200, &json!({ "data": session("ses_a", DIRECTORY) })),
         MemoryRoute::json("GET", "/api/session/ses_gone", 200, &json!({ "data": session("ses_gone", GONE) })),

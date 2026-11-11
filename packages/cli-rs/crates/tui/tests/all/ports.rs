@@ -65,7 +65,10 @@ impl Transport for Server {
             headers: request.headers.clone(),
         };
         self.log.lock().unwrap().push(seen.clone());
-        let (status, body) = (self.handler)(&seen).unwrap_or_else(|| support::base(&seen, DIRECTORY));
+        // `ses_p` exists unless the handler says otherwise: a session the server lacks closes again.
+        let parent = (seen.method == "GET" && seen.path == "/api/session/ses_p")
+            .then(|| (200, json!({ "data": session("ses_p", "Parent", None, 1) })));
+        let (status, body) = (self.handler)(&seen).or(parent).unwrap_or_else(|| support::base(&seen, DIRECTORY));
         Box::pin(async move { Ok(support::respond(status, &body)) })
     }
 }
