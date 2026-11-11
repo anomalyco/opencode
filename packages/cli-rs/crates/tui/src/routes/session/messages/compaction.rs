@@ -3,6 +3,7 @@
 //! failure as Markdown.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use opencode_api::generated::{SessionMessageCompaction, SessionMessageInfo, TokenUsageInfo};
 use opencode_ui::motion::Spinner;
@@ -10,6 +11,7 @@ use opentui::prelude::*;
 use opentui::widget::Markdown;
 
 use super::list::Context;
+use crate::features::session_links::{self, Links};
 
 pub struct Compaction {
     root: View,
@@ -18,6 +20,7 @@ pub struct Compaction {
     right: View,
     body: View,
     markdown: Markdown,
+    _links: Rc<Links>,
     rendered: RefCell<Option<Rendered>>,
 }
 
@@ -41,11 +44,12 @@ impl Compaction {
     pub fn new(cx: &Context<'_>) -> Self {
         let (left, label, right) = rule(cx);
         let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true);
+        let links = session_links::attach(cx.tui, &markdown);
         let body =
             View::new(cx.app).padding_edge(Edge::Top, 1).padding_edge(Edge::Left, 3).visible(false).child(&markdown);
         let line = View::new(cx.app).row().align_items(Align::Center).child(&left).child(&label).child(&right);
         let root = View::new(cx.app).column().shrink(0.0).child(&line).child(&body);
-        Self { root, left, label, right, body, markdown, rendered: RefCell::default() }
+        Self { root, left, label, right, body, markdown, _links: links, rendered: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {

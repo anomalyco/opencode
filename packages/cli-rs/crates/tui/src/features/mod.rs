@@ -15,6 +15,7 @@ pub mod overlays;
 pub mod quick_switch;
 pub mod route_missing;
 pub mod selection;
+pub mod session_links;
 pub mod startup;
 pub mod system_commands;
 pub mod title;

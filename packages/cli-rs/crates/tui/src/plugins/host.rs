@@ -233,6 +233,8 @@ impl Host for Tui {
             != Some(opencode_local::cli_config::Markdown::Source);
         let syntax = opencode_ui::code::syntax_theme(&page);
         let markdown = opencode_ui::markdown::view(&self.app, &page, &syntax, &code_blocks(self), conceal, false);
+        // The `/btw` answer links sessions, as a message does.
+        crate::features::session_links::pin(self, &markdown);
         markdown.set_markdown(text);
         markdown.as_any()
     }
