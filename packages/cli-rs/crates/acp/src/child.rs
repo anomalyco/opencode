@@ -10,6 +10,8 @@ pub struct Session {
     pub parent_id: String,
     pub depth: u64,
     pub title: Option<String>,
+    /// The inbox item of the prompt turn that started the family, if a prompt turn did.
+    pub turn_id: Option<String>,
 }
 
 impl Session {

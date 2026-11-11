@@ -14,7 +14,7 @@ fn ctx(child_updates: bool) -> TurnContext {
     TurnContext {
         session_id: ROOT.to_owned(),
         cwd: "/workspace".to_owned(),
-        start: TurnStart { kind: StartKind::Input, id: "msg_input".to_owned() },
+        start: Some(TurnStart { kind: StartKind::Input, id: "msg_input".to_owned() }),
         child_updates,
         compaction: false,
     }
