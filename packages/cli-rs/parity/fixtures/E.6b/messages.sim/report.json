@@ -56,10 +56,7 @@
         "POST /api/session/<ses>/revert/stage {\"messageID\":\"<msg>\"}"
       ]
     },
-    "onlyA": [
-      "GET /api/fs/list",
-      "GET /api/plugin"
-    ],
+    "onlyA": [],
     "onlyB": []
   },
   "model": [
@@ -77,6 +74,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -95,6 +93,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -113,6 +112,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -131,6 +131,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -151,6 +152,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -169,6 +171,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -187,6 +190,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -205,6 +209,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"

@@ -38,9 +38,7 @@
         "DELETE /api/session/<ses>"
       ]
     },
-    "onlyA": [
-      "GET /api/plugin"
-    ],
+    "onlyA": [],
     "onlyB": []
   },
   "model": [

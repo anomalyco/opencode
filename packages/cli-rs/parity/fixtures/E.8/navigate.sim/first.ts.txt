@@ -4,7 +4,7 @@
   ┃  Question 1
   ┃
 
-     → Explored: 2 reads
+     + 2 reads
 
      Answer 1 one.
 
@@ -18,7 +18,7 @@
   ┃  Question 2
   ┃
 
-     → Explored: 2 reads
+     + 2 reads
 
                                                                                   Jump to latest ↓
   ┃

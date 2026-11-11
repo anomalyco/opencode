@@ -31,8 +31,7 @@
       ]
     },
     "onlyA": [
-      "GET /api/fs/list",
-      "GET /api/plugin"
+      "GET /api/experimental/migration/v1"
     ],
     "onlyB": []
   },
@@ -56,6 +55,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
@@ -81,6 +81,7 @@
           "shell",
           "skill",
           "subagent",
+          "todowrite",
           "webfetch",
           "websearch",
           "execute"
