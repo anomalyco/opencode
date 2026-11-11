@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use opencode_api::generated::{SessionID, SessionInboxInfo, SessionInboxItem, SessionInfoOutcome, SessionViewInput};
 use opencode_local::storage::Storage;
-use opencode_store::{Changes, SessionStatus, State};
+use opencode_store::{Catalog, Changes, Location, SessionStatus, State};
 use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::input::{KeyCode, Modifiers};
@@ -27,11 +27,25 @@ use serde::{Deserialize, Serialize};
 use crate::app::Tui;
 use crate::features::events::Handled;
 use crate::routes::Route;
+use crate::routes::session::form::quiet;
 use crate::routes::session::messages::list::ScrollAnchor;
 use model::{Closed, History, NEW_SESSION_TAB_TITLE, Tab, Unread};
 
 const VIEW_RETRY_DELAY: Duration = Duration::from_millis(250);
 const VIEW_RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
+/// `TAB_PREFETCH_DELAY`: background tabs read their transcripts and requests after this.
+const PREFETCH_DELAY: Duration = Duration::from_millis(300);
+/// How many recently viewed sessions besides the open tabs keep their transcripts (`session-tabs.tsx:140-146`).
+const RETAINED: usize = 3;
+
+/// `createSessionRetention` (`packages/client/src/solid/retention.ts`): the recently viewed roots, newest first,
+/// and each evicted session with its root and message count then.
+#[derive(Default)]
+struct Retention {
+    previous: Option<String>,
+    recent: Vec<String>,
+    evicted: HashMap<String, String>,
+}
 
 /// One scope's tabs as `tabs.json` stores them. `unread` stays empty, for older clients that still read it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -103,8 +117,10 @@ pub struct Tabs {
     retry: Cell<Option<opentui::prelude::TimerId>>,
     attempt: Cell<u32>,
     cwd: RefCell<String>,
-    /// Tabs whose session [`prefetch`] read.
-    fetched: RefCell<HashSet<String>>,
+    /// The open tabs [`prefetch`] last read, sorted (`openTabSessions`), and its delayed reads.
+    fetched: RefCell<String>,
+    prefetch: Cell<Option<opentui::prelude::TimerId>>,
+    retention: RefCell<Retention>,
     epoch: Cell<Option<std::time::Instant>>,
     _watch: RefCell<Option<opencode_local::watch::Watch>>,
 }
@@ -316,6 +332,7 @@ fn enabled(weak: &std::rc::Weak<Tui>) -> Condition {
 
 /// After a route change: admit the routed session as a tab and record it in the history.
 pub fn route_changed(tui: &Tui) {
+    retain(tui);
     let tabs = &tui.tabs;
     let routed = match tui.route() {
         Route::Session { id } => Some(id),
@@ -357,7 +374,10 @@ pub fn route_changed(tui: &Tui) {
 /// After the store changed: refresh titles and roots of open tabs (`normalize`), count prompt pulses, and
 /// acknowledge what the user sees.
 pub fn sync(tui: &Tui, changes: &Changes) {
-    prefetch(tui);
+    prefetch(tui, changes);
+    if changes.sessions() {
+        retain(tui);
+    }
     if Tabs::enabled(tui) && changes.sessions() {
         let open = tui.tabs.tabs(tui);
         // `normalize`: each tab under its root session, once, with the store's title.
@@ -386,23 +406,116 @@ pub fn sync(tui: &Tui, changes: &Changes) {
     acknowledge(tui);
 }
 
-/// Reads each open tab's session and its children once, so persisted tabs show current titles and states
-/// (the first half of the TS prefetch effect; the delayed message, inbox, permission, and form reads are not
-/// ported).
-fn prefetch(tui: &Tui) {
+/// The prefetch effect (`session-tabs.tsx:285-325`): when the open tabs change or the connection comes back, reads
+/// each tab's session and children, then the info and VCS of their locations, and after [`PREFETCH_DELAY`] the
+/// transcripts, inboxes, permissions and forms of the tabs in the background, so they show their states.
+fn prefetch(tui: &Tui, changes: &Changes) {
     if !Tabs::enabled(tui) {
         return;
     }
-    let tabs = tui.tabs.tabs(tui);
-    let missing: Vec<SessionID> = tui.data.read(|state| {
-        tabs.iter().map(|tab| SessionID(tab.session_id.clone())).filter(|id| state.session(id).is_none()).collect()
-    });
-    for id in missing {
-        if tui.tabs.fetched.borrow_mut().insert(id.0.clone()) {
-            let task = tui.data.session_sync(&id, true);
-            tui.app.spawn(task, |_, _| {});
-        }
+    let mut ids: Vec<String> = tui.tabs.tabs(tui).into_iter().map(|tab| tab.session_id).collect();
+    ids.sort();
+    let signature = ids.join("\n");
+    if signature.is_empty() || (*tui.tabs.fetched.borrow() == signature && !changes.all) {
+        return;
     }
+    *tui.tabs.fetched.borrow_mut() = signature;
+    let sessions: Vec<SessionID> = ids.into_iter().map(SessionID).collect();
+    let reads: Vec<_> = sessions.iter().map(|id| tui.data.session_sync(id, true)).collect();
+    tui.app.spawn(
+        futures_util::future::join_all(reads),
+        bind!(tui, |tui, _, _| {
+            let mut directories: Vec<String> = tui.data.read(|state| {
+                sessions
+                    .iter()
+                    .filter_map(|id| Some(state.session(id)?.location.directory.as_str().to_owned()))
+                    .collect()
+            });
+            directories.sort();
+            directories.dedup();
+            for location in directories.iter().map(|directory| Location::new(directory.as_str())) {
+                let location = &location;
+                quiet(&tui, tui.data.location_sync(Some(location)));
+                quiet(&tui, tui.data.catalog_sync(Catalog::Vcs, Some(location)));
+            }
+        }),
+    );
+    if let Some(timer) = tui.tabs.prefetch.take() {
+        tui.app.cancel_timer(timer);
+    }
+    let timer = tui.app.set_timeout(
+        PREFETCH_DELAY,
+        bind!(tui, |tui, _| {
+            tui.tabs.prefetch.set(None);
+            let current = tui.tabs.current(&tui);
+            for tab in tui.tabs.tabs(&tui).into_iter().filter(|tab| current.as_ref() != Some(&tab.session_id)) {
+                let id = SessionID(tab.session_id);
+                quiet(&tui, tui.data.message_sync(&id));
+                quiet(&tui, tui.data.pending_sync(&id));
+                quiet(&tui, tui.data.permission_sync(&id));
+                quiet(&tui, tui.data.form_sync(&id.0, None));
+            }
+        }),
+    );
+    tui.tabs.prefetch.set(Some(timer));
+}
+
+/// `createSessionRetention` with the open tabs kept (`session-tabs.tsx:140-146`): the open root, the open tabs, and
+/// the [`RETAINED`] roots viewed last keep their transcripts; every other session's are evicted. Only navigation
+/// advances recency. A session evicted already is evicted again only once a background turn refilled it.
+fn retain(tui: &Tui) {
+    let viewed = match tui.route() {
+        Route::Session { id } => Some(id.0),
+        _ => None,
+    };
+    let keep: Vec<String> = if Tabs::enabled(tui) {
+        tui.tabs.tabs(tui).into_iter().map(|tab| tab.session_id).collect()
+    } else {
+        Vec::new()
+    };
+    let mut retention = tui.tabs.retention.borrow_mut();
+    let (excluded, evict) = tui.data.read(|state| {
+        let root = |id: &str| state.root(&SessionID(id.to_owned())).0;
+        let current = viewed.as_deref().map(root);
+        let keep: HashSet<String> = keep.iter().map(|id| root(id)).collect();
+        let advanced = current.clone().filter(|_| viewed != retention.previous);
+        let mut recent: Vec<String> = Vec::new();
+        for id in advanced.into_iter().chain(retention.recent.iter().map(|id| root(id))) {
+            if !recent.contains(&id) {
+                recent.push(id);
+            }
+        }
+        let mut retained = keep.clone();
+        retained.extend(recent.iter().filter(|id| !keep.contains(*id)).take(RETAINED).cloned());
+        retained.extend(current);
+        recent.retain(|id| retained.contains(id));
+        retention.recent = recent;
+        let count = |id: &SessionID| state.messages(id).len();
+        let excluded: Vec<(SessionID, String)> = state
+            .sessions()
+            .into_iter()
+            .map(|session| (session.id.clone(), root(&session.id.0)))
+            .filter(|(_, root)| !retained.contains(root))
+            .collect();
+        let mut evict: Vec<String> = excluded
+            .iter()
+            .filter(|(id, root)| retention.evicted.get(&id.0) != Some(&format!("{root}:{}", count(id))))
+            .map(|(_, root)| root.clone())
+            .collect();
+        evict.sort();
+        evict.dedup();
+        (excluded, evict)
+    });
+    retention.previous = viewed;
+    // The evictions publish, which may sync the tabs again.
+    drop(retention);
+    for root in evict {
+        tui.data.evict(&SessionID(root));
+    }
+    let evicted = tui.data.read(|state| {
+        excluded.into_iter().map(|(id, root)| (id.0.clone(), format!("{root}:{}", state.messages(&id).len()))).collect()
+    });
+    tui.tabs.retention.borrow_mut().evicted = evicted;
 }
 
 /// `title`: the store's title, else the persisted one, else the fallback, else the timestamped default.

@@ -13,6 +13,7 @@ use std::process::Command;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_tui::panel::{Presentation, Target};
 use opencode_tui::{Deps, Route, Tui};
@@ -142,6 +143,76 @@ fn clear_closes_the_tab_and_goes_home() {
     // Home shows the strip with the new-session tab.
     let screen = h.wait_for("New session");
     assert!(screen.lines().next().unwrap().contains("Fix the parser"), "{screen}");
+}
+
+// `createSessionRetention` (`packages/client/src/solid/retention.ts`, limit 3 in `session-tabs.tsx:140-146`): of the
+// sessions viewed and left, only the last three keep their transcripts.
+#[test]
+fn only_the_last_three_viewed_sessions_keep_their_transcripts() {
+    let ids: Vec<String> = (1..=6).map(|n| format!("ses_{n}")).collect();
+    let mut routes = vec![
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/config", 200, &json!([])),
+    ];
+    for id in &ids {
+        let path = format!("/api/session/{id}");
+        let message = json!({ "id": format!("msg_{id}"), "type": "user", "text": format!("Hello from {id}"), "time": { "created": 1 } });
+        routes.push(MemoryRoute::json("GET", &path, 200, &json!({ "data": support::test_session(id, id) })));
+        routes.push(MemoryRoute::json(
+            "GET",
+            &format!("{path}/message"),
+            200,
+            &json!({ "data": [message], "cursor": {} }),
+        ));
+        for list in ["inbox", "permission", "form"] {
+            routes.push(MemoryRoute::json("GET", &format!("{path}/{list}"), 200, &json!({ "data": [] })));
+        }
+    }
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false, "tabs": { "mode": "off" } }"#)),
+        ..support::deps(Arc::new(Memory::new(routes)))
+    };
+    let h = support::mount(100, 30, deps);
+    for id in &ids {
+        h.tui.navigate(support::session_route(id));
+        h.wait_for(&format!("Hello from {id}"));
+    }
+    h.tui.navigate(Route::Home);
+    let loaded = |id: &String| h.tui.data.read(|state| !state.messages(&SessionID(id.clone())).is_empty());
+    let kept = h.app.wait_until(WAIT, || ids.iter().filter(|id| loaded(id)).count() == 3);
+    let held: Vec<_> = ids.iter().filter(|id| loaded(id)).collect();
+    assert!(kept, "{held:?}");
+    assert_eq!(held, ids[3..].iter().collect::<Vec<_>>());
+}
+
+// The prefetch effect (`session-tabs.tsx:285-325`): a persisted background tab reads its permissions after a delay,
+// so its tab shows that it waits on the user.
+#[test]
+fn a_background_tab_reads_its_pending_permission() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    let storage = paths.state.join(CHANNEL).join("tui");
+    std::fs::create_dir_all(&storage).unwrap();
+    let mut tabs = json!({ "cwd": {} });
+    tabs["cwd"][cwd()] = json!({ "tabs": [{ "sessionID": "ses_a" }, { "sessionID": "ses_b" }] });
+    std::fs::write(storage.join("tabs.json"), tabs.to_string()).unwrap();
+    let mut routes = routes();
+    let request = json!({ "id": "per_1", "sessionID": "ses_b", "action": "read", "resources": ["notes.md"] });
+    routes.insert(0, MemoryRoute::json("GET", "/api/session/ses_b/permission", 200, &json!({ "data": [request] })));
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        roots: support::roots(paths, CHANNEL),
+        route: support::session_route("ses_a"),
+        events: true,
+        ..support::deps(Arc::new(Memory::new(routes)))
+    };
+    let h = support::mount(100, 30, deps);
+    h.wait_for("Fix the parser");
+    let waiting = h.app.wait_until(WAIT, || {
+        h.app.advance(std::time::Duration::from_millis(100));
+        h.tui.tabs.status(&h.tui, "ses_b").attention.is_some()
+    });
+    assert!(waiting, "{}", h.app.text());
 }
 
 // Another client holding `tabs.json`'s lock delays the writes, not the UI thread that queues them
