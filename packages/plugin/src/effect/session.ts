@@ -206,14 +206,13 @@ export interface SessionHooks {
   readonly "experimental.model.resolve": SessionModelResolve
   readonly "model.request": SessionModelRequest
   /**
-   * Runs for HTTP requests a Session makes. Registered as a `ctx.model.hook("experimental.http.request")` that skips
-   * calls without a Session. Prefer the model hook, which also sees Generate calls; `event.session` holds the Session.
+   * Runs for HTTP requests a Session makes, inside `ctx.model.hook("experimental.http.request")`. Prefer the model hook,
+   * which also sees Generate calls; `event.session` holds the Session.
    */
   readonly "http.request": SessionHttpRequest
   /**
-   * Runs for HTTP responses to a Session's requests. Registered as a `ctx.model.hook("experimental.http.response")`
-   * that skips calls without a Session. Prefer the model hook, which also sees Generate calls; `event.session` holds the
-   * Session.
+   * Runs for HTTP responses to a Session's requests, before `ctx.model.hook("experimental.http.response")`. Prefer the
+   * model hook, which also sees Generate calls; `event.session` holds the Session.
    */
   readonly "http.response": SessionHttpResponse
   readonly "experimental.ws.handshake": SessionWebSocketHandshake

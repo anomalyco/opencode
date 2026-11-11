@@ -1505,8 +1505,8 @@ await ctx.session.hook(
 #### Native HTTP
 
 Prefer the [model HTTP hooks](#model-http-experimental), which run for the same requests and for calls made outside a
-Session. `ctx.session.hook("http.request")` and `"http.response"` still work: each one is registered as a model hook
-that skips calls without a Session, so both kinds run in plugin order.
+Session. `ctx.session.hook("http.request")` and `"http.response"` still work for Session requests. The model hooks wrap
+them: a model request hook runs before the session one, and a model response hook runs after it.
 
 #### Native WebSocket (experimental)
 

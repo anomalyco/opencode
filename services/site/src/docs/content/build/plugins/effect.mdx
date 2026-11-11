@@ -1311,7 +1311,7 @@ Modify native provider requests or responses with the experimental model HTTP ho
 to a model provider, including Generate text, image and decision calls made outside a Session. Bodies are one-shot
 streams; clone or replace a body before reading it. `event.kind` says why the call was made, and `event.session` is set
 for a Session's own model requests. The session `http.request` and `http.response` hooks still
-work, as model hooks that skip calls without a Session.
+work for Session requests, inside the model hooks.
 
 ```ts
 effect: (ctx) =>
