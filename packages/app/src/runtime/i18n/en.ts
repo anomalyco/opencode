@@ -272,6 +272,8 @@ export const dict = {
     "Check that your browser shows the same code before you authorize.",
   "provider.connect.oauth.auto.description":
     "Your browser opens so you can sign in to {{provider}}. Come back here when you are done.",
+  "provider.connect.oauth.auto.paste.description":
+    "Your browser opens so you can sign in to {{provider}}. If it can't reach the machine running OpenCode, paste the URL it was redirected to below.",
   "provider.connect.oauth.code.description":
     "Your browser opens so you can sign in to {{provider}}. Paste the authorization code it gives you below.",
   "provider.connect.oauth.openBrowser": "Open browser",
@@ -390,9 +392,6 @@ export const dict = {
   "dialog.mcp.signIn.open": "Sign in to {{name}}",
   "dialog.mcp.signIn.description":
     "Your browser opens so you can sign in to {{name}}. If it can't reach the machine running OpenCode, paste the URL it was redirected to below.",
-  "dialog.mcp.signIn.paste.label": "Redirect URL",
-  "dialog.mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
-  "dialog.mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
   "dialog.mcp.signIn.syncFailed": "Signed in, but couldn't refresh {{name}}: {{error}}",
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
