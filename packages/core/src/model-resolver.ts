@@ -518,7 +518,8 @@ export const layer = Layer.effect(
       )
       if (!info) return undefined
       const { provider, credential, runtimeInfo } = yield* prepare(info, ref.variant)
-      // Same keyless rule as chat. Media routes can't swap auth after construction, so the package gets `apiKey: false`.
+      // Same no-key rule as chat in `load`. A built image or decision model can't have its auth swapped like chat,
+      // so the package gets `apiKey: false` up front and builds the model without auth.
       const keyless =
         provider?.activation === "enabled" &&
         credential === undefined &&
