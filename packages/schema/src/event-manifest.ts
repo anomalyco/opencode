@@ -80,7 +80,6 @@ export const ServerDefinitions = Event.inventory(
   McpEvent.StatusChanged,
   McpEvent.ResourcesChanged,
   McpEvent.ExperimentalEvent,
-  McpEvent.ExperimentalSubscriptionChanged,
 )
 export const Server = Event.latest(ServerDefinitions)
 export type ServerEvent = Schema.Schema.Type<(typeof ServerDefinitions)[number]>

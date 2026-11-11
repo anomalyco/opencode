@@ -38,9 +38,7 @@ describe("public event manifest", () => {
     expect(EventManifest.Server.get("mcp.status.changed")).toBe(McpEvent.StatusChanged)
     expect(EventManifest.Server.get("mcp.resources.changed")).toBe(McpEvent.ResourcesChanged)
     expect(EventManifest.Server.get("experimental.mcp.event")).toBe(McpEvent.ExperimentalEvent)
-    expect(EventManifest.Server.get("experimental.mcp.subscription.changed")).toBe(
-      McpEvent.ExperimentalSubscriptionChanged,
-    )
+    expect(EventManifest.Server.has("experimental.mcp.subscription.changed")).toBe(false)
     expect(EventManifest.Server.get("session.created")).toBe(SessionEvent.Created)
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.get("project.updated")).toBe(Project.Event.Updated)

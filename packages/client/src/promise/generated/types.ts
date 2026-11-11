@@ -2129,15 +2129,6 @@ export type ExperimentalMcpEvent = {
   }
 }
 
-export type ExperimentalMcpSubscriptionChanged = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "experimental.mcp.subscription.changed"
-  location?: LocationRef
-  data: { id: string }
-}
-
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2979,7 +2970,6 @@ export type V2Event =
   | McpStatusChanged
   | McpResourcesChanged
   | ExperimentalMcpEvent
-  | ExperimentalMcpSubscriptionChanged
   | V2EventRpc
   | V2EventServerConnected
 
@@ -4478,7 +4468,6 @@ export type EventSubscribeInput = {
         | "mcp.status.changed"
         | "mcp.resources.changed"
         | "experimental.mcp.event"
-        | "experimental.mcp.subscription.changed"
         | `${"rpc."}${string}`
       >
     | undefined
