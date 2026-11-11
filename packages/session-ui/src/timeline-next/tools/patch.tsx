@@ -4,32 +4,18 @@ import { DiffChanges } from "@opencode/ui/diff-changes"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { getFilename } from "@opencode/util/path"
-import {
-  batch,
-  createEffect,
-  createMemo,
-  createSignal,
-  createUniqueId,
-  For,
-  Index,
-  Match,
-  on,
-  Show,
-  Switch,
-  type JSX,
-} from "solid-js"
+import { batch, createMemo, createUniqueId, For, Index, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { patchFileGroups } from "../../components/apply-patch-file"
 import { createDisclosure } from "../../components/disclosure"
 import { displayDirectory, FileAccordionGroup, FileTool, type ToolProps } from "../../tools/tool-renderer"
-import { ClampedContent } from "./clamped-content"
 
 // One unchanged line around each change places it without a wall of context.
 const context = 1
 
 /**
- * A file change: each file says what happened to it beside its name, in the change colors, and opens to its diff, cut
- * to the first rows until clicked. A diff here is read, not acted on line by line, so its lines stay still.
+ * A file change: each file says what happened to it beside its name, in the change colors, and opens to its whole diff.
+ * A diff here is read, not acted on line by line, so its lines stay still.
  */
 export function PatchTool(props: ToolProps) {
   const i18n = useI18n()
@@ -67,11 +53,6 @@ export function PatchTool(props: ToolProps) {
                 onOpenChange: (open) => props.onFileOpenChange?.(file().path, open),
               })
 
-              const preview = () => file().views.length > 0
-              // Shown in full once clicked; closing the file cuts it again.
-              const [full, setFull] = createSignal(false)
-              createEffect(on(disclosure.open, (open) => !open && setFull(false), { defer: true }))
-
               const views = () => (
                 <For each={file().views}>
                   {(view) => (
@@ -94,7 +75,6 @@ export function PatchTool(props: ToolProps) {
                 <FileAccordionItem
                   open={disclosure.open()}
                   onOpenChange={disclosure.setOpen}
-                  preview={preview()}
                   type={file().type}
                   header={
                     <div data-slot="apply-patch-trigger-content">
@@ -132,13 +112,7 @@ export function PatchTool(props: ToolProps) {
                     </div>
                   }
                 >
-                  <Show when={disclosure.mounted()}>
-                    <Show when={preview()} fallback={views()}>
-                      <ClampedContent expanded={full()} height={diffPreviewHeight} onExpand={() => setFull(true)}>
-                        {views()}
-                      </ClampedContent>
-                    </Show>
-                  </Show>
+                  <Show when={disclosure.mounted()}>{views()}</Show>
                 </FileAccordionItem>
               )
             }}
@@ -153,8 +127,6 @@ function FileAccordionItem(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   type?: string
-  /** The open content is cut to its first lines until clicked. */
-  preview?: boolean
   header: JSX.Element
   children: JSX.Element
 }) {
@@ -164,7 +136,6 @@ function FileAccordionItem(props: {
     <div
       data-slot="accordion-item"
       data-type={props.type}
-      data-preview={props.preview ? "" : undefined}
       data-expanded={props.open ? "" : undefined}
       data-closed={!props.open ? "" : undefined}
     >
@@ -200,20 +171,4 @@ function FileAccordionItem(props: {
       </Show>
     </div>
   )
-}
-
-// An open diff shows its first six rows until clicked.
-function diffPreviewHeight(content: HTMLElement) {
-  const column = content.querySelector("diffs-container")?.shadowRoot?.querySelector("[data-content]")
-
-  if (!column) return
-  const rows = [...column.children].filter((row) => row instanceof HTMLElement)
-  const start = rows.findIndex((row) => !row.hasAttribute("data-separator"))
-
-  if (start === -1) return
-  const last = rows.slice(start, start + 6).at(-1)
-
-  if (!last) return
-
-  return last.getBoundingClientRect().bottom - content.getBoundingClientRect().top
 }

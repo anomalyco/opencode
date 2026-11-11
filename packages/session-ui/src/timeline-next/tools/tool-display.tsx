@@ -31,7 +31,7 @@ const tools: Record<string, Component<ToolProps>> = {
 
 /**
  * One call. A call that failed shows as an error card. One the user stopped (`stopped`, from the rules) shows as one
- * that ran does, a shell saying it was stopped on its card. `tool` is the tool's current name, from the rules.
+ * that ran does, a shell saying it was stopped on its row. `tool` is the tool's current name, from the rules.
  */
 export function ToolDisplay(props: ToolProps & { id: string; error?: string; stopped?: boolean }) {
   const data = useData()

@@ -76,8 +76,7 @@
   }
 }
 
-/* Cut content shows its first lines, fading out where it is cut; a click shows the rest. Running output keeps its newest
-   lines in view instead, so it fades at the top. */
+/* Cut output shows its last lines, fading out at the top where it is cut. */
 [data-timeline="next"] [data-component="clamped-content"] {
   &[data-clamped] {
     max-height: var(--clamped-content-height, 96px);
@@ -92,21 +91,15 @@
       content: "";
       position: absolute;
       inset-inline: 0;
-      bottom: 0;
+      top: 0;
       height: 20px;
-      background: linear-gradient(transparent, var(--clamped-content-fade));
+      background: linear-gradient(var(--clamped-content-fade), transparent);
       pointer-events: none;
     }
   }
-
-  &[data-overflow][data-tail]::after {
-    top: 0;
-    bottom: auto;
-    background: linear-gradient(var(--clamped-content-fade), transparent);
-  }
 }
 
-/* A shell is its command and output, always showing, with the output cut to four lines. */
+/* A command the user ran is its command and output, always showing, with the output cut to four lines. */
 [data-timeline="next"] [data-component="shell-tool"] {
   [data-slot="shell-tool-writing"] {
     display: block;
@@ -213,20 +206,6 @@
       background-color: color-mix(in srgb, var(--v2-overlay-simple-overlay-hover) 50%, transparent);
     }
   }
-}
-
-/* An open diff shows six lines until it is clicked. */
-[data-timeline="next"]
-  [data-component="accordion"][data-scope="apply-patch"]
-  [data-slot="accordion-item"][data-preview] {
-  --clamped-content-height: 120px;
-
-  [data-component="clamped-content"][data-expandable] {
-    cursor: pointer;
-  }
-
-  /* The diff's background, as the viewer sets it. */
-  --clamped-content-fade: var(--opencode-diffs-bg, var(--color-background-stronger));
 }
 
 /* Anything nested under a row hangs from a line 2px in from the row's leading edge, with the
@@ -407,8 +386,9 @@
    The gap is the frame's only space above its content; rows add none of their own. */
 [data-timeline="next"] {
   --timeline-gap-s: 16px;
-  --timeline-gap-m: 24px;
-  --timeline-gap-l: 32px;
+  --timeline-gap-m: 20px;
+  --timeline-gap-l: 24px;
+  --timeline-gap-xl: 32px;
 }
 
 [data-timeline="next"][data-timeline-gap="s"] {
@@ -421,6 +401,10 @@
 
 [data-timeline="next"][data-timeline-gap="l"] {
   padding-top: var(--timeline-gap-l);
+}
+
+[data-timeline="next"][data-timeline-gap="xl"] {
+  padding-top: var(--timeline-gap-xl);
 }
 
 /* The user's message actions show in the large gap below it rather than adding to it, above the row that follows so
@@ -589,13 +573,21 @@
   height: calc(var(--line-height-compact) + var(--timeline-status-space));
   padding-top: var(--timeline-status-space);
 
-  /* The timeline's small and large gaps between rows, which the lane sits outside of. */
+  /* The timeline's gaps between rows, which the lane sits outside of. */
   &[data-spacing="s"] {
-    --timeline-status-space: 16px;
+    --timeline-status-space: var(--timeline-gap-s);
+  }
+
+  &[data-spacing="m"] {
+    --timeline-status-space: var(--timeline-gap-m);
   }
 
   &[data-spacing="l"] {
-    --timeline-status-space: 32px;
+    --timeline-status-space: var(--timeline-gap-l);
+  }
+
+  &[data-spacing="xl"] {
+    --timeline-status-space: var(--timeline-gap-xl);
   }
 
   &[data-collapsed] {

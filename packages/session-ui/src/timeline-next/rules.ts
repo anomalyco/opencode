@@ -16,13 +16,12 @@ export type ToolMode = "explore" | "edit" | "run" | "tool"
 
 /**
  * How a call shows when it stands on its own:
- * - `line`: one line of activity.
- * - `card`: a command and its output, cut to its first lines until opened.
- * - `file`: a file's changes, cut to the first lines of its diff until opened.
+ * - `line`: one line of activity, a command's included: commands run long, so its row cuts the command to a line.
+ * - `file`: a file's name and changes, opening to its whole diff.
  * - `event`: work that runs on: a subagent, or a shell started in the background. Grouped, starting it is counted in
  *   the group's label; on its own, it is counted with others like it: Started 2 subagents.
  */
-export type ToolShape = "line" | "card" | "file" | "event"
+export type ToolShape = "line" | "file" | "event"
 
 export type ToolRule = {
   /** The detail setting that shows or hides it. */
@@ -50,7 +49,7 @@ const tools: Record<string, ToolRule> = {
   edit: file,
   write: file,
   patch: file,
-  shell: { category: "shell", mode: "run", shape: "card" },
+  shell: { category: "shell", mode: "run", shape: "line" },
   execute: { category: "shell", mode: "run", shape: "line" },
   subagent: { category: "subagents", mode: "tool", shape: "event" },
   question: { category: "tools", mode: "tool", shape: "line", alone: true },
@@ -145,8 +144,8 @@ export function contentGroup(detail: TimelineDetail, content: Content, commentar
 }
 
 /**
- * Whether a part starts open. What the user opened or closed always wins. Expanded details show a command's whole
- * output and a call's details; collapsed ones show a command's last lines and a call's one line. A file shows its name
+ * Whether a part starts open. What the user opened or closed always wins. Expanded details show a command with its
+ * output and a call's details; collapsed ones show each as one line. A file shows its name
  * and changes, its diff opening as `diffOpens` says, and a call that errored opens to its error where details expand.
  */
 export function contentOpens(detail: TimelineDetail, content: Content) {
@@ -163,7 +162,7 @@ export function contentOpens(detail: TimelineDetail, content: Content) {
   return false
 }
 
-/** Whether a file's diff starts open, cut to its first rows, where edits show in detail. */
+/** Whether a file's diff starts open, where edits show in detail. */
 export function diffOpens(detail: TimelineDetail) {
   return detail.edit.details === "expanded"
 }

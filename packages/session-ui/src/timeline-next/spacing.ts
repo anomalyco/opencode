@@ -13,16 +13,17 @@ type Content = SessionMessageAssistant["content"][number]
 export type TimelineBlock = "user" | "agent" | "event"
 
 /**
- * What a row or an item in an opened group shows: the agent's words, a card (a command's output or a file's changes),
- * or a line of activity.
+ * What a row or an item in an opened group shows: the agent's words, a card (a file's changes), or a line of
+ * activity.
  */
 export type TimelineItem = "prose" | "card" | "line"
 
 /**
- * The space above a row: small within a reply or a run of session events, medium between a card and the rows beside it
- * in a reply, large around each thing the user did and wherever a new block starts.
+ * The space above a row: small between lines of activity in a reply or a run of session events, medium between the
+ * agent's words and its activity, large between a card and the rows beside it, and extra large around each thing the
+ * user did and wherever a new block starts.
  */
-export type TimelineGap = "s" | "m" | "l"
+export type TimelineGap = "s" | "m" | "l" | "xl"
 
 /**
  * Each row's gap above it, by key; the first row gets none. Background work reporting back always starts a block, which
@@ -51,22 +52,24 @@ export function timelineGaps(
 }
 
 /**
- * The gap above the status line below a working turn. It stands in for the agent's next row, so it continues agent work
- * a small gap below, and starts it a large gap below anything else. Before the turn shows anything, such as while a
- * hidden thought streams, it stands in for the turn's first row, so it sits where that row will land.
+ * The gap above the status line below a working turn. It stands in for the agent's next line of activity, so it sits
+ * where that row would. Before the turn shows anything, such as while a hidden thought streams, it stands in for the
+ * turn's first row, so it sits where that row will land.
  */
 export function laneGap(
   rows: readonly TimelineRow.TimelineRow[],
   turnID: string,
   messageByID: ReadonlyMap<string, SessionMessageInfo>,
-): Exclude<TimelineGap, "m"> | undefined {
+): TimelineGap | undefined {
   const last =
     rows.findLast((row) => row.userMessageID === turnID && rowBlock(row, messageByID)) ??
     rows.findLast((row) => rowBlock(row, messageByID))
 
-  if (!last) return undefined
+  const block = last && rowBlock(last, messageByID)
 
-  return rowBlock(last, messageByID) === "agent" ? "s" : "l"
+  if (!last || !block) return undefined
+
+  return gap({ block, item: rowItem(last, messageByID) }, { block: "agent", item: "line" }, false)
 }
 
 function gap(
@@ -75,12 +78,13 @@ function gap(
   starts: boolean,
 ): TimelineGap {
   // Each thing the user did stands on its own, apart from the reply before it and the one after.
-  if (starts || previous.block !== current.block || current.block === "user") return "l"
+  if (starts || previous.block !== current.block || current.block === "user") return "xl"
 
-  // A card stands a little apart from the lines and paragraphs around it; anything else in a reply reads together.
-  if (previous.item !== current.item && (previous.item === "card" || current.item === "card")) return "m"
+  if (previous.item === current.item) return "s"
 
-  return "s"
+  // A card stands apart from the lines and paragraphs around it, and the agent's words a little apart from its activity,
+  // so each reads as what it is.
+  return previous.item === "card" || current.item === "card" ? "l" : "m"
 }
 
 /** What one part shows, so an opened group spaces its items as the timeline spaces rows. */
@@ -88,9 +92,8 @@ export function contentItem(content: Content): TimelineItem {
   if (content.type === "text") return "prose"
 
   if (content.type === "reasoning" || content.state.status === "error") return "line"
-  const shape = toolRule(content).shape
 
-  return shape === "card" || shape === "file" ? "card" : "line"
+  return toolRule(content).shape === "file" ? "card" : "line"
 }
 
 function rowBlock(

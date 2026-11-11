@@ -85,7 +85,7 @@ import {
 } from "./run-machine"
 import { LinkedText } from "../components/linked-text"
 
-function ShellSubmessage(props: { text: string; animate?: boolean }) {
+export function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
   let valueRef: HTMLSpanElement | undefined
 
@@ -1859,7 +1859,7 @@ ToolRegistry.register({
   },
 })
 
-function ConsoleOutput(props: { command?: string; output: string }) {
+export function ConsoleOutput(props: { command?: string; output: string }) {
   const i18n = useI18n()
 
   return (

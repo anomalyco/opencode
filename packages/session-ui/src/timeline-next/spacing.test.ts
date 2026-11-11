@@ -71,7 +71,11 @@ const gaps = (rows: TimelineRow.TimelineRow[]) => {
 }
 
 describe("timelineGaps", () => {
-  test("a reply reads as one stretch: lines and paragraphs sit the small gap apart", () => {
+  test("lines of activity in a row sit the small gap apart", () => {
+    expect(gaps([context("context:explored"), context("context:edited")])).toEqual(["-", "s"])
+  })
+
+  test("a reply reads as one stretch, its words a little apart from its activity", () => {
     expect(
       gaps([
         new TimelineRow.UserMessage({ userMessageID: "user" }),
@@ -80,10 +84,10 @@ describe("timelineGaps", () => {
         context("context:edited"),
         part("part:text-1", "assistant:text:1"),
       ]),
-    ).toEqual(["-", "l", "s", "s", "s"])
+    ).toEqual(["-", "xl", "m", "m", "m"])
   })
 
-  test("a card stands a medium gap from the rows beside it in a reply", () => {
+  test("the agent's words sit a little apart from its activity, a command included", () => {
     expect(
       gaps([
         part("part:text-0", "assistant:text:0"),
@@ -91,6 +95,20 @@ describe("timelineGaps", () => {
         part("part:text-1", "assistant:text:1"),
       ]),
     ).toEqual(["-", "m", "m"])
+  })
+
+  test("a card stands a large gap from the rows beside it in a reply", () => {
+    expect(
+      gaps([
+        part("part:text-0", "assistant:text:0"),
+        new TimelineRow.AssistantPart({
+          userMessageID: "user",
+          group: { key: "file:edited", type: "file", refs: [{ messageID: assistant.id, partID: "patch" }] },
+          previousAssistantPart: true,
+        }),
+        context("context:next"),
+      ]),
+    ).toEqual(["-", "l", "l"])
   })
 
   test("each thing the user did stands apart, even from another thing they did", () => {
@@ -101,7 +119,7 @@ describe("timelineGaps", () => {
         new TimelineRow.Notice({ userMessageID: "shell-turn", messageID: goal.id }),
         context("context:next"),
       ]),
-    ).toEqual(["-", "l", "l", "l"])
+    ).toEqual(["-", "xl", "xl", "xl"])
   })
 
   test("session events sit together, apart from the work around them", () => {
@@ -112,6 +130,6 @@ describe("timelineGaps", () => {
         new TimelineRow.Notice({ userMessageID: "user", messageID: switched.id }),
         new TimelineRow.UserMessage({ userMessageID: "next" }),
       ]),
-    ).toEqual(["-", "l", "s", "l"])
+    ).toEqual(["-", "xl", "s", "xl"])
   })
 })

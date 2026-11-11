@@ -1,5 +1,6 @@
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Show, type JSX } from "solid-js"
+import type { TimelineGap } from "./spacing"
 
 /**
  * The lane below a working turn: the status line, and any action beside it. It keeps its height while empty, so the
@@ -10,7 +11,7 @@ export function StatusLane(props: {
   label?: string
   collapsed?: boolean
   /** The space above the next row of the turn, so the line sits where that row will. */
-  spacing?: "s" | "l"
+  spacing?: TimelineGap
   class?: string
   children?: JSX.Element
 }) {
