@@ -29,10 +29,12 @@ impl State {
             source: data.source.clone(),
             message: data.message.clone(),
         });
+        self.permission_live.add(&data.id.0);
         self.log.permissions(&data.session_id);
     }
 
     pub(crate) fn remove_permission(&mut self, session: &SessionID, request: &PermissionID) {
+        self.permission_live.remove(&request.0);
         let Some(requests) = self.permission.get_mut(session) else {
             return;
         };
@@ -45,14 +47,15 @@ impl State {
 }
 
 impl Data {
-    /// Reads pending permissions once per invalidation (`permission.sync`).
+    /// Reads pending permissions once per invalidation (`permission.sync`). Requests asked or
+    /// settled while the read was in flight win over the snapshot (deviation O89-list-snapshots).
     pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
         let session = session.clone();
         self.sync_start(
             format!("session.permission:{}", session.0),
-            |state| state.deletion_epoch,
-            move |data, started| async move {
-                let list = data
+            |state| (state.deletion_epoch, state.permission_live.now()),
+            move |data, (started, seq)| async move {
+                let mut list = data
                     .client()
                     .permission_list(&PermissionListInput { session_id: session.clone() })
                     .await
@@ -61,6 +64,12 @@ impl Data {
                     if state.deleted_since(&session, started) {
                         return;
                     }
+                    let live = &state.permission_live;
+                    list.retain(|request| !live.removed_since(&request.id.0, seq));
+                    let newer = state.permission.get(&session).into_iter().flatten().filter(|request| {
+                        live.added_since(&request.id.0, seq) && list.iter().all(|item| item.id != request.id)
+                    });
+                    list.extend(newer.cloned().collect::<Vec<_>>());
                     state.permission.insert(session.clone(), list);
                     state.log.permissions(&session);
                 });
