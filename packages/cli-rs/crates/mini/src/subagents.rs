@@ -368,6 +368,12 @@ impl Tracker {
         &self.parent
     }
 
+    /// Shows or hides the reasoning that arrives from now on, as `/settings` does for the main transcript. TS
+    /// fixes it when the tracker starts (`parity/deviations/O89-mini-subagent-thinking.md`).
+    pub fn set_thinking(&mut self, thinking: bool) {
+        self.thinking = thinking;
+    }
+
     /// Whether the tabs, permissions, or forms changed since the last call (`emit`).
     pub fn take_changed(&mut self) -> bool {
         std::mem::take(&mut self.changed)
@@ -1307,6 +1313,24 @@ mod tests {
         tracker.foreign(&event("session.execution.started", "ses_far", json!({})));
         tracker.discovered("ses_far", Discovery::Unrelated);
         assert!(tracker.foreign(&event("session.execution.started", "ses_far", json!({}))).is_empty());
+    }
+
+    #[test]
+    fn child_reasoning_follows_the_setting() {
+        let mut tracker = Tracker::new("ses_root", true, None);
+        tracker.hydrate(&[assistant("msg_p", json!([subagent_call("call_1", "ses_a", "running")]))], &[], false);
+        tracker.select(Some("ses_a"));
+        tracker.child_loaded("ses_a", Ok((Vec::new(), Vec::new())));
+        let reasoning = |ordinal: u64, text: &str| {
+            let data = json!({ "assistantMessageID": "msg_c", "ordinal": ordinal, "text": text });
+            event("session.reasoning.ended", "ses_a", data)
+        };
+        tracker.set_thinking(false);
+        tracker.foreign(&reasoning(0, "Hidden"));
+        assert_eq!(texts(&tracker, "ses_a"), []);
+        tracker.set_thinking(true);
+        tracker.foreign(&reasoning(1, "Shown"));
+        assert_eq!(texts(&tracker, "ses_a"), [(EntryKind::Reasoning, "Thinking: Shown".into())]);
     }
 
     #[test]

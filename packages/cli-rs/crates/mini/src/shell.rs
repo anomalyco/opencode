@@ -673,6 +673,7 @@ impl Mini {
             transcript.thinking = settings.thinking == Visibility::Show;
             transcript.tools = settings.tools == Visibility::Show;
         }
+        self.footers.set_thinking(settings.thinking == Visibility::Show);
         let mut writer = self.writer.borrow_mut();
         writer.set_shell_output(settings.shell_output == Visibility::Show);
         if previous.mono != settings.mono {
