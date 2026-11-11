@@ -189,6 +189,7 @@ const source = {
   "ui.timeline.event.shells.other": "{{count}} shells",
   "ui.timeline.event.failed": "{{count}} failed",
   "ui.timeline.event.allFailed": "Failed",
+  "ui.timeline.notice.agentSwitched": "Switched to {{agent}}",
   "ui.timeline.shell.exit": "Exit {{code}}",
   "ui.timeline.shell.timedOut": "Timed out",
   "ui.timeline.shell.stopped": "Stopped",

@@ -576,15 +576,7 @@ export function createNextTimelineRowRenderer(input: {
   }
 
   const notice = (message: SessionMessageInfo) => {
-    if (message.type === "agent-switched")
-      return {
-        label: i18n.t("ui.sessionTimeline.notice.agentChanged"),
-        data: message.previous
-          ? `${capitalizeAgent(message.previous)} → ${capitalizeAgent(message.agent)}`
-          : capitalizeAgent(message.agent),
-      }
-
-    if (message.type === "model-switched") return undefined
+    if (message.type === "agent-switched" || message.type === "model-switched") return undefined
 
     if (message.type === "skill") return { label: i18n.t("ui.tool.skill"), data: message.name }
 
@@ -700,8 +692,16 @@ export function createNextTimelineRowRenderer(input: {
       return value?.type === "location-switched" ? value : undefined
     })
 
-    const model = createMemo(() => {
+    // Switching the agent or the model changes who answers next, so both draw as the same separator.
+    const switched = createMemo(() => {
       const value = message()
+
+      if (value?.type === "agent-switched")
+        return {
+          label: i18n.t("ui.timeline.notice.agentSwitched", { agent: capitalizeAgent(value.agent) }),
+          providerID: undefined,
+          variant: undefined,
+        }
 
       if (value?.type !== "model-switched") return undefined
       const match = data.store.provider?.all?.get(value.model.providerID)
@@ -819,7 +819,7 @@ export function createNextTimelineRowRenderer(input: {
           when={moved()}
           fallback={
             <Show
-              when={model()}
+              when={switched()}
               fallback={
                 <Show when={content()}>
                   {(content) => (
@@ -847,17 +847,13 @@ export function createNextTimelineRowRenderer(input: {
                               />
                             )}
                           </Show>
-                          <bdi
-                            dir="auto"
-                            class={`font-[530] ${outcomeNoticeColor(content().outcome)}`}
-                            classList={{ "text-v2-text-text-faint": message()?.type === "agent-switched" }}
-                          >
+                          <bdi dir="auto" class={`font-[530] ${outcomeNoticeColor(content().outcome)}`}>
                             {content().label}
                           </bdi>
                           <Show when={content().data}>
                             {(data) => (
-                              <span classList={{ "ms-2": message()?.type === "agent-switched" }}>
-                                <Show when={message()?.type !== "agent-switched"}>{" · "}</Show>
+                              <span>
+                                {" · "}
                                 <bdi dir="auto">{data()}</bdi>
                               </span>
                             )}
@@ -890,9 +886,9 @@ export function createNextTimelineRowRenderer(input: {
                 </Show>
               }
             >
-              {(model) => (
-                <div data-slot="session-timeline-notice" data-type="model-switched" class={`w-full ${inset()}`}>
-                  <Separator label={model().label} providerID={model().providerID} variant={model().variant} />
+              {(switched) => (
+                <div data-slot="session-timeline-notice" data-type={message()?.type} class={`w-full ${inset()}`}>
+                  <Separator label={switched().label} providerID={switched().providerID} variant={switched().variant} />
                 </div>
               )}
             </Show>
