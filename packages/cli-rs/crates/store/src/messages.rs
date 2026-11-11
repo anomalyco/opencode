@@ -499,6 +499,7 @@ impl State {
             existing.raw_finish = None;
             existing.native = None;
             existing.time.created = started;
+            existing.time.first_token = None;
             existing.time.streamed = None;
             existing.time.completed = None;
             if let Some(snapshot) = &data.snapshot {
@@ -527,6 +528,13 @@ impl State {
             ..Default::default()
         };
         self.insert_message(session, SessionMessageInfo::Assistant(assistant));
+    }
+
+    pub(crate) fn on_step_first_token(&mut self, event: &SessionStepFirstToken) {
+        let created = event.created;
+        self.edit_assistant(&event.data.session_id, &event.data.assistant_message_id, |assistant| {
+            assistant.time.first_token = Some(created)
+        });
     }
 
     pub(crate) fn on_step_streamed(&mut self, event: &SessionStepStreamed) {
@@ -991,6 +999,7 @@ pub(crate) fn durable_seq(event: &V2Event) -> Option<i64> {
 fn edit_session(event: &V2Event) -> Option<&SessionID> {
     Some(match event {
         V2Event::SessionShellEnded(event) => &event.data.session_id,
+        V2Event::SessionStepFirstToken(event) => &event.data.session_id,
         V2Event::SessionStepStreamed(event) => &event.data.session_id,
         V2Event::SessionStepEnded(event) => &event.data.session_id,
         V2Event::SessionStepFailed(event) => &event.data.session_id,
