@@ -2017,7 +2017,9 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
   // Code Mode returns structured results as compact JSON; show those indented and highlighted, anything else plain.
   const output = createMemo(() => {
     const decoded = decodeJson(props.output)
+
     if (Option.isNone(decoded)) return { text: props.output, json: false }
+
     return { text: JSON.stringify(decoded.value, null, 2), json: true }
   })
 
