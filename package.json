@@ -38,7 +38,7 @@
       "packages/*",
       "packages/plugins/*",
       "services/*",
-      "packages/stats/*"
+      "packages/data/*"
     ],
     "catalog": {
       "@effect/opentelemetry": "4.1.0",
