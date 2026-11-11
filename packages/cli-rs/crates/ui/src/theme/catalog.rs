@@ -3,22 +3,35 @@
 //! themes take the new-designs migration.
 
 use std::borrow::Cow;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, OnceLock};
 
 use indexmap::{IndexMap, IndexSet};
 use serde::Deserialize;
 use serde_json::Value;
+use serde_json::value::RawValue;
 
 use super::document::{decode, modes};
 use super::{Theme, ThemeMode, resolve, v1_new};
 
+/// A built-in theme: its document stays raw JSON until the theme is first loaded, so startup parses only the one in
+/// use.
 #[derive(Deserialize)]
 struct Builtin {
-    name: String,
-    document: Value,
+    name: &'static str,
+    #[serde(rename = "document")]
+    raw: &'static RawValue,
+    #[serde(skip)]
+    document: OnceLock<Value>,
+}
+
+impl Builtin {
+    fn document(&self) -> &Value {
+        self.document.get_or_init(|| serde_json::from_str(self.raw.get()).expect("generated/themes.json is valid"))
+    }
 }
 
 #[derive(Deserialize)]
+#[serde(bound(deserialize = "'de: 'static"))]
 struct Builtins {
     themes: Vec<Builtin>,
 }
@@ -66,7 +79,7 @@ impl Catalog {
     /// `system`.
     pub fn names(&self) -> Vec<String> {
         let mut names = IndexSet::new();
-        names.extend(BUILTINS.themes.iter().map(|theme| theme.name.clone()));
+        names.extend(BUILTINS.themes.iter().map(|theme| theme.name.to_owned()));
         names.extend(self.custom.keys().cloned());
         names.insert("system".to_owned());
         names.into_iter().collect()
@@ -84,7 +97,7 @@ impl Catalog {
         if let Some(custom) = self.custom.get(name) {
             return Some(ThemeSource::Custom(custom));
         }
-        BUILTINS.themes.iter().find(|theme| theme.name == name).map(|theme| ThemeSource::Builtin(&theme.document))
+        BUILTINS.themes.iter().find(|theme| theme.name == name).map(|theme| ThemeSource::Builtin(theme.document()))
     }
 
     /// `loadTheme`: the theme `name` in `mode`, or in its first mode when it lacks `mode`.
@@ -122,4 +135,21 @@ fn parse<'a>(source: ThemeSource<'a>, name: &str) -> Result<Cow<'a, Value>, Stri
 /// `themeDecodeError`'s message.
 fn invalid(name: &str, value: &str) -> String {
     format!("Invalid theme: {name} {value} is an invalid value")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_builtin_loads_from_its_raw_document() {
+        let catalog = Catalog::default();
+        let names = catalog.names();
+        assert_eq!(names.len(), BUILTINS.themes.len() + 1);
+        for name in &names[..BUILTINS.themes.len()] {
+            for mode in [ThemeMode::Dark, ThemeMode::Light] {
+                catalog.load(name, mode).unwrap_or_else(|error| panic!("{name}: {error}"));
+            }
+        }
+    }
 }
