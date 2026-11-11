@@ -1,7 +1,6 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { httpClient } from "@opencode/util/effect/app-node-platform"
 import {
   DecisionModel,
   DecisionModelCompatibility,
@@ -14,10 +13,8 @@ import {
 } from "@opencode/ai/effect"
 import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
-import { HttpClient } from "effect/http"
 import { AISDK } from "./aisdk.js"
 import { Config } from "./config.js"
-import { ConsoleAccess } from "./console-access.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
 import { IntegrationConnection } from "./integration/connection.js"
@@ -470,10 +467,9 @@ export const layer = Layer.effect(
     const models = yield* Model.Service
     const integrations = yield* Integration.Service
     const config = yield* Config.Service
-    const http = yield* HttpClient.HttpClient
+    const usageLimits = yield* UsageLimits.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
-    const autoBalanceCache = new Map<string, { at: number; value: UsageLimits.Info["go"] }>()
     const dependencies: Dependencies = {
       loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
       loadAISDK: (model) => aisdk.model(model),
@@ -482,6 +478,7 @@ export const layer = Layer.effect(
       const provider = yield* providers.get(selected.providerID)
       const integrationID = provider?.integrationID ?? Integration.ID.make(selected.providerID)
       let connection = yield* integrations.connection.active(integrationID)
+      const originalConnection = connection
       // Auto-balance OpenCode Go accounts when enabled and more than one is available.
       const entries = yield* config.entries()
       const toggle = Config.latest(entries, "experimental")?.auto_balance_accounts === true
@@ -491,35 +488,23 @@ export const layer = Layer.effect(
         const credentialConnections = connections.filter((item) => item.type === "credential")
         if (credentialConnections.length >= 2) {
           const now = Date.now()
-          const cacheTtl = 5 * 60 * 1000
-          const scored: Array<{
-            conn: (typeof credentialConnections)[number]
-            score: number
-            monthlyPercent: number
-            resetsAt: number
-          }> = []
-          for (const conn of credentialConnections) {
-            const cached = autoBalanceCache.get(conn.id)
-            let goUsage = cached && now - cached.at < cacheTtl ? cached.value : undefined
-            if (goUsage === undefined && (!cached || now - cached.at >= cacheTtl)) {
-              const resolved = yield* integrations.connection
-                .resolve(conn)
-                .pipe(Effect.catch(() => Effect.succeed(undefined)))
-              if (resolved && resolved.type !== "external") {
-                const workspaceID = resolved.metadata?.orgID
-                if (typeof workspaceID === "string") {
-                  goUsage = yield* UsageLimits.readGo(http, ConsoleAccess.server(resolved), resolved, workspaceID).pipe(
-                    Effect.catch(() => Effect.succeed(undefined)),
-                  )
-                }
-              }
-              autoBalanceCache.set(conn.id, { at: now, value: goUsage })
-            }
-            if (!goUsage) continue
-            const monthly = goUsage.monthly
-            const score = monthly.percent / Math.max(1, monthly.resetsAt - now)
-            scored.push({ conn, score, monthlyPercent: monthly.percent, resetsAt: monthly.resetsAt })
-          }
+          const scored = (yield* Effect.forEach(
+            credentialConnections,
+            (conn) =>
+              Effect.gen(function* () {
+                const resolved = yield* integrations.connection
+                  .resolve(conn)
+                  .pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (!resolved || resolved.type === "external") return undefined
+                const goUsage = yield* usageLimits.go(resolved).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                if (!goUsage) return undefined
+                if (goUsage.rolling.limited || goUsage.weekly.limited || goUsage.monthly.limited) return undefined
+                const monthly = goUsage.monthly
+                const score = monthly.percent / Math.max(1, monthly.resetsAt - now)
+                return { conn, score, monthlyPercent: monthly.percent, resetsAt: monthly.resetsAt }
+              }),
+            { concurrency: 4 },
+          )).filter((item): item is NonNullable<typeof item> => item !== undefined)
           if (scored.length > 0) {
             const minScore = Math.min(...scored.map((item) => item.score))
             const best = scored.filter((item) => item.score === minScore)
@@ -538,6 +523,18 @@ export const layer = Layer.effect(
             }
           }
         }
+      }
+      // Make the auto-balanced choice visible instead of switching accounts silently.
+      if (
+        toggle &&
+        selected.providerID === "opencode-go" &&
+        connection &&
+        originalConnection &&
+        IntegrationConnection.key(connection) !== IntegrationConnection.key(originalConnection)
+      ) {
+        yield* integrations.connection
+          .activate((connection as { type: "credential"; id: any }).id)
+          .pipe(Effect.catch(() => Effect.void))
       }
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const selectedVariant = yield* withVariant(selected, variant)
@@ -678,5 +675,5 @@ function usesAPIKeyAuth(packageName: string | undefined) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Provider.node, Model.node, Integration.node, Config.node, httpClient, Npm.node, AISDK.node],
+  deps: [Provider.node, Model.node, Integration.node, Config.node, UsageLimits.node, Npm.node, AISDK.node],
 })

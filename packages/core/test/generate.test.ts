@@ -442,9 +442,22 @@ describe("image and decision generation", () => {
   )
   const executor = RequestExecutor.layer.pipe(Layer.provide(http))
   const mediaConfig = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
+  const mediaUsageLimits = Layer.mock(UsageLimits.Service)({
+    get: () => Effect.succeed(undefined),
+    go: () => Effect.succeed(undefined),
+  })
   const mediaResolver = ModelResolver.layer.pipe(
     Layer.provide(
-      Layer.mergeAll(mediaProviders, mediaModels, mediaIntegrations, mediaConfig, npm, aisdk, FetchHttpClient.layer),
+      Layer.mergeAll(
+        mediaProviders,
+        mediaModels,
+        mediaIntegrations,
+        mediaConfig,
+        mediaUsageLimits,
+        npm,
+        aisdk,
+        FetchHttpClient.layer,
+      ),
     ),
   )
   const mediaIt = testEffect(

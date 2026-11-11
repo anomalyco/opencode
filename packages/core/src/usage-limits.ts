@@ -35,6 +35,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const integrations = yield* Integration.Service
     const http = yield* HttpClient.HttpClient
+    const cache = new Map<string, { at: number; value: UsageLimits.Go | undefined }>()
 
     const get = Effect.fn("UsageLimits.get")(function* () {
       const connection = yield* integrations.connection.active(Integration.ID.make("opencode"))
@@ -70,9 +71,20 @@ export const layer = Layer.effect(
       const workspaceID = credential.metadata?.orgID
       if (typeof workspaceID !== "string") return undefined
       const server = ConsoleAccess.server(credential)
-      return yield* readGo(http, server, credential, workspaceID).pipe(
-        Effect.catch((error) => Effect.fail(new UnavailableError({ message: error.message }))),
+      const cacheKey = `${credential.type}:${credential.type === "key" ? credential.key : credential.access}:${workspaceID}`
+      const now = Date.now()
+      const ttl = 5 * 60 * 1000
+      const cached = cache.get(cacheKey)
+      if (cached && now - cached.at < ttl) return cached.value
+      const result = yield* readGo(http, server, credential, workspaceID).pipe(
+        Effect.timeoutOrElse({ duration: Duration.seconds(15), orElse: () => Effect.succeed(undefined) }),
+        Effect.result,
       )
+      if (result._tag === "Success") {
+        cache.set(cacheKey, { at: now, value: result.success })
+        return result.success
+      }
+      return undefined
     })
 
     return Service.of({ get, go })
