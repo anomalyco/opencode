@@ -17,7 +17,6 @@ base64.workspace = true
 indexmap.workspace = true
 log.workspace = true
 regex.workspace = true
-regress.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-width.workspace = true
