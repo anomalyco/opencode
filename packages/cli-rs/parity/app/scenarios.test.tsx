@@ -2,6 +2,7 @@
 // createAppFixture. Writes parity/fixtures/<step>/<name>.app.json and one cell file per checkpoint.
 // `PARITY_SCENARIO=<step>/<name>` selects one scenario.
 import { test } from "bun:test"
+import { CodeRenderable, type Renderable } from "@opentui/core"
 import { Database } from "bun:sqlite"
 import type { ServerWebSocket } from "bun"
 import { mkdtemp, rm } from "node:fs/promises"
@@ -208,15 +209,15 @@ async function zedDatabase(sql: string) {
   }
 }
 
-// The frame is ready when it contains `until` and three polls in a row read the same cells; colors settle
-// after the text when highlighting finishes.
+// The frame is ready when it contains `until`, no code view is still highlighting, and three polls in a row
+// read the same cells. Colors land after the text, from a worker, so stable cells alone may be unhighlighted.
 async function settle(setup: Setup, until: string | undefined, label: string): Promise<Fixture> {
   const deadline = Date.now() + 5_000
   let previous = ""
   let same = 0
   while (Date.now() < deadline) {
     await Bun.sleep(30)
-    const cells = read(setup)
+    const cells = highlighting(setup.renderer.root) ? undefined : read(setup)
     if (!cells) continue
     const key = JSON.stringify(cells)
     same = key === previous ? same + 1 : 0
@@ -226,6 +227,13 @@ async function settle(setup: Setup, until: string | undefined, label: string): P
   throw new Error(
     `${label}: no settled frame${until ? ` with ${JSON.stringify(until)}` : ""} within 5s:\n${setup.captureCharFrame()}`,
   )
+}
+
+// A code view draws its plain text and starts highlighting in the same update, and is busy until the result
+// is applied.
+function highlighting(node: Renderable): boolean {
+  if (node instanceof CodeRenderable && node.isHighlighting) return true
+  return node.getChildren().some(highlighting)
 }
 
 // The renderer is started, so a frame in progress holds the buffer lease; that poll is skipped.
