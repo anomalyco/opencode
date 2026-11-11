@@ -2,7 +2,7 @@ export * as McpConnection from "./connection.js"
 
 import type { AuthProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
-import { Cause, Effect, Exit, Scope } from "effect"
+import { Cause, Effect, Exit, Fiber, Random, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Environment } from "../environment/index.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
@@ -67,7 +67,7 @@ export interface Input {
   /** Runs callbacks from the live connection. */
   readonly callbacks: (effect: Effect.Effect<void>) => unknown
   /** Runs recovery that a background request triggered. */
-  readonly fork: (effect: Effect.Effect<void>) => unknown
+  readonly fork: (effect: Effect.Effect<void>) => Fiber.Fiber<void>
   readonly events: Events
 }
 
@@ -102,7 +102,28 @@ export function make(input: Input): Connection {
     client?: McpClient.Connection
     tools?: ReadonlyArray<McpClient.Tool>
     prompts?: ReadonlyArray<McpClient.Prompt>
-  } = {}
+    retry?: Fiber.Fiber<void>
+    failures: number
+  } = { failures: 0 }
+
+  const retry = (retryAfter = 0) =>
+    Effect.gen(function* () {
+      if (input.config.type !== "remote" || state.retry) return
+      state.failures++
+      const jitter = 0.8 + (yield* Random.next) * 0.4
+      const delay = Math.max(retryAfter, Math.min(60_000, 1000 * 2 ** Math.min(state.failures - 1, 6) * jitter))
+      yield* Effect.logInfo("mcp reconnect scheduled", { server: input.name, delayMs: delay })
+      state.retry = input.fork(
+        Effect.sleep(delay).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              state.retry = undefined
+              yield* start
+            }).pipe(input.lock),
+          ),
+        ),
+      )
+    })
 
   // Runs a connection callback under the lock, dropping it if the connection is no longer the live
   // client, so late SDK callbacks cannot commit obsolete state.
@@ -152,7 +173,7 @@ export function make(input: Input): Connection {
 
   const watch = (client: McpClient.Connection) => {
     const live = whenLive(client)
-    client.onClose((reason) => live(input.events.closed(reason)))
+    client.onClose((reason) => live(input.events.closed(reason).pipe(Effect.andThen(retry()))))
     // Background refreshes (list-changed) can observe the expiry too; they do not retry, so
     // reconnect here for them. Foreground calls reconnect through `recovering`.
     client.onSessionExpired(() => input.fork(recover(client)))
@@ -206,6 +227,7 @@ export function make(input: Input): Connection {
         return yield* input.events.legacy?.(result.value.client.protocolVersion) ?? Effect.void
       }
       if (Exit.isSuccess(result)) {
+        state.failures = 0
         state.client = result.value.client
         state.tools = result.value.tools
         state.prompts = []
@@ -223,6 +245,7 @@ export function make(input: Input): Connection {
           : { status: "failed", error: error instanceof Error ? error.message : String(error) },
         error instanceof McpClient.ConnectError && error.answered === true,
       )
+      if (McpClient.isTransient(error)) yield* retry(McpClient.retryAfter(error))
     }).pipe(
       Effect.ensuring(input.events.settled),
       Effect.annotateLogs({ server: input.name, directory: input.directory, connectionID: crypto.randomUUID() }),
@@ -230,6 +253,10 @@ export function make(input: Input): Connection {
   )
 
   const stop = Effect.gen(function* () {
+    const retry = state.retry
+    state.retry = undefined
+    state.failures = 0
+    if (retry) yield* Fiber.interrupt(retry)
     const scope = state.scope
     if (!scope) return
     state.scope = undefined
