@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { SyntaxStyle, TextAttributes } from "@opentui/core"
+import { CodeRenderable, SyntaxStyle, TextAttributes, type MarkdownRenderable, type Renderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { onCleanup, onMount, type JSX } from "solid-js"
 import { ConfigProvider } from "../../src/config"
@@ -236,6 +236,65 @@ test.each([true, false])("code spans link only when they are exactly an ID, conc
     await waitForHighlightedFrame(app, () => linked().length > 0)
     expect(linked()).toEqual([conceal ? `@${known.title}` : known.id])
     expect(app.captureCharFrame()).toContain(`opencode --session ${known.id}`)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("a label change re-highlights only the blocks that mention that session", async () => {
+  await using state = await tmpdir()
+  const calls = createFetch(async () => undefined)
+  const other = session(id("other"), "Other work")
+  let data!: ReturnType<typeof useData>
+  let markdown!: MarkdownRenderable
+
+  function Transcript() {
+    data = useData()
+    data.session.remember({ ...known })
+    data.session.remember({ ...other })
+    const links = useSessionLinks()
+    const renderer = useRenderer()
+    const syntaxStyle = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, renderer.nativeScene)
+    onCleanup(() => syntaxStyle.destroy())
+    return (
+      <markdown
+        ref={(renderable: MarkdownRenderable) => {
+          links(renderable)
+          markdown = renderable
+        }}
+        internalBlockMode="top-level"
+        syntaxStyle={syntaxStyle}
+        content={`First ${known.id}\n\nSecond ${other.id}`}
+      />
+    )
+  }
+
+  const app = await mount(state.path, calls.fetch, () => <Transcript />, 80, 6)
+
+  try {
+    await waitForHighlightedFrame(app, (frame) => frame.includes("@Fix") && frame.includes("@Other"))
+    // Record which blocks get their chunk callback reset, the refresh's re-highlight trigger.
+    const reset: string[] = []
+    const descriptor = Object.getOwnPropertyDescriptor(CodeRenderable.prototype, "onChunks")!
+    const blocks = (renderable: Renderable): CodeRenderable[] => [
+      ...(renderable instanceof CodeRenderable ? [renderable] : []),
+      ...renderable.getChildren().flatMap(blocks),
+    ]
+    blocks(markdown).forEach((block) =>
+      Object.defineProperty(block, "onChunks", {
+        configurable: true,
+        get: () => descriptor.get!.call(block),
+        set: (value) => {
+          reset.push(block.plainText)
+          descriptor.set!.call(block, value)
+        },
+      }),
+    )
+
+    data.session.remember({ ...known, title: "Renamed" })
+    await waitForHighlightedFrame(app, (frame) => frame.includes("@Renamed"))
+    expect(reset.length).toBeGreaterThan(0)
+    expect(reset.every((text) => text.startsWith("First"))).toBe(true)
   } finally {
     app.renderer.destroy()
   }

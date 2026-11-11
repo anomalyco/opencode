@@ -19,7 +19,13 @@ import { stringWidth } from "../util/string-width"
 import { useDialog } from "./dialog"
 import { plainClick } from "./link"
 
-type Rendered = { text: string; ranges: { start: number; end: number; sessionID: string }[] }
+// `sessionIDs` holds every ID the block mentions, linked or not, so a label change re-highlights only
+// the blocks that show it.
+type Rendered = {
+  text: string
+  ranges: { start: number; end: number; sessionID: string }[]
+  sessionIDs: Set<string>
+}
 
 /**
  * Returns a `<markdown>` ref that shows session IDs as links titled after their sessions and
@@ -62,6 +68,7 @@ export function useSessionLinks() {
       return text !== undefined && !parseSessionMention(text) ? [{ start, end: position }] : []
     })
     position = 0
+    const sessionIDs = new Set<string>()
     const parts = detectLinks(chunks, context).flatMap((chunk): { chunk: TextChunk; sessionID?: string }[] => {
       const start = position
       position += chunk.text.length
@@ -74,6 +81,7 @@ export function useSessionLinks() {
         const text = chunk.text.slice(cuts[index], end)
         const mention = index % 2 ? mentions[(index - 1) / 2]! : undefined
         const label = mention && labelOf(mention.id)
+        if (mention) sessionIDs.add(mention.id)
         if (mention && (!used.has(mention.id) || used.get(mention.id) !== label)) {
           used.set(mention.id, label)
           setVersion((value) => value + 1)
@@ -95,17 +103,24 @@ export function useSessionLinks() {
       offset += part.chunk.text.length
       return part.sessionID ? [{ start, end: offset, sessionID: part.sessionID }] : []
     })
-    rendered.set(this, { text: parts.map((part) => part.chunk.text).join(""), ranges })
+    rendered.set(this, { text: parts.map((part) => part.chunk.text).join(""), ranges, sessionIDs })
     return parts.map((part) => part.chunk)
   }
 
   createEffect(() => {
     version()
-    if (!markdown || [...used].every(([sessionID, label]) => labelOf(sessionID) === label)) return
-    // Toggling the callback marks each block's highlight dirty while keeping the identity OpenTUI
-    // checks when terminal capabilities refresh link styling.
+    const changed = [...used].flatMap(([sessionID, label]) => (labelOf(sessionID) === label ? [] : [sessionID]))
+    if (!markdown || changed.length === 0) return
+    changed.forEach((sessionID) => used.set(sessionID, labelOf(sessionID)))
+    // Toggling the callback marks the block's highlight dirty while keeping the identity OpenTUI
+    // checks when terminal capabilities refresh link styling. Dirty blocks highlight on the next
+    // frame, so labels that change within one frame share a single re-highlight.
     const refresh = (renderable: Renderable): void => {
-      if (renderable instanceof CodeRenderable && renderable.onChunks === linkChunks) {
+      if (
+        renderable instanceof CodeRenderable &&
+        renderable.onChunks === linkChunks &&
+        changed.some((sessionID) => rendered.get(renderable)?.sessionIDs.has(sessionID))
+      ) {
         renderable.onChunks = undefined
         renderable.onChunks = linkChunks
         renderable.requestRender()
