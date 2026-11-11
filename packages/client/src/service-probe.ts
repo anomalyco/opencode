@@ -38,27 +38,33 @@ function fail(message: string) {
 
 /** The default registration file, scoped to this process's network namespace when it has one. */
 export function fallback() {
-  const namespace = netns()
   return join(
     process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"),
     "opencode",
-    namespace === undefined ? "service.json" : `service-netns-${namespace}.json`,
+    scopedRegistrationFilename("service.json"),
   )
 }
 
 // The identity of the network namespace this process runs in: the inode of
 // /proc/self/ns/net. A registration written by one namespace names a service
 // that is unreachable from another, so discovery reads this namespace's
-// registration. Kept in step with the CLI's service configuration; where the
-// identity cannot be determined (not Linux, or the namespace file cannot be
-// read) the unscoped default is used.
-function netns() {
+// registration. The CLI's service configuration builds its channel filenames
+// through scopedRegistrationFilename below, so both packages agree on the
+// scoped name. Where the identity cannot be determined (not Linux, or the
+// namespace file cannot be read) there is no scoping and names are unchanged.
+export function netns() {
   if (process.platform !== "linux") return undefined
   try {
     return /\[(\d+)\]$/.exec(readlinkSync("/proc/self/ns/net"))?.[1]
   } catch {
     return undefined
   }
+}
+
+/** Scope a registration filename to this process's network namespace when it has one. */
+export function scopedRegistrationFilename(name: string, namespace = netns()) {
+  if (namespace === undefined) return name
+  return `${name.slice(0, -".json".length)}-netns-${namespace}.json`
 }
 
 /** Whether two registrations describe the same service instance. */

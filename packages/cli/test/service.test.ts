@@ -276,20 +276,11 @@ test("service filenames share release channels and identify preview channels", (
 })
 
 test("service registration filenames are scoped to the network namespace", () => {
-  const state = path.join("root", "state")
   expect(ServiceConfig.registrationFilename("latest", "4026531840")).toBe("service-netns-4026531840.json")
   expect(ServiceConfig.registrationFilename("dev", "4026531840")).toBe("service-netns-4026531840.json")
   expect(ServiceConfig.registrationFilename("local", "4026531840")).toBe("service-local-netns-4026531840.json")
   expect(ServiceConfig.registrationFilename("preview-a", "4026531840")).toBe(
     "service-preview-a-netns-4026531840.json",
-  )
-  // Two namespaces sharing one state directory resolve to different registration files.
-  expect(path.join(state, ServiceConfig.registrationFilename("latest", "4026531840"))).not.toBe(
-    path.join(state, ServiceConfig.registrationFilename("latest", "4026531841")),
-  )
-  // One namespace always resolves to the same file.
-  expect(ServiceConfig.registrationFilename("latest", "4026531840")).toBe(
-    ServiceConfig.registrationFilename("latest", "4026531840"),
   )
   // Omitting the identity scopes to the current namespace, which is the
   // unscoped name where no identity can be determined.

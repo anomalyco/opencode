@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readlinkSync } from "node:fs"
 import { join } from "node:path"
-import { decide, fallback, type LocalService } from "../src/service-probe"
+import { decide, fallback, netns, scopedRegistrationFilename, type LocalService } from "../src/service-probe"
 
 const protocolError =
   "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
@@ -21,6 +21,19 @@ test("the default registration file is scoped to the current network namespace",
   }
   const id = /\[(\d+)\]$/.exec(readlinkSync("/proc/self/ns/net"))?.[1]
   expect(fallback().endsWith(join("opencode", `service-netns-${id}.json`))).toBe(true)
+})
+
+test("a registration filename is scoped to a namespace only when one is given", () => {
+  expect(scopedRegistrationFilename("service.json", "4026531840")).toBe("service-netns-4026531840.json")
+  expect(scopedRegistrationFilename("service-local.json", "4026531840")).toBe(
+    "service-local-netns-4026531840.json",
+  )
+  // Omitting the identity scopes to the current namespace, which is the
+  // unscoped name where no identity can be determined.
+  const current = netns()
+  expect(scopedRegistrationFilename("service.json")).toBe(
+    current === undefined ? "service.json" : `service-netns-${current}.json`,
+  )
 })
 
 test("a missing health endpoint fails unless the caller requires a different version", () => {

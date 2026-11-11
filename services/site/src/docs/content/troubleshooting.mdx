@@ -206,6 +206,8 @@ The shared server registers itself at:
 ~/.local/state/opencode/service.json
 ```
 
+On Linux, a server running inside a network namespace registers under a scoped name instead (`service-netns-<inode>.json`, or `service-<channel>-netns-<inode>.json` for other channels), so each namespace keeps its own registration. `opencode service status` prints the registered URL either way.
+
 Its private service configuration is stored separately at:
 
 ```text

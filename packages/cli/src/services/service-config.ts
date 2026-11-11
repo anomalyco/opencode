@@ -1,10 +1,9 @@
 import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
-import { Service } from "@opencode/client/effect/service"
+import { Service, netns, scopedRegistrationFilename } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
-import { readlinkSync } from "fs"
 import path from "path"
 import { selfCommand } from "../util/process"
 import { RemoteTunnel } from "./remote-tunnel"
@@ -45,24 +44,12 @@ export function filename(channel = OPENCODE_CHANNEL) {
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-// The identity of the network namespace this process runs in: the inode of
-// /proc/self/ns/net. A service registered by one namespace listens on an
-// address that is unreachable from another, so each namespace keeps its own
-// registration. Where the identity cannot be determined (not Linux, or the
-// namespace file cannot be read) there is no scoping and names are unchanged.
-export function netns() {
-  if (process.platform !== "linux") return undefined
-  try {
-    return /\[(\d+)\]$/.exec(readlinkSync("/proc/self/ns/net"))?.[1]
-  } catch {
-    return undefined
-  }
-}
+// Re-exported so tests keep reading the namespace identity through ServiceConfig.
+export { netns }
 
+// The scoped name lives in @opencode/client so the CLI, the client, and Desktop agree on it.
 export function registrationFilename(channel = OPENCODE_CHANNEL, namespace = netns()) {
-  const name = filename(channel)
-  if (namespace === undefined) return name
-  return `${name.slice(0, -".json".length)}-netns-${namespace}.json`
+  return scopedRegistrationFilename(filename(channel), namespace)
 }
 
 export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
