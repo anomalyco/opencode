@@ -12,16 +12,16 @@ use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectListInput, SessionID, SessionInfo,
-    SessionListInput, SessionListInputOrder, SessionRemoveInput,
+    LocationPublicInfo, Project, SessionID, SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput,
 };
 use opencode_local::cli_config::TabsScope;
-use opencode_store::SessionStatus;
 use opencode_store::state::State as Store;
+use opencode_store::{Location, SessionStatus};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::motion::Spinner;
+use opencode_ui::path::relative;
 use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -49,13 +49,12 @@ pub fn show(tui: &Tui) {
             search: String::new(),
             to_delete: None,
             all_projects,
-            location: None,
-            projects: Vec::new(),
             loading: true,
             results: None,
             request: 0,
         }),
         timer: Cell::new(None),
+        seen: Cell::new(tui.data.revision()),
     });
     let current = match tui.route() {
         Route::Session { id } => Some(id),
@@ -179,6 +178,8 @@ struct List {
     select: RefCell<Option<Select<SessionID>>>,
     state: RefCell<State>,
     timer: Cell<Option<TimerId>>,
+    /// The store revision the list last looked at.
+    seen: Cell<u64>,
 }
 
 struct State {
@@ -188,8 +189,6 @@ struct State {
     /// The session the first delete press marked.
     to_delete: Option<SessionID>,
     all_projects: bool,
-    location: Option<LocationPublicInfo>,
-    projects: Vec<Project>,
     loading: bool,
     /// The newest finished read (`searchResults.latest`).
     results: Option<Results>,
@@ -210,32 +209,47 @@ impl List {
         self.tui.upgrade().map(|tui| tui.app.clone())
     }
 
-    /// The picker location, then the project list and the first read.
+    /// The picker location's info and the projects into the store, then the first read. The list follows the
+    /// store's projects and location info while it is open.
     fn load(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let directory = picker_directory(&tui);
-        let client = tui.data.client().clone();
-        tui.app.spawn(
-            async move {
-                let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
-                let (location, projects) = futures_util::future::join(
-                    client.location_get(&input),
-                    client.project_list(&ProjectListInput::default()),
-                )
-                .await;
-                (location.ok(), projects.unwrap_or_default())
-            },
-            bind!(self, |list, _, (location, projects)| {
-                {
-                    let mut state = list.state.borrow_mut();
-                    state.location = location;
-                    state.projects = projects;
-                }
-                list.fetch();
-            }),
+        let reads = futures_util::future::join(
+            tui.data.location_sync_info(Some(&picker_location(&tui))),
+            tui.data.project_sync(),
         );
+        tui.app.spawn(reads, bind!(self, |list, _, _| list.fetch()));
+        self.watch(tui.data.subscribe());
+    }
+
+    /// Repaints after each store flush that touched the projects or the picker location.
+    fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
+        let Some(tui) = self.tui.upgrade() else {
+            return;
+        };
+        let weak = Rc::downgrade(self);
+        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
+            let (Some(list), Some(revisions)) = (weak.upgrade(), revisions) else {
+                return;
+            };
+            let Some(tui) = list.tui.upgrade() else { return };
+            if list.select.borrow().is_none() {
+                return;
+            }
+            let (revision, changes) = tui.data.changes_since(list.seen.get());
+            list.seen.set(revision);
+            if changes.projects() || changes.location(&picker_location(&tui)) {
+                list.refresh();
+            }
+            list.watch(revisions);
+        });
+    }
+
+    /// `data.location.info(pickerLocation())`.
+    fn location(&self, tui: &Tui) -> Option<LocationPublicInfo> {
+        let location = picker_location(tui);
+        tui.data.read(|store| store.location(Some(&location)).and_then(|data| data.info.clone()))
     }
 
     /// Reads the list for the current search and scope (the `searchResults` resource).
@@ -243,11 +257,12 @@ impl List {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let (query, all_projects, location, request) = {
+        let location = self.location(&tui);
+        let (query, all_projects, request) = {
             let mut state = self.state.borrow_mut();
             state.request += 1;
             state.loading = true;
-            (state.search.trim().to_owned(), state.all_projects, state.location.clone(), state.request)
+            (state.search.trim().to_owned(), state.all_projects, state.request)
         };
         self.refresh();
         let client = tui.data.client().clone();
@@ -413,19 +428,20 @@ impl List {
 
     /// `currentProjectName`.
     fn project_name(&self) -> String {
-        let state = self.state.borrow();
-        let Some(current) = &state.location else {
+        let Some(tui) = self.tui.upgrade() else {
             return String::new();
         };
-        let project = state.projects.iter().find(|project| project.id == current.project.id);
-        project_name(project).unwrap_or_default()
+        let Some(current) = self.location(&tui) else {
+            return String::new();
+        };
+        tui.data.read(|store| project_name(store.project(&current.project.id))).unwrap_or_default()
     }
 
     /// `sessions()`: the read's results, or the loaded sessions while a read is pending or failed.
-    fn sessions(&self, store: &Store) -> Vec<SessionInfo> {
+    fn sessions(&self, store: &Store, location: Option<&LocationPublicInfo>) -> Vec<SessionInfo> {
         let state = self.state.borrow();
         let query = state.filter.trim();
-        let local = || local_sessions(store, &state, query);
+        let local = || local_sessions(store, &state, location, query);
         if query != state.search.trim() {
             return state.results.as_ref().map_or_else(local, |results| results.sessions.clone());
         }
@@ -486,20 +502,21 @@ impl List {
             pins::slots(&tui).into_iter().enumerate().map(|(index, id)| (id, index + 1)).collect()
         };
         let delete_key = tui.keymap.shortcut("session.delete").unwrap_or_default();
-        let state = self.state.borrow();
-        let to_delete = state.to_delete.clone();
-        let projects = state.projects.clone();
-        drop(state);
+        let to_delete = self.state.borrow().to_delete.clone();
+        let location = self.location(&tui);
         tui.data.read(|store| {
-            let sessions: Vec<SessionInfo> =
-                self.sessions(store).into_iter().filter(|session| session.parent_id.is_none()).collect();
+            let sessions: Vec<SessionInfo> = self
+                .sessions(store, location.as_ref())
+                .into_iter()
+                .filter(|session| session.parent_id.is_none())
+                .collect();
             let by_id: HashMap<&SessionID, &SessionInfo> =
                 sessions.iter().map(|session| (&session.id, session)).collect();
             let pinned: Vec<&SessionID> = pinned_ids.iter().filter(|id| by_id.contains_key(id)).collect();
             let pinned_set: HashSet<&SessionID> = pinned.iter().copied().collect();
             let today = date_string(now_ms());
             let option = |session: &SessionInfo, category: String| {
-                let project = projects.iter().find(|project| project.id == session.project_id);
+                let project = store.project(&session.project_id);
                 let deleting = to_delete.as_ref() == Some(&session.id);
                 let mut option = SelectOption::new(
                     if deleting { format!("Press {delete_key} again to confirm") } else { title(session) },
@@ -542,7 +559,12 @@ pub fn dialog_theme(tui: &Tui) -> Theme {
 }
 
 /// `localSessions()`: loaded sessions of the picker location (or all), matched by title.
-fn local_sessions(store: &Store, state: &State, query: &str) -> Vec<SessionInfo> {
+fn local_sessions(
+    store: &Store,
+    state: &State,
+    location: Option<&LocationPublicInfo>,
+    query: &str,
+) -> Vec<SessionInfo> {
     let query = query.to_lowercase();
     store
         .sessions()
@@ -550,7 +572,7 @@ fn local_sessions(store: &Store, state: &State, query: &str) -> Vec<SessionInfo>
         .filter(|session| {
             session.time.archived.is_none()
                 && (state.all_projects
-                    || state.location.as_ref().is_some_and(|current| {
+                    || location.is_some_and(|current| {
                         session.project_id == current.project.id && session.location.directory == current.directory
                     }))
         })
@@ -589,14 +611,14 @@ async fn read(client: &Client, input: &SessionListInput) -> Option<Vec<SessionIn
 }
 
 /// `pickerLocation()`: the open session's location, else the active location, else the default location.
-fn picker_directory(tui: &Tui) -> String {
+fn picker_location(tui: &Tui) -> Location {
     let session = match tui.route() {
         Route::Session { id } => {
-            tui.data.read(|state| state.session(&id).map(|session| session.location.directory.0.clone()))
+            tui.data.read(|state| state.session(&id).map(|session| Location::new(session.location.directory.0.clone())))
         }
         _ => None,
     };
-    session.unwrap_or_else(|| crate::features::location::active(tui).directory)
+    session.unwrap_or_else(|| crate::features::location::active(tui))
 }
 
 /// `prefs.allProjects` from the `session-list` storage key.
@@ -701,18 +723,6 @@ fn resolve_up(directory: &str, ups: usize) -> String {
         parts.pop();
     }
     format!("/{}", parts.join("/"))
-}
-
-/// `path.relative(from, to)` for absolute POSIX paths.
-fn relative(from: &str, to: &str) -> String {
-    let split = |path: &str| -> Vec<String> {
-        path.split('/').filter(|part| !part.is_empty() && *part != ".").map(str::to_owned).collect()
-    };
-    let (from, to) = (split(from), split(to));
-    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
-    let mut parts: Vec<String> = vec!["..".to_owned(); from.len() - common];
-    parts.extend(to[common..].iter().cloned());
-    parts.join("/")
 }
 
 /// Pinned sessions in `<state>/session.json` (`context/local.tsx:508-603`), shared with the TS

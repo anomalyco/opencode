@@ -5,9 +5,8 @@
 //! list. `right` on a Git project lists its worktrees, where `ctrl+n` creates one.
 
 use opencode_api::generated::{
-    LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectID, ProjectListInput, SessionGetInput,
-    SessionID, SessionInfo, SessionListInput, SessionListInputOrder, WorktreeCreateInput, WorktreeListInput,
-    WorktreeRefreshInput,
+    ProjectID, SessionGetInput, SessionID, SessionInfo, SessionListInput, SessionListInputOrder, WorktreeCreateInput,
+    WorktreeListInput, WorktreeRefreshInput,
 };
 use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
@@ -18,7 +17,7 @@ use opencode_ui::prompt::{Prompt, PromptProps, prompt};
 use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::{Rc, Weak};
 use unicode_width::UnicodeWidthStr;
@@ -93,9 +92,7 @@ pub fn show(tui: &Tui) {
             moved: false,
             sessions: RECENT.with(|recent| recent.borrow().clone()),
             recent: None,
-            projects: Vec::new(),
-            projects_loaded: None,
-            location: None,
+            projects: None,
             matched: None,
             worktrees: None,
             refreshed: HashSet::new(),
@@ -104,6 +101,7 @@ pub fn show(tui: &Tui) {
         select: RefCell::new(None),
         prompt: RefCell::new(None),
         footer: View::new(&tui.app),
+        seen: Cell::new(tui.data.revision()),
     });
     OPEN.with(|slot| *slot.borrow_mut() = Rc::downgrade(&open));
     open.build(Selection { view: OpenView::Projects, filter: String::new(), selected: None });
@@ -118,6 +116,8 @@ struct Open {
     prompt: RefCell<Option<Prompt>>,
     /// The loading and error line under the list.
     footer: View,
+    /// The store revision the dialog last looked at.
+    seen: Cell<u64>,
 }
 
 struct State {
@@ -129,10 +129,8 @@ struct State {
     sessions: Vec<SessionInfo>,
     /// The recent read: `None` while loading, then whether it succeeded.
     recent: Option<bool>,
-    projects: Vec<Project>,
-    projects_loaded: Option<bool>,
-    /// The default location, for the current project marker.
-    location: Option<LocationPublicInfo>,
+    /// The store's project read: `None` while loading, then whether it succeeded.
+    projects: Option<bool>,
     /// The session an exact ID in the filter names.
     matched: Option<SessionInfo>,
     /// The worktree directories of the open project; `None` while loading.
@@ -216,7 +214,7 @@ impl Open {
                     move || {
                         let loading = weak.upgrade().is_none_or(|open| {
                             let state = open.state.borrow();
-                            state.recent.is_none() || state.projects_loaded.is_none()
+                            state.recent.is_none() || state.projects.is_none()
                         });
                         let row = View::new(&app).padding_x(DIALOG_LIST_INSET);
                         if !loading {
@@ -268,15 +266,22 @@ impl Open {
     }
 
     fn project_title(&self, id: &ProjectID) -> String {
-        let state = self.state.borrow();
-        project_name(state.projects.iter().find(|project| project.id == *id)).unwrap_or_else(|| "Project".into())
+        let Some(tui) = self.tui() else {
+            return "Project".into();
+        };
+        tui.data.read(|store| project_name(store.project(id))).unwrap_or_else(|| "Project".into())
     }
 
-    /// The recent read, the projects, and the default location.
+    /// The recent read, and the projects and the active location's info into the store. The dialog follows the
+    /// store's projects and location info while it is open.
     fn load(self: &Rc<Self>) {
         let Some(tui) = self.tui() else { return };
         let client = tui.data.client().clone();
-        let directory = crate::features::location::active(&tui).directory;
+        crate::routes::session::form::quiet(
+            &tui,
+            tui.data.location_sync_info(Some(&crate::features::location::active(&tui))),
+        );
+        let projects = tui.data.project_sync();
         tui.app.spawn(
             async move {
                 let recent = SessionListInput {
@@ -286,15 +291,9 @@ impl Open {
                     archived: Some(false),
                     ..SessionListInput::default()
                 };
-                let location = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
-                futures_util::future::join3(
-                    client.session_list(&recent),
-                    client.project_list(&ProjectListInput::default()),
-                    client.location_get(&location),
-                )
-                .await
+                futures_util::future::join(client.session_list(&recent), projects).await
             },
-            bind!(self, |open, _, (recent, projects, location)| {
+            bind!(self, |open, _, (recent, projects)| {
                 let Some(tui) = open.tui() else { return };
                 {
                     let mut state = open.state.borrow_mut();
@@ -307,16 +306,34 @@ impl Open {
                         RECENT.with(|recent| *recent.borrow_mut() = sessions.clone());
                         state.sessions = sessions;
                     }
-                    state.projects_loaded = Some(projects.is_ok());
-                    if let Ok(projects) = projects {
-                        state.projects = projects;
-                    }
-                    state.location = location.ok();
+                    state.projects = Some(projects.is_ok());
                 }
                 open.sync_attention();
                 open.refresh();
             }),
         );
+        self.watch(tui.data.subscribe());
+    }
+
+    /// Repaints after each store flush that touched the projects or the active location.
+    fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
+        let Some(tui) = self.tui() else { return };
+        let weak = Rc::downgrade(self);
+        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
+            let (Some(open), Some(revisions)) = (weak.upgrade(), revisions) else {
+                return;
+            };
+            let Some(tui) = open.tui() else { return };
+            if tui.dialogs.key().as_deref() != Some(KEY) {
+                return;
+            }
+            let (revision, changes) = tui.data.changes_since(open.seen.get());
+            open.seen.set(revision);
+            if changes.projects() || changes.location(&crate::features::location::active(&tui)) {
+                open.refresh();
+            }
+            open.watch(revisions);
+        });
     }
 
     /// Reads the requests of running sessions and the root sessions that wait on one, so their rows show and sort
@@ -439,10 +456,10 @@ impl Open {
                 .is_none()
                 .then(|| Spinner::new(app).color(theme.text.muted).label("Loading worktrees…").as_any()),
             OpenView::Projects => {
-                if state.recent.is_none() || state.projects_loaded.is_none() {
+                if state.recent.is_none() || state.projects.is_none() {
                     Some(Spinner::new(app).color(theme.text.muted).label("Refreshing sessions and projects…").as_any())
                 } else {
-                    let what = match (state.recent == Some(false), state.projects_loaded == Some(false)) {
+                    let what = match (state.recent == Some(false), state.projects == Some(false)) {
                         (true, true) => Some("sessions and projects"),
                         (true, false) => Some("sessions"),
                         (false, true) => Some("projects"),
@@ -474,7 +491,7 @@ impl Open {
         if let OpenView::Worktrees(_) = state.view {
             return if state.worktrees.is_none() { "Loading worktrees…" } else { "No matching worktrees" }.into();
         }
-        if state.recent.is_none() || state.projects_loaded.is_none() {
+        if state.recent.is_none() || state.projects.is_none() {
             return "Searching sessions and projects…".into();
         }
         match tui.keymap.shortcut("session.list") {
@@ -548,7 +565,7 @@ impl Open {
             recent
                 .into_iter()
                 .map(|session| {
-                    let project = state.projects.iter().find(|project| project.id == session.project_id);
+                    let project = store.project(&session.project_id);
                     let name = project_name(project).unwrap_or_default();
                     let base = basename(session.location.directory.as_str());
                     let label = if !name.is_empty()
@@ -585,15 +602,17 @@ impl Open {
                 .collect()
         });
 
-        let current = crate::features::location::active(&tui).directory;
-        let current = current.as_str();
-        let current_project = state.location.as_ref().map(|location| location.project.canonical.as_str());
-        let mut projects: Vec<&Project> =
-            state.projects.iter().filter(|project| project.time.archived.is_none()).collect();
-        projects.sort_by_key(|project| std::cmp::Reverse(project.time.active));
+        let active = crate::features::location::active(&tui);
+        let current = active.directory.as_str();
+        let (projects, current_project) = tui.data.read(|store| {
+            let info = store.location(Some(&active)).and_then(|data| data.info.as_ref());
+            let projects: Vec<_> = store.projects().into_iter().cloned().collect();
+            (projects, info.map(|info| info.project.canonical.0.clone()))
+        });
+        let current_project = current_project.as_deref();
         let mut canonicals = HashSet::new();
         for project in projects
-            .into_iter()
+            .iter()
             .filter(|project| project.canonical.as_str() != "/")
             // Historical project identities can share a checkout; the newest-active one stays.
             .filter(|project| canonicals.insert(project.canonical.0.clone()))
@@ -625,7 +644,7 @@ impl Open {
         };
         let theme = dialog_theme(&tui);
         let state = self.state.borrow();
-        let Some(project) = state.projects.iter().find(|project| project.id == *id) else {
+        let Some(project) = tui.data.read(|store| store.project(id).cloned()) else {
             return Vec::new();
         };
         let canonical = project.canonical.as_str();
@@ -636,7 +655,7 @@ impl Open {
         directories.extend(state.worktrees.iter().flatten().map(String::as_str));
         let title = |directory: &str| {
             if directory == canonical {
-                project_name(Some(project)).unwrap_or_else(|| basename(directory).into())
+                project_name(Some(&project)).unwrap_or_else(|| basename(directory).into())
             } else {
                 basename(directory).to_owned()
             }
