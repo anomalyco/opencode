@@ -37,7 +37,7 @@ export default defineApp({
     { path: "/api/session/ses_b/message", json: { data: [assistant("msg_2", "Done."), user("msg_1", "Why?")], cursor: {} } },
   ],
   steps: [
-    { checkpoint: "open", until: "Why?", deviation: [{ file: "V01-plain-transcript", cells: 70 }] },
+    { checkpoint: "open", until: "Why?", deviation: [{ file: "V03-markdown-widget", cells: 70 }] },
     { keys: ["ctrl+x", "n"] },
     { event: { type: "session.text.delta", data: { /* … */ } } },
     { type: "hello" },
