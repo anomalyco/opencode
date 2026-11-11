@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import type { SDKAssistantMessage, SDKMessage, SDKRateLimitEvent } from "@anthropic-ai/claude-agent-sdk"
+import { ClaudeAgentError } from "@opencode/core/plugin/provider/claude-agent/language-model/claude-agent-error"
 import { ConvertClaudeStream } from "@opencode/core/plugin/provider/claude-agent/language-model/convert-claude-stream"
 import { Recorder } from "../lib/recorder"
 
 function assistant() {
-  const line = Recorder.load("api-error").find(
+  const line = Recorder.load("billing-error").find(
     (line) => line.from === "claude" && line.message.type === "assistant" && line.message.error,
   )!
   if (line.from !== "claude") throw new Error("Expected a recorded assistant error")
@@ -26,12 +27,20 @@ describe("terminal errors", () => {
     expect(parts.some((part) => part.type === "finish")).toBe(false)
   })
 
-  test("a recorded API error is an error, not answer text", () => {
+  test("a recorded billing failure is an error, not answer text", () => {
     const convert = ConvertClaudeStream.make([])
     expect(convert(assistant())).toEqual([])
-    const parts = convert(Recorder.result("api-error"))
+    const parts = convert(Recorder.result("billing-error"))
     expect(parts).toEqual([{ type: "error", error: expect.any(Error) }])
-    if (parts[0]?.type === "error") expect(String(parts[0].error)).toContain("claude-does-not-exist")
+    if (parts[0]?.type === "error") expect(String(parts[0].error)).toContain("extra usage")
+  })
+
+  test("a billing error points to the plan settings and is not a limit to rotate away from", () => {
+    const failure = ClaudeAgentError.make()
+    failure({ ...assistant(), error: "billing_error" } as const)
+    const error = failure(Recorder.result("billing-error"))
+    expect(error?.message).toContain("Check your Claude plan and extra-usage settings.")
+    expect(error?.limited).toBe(false)
   })
 
   test("a rejected weekly window gives its reset date, while allowed windows do not fail", () => {
