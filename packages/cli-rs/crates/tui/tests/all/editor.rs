@@ -77,6 +77,9 @@ fn ide_selection_shows_and_goes_once_before_the_prompt() {
     let ide = Ide::start();
     let setup = Setup::new(Source { port: Some(ide.port), ..Source::default() });
     setup.wait("the MCP handshake", || ide.methods() == ["initialize", "notifications/initialized"]);
+    // The worker posts the server info before it sends `notifications/initialized`, but the UI applies the
+    // post on its own turn, so the IDE can see the notification first.
+    setup.wait("the server info", || setup.tui.prompt.editor.server().is_some());
     let initialize = ide.received.lock().unwrap()[0].clone();
     assert_eq!(
         initialize["params"],
