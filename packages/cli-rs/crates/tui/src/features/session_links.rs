@@ -124,6 +124,10 @@ fn link_spans(
     spans: Vec<InlineSpan>,
     cx: &InlineContext<'_>,
 ) -> Vec<InlineSpan> {
+    // Core never passes table cells to the chunk callback, so TS shows their IDs as written.
+    if cx.table_cell {
+        return spans;
+    }
     let url = cx.syntax.merge(["markup.link.url"]);
     let mut out = Vec::with_capacity(spans.len());
     for span in spans {
