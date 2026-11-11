@@ -223,35 +223,11 @@ pub fn read_display_text(text: &str) -> Option<String> {
     Some(lines.join("\n"))
 }
 
-/// `input` relative to `directory` (else the current directory) when it is inside it. Outside, the
-/// absolute path, with the home directory as `~` when `home` is given.
+/// `toolPath` (`mini/tool.ts:324-330`): `input` relative to `directory` (else the current directory) when it is
+/// inside it. Outside, the absolute path, with the home directory as `~` when `home` is given.
 pub fn tool_path(input: &str, directory: Option<&str>, home: Option<&str>) -> String {
-    if input.is_empty() {
-        return String::new();
-    }
-    let cwd;
-    let base = match directory {
-        Some(directory) => directory,
-        None => {
-            cwd = std::env::current_dir().map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_default();
-            &cwd
-        }
-    };
-    if !windows_path(base) && windows_path(input) {
-        return input.replace('\\', "/");
-    }
-    let absolute = if input.starts_with('/') { input.to_owned() } else { resolve(base, input) };
-    let relative = relative(base, &absolute);
-    if relative.is_empty() {
-        return ".".to_owned();
-    }
-    if relative != ".." && !relative.starts_with("../") {
-        return relative;
-    }
-    match home {
-        Some(home) if !home.is_empty() => abbreviate_home(&absolute, home),
-        _ => absolute,
-    }
+    let cwd = std::env::current_dir().map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_default();
+    crate::path::format_path(input, directory.unwrap_or(&cwd), home, true)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -613,50 +589,6 @@ pub fn titlecase(text: &str) -> String {
         .collect()
 }
 
-fn windows_path(input: &str) -> bool {
-    let bytes = input.as_bytes();
-    let drive = bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
-    (drive && matches!(bytes[2], b'\\' | b'/')) || input.starts_with("\\\\")
-}
-
-/// `path.posix.resolve(base, input)` for an absolute `base`.
-fn resolve(base: &str, input: &str) -> String {
-    let joined = if input.starts_with('/') { input.to_owned() } else { format!("{base}/{input}") };
-    let segments = joined.split('/').fold(Vec::new(), |mut segments, segment| {
-        match segment {
-            "" | "." => {}
-            ".." => {
-                segments.pop();
-            }
-            _ => segments.push(segment),
-        }
-        segments
-    });
-    format!("/{}", segments.join("/"))
-}
-
-/// `path.posix.relative(from, to)`.
-fn relative(from: &str, to: &str) -> String {
-    let from = resolve(from, "");
-    let to = resolve(to, "");
-    let from: Vec<_> = from.split('/').filter(|segment| !segment.is_empty()).collect();
-    let to: Vec<_> = to.split('/').filter(|segment| !segment.is_empty()).collect();
-    let common = from.iter().zip(&to).take_while(|(from, to)| from == to).count();
-    let up = std::iter::repeat_n("..", from.len() - common);
-    up.chain(to[common..].iter().copied()).collect::<Vec<_>>().join("/")
-}
-
-fn abbreviate_home(input: &str, home: &str) -> String {
-    let relative = relative(home, input);
-    if relative.is_empty() {
-        return "~".to_owned();
-    }
-    if relative == ".." || relative.starts_with("../") {
-        return input.to_owned();
-    }
-    format!("~/{relative}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -670,6 +602,8 @@ mod tests {
         assert_eq!(path("/work/project/src/./a.ts"), "src/a.ts");
         assert_eq!(path("C:\\work\\a.ts"), "C:/work/a.ts");
         assert_eq!(tool_path("/home/me/x", Some("/work"), Some("/home/me")), "~/x");
+        // A Windows server's paths follow `path.win32`, as the TUI's rows do.
+        assert_eq!(tool_path("C:\\proj\\src\\a.ts", Some("C:\\proj"), None), "src/a.ts");
     }
 
     #[test]
