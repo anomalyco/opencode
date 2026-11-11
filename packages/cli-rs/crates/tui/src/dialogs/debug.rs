@@ -40,8 +40,12 @@ pub fn entries(tui: &Tui) -> Vec<(&'static str, String)> {
         ("OS", describe_os()),
         ("Terminal", describe_terminal(|name| std::env::var(name).ok())),
         ("Session ID", session),
-        // The current model is E.16's (`local.model.current()`).
-        ("Model", "n/a".to_owned()),
+        (
+            "Model",
+            tui.local
+                .current()
+                .map_or_else(|| "n/a".to_owned(), |model| format!("{}/{}", model.provider_id, model.model_id)),
+        ),
     ]
 }
 
@@ -132,7 +136,7 @@ fn redraw(tui: &Weak<Tui>, hook: &Hook) {
 
 fn copy(tui: &Weak<Tui>, copied: &Cell<bool>, text: &str) {
     let Some(tui) = tui.upgrade() else { return };
-    if !tui.app.copy_to_clipboard(text) {
+    if !crate::features::selection::put(&tui.app, text) {
         tui.toasts.error("Failed to copy to clipboard");
         return;
     }

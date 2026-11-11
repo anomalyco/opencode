@@ -717,7 +717,7 @@ impl Connect {
             return;
         };
         let value = oauth_code(&attempt.instructions).unwrap_or(attempt.url);
-        if self.local.app.copy_to_clipboard(&value) {
+        if crate::features::selection::put(&self.local.app, &value) {
             self.local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
             return;
         }
