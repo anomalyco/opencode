@@ -19,7 +19,7 @@ use serde_json::Value;
 
 use crate::app::Tui;
 use crate::routes::session::messages::footer::duration;
-use crate::routes::session::messages::shell::strip_ansi;
+use opencode_ui::prompt_input::paste::strip_ansi;
 
 /// The open dialog: the call it shows and how to redraw it.
 pub struct Live {

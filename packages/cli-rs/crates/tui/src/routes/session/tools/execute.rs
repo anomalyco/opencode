@@ -17,7 +17,8 @@ use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status, content_wid
 use crate::app::Tui;
 use crate::dialogs::execute::{self, Live};
 use crate::routes::session::messages::list::Context;
-use crate::routes::session::messages::shell::{collapse_tool_output, strip_ansi};
+use crate::routes::session::messages::shell::collapse_tool_output;
+use opencode_ui::prompt_input::paste::strip_ansi;
 
 pub struct Execute(Rc<Inner>);
 

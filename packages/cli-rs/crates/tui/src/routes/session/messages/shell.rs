@@ -3,6 +3,7 @@
 //! output collapsed to ten lines until a click opens it, and why it failed. While the shell runs, its output is
 //! read every second.
 
+use opencode_api::client::Client;
 use opencode_api::generated::{
     LocationQueryInput, SessionMessageShell, SessionMessageShellExit, SessionMessageShellStatus, ShellID,
     ShellOutputInput,
@@ -10,6 +11,7 @@ use opencode_api::generated::{
 use opencode_store::Data;
 use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
+use opencode_ui::prompt_input::paste::strip_ansi;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use std::cell::{Cell, RefCell};
@@ -19,7 +21,7 @@ use unicode_width::UnicodeWidthChar;
 
 use super::list::Context;
 
-/// `SHELL_DISPLAY_LIMIT`: the most output kept, from the end.
+/// `SHELL_DISPLAY_LIMIT`: the most output kept, in characters from the end, and read per request.
 const LIMIT: usize = 1024 * 1024;
 const MAX_LINES: usize = 10;
 
@@ -57,16 +59,98 @@ struct Props {
     width: usize,
 }
 
-/// The output read so far from `GET /api/shell/{id}/output`.
 #[derive(Default)]
 struct Read {
-    output: String,
-    truncated: bool,
-    cursor: i64,
-    loading: bool,
-    drain: bool,
+    output: Output,
     was_running: bool,
     timer: Option<TimerId>,
+}
+
+/// `loadBackgroundOutput` (`routes/session/index.tsx:3040-3086`): the output read so far from
+/// `GET /api/shell/{id}/output`, stripped and capped at the last [`LIMIT`] characters. Shell messages and the shell
+/// tool both read through it.
+#[derive(Default)]
+pub(crate) struct Output {
+    pub(crate) text: String,
+    pub(crate) truncated: bool,
+    cursor: i64,
+    loading: bool,
+    drain_requested: bool,
+}
+
+/// What one [`Output::start`] read: the pages' output, the cursor after them, and whether it skipped ahead.
+pub(crate) type Pages = (Vec<String>, i64, bool);
+
+impl Output {
+    /// Reads from the cursor; `drain` keeps reading to the end, skipping to the last [`LIMIT`] characters. `None`
+    /// while a read runs: a drain asked meanwhile runs once it ends.
+    pub(crate) fn start(
+        &mut self,
+        client: &Client,
+        id: ShellID,
+        directory: Option<String>,
+        drain: bool,
+    ) -> Option<impl Future<Output = Pages> + Send + use<>> {
+        if self.loading {
+            self.drain_requested |= drain;
+            return None;
+        }
+        self.loading = true;
+        let client = client.clone();
+        let start = self.cursor;
+        let location = directory.map(|directory| LocationQueryInput { directory: Some(directory) });
+        Some(async move {
+            let mut chunks = Vec::new();
+            let mut cursor = start;
+            let mut skipped = false;
+            loop {
+                let input = ShellOutputInput {
+                    id: id.clone(),
+                    location: location.clone(),
+                    cursor: Some(cursor),
+                    limit: Some(LIMIT as i64),
+                };
+                let Ok(response) = client.shell_output(&input).await else {
+                    break;
+                };
+                let data = response.data;
+                if !data.output.is_empty() {
+                    chunks.push(data.output);
+                }
+                if data.cursor <= cursor {
+                    break;
+                }
+                cursor = data.cursor;
+                if !drain || cursor >= data.size {
+                    break;
+                }
+                let tail = cursor.max(data.size - LIMIT as i64);
+                if tail > cursor {
+                    cursor = tail;
+                    skipped = true;
+                }
+            }
+            (chunks, cursor, skipped)
+        })
+    }
+
+    /// Takes in a finished read; `true` when a drain was asked while it ran.
+    pub(crate) fn finish(&mut self, (chunks, cursor, skipped): Pages) -> bool {
+        for chunk in chunks {
+            let next = strip_ansi(&format!("{}{chunk}", self.text));
+            let count = next.chars().count();
+            self.text = if count > LIMIT {
+                self.truncated = true;
+                next.chars().skip(count - LIMIT).collect()
+            } else {
+                next
+            };
+        }
+        self.truncated |= skipped;
+        self.cursor = cursor;
+        self.loading = false;
+        std::mem::take(&mut self.drain_requested)
+    }
 }
 
 impl Shell {
@@ -201,7 +285,6 @@ impl Inner {
         self.load(false);
     }
 
-    /// `loadBackgroundOutput`: one page, or with `drain` every page up to the last `LIMIT` bytes.
     fn load(&self, drain: bool) {
         let Some(props) = self.props.borrow().clone() else {
             return;
@@ -209,58 +292,13 @@ impl Inner {
         if !props.running && props.output.is_some() {
             return;
         }
-        let mut read = self.read.borrow_mut();
-        if read.loading {
-            read.drain |= drain;
-            return;
-        }
-        read.loading = true;
-        let cursor = read.cursor;
-        drop(read);
-        let client = self.data.client().clone();
+        let pages = self.read.borrow_mut().output.start(self.data.client(), props.shell, props.location, drain);
+        let Some(pages) = pages else { return };
         let weak = self.this.clone();
         self.app.spawn(
-            async move {
-                client
-                    .shell_output(&ShellOutputInput {
-                        id: props.shell.clone(),
-                        location: props.location.map(|directory| LocationQueryInput { directory: Some(directory) }),
-                        cursor: Some(cursor),
-                        limit: Some(LIMIT as i64),
-                    })
-                    .await
-            },
-            bind!(weak, |inner, _, response| {
-                let mut read = inner.read.borrow_mut();
-                read.loading = false;
-                let mut again = std::mem::take(&mut read.drain);
-                if let Ok(response) = response {
-                    let page = response.data;
-                    if !page.output.is_empty() {
-                        let mut next = strip_ansi(&format!("{}{}", read.output, page.output));
-                        if next.len() > LIMIT {
-                            read.truncated = true;
-                            let mut start = next.len() - LIMIT;
-                            while !next.is_char_boundary(start) {
-                                start += 1;
-                            }
-                            next.drain(..start);
-                        }
-                        read.output = next;
-                    }
-                    if page.cursor > read.cursor {
-                        read.cursor = page.cursor;
-                        if drain && read.cursor < page.size {
-                            let tail = read.cursor.max(page.size - LIMIT as i64);
-                            if tail > read.cursor {
-                                read.cursor = tail;
-                                read.truncated = true;
-                            }
-                            again = true;
-                        }
-                    }
-                }
-                drop(read);
+            pages,
+            bind!(weak, |inner, _, pages| {
+                let again = inner.read.borrow_mut().output.finish(pages);
                 inner.render();
                 if again {
                     inner.load(true);
@@ -277,15 +315,12 @@ impl Inner {
         let running = props.running || props.background;
         let expanded = self.expanded.get();
         let output = {
-            let read = self.read.borrow();
+            let read = &self.read.borrow().output;
             match (&props.output, props.running) {
                 (Some(output), false) => strip_ansi(output.trim()),
                 (output, _) => {
-                    let current = if read.output.is_empty() {
-                        output.as_deref().unwrap_or_default()
-                    } else {
-                        read.output.as_str()
-                    };
+                    let current =
+                        if read.text.is_empty() { output.as_deref().unwrap_or_default() } else { read.text.as_str() };
                     let text = strip_ansi(current.trim());
                     if read.truncated { format!("[earlier output omitted]\n{text}") } else { text }
                 }
@@ -444,40 +479,6 @@ fn collapse_tail(output: &str, max_lines: usize, max_chars: usize) -> String {
     format!("{label}\n{tail}")
 }
 
-/// Drops ANSI escape sequences: CSI (`ESC [ … final`), OSC (`ESC ] … BEL` or `ESC \`), and two-byte escapes.
-pub fn strip_ansi(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    while let Some(character) = chars.next() {
-        if character != '\u{1b}' && character != '\u{9b}' {
-            out.push(character);
-            continue;
-        }
-        let csi = character == '\u{9b}' || chars.next_if_eq(&'[').is_some();
-        if csi {
-            for next in chars.by_ref() {
-                if ('\u{40}'..='\u{7e}').contains(&next) {
-                    break;
-                }
-            }
-            continue;
-        }
-        if chars.next_if_eq(&']').is_some() {
-            while let Some(next) = chars.next() {
-                if next == '\u{7}' {
-                    break;
-                }
-                if next == '\u{1b}' && chars.next_if_eq(&'\\').is_some() {
-                    break;
-                }
-            }
-            continue;
-        }
-        chars.next();
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -509,9 +510,11 @@ mod tests {
         assert_eq!(collapsed.input, format!("{}…", "x".repeat(39)));
     }
 
+    // `tput sgr0` prints `ESC ( B ESC [ m`; TS `strip-ansi` drops both, so the output reads `okdone`.
     #[test]
-    fn strip_ansi_drops_escapes() {
-        assert_eq!(strip_ansi("\u{1b}[1;31mred\u{1b}[0m ok"), "red ok");
-        assert_eq!(strip_ansi("\u{1b}]0;title\u{7}text"), "text");
+    fn the_output_drops_a_charset_reset() {
+        let mut output = Output::default();
+        output.finish((vec!["ok\u{1b}(B\u{1b}[mdone".into()], 1, false));
+        assert_eq!(output.text, "okdone");
     }
 }

@@ -24,8 +24,8 @@ use super::{
 use crate::dialogs::open::truncate_file_path;
 use crate::routes::session::messages::images::{Images, tool_images};
 use crate::routes::session::messages::list::Context;
-use crate::routes::session::messages::shell::strip_ansi;
 use crate::routes::session::permission;
+use opencode_ui::prompt_input::paste::strip_ansi;
 
 /// `INLINE_TOOL_ICON_WIDTH`.
 pub const ICON_WIDTH: u16 = 2;
