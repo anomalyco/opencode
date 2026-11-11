@@ -5,7 +5,9 @@ export type { Context, Metadata, Namespace, Options, Result } from "@opencode/sc
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
-import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
+import { Context, Effect, Layer, Option, Ref, Result, Schema, SchemaIssue, Types } from "effect"
+import { fileURLToPath } from "url"
+import { FSUtil } from "@opencode/util/fs-util"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -19,6 +21,8 @@ import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
 import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
+import { ReadToolFileSystem } from "./tool/read-filesystem.js"
+import { Mime } from "./mime.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -91,6 +95,7 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const permission = yield* Permission.Service
     const flag = yield* Flag.Service
+    const fs = yield* FSUtil.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -120,6 +125,53 @@ const layer = Layer.effect(
         ...note("decode", "could not be decoded."),
         ...note("size", "could not be resized below the image size limit."),
       ]
+    })
+    
+    /**
+     * Inline local `file:` content before the result is recorded.
+     *
+     * Tools may return files on disk as file content (computer-use screenshots are one
+     * example). Provider request compilation rejects every `file:` reference, and a recorded
+     * tool result is replayed on every later turn, so one such reference would fail every
+     * later turn of the session. Reading the bytes here keeps the transcript self-contained;
+     * unreadable, oversized, or unsupported files degrade to a text note instead. The size
+     * limit matches the attachment pipeline (SessionPrompt.MAX_ATTACHMENT_BYTES).
+     */
+    const MAX_INLINE_FILE_BYTES = 20 * 1024 * 1024
+    
+    const materializeLocalFiles = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
+      const note = (item: Tool.FileContent, reason: string): Tool.Content => ({
+        type: "text",
+        text: `[${item.name ?? item.mime} omitted: ${reason}]`,
+      })
+      return yield* Effect.forEach(content, (item): Effect.Effect<Tool.Content> =>
+        Effect.gen(function* () {
+          if (item.type !== "file") return item
+          const url = URL.parse(item.uri.trim())
+          if (url?.protocol !== "file:") return item
+          const mime = item.mime.split(";", 1)[0].trim().toLowerCase()
+          // Only media the read tool also accepts is sent inline; other types would fail request lowering on every later turn.
+          const media = ReadToolFileSystem.MEDIA_MIMES.has(mime)
+          if (!media && !Mime.isTextual(mime)) return note(item, "unsupported file type")
+          const target = yield* Effect.try(() => {
+            url.search = ""
+            url.hash = ""
+            return fileURLToPath(url)
+          }).pipe(Effect.option)
+          if (Option.isNone(target)) return note(item, "invalid file URL")
+          const info = yield* fs.stat(target.value).pipe(Effect.option)
+          if (Option.isNone(info) || info.value.type !== "File") return note(item, "could not be read")
+          if (Number(info.value.size) > MAX_INLINE_FILE_BYTES) return note(item, "exceeds the inline size limit")
+          const bytes = yield* fs.readFile(target.value).pipe(Effect.option)
+          if (Option.isNone(bytes)) return note(item, "could not be read")
+          if (!media)
+            return {
+              type: "text" as const,
+              text: `[Resource ${item.name ?? item.uri} (${item.mime})]\n${Buffer.from(bytes.value).toString("utf8")}`,
+            }
+          return { ...item, uri: `data:${item.mime};base64,${Buffer.from(bytes.value).toString("base64")}` }
+        }),
+      )
     })
 
     const beforeExecute = (name: string, input: unknown, context: Tool.Context) =>
@@ -175,7 +227,10 @@ const layer = Layer.effect(
         },
       }
       yield* hooks.trigger("tool", "execute.after", afterEvent)
-      const afterContent = yield* normalizeImages(normalizeContent(afterEvent.result.content, afterEvent.result.output))
+      const materialized = yield* materializeLocalFiles(
+        normalizeContent(afterEvent.result.content, afterEvent.result.output),
+      )
+      const afterContent = yield* normalizeImages(materialized)
       return {
         ...(afterEvent.result.output === undefined ? {} : { output: afterEvent.result.output }),
         content: afterContent,
@@ -430,5 +485,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
+  deps: [PluginHooks.node, Image.node, Permission.node, Flag.node, FSUtil.node],
 })
