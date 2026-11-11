@@ -13,9 +13,8 @@ One Worker that answers by hostname:
   OIDC token for a GitHub App installation token for the V1 GitHub Action
   (`POST /exchange_github_app_token`, `src/api.ts`).
 
-`cloudflare.config.ts` defines the Worker. `deploy:dev` and `deploy:production` deploy it with `cf`,
-after the SST job in `.github/workflows/deploy.yml`, because the SST stack owned these hostnames until
-the Worker moved here. The deploy job reads the `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` Worker
+`cloudflare.config.ts` defines the Worker. `deploy:dev` and `deploy:production` deploy it with `cf`
+from `.github/workflows/deploy.yml`. The deploy job reads the `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` Worker
 secrets from AWS Secrets Manager (`opencode/<stage>/GITHUB_APP_*`) and uploads them with
 `--secrets-file`.
 

@@ -8,7 +8,7 @@ export { waitUntil } from "cloudflare:workers"
 type Fetcher = { fetch(request: Request): Promise<Response> }
 const bindings = env as { OG_WORKER: Fetcher; ASSETS: Fetcher }
 
-// The private StatsOg Worker renders cards (infra/stats.ts, src/og/worker.ts).
+// The private OG Worker renders cards (services/data/og.config.ts, src/og/worker.ts).
 export async function renderOgCard(card: OgCard) {
   const response = await bindings.OG_WORKER.fetch(
     new Request("https://og/render", { method: "POST", body: JSON.stringify(card) }),

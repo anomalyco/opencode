@@ -13,8 +13,7 @@
   },
   "dependencies": {
     "@opencode/stats-core": "workspace:*",
-    "effect": "catalog:",
-    "sst": "catalog:"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",

@@ -1,6 +1,6 @@
-// The private StatsOg Worker (infra/stats.ts). The Stats Worker posts a card to it over a Service Binding and gets a
-// PNG back. It is its own Worker because its Wasm and font modules can't ship in the Stats Worker's single-file
-// bundle. script/build-og-worker.ts bundles it and writes the modules imported here next to it.
+// The private OG Worker (services/data/og.config.ts). The data Worker posts a card to it over a Service Binding and gets a
+// PNG back. It is its own Worker so the data Worker doesn't load its Wasm engines and fonts.
+// script/build-og-worker.ts bundles it and writes the modules imported here next to it.
 import regularLatin from "./opentui-mono-regular-latin.bin"
 import regularRest from "./opentui-mono-regular-rest.bin"
 import boldLatin from "./opentui-mono-bold-latin.bin"

@@ -1,5 +1,5 @@
 import type { createMiddleware } from "@solidjs/start/middleware"
-import { Resource } from "sst/resource"
+import { Resource } from "@opencode/stats-core/resource"
 
 // Only production may be indexed: dev.opencode.ai and the personal stages run unreleased builds, and
 // search engines must never list them in place of opencode.ai. Every response there asks them not
@@ -9,12 +9,12 @@ import { Resource } from "sst/resource"
 type Middleware = ReturnType<typeof createMiddleware>[number]
 
 /**
- * The headers every response from this stage carries: none in production, or outside SST (`vite dev` on its own),
- * where no App is linked. SST links the App to the build as well as the Worker.
+ * The headers every response from this stage carries: none in production, or when STAGE is unset (`vite dev` on its
+ * own). services/data sets STAGE for the build as well as on the Worker.
  */
 export function stageHeaders(): Record<string, string> {
-  const stage = "App" in Resource ? Resource.App.stage : "production"
-  return stage === "production" ? {} : { "X-Robots-Tag": "noindex, nofollow" }
+  if (!process.env.STAGE) return {}
+  return Resource.App.stage === "production" ? {} : { "X-Robots-Tag": "noindex, nofollow" }
 }
 
 // h3 adds the prepared headers to whatever a route returns, and the error headers to a status of 400 or more.
