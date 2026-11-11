@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { useTheme, useThemes } from "../../context/theme"
 import type { PermissionReply, PermissionRequest } from "@opencode/client"
 import { SplitBorder } from "../../ui/border"
@@ -107,6 +107,63 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
         </Show>
       </Show>
     </box>
+  )
+}
+
+function AlwaysAllowBody(props: { request: PermissionRequest }) {
+  const theme = useTheme()
+  const config = useConfig().data
+  const lines = () => permissionAlwaysLines(props.request)
+  let scroll: ScrollBoxRenderable | undefined
+
+  // A keymap layer, not useKeyboard: the session's pageup/pagedown bindings claim those keys first.
+  Keymap.createLayer(() => ({
+    mode: "base",
+    commands: [
+      {
+        bind: "pageup",
+        title: "Previous always-allow page",
+        group: "Permission",
+        run: () => scroll?.scrollBy(-1, "viewport"),
+      },
+      {
+        bind: "pagedown",
+        title: "Next always-allow page",
+        group: "Permission",
+        run: () => scroll?.scrollBy(1, "viewport"),
+      },
+    ],
+  }))
+
+  return (
+    <scrollbox
+      ref={(element: ScrollBoxRenderable) => (scroll = element)}
+      flexGrow={1}
+      minHeight={0}
+      contentOptions={{ minHeight: 0 }}
+      scrollAcceleration={getScrollAcceleration(config)}
+      verticalScrollbarOptions={{
+        trackOptions: {
+          backgroundColor: theme.background.base,
+          foregroundColor: theme.scrollbar.base,
+        },
+      }}
+    >
+      <box paddingLeft={1} gap={1}>
+        <text fg={theme.text.muted} wrapMode="word" flexShrink={0}>
+          {lines()[0]}
+        </text>
+        <box>
+          <For each={lines().slice(1)}>
+            {(line) => (
+              <text fg={theme.text.base} wrapMode="word" flexShrink={0}>
+                {line}
+              </text>
+            )}
+          </For>
+        </box>
+      </box>
+    </scrollbox>
   )
 }
 
@@ -222,11 +279,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               header={header()}
               body={(option) => (
                 <Show when={option === "always"} fallback={presentationBody()}>
-                  <box paddingLeft={1} gap={1}>
-                    <For each={permissionAlwaysLines(props.request)}>
-                      {(line, index) => <text fg={index() === 0 ? theme.text.muted : theme.text.base}>{line}</text>}
-                    </For>
-                  </box>
+                  <AlwaysAllowBody request={props.request} />
                 </Show>
               )}
               options={
