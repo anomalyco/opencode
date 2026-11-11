@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status};
 use crate::routes::session::messages::list::Context;
-use crate::routes::session::messages::shell::strip_ansi;
+use opencode_ui::prompt_input::paste::strip_ansi;
 
 pub struct Generic(Rc<Inner>);
 
