@@ -32,11 +32,12 @@
 //! - `MODEL_REPORT=1` prints the verdict of every `KNOWN` and `OPEN` entry.
 //! - `MODEL_DUMP=<path>` (and `MODEL_DUMP_OPEN=1`) write traces for `round2/models-pilot/model-differential.ts`.
 //!
-//! `permissions_converge_to_the_server` runs by default. The other random searches are `#[ignore]`d until the plan
-//! step that fixes their open defects un-ignores them. Before a store change, run the searches at 5,000 cases:
+//! `permissions_converge_to_the_server` and `forms_converge_to_the_server` run by default. The other random searches
+//! are `#[ignore]`d until the plan step that fixes their open defects un-ignores them. Before a store change, run the
+//! searches at 5,000 cases:
 //!
 //! ```sh
-//! MODEL_CASES=5000 cargo test -p opencode-store --test model -- permissions_converge
+//! MODEL_CASES=5000 cargo test -p opencode-store --test model -- permissions_converge forms_converge
 //! MODEL_CASES=5000 cargo test -p opencode-store --test model -- --ignored --nocapture
 //! MODEL_CASES=5000 cargo test -p opencode-store --test model -- --ignored everything_together
 //! ```
@@ -1320,7 +1321,6 @@ fn permissions_converge_to_the_server() {
 }
 
 #[test]
-#[ignore = "red until plan step 3 (O9); run with --ignored"]
 fn forms_converge_to_the_server() {
     assert_converges(Mix { permissions: false, forms: true, messages: false, shells: false });
 }
@@ -1538,6 +1538,12 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "missing ses_1",
         &[Op::Ask(1), Op::Delete(1), Op::SyncPermissions(1), Op::Release(Read::Permissions, 1)],
     ),
+    // O9, form half: a late form for a session the store found missing recreated its forms (models step 3).
+    (
+        "late form for a missing session",
+        "missing ses_0",
+        &[Op::Open(0), Op::Delete(0), Op::SyncForms(0), Op::Release(Read::Forms, 0)],
+    ),
     // S1 (carbon-4, O92-shell-list): a `Catalog::Shell` read replaced the location's shells, losing a
     // `shell.created` and bringing back a shell whose `shell.exited` arrived while it was in flight.
     ("shell created during the shell read", "shells", &[Op::SyncShells, Op::ShellCreate]),
@@ -1588,13 +1594,6 @@ const OPEN: &[(&str, &str, &[Op])] = &[
             Op::Reconnect,
             Op::Step(1),
         ],
-    ),
-    // New: events for a session the store already found missing (a read answered `SessionNotFoundError`) recreate
-    // its forms.
-    (
-        "late form for a missing session",
-        "missing ses_0",
-        &[Op::Open(0), Op::Delete(0), Op::SyncForms(0), Op::Release(Read::Forms, 0)],
     ),
 ];
 
