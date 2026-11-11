@@ -8,7 +8,8 @@
 //!
 //! `session.moved` updates the open dialog's cache, which E.11a replaced with the store's sessions.
 //! `app::mount` calls [`install`] once and `Tui::sync` calls [`sync`]. The app's pump posts each store signal once as
-//! a [`Signal`]; [`handle`] sees it first, then every [`subscribe`]r in order.
+//! a [`Signal`]; [`handle`] sees it first, then every [`subscribe`]r in order. When it skipped signals, it posts
+//! [`Lagged`] instead.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -16,7 +17,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use opencode_api::generated::{McpServerStatus, V2Event};
+use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDeleted, SessionID, V2Event};
 use opencode_store::Changes;
 use opencode_ui::bind;
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -38,6 +39,10 @@ pub struct Events {
 /// One event the store passed on, posted to the UI thread.
 #[derive(Clone)]
 pub(crate) struct Signal(pub Arc<V2Event>);
+
+/// The pump's signal receiver fell behind and skipped events, posted to the UI thread.
+#[derive(Clone)]
+pub(crate) struct Lagged;
 
 /// Declares [`Handled`], the events [`handle`] and the handlers it calls act on, and [`HANDLED`], their tags, which the
 /// store passes on. The handlers match on [`Handled`], so acting on a type means adding it here.
@@ -91,6 +96,28 @@ pub fn install(tui: &Tui) {
             subscriber(&tui, event);
         }
     }));
+    tui.app.on_message(bind!(tui, |tui, _, _: &Lagged| resync(&tui)));
+}
+
+/// After skipped signals, as after a reconnect: reads the location again and syncs every view. The store applied
+/// the skipped events, so the open tabs and the open session it saw deleted close as `session.deleted` closes them.
+fn resync(tui: &Tui) {
+    crate::features::location::reconnected(tui);
+    let mut open = tui.tabs.open_ids(tui);
+    if let Route::Session { id } = tui.route() {
+        open.push(id.0);
+    }
+    let deleted: Vec<SessionID> =
+        tui.data.read(|state| open.into_iter().map(SessionID).filter(|id| state.is_missing(id)).collect());
+    for id in deleted {
+        let event = SessionDeleted {
+            r#type: "session.deleted".to_owned(),
+            data: SessionArchivedData { session_id: id },
+            ..SessionDeleted::default()
+        };
+        handle(tui, &Handled::SessionDeleted(&event));
+    }
+    tui.resync();
 }
 
 /// Calls `subscriber` with each store signal, after the TUI's own handling, until the disposer drops. The store passes

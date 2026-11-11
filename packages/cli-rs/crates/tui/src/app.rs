@@ -720,8 +720,8 @@ fn pump(app: &App, wakeups: Wakeups, mut status: Option<tokio::sync::watch::Rece
                 signal = signals.recv() => match signal {
                     Ok(event) => post(&proxy, crate::features::events::Signal(event)).await,
                     Err(RecvError::Lagged(skipped)) => {
-                        log::warn!("the UI skipped {skipped} server events");
-                        true
+                        log::warn!("the UI skipped {skipped} server events; resyncing");
+                        post(&proxy, crate::features::events::Lagged).await
                     }
                     Err(RecvError::Closed) => false,
                 },
