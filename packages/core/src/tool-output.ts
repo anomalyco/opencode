@@ -75,9 +75,14 @@ const layer = Layer.effect(
     const truncate = Effect.fnUntraced(function* (result: Result) {
       if (result.metadata?.truncated !== undefined) return result
       const content = result.content
+      // A line break joins text parts unless the text before already ends in one.
       const text = content.reduce(
         (joined, item) =>
-          item.type !== "text" ? joined : needsBreak(joined) ? `${joined}\n${item.text}` : joined + item.text,
+          item.type !== "text"
+            ? joined
+            : joined === "" || joined.endsWith("\n")
+              ? joined + item.text
+              : `${joined}\n${item.text}`,
         "",
       )
       const limits = state.get()
@@ -87,11 +92,10 @@ const layer = Layer.effect(
       if (lines.length <= limits.maxLines && totalBytes <= limits.maxBytes)
         return { ...result, metadata: { ...result.metadata, truncated: false } }
 
-      // One cut: the end of the last line allowed, or the byte limit, whichever comes first. A line longer than what
-      // is left (a long log line, or a whole JSON result on one line) shows its start instead of vanishing.
-      const byLines = lineEnd(text, limits.maxLines)
-      const cut = withoutLineBreak(text, Math.min(byLines, byteBoundary(text, limits.maxBytes)))
-      const shown = text.slice(0, cut)
+      // One cut at the line or byte limit, whichever comes first, so a line too long for the space left shows its start.
+      const shown = text
+        .slice(0, Math.min(afterLines(text, limits.maxLines), byteBoundary(text, limits.maxBytes)))
+        .replace(/\r?\n$/, "")
       const file = path.join(directory, fileName())
       const failure = yield* fs.ensureDir(directory).pipe(
         Effect.andThen(fs.writeFileString(file, text)),
@@ -100,28 +104,23 @@ const layer = Layer.effect(
           Effect.logWarning("failed to save full tool output", { file, cause: error }).pipe(Effect.as(describe(error))),
         ),
       )
-      const saved =
+      const range = shown === "" ? "0 lines" : `lines 1-${shown.split("\n").length}`
+      const cutLine =
+        shown === "" || /^(\r?\n|$)/.test(text.slice(shown.length, shown.length + 2)) ? "" : " (last line cut)"
+      const marker = `[showing ${range} of ${lines.length}${cutLine}; ${
         failure === undefined ? `full output saved to ${file}` : `full output could not be saved: ${failure}`
-      const shownLines = shown === "" ? 0 : shown.split("\n").length
-      const range = shownLines === 0 ? "0 lines" : `lines 1-${shownLines}`
-      const lineCut = cut < text.length && !/^\r?\n/.test(text.slice(cut, cut + 2))
-      const marker =
-        cut === byLines
-          ? `[showing lines 1-${Math.min(limits.maxLines, lines.length)} of ${lines.length}; ${saved}]`
-          : `[showing ${Buffer.byteLength(shown, "utf-8")} of ${totalBytes} bytes (${range} of ${lines.length}${lineCut ? ", last line cut" : ""}); ${saved}]`
+      }]`
       const bounded: Tool.Content[] = []
       let remaining = shown.length
-      // Whether a line break joins the next text part to the text before it, as when `text` was built.
-      let pending = false
+      let separator = false
       let marked = false
       for (const item of content) {
         if (item.type === "file") {
           bounded.push(item)
           continue
         }
-        if (pending && remaining > 0) remaining--
-        pending = item.text !== "" && !item.text.endsWith("\n")
-        // Parts after the cut, empty ones included, are left out.
+        if (separator && remaining > 0) remaining--
+        separator = item.text !== "" && !item.text.endsWith("\n")
         if (!marked && remaining >= item.text.length) {
           bounded.push(item)
           remaining -= item.text.length
@@ -179,42 +178,24 @@ export const node = makeLocationNode({
   deps: [FSUtil.node, Global.node, cleanupNode],
 })
 
-/** Whether text joined so far needs a line break before the next part: it has text and doesn't end in one. */
-function needsBreak(joined: string) {
-  return joined !== "" && !joined.endsWith("\n")
-}
-
-/** The index where line `count` ends, before its line break, or the end of `text` when it has no more lines. */
-function lineEnd(text: string, count: number) {
-  if (count <= 0) return 0
-  let index = -1
+/** Where the line after the first `count` lines starts, or the end of `text`. */
+function afterLines(text: string, count: number) {
+  let index = 0
   for (let line = 0; line < count; line++) {
-    index = text.indexOf("\n", index + 1)
-    if (index === -1) return text.length
+    const next = text.indexOf("\n", index)
+    if (next === -1) return text.length
+    index = next + 1
   }
-  return text[index - 1] === "\r" ? index - 1 : index
-}
-
-/** `index`, moved back before a line break that ends right at it, so the shown text never ends in one. */
-function withoutLineBreak(text: string, index: number) {
-  if (text[index - 1] !== "\n") return index
-  return text[index - 2] === "\r" ? index - 2 : index - 1
+  return index
 }
 
 const encoder = new TextEncoder()
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
-/**
- * The longest prefix of `text`, as a string index, that fits in `budget` UTF-8 bytes and ends between user-perceived
- * characters, so a cut never splits a code point, a surrogate pair or a multi-code-point emoji (ZWJ sequences, skin
- * tones, flags). A single character bigger than the whole budget still shows its first code points.
- */
+/** The longest start of `text` that fits in `budget` UTF-8 bytes without splitting a character, emoji included. */
 function byteBoundary(text: string, budget: number) {
-  // encodeInto writes whole code points only, so `read` never ends inside a surrogate pair.
+  // encodeInto stops at whole code points; the segmenter then backs off to the start of the grapheme it is inside.
   const index = encoder.encodeInto(text, new Uint8Array(Math.max(0, budget))).read
   if (index === text.length) return index
-  // Segmenting from the start of the text keeps flag pairing and long clusters exact; one code point past the cut
-  // shows the segmenter what follows it.
-  const start = graphemes.segment(text.slice(0, index + 2)).containing(index)?.index ?? index
-  return start > 0 ? start : index
+  return graphemes.segment(text.slice(0, index + 2)).containing(index)?.index ?? index
 }

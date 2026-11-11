@@ -78,9 +78,7 @@ describe("ToolOutput", () => {
             { type: "text", text: "one\nt" },
             {
               type: "text",
-              text: expect.stringMatching(
-                /^\[showing 5 of 7 bytes \(lines 1-2 of 2, last line cut\); full output saved to .+\]$/,
-              ),
+              text: expect.stringMatching(/^\[showing lines 1-2 of 2 \(last line cut\); full output saved to .+\]$/),
             },
           ])
         }),
@@ -99,9 +97,7 @@ describe("ToolOutput", () => {
             {
               type: "text",
               text: expect.stringMatching(
-                new RegExp(
-                  `^\\[showing 20 of ${text.length} bytes \\(lines 1-1 of 1, last line cut\\); full output saved to .+\\]$`,
-                ),
+                new RegExp("^\\[showing lines 1-1 of 1 \\(last line cut\\); full output saved to .+\\]$"),
               ),
             },
           ])
@@ -165,7 +161,7 @@ describe("ToolOutput", () => {
             { type: "text", text: "de" },
             {
               type: "text",
-              text: expect.stringMatching(/^\[showing 6 of 10 bytes \(lines 1-2 of 2, last line cut\);/),
+              text: expect.stringMatching(/^\[showing lines 1-2 of 2 \(last line cut\);/),
             },
           ])
           const between = yield* output.truncate({
@@ -176,7 +172,7 @@ describe("ToolOutput", () => {
           })
           expect(between.content).toEqual([
             { type: "text", text: "abcde" },
-            { type: "text", text: expect.stringMatching(/^\[showing 5 of 9 bytes \(lines 1-1 of 2\);/) },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 2;/) },
           ])
         }),
       { maxLines: 100, maxBytes: 6 },
@@ -193,7 +189,7 @@ describe("ToolOutput", () => {
             { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 3;/) },
           ])
           const blank = yield* output.truncate({ content: [{ type: "text", text: "\nfoo\nbar" }] })
-          expect(blank.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 3;/) }])
+          expect(blank.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing 0 lines of 3;/) }])
         }),
       { maxLines: 1, maxBytes: 1_000 },
     ),
@@ -204,7 +200,7 @@ describe("ToolOutput", () => {
       (output) =>
         Effect.gen(function* () {
           const result = yield* output.truncate({ content: [{ type: "text", text: "secret" }] })
-          expect(result.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing lines 1-0 of 1;/) }])
+          expect(result.content).toEqual([{ type: "text", text: expect.stringMatching(/^\[showing 0 lines of 1;/) }])
         }),
       { maxLines: 0, maxBytes: 1_000 },
     ),
@@ -297,7 +293,7 @@ describe("ToolOutput", () => {
             { type: "text", text: "one" },
             {
               type: "text",
-              text: expect.stringMatching(/^\[showing 3 of 4 bytes \(lines 1-1 of 1\); full output saved to /),
+              text: expect.stringMatching(/^\[showing lines 1-1 of 1; full output saved to /),
             },
           ])
         }),
