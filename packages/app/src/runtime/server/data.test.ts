@@ -198,34 +198,27 @@ test("after a reload, Recent shows the order a restarted window shows for the sa
   }
 })
 
-// The live record lags the server after a rename, model or agent change, step or metadata update, while list
-// snapshots and events carry the newer time. A send must still bump past both until a newer record arrives.
-test.each(["a rename event", "a reloaded list"] as const)(
-  "a send after %s that is ahead of the live record still bumps until the server passes it",
-  (source) => {
-    const live = { ...session, time: { created: 0, updated: 10 } }
-    const setup = setupDesktop(async () => Response.json({ data: live }))
+// The live record lags the server after a rename, model or agent change, step or metadata update, while a reloaded
+// list shows the newer time. A send must still bump past it until a newer record arrives.
+test("a send after a list showed a time ahead of the live record still bumps until the server passes it", () => {
+  const setup = setupDesktop(async () => Response.json({ data: { ...session, time: { created: 0, updated: 10 } } }))
 
-    try {
-      setup.seed(10)
+  try {
+    setup.seed(10)
+    setup.data.session.apply([{ ...session, time: { created: 0, updated: 50 } }], { reloads: true })
+    setSystemTime(new Date(1_000))
+    setup.data.session.acceptSend(session.id)
 
-      if (source === "a rename event") setup.emit("session.renamed", 50, { title: "Renamed" })
-      else setup.data.session.apply([{ ...session, time: { created: 0, updated: 50 } }], { reloads: true })
+    const at = (updated: number) =>
+      setup.data.session.apply([{ ...session, time: { created: 0, updated } }], { reloads: true })[0].time.updated
 
-      setSystemTime(new Date(1_000))
-      setup.data.session.acceptSend(session.id)
-
-      const at = (updated: number) =>
-        setup.data.session.apply([{ ...session, time: { created: 0, updated } }], { reloads: true })[0].time.updated
-
-      // A snapshot taken before the send, or one that only shows the earlier change, keeps the bump.
-      expect(at(50)).toBe(1_000)
-      expect(at(51)).toBe(51)
-    } finally {
-      setup.dispose()
-    }
-  },
-)
+    expect(setup.data.session.get(session.id)?.time.updated).toBe(10)
+    expect(at(50)).toBe(1_000)
+    expect(at(51)).toBe(51)
+  } finally {
+    setup.dispose()
+  }
+})
 
 test("a projected send bump merged through an index never becomes a server time", () => {
   const setup = setupDesktop(async () => Response.json({ data: session }))
