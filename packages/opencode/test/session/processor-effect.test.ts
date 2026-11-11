@@ -209,6 +209,36 @@ const providerErrorLLM = Layer.succeed(
 const providerErrorEnv = LayerNode.compile(root, [...replacements, [LLM.node, providerErrorLLM]])
 const itProviderError = testEffect(providerErrorEnv)
 
+const providerLoopLLM = (persisted: boolean) =>
+  Layer.succeed(
+    LLM.Service,
+    LLM.Service.of({
+      stream: () =>
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          ...Array.from({ length: 3 }, (_, index) => [
+            ...(persisted
+              ? [LLMEvent.toolCall({ id: `provider-${index}`, name: "lookup", input: {}, providerExecuted: true })]
+              : []),
+            LLMEvent.toolCall({
+              id: `provider-${index}`,
+              name: "lookup",
+              input: { query: "same" },
+              ...(persisted ? {} : { providerExecuted: true }),
+            }),
+            LLMEvent.toolResult({
+              id: `provider-${index}`,
+              name: "lookup",
+              result: { type: "json", value: { found: true } },
+              providerExecuted: true,
+            }),
+          ]).flat(),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ]),
+    }),
+  )
+
 const fragmentFailureLLM = Layer.succeed(
   LLM.Service,
   LLM.Service.of({
@@ -1169,3 +1199,50 @@ itFragmentFailure.live("session.processor effect tests retain partial legacy par
     { config: cfg },
   ),
 )
+
+for (const policy of [
+  { action: "deny", result: "stop", completed: 2, persisted: false },
+  { action: "allow", result: "continue", completed: 3, persisted: false },
+  { action: "deny", result: "stop", completed: 2, persisted: true },
+] as const) {
+  const itProviderLoop = testEffect(
+    LayerNode.compile(root, [...replacements, [LLM.node, providerLoopLLM(policy.persisted)]]),
+  )
+  itProviderLoop.live(
+    `provider-executed repeat reports retain doom_loop=${policy.action}, persisted=${policy.persisted}`,
+    () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const { processors, session, provider } = yield* boot()
+            const chat = yield* session.create({
+              permission: [
+                { permission: "*", pattern: "*", action: "allow" },
+                { permission: "doom_loop", pattern: "*", action: policy.action },
+              ],
+            })
+            const parent = yield* user(chat.id, "provider execution loop")
+            const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+            const model = yield* provider.getModel(ref.providerID, ref.modelID)
+            const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model })
+            const result = yield* handle.process({
+              user: parent,
+              sessionID: chat.id,
+              model,
+              agent: agent(),
+              system: [],
+              messages: [{ role: "user", content: "provider execution loop" }],
+              tools: {},
+            })
+            const calls = (yield* MessageV2.parts(msg.id)).filter(
+              (part): part is SessionV1.ToolPart => part.type === "tool",
+            )
+            expect(result).toBe(policy.result)
+            expect(calls).toHaveLength(3)
+            expect(calls.filter((call) => call.state.status === "completed")).toHaveLength(policy.completed)
+            expect(calls.every((call) => call.metadata?.providerExecuted === true)).toBe(true)
+          }),
+        { config: { ...cfg, permission: { "*": "allow", doom_loop: policy.action } } },
+      ),
+  )
+}

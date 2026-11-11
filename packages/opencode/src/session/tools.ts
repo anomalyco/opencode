@@ -23,6 +23,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { AppProcess } from "@opencode-ai/core/process"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -42,7 +43,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
   session: Session.Info
-  processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+  processor: Pick<SessionProcessor.Handle, "message" | "beforeToolCall" | "updateToolCall" | "completeToolCall">
   bypassAgentCheck: boolean
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
@@ -56,12 +57,21 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
 
-  const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
+  const context = (
+    args: Record<string, unknown>,
+    options: ToolExecutionOptions,
+    doomLoopPermissionChecked = false,
+  ): Tool.Context => ({
     sessionID: input.session.id,
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+    extra: {
+      model: input.model,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+      doomLoopPermissionChecked,
+    },
     agent: input.agent.name,
     messages: input.messages,
     metadata: (val) =>
@@ -79,14 +89,18 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }
       }),
     ask: (req) =>
-      permission
-        .ask({
+      Effect.gen(function* () {
+        const signal = options.abortSignal
+        signal?.throwIfAborted()
+        const request = permission.ask({
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
         })
-        .pipe(Effect.orDie),
+        yield* signal ? Effect.raceFirst(request, AppProcess.waitForAbort(signal)) : request
+        signal?.throwIfAborted()
+      }).pipe(Effect.orDie),
   })
 
   for (const item of yield* registry.tools({
@@ -102,7 +116,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       execute(args, options) {
         return run.promise(
           Effect.gen(function* () {
-            const ctx = context(args, options)
+            const checked = yield* input.processor.beforeToolCall({
+              tool: item.id,
+              args,
+              callID: options.toolCallId,
+              abort: options.abortSignal,
+            })
+            const ctx = context(args, options, checked)
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -155,6 +175,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       execute(args, opts) {
         return run.promise(
           Effect.gen(function* () {
+            yield* input.processor.beforeToolCall({
+              tool: MCP_RESOURCE_TOOLS.list,
+              args,
+              callID: opts.toolCallId,
+              abort: opts.abortSignal,
+            })
             const parsed = parseListMcpResourcesArgs(args)
             const ctx = context(toRecord(args), opts)
             const clients = yield* mcp.clients()
@@ -238,6 +264,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       execute(args, opts) {
         return run.promise(
           Effect.gen(function* () {
+            yield* input.processor.beforeToolCall({
+              tool: MCP_RESOURCE_TOOLS.listTemplates,
+              args,
+              callID: opts.toolCallId,
+              abort: opts.abortSignal,
+            })
             const parsed = parseListMcpResourcesArgs(args)
             const ctx = context(toRecord(args), opts)
             const clients = yield* mcp.clients()
@@ -325,6 +357,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       execute(args, opts) {
         return run.promise(
           Effect.gen(function* () {
+            yield* input.processor.beforeToolCall({
+              tool: MCP_RESOURCE_TOOLS.read,
+              args,
+              callID: opts.toolCallId,
+              abort: opts.abortSignal,
+            })
             const parsed = parseReadMcpResourceArgs(args)
             const ctx = context(toRecord(args), opts)
             const clients = yield* mcp.clients()
@@ -398,6 +436,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     item.execute = (args, opts) =>
       run.promise(
         Effect.gen(function* () {
+          yield* input.processor.beforeToolCall({ tool: key, args, callID: opts.toolCallId, abort: opts.abortSignal })
           const ctx = context(args, opts)
           yield* plugin.trigger(
             "tool.execute.before",
