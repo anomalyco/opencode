@@ -2,26 +2,30 @@
 //! are `tools::dispatch::Tool` (E.7a).
 
 use std::cell::Cell;
+use std::rc::Rc;
 
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantText};
 use opentui::prelude::*;
 use opentui::widget::Markdown;
 
 use super::list::Context;
+use crate::features::session_links::{self, Links};
 
 /// Assistant text: Markdown in a box padded 3 from the left, streaming until the message
 /// completes.
 pub struct TextPart {
     root: View,
     markdown: Markdown,
+    _links: Rc<Links>,
     streaming: Cell<bool>,
 }
 
 impl TextPart {
     pub fn new(cx: &Context<'_>) -> Self {
         let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true);
+        let links = session_links::attach(cx.tui, &markdown);
         let root = View::new(cx.app).padding_edge(Edge::Left, 3).shrink(0.0).child(&markdown);
-        Self { root, markdown, streaming: Cell::new(true) }
+        Self { root, markdown, _links: links, streaming: Cell::new(true) }
     }
 
     pub fn root(&self) -> &View {
