@@ -10,6 +10,8 @@ import { Location } from "../../location.js"
 import { Model } from "../../model.js"
 import type { PluginInternal } from "../internal.js"
 import { foldSettings } from "./configured.js"
+import { activeCredential } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 
 export type LocalModel = {
   readonly id: string
@@ -99,22 +101,21 @@ export function createLocalProviderPlugin<Discovered>(input: {
         const discover = Effect.fn("LocalProviderPlugin.discover")(function* () {
           const current = source.current
           if (!current.endpoint) return undefined
+          // A key saved with /connect wins over config, as it does for requests.
+          const stored = (yield* activeCredential(ctx, input.providerID)).credential
+          const apiKey = stored?.type === "key" ? stored.key : current.apiKey
           return yield* discoveryLock.withPermit(
             Effect.gen(function* () {
               const cached = discovery.get(current.root)
-              if (
-                cached &&
-                cached.apiKey === current.apiKey &&
-                Date.now() - cached.checked < Duration.toMillis(interval)
-              )
+              if (cached && cached.apiKey === apiKey && Date.now() - cached.checked < Duration.toMillis(interval))
                 return { source: current, models: cached.models }
               discovery.set(current.root, {
                 checked: Date.now(),
-                apiKey: current.apiKey,
-                models: cached && cached.apiKey === current.apiKey ? cached.models : undefined,
+                apiKey,
+                models: cached && cached.apiKey === apiKey ? cached.models : undefined,
               })
-              const models = yield* input.discover(createClient(http, current.root, current.apiKey, current.endpoint))
-              discovery.set(current.root, { checked: Date.now(), apiKey: current.apiKey, models })
+              const models = yield* input.discover(createClient(http, current.root, apiKey, current.endpoint))
+              discovery.set(current.root, { checked: Date.now(), apiKey, models })
               return { source: current, models }
             }),
           )
@@ -133,6 +134,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
 
         // Keep the last successful inventory through transient outages instead of flickering model availability.
         yield* refresh().pipe(Effect.ignore, Effect.repeat(Schedule.spaced(interval)), Effect.forkScoped)
+        yield* ProviderRefresh.onSwitch(input.providerID, refresh().pipe(Effect.ignore))
         const reload = Effect.fn("LocalProviderPlugin.reload")(function* () {
           const next = configured(yield* config.entries(), input.providerID, defaultOrigin, suffix)
           if (
