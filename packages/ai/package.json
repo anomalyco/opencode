@@ -99,6 +99,7 @@
     "./providers/openai": "./src/providers/openai.ts",
     "./providers/openai-compatible": "./src/providers/openai-compatible.ts",
     "./providers/openai-compatible-responses": "./src/providers/openai-compatible-responses.ts",
+    "./providers/openai-compatible/decisions": "./src/providers/openai-compatible/decisions.ts",
     "./providers/openai-compatible/embeddings": "./src/providers/openai-compatible/embeddings.ts",
     "./providers/openai-compatible/images": "./src/providers/openai-compatible/images.ts",
     "./providers/openai-compatible/responses": "./src/providers/openai-compatible/responses.ts",

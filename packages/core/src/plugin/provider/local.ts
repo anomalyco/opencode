@@ -18,6 +18,8 @@ export type LocalModel = {
   readonly tools?: boolean
   readonly vision?: boolean
   readonly context?: number | null
+  /** Decision models answer typed questions through the host's System One endpoint (`/v1/systemone`). */
+  readonly type?: "chat" | "decision"
 }
 
 export type LocalDiscoveryClient = ReturnType<typeof createClient>
@@ -86,6 +88,10 @@ export function createLocalProviderPlugin<Discovered>(input: {
                 output: ["text"],
               }
               if (typeof spec.context === "number" && spec.context > 0) model.limit.context = spec.context
+              if (spec.type !== "decision") return
+              model.type = "decision"
+              model.package = "@opencode/ai/providers/openai-compatible/decisions"
+              model.capabilities.output = ["decision"]
             })
           }
         })
