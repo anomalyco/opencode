@@ -94,12 +94,10 @@ pub fn adopt(project: &str, directory: &str, event: &WorktreeResolvedData) -> Op
     if key != parent && !key.starts_with(&format!("{parent}/")) {
         return None;
     }
-    // `directory.slice(root.length + 1)` counts UTF-16 units of the unlowered root, which need not
-    // line up with `directory` once lowercasing changed a length.
-    let subpath = (key != parent).then(|| {
-        let units: Vec<u16> = directory.encode_utf16().skip(root.encode_utf16().count() + 1).collect();
-        String::from_utf16_lossy(&units)
-    });
+    // The segments after the root's. TS slices `directory.slice(root.length + 1)`, which is wrong when
+    // lowercasing changed a length (deviation O89-adopt-case-fold).
+    let subpath =
+        (key != parent).then(|| directory.split('/').skip(root.split('/').count()).collect::<Vec<_>>().join("/"));
     Some((event.project_id.0.clone(), subpath))
 }
 
@@ -189,8 +187,9 @@ mod tests {
         assert_eq!(adopt("global", "\\repo\\.\\Legacy"), Some(("repository".into(), Some("Legacy".into()))));
         let windows = event("C:\\Repo", &[]);
         assert_eq!(super::adopt("global", "c:/repo/App", &windows), Some(("repository".into(), Some("App".into()))));
-        // Lowercasing `İ` lengthens it; TS slices by the root's UTF-16 length, so the subpath is empty.
+        // Lowercasing `İ` lengthens it. TS slices by the root's UTF-16 length and gives an empty subpath;
+        // the subpath is what follows the root's segments (deviation O89-adopt-case-fold).
         let folded = event("c:\\i\u{307}", &[]);
-        assert_eq!(super::adopt("global", "C:\\\u{130}\\ä", &folded), Some(("repository".into(), Some(String::new()))));
+        assert_eq!(super::adopt("global", "C:\\\u{130}\\ä", &folded), Some(("repository".into(), Some("ä".into()))));
     }
 }
