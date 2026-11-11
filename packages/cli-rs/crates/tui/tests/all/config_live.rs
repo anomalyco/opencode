@@ -76,6 +76,24 @@ fn a_keybinds_write_rebinds_and_disables_commands_at_once() {
     assert!(!tui.dialogs.is_open(), "f7 still opened the sessions");
 }
 
+// Expected (carbon-dialogs-7): a closed Settings or Experiments dialog lets go of its config listener.
+#[test]
+fn closed_settings_dialogs_drop_their_config_listeners() {
+    let app = TestApp::new(100, 30);
+    let tui = support::mount_empty(&app, Info::default(), None);
+    let before = tui.settings.listener_count();
+    for _ in 0..3 {
+        settings::show(&tui, None);
+        app.render();
+        tui.dialogs.clear();
+        opencode_tui::dialogs::experiments::show(&tui);
+        app.render();
+        tui.dialogs.clear();
+        app.render();
+    }
+    assert_eq!(tui.settings.listener_count(), before);
+}
+
 #[test]
 fn an_outside_cli_json_edit_reloads() {
     let home = opencode_util::temp::tempdir().unwrap();

@@ -342,6 +342,53 @@ fn plugin_manager_matches_typescript() {
     assert_dialog(&app, "E.18b/plugins-internal", "Plugins");
 }
 
+// Expected (carbon-dialogs-7): the manager reads the server plugins again on `plugin.updated` while it shows an error,
+// as TS's subscription lives as long as the dialog.
+#[test]
+fn plugin_manager_follows_plugin_updated_under_its_error_view() {
+    use opencode_api::memory::{Memory, Route as MemoryRoute};
+    let failed = json!([{
+        "id": "audit", "source": { "type": "local", "path": format!("{DIRECTORY}/audit.ts") },
+        "features": { "server": true }, "state": { "status": "failed", "error": "Cannot find module" },
+    }]);
+    let memory = Memory::new(vec![
+        MemoryRoute::json("GET", "/api/location", 200, &location()),
+        MemoryRoute::json("GET", "/api/plugin", 200, &json!({ "location": location(), "data": failed })),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+    ]);
+    let app = TestApp::new(100, 30);
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(support::component_info(json!({}))),
+        route: Route::Home,
+        events: true,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let tui = opencode_tui::mount(&app, deps);
+    // The manager reads `/tmp/other`; the plugin host reads the default location on the same event.
+    opencode_tui::features::location::navigate_home(&tui, Some(opencode_store::Location::new("/tmp/other")));
+    let reads = || {
+        let other = Some(vec!["/tmp/other".to_owned()]);
+        memory
+            .requests()
+            .iter()
+            .filter(|seen| seen.path == "/api/plugin" && seen.query.get("location[directory]") == other.as_ref())
+            .count()
+    };
+    opencode_tui::dialogs::plugins::show(&tui);
+    wait_for(&app, "view error enter");
+    app.press("enter");
+    wait_for(&app, "Server plugin error");
+    let before = reads();
+    memory.emit(&json!({ "id": "evt_plugins", "created": 1, "type": "plugin.updated", "data": {} }));
+    assert!(app.wait_until(WAIT, || reads() > before), "plugin.updated under the error view read nothing");
+    app.press("escape");
+    wait_for(&app, "view error enter");
+    let before = reads();
+    memory.emit(&json!({ "id": "evt_plugins_2", "created": 2, "type": "plugin.updated", "data": {} }));
+    assert!(app.wait_until(WAIT, || reads() > before), "the list stopped following plugin.updated");
+}
+
 #[test]
 fn plugin_manager_reads_the_active_location() {
     let app = TestApp::new(100, 30);
