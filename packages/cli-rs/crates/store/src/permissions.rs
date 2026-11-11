@@ -53,14 +53,6 @@ impl State {
             self.log.permissions(session);
         }
     }
-
-    /// Ends the read `ticket` of `session`; its overlay, while that read is still the current one.
-    fn take_permission_read(&mut self, session: &SessionID, ticket: u64) -> Option<Overlay<PermissionRequest>> {
-        if self.permission_reads.get(session)?.ticket != ticket {
-            return None;
-        }
-        self.permission_reads.remove(session)
-    }
 }
 
 impl Data {
@@ -82,12 +74,12 @@ impl Data {
                     match data.client().permission_list(&PermissionListInput { session_id: session.clone() }).await {
                         Ok(list) => list,
                         Err(error) => {
-                            data.write(|state| state.take_permission_read(&session, ticket));
+                            data.write(|state| Overlay::take(&mut state.permission_reads, &session, ticket));
                             return Err(evict_missing(&data, error));
                         }
                     };
                 let reread = data.write(|state| {
-                    let Some(read) = state.take_permission_read(&session, ticket) else {
+                    let Some(read) = Overlay::take(&mut state.permission_reads, &session, ticket) else {
                         return false;
                     };
                     if state.deleted_since(&session, started) {
