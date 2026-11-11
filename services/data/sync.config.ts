@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => {
       env: {
         DataSyncWorkflow: bindings.workflow({ name, worker: name, exportName: "DataSyncWorkflow" }),
         STAGE: bindings.text(current),
+        ...(current === "dev" && { R2_SQL_ACCOUNT_ID: bindings.text(stageAccount(current)) }),
         // Set from AWS Secrets Manager (opencode/<stage>/*) by the deploy job.
         DATA_DATABASE_HOST: bindings.secret(),
         DATA_DATABASE_USERNAME: bindings.secret(),
