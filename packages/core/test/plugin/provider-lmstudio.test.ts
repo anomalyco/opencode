@@ -276,8 +276,15 @@ describe("LMStudioPlugin", () => {
       ({ requests, server }) =>
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
+          const integrations = yield* Integration.Service
           const modelState = yield* Model.Service
           const providerID = Provider.ID.make("lmstudio")
+          yield* integrations.transform((editor) => {
+            editor.update(Integration.ID.make("lmstudio"), (integration) => {
+              integration.name = "LMStudio"
+            })
+            editor.method.update({ integrationID: Integration.ID.make("lmstudio"), method: { type: "key" } })
+          })
           yield* addPlugin(server.url.origin)
           yield* eventually(
             Effect.sync(() => requests.length),
@@ -291,6 +298,8 @@ describe("LMStudioPlugin", () => {
           })
           yield* eventually(modelState.get(providerID, Model.ID.make("secured-model")), (model) => model !== undefined)
           expect(requests.at(-1)).toBe("Bearer saved-key")
+          // The saved key stays listed under the integration, so /connect can still manage it.
+          expect(yield* integrations.get(Integration.ID.make("lmstudio"))).toBeDefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
