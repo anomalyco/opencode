@@ -277,7 +277,7 @@ impl State {
         {
             item.set_created(event.created);
             transcript.move_last(inbox);
-            self.message_live.add(inbox);
+            self.created(session, inbox);
             self.log.messages(session);
         }
         self.observe(session, inbox);
