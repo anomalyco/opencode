@@ -1,0 +1,62 @@
+/* Type for non-Latin locales: the CJK system fonts per language, Arabic and Thai titles, tracking,
+   leading and line breaking. The Arabic and Thai faces are in style/script-fonts.css; the hero
+   title's size for these scripts is in hero-title.ts. English pages match none of these rules. */
+
+/* The fonts the browser's own fallback picks on macOS, then Windows, then Linux and Android, so the
+   mono stack never reaches a monospaced CJK face (MS Gothic, SimSun) on other systems. */
+[data-site]:lang(ja) {
+  --font-cjk:
+    "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP",
+    "Noto Sans CJK JP";
+}
+
+[data-site]:lang(zh-Hans) {
+  --font-cjk: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC";
+}
+
+[data-site]:lang(zh-Hant) {
+  --font-cjk: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC";
+}
+
+[data-site]:lang(ko) {
+  --font-cjk: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR";
+}
+
+/* Arabic and Thai letters join or stack marks on their base letters, so tracking pulls them apart
+   (and the hero's negative tracking overlaps them). */
+[data-site]:is(:lang(ar), :lang(th)) * {
+  letter-spacing: normal !important;
+}
+
+/* Arabic titles are set in the sans stack: in OpenTUI Mono every space is a monospaced cell, which leaves
+   wide gaps between Arabic words, and Latin names sit better with Arabic in Inter. */
+[data-site]:lang(ar) :is(h1, h2, h3):lang(ar) {
+  font-family: var(--font-sans);
+  line-height: 1.35;
+}
+
+/* Thai marks sit above and below the line, so titles need taller lines. */
+[data-site]:lang(th) :is(h1, h2, h3):lang(th) {
+  line-height: 1.4;
+}
+
+/* CJK glyphs fill the em box, so wrapped titles need more than the Latin display leading. */
+[data-site]:is(:lang(ja), :lang(zh), :lang(ko)) :is(h1, h2, h3):is(:lang(ja), :lang(zh), :lang(ko)) {
+  line-height: 1.25;
+}
+
+/* Japanese has no spaces: break titles between phrases, not inside words ("必 / 要"). Browsers
+   without auto-phrase keep the normal breaks. Strict line breaking keeps small kana and the long
+   vowel mark ("ェ", "ー") off the start of a line. */
+[data-site]:lang(ja) :is(h1, h2, h3, [data-slot="label"]):lang(ja) {
+  word-break: normal;
+  word-break: auto-phrase;
+  line-break: strict;
+}
+
+/* Korean breaks between words at spaces, not inside them ("코 / 딩"). A word longer than the line
+   still breaks rather than overflowing. */
+[data-site]:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}

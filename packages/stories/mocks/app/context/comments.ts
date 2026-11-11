@@ -26,6 +26,10 @@ export function useComments() {
       setFocus(null)
       setActive(null)
     },
+    open(target: { file: string; id: string }) {
+      setActive(target)
+      setFocus(target)
+    },
     focus,
     setFocus,
     active,

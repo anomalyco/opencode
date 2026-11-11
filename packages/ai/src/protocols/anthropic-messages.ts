@@ -745,6 +745,8 @@ const requireThinkingSignature = (request: LLMRequest) => {
 
 // Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
+  const override = request.model.capabilities?.systemUpdates
+  if (override !== undefined) return override
   const version = claudeVersion(request.model.id)
   if (version === undefined) return false
   if (version.family === "opus" && version.major === 4) return version.minor >= 8
@@ -913,15 +915,14 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   return messages
 })
 
-// TODO: Move per-model capability heuristics (`supportsEffortUpdates`, `supportsNativeSystemUpdates`,
-// `supportsThinkingBlockBinding`) into explicit model/provider `compatibility` metadata so the protocol
-// only reads `request.model.compatibility`.
+// The model-ID checks below are fallbacks for models that leave `capabilities.reasoning.updates`,
+// `capabilities.systemUpdates` and `compatibility.supportsThinkingBlockBinding` unset.
 const isThinkingOff = Schema.is(AnthropicThinkingDisabled)
 
 // Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (isThinkingOff(request.providerOptions?.thinking)) return false
-  const override = request.model.compatibility?.supportsEffortUpdates
+  const override = request.model.capabilities?.reasoning?.updates
   if (override !== undefined) return override
   const version = claudeVersion(request.model.id)
   if (version === undefined) return false
@@ -956,7 +957,6 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const outputConfig = options.output_config ?? options.outputConfig
   const format = outputConfig?.format ?? undefined
   const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
-  const generation = request.generation
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -978,7 +978,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
-  const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS
+  const maxTokens = request.maxTokens ?? DEFAULT_MAX_TOKENS
   const body = {
     model: request.model.id,
     system,
@@ -987,10 +987,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    top_k: generation?.topK,
-    stop_sequences: generation?.stop,
+    temperature: request.temperature,
+    top_p: request.topP,
+    top_k: request.topK,
+    stop_sequences: request.stop,
     thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
@@ -1032,7 +1032,11 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // inclusive `inputTokens` the rest of the contract expects. Extended
 // thinking tokens are included in `output_tokens`; newer responses also
 // expose that subset through `output_tokens_details.thinking_tokens`.
-const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string): Usage | undefined => {
+const mapUsage = (
+  usage: AnthropicUsage | undefined,
+  providerMetadataKey: string,
+  frame?: AnthropicEvent,
+): Usage | undefined => {
   if (!usage) return undefined
   const iterations = usage.iterations?.length ? usage.iterations : [usage]
   const last = usage.iterations?.at(-1)
@@ -1059,7 +1063,7 @@ const mapUsage = (usage: AnthropicUsage | undefined, providerMetadataKey: string
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: ProviderShared.sumTokens(...iterations.map((item) => item.output_tokens_details?.thinking_tokens)),
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
-    ...ProviderShared.reportedBilling(usage),
+    ...ProviderShared.reportedBilling(usage, frame),
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
@@ -1331,7 +1335,11 @@ const onMessageDelta = (
   state: ParserState,
   event: AnthropicEvent & { readonly delta?: AnthropicStreamDelta },
 ): StepResult => {
-  const usage = mergeUsage(state.usage, mapUsage(event.usage, state.providerMetadataKey), state.providerMetadataKey)
+  const usage = mergeUsage(
+    state.usage,
+    mapUsage(event.usage, state.providerMetadataKey, event),
+    state.providerMetadataKey,
+  )
   const pendingFinish = (() => {
     const stopReason = event.delta?.stop_reason
     if (stopReason === null || stopReason === undefined) return state.pendingFinish

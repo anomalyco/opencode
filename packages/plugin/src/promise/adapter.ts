@@ -535,6 +535,7 @@ export function fromPromise(plugin: Plugin) {
                         update(value)
                         Object.assign(tool, value, {
                           output: value.output,
+                          freeform: value.freeform,
                           options: value.options,
                           execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
                             executePromiseTool(value, input, context),
@@ -692,11 +693,33 @@ const toolHook: {
 
 const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
   Effect.tryPromise({
-    try: (signal) =>
-      tool.execute(input, {
-        ...context,
-        signal,
-        progress: (update) => Effect.runPromise(context.progress(update), { signal }),
-      }),
+    try: (interrupted) => {
+      // `signal` aborts when the call is interrupted, and also when the user stops the call once the tool has read
+      // it. Reading it awaits `cancel`, which tells the step this tool stops on its own instead of being interrupted.
+      const stopped = new AbortController()
+      const finished = new AbortController()
+      const signal = AbortSignal.any([interrupted, stopped.signal])
+      // `cancel` stays out of the promise context; promise tools stop through `signal`.
+      const { cancel, ...rest } = context
+      let listening = false
+      const listen = () => {
+        if (listening || !cancel) return
+        listening = true
+        Effect.runPromise(cancel, { signal: AbortSignal.any([interrupted, finished.signal]) }).then(
+          () => stopped.abort(),
+          () => {},
+        )
+      }
+      return Promise.resolve(
+        tool.execute(input, {
+          ...rest,
+          get signal() {
+            listen()
+            return signal
+          },
+          progress: (update) => Effect.runPromise(context.progress(update), { signal: interrupted }),
+        }),
+      ).finally(() => finished.abort())
+    },
     catch: toolError,
   })

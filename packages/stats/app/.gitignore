@@ -1,6 +1,7 @@
 dist
 .wrangler
 .output
+.og-worker
 .vercel
 .netlify
 app.config.timestamp_*.js

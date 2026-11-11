@@ -39,7 +39,8 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 describe("OpenAI Chat route", () => {
@@ -66,7 +67,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { streamUsage: false } }),
+          model: LanguageModel.update(model, { capabilities: { streamUsage: false } }),
           prompt: "Hello",
         }),
       )
@@ -88,7 +89,7 @@ describe("OpenAI Chat route", () => {
       const optedIn = yield* compileRequest(
         ai.request({
           model: LanguageModel.update(compatible.model("compatible-model"), {
-            compatibility: { supportsStore: true },
+            capabilities: { store: true },
           }),
           prompt: "Hello",
         }),
@@ -377,7 +378,7 @@ describe("OpenAI Chat route", () => {
         ai.request({
           model: OpenAIChat.route
             .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
-            .model({ id: "compatible-model", compatibility: { supportsPromptCacheKey: true } }),
+            .model({ id: "compatible-model", capabilities: { promptCacheKey: true } }),
           prompt: "Hello",
           promptCacheKey: "session_123",
         }),
@@ -1260,6 +1261,42 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0 })
+    }),
+  )
+
+  it.effect("reads top-level reasoning tokens whether or not completion tokens include them", () =>
+    Effect.gen(function* () {
+      const generate = (usage: object) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hi" }, "stop"), usageChunk(usage)))),
+          Effect.map((response) => response.usage),
+        )
+
+      // Copilot's Gemini: total = prompt + completion + reasoning.
+      expect(
+        yield* generate({ prompt_tokens: 7, completion_tokens: 2, total_tokens: 62, reasoning_tokens: 53 }),
+      ).toMatchObject({ outputTokens: 55, reasoningTokens: 53, totalTokens: 62 })
+      // Copilot's Kimi: total = prompt + completion, which already includes reasoning.
+      expect(
+        yield* generate({ prompt_tokens: 96, completion_tokens: 50, total_tokens: 146, reasoning_tokens: 35 }),
+      ).toMatchObject({ outputTokens: 50, reasoningTokens: 35, totalTokens: 146 })
+    }),
+  )
+
+  it.effect("converts the GitHub Copilot billing beside usage to USD", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({ content: "Hello" }, "stop"), {
+              ...usageChunk({ prompt_tokens: 5, completion_tokens: 2 }),
+              copilot_usage: { total_nano_aiu: 4_473_525_000, token_details: [] },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0.04473525 })
     }),
   )
 

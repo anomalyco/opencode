@@ -58,7 +58,6 @@ const fallbackModel: ModelSelection = {
   setVisibility() {},
   variant: {
     configured: () => undefined,
-    selected: variant,
     current: variant,
     list: () => Object.keys(defaultModel.variants),
     set: setVariant,
@@ -131,7 +130,6 @@ export function LocalProvider(props: ParentProps) {
       setVisibility: models.setVisibility,
       variant: {
         configured: () => undefined,
-        selected: () => selected.variant,
         current: () => selected.variant,
         list: () => Object.keys(current()?.variants ?? {}),
         set(next?: string) {

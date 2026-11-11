@@ -58,7 +58,7 @@ export default function Layout(props: ParentProps) {
   const verticalTabs = () => preferences.appearance.tabLayout() !== "horizontal" && !mobile()
 
   const organizedSidebar = () =>
-    preferences.appearance.tabLayout() === "vertical" && preferences.general.sidebarOrganize() === "projects"
+    preferences.appearance.tabLayout() === "vertical" && preferences.general.sidebarOrganize() !== "list"
 
   const toggleSidebar = () => preferences.appearance.setSidebarOpen(!preferences.appearance.sidebarOpen())
 
@@ -129,6 +129,7 @@ export default function Layout(props: ParentProps) {
   })
 
   const peek = createSidebarPeek({
+    enabled: verticalTabs,
     available: () => verticalTabs() && !preferences.appearance.sidebarOpen() && !sidebarMotion.present(),
     open: preferences.appearance.sidebarOpen,
     aside: () => state.tabsAside,

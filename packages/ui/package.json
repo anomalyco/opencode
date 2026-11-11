@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.2.5",
+  "version": "2.2.7",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -54,7 +54,10 @@
     "./inline-input": "./src/forms/inline-input/inline-input.tsx",
     "./keybind": "./src/data-display/keybind/keybind.tsx",
     "./line-comment": "./src/data-display/line-comment/line-comment.tsx",
+    "./line-comment/machine": "./src/data-display/line-comment/machine.ts",
     "./loader": "./src/feedback/loader/loader.tsx",
+    "./mcp-sign-in": "./src/overlays/mcp-sign-in/mcp-sign-in.ts",
+    "./mcp-sign-in/machine": "./src/overlays/mcp-sign-in/machine.ts",
     "./menu": "./src/navigation/menu/menu.tsx",
     "./motion": "./src/motion/index.ts",
     "./motion/solid": "./src/motion/solid.ts",
@@ -67,6 +70,7 @@
     "./search-list": "./src/forms/search-list/search-list.tsx",
     "./segmented-control": "./src/navigation/segmented-control/segmented-control.tsx",
     "./select": "./src/forms/select/select.tsx",
+    "./select.css": "./src/forms/select/select.css",
     "./split-button": "./src/actions/split-button/split-button.tsx",
     "./switch": "./src/forms/switch/switch.tsx",
     "./tab-state-indicator": "./src/navigation/tab-state-indicator.tsx",
@@ -96,6 +100,7 @@
     "./theme/context": "./src/theme/context.tsx",
     "./icons/provider": "./src/components/provider-icons/types.ts",
     "./icons/file-type": "./src/components/file-icons/types.ts",
+    "./icons/file-type-name": "./src/components/file-icons/choose-icon-name.ts",
     "./icons/app": "./src/components/app-icons/types.ts",
     "./fonts/*": "./src/assets/fonts/*",
     "./audio/*": "./src/assets/audio/*"

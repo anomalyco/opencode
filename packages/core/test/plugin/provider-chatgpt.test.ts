@@ -265,8 +265,12 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  for (const source of ["http", "stream"] as const) {
-    it.effect(`stops retries for ChatGPT usage limits from ${source} failures`, () =>
+  for (const [source, code] of [
+    ["http", "subscription_sharing_usage_limit_exceeded"],
+    ["stream", "subscription_sharing_usage_limit_exceeded"],
+    ["http", "subscription_sharing_workplace_individual_usage_limit_exceeded"],
+  ] as const) {
+    it.effect(`stops retries for ${code} from ${source} failures`, () =>
       Effect.gen(function* () {
         const credentials = yield* Credential.Service
         yield* credentials.create({
@@ -284,10 +288,10 @@ describe("ChatGPTPlugin", () => {
         const hooks = yield* PluginHooks.Service
         const body =
           source === "http"
-            ? JSON.stringify({ error: { code: "subscription_sharing_usage_limit_exceeded" } })
+            ? JSON.stringify({ error: { code } })
             : JSON.stringify({
                 type: "response.failed",
-                response: { error: { code: "subscription_sharing_usage_limit_exceeded" } },
+                response: { error: { code } },
               })
         const cause = new AIError({
           reason: new RateLimitError({

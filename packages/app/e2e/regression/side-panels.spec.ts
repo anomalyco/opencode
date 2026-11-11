@@ -96,6 +96,52 @@ test("new tab selection and closing stay in the focused pane", async ({ page }) 
   await expect(sideTabs.nth(0)).toHaveAttribute("aria-selected", "true")
 })
 
+test("closing another pane's tab keeps the side pane's New tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/OtherPaneClose"
+  const key = `local\u0000${base64Encode(directory)}/ses_otherpaneclose`
+
+  await openSession(page, {
+    name: "OtherPaneClose",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_otherpaneclose: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: {
+            // The side pane selects nothing of its own, so it shows its fallback tab while the split pane is active.
+            [key]: {
+              all: ["review:changes", "file://README.md", "file://notes.md"],
+              active: "file://notes.md",
+              panes: { "file://notes.md": "split" },
+              selected: { split: "file://notes.md" },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const split = page.locator('[data-pane-content="split"]')
+  const sideNewTab = side.getByRole("tab", { name: "New tab", exact: true })
+  await expect(side.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  await side.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(sideNewTab).toHaveAttribute("aria-selected", "true")
+
+  // The selection falls back to the side pane's first tab, which is already listed there: no launcher opened it.
+  await split.getByRole("tab", { name: "notes.md", exact: true }).hover()
+  await split
+    .locator('div[data-value="file://notes.md"]')
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expect(split).toHaveCount(0)
+  await expect(sideNewTab).toHaveCount(1)
+  await expect(sideNewTab).toHaveAttribute("aria-selected", "true")
+})
+
 test("closing the last New tab closes the side region, and only a New tab lists the launchers", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await openSession(page, { name: "LastNewTab", seed: { panes: { ses_lastnewtab: { review: true } } } })
@@ -175,7 +221,7 @@ test("New tabs stay when a launcher in another one opens a tab, or when the tab 
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
 })
 
-test("tabs in a narrow side strip shrink to keep their close buttons, and a tab's menu closes the others", async ({
+test("tabs in a narrow side strip shrink to keep their close buttons, and a tab's menu closes the others or those to its right", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 700 })
@@ -211,16 +257,53 @@ test("tabs in a narrow side strip shrink to keep their close buttons, and a tab'
     expect(box.x + box.width).toBeLessThanOrEqual(end)
   }
 
-  await side.getByRole("tab", { name: "b.md", exact: true }).click({ button: "right" })
+  await side.getByRole("tab", { name: files[1], exact: true }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Close tabs to the right", exact: true }).click()
+  await expect(side.getByRole("tab")).toHaveText(["a.md", files[1]])
+
+  await side.getByRole("tab", { name: "a.md", exact: true }).click({ button: "right" })
   await page.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
   await expect(side.getByRole("tab")).toHaveCount(1)
-  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(side.getByRole("tab", { name: "a.md", exact: true })).toHaveAttribute("aria-selected", "true")
 
   // With nothing else to close, the menu offers only the tab itself.
-  await side.getByRole("tab", { name: "b.md", exact: true }).click({ button: "right" })
+  await side.getByRole("tab", { name: "a.md", exact: true }).click({ button: "right" })
   await expect(page.getByRole("menuitem", { name: "Close other tabs", exact: true })).toBeDisabled()
+  await expect(page.getByRole("menuitem", { name: "Close tabs to the right", exact: true })).toBeDisabled()
   await page.getByRole("menuitem", { name: "Close tab", exact: true }).click()
-  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveCount(0)
+  await expect(side.getByRole("tab", { name: "a.md", exact: true })).toHaveCount(0)
+})
+
+test("a reopened side tab returns to where it closed", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/ReopenPlace"
+  const key = `local\u0000${base64Encode(directory)}/ses_reopenplace`
+  const files = ["a.md", "b.md", "c.md"]
+
+  await openSession(page, {
+    name: "ReopenPlace",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_reopenplace: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: files.map((file) => `file://${file}`), active: "file://b.md" } },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(side.getByRole("tab")).toHaveText(["a.md", "c.md"])
+
+  await page.keyboard.press("ControlOrMeta+Shift+t")
+  await expect(side.getByRole("tab")).toHaveText(["a.md", "b.md", "c.md"])
+  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
 async function expectTreeSentinel(page: Page) {

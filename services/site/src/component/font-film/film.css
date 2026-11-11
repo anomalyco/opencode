@@ -1,0 +1,80 @@
+/* The film's frame: letterbox bars with mono annotations around one SVG scene. */
+
+[data-component="font-film"] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0c0c0c;
+  color: rgb(242 242 242 / 0.55);
+
+  [data-slot="film-bar"] {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    padding: 0 40px;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+
+    /* Tracking adds space after the last letter; pull it back so right-aligned labels end on the
+       picture's edge. */
+    span:last-child {
+      margin-right: -0.06em;
+    }
+  }
+
+  [data-slot="film-fade"] {
+    position: absolute;
+    inset: 0;
+    background: #000;
+  }
+
+  [data-slot="film-frame"] {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  text[data-type="mono"] {
+    font-family: var(--font-mono);
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  text[data-type="sans"] {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    letter-spacing: -0.035em;
+  }
+
+  [data-slot="ink"] {
+    fill: var(--ink);
+  }
+
+  [data-slot="shadow"] {
+    fill: var(--shade);
+  }
+}
+
+/* Dev only: /dev/font-film pins the frame to the top-left corner for the recorder. */
+
+[data-site]:has([data-component="font-film-stage"]) [data-component="bare-chrome"] {
+  display: none;
+}
+
+html:has([data-component="font-film-stage"]),
+html:has([data-component="font-film-stage"]) body {
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+[data-component="font-film-stage"] {
+  position: fixed;
+  z-index: 100;
+  top: 0;
+  left: 0;
+}

@@ -793,7 +793,6 @@ export const dict = {
   "session.new.project.search": "Søk etter prosjekter",
   "session.new.project.add": "Legg til prosjekt",
   "session.new.workspace.runIn": "Kjør sesjonen i",
-  "session.new.workspace.triggerLocal": "Lokalt",
   "session.new.workspace.local": "Lokalt depot",
   "session.new.git.none": "Ingen Git",
 
