@@ -228,12 +228,42 @@ export const make = Effect.gen(function* () {
     Effect.suspend(() => {
       let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
       if (Predicate.isNotNull(proc.stdin)) {
+        const writable = proc.stdin
+        const failed = Deferred.makeUnsafe<never, PlatformError.PlatformError>()
+        const onError = (err: Error) =>
+          Deferred.doneUnsafe(failed, Effect.fail(toPlatformError("fromWritable(stdin)", err, command)))
+        // NodeSink's input listener ends before writable.end(); keep late pipe errors owned until close.
+        writable.on("error", onError)
+        writable.once("close", () => writable.off("error", onError))
         sink = NodeSink.fromWritable({
-          evaluate: () => proc.stdin!,
+          evaluate: () => writable,
           onError: (err) => toPlatformError("fromWritable(stdin)", toError(err), command),
-          endOnDone: cfg.endOnDone,
+          endOnDone: false,
           encoding: cfg.encoding,
         })
+        if (cfg.endOnDone) {
+          sink = sink.pipe(
+            Sink.mapEffect(() =>
+              Effect.callback<void, PlatformError.PlatformError>((resume) => {
+                if (writable.errored)
+                  return resume(Effect.fail(toPlatformError("end(stdin)", writable.errored, command)))
+                if (writable.writableFinished || writable.closed) return resume(Effect.void)
+                const finish = () => resume(Effect.void)
+                const close = () =>
+                  resume(
+                    Effect.fail(toPlatformError("end(stdin)", new Error("stdin closed before finishing"), command)),
+                  )
+                writable.once("finish", finish)
+                writable.once("close", close)
+                writable.end()
+                return Effect.sync(() => {
+                  writable.off("finish", finish)
+                  writable.off("close", close)
+                })
+              }).pipe(Effect.raceFirst(Deferred.await(failed))),
+            ),
+          )
+        }
       }
       if (Stream.isStream(cfg.stream)) return Effect.as(Effect.forkScoped(Stream.run(cfg.stream, sink)), sink)
       return Effect.succeed(sink)

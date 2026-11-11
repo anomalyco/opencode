@@ -3,6 +3,9 @@ import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { InstanceState } from "@/effect/instance-state"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
@@ -1213,6 +1216,102 @@ it.instance(
     yield* snapshot.revert([patch])
     for (let i = 0; i < base.length; i++) expect(yield* readText(base[i])).toBe(`base-${i}`)
     for (const file of fresh) expect(yield* exists(file)).toBe(false)
+  }),
+  { git: true },
+)
+
+const holdIndex = Effect.fn("SnapshotTest.holdIndex")(function* (gitdir: string, cwd: string) {
+  const holder = yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      Bun.spawn(["git", "--git-dir", gitdir, "update-index", "--index-info"], {
+        cwd,
+        stdin: "pipe",
+        stdout: "ignore",
+        stderr: "pipe",
+      }),
+    ),
+    (proc) =>
+      Effect.promise(async () => {
+        if (proc.exitCode === null) proc.stdin.end()
+        await proc.exited
+      }),
+  )
+  yield* Effect.promise(async () => {
+    const deadline = Date.now() + 2000
+    while (!(await Bun.file(path.join(gitdir, "index.lock")).exists())) {
+      if (Date.now() > deadline) throw new Error("git did not acquire the snapshot index lock")
+      await Bun.sleep(10)
+    }
+  })
+  return holder
+})
+
+it.instance(
+  "track retries an index lock held by another git process without losing new files",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const before = yield* snapshot.track()
+    const ctx = yield* InstanceState.context
+    const gitdir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+    yield* write(`${tmp.path}/contended.txt`, "captured after contention")
+
+    const holder = yield* holdIndex(gitdir, tmp.path)
+    const pending = yield* snapshot.track().pipe(Effect.forkChild)
+    yield* Effect.sleep("250 millis")
+    holder.stdin.end()
+    expect(yield* Effect.promise(() => holder.exited)).toBe(0)
+    const after = yield* Fiber.join(pending)
+    expect(after).toMatch(/^[0-9a-f]{40}$/)
+    expect(after).not.toBe(before)
+    const proc = Bun.spawn(["git", "--git-dir", gitdir, "show", `${after}:contended.txt`], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(yield* Effect.promise(() => new Response(proc.stdout).text())).toBe("captured after contention")
+    expect(yield* Effect.promise(() => proc.exited)).toBe(0)
+  }),
+  { git: true },
+)
+
+it.instance(
+  "track stops retrying a persistent index collision and leaves the other owner alive",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    yield* snapshot.track()
+    const ctx = yield* InstanceState.context
+    const gitdir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+    yield* write(`${tmp.path}/contended.txt`, "not snapshotted while the index is locked")
+    const holder = yield* holdIndex(gitdir, tmp.path)
+    expect(yield* snapshot.track().pipe(Effect.timeout("12 seconds"))).toBeUndefined()
+    expect(yield* exists(path.join(gitdir, "index.lock"))).toBe(true)
+    expect(holder.exitCode).toBeNull()
+  }),
+  { git: true },
+)
+
+it.instance(
+  "track does not return a stale tree or retry an unrelated fatal git staging error",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    yield* snapshot.track()
+    const ctx = yield* InstanceState.context
+    const gitdir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+    yield* exec(tmp.path, [
+      "git",
+      "--git-dir",
+      gitdir,
+      "config",
+      "filter.reject.clean",
+      "printf x >> filter-count; false",
+    ])
+    yield* exec(tmp.path, ["git", "--git-dir", gitdir, "config", "filter.reject.required", "true"])
+    yield* write(`${tmp.path}/.gitattributes`, "*.fail filter=reject\n")
+    yield* write(`${tmp.path}/new.fail`, "must not be claimed as captured")
+    expect(yield* snapshot.track()).toBeUndefined()
+    expect(yield* readText(`${tmp.path}/filter-count`)).toBe("x")
   }),
   { git: true },
 )
