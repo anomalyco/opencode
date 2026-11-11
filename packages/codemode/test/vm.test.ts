@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { disassembleSource } from "../../script/disasm.js"
-import { hashOf } from "../../src/code.js"
-import { compileSource } from "../../src/compiler/compile.js"
-import { verifyAll } from "./verify.js"
-import { parseVmSource, runProgram } from "./run.js"
+import { disassembleSource } from "../script/disasm.js"
+import { hashOf } from "../src/code.js"
+import { compileSource } from "../src/compiler/compile.js"
+import { verifyAll } from "./verify-bytecode.js"
+import { parseVmSource, runProgram } from "./run-program.js"
 
 const val = (code: string) => {
   const parsed = parseVmSource(code)

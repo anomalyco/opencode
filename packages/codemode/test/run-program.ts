@@ -1,19 +1,19 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import type { Program } from "acorn"
-import type { DataValue, Diagnostic, Result } from "../../src/codemode.js"
-import { normalizeError } from "../../src/runtime/errors.js"
-import { parseProgram } from "../../src/runtime/execute.js"
-import { createBuiltins } from "../../src/runtime/intrinsics.js"
-import { Interpreter } from "../../src/runtime/interpreter.js"
-import { PendingThrow } from "../../src/runtime/model.js"
-import type { Value } from "../../src/runtime/objects.js"
-import { Interruption } from "../../src/runtime/signals.js"
-import type { Source } from "../../src/runtime/source.js"
-import type { ToolRuntime } from "../../src/tool-runtime.js"
-import type { Snapshot } from "../../src/snapshot/snapshot.js"
+import type { DataValue, Diagnostic, Result } from "../src/codemode.js"
+import { normalizeError } from "../src/runtime/errors.js"
+import { parseProgram } from "../src/runtime/execute.js"
+import { createBuiltins } from "../src/runtime/intrinsics.js"
+import { Interpreter } from "../src/runtime/interpreter.js"
+import { PendingThrow } from "../src/runtime/model.js"
+import type { Value } from "../src/runtime/objects.js"
+import { Interruption } from "../src/runtime/signals.js"
+import type { Source } from "../src/runtime/source.js"
+import type { ToolRuntime } from "../src/tool-runtime.js"
+import type { Snapshot } from "../src/snapshot/snapshot.js"
 
-/** A quoted `file:` URL for a module relative to `test/vm`, to import from a script run with `bun -e` on any platform. */
+/** A quoted `file:` URL for a module relative to `test`, to import from a script run with `bun -e` on any platform. */
 export const moduleUrl = (relative: string) =>
   JSON.stringify(pathToFileURL(path.join(import.meta.dir, relative)).href)
 

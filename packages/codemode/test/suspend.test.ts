@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { Context, Effect, Fiber, Schema } from "effect"
-import { CodeMode, Extension, Tool } from "../../src/index.js"
+import { CodeMode, Extension, Tool } from "../src/index.js"
 
 // Suspending a run, saving its state, and resuming it in a brand-new runtime.
 
@@ -450,7 +450,7 @@ describe("suspend", () => {
 
   test("the snapshot codec does not import Effect", async () => {
     for (const file of ["codec.ts", "snapshot.ts"]) {
-      expect(await Bun.file(path.join(import.meta.dir, "../../src/snapshot", file)).text()).not.toMatch(
+      expect(await Bun.file(path.join(import.meta.dir, "../src/snapshot", file)).text()).not.toMatch(
         /from "effect"/,
       )
     }
@@ -479,7 +479,7 @@ describe("resume", () => {
     const file = path.join(tmpdir(), `codemode-${crypto.randomUUID()}.state`)
     await Bun.write(file, CodeMode.toBytes(suspended.state))
     try {
-      const child = Bun.spawn(["bun", path.join(import.meta.dir, "../fixtures/resume-process.ts"), file], {
+      const child = Bun.spawn(["bun", path.join(import.meta.dir, "fixtures/resume-process.ts"), file], {
         stdout: "pipe",
         stderr: "inherit",
       })

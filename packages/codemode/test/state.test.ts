@@ -2,19 +2,19 @@ import { describe, expect, test } from "bun:test"
 import { Glob } from "bun"
 import path from "node:path"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "../../src/index.js"
-import { parseProgram } from "../../src/runtime/execute.js"
-import { Interpreter } from "../../src/runtime/interpreter.js"
-import { createBuiltins } from "../../src/runtime/intrinsics.js"
-import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../../src/runtime/objects.js"
-import { normal } from "../../src/runtime/signals.js"
-import { ToolRuntime } from "../../src/tool-runtime.js"
-import { Code } from "../../src/code.js"
-import { AsyncFromSyncIterator } from "../../src/generators.js"
-import { VmIntrinsic } from "../../src/internal-prelude.js"
-import { Cell, CodeFlags } from "../../src/opcodes.js"
-import type { Stop } from "../../src/scheduler.js"
-import { CustomIter, Frame, Mode, Vm } from "../../src/vm.js"
+import { CodeMode, Tool } from "../src/index.js"
+import { parseProgram } from "../src/runtime/execute.js"
+import { Interpreter } from "../src/runtime/interpreter.js"
+import { createBuiltins } from "../src/runtime/intrinsics.js"
+import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../src/runtime/objects.js"
+import { normal } from "../src/runtime/signals.js"
+import { ToolRuntime } from "../src/tool-runtime.js"
+import { Code } from "../src/code.js"
+import { AsyncFromSyncIterator } from "../src/generators.js"
+import { VmIntrinsic } from "../src/internal-prelude.js"
+import { Cell, CodeFlags } from "../src/opcodes.js"
+import type { Stop } from "../src/scheduler.js"
+import { CustomIter, Frame, Mode, Vm } from "../src/vm.js"
 
 // The VM (`src/vm.ts`) runs programs as bytecode frames, and keeps the jobs, promises, and host calls they wait on as
 // data: a frame is its code, pc, and registers, and every suspension point is one. The Effect driver only does what
@@ -384,7 +384,7 @@ describe("vm", () => {
   })
 
   test("the VM does not import Effect", async () => {
-    const root = path.join(import.meta.dir, "../..")
+    const root = path.join(import.meta.dir, "..")
     const host = new Set([
       "src/codemode.ts",
       "src/extension.ts",

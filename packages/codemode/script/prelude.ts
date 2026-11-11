@@ -2,7 +2,7 @@
 
 // Compiles the built-in sources (the prelude, the VM's internal helpers) ahead of time into src/prelude/bytecode.json,
 // which a process loads instead of parsing and compiling them (see src/prelude/bytecode.ts). Run it after changing
-// either source or the compiler; test/vm/prelude-bytecode.test.ts fails until then.
+// either source or the compiler; test/prelude-bytecode.test.ts fails until then.
 
 import { parse } from "acorn"
 import { Source } from "../src/runtime/source.js"
