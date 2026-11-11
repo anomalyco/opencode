@@ -67,6 +67,14 @@ export function configDirs(value: unknown) {
   return dirs
 }
 
+const STRATEGIES = ["ordered", "ordered-strict", "round-robin"] as const
+export type Strategy = (typeof STRATEGIES)[number]
+
+// Like configDir, an unusable value falls back rather than failing every request.
+export function strategy(value: unknown): Strategy {
+  return STRATEGIES.find((item) => item === value) ?? "ordered"
+}
+
 export function base(input: {
   executable: string
   io: ClaudeIO.Interface

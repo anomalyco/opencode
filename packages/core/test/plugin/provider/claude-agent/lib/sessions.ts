@@ -46,7 +46,8 @@ export const model = (sessions: ClaudeSessions.Interface, settings?: Record<stri
 
 export const rotating = (accounts: ClaudeAccounts.Interface, settings?: Record<string, unknown>) => {
   const configDirs = ClaudeQueryOptions.configDirs(settings?.configDir)
-  return build((request) => accounts.run(request, configDirs), settings)
+  const strategy = ClaudeQueryOptions.strategy(settings?.strategy)
+  return build((request) => accounts.run(request, configDirs, strategy), settings)
 }
 
 const build = Effect.fn(function* (

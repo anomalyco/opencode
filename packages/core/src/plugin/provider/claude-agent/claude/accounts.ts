@@ -3,6 +3,7 @@ export * as ClaudeAccounts from "./accounts.js"
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
 import { Clock, Effect, Option, Schema } from "effect"
 import { ClaudeAgentError } from "../language-model/claude-agent-error.js"
+import type { ClaudeQueryOptions } from "./query-options.js"
 import type { ClaudeSessions } from "./sessions.js"
 
 export interface Storage {
@@ -11,10 +12,12 @@ export interface Storage {
 }
 
 export interface Interface {
-  readonly run: (request: ClaudeSessions.Request, configDirs: readonly string[]) => Effect.Effect<void, Error>
+  readonly run: (
+    request: ClaudeSessions.Request,
+    configDirs: readonly string[],
+    strategy: ClaudeQueryOptions.Strategy,
+  ) => Effect.Effect<void, Error>
 }
-
-const LAST = "last-account"
 
 export function make(input: { readonly sessions: ClaudeSessions.Interface; readonly storage: Storage }) {
   const read = Effect.fn("ClaudeAccounts.read")(function* (key: string) {
@@ -27,18 +30,25 @@ export function make(input: { readonly sessions: ClaudeSessions.Interface; reado
   const run = Effect.fn("ClaudeAccounts.run")(function* (
     request: ClaudeSessions.Request,
     configDirs: readonly string[],
+    strategy: ClaudeQueryOptions.Strategy,
   ) {
     const connection = request.connection
     // An API key or token logs in the same way whatever the folder, so those requests never rotate.
     if (configDirs.length < 2 || connection?.ANTHROPIC_API_KEY || connection?.ANTHROPIC_AUTH_TOKEN) {
       return yield* input.sessions.run(request)
     }
-    const own = request.sessionID ? yield* read(`accounts/${request.sessionID}`) : undefined
-    const last = yield* read(LAST)
+    const saved = request.sessionID ? yield* read(`accounts/${request.sessionID}`) : undefined
+    // A strict chat always starts from the top of the list, so it returns to the first account once that resets.
+    const own = strategy === "ordered-strict" ? undefined : saved
     // Side calls and new forks start on their parent chat's account, which has its transcript and prompt cache.
     const parent = !own && request.sourceID ? yield* read(`accounts/${request.sourceID}`) : undefined
-    const from = own ?? parent ?? last
-    const start = from ? Math.max(0, configDirs.indexOf(from)) : 0
+    // Each list of accounts takes its own turns, so models with different lists do not disturb each other.
+    const turn = `round-robin/${configDirs.join("\n")}`
+    const fresh = strategy === "round-robin" && request.sessionID !== undefined && !own && !parent
+    const previous = fresh ? yield* read(turn) : undefined
+    const next = previous ? (configDirs.indexOf(previous) + 1) % configDirs.length : 0
+    const from = own ?? parent
+    const start = from ? Math.max(0, configDirs.indexOf(from)) : next
     const rotated = [...configDirs.slice(start), ...configDirs.slice(0, start)]
     const now = yield* Clock.currentTimeMillis
     const limits = yield* Effect.forEach(rotated, (dir) => readTime(`limited/${dir}`))
@@ -57,8 +67,8 @@ export function make(input: { readonly sessions: ClaudeSessions.Interface; reado
       if (error?.limited && error.resetsAt) yield* input.storage.set(`limited/${dir}`, error.resetsAt)
       if (!error) {
         // A side call never moves its chat, because the side call's model may have hit a limit of its own.
-        if (request.sessionID && dir !== own) yield* input.storage.set(`accounts/${request.sessionID}`, dir)
-        if (dir !== last) yield* input.storage.set(LAST, dir)
+        if (request.sessionID && dir !== saved) yield* input.storage.set(`accounts/${request.sessionID}`, dir)
+        if (fresh) yield* input.storage.set(turn, dir)
         attempt.flush()
         return
       }

@@ -3,6 +3,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
 import os from "node:os"
 import path from "node:path"
 import { Effect } from "effect"
+import { TestClock } from "effect/testing"
 import { ClaudeQueryOptions } from "@opencode/core/plugin/provider/claude-agent/claude/query-options"
 import { RequestKind } from "@opencode/core/plugin/provider/claude-agent/language-model/request-kind"
 import { it } from "../../../../lib/effect"
@@ -88,7 +89,73 @@ describe("Claude accounts", () => {
     }),
   )
 
-  it.effect("a new chat starts on the account that last worked", () =>
+  test("strategy defaults to ordered, also for unknown values", () => {
+    expect(ClaudeQueryOptions.strategy(undefined)).toBe("ordered")
+    expect(ClaudeQueryOptions.strategy("round-robin")).toBe("round-robin")
+    expect(ClaudeQueryOptions.strategy("ordered-strict")).toBe("ordered-strict")
+    expect(ClaudeQueryOptions.strategy("random")).toBe("ordered")
+  })
+
+  it.effect("ordered: a new chat starts on the first account, and a limited one is used again after it resets", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        limitTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        // Moving the clock to the reset closes both idle chats.
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
+      yield* TestSessions.reply(test.model, first)
+      // While the first account is limited, a new chat skips it.
+      yield* TestSessions.reply(test.model, first, "session-b")
+      yield* TestClock.setTime(resetsAt * 1000)
+      yield* TestSessions.reply(test.model, first, "session-c")
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([
+        "/accounts/a",
+        "/accounts/b",
+        "/accounts/b",
+        "/accounts/a",
+      ])
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("ordered: a chat that moved stays on its account after the first one resets", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        limitTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        // Moving the clock to the reset closes the idle chat, which then resumes its transcript.
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ index: 1 }),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
+      yield* TestSessions.reply(test.model, first)
+      yield* TestClock.setTime(resetsAt * 1000)
+      yield* TestSessions.reply(test.model, TestSessions.followup())
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b", "/accounts/b"])
+      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/b")
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("ordered-strict: a chat returns to the first account once it resets", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup(),
@@ -98,20 +165,82 @@ describe("Claude accounts", () => {
         FakeClaude.expectTurn(),
         FakeClaude.expectInterrupt(),
         FakeClaude.expectStartup(),
-        FakeClaude.expectTurn(),
+        FakeClaude.expectTurn({ index: 1 }),
         FakeClaude.expectInterrupt(),
       ])
-      const saved = TestSessions.storage()
-      const old = yield* TestSessions.start(claude, saved, pool)
-      yield* TestSessions.reply(old.model, first)
-      expect(saved.data.get("last-account")).toBe("/accounts/b")
-      // After a restart, a new chat skips the refused account.
-      yield* old.registry.close()
-      const test = yield* TestSessions.start(claude, saved, pool)
-      const parts = yield* TestSessions.reply(test.model, first, "session-b")
-      expect(TestSessions.text(parts)).toBe("COPPER-OTTER")
-      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b", "/accounts/b"])
-      expect(saved.data.get("accounts/session-b")).toBe("/accounts/b")
+      const test = yield* TestSessions.start(claude, TestSessions.storage(), { ...pool, strategy: "ordered-strict" })
+      yield* TestSessions.reply(test.model, first)
+      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/b")
+      yield* TestClock.setTime(resetsAt * 1000)
+      const two = yield* TestSessions.reply(test.model, TestSessions.followup())
+      expect(TestSessions.text(two)).toBe("COPPER-OTTER")
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b", "/accounts/a"])
+      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/a")
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("round-robin: new chats take turns, skipping a limited account, and each chat stays on its own", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        limitTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectTurn({ index: 1 }),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude, TestSessions.storage(), { ...pool, strategy: "round-robin" })
+      yield* TestSessions.reply(test.model, first)
+      // The next chat's turn is b, which is limited, so it moves on to c.
+      yield* TestSessions.reply(test.model, first, "session-b")
+      // b is still limited, so the turn after c wraps around to a.
+      yield* TestSessions.reply(test.model, first, "session-c")
+      yield* TestSessions.reply(test.model, TestSessions.followup())
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([
+        "/accounts/a",
+        "/accounts/b",
+        "/accounts/c",
+        "/accounts/a",
+      ])
+      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/a")
+      expect(test.storage.data.get("accounts/session-b")).toBe("/accounts/c")
+      expect(test.storage.data.get("accounts/session-c")).toBe("/accounts/a")
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
+  it.effect("round-robin: lists of accounts keep separate turns", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude, TestSessions.storage(), { ...pool, strategy: "round-robin" })
+      const other = yield* TestSessions.rotating(test.accounts, {
+        configDir: ["/accounts/x", "/accounts/y"],
+        strategy: "round-robin",
+      })
+      yield* TestSessions.reply(test.model, first)
+      yield* TestSessions.reply(other, first, "session-x")
+      yield* TestSessions.reply(test.model, first, "session-b")
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/x", "/accounts/b"])
       yield* test.registry.close()
       claude.check()
     }),
@@ -177,7 +306,6 @@ describe("Claude accounts", () => {
       expect(claude.forks.map((fork) => fork.configDir)).toEqual(["/accounts/a"])
       expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/a", "/accounts/b"])
       expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/a")
-      expect(test.storage.data.get("last-account")).toBe("/accounts/b")
       yield* test.registry.close()
       claude.check()
     }),
@@ -233,7 +361,6 @@ describe("Claude accounts", () => {
       expect(errors).toHaveLength(1)
       expect(String(errors[0]?.error)).toContain(new Date(resetsAt * 1000).toISOString())
       expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/a")
-      expect(test.storage.data.get("last-account")).toBe("/accounts/a")
       // Like switching to a model that still has room: it starts on the chat's own account and works.
       const two = yield* TestSessions.reply(test.model, TestSessions.followup())
       expect(TestSessions.text(two)).toBe("COPPER-OTTER")
@@ -258,7 +385,6 @@ describe("Claude accounts", () => {
       expect(String(parts.find((part) => part.type === "error")?.error)).toContain("claude-does-not-exist")
       expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual(["/accounts/a", "/accounts/b"])
       expect(test.storage.data.has("accounts/session-a")).toBe(false)
-      expect(test.storage.data.has("last-account")).toBe(false)
       yield* test.registry.close()
       claude.check()
     }),
@@ -325,8 +451,8 @@ describe("Claude accounts", () => {
       const old = yield* TestSessions.start(claude, saved, pool)
       yield* TestSessions.reply(old.model, first)
       expect(saved.data.get("accounts/session-a")).toBe("/accounts/b")
-      // Move the newest account away, so only the parent's saved account can steer the fork there.
-      saved.data.set("last-account", "/accounts/c")
+      // The first account has room again, so only the parent's saved account can steer the fork away from it.
+      yield* TestClock.setTime(resetsAt * 1000)
       yield* old.registry.close()
       const test = yield* TestSessions.start(claude, saved, pool)
       const result = yield* Effect.promise(() =>

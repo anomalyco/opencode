@@ -24,8 +24,9 @@ export const register = Effect.fn("ClaudeAISDK.register")(function* (ctx: Contex
           body: evt.options.body,
         })
         const configDirs = ClaudeQueryOptions.configDirs(evt.options.configDir)
+        const strategy = ClaudeQueryOptions.strategy(evt.options.strategy)
         const dependencies: ClaudeAgentLanguageModel.Dependencies = {
-          run: (request, signal) => run(accounts.run(request, configDirs), { signal }),
+          run: (request, signal) => run(accounts.run(request, configDirs, strategy), { signal }),
         }
         evt.sdk = {
           languageModel: (modelID: string) => new ClaudeAgentLanguageModel.Model(modelID, dependencies, connection),

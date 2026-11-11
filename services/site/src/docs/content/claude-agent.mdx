@@ -130,8 +130,19 @@ Sign in to each account in its own folder, then list the folders:
 }
 ```
 
-A chat stays on the account that last answered it, and new chats start on the account that worked last. Rotation only
-applies to Claude subscription logins, not to `apiKey` or `authToken`.
+When an account hits its limit, OpenCode skips it until the limit resets. Rotation only applies to Claude subscription
+logins, not to `apiKey` or `authToken`.
+
+Set `settings.strategy` to choose which account a chat uses:
+
+| Strategy | New chats | Existing chats |
+| --- | --- | --- |
+| `ordered` (default) | Start on the first account with room left | Stay on their account until it hits its limit |
+| `ordered-strict` | Start on the first account with room left | Return to an earlier account in the list as soon as it resets |
+| `round-robin` | Take turns across the accounts | Stay on their account until it hits its limit |
+
+Moving a chat to an account it has not used before sends it the whole conversation again, without the prompt cache.
+`ordered-strict` keeps the first accounts busy at the cost of more of these moves.
 
 ## Limitations
 
