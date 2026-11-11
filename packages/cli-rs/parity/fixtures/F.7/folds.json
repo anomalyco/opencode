@@ -541,6 +541,16 @@
       "case": "session.model.selected#no-previous@loaded",
       "field": "messages.ses_a",
       "deviation": "O89-model-switch-previous.md"
+    },
+    {
+      "case": "session.text.started@loaded",
+      "field": "messages.ses_a",
+      "deviation": "O5-text-started-replay.md"
+    },
+    {
+      "case": "session.reasoning.started@loaded",
+      "field": "messages.ses_a",
+      "deviation": "O5-text-started-replay.md"
     }
   ],
   "cases": [
