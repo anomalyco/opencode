@@ -201,6 +201,27 @@ export function createNextTimelineProjection(input: {
   }
 }
 
+/**
+ * How long a turn the user stopped worked: from its start, the user's message or else the agent's first step, to the end
+ * of the step the user stopped. A stopped step may not record its end, so its parts' latest time stands in.
+ */
+export function workedDuration(user: SessionMessageUser | undefined, steps: readonly SessionMessageAssistant[]) {
+  const start = user?.time.created ?? steps[0]?.time.created
+  const stopped = steps.find((step) => isInterruptedError(step.error))
+
+  if (start === undefined || !stopped) return undefined
+  const end =
+    stopped.time.completed ??
+    Math.max(
+      stopped.time.created,
+      ...stopped.content.flatMap((content) =>
+        content.type === "text" ? [] : [content.time?.completed ?? content.time?.created ?? stopped.time.created],
+      ),
+    )
+
+  return Math.max(0, end - start)
+}
+
 /** A part of an assistant message by its ID: a tool's own ID, or `<message>:<text|reasoning>:<n>`. */
 export function resolveContent(message: SessionMessageInfo | undefined, partID: string): Content | undefined {
   if (message?.type !== "assistant") return undefined
@@ -466,8 +487,11 @@ function turnRows(
 
     appendGroups(before)
 
-    // The user stopped the turn, so the timeline confirms it whatever the setting.
+    // The user stopped the turn, so the timeline confirms it whatever the setting. Where the setting hides all of the
+    // agent's activity, the work stopped first says how long it ran.
     if (interruptedAt >= 0) {
+      if (hidesActivity(detail) && !rows.some((row) => Predicate.isTagged(row, "Worked")))
+        rows.push(new TimelineRow.Worked({ userMessageID: turn.id }))
       rows.push(new TimelineRow.TurnDivider({ userMessageID: turn.id }))
       appendGroups(after)
     }
@@ -528,10 +552,6 @@ function turnRows(
     }
   })
   appendAssistantSegment(assistantSegment)
-
-  // Where the setting hides all of the agent's activity, a turn the user stopped says how long it worked.
-  if (hidesActivity(detail) && assistantMessages.some((message) => isInterruptedError(message.error)))
-    rows.push(new TimelineRow.Worked({ userMessageID: turn.id }))
 
   return rows
 }

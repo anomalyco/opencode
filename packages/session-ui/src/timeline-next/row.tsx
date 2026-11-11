@@ -52,7 +52,7 @@ import { unwrapErrorMessage } from "./errors"
 import { TimelineEventRow } from "./event-row"
 import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
-import { contentEntries, createNextTimelineProjection, resolveContent } from "./projection"
+import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
 import { contentOpens, diffOpens, goal as goalMessage, thinkingOpens, toolRule, userShellOpens } from "./rules"
 import { Separator } from "./separator"
 import { timelineGaps } from "./spacing"
@@ -1253,9 +1253,14 @@ export function createNextTimelineRowRenderer(input: {
       }
 
       const label = createMemo(() => {
-        const ms = duration(current().userMessageID)
+        const id = current().userMessageID
+        const user = input.projection.messageByID().get(id)
+        const ms = workedDuration(
+          user?.type === "user" ? user : undefined,
+          input.projection.assistantMessagesByParent().get(id) ?? emptyAssistantMessages,
+        )
 
-        if (ms === null || ms === undefined || !(ms >= 0)) return i18n.t("ui.timeline.activity.workedUnknown")
+        if (ms === undefined) return i18n.t("ui.timeline.activity.workedUnknown")
         const total = Math.round(ms / 1000)
         const numfmt = new Intl.NumberFormat(i18n.locale())
 
