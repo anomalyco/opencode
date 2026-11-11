@@ -158,6 +158,24 @@ describe("FSUtil", () => {
         expect(info.type).toBe("Directory")
       }),
     )
+    // Windows has no POSIX permission bits.
+    ;(process.platform === "win32" ? it.skip : it)(
+      "applies a mode to new and existing directories",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const created = path.join(tmp, "created")
+        const existing = path.join(tmp, "existing")
+        yield* filesys.makeDirectory(existing, { mode: 0o755 })
+
+        yield* fs.ensureDir(created, 0o700)
+        yield* fs.ensureDir(existing, 0o700)
+
+        expect((yield* filesys.stat(created)).mode & 0o777).toBe(0o700)
+        expect((yield* filesys.stat(existing)).mode & 0o777).toBe(0o700)
+      }),
+    )
   })
 
   describe("writeWithDirs", () => {

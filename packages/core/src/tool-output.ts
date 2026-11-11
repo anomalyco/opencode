@@ -14,6 +14,9 @@ export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024 // 50 KiB
 export const RETENTION = Duration.days(7)
 export const DIRECTORY = "tool-output"
+// Tool output often holds secrets, so only the user may read it. `wx` never follows a link planted at the path.
+const PRIVATE_DIRECTORY = 0o700
+const PRIVATE_FILE = { flag: "wx", mode: 0o600 } as const
 
 export const fileName = (timestamp?: number) => "tool_" + Identifier.create(false, timestamp)
 
@@ -86,8 +89,8 @@ const layer = Layer.effect(
         bytes += size
       }
       const file = path.join(directory, fileName())
-      yield* fs.ensureDir(directory).pipe(Effect.orDie)
-      yield* fs.writeFileString(file, text).pipe(Effect.orDie)
+      yield* fs.ensureDir(directory, PRIVATE_DIRECTORY).pipe(Effect.orDie)
+      yield* fs.writeFileString(file, text, PRIVATE_FILE).pipe(Effect.orDie)
       const shown = kept.length > 0 ? `lines 1-${kept.length}` : "0 lines"
       const marker = `[showing ${shown} of ${lines.length}; full output saved to ${file}]`
       const bounded: Tool.Content[] = []
@@ -121,7 +124,8 @@ const layer = Layer.effect(
 
     const save = Effect.fnUntraced(function* (bytes: Uint8Array, extension: string) {
       const file = path.join(directory, fileName() + extension)
-      yield* fs.writeWithDirs(file, bytes).pipe(Effect.orDie)
+      yield* fs.ensureDir(directory, PRIVATE_DIRECTORY).pipe(Effect.orDie)
+      yield* fs.writeFile(file, bytes, PRIVATE_FILE).pipe(Effect.orDie)
       return file
     })
 

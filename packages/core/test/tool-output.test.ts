@@ -132,6 +132,45 @@ describe("ToolOutput", () => {
     ),
   )
 
+  // Windows has no POSIX permission bits.
+  const posix = process.platform === "win32" ? it.live.skip : it.live
+
+  posix("keeps truncated output private", () =>
+    withStore(
+      (output, fs, root) =>
+        Effect.gen(function* () {
+          const directory = path.join(root, ToolOutput.DIRECTORY)
+          yield* fs.makeDirectory(directory, { mode: 0o755 })
+          const first = yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })
+          const second = yield* output.truncate({ content: [{ type: "text", text: "three\nfour" }] })
+          const files = [first.metadata?.outputPath, second.metadata?.outputPath].filter(
+            (file): file is string => typeof file === "string",
+          )
+          expect(new Set(files).size).toBe(2)
+          expect((yield* fs.stat(directory)).mode & 0o777).toBe(0o700)
+          for (const file of files) expect((yield* fs.stat(file)).mode & 0o777).toBe(0o600)
+          expect(yield* fs.readFileString(files[1])).toBe("three\nfour")
+        }),
+      { maxLines: 1, maxBytes: 1_000 },
+    ),
+  )
+
+  posix("keeps saved bytes private", () =>
+    withStore((output, fs, root) =>
+      Effect.gen(function* () {
+        const bytes = new Uint8Array([1, 2, 3])
+        const first = yield* output.save(bytes, ".bin")
+        const second = yield* output.save(bytes, ".bin")
+        expect(first).not.toBe(second)
+        expect((yield* fs.stat(path.join(root, ToolOutput.DIRECTORY))).mode & 0o777).toBe(0o700)
+        for (const file of [first, second]) {
+          expect((yield* fs.stat(file)).mode & 0o777).toBe(0o600)
+          expect(yield* fs.readFile(file)).toEqual(bytes)
+        }
+      }),
+    ),
+  )
+
   it.live("uses file modification time when IDs wrap", () =>
     withStore((output, fs, root) =>
       Effect.gen(function* () {
