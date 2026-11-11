@@ -28,6 +28,7 @@ import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
+import { Flag } from "../flag.js"
 import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
@@ -117,8 +118,7 @@ type AttachedEntry = {
   tools: ReadonlyArray<Tool>
 }
 
-// How long a model call may wait for a server that is still connecting and configures no `timeout.startup`,
-// counted from when it began. A server with a startup timeout gets that window instead.
+// How long a model call may wait for a server that is still connecting, counted from when it began.
 const STARTUP_GRACE_MS = 2_000
 
 // Bounds re-listing the tools of an attached connection that takes over the top of its stack.
@@ -161,8 +161,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly tools: () => Effect.Effect<Tool[]>
   /**
    * Waits for servers that are still connecting, each until it settles or until its startup grace
-   * window ends: `timeout.startup` when the server configures one, else `STARTUP_GRACE_MS`. Servers
-   * past their window never wait.
+   * window ends. Servers past their window never wait.
    */
   readonly awaitStartup: () => Effect.Effect<void>
   readonly callTool: (input: {
@@ -184,6 +183,8 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
+  /** Experimental: MCP Events of a connected server that offers them, while the `mcp_events` flag is on. */
+  readonly events: (server: ServerName | string) => Effect.Effect<McpClient.Events | undefined, NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
@@ -210,6 +211,7 @@ export const layer = (options?: Options) =>
       const credentials = yield* Credential.Service
       const fetch = yield* FetchHttpClient.Fetch
       const pool = yield* McpPool.Service
+      const mcpEvents = yield* Flag.enabled("mcp_events")
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -298,12 +300,13 @@ export const layer = (options?: Options) =>
           : Effect.succeed(undefined)
 
       const connectProvider = Effect.fnUntraced(function* (
+        name: ServerName,
         entry: ServerEntry,
         credential: Credential.Info | undefined,
       ) {
         if (entry.config.type !== "remote" || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-        return yield* McpOAuth.connectProvider({ config: entry.config, credential }).pipe(
+        return yield* McpOAuth.connectProvider({ server: name, config: entry.config, credential }).pipe(
           Effect.provideService(Credential.Service, credentials),
           Effect.provideService(FetchHttpClient.Fetch, fetch),
         )
@@ -399,7 +402,7 @@ export const layer = (options?: Options) =>
                 const credential = yield* selectCredential(entry)
                 return {
                   key: McpPool.key({ ...input, credential: credential?.id }),
-                  authProvider: connectProvider(entry, credential),
+                  authProvider: connectProvider(name, entry, credential),
                 }
               }
               // Resolved exactly as the spawn resolves it, `~` included, so the key matches where the server runs.
@@ -421,8 +424,9 @@ export const layer = (options?: Options) =>
             config: config.pool && config.protocol === undefined ? { ...config, protocol: "auto" } : config,
             directory: location.directory,
             clientInfo: options?.clientInfo,
+            mcpEvents,
             authProvider: Effect.suspend(() =>
-              selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(entry, credential))),
+              selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
             ),
             elicitation,
             environment,
@@ -525,10 +529,9 @@ export const layer = (options?: Options) =>
 
       const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
         const previous = entries.get(name)
-        const entry = makeEntry(name, serverConfig, yield* Clock.currentTimeMillis)
-        // Readers that arrive while the previous connection closes wait for this one instead of using that one.
-        entries.set(name, entry)
         if (previous) yield* disposeServer(previous)
+        const entry = makeEntry(name, serverConfig, yield* Clock.currentTimeMillis)
+        entries.set(name, entry)
         yield* Effect.gen(function* () {
           yield* register(name, entry)
           if (serverConfig.disabled) {
@@ -804,10 +807,7 @@ export const layer = (options?: Options) =>
           yield* Effect.all(
             Array.from(entries.values()).flatMap((entry) => {
               if (entry.status.status !== "pending" || !entry.attempt) return []
-              // A configured startup timeout is the window the connection itself is allowed, so wait as long
-              // as the caller asked for rather than dropping a server that is still mid-handshake.
-              const grace = entry.config.timeout?.startup ?? STARTUP_GRACE_MS
-              const remaining = entry.attempt.started + grace - now
+              const remaining = entry.attempt.started + STARTUP_GRACE_MS - now
               return remaining > 0 ? [entry.attempt.settled.await.pipe(Effect.raceFirst(Effect.sleep(remaining)))] : []
             }),
             { concurrency: "unbounded", discard: true },
@@ -902,6 +902,9 @@ export const layer = (options?: Options) =>
             ),
           })
         }),
+        events: Effect.fn("MCP.events")(function* (server) {
+          return (yield* connected(ServerName.make(server))).client?.events
+        }),
       })
     }),
   )
@@ -931,6 +934,7 @@ export function configured(options?: Options) {
     deps: [
       Location.node,
       Environment.node,
+      Flag.node,
       Bus.node,
       Form.node,
       Integration.node,

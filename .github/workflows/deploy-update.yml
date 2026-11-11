@@ -18,6 +18,9 @@ jobs:
     if: github.repository == 'anomalyco/opencode' && github.ref_name == 'production'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: production
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
@@ -27,8 +30,25 @@ jobs:
         working-directory: services/update
         run: bun run typecheck:tsc
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-production
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      # A 15-minute token for the production Workers only, minted by the token issuer (anomalyco/secrets) from the role
+      # above. It is a step output, so only the Deploy step gets it.
+      - name: Cloudflare token
+        id: cloudflare-token
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
+
+      # wrangler.jsonc has no account id, and the token can't list accounts.
       - name: Deploy
         working-directory: services/update
         run: bun run deploy
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}

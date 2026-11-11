@@ -71,13 +71,15 @@ export const DisplayMultiline = {
 }
 
 export const Editor = {
-  args: { variant: "default", allowEmpty: false },
+  args: { variant: "default", allowEmpty: false, alternateSubmit: false },
   argTypes: {
     variant: { control: "select", options: ["default", "compact"] },
     allowEmpty: { control: "boolean" },
+    alternateSubmit: { control: "boolean" },
   },
   render: (args) => {
     const [value, setValue] = createSignal("")
+
     const [result, setResult] = createSignal("")
 
     return (
@@ -95,6 +97,18 @@ export const Editor = {
             setValue("")
             setResult(`Submitted: ${comment}`)
           }}
+          alternateSubmit={
+            args.alternateSubmit
+              ? {
+                  label: "Send",
+                  keys: ["Ctrl", "Enter"],
+                  onSubmit: (comment) => {
+                    setValue("")
+                    setResult(`Sent: ${comment}`)
+                  },
+                }
+              : undefined
+          }
         />
         <output aria-label="Editor result">{result()}</output>
       </div>

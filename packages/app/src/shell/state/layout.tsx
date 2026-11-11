@@ -133,6 +133,8 @@ const closedTabSchema = Schema.Struct({
   file: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.String),
   data: Schema.optional(Schema.String),
+  pane: Schema.optional(Schema.Literals(["side", "split", "bottom"])),
+  index: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   closed: Schema.Finite,
 })
 
@@ -767,9 +769,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             if (!current?.all.includes(tab)) return
             writeTabs(session, moveSessionTab(current, tab, pane, before))
           },
-          /** Opens the next new tab a pane's "+" menu creates in `pane`; with `plugin`, only that plugin's tab. */
-          target(pane: SessionPane, plugin?: string) {
-            dispatchIntent({ type: "pane.targeted", session: key(), pane, plugin })
+          /**
+           * Opens the next new tab a pane's "+" menu creates in `pane`; with `plugin`, only that plugin's tab, and with
+           * `index`, at that position in the strip.
+           */
+          target(pane: SessionPane, plugin?: string, index?: number) {
+            dispatchIntent({ type: "pane.targeted", session: key(), pane, plugin, index })
           },
         }
       },

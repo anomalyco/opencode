@@ -15,21 +15,22 @@ import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { useServerSDK } from "@/runtime/server/client"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "@/session/title"
-import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { showToast } from "@/shell/notifications/toast"
-import { usePlatform } from "@/runtime/platform/platform"
 import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
 import {
   createSessionDeleteState,
-  createSessionHeaderTitleState,
   selectSessionDeleteView,
-  selectSessionHeaderTitleView,
   SESSION_DELETE_TIMEOUT_MS,
-  SESSION_RENAME_TIMEOUT_MS,
   transitionSessionDelete,
-  transitionSessionHeaderTitle,
   type SessionDeleteEffect,
   type SessionDeleteEvent,
+} from "@/session/delete-machine"
+import { useSessionExporter } from "@/session/commands/export-session"
+import {
+  createSessionHeaderTitleState,
+  selectSessionHeaderTitleView,
+  SESSION_RENAME_TIMEOUT_MS,
+  transitionSessionHeaderTitle,
   type SessionHeaderTitleEffect,
   type SessionHeaderTitleEvent,
 } from "./header-actions-machine"
@@ -78,7 +79,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const tabs = useTabs()
   const dialog = useDialog()
   const language = useLanguage()
-  const platform = usePlatform()
+  const exporter = useSessionExporter()
 
   // Pending inputs and the handoff hold with the history while the view is detached, so a hidden view never shows
   // one against history it has not caught up with.
@@ -298,27 +299,6 @@ export function createTimelineController(input: { session: TimelineSessionSource
     return tabs.newDraft({ server: server.key, directory: sdk().directory })
   }
 
-  const exportSession = async (id: string) => {
-    try {
-      const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
-      const filename = sessionExportFilename(data.info)
-
-      if (!(await saveSessionExport(filename, data, platform))) return
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename }),
-      })
-    } catch (error) {
-      showToast({
-        variant: "error",
-        title: language.t("toast.session.export.failed.title"),
-        description: error instanceof Error ? error.message : language.t("toast.session.export.failed.description"),
-      })
-    }
-  }
-
   // Where the view goes once the session is gone, read before the delete hides it from the list.
   const deleteTarget = (id: string) => {
     const session = data.session.get(id)
@@ -460,7 +440,8 @@ export function createTimelineController(input: { session: TimelineSessionSource
         }),
     },
     action: {
-      export: exportSession,
+      export: (id: string) => exporter.export({ server: server.key, sessionID: id }),
+      exporting: (id: string) => exporter.exporting({ server: server.key, sessionID: id }),
       showDelete: (id: string) => dialog.show(() => <DeleteDialog sessionID={id} />),
       navigateParent: () => {
         const id = input.session.data.parentID()

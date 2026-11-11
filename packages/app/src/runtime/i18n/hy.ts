@@ -338,7 +338,6 @@ export const dict = {
   "session.new.project.search": "Որոնել նախագծեր",
   "session.new.project.add": "Ավելացնել նախագիծ",
   "session.new.workspace.runIn": "Գործարկել նիստը",
-  "session.new.workspace.triggerLocal": "Տեղական",
   "session.new.workspace.local": "Տեղական պահոց",
   "session.new.git.none": "Առանց Git-ի",
   "session.header.open.finder": "Finder",

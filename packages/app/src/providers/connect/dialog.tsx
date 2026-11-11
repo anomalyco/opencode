@@ -23,10 +23,11 @@ import { SettingsList } from "@/settings/list"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Schema } from "effect"
-import type { FormAnswer, FormField, FormValue, IntegrationInfo } from "@opencode/client/promise"
+import type { FormField, IntegrationInfo } from "@opencode/client/promise"
 import { createProviderDialogController, modelKey } from "./controller"
 import { CONSOLE_INTEGRATION, type ProviderDialogBody, type ProviderDialogFrame } from "./dialog-machine"
-import { connectMethods, providerFormDefaults, selectProviderConnectView, type ProviderConnectMethod } from "./machine"
+import { connectMethods, selectProviderConnectView, type ProviderConnectMethod } from "./machine"
+import type { ProviderFormInput, ProviderFormView } from "./form-machine"
 import { ConsoleAuthorization } from "./console"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
@@ -451,334 +452,212 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
 
   // Asks one visible field at a time, like the TUI, so `when` conditions see every earlier answer.
   function AuthFormView() {
-    const method = connect().method
-    const fields = method && method.type !== "command" ? (method.form ?? []) : []
-    const hidden = providerFormDefaults(fields)
+    const form = () => connect().form
+    const send = (event: ProviderFormInput) => props.controller.input({ type: "form", event })
 
-    const [formStore, setFormStore] = createStore<{
-      answer: FormAnswer
-      index: number
-      text: string
-      choice?: string
-      customOn: boolean
-      customText: string
-      picked: string[]
-      opened: boolean
-      error?: string
-    }>({ answer: {}, index: -1, text: "", customOn: false, customText: "", picked: [], opened: false })
+    const external = createMemo(() => {
+      const current = form()
 
-    const active = (field: FormField, answer: FormAnswer) => {
-      if (field.type === "external" || !field.when) return true
+      return current?.kind === "external" ? current : undefined
+    })
 
-      return field.when.every((condition) => {
-        const value = answer[condition.key]
+    const multiselect = createMemo(() => {
+      const current = form()
 
-        if (value === undefined) return false
-        const hit = Array.isArray(value) ? value.includes(String(condition.value)) : value === condition.value
+      return current?.kind === "multiselect" ? current : undefined
+    })
 
-        return condition.op === "eq" ? hit : !hit
-      })
+    const choice = createMemo(() => {
+      const current = form()
+
+      return current?.kind === "choice" ? current : undefined
+    })
+
+    const text = createMemo(() => {
+      const current = form()
+
+      return current?.kind === "text" ? current : undefined
+    })
+
+    const error = () => {
+      const current = form()
+      const value = current?.kind === "choice" || current?.kind === "text" ? current.error : undefined
+
+      if (value === "required") return language.t("provider.connect.form.required")
+
+      if (value === "number") return language.t("provider.connect.form.number")
     }
 
-    const asked = (field: FormField) => field.type === "external" || !field.hidden
+    const issue = (value: Extract<ProviderFormView, { kind: "multiselect" }>) => {
+      if (value.issue === "select-one") return language.t("provider.connect.form.selectOne")
 
-    const field = createMemo(() => (formStore.index < 0 ? undefined : fields[formStore.index]))
+      if (value.issue === "min-items")
+        return language.t("provider.connect.form.minItems", { count: value.field.minItems ?? 0 })
 
-    const external = () => {
-      const current = field()
-
-      return current?.type === "external" ? current : undefined
+      if (value.issue === "max-items")
+        return language.t("provider.connect.form.maxItems", { count: value.field.maxItems ?? 0 })
     }
 
-    const multiselect = () => {
-      const current = field()
-
-      return current?.type === "multiselect" ? current : undefined
-    }
-
-    const text = () => {
-      const current = field()
-
-      return current?.type === "string" ? current : undefined
-    }
-
-    const required = () => {
-      const current = field()
-
-      return current?.type !== "external" && !!current?.required
-    }
-
-    // Prefills the next field from its default; the value only enters the answer once confirmed.
-    function advance(answer: FormAnswer) {
-      const merged = { ...hidden, ...answer }
-      const index = fields.findIndex((item, i) => i > formStore.index && asked(item) && active(item, merged))
-
-      if (index === -1) {
-        props.controller.input({ type: "form.submitted", answer })
-
-        return
-      }
-
-      const next = fields[index]
-      setFormStore({
-        answer,
-        index,
-        text: "",
-        choice: undefined,
-        customOn: false,
-        customText: "",
-        picked: next.type === "multiselect" ? [...(next.default ?? [])] : [],
-        opened: false,
-        error: undefined,
-      })
-
-      if (next.type === "boolean" && next.default !== undefined) setFormStore("choice", String(next.default))
-
-      if ((next.type === "number" || next.type === "integer") && next.default !== undefined)
-        setFormStore("text", String(next.default))
-
-      if (next.type !== "string" || next.default === undefined) return
-
-      if (!next.options) return setFormStore("text", next.default)
-
-      if (next.options.some((option) => option.value === next.default)) return setFormStore("choice", next.default)
-
-      if (next.custom) setFormStore({ customOn: true, customText: next.default })
-    }
-
-    onMount(() => advance({}))
-
-    const confirm = (value: FormValue | undefined) => {
-      const current = field()
-
-      if (!current) return
-
-      if (value === undefined && required()) {
-        setFormStore("error", language.t("provider.connect.form.required"))
-
-        return
-      }
-
-      const answer = { ...formStore.answer }
-
-      if (value !== undefined) answer[current.key] = value
-      advance(answer)
-    }
-
-    const submitText = (event: SubmitEvent) => {
-      event.preventDefault()
-      const current = field()
-
-      if (!current || current.type === "external") return
-      const text = formStore.text.trim()
-
-      if (!text) return confirm(undefined)
-
-      if (current.type === "number" || current.type === "integer") {
-        const value = Number(text)
-
-        if (!Number.isFinite(value) || (current.type === "integer" && !Number.isInteger(value))) {
-          setFormStore("error", language.t("provider.connect.form.number"))
-
-          return
-        }
-
-        return confirm(value)
-      }
-
-      confirm(text)
-    }
-
-    const optionRows = (current: FormField) => {
-      if (current.type === "boolean") {
+    const optionRows = (field: Extract<FormField, { type: "boolean" | "string" | "multiselect" }>) => {
+      if (field.type === "boolean") {
         const rows = [
           { value: "true", label: language.t("provider.connect.form.yes"), description: undefined },
           { value: "false", label: language.t("provider.connect.form.no"), description: undefined },
         ]
 
-        return current.default === false ? rows.toReversed() : rows
+        return field.default === false ? rows.toReversed() : rows
       }
 
-      if (current.type === "string" || current.type === "multiselect")
-        return (current.options ?? []).map((option) => ({
-          value: option.value,
-          label: option.label,
-          description: option.description,
-        }))
-
-      return []
+      return (field.options ?? []).map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.description,
+      }))
     }
-
-    const choose = () => {
-      const current = field()
-
-      if (!current) return
-
-      if (current.type === "boolean")
-        return confirm(formStore.choice === undefined ? undefined : formStore.choice === "true")
-
-      if (formStore.customOn) return confirm(formStore.customText.trim() || undefined)
-      confirm(formStore.choice)
-    }
-
-    const multiselectError = () => {
-      const current = field()
-
-      if (current?.type !== "multiselect") return
-      const count = formStore.picked.length
-
-      if (current.required && count === 0) return language.t("provider.connect.form.selectOne")
-
-      if (current.minItems !== undefined && count < current.minItems)
-        return language.t("provider.connect.form.minItems", { count: current.minItems })
-
-      if (current.maxItems !== undefined && count > current.maxItems)
-        return language.t("provider.connect.form.maxItems", { count: current.maxItems })
-    }
-
-    const openLink = async (url: string) => {
-      const opened = await Promise.resolve()
-        .then(() => {
-          if (platform.openBrowser) return platform.openBrowser(url)
-          platform.openExternal(url)
-
-          return true
-        })
-        .catch(() => false)
-
-      setFormStore("opened", (value) => value || opened)
-    }
-
-    const title = (current: FormField) => current.title ?? (current.type === "external" ? current.url : current.key)
 
     return (
-      <Show when={field()}>
-        {(current) => (
-          <div data-component="provider-connect-form" class="flex flex-col items-start gap-4 px-3">
-            <div class="flex w-full flex-col gap-1">
-              <div class="text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base">
-                {title(current())}
-              </div>
-              <Show when={current().description}>
-                {(description) => (
-                  <div class="text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-                    {description()}
-                  </div>
-                )}
-              </Show>
+      // Keyed by step, so each step mounts fresh inputs that take focus.
+      <Show when={form()?.key} keyed>
+        <div data-component="provider-connect-form" class="flex flex-col items-start gap-4 px-3">
+          <div class="flex w-full flex-col gap-1">
+            <div class="text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base">
+              {form()?.title}
             </div>
-            <Switch>
-              <Match when={external()}>
-                {(external) => (
+            <Show when={form()?.description}>
+              {(description) => (
+                <div class="text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+                  {description()}
+                </div>
+              )}
+            </Show>
+          </div>
+          <Switch>
+            <Match when={external()}>
+              {(step) => (
+                <>
                   <div class="flex flex-wrap items-center gap-2">
-                    <Button variant="neutral" icon="arrow-up-right" onClick={() => void openLink(external().url)}>
-                      {language.t(formStore.opened ? "provider.connect.form.openAgain" : "provider.connect.form.open")}
+                    <Button
+                      variant="neutral"
+                      icon="arrow-up-right"
+                      disabled={step().opening}
+                      aria-busy={step().opening}
+                      onClick={() => send({ type: "external.open" })}
+                    >
+                      {language.t(step().canFinish ? "provider.connect.form.openAgain" : "provider.connect.form.open")}
                     </Button>
-                    <Button variant="contrast" disabled={!formStore.opened} onClick={() => confirm(true)}>
+                    <Button
+                      variant="contrast"
+                      disabled={!step().canFinish}
+                      onClick={() => send({ type: "step.submitted" })}
+                    >
                       {language.t("provider.connect.form.finished")}
                     </Button>
                   </div>
-                )}
-              </Match>
-              <Match when={multiselect()}>
-                {(multi) => {
-                  const options = () => optionRows(multi())
-                  const custom = () => multi().custom
-
-                  return (
-                    <div class="flex w-full flex-col gap-4">
-                      <div class="flex flex-col gap-2">
-                        <For
-                          each={[
-                            ...options(),
-                            ...formStore.picked
-                              .filter((item) => !options().some((option) => option.value === item))
-                              .map((value) => ({ value, label: value, description: undefined })),
-                          ]}
-                        >
-                          {(option) => (
-                            <Checkbox
-                              checked={formStore.picked.includes(option.value)}
-                              description={option.description}
-                              onChange={(checked: boolean) =>
-                                setFormStore("picked", (picked) =>
-                                  checked ? [...picked, option.value] : picked.filter((item) => item !== option.value),
-                                )
-                              }
-                            >
-                              {option.label}
-                            </Checkbox>
-                          )}
-                        </For>
-                      </div>
-                      <Show when={custom()}>
-                        <form
-                          class="flex w-full items-center gap-2"
-                          onSubmit={(event) => {
-                            event.preventDefault()
-                            const value = formStore.customText.trim()
-
-                            if (!value || formStore.picked.includes(value)) return
-                            setFormStore({ picked: [...formStore.picked, value], customText: "" })
-                          }}
-                        >
-                          <TextInput
-                            class="min-w-0 flex-1"
-                            placeholder={language.t("ui.question.custom.placeholder")}
-                            aria-label={language.t("ui.messagePart.option.typeOwnAnswer")}
-                            value={formStore.customText}
-                            onInput={(event) => setFormStore("customText", event.currentTarget.value)}
-                          />
-                          <Button type="submit" variant="neutral">
-                            {language.t("provider.connect.form.add")}
-                          </Button>
-                        </form>
-                      </Show>
-                      <Show when={multiselectError()}>
-                        {(error) => <div class="text-xs text-v2-text-text-muted">{error()}</div>}
-                      </Show>
-                      <Button
-                        class="w-auto self-start"
-                        variant="contrast"
-                        disabled={multiselectError() !== undefined}
-                        onClick={() => confirm(formStore.picked.length ? [...formStore.picked] : undefined)}
-                      >
-                        {language.t("common.continue")}
-                      </Button>
+                  <Show when={step().browserFailed}>
+                    <div role="alert" class="text-xs text-v2-state-fg-danger">
+                      {language.t("provider.connect.form.browserFailed")}
                     </div>
-                  )
-                }}
-              </Match>
-              <Match
-                when={current().type === "boolean" || (current().type === "string" && optionRows(current()).length > 0)}
-              >
+                    <TextField
+                      label={step().title}
+                      hideLabel
+                      class="w-full font-mono"
+                      value={step().url}
+                      readOnly
+                      copyable
+                    />
+                  </Show>
+                </>
+              )}
+            </Match>
+            <Match when={multiselect()}>
+              {(step) => {
+                const options = () => optionRows(step().field)
+
+                return (
+                  <div class="flex w-full flex-col gap-4">
+                    <div class="flex flex-col gap-2">
+                      <For
+                        each={[
+                          ...options(),
+                          ...step()
+                            .picked.filter((item) => !options().some((option) => option.value === item))
+                            .map((value) => ({ value, label: value, description: undefined })),
+                        ]}
+                      >
+                        {(option) => (
+                          <Checkbox
+                            checked={step().picked.includes(option.value)}
+                            description={option.description}
+                            onChange={(checked: boolean) =>
+                              send({ type: "option.toggled", value: option.value, checked })
+                            }
+                          >
+                            {option.label}
+                          </Checkbox>
+                        )}
+                      </For>
+                    </div>
+                    <Show when={step().field.custom}>
+                      <form
+                        class="flex w-full items-center gap-2"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          send({ type: "custom.item.added" })
+                        }}
+                      >
+                        <TextInput
+                          class="min-w-0 flex-1"
+                          placeholder={language.t("ui.question.custom.placeholder")}
+                          aria-label={language.t("ui.messagePart.option.typeOwnAnswer")}
+                          value={step().customText}
+                          onInput={(event) => send({ type: "custom.text.changed", value: event.currentTarget.value })}
+                        />
+                        <Button type="submit" variant="neutral">
+                          {language.t("provider.connect.form.add")}
+                        </Button>
+                      </form>
+                    </Show>
+                    <Show when={issue(step())}>
+                      {(message) => <div class="text-xs text-v2-text-text-muted">{message()}</div>}
+                    </Show>
+                    <Button
+                      class="w-auto self-start"
+                      variant="contrast"
+                      disabled={!step().canContinue}
+                      onClick={() => send({ type: "step.submitted" })}
+                    >
+                      {language.t("common.continue")}
+                    </Button>
+                  </div>
+                )
+              }}
+            </Match>
+            <Match when={choice()}>
+              {(step) => (
                 <div class="flex w-full flex-col gap-4">
                   <RadioGroup
-                    label={title(current())}
+                    label={step().title}
                     hideLabel
-                    value={formStore.customOn ? "custom" : formStore.choice}
-                    onChange={(value) => {
-                      if (value === "custom") return setFormStore({ customOn: true, error: undefined })
-                      setFormStore({ customOn: false, choice: value, error: undefined })
-                    }}
+                    value={step().selected}
+                    onChange={(value) => send({ type: "choice.selected", value })}
                   >
-                    <For each={optionRows(current())}>
+                    <For each={optionRows(step().field)}>
                       {(option) => (
                         <RadioItem value={option.value} label={option.label} description={option.description} />
                       )}
                     </For>
-                    <Show when={text()?.custom}>
+                    <Show when={step().custom}>
                       <RadioItem value="custom" label={language.t("ui.messagePart.option.typeOwnAnswer")} />
-                      <Show when={formStore.customOn}>
+                      <Show when={step().selected === "custom"}>
                         <div class="pl-6">
                           <TextField
                             ref={(input: HTMLInputElement) => queueMicrotask(() => input.focus())}
                             type="text"
                             label={language.t("ui.messagePart.option.typeOwnAnswer")}
                             hideLabel
-                            placeholder={text()?.placeholder ?? language.t("ui.question.custom.placeholder")}
-                            value={formStore.customText}
-                            onChange={(value) => setFormStore("customText", value)}
+                            placeholder={step().placeholder ?? language.t("ui.question.custom.placeholder")}
+                            value={step().customText}
+                            onChange={(value) => send({ type: "custom.text.changed", value })}
                           />
                         </div>
                       </Show>
@@ -788,49 +667,57 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                     <Button
                       class="w-auto"
                       variant="contrast"
-                      disabled={formStore.customOn ? !formStore.customText.trim() : formStore.choice === undefined}
-                      onClick={choose}
+                      disabled={!step().canContinue}
+                      onClick={() => send({ type: "step.submitted" })}
                     >
                       {language.t("common.continue")}
                     </Button>
-                    <Show when={!required()}>
-                      <Button variant="ghost-muted" onClick={() => confirm(undefined)}>
+                    <Show when={step().canSkip}>
+                      <Button variant="ghost-muted" onClick={() => send({ type: "step.skipped" })}>
                         {language.t("provider.connect.form.skip")}
                       </Button>
                     </Show>
                   </div>
                 </div>
-              </Match>
-              <Match when={true}>
-                <form onSubmit={submitText} class="flex w-full flex-col items-start gap-4">
+              )}
+            </Match>
+            <Match when={text()}>
+              {(step) => (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    send({ type: "step.submitted" })
+                  }}
+                  class="flex w-full flex-col items-start gap-4"
+                >
                   <TextInput
                     ref={(input: HTMLInputElement) => queueMicrotask(() => input.focus({ preventScroll: true }))}
                     class="!w-full"
                     type="text"
-                    inputMode={current().type === "string" ? undefined : "decimal"}
-                    aria-label={title(current())}
-                    placeholder={text()?.placeholder}
-                    value={formStore.text}
-                    invalid={formStore.error !== undefined}
+                    inputMode={step().numeric ? "decimal" : undefined}
+                    aria-label={step().title}
+                    placeholder={step().placeholder}
+                    value={step().text}
+                    invalid={step().error !== undefined}
                     autocomplete="off"
                     spellcheck={false}
-                    onInput={(event) => setFormStore({ text: event.currentTarget.value, error: undefined })}
+                    onInput={(event) => send({ type: "text.changed", value: event.currentTarget.value })}
                   />
                   <Button type="submit" variant="contrast">
                     {language.t("common.continue")}
                   </Button>
                 </form>
-              </Match>
-            </Switch>
-            <Show when={formStore.error}>
-              {(error) => (
-                <div role="alert" class="text-xs text-v2-state-fg-danger">
-                  {error()}
-                </div>
               )}
-            </Show>
-          </div>
-        )}
+            </Match>
+          </Switch>
+          <Show when={error()}>
+            {(message) => (
+              <div role="alert" class="text-xs text-v2-state-fg-danger">
+                {message()}
+              </div>
+            )}
+          </Show>
+        </div>
       </Show>
     )
   }

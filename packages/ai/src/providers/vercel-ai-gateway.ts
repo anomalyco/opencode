@@ -3,13 +3,14 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { OpenAIDecisions } from "../protocols/openai-decisions.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { XAIImages } from "../protocols/xai-images.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
 import type { ProviderPackage } from "../provider-package.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
@@ -21,6 +22,7 @@ import {
   ProviderMetadata,
   ReasoningEffort,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
@@ -100,7 +102,7 @@ export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
     readonly cacheAnchorItems?: number
   }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
@@ -174,7 +176,7 @@ const route = <Body, Event, State>(input: {
   readonly api: "messages" | "responses" | "chat"
   readonly path: string
   readonly framing: Framing.Definition<string>
-  readonly defaults?: RouteDefaultsInput
+  readonly options?: RequestOptions
 }) =>
   Route.make({
     id: input.id,
@@ -185,7 +187,7 @@ const route = <Body, Event, State>(input: {
     framing: input.framing,
     headers: ({ request }): Record<string, string> =>
       request.promptCacheKey ? { "x-session-affinity": request.promptCacheKey } : {},
-    defaults: input.defaults,
+    options: input.options,
   })
 
 const messagesRoute = route({
@@ -194,7 +196,7 @@ const messagesRoute = route({
   api: "messages",
   path: "/messages",
   framing: AnthropicMessages.framing,
-  defaults: { headers: { "anthropic-version": "2023-06-01" } },
+  options: { headers: { "anthropic-version": "2023-06-01" } },
 })
 const responsesRoute = route({
   id: "vercel-ai-gateway-responses",
@@ -202,7 +204,7 @@ const responsesRoute = route({
   api: "responses",
   path: "/responses",
   framing: Framing.sse,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 const chatRoute = route({
   id: "vercel-ai-gateway-chat",
@@ -254,11 +256,21 @@ export const configure = (input: Config = {}) => {
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model({ id: modelID, providerOptions })
-  return { id, model, messages, responses, chat, image, decision, configure }
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    provider: id,
+    endpoint: { baseURL: configured.endpoint.baseURL },
+    auth: configured.auth,
+    headers: input.headers,
+    http: input.http,
+  })
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model({ id: modelID, providerOptions })
+  return { id, model, messages, responses, chat, image, decision, embedding, configure }
 }
 
 export const provider = configure()
 export const decision = provider.decision
+export const embedding = provider.embedding
 export const messages = provider.messages
 export const responses = provider.responses
 export const chat = provider.chat
@@ -279,6 +291,11 @@ export const imageModel = (modelID: string, settings?: Settings) => {
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).decision(modelID, input.providerOptions)
+}
+
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 
 export * as VercelAIGateway from "./vercel-ai-gateway.js"

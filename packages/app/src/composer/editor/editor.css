@@ -2,8 +2,10 @@
   content: "\200B";
 }
 
+/* Transcript session references match this (packages/session-ui/src/components/markdown.css). */
 [data-component="composer-editor"] [data-mention="session"] {
   color: var(--v2-text-text-muted);
+  font-weight: var(--font-weight-medium);
 }
 
 /* Matches the 16px session title fade. The top fade only covers the editor's 16px top padding until text scrolls

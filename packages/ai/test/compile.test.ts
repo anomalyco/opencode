@@ -52,7 +52,7 @@ describe("request option precedence", () => {
       })
       const model = route.model({
         id: "gpt-4o-mini",
-        defaults: {
+        options: {
           maxTokens: 20,
           temperature: 0.5,
           frequencyPenalty: 0.25,
@@ -203,7 +203,7 @@ describe("request option precedence", () => {
           })
           .model({
             id: "gpt-4o-mini",
-            defaults: {
+            options: {
               headers: { "x-model": "model", "x-shared": "model" },
               http: {
                 body: { metadata: { model: true, shared: "model" }, value: "model" },

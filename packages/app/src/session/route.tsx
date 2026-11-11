@@ -33,6 +33,7 @@ import { createSessionResolution } from "./session-resolution"
 import { SessionScreenView } from "./screen"
 import { PreparingComposer } from "./preparing-composer"
 import { ComposerFocusProvider } from "./composer/focus"
+import { INITIAL_SESSION_VIEWED_STATE, transitionSessionViewed, type SessionViewedState } from "./viewed-machine"
 
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
@@ -254,6 +255,23 @@ function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
   makeEventListener(window, "focus", update)
   makeEventListener(window, "blur", update)
   makeEventListener(document, "visibilitychange", update)
+
+  const viewed = createMemo<SessionViewedState>(
+    (previous) =>
+      transitionSessionViewed(previous, {
+        type: "changed",
+        sessionID: props.sessionID(),
+        focused: focus.window,
+        ready: notification.session.ready(),
+      }),
+    INITIAL_SESSION_VIEWED_STATE,
+  )
+
+  createEffect(
+    on(viewed, (state) => {
+      if (state.status === "viewed") notification.session.opened(state.sessionID)
+    }),
+  )
 
   // Viewed state is shared by every client, so only a focused window reports what its user has seen.
   // markViewed reads the session's idle watermark, so a turn finishing while it stays open re-runs this.

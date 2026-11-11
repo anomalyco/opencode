@@ -87,7 +87,7 @@ describe("public event manifest", () => {
       expect(EventManifest.Durable.has(definition.type)).toBe(false)
     }
 
-    expect(Credential.Event.Updated.data.make({})).toEqual({})
+    expect(Credential.Event.Updated.data.make({ integrationID, credentialID })).toEqual({ integrationID, credentialID })
     expect(Credential.Event.Switched.data.make({ integrationID, credentialID })).toEqual({
       integrationID,
       credentialID,

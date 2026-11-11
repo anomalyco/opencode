@@ -6,6 +6,7 @@ import {
   settingsSchema,
   settingsPersistence,
   defaultSettings,
+  recentSessionsAvailable,
   monoDefault,
   monoFontFamily,
   sansDefault,
@@ -128,6 +129,15 @@ describe("settings schema", () => {
     })
   })
 
+  test.each(["list", "projects", "customize", "recent"])("round trips saved side-tab organization %s", (mode) => {
+    const settings = decode({ general: { sidebarOrganize: mode } })
+    expect(decode(encode(settings)).general.sidebarOrganize).toBe(mode)
+  })
+
+  test("the retired Recent sessions switch does not opt into Recent organization", () => {
+    expect(decode({ general: { recentSessions: true } }).general.sidebarOrganize).toBe("list")
+  })
+
   test("defaults invalid preferences locally while retaining valid siblings", () => {
     const settings = decode({
       general: {
@@ -201,6 +211,11 @@ describe("settings schema", () => {
       Schema.encodeUnknownSync(settingsSchema)({ ...decode({}), appearance: { fontSize: "large" } }),
     ).toThrow()
   })
+})
+
+test.each(["local", "dev", "beta", "prod", undefined] as const)("Recent availability in %s", (channel) => {
+  expect(recentSessionsAvailable("desktop", channel)).toBe(channel === "local" || channel === "dev")
+  expect(recentSessionsAvailable("web", channel)).toBe(false)
 })
 
 test("font defaults are Inter and IBM Plex Mono", () => {
