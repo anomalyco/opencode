@@ -1314,6 +1314,33 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("admits a steer with resume:false that stays pending and can be cancelled", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      wakeCalls.length = 0
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "Steer without resuming",
+        resume: false,
+      })
+
+      expect(yield* session.messages({ sessionID })).toEqual([])
+      expect(wakeCalls).toEqual([])
+      expect(yield* admitted(message.id)).toMatchObject({
+        id: message.id,
+        sessionID,
+        type: "user",
+        delivery: "steer",
+      })
+
+      yield* session.cancelInbox({ sessionID, inboxID: message.id })
+      expect(yield* session.inbox(sessionID)).toEqual([])
+      expect(yield* admitted(message.id)).toBeUndefined()
+    }),
+  )
+
   it.effect("keeps the first admission's metadata when one ID is reused with other metadata", () =>
     Effect.gen(function* () {
       yield* setup
