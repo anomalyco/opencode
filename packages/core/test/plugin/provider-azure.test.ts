@@ -626,6 +626,16 @@ describe("AzurePlugin requests", () => {
       expect(foundry.request.headers.get("authorization")).toBe("Bearer https://ai.azure.com/.default-token")
       expect(foundry.request.headers.has("x-api-key")).toBe(false)
 
+      // Generate calls have no Session and get the same token.
+      const generated = yield* hooks.trigger("model", "experimental.http.request", {
+        model: context.model,
+        kind: "text",
+        request: new Request("https://test-resource.openai.azure.com/openai/v1/responses"),
+      })
+      expect(generated.request.headers.get("authorization")).toBe(
+        "Bearer https://cognitiveservices.azure.com/.default-token",
+      )
+
       const handshake = yield* hooks.trigger("session", "experimental.ws.handshake", {
         ...context,
         sessionID: Session.ID.make("ses_azure_ws"),

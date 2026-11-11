@@ -87,7 +87,7 @@ export interface SessionModelRequest {
   headers: Record<string, string>
 }
 
-/** @deprecated Use `ctx.model.hook("experimental.http.request")`, which also runs for calls made outside a Session. */
+/** Prefer `ctx.model.hook("experimental.http.request")`, which also runs for calls made outside a Session. */
 export interface SessionHttpRequest {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
@@ -96,7 +96,7 @@ export interface SessionHttpRequest {
   request: Request
 }
 
-/** @deprecated Use `ctx.model.hook("experimental.http.response")`, which also runs for calls made outside a Session. */
+/** Prefer `ctx.model.hook("experimental.http.response")`, which also runs for calls made outside a Session. */
 export interface SessionHttpResponse {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
@@ -207,14 +207,13 @@ export interface SessionHooks {
   readonly "model.request": SessionModelRequest
   /**
    * Runs for HTTP requests a Session makes. Registered as a `ctx.model.hook("experimental.http.request")` that skips
-   * calls without a Session.
-   * @deprecated Use `ctx.model.hook("experimental.http.request")` and read `event.session`.
+   * calls without a Session. Prefer the model hook, which also sees Generate calls; `event.session` holds the Session.
    */
   readonly "http.request": SessionHttpRequest
   /**
    * Runs for HTTP responses to a Session's requests. Registered as a `ctx.model.hook("experimental.http.response")`
-   * that skips calls without a Session.
-   * @deprecated Use `ctx.model.hook("experimental.http.response")` and read `event.session`.
+   * that skips calls without a Session. Prefer the model hook, which also sees Generate calls; `event.session` holds the
+   * Session.
    */
   readonly "http.response": SessionHttpResponse
   readonly "experimental.ws.handshake": SessionWebSocketHandshake

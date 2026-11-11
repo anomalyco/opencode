@@ -201,8 +201,8 @@ export const SnowflakeCortexPlugin = define({
       }
     })
     yield* ProviderRefresh.onSwitch(integrationID, ProviderRefresh.reloadIfChanged(load, ctx.provider.reload()))
-    yield* ctx.session.hook(
-      "http.request",
+    yield* ctx.model.hook(
+      "experimental.http.request",
       (event) =>
         Effect.sync(() => {
           // Model resolution already supplies and refreshes stored credentials on each attempt.
@@ -212,8 +212,8 @@ export const SnowflakeCortexPlugin = define({
         }),
       { providerID },
     )
-    yield* ctx.session.hook(
-      "http.response",
+    yield* ctx.model.hook(
+      "experimental.http.response",
       Effect.fn(function* (event) {
         if (event.response.status !== 400) return
         const error = Option.getOrUndefined(decodeError(yield* Effect.promise(() => event.response.clone().text())))

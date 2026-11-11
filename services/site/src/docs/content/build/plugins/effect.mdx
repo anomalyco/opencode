@@ -1310,8 +1310,8 @@ effect: (ctx) =>
 Modify native provider requests or responses with the experimental model HTTP hooks. They run for every HTTP request
 to a model provider, including Generate text, image and decision calls made outside a Session. Bodies are one-shot
 streams; clone or replace a body before reading it. `event.kind` says why the call was made, and `event.session` is set
-for a Session's own model requests. The session `http.request` and `http.response` hooks are deprecated; they still run, as
-model hooks that skip calls without a Session.
+for a Session's own model requests. The session `http.request` and `http.response` hooks still
+work, as model hooks that skip calls without a Session.
 
 ```ts
 effect: (ctx) =>
@@ -1412,9 +1412,9 @@ interface SessionHooks {
   readonly generate: SessionGenerate
   readonly title: SessionTitle
   readonly "model.request": SessionModelRequest
-  /** @deprecated Use ctx.model.hook("experimental.http.request") */
+  /** Session calls only. Prefer ctx.model.hook("experimental.http.request") */
   readonly "http.request": SessionHttpRequest
-  /** @deprecated Use ctx.model.hook("experimental.http.response") */
+  /** Session calls only. Prefer ctx.model.hook("experimental.http.response") */
   readonly "http.response": SessionHttpResponse
   readonly "experimental.ws.handshake": SessionWebSocketHandshake
   readonly "experimental.ws.send": SessionWebSocketSend

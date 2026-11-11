@@ -444,8 +444,8 @@ export function make(
         const current = yield* token(scope).pipe(Effect.orDie)
         return `Bearer ${current.access}`
       })
-      yield* ctx.session.hook(
-        "http.request",
+      yield* ctx.model.hook(
+        "experimental.http.request",
         (evt) =>
           Effect.gen(function* () {
             const authorization = yield* bearer(evt.request.url)

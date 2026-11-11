@@ -1504,9 +1504,9 @@ await ctx.session.hook(
 
 #### Native HTTP
 
-`http.request` and `http.response` are deprecated. Use the [model HTTP hooks](#model-http-experimental), which run for
-the same requests and for calls made outside a Session. The session hooks still work: each one is registered as a
-model hook that skips calls without a Session, so both kinds run in plugin order.
+Prefer the [model HTTP hooks](#model-http-experimental), which run for the same requests and for calls made outside a
+Session. `ctx.session.hook("http.request")` and `"http.response"` still work: each one is registered as a model hook
+that skips calls without a Session, so both kinds run in plugin order.
 
 #### Native WebSocket (experimental)
 
@@ -1599,9 +1599,9 @@ interface SessionHooks {
   title: SessionRequestHook & { result?: string }
   "experimental.model.resolve": SessionModelResolveHook
   "model.request": SessionModelRequestHook
-  /** @deprecated Use ctx.model.hook("experimental.http.request") */
+  /** Session calls only. Prefer ctx.model.hook("experimental.http.request") */
   "http.request": SessionHttpRequestHook
-  /** @deprecated Use ctx.model.hook("experimental.http.response") */
+  /** Session calls only. Prefer ctx.model.hook("experimental.http.response") */
   "http.response": SessionHttpResponseHook
   "experimental.ws.handshake": SessionWebSocketHandshakeHook
   "experimental.ws.send": SessionWebSocketSendHook
