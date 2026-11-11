@@ -429,7 +429,7 @@ describe("ReadToolFileSystem", () => {
         "[Output truncated. Continue reading with offset: 50004]",
       ])
 
-      // A null byte in a chunk dropped from the window still marks the file as binary.
+      // A null byte in an earlier scanned chunk still marks the file as binary.
       const early = new TextEncoder().encode(content)
       early[10] = 0
       const negative = yield* read("early-nul.txt", early, { offset: -5 }).pipe(Effect.flip)
@@ -540,6 +540,33 @@ describe("ReadToolFileSystem", () => {
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "nul.txt", { limit: 1 })
 
       expect(result).toMatchObject({ type: "text-page", content: "one", truncated: true, next: 2 })
+    }),
+  )
+
+  it.live("ignores a NUL after a chunked page but rejects it for a past-end offset", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "nul.txt"))
+      yield* files.writeFileString(file, `${"x".repeat(256 * 1024)}\nselected\n\0\ntail`)
+      const read = (offset: number) => ReadToolFileSystem.read(environment, file, "nul.txt", { offset, limit: 1 })
+
+      for (const offset of [2, -3]) {
+        expect(yield* read(offset)).toMatchObject({ content: "selected", offset: 2, truncated: true, next: 3 })
+      }
+      expect(yield* read(5).pipe(Effect.flip)).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+
+  it.live("keeps a split byte order mark in a past-end tail and strips it at a negative offset", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "marked.txt"))
+      // The first byte of the three-byte UTF-8 mark is the last byte of the first chunk.
+      yield* files.writeFileString(file, `${"x".repeat(256 * 1024 - 2)}\n\uFEFFselected`)
+      const read = (offset: number) => ReadToolFileSystem.read(environment, file, "marked.txt", { offset, limit: 1 })
+
+      expect(yield* read(3)).toMatchObject({ content: "\uFEFFselected", offset: 2, truncated: false })
+      expect(yield* read(-1)).toMatchObject({ content: "selected", offset: 2, truncated: false })
     }),
   )
 
