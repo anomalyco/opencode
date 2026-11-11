@@ -78,6 +78,10 @@ export const tabHref = (tab: Tab) =>
 export const tabKey = (tab: Tab) =>
   tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${sessionHref(tab.server, tab.sessionId)}`
 
+/** The workspace an unsent draft runs in: its selected worktree, or the project directory for Local and New worktree. */
+export const draftDirectory = (draft: Pick<DraftTab, "directory" | "worktree">) =>
+  draft.worktree && draft.worktree !== "main" && draft.worktree !== "create" ? draft.worktree : draft.directory
+
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: SessionInfo) {
   return sessionIDHasOpenTab(tabs, server, session.id)
 }
@@ -522,12 +526,16 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       reserveDraft(draftID: string) {
         const draft = actions.draft(draftID)
 
-        if (draft.sessionId) return Session.ID.make(draft.sessionId)
+        if (draft.sessionId) return draft.sessionId
         const id = Session.ID.create()
 
         setStore((tab) => tab.type === "draft" && tab.draftID === draftID, "sessionId", id)
 
         return id
+      },
+      /** Drops a draft's reserved id, so the next attempt creates a Session with a fresh one. */
+      resetDraftSession(draftID: string) {
+        setStore((tab) => tab.type === "draft" && tab.draftID === draftID, "sessionId", undefined)
       },
       /** Opens a draft tab; pass `draftID` to know it before the draft opens. */
       async newDraft(
@@ -615,7 +623,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             await memory.get<ComposerState>(key, "prompt")?.ready.promise
             await commitPromotion(() => ({ type: "complete.settled", key, attempt }))
           },
-          async rollback(worktree?: string) {
+          async rollback(worktree?: string, options?: { resetSession?: boolean }) {
             await ready
 
             if (!dispatchPromotion({ type: "rollback.start", key, attempt, worktree })) return
@@ -625,6 +633,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
               attempt,
               open: store.some((tab) => tabKey(tab) === key),
             }))
+
+            if (options?.resetSession) actions.resetDraftSession(draftID)
           },
         }
       },

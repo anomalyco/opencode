@@ -1007,6 +1007,7 @@ test("retains the draft and reuses the created workspace after session creation 
   await expect.poll(() => mock.prompts.length).toBe(1)
   expect(mock.creates).toHaveLength(2)
   expect(mock.creates[1]).toMatchObject({ location: { directory: workspace } })
+  expect(mock.creates[1]!.id).not.toBe(mock.creates[0]!.id)
   expect(mock.prompts[0]).toMatchObject({ sessionID: mock.creates[1]!.id, body: { text } })
   expect(mock.calls).toEqual(["worktree", "session", "session", "prompt"])
   await expectPath(page, sessionHref(String(mock.creates[1]!.id)))

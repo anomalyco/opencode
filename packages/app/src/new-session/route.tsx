@@ -9,7 +9,7 @@ import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { ServerProvider, useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { isServerIncompatible } from "@/runtime/server/health-machine"
-import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
+import { draftDirectory, useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import NewSession from "@/new-session/screen"
 import { ServerSignedOutPanel, ServerUnavailablePanel } from "@/session/server-unavailable-panel"
@@ -61,11 +61,7 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
   const server = useServer()
   const tabs = useTabs()
 
-  // A selected worktree is the draft's workspace; "main" and "create" start from the project directory.
-  const directory = () =>
-    props.draft.worktree && props.draft.worktree !== "main" && props.draft.worktree !== "create"
-      ? props.draft.worktree
-      : props.draft.directory
+  const directory = () => draftDirectory(props.draft)
 
   return (
     <Show

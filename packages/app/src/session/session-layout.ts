@@ -34,13 +34,9 @@ export const useSessionLayout = () => {
   const serverSDK = useServerSDK()
 
   const currentTab = createMemo(() => {
-    const current = draft()
+    if (params.id) return tabs.sessionTab(ServerConnection.key(serverSDK.server), params.id)
 
-    if (current) return current
-
-    if (!params.id) return
-
-    return tabs.sessionTab(ServerConnection.key(serverSDK.server), params.id)
+    return draft()
   })
 
   const regions = {

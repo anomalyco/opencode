@@ -261,7 +261,7 @@ export function createNewSessionComposerAdapter(props: {
               await data.project.sync().catch(() => undefined)
             }
 
-            await pending.rollback(effect.worktree?.directory)
+            await pending.rollback(effect.worktree?.directory, { resetSession: effect.resetSession })
 
             if (effect.worktree) props.mcp.remember(effect.worktree.directory, effect.worktree.mcp)
             settled.resolve(undefined)

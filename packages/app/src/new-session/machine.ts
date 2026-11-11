@@ -104,6 +104,8 @@ export type NewSessionStartEffect =
       readonly type: "tab.rollback"
       readonly attempt: number
       readonly worktree?: { directory: string; mcp: McpStates }
+      /** The Session create failed, so the draft takes a fresh id for its next attempt. */
+      readonly resetSession?: boolean
     }
   // Ends the attempt without touching the tabs, which are being removed.
   | { readonly type: "attempt.abort"; readonly attempt: number }
@@ -251,10 +253,12 @@ function rollback(state: ActiveState, toast?: NewSessionStartEffect): NewSession
   const worktree =
     state.type !== "worktree" && state.created ? { directory: state.directory, mcp: state.mcp } : undefined
 
-  return changed({ type: "idle", attempt: state.attempt }, [
-    ...(toast ? [toast] : []),
-    { type: "tab.rollback", attempt: state.attempt, worktree },
-  ])
+  const rollback: NewSessionStartEffect =
+    state.type === "session"
+      ? { type: "tab.rollback", attempt: state.attempt, worktree, resetSession: true }
+      : { type: "tab.rollback", attempt: state.attempt, worktree }
+
+  return changed({ type: "idle", attempt: state.attempt }, [...(toast ? [toast] : []), rollback])
 }
 
 function changed(

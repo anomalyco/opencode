@@ -45,7 +45,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { isServerIncompatible } from "@/runtime/server/health-machine"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { SessionRouteKey, SessionStateKey, type ServerScope } from "@/runtime/server/scope"
-import { findSessionTab, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
+import { draftDirectory, findSessionTab, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
 import { openNotificationSession } from "@/shell/notifications/notification"
 import { playSoundById } from "@/shell/notifications/sound"
 import { showToast } from "@/shell/notifications/toast"
@@ -652,13 +652,7 @@ export function createPluginAttachment(apis: HostApis) {
           get location() {
             const current = ownedTab()
 
-            if (current?.type === "draft")
-              return {
-                directory:
-                  current.worktree && current.worktree !== "main" && current.worktree !== "create"
-                    ? current.worktree
-                    : current.directory,
-              }
+            if (current?.type === "draft") return { directory: draftDirectory(current) }
 
             return target.data.session.get(id)?.location
           },

@@ -42,7 +42,7 @@ export default function NewSessionPage(props: { draftId: string }) {
     identity: { sessionID: sessionLayout.sessionID },
     workspace: { directory: () => workspaceLocation().directory },
     layout: { tabKey: sessionLayout.tabKey },
-    data: { isChild: () => false },
+    isChild: () => false,
     draft: true,
   })
 

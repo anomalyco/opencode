@@ -54,7 +54,8 @@ export function createMountedSession(session: {
   identity: Pick<SessionModel["identity"], "sessionID">
   workspace: Pick<SessionModel["workspace"], "directory">
   layout: Pick<SessionModel["layout"], "tabKey">
-  data: Pick<SessionModel["data"], "isChild">
+  /** Whether this is a subagent's child session, which has no composer. False for a draft. */
+  isChild: () => boolean
   /** An unsent draft: no server Session exists yet, and its id is reserved locally. */
   draft?: boolean
 }) {
@@ -229,12 +230,12 @@ export function createMountedSession(session: {
 
   // A subagent's session has no composer, so its draft is never sent.
   const edit = (apply: (draft: ReturnType<typeof createComposerEditorActions>) => void) => {
-    if (!session.data.isChild()) write((target) => apply(createComposerEditorActions(target.store)))
+    if (!session.isChild()) write((target) => apply(createComposerEditorActions(target.store)))
   }
 
   const composerRef: Composer = {
     text: () =>
-      session.data.isChild()
+      session.isChild()
         ? ""
         : composer
             .capture()
@@ -248,14 +249,14 @@ export function createMountedSession(session: {
     },
     setText: (value) => edit((draft) => draft.setText(value.replace(/\r\n?/g, "\n"))),
     model() {
-      const item = session.data.isChild() ? undefined : local.model.current()
+      const item = session.isChild() ? undefined : local.model.current()
 
       if (!item) return
 
       return { providerID: item.provider.id, modelID: item.id, variant: local.model.variant.current() }
     },
     setModel(model) {
-      const item = session.data.isChild()
+      const item = session.isChild()
         ? undefined
         : local.model.list().find((entry) => entry.provider.id === model.providerID && entry.id === model.modelID)
 
@@ -269,7 +270,7 @@ export function createMountedSession(session: {
       return true
     },
     setVariant(variant) {
-      if (session.data.isChild() || !local.model.current()) return false
+      if (session.isChild() || !local.model.current()) return false
 
       if (variant !== undefined && !local.model.variant.list().includes(variant)) return false
       local.model.variant.set(variant)
@@ -317,6 +318,7 @@ export function createMountedSession(session: {
     })
 
     const local = createMemo(() => !sessionInWorkspace(server.ctx.sync.data.project, info(), directory))
+    const draftLocation = session.draft ? { directory } : undefined
 
     const view: MountedSession = Object.freeze({
       key: `${server.key}\n${id}`,
@@ -329,7 +331,7 @@ export function createMountedSession(session: {
         return server.ctx.data.session.creating(id)
       },
       get location() {
-        return session.draft ? { directory } : info()?.location
+        return session.draft ? draftLocation : info()?.location
       },
       get project() {
         return project()
