@@ -2,6 +2,7 @@
 //!
 //! - P-COMP: `parity/component/E.18a-settings.tsx` renders the TS dialogs alone; here they open over the whole
 //!   TUI, so the comparison covers the dialog panel (the cells with the panel background in the fixture).
+//! - P-ORACLE: every field of `SETTINGS` against the TS table, through `parity/oracle/E.18a-settings.ts`.
 //! - `TestApp`: changes, the palette's settings rows, the debug dialog, and the bar.
 //! - P-FILE: settings writes go to a `cli.json` in a temporary home, and the TS `Config` service reads them
 //!   back through `parity/oracle/F.5-config.ts` (skipped without bun and `node_modules`).
@@ -52,6 +53,51 @@ fn assert_dialog(app: &TestApp, name: &str, title: &str) {
         std::fs::write(&path, actual.to_json()).unwrap();
     }
     assert!(comparison.is_equal(), "P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}");
+}
+
+// The P-COMP fixtures show only the first screen and two filters; this compares every field of every row with
+// the TS table itself, read live through `parity/oracle/E.18a-settings.ts`.
+#[test]
+fn settings_table_matches_the_typescript_table() {
+    if support::ts_root().is_none() {
+        return;
+    }
+    let parity = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity");
+    let output =
+        std::process::Command::new("bun").arg("oracle/E.18a-settings.ts").current_dir(&parity).output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let expected: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let actual: Vec<serde_json::Value> = settings::SETTINGS
+        .iter()
+        .zip(expected.as_array().unwrap().iter().chain(std::iter::repeat(&serde_json::Value::Null)))
+        .map(|(setting, expected)| {
+            let range = setting.range.map(|range| {
+                let formatted: Vec<_> = expected["range"]["formatted"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|pair| json!([pair[0], (range.format)(pair[0].as_f64().unwrap())]))
+                    .collect();
+                json!({ "step": range.step, "min": range.min, "max": range.max, "formatted": formatted })
+            });
+            json!({
+                "title": setting.title,
+                "category": setting.category,
+                "path": setting.path,
+                "description": setting.description,
+                "default": setting.default.value(),
+                "values": setting.values.iter().map(|value| value.value()).collect::<Vec<_>>(),
+                "labels": setting.labels,
+                "range": range,
+                "keywords": setting.keywords,
+            })
+        })
+        .collect();
+    let expected = expected.as_array().unwrap();
+    for (actual, expected) in actual.iter().zip(expected) {
+        assert!(opencode_local::jsonc::same(actual, expected), "Rust {actual}\nTypeScript {expected}");
+    }
+    assert_eq!(actual.len(), expected.len(), "SETTINGS has {} rows, TypeScript {}", actual.len(), expected.len());
 }
 
 #[test]
