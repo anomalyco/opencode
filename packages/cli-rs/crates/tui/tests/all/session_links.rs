@@ -161,6 +161,37 @@ fn a_wrapped_title_opens_its_session_from_either_row() {
     h.wait("the click to open the session", || opened(&h, &known));
 }
 
+// Expected: as in TS, another plugin's dialog Markdown shows the raw ID, unlinked and not looked up; the same panel
+// from `/btw` links it.
+#[test]
+fn only_the_btw_answer_links_sessions_among_plugin_markdown() {
+    let known = id("known");
+    let (h, log) = open(100, 30, "Done.", Info::default());
+    h.wait_for("Done.");
+    let panel = |key: &str| {
+        opencode_plugin::abi::Dialog::Panel(opencode_plugin::abi::Panel {
+            key: key.to_owned(),
+            size: opencode_plugin::abi::PanelSize::Large,
+            title: vec![opencode_plugin::abi::Span::new("Panel")],
+            subtitle: None,
+            body: opencode_plugin::abi::Node::Markdown { text: format!("See {known} here") },
+            actions: Vec::new(),
+            binds: Vec::new(),
+            bleed: true,
+            centered: true,
+        })
+    };
+    opencode_plugin::Host::dialog(&*h.tui, "test.other", panel("other"));
+    h.wait_for(&format!("See {known} here"));
+    h.app.advance(std::time::Duration::from_millis(50));
+    assert_eq!(linked(&h), Vec::<String>::new());
+    assert_eq!(lookups(&log, &known), 0, "{:?}", support::lines(&log));
+
+    opencode_plugin::Host::dialog(&*h.tui, opencode_tui::plugins::btw::ID, panel("answer"));
+    h.wait_for("See @Fix the flaky reconnect test on Windows here");
+    assert_eq!(linked(&h), ["@Fix the flaky reconnect test on Windows"]);
+}
+
 // Expected: a click on a link in the `/btw` answer closes the dialog and opens the session.
 #[test]
 fn a_link_in_the_btw_answer_closes_it_and_opens_the_session() {
