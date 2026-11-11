@@ -320,7 +320,12 @@ impl ThemeState {
             Err(message) => {
                 self.error = Some(ThemeError { name, message });
                 self.active = "opencode".to_owned();
-                self.current = self.catalog.load("opencode", self.mode).expect("the built-in opencode theme loads");
+                // A custom `opencode` replaces the built-in one; when it is the one that fails, the built-in one is
+                // the fallback (TS throws, deviation U01).
+                self.current = self.catalog.load("opencode", self.mode).unwrap_or_else(|message| {
+                    log::warn!("custom theme opencode: {message}; using the built-in opencode theme");
+                    Catalog::default().load("opencode", self.mode).expect("the built-in opencode theme loads")
+                });
             }
         }
     }
@@ -443,6 +448,22 @@ mod tests {
         assert_eq!(state.selected(), "opencode");
         assert!(!state.has("notes"), "values that are not themes are dropped");
         assert!(state.take_error().is_none());
+    }
+
+    // Expected (O-89, deviation U01): a custom theme named `opencode` replaces the built-in one, and a broken one is
+    // the fallback that fails. TS throws there (`context/theme.tsx:298-308`); this falls back to the built-in
+    // `opencode` and logs why, for the broken theme itself and for another broken theme that falls back to it.
+    #[test]
+    fn a_broken_custom_opencode_falls_back_to_the_built_in_opencode() {
+        let builtin = ThemeState::new(options());
+        let broken = serde_json::json!({ "base": {} });
+        for name in ["opencode", "mine", "system"] {
+            let mut state = ThemeState::new(ThemeStateOptions { name: Some(name.to_owned()), ..options() });
+            let mine = serde_json::json!({ "theme": { "primary": "missing" } });
+            state.custom_themes(IndexMap::from([("opencode".to_owned(), broken.clone()), ("mine".to_owned(), mine)]));
+            assert_eq!(**state.theme(), **builtin.theme(), "{name}");
+            assert_eq!(state.selected(), "opencode", "{name}");
+        }
     }
 
     #[test]
