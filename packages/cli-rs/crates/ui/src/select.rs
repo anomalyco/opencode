@@ -366,6 +366,8 @@ struct Inner<T> {
     footer_key: RefCell<Option<FooterKey>>,
     /// A selection scroll waiting for the list's new height (`scrollAfterLayout`).
     scroll_after_layout: Cell<bool>,
+    /// The options' search strings, prepared once rather than on every keystroke.
+    prepared: RefCell<fuzzy::Cache>,
 }
 
 struct Row<T> {
@@ -476,6 +478,7 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
         tail: RefCell::new(Vec::new()),
         footer_key: RefCell::new(None),
         scroll_after_layout: Cell::new(false),
+        prepared: RefCell::default(),
     });
     // The dialog owns the select; handlers hold weak references.
     let owner = inner.clone();
@@ -663,12 +666,13 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let filtered: Vec<SelectOption<T>> = match &props.search {
             Some(search) => search(&filter).into_iter().filter(|x| !x.disabled).collect(),
             None => {
-                let options: Vec<SelectOption<T>> = state.options.iter().filter(|x| !x.disabled).cloned().collect();
+                let options: Vec<&SelectOption<T>> = state.options.iter().filter(|x| !x.disabled).collect();
                 let needle = filter.to_lowercase();
                 if props.skip_filter || !props.render_filter || needle.is_empty() {
-                    options
+                    options.into_iter().cloned().collect()
                 } else {
-                    fuzzy::go(
+                    fuzzy::go_cached(
+                        &mut self.0.prepared.borrow_mut(),
                         &needle,
                         &options,
                         |option| {
