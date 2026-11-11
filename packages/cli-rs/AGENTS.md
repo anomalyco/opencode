@@ -53,3 +53,6 @@ with `cargo test -p opencode-tui --test all <module>::`, the unit tests with `--
   alone sets basis 0, which lays out differently.
 - Generated files are committed; regenerate with `bun run --cwd packages/cli-rs generate`, which runs
   every `script/gen/*.ts`. Parity fixtures regenerate with `bun run --cwd packages/cli-rs fixtures`.
+  `bun run --cwd packages/cli-rs check:drift` reruns the generators and fixture oracles and fails on any
+  change. `OPENCODE_RS_REQUIRE_TS=1` makes the live TypeScript interop tests fail instead of skip
+  without bun or `node_modules`.
