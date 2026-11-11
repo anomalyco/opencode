@@ -145,7 +145,7 @@ export const docsIntro = {
   metaTitle: "OpenCode | Install OpenCode and connect a provider",
   description:
     "Get started with OpenCode. Install the CLI, desktop app, web or Docker version, connect a model provider, and find your way around the rest of the docs.",
-  lead: "OpenCode is an open source coding agent. It's available as a desktop app, a mobile app, a terminal interface and an SDK.",
+  lead: "OpenCode is an open source coding agent. It's available as a desktop app, a terminal interface, a mobile app and an SDK.",
   cli: [
     [
       "The npm package uses a postinstall script to select the native ",

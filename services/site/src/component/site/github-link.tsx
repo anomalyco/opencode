@@ -1,19 +1,18 @@
 import "./github-link.css"
+import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
-import { useLanguage } from "~/context/language"
 import { GitHubMark } from "./icons"
-import { siteLinks } from "./links"
 
 /**
  * The repo, as a GitHub mark: fixed in the top-right corner beside the sidebar (and at every width on
- * bare pages), in the top bar on small screens (site.tsx), and in the 404 arcade's phone bar.
+ * bare pages), in the top bar on small screens (site.tsx), and in the 404 arcade's phone bar. It needs
+ * no router, so the docs render it too.
  */
 export function GitHubLink(props: { owner: "corner" | "topbar" }) {
   const i18n = useI18n()
-  const language = useLanguage()
   return (
     <a
-      href={siteLinks(i18n.t, language.route).github.href}
+      href={config.github.repoUrl}
       target="_blank"
       rel="noopener"
       data-component="github-link"

@@ -57,6 +57,8 @@ export const VISIT_BUDGET = 2048
  * waiting in the inbox, and the blocking call the current job waits on. Ids count up in program order.
  */
 export class HostCalls {
+  /** Names this run's host calls (`<runId>:<callId>`). */
+  runId = ""
   queued: Array<HostCall> = []
   readonly running = new Map<number, HostCall>()
   readonly inbox: Array<Delivery> = []
@@ -65,8 +67,8 @@ export class HostCalls {
   blocked: HostCall | undefined = undefined
   /** A completed blocking call's outcome, which continues the job on the stack before anything else runs. */
   input: { readonly call: HostCall; readonly completion: Completion } | undefined = undefined
-  /** The synchronous extension call the program is in the middle of: see `Engine.activeExtension`. */
-  extension: { readonly path: string } | undefined = undefined
+  /** The synchronous extension call the program is in the middle of: see `Vm.activeExtension`. */
+  extension: { readonly key: string; readonly path: string } | undefined = undefined
   extensionResume: ((completion: Completion) => HostResult) | undefined = undefined
 
   constructor(
@@ -94,7 +96,9 @@ export class HostCalls {
 
   /** Queues blocking extension work: the job stops until it completes, then continues with `resume`. */
   blockExtension(call: ExtensionRequest, resume: (completion: Completion) => HostResult): typeof BLOCK {
-    return this.block({ kind: "extension", call }, "extension", resume)
+    this.block({ kind: "extension", call }, "extension", resume)
+    this.extension = { key: this.blocked!.key, path: call.label }
+    return BLOCK
   }
 
   private block(
@@ -116,7 +120,7 @@ export class HostCalls {
     site: AstNode | undefined,
   ): HostCall {
     const id = this.nextID++
-    const call = new HostCall(id, request, label, blocking, result, resolving, site)
+    const call = new HostCall(id, `${this.runId}:${id}`, request, label, blocking, result, resolving, site)
     this.queued.push(call)
     return call
   }
@@ -145,6 +149,7 @@ export class HostCalls {
     if (call === undefined) return
     this.running.delete(id)
     // Its outcome is all that is left: the host function, its arguments, and what it returned are dropped.
+    call.data = undefined
     const request = call.request
     if (request.kind === "extension") {
       request.call.invocation = undefined
@@ -268,9 +273,9 @@ export const callExtension = (
     args: slots[1] as ReadonlyArray<unknown>,
     label,
     invocation: slots[3] as ExtensionInvocation | undefined,
+    extension: slots[4] as string | undefined,
   }
   if (call.host instanceof Lost) throw lostError(`The function ${label}`)
-  hosts.extension = { path: label }
   const run = (): HostResult => {
     const started = startExtensionCall(ctx, call.host as Function, call.args, call, site)
     if (started instanceof PromiseObj) {

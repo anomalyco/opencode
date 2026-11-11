@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
@@ -25,23 +26,57 @@ const context = {
 
 const allowAll = permissionService({ assert: () => Effect.void })
 
-const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
+const vmFlag = (codemode_vm: boolean): Flag.Interface => {
+  const resolve: Flag.Interface["resolve"] = (entries) =>
+    Flag.resolve({
+      entries,
+      channel: codemode_vm ? "dev" : "latest",
+      overrides: `${codemode_vm ? "" : "-"}codemode_vm`,
+    })
+  const all = Effect.sync(() => resolve([]))
+  return {
+    resolve,
+    all,
+    enabled: (key) => Effect.map(all, (flags) => flags[key].enabled),
+  }
+}
 
-const vmConfig = (codemode_vm: boolean) =>
-  Config.testLayer([
-    new Document({
-      type: "document",
-      info: new ConfigInfo({ experimental: new ConfigExperimental.Info({ codemode_vm }) }),
-    }),
+const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll, flag = vmFlag(false)) =>
+  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, flag)
+
+test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
+  const input = Schema.Struct({ text: Schema.NonEmptyString })
+  const send = {
+    name: "send",
+    description: "Send text",
+    input,
+    output: Schema.String,
+    execute: ({ text }) => Effect.succeed({ output: text }),
+  } satisfies Info<typeof input, typeof Schema.String>
+  const tools = new Map<string, Info>([
+    ["echo", { ...send, name: "echo" }],
+    ["send", { ...send, freeform: { type: "text" } }],
   ])
+  const codeMode = createCodeMode(tools)
+  expect(codeMode.freeform).toEqual({ type: "text" })
+  expect(CodeModeTool.catalog({ tools }).tools.map((tool) => "signature" in tool && tool.signature)).toEqual([
+    "tools.echo({\n  /** @minLength 1 */\n  text: string,\n}): Promise<string>",
+    "tools.send(/** @minLength 1 */ text: string): Promise<string>",
+  ])
+  const calls = await Effect.runPromise(
+    codeMode.execute({ code: 'return [await tools.send("first"), await tools.send({text: "second"})]' }, context),
+  )
+  expect(JSON.parse(calls.output.output)).toEqual(["first", "second"])
+  expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
+})
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
       "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+      "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
       "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-      "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+      "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
       "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
@@ -131,12 +166,15 @@ describe.each([
   ["experimental.codemode_vm off (legacy)", false],
   ["experimental.codemode_vm on (vm)", true],
 ] as const)("%s", (_, vm) => {
-  const provideFlag = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(vmConfig(vm)))
-  const runFlagged = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(provideFlag(effect))
+  const flag = vmFlag(vm)
+  const createMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
+    createCodeMode(tools, permission, flag)
+  const provideFlag = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect
+  const runFlagged = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect)
 
   test("execute rejects filesystem fetches", async () => {
     const result = await runFlagged(
-      createCodeMode(new Map()).execute({ code: 'return await fetch("file:///blocked.txt")' }, context),
+      createMode(new Map()).execute({ code: 'return await fetch("file:///blocked.txt")' }, context),
     )
 
     expect(result.output.error).toBe(true)
@@ -164,7 +202,7 @@ describe.each([
       const asked: Array<Permission.AssertInput> = []
       const url = `${server.url.origin}/allowed`
       const result = await runFlagged(
-        createCodeMode(
+        createMode(
           new Map(),
           permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) }),
         ).execute({ code: `return await (await fetch("${url}", { method: "POST" })).text()` }, context),
@@ -193,7 +231,7 @@ describe.each([
           Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
       })
       const result = await runFlagged(
-        createCodeMode(new Map(), denied).execute(
+        createMode(new Map(), denied).execute(
           { code: `try { await fetch("${server.url.origin}/redirect") } catch (e) { return e.message }` },
           context,
         ),
@@ -207,7 +245,7 @@ describe.each([
       hits.length = 0
       const asked: Array<ReadonlyArray<string>> = []
       const result = await runFlagged(
-        createCodeMode(
+        createMode(
           new Map(),
           permissionService({ assert: (input) => Effect.sync(() => void asked.push(input.resources)) }),
         ).execute(
@@ -230,7 +268,7 @@ describe.each([
         assert: () => Effect.fail(new Permission.CorrectedError({ feedback: "use the docs site instead" })),
       })
       const result = await runFlagged(
-        createCodeMode(new Map(), corrected).execute(
+        createMode(new Map(), corrected).execute(
           { code: `try { await fetch("${url}") } catch (e) { return e.message }` },
           context,
         ),
@@ -248,7 +286,7 @@ describe.each([
           Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
       })
       const result = await runFlagged(
-        createCodeMode(new Map(), denied).execute(
+        createMode(new Map(), denied).execute(
           { code: `const [denied] = await Promise.allSettled([fetch("${url}")]); return denied.status` },
           context,
         ),
@@ -276,7 +314,7 @@ describe.each([
       options: { namespace: "slack.admin" },
       execute: () => Effect.succeed({ output: "created" }),
     }
-    const codeMode = createCodeMode(
+    const codeMode = createMode(
       new Map([
         ["slack_admin", callable],
         ["slack_admin_create", child],
@@ -292,7 +330,7 @@ describe.each([
         { tool: "slack.admin.create", status: "completed" },
       ],
     })
-    expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
+    expect(result.content).toEqual([{ type: "text", text: '["admin","created"]' }])
   })
 
   test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {
@@ -317,10 +355,15 @@ describe.each([
       execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
     }
     const inventory = { tools: new Map([["echo", echo]]) }
-    const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
+    const codeMode = CodeModeTool.create(
+      inventory,
+      (_, tool, input, context) => execute(tool, input, context),
+      allowAll,
+      flag,
+    )
     const run = (id: string) => {
       const progress: Array<Tool.Metadata> = []
-      return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
+      return CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll, flag)
         .execute(
           { code: `return await tools.echo({ value: "${id}" })` },
           { ...context, id: Tool.CallID.make(id), progress: (update) => Effect.sync(() => progress.push(update)) },
@@ -344,13 +387,13 @@ describe.each([
     expect(conversions).toBe(1)
 
     await runFlagged(
-      createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
+      createMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
     )
     expect(conversions).toBe(2)
   })
 
   const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<void>) =>
-    createCodeMode(
+    createMode(
       new Map<string, Info>([
         [
           "step",
@@ -452,28 +495,133 @@ test("runtime cache is keyed per engine when experimental.codemode_vm toggles", 
     },
     execute: (input) => Effect.succeed({ content: (input as { value: string }).value }),
   }
+  const document = (codemode_vm: boolean) =>
+    new Document({
+      type: "document",
+      info: new ConfigInfo({ experimental: new ConfigExperimental.Info({ codemode_vm }) }),
+    })
   const inventory = { tools: new Map([["echo", echo]]) }
-  const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
 
-  // Legacy engine (flag off) builds and reuses the legacy runtime
   await Effect.runPromise(
-    codeMode.execute({ code: 'return await tools.echo({ value: "a" })' }, context).pipe(Effect.provide(vmConfig(false))),
-  )
-  await Effect.runPromise(
-    codeMode.execute({ code: 'return await tools.echo({ value: "b" })' }, context).pipe(Effect.provide(vmConfig(false))),
-  )
-  expect(conversions).toBe(1)
+    Effect.gen(function* () {
+      const config = yield* Config.Test
+      const flag = yield* Flag.Service
+      const codeMode = CodeModeTool.create(
+        inventory,
+        (_, tool, input, context) => execute(tool, input, context),
+        allowAll,
+        flag,
+      )
 
-  // VM engine (flag on) builds and reuses its own runtime instance for the same inventory
-  await Effect.runPromise(
-    codeMode.execute({ code: 'return await tools.echo({ value: "c" })' }, context).pipe(Effect.provide(vmConfig(true))),
-  )
-  await Effect.runPromise(
-    codeMode.execute({ code: 'return await tools.echo({ value: "d" })' }, context).pipe(Effect.provide(vmConfig(true))),
-  )
-  expect(conversions).toBe(2)
+      // Legacy engine (flag off) builds and reuses the legacy runtime
+      yield* codeMode.execute({ code: 'return await tools.echo({ value: "a" })' }, context)
+      yield* codeMode.execute({ code: 'return await tools.echo({ value: "b" })' }, context)
+      expect(conversions).toBe(1)
 
-  // Reading the catalog reuses the cached runtime without rebuilding
-  expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
-  expect(conversions).toBe(2)
+      // VM engine (flag on) builds and reuses its own runtime instance for the same inventory
+      yield* config.setEntries([document(true)])
+      yield* codeMode.execute({ code: 'return await tools.echo({ value: "c" })' }, context)
+      yield* codeMode.execute({ code: 'return await tools.echo({ value: "d" })' }, context)
+      expect(conversions).toBe(2)
+
+      // Reading the catalog reuses the cached runtime without rebuilding
+      expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
+      expect(conversions).toBe(2)
+    }).pipe(Effect.provide(Flag.testLayer([document(false)]))),
+  )
+})
+
+describe("codemode_vm follows the flag registry", () => {
+  const document = (experimental: ConstructorParameters<typeof ConfigExperimental.Info>[0]) =>
+    new Document({
+      type: "document",
+      info: new ConfigInfo({ experimental: new ConfigExperimental.Info(experimental) }),
+    })
+
+  // A fresh inventory prepares its tools once per engine, so a second conversion after a legacy run means the VM ran.
+  const engine = async (input: {
+    readonly channel: string
+    readonly overrides?: string
+    readonly entries?: Array<Document>
+  }) => {
+    let conversions = 0
+    const echo: Info = {
+      name: "echo",
+      description: "Echo a value",
+      input: {
+        "~standard": {
+          version: 1,
+          vendor: "test",
+          validate: (value: unknown) => ({ value }),
+          jsonSchema: {
+            input: () => {
+              conversions++
+              return { type: "object", properties: { value: { type: "string" } }, required: ["value"] }
+            },
+            output: () => ({}),
+          },
+        },
+      },
+      execute: (input) => Effect.succeed({ content: (input as { value: string }).value }),
+    }
+    const inventory = { tools: new Map([["echo", echo]]) }
+    await Effect.runPromise(
+      CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll, vmFlag(false))
+        .execute({ code: 'return await tools.echo({ value: "a" })' }, context),
+    )
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const flag = yield* Flag.Service
+        return yield* CodeModeTool.create(
+          inventory,
+          (_, tool, input, context) => execute(tool, input, context),
+          allowAll,
+          flag,
+        ).execute({ code: 'return await tools.echo({ value: "a" })' }, context)
+      }).pipe(
+        Effect.provide(
+          Flag.testLayer(input.entries ?? [], {
+            app: { channel: input.channel },
+            overrides: input.overrides,
+          }),
+        ),
+      ),
+    )
+    expect(result.output.output).toBe("a")
+    return conversions === 2 ? "vm" : "legacy"
+  }
+
+  test("is on by default in local and dev builds and off in every other channel", async () => {
+    const table = await Promise.all(
+      ["local", "dev", "latest", "beta", "pr", "my-branch", "unknown"].map(async (channel) => [
+        channel,
+        await engine({ channel }),
+      ]),
+    )
+    expect(Object.fromEntries(table)).toEqual({
+      local: "vm",
+      dev: "vm",
+      latest: "legacy",
+      beta: "legacy",
+      pr: "legacy",
+      "my-branch": "legacy",
+      unknown: "legacy",
+    })
+  })
+
+  test("a release build opts in with OPENCODE_FLAGS, config, all or all_flags", async () => {
+    expect(await engine({ channel: "latest", overrides: "codemode_vm" })).toBe("vm")
+    expect(await engine({ channel: "latest", entries: [document({ codemode_vm: true })] })).toBe("vm")
+    expect(await engine({ channel: "latest", overrides: "all" })).toBe("vm")
+    expect(await engine({ channel: "latest", entries: [document({ all_flags: true })] })).toBe("vm")
+  })
+
+  test("a dev build opts out with OPENCODE_FLAGS or config", async () => {
+    expect(await engine({ channel: "dev", overrides: "-codemode_vm" })).toBe("legacy")
+    expect(await engine({ channel: "dev", overrides: "all,-codemode_vm" })).toBe("legacy")
+    expect(await engine({ channel: "dev", entries: [document({ codemode_vm: false })] })).toBe("legacy")
+    expect(await engine({ channel: "dev", entries: [document({ all_flags: true, codemode_vm: false })] })).toBe(
+      "legacy",
+    )
+  })
 })

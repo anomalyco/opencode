@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
+import { CodeMode } from "../../src/index.js"
 import { createBuiltins } from "../../src/vm/runtime/intrinsics.js"
 import { Interpreter } from "../../src/vm/runtime/interpreter.js"
 import { type Snapshot, SnapshotError } from "../../src/vm/snapshot/snapshot.js"
@@ -239,6 +241,25 @@ describe("snapshots", () => {
     const code = compileSource(parse(snapshot.header.sources[0]!.code))[0]!
     regsOf(snapshot)[code.finallies[code.finallyOffsets[0]!]!] = 50
     expect(refusal(snapshot)).toContain("finally tag")
+  })
+})
+
+describe("suspend", () => {
+  test("a sync program suspended mid-loop resumes where it stopped, in a new runtime", async () => {
+    const runtime = CodeMode.make({ tools: {}, engine: "vm" })
+    const code = `
+      const seen = []
+      let n = 0
+      for (let i = 0; i < 400_000; i++) { n = (n + i) % 1_000_003; if (i % 100_000 === 0) seen.push(i) }
+      return [n, seen]`
+    const expected = await Effect.runPromise(runtime.execute(code))
+    const program = runtime.program(code)
+    const run = Effect.runPromise(program.run())
+    await new Promise((done) => setTimeout(done, 5))
+    const suspended = await Effect.runPromise(program.suspend())
+    if (suspended.ok !== "suspended") throw new Error("the run ended before it could be suspended")
+    expect(await run).toBe(suspended)
+    expect(await Effect.runPromise(runtime.resume(suspended.state).run())).toEqual(expected)
   })
 })
 

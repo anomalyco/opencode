@@ -25,32 +25,34 @@ export const content = {
     desktop: {
       title: "OpenCode | 适用于 macOS、Windows 和 Linux 的桌面应用",
       description:
-        "同时运行多个 OpenCode 代理，每个都在独立的标签页中。以 diff 审查每处更改，在任意一行添加评论，并在内置浏览器中预览结果。",
+        "并行运行任意多个 OpenCode 代理，在旁边的浏览器中查看每处更改，并在任意设备上继续。适用于 macOS、Windows 和 Linux。",
       intro:
         "同时运行多个代理，每个会话都有独立的标签页。以 diff 审查每处更改，在任意一行添加评论，并在内置浏览器中检查结果。支持 macOS、Windows 和 Linux。",
-      features: {
-        "built-in-terminal": { title: "内置终端", body: "在会话旁的终端标签页中运行命令。" },
-        "ssh-servers": { title: "SSH 服务器", body: "通过 SSH 连接到另一台机器，处理其中的项目。" },
-        extensions: { title: "扩展", body: "在同一个菜单中管理 MCP 服务器、插件和技能。" },
-        wsl: { title: "WSL", body: "在 Windows 上，可以在 WSL 2 发行版中运行会话，而不是原生运行。" },
-        "office-files": { title: "Office 文件", body: "在会话旁打开 Word、Excel 和 PowerPoint 文件。" },
-        "keyboard-shortcuts": { title: "键盘快捷键", body: "每个操作都有快捷键，而且都可以自定义。" },
-        "updates-itself": { title: "自动更新", body: "新版本会在应用内下载并安装。" },
-        "all-your-projects": { title: "所有项目", body: "在一个窗口中切换项目及其会话。" },
-      },
       showcase: {
-        "pair-your-phone": { title: "配对手机", body: "在 OpenCode Mobile 中扫描二维码，用 iPhone 引导会话。" },
-        "sessions-in-tabs": { title: "标签页中的会话", body: "让多个代理同时工作，每个会话都有自己的标签页。" },
-        "review-and-comment": { title: "审查和评论", body: "以 diff 阅读每处更改，在某一行添加评论并发回。" },
-        "see-it-in-the-browser": { title: "在浏览器中查看", body: "代理的成果一出来，就会在会话旁的浏览器中打开。" },
+        "parallel-agents": {
+          title: "并行代理",
+          body: "想启动多少个代理都可以，让它们全部并行工作。哪个完成了，就切换过去查看。",
+        },
+        "see-it-in-the-browser": {
+          title: "在浏览器中查看",
+          body: "你的应用会在代理旁边的浏览器中打开，你和代理都能看到每处更改落地。",
+        },
+        "on-every-device": {
+          title: "在每台设备上",
+          body: "在你的所有设备上启动代理，并在桌面应用、终端或手机上继续。",
+        },
+        "extend-it": {
+          title: "扩展它",
+          body: "连接你的工具和服务，让代理能处理任何事情。或者让 OpenCode 为自己构建插件，并在侧边栏中拥有自己的界面。",
+        },
       },
     },
     mobile: {
       title: "OpenCode | 在手机上引导编程代理的移动应用",
       description:
-        "在手机上启动、引导和批准 OpenCode 会话。与代理对话，审查它的更改，批准它需要的操作，而它始终在您的电脑上运行。",
+        "在手机上启动并引导 OpenCode 会话。代理在您的电脑上运行时，您可以与它对话。",
       intro:
-        "无论身在何处，都能在手机上启动、引导和批准会话。呼叫会话并与代理对话，审查它的更改，批准它需要的操作，一切都由您自己电脑上运行的 OpenCode 完成。",
+        "无论身在何处，都能在手机上启动并引导会话。给会话打电话与代理交谈，或打开任意会话从上次中断处继续，一切都在您自己电脑上的 OpenCode 中运行。",
       features: {
         "notify-when-done": { title: "完成时通知", body: "您启动的会话完成后，会收到一段简短总结。" },
         "pair-from-anywhere": { title: "随处配对", body: "使用 opencode pair --remote 从任意网络连接。" },
@@ -64,7 +66,6 @@ export const content = {
       showcase: {
         results: { title: "结果", body: "您交代的工作完成后，通话会告诉您改了什么。" },
         voice: { title: "语音", body: "呼叫会话，说出您的需求。代理会出声回答。" },
-        approvals: { title: "批准", body: "代理请求权限时，在手机上审查更改并批准。" },
         sessions: { title: "会话", body: "打开任意会话查看进度，然后从上次中断的地方继续。" },
         steer: { title: "引导", body: "发送后续消息，在会话中途调整方向。" },
       },
@@ -186,14 +187,18 @@ export const content = {
           title: "任意 MCP 客户端",
           body: "OpenCode、Claude Code、Cursor、Codex、Zed 等众多客户端。",
         },
-        "named-sessions": { title: "命名会话", body: "每个会话都保留自己的标签页，重启后依然存在。" },
+        "all-your-logins": {
+          title: "沿用你的所有登录",
+          body: "智能体直接使用你已登录的网站。无需密钥，无需设置。",
+        },
         allowlists: { title: "允许列表", body: "将会话的标签页限制在您指定的网站内。" },
       },
       install:
-        "只需运行一次。它会把 browse MCP 服务器添加到您选择的代理中，并从 Chrome 网上应用店配对扩展。需要 Node.js 22.19 或更高版本。",
+        "请先安装 [Chrome 扩展]，它会引导你完成其余步骤。如需直接安装 CLI（通常不需要），可使用以下任一命令。",
     },
   },
   apps: {
+    browse: { category: "代理浏览器控制", body: "让你的代理使用你真实的浏览器，保留登录状态和标签页。" },
     hex: { category: "语音听写", body: "适用于任意应用的设备端语音听写。" },
     opentunnel: { category: "本地隧道", body: "为本地应用提供公开的 HTTPS URL。" },
     opentui: { category: "库", body: "用于构建终端用户界面的库。" },
@@ -210,7 +215,7 @@ export const content = {
     },
     subscriptions: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } },
     steps: {
-      download: { title: "下载", line: "桌面端、移动端或终端。" },
+      download: { title: "下载", line: "桌面端、终端或移动端。" },
       "use-free-models": { title: "使用免费模型", line: "OpenCode 内置一组免费模型，无需账户。" },
       "add-more-models": {
         title: "添加更多模型",
@@ -385,7 +390,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "开源编程代理，提供桌面、移动和终端应用以及 SDK。采用 MIT 许可，GitHub 星标超过 220,000。",
+          body: "开源编程代理，提供桌面、终端和移动应用以及 SDK。采用 MIT 许可，GitHub 星标超过 220,000。",
         },
         sst: {
           name: "SST",
@@ -411,9 +416,10 @@ export const content = {
     },
     about: {
       title: "关于 OpenCode",
+      body: "OpenCode 及其产品的介绍，有长短两个版本，可直接复制。",
       boilerplate: {
-        long: "OpenCode 是一个开源编程代理。它提供桌面应用、移动应用、终端界面和 SDK，并支持任意提供商的模型，包括 Claude、GPT 和 Gemini。OpenCode 采用 MIT 许可，由 Anomaly 打造。它在 GitHub 上拥有超过 220,000 个星标和 1,000 多位贡献者，每月有超过 2200 万开发者使用。",
-        short: "OpenCode 是 Anomaly 推出的开源编程代理，提供桌面、移动和终端应用以及 SDK。",
+        long: "OpenCode 是一个开源编程代理。它提供桌面应用、终端界面、移动应用和 SDK，并支持任意提供商的模型，包括 Claude、GPT 和 Gemini。OpenCode 采用 MIT 许可，由 Anomaly 打造。它在 GitHub 上拥有超过 220,000 个星标和 1,000 多位贡献者，每月有超过 2200 万开发者使用。",
+        short: "OpenCode 是 Anomaly 推出的开源编程代理，提供桌面、终端和移动应用以及 SDK。",
       },
       products: {
         "opencode-console": {
@@ -588,13 +594,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "集成",
-      items: {
-        github: { body: "在 GitHub Actions 中使用 OpenCode。" },
-        gitlab: { label: "GitLab", body: "在 GitLab CI/CD 或 Duo 中使用 OpenCode。" },
       },
     },
   },

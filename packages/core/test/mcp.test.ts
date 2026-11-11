@@ -30,6 +30,8 @@ import { ID, type Payload } from "@opencode/schema/event"
 import { Form } from "@opencode/core/form"
 import { Integration } from "@opencode/core/integration"
 import { Environment } from "@opencode/core/environment/index"
+import { App } from "@opencode/core/app"
+import { Flag } from "@opencode/core/flag"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -68,14 +70,12 @@ import {
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
-import { Image } from "@opencode/core/image"
 import { Global } from "@opencode/util/global"
 import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
-import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -86,6 +86,7 @@ import {
   registerToolPlugin,
   toolDefinitions,
   toolIdentity,
+  toolNodeReplacements,
   waitForTool,
 } from "./lib/tool"
 
@@ -118,12 +119,17 @@ function resourceServer(
      * malformed optional field of each kind, then one with every optional field valid.
      */
     malformedTool?: boolean
-    /** Listed after the default tools. A call's `structured` argument comes back as structured content. */
+    /**
+     * Listed after the default tools. A call's `structured` argument comes back as structured content and
+     * its `text` argument as text content.
+     */
     tools?: ListToolsResult["tools"]
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
     /** Lists a `roots` tool that asks for the client's roots (2026-07-28 only) and returns them. */
     roots?: boolean
+    /** Advertises MCP Events; answer its requests through `respond`. */
+    events?: boolean
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
@@ -166,6 +172,7 @@ function resourceServer(
               tools: { listChanged: input.listChanged },
               prompts: {},
               ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
+              ...(input.events ? { extensions: { "io.modelcontextprotocol/events": {} } } : {}),
             },
             instructions: "Use the resources tools.",
           },
@@ -269,9 +276,9 @@ function resourceServer(
               progressToken: request.params._meta?.progressToken,
             })
             const structured = request.params.arguments?.structured
-            return Promise.resolve(
-              structured === undefined ? { content: [] } : { content: [], structuredContent: structured },
-            )
+            const text = request.params.arguments?.text
+            const content = typeof text === "string" ? [{ type: "text" as const, text }] : []
+            return Promise.resolve(structured === undefined ? { content } : { content, structuredContent: structured })
           })
         }
         protocol.setRequestHandler("prompts/list", () => Promise.resolve({ prompts: [{ name: "greet" }] }))
@@ -366,6 +373,8 @@ function resourceMcpLayer(
     name?: string
     credentials?: Partial<Credential.Interface>
     bus?: Layer.Layer<Bus.Service>
+    /** `OPENCODE_FLAGS`, such as `-mcp_events`. */
+    flags?: string
   },
 ) {
   const directory = AbsolutePath.make(overrides?.directory ?? import.meta.dir)
@@ -384,6 +393,7 @@ function resourceMcpLayer(
   ).pipe(
     Layer.provideMerge(Mcp.layer(options)),
     Layer.provideMerge(Form.layer),
+    Layer.provideMerge(Flag.layer),
     Layer.provide(
       Layer.mergeAll(
         overrides?.pool ?? poolLayer,
@@ -412,6 +422,8 @@ function resourceMcpLayer(
               }),
             ]),
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
+        App.layer(),
+        Layer.succeed(Flag.Overrides, overrides?.flags),
         overrides?.bus ??
           Layer.mock(Bus.Service, {
             subscribe: overrides?.subscribe ?? (() => Stream.never),
@@ -617,10 +629,9 @@ const events = Layer.mock(Bus.Service, { subscribe: () => Stream.never })
 const outputData = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-mcp-output-"))
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node]), [
+    ...toolNodeReplacements(permissions),
     Mcp.node.replace(mcp),
-    Permission.node.replace(permissions),
     Bus.node.replace(events),
-    Image.node.replace(imagePassthrough),
     Global.node.replace(Global.layerWith({ data: outputData })),
   ]),
 )
@@ -1318,7 +1329,7 @@ describe.each([
     )
   })
 
-  test("validates structured content against the called tool's output schema", async () => {
+  test("returns results that miss or break the called tool's output schema", async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -1326,33 +1337,40 @@ describe.each([
             modern: era === "modern",
             resources: false,
             tools: [
+              // Zoom's meeting_delete declares an empty object and returns nothing for the REST API's 204.
+              { name: "delete", inputSchema: { type: "object" }, outputSchema: { type: "object", properties: {} } },
               {
-                name: "typed",
+                name: "collaborators",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+                outputSchema: {
+                  type: "object",
+                  properties: { role: { type: "string", enum: ["owner", "editor"] } },
+                  required: ["role"],
+                },
               },
             ],
           })
           const connection = yield* connect(
-            "typed",
+            "lenient",
             new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol }),
             import.meta.dir,
           )
           yield* connection.tools()
 
-          expect(yield* connection.callTool({ name: "typed", args: { structured: { value: "ok" } } })).toMatchObject({
-            structured: { value: "ok" },
+          expect(yield* connection.callTool({ name: "delete", args: { text: "Meeting deleted." } })).toEqual({
+            isError: false,
+            structured: undefined,
+            content: [{ type: "text", text: "Meeting deleted." }],
+          })
+          expect(yield* connection.callTool({ name: "delete" })).toEqual({
+            isError: false,
+            structured: undefined,
+            content: [],
           })
           expect(
-            (yield* connection.callTool({ name: "typed", args: { structured: { value: 42 } } }).pipe(Effect.flip))
-              .message,
-          ).toContain("Structured content does not match the tool's output schema")
-          expect((yield* connection.callTool({ name: "typed" }).pipe(Effect.flip)).message).toContain(
-            "has an output schema but did not return structured content",
-          )
-          expect(yield* connection.callTool({ name: "echo", args: { structured: { value: 42 } } })).toMatchObject({
-            structured: { value: 42 },
-          })
+            yield* connection.callTool({ name: "collaborators", args: { structured: { role: "commenter" } } }),
+          ).toMatchObject({ isError: false, structured: { role: "commenter" } })
+          expect(server.state.toolCalls.map((call) => call.name)).toEqual(["delete", "delete", "collaborators"])
         }),
       ),
     )
@@ -2300,6 +2318,7 @@ const shutdownIt = testEffect(
       Form.node,
       Environment.node,
       Location.node,
+      Flag.node,
       McpPool.node,
     ]),
     [
@@ -2662,6 +2681,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
       Effect.provide(
         Layer.fresh(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+            ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 awaitStartup: () => Effect.void,
@@ -2673,8 +2693,6 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
                   } satisfies Mcp.ToolResult),
               }),
             ),
-            Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
-            Image.node.replace(imagePassthrough),
           ]),
         ),
       ),
@@ -2714,6 +2732,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+        ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             awaitStartup: () => Effect.void,
@@ -2724,8 +2743,6 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
               }),
           }),
         ),
-        Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
-        Image.node.replace(imagePassthrough),
       ]),
     ),
   )
@@ -2749,10 +2766,9 @@ const gatedServer = Effect.gen(function* () {
 // The real Mcp layer behind the tool registry; the bus never delivers, so only flush can register tools.
 const startupRegistry = (url: string) =>
   AppNodeBuilder.build(LayerNode.group([Mcp.node, Tool.node, McpTool.node]), [
+    ...toolNodeReplacements(permissions),
     Mcp.node.replace(resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, codemode: false }))),
-    Permission.node.replace(permissions),
     Bus.node.replace(events),
-    Image.node.replace(imagePassthrough),
     Global.node.replace(Global.layerWith({ data: outputData })),
   ])
 
@@ -3932,6 +3948,72 @@ describe("MCP pool", () => {
       expect(Array.from(collected).toSorted()).toEqual(["forms", "mcp"])
       expect(yield* status(second.mcp)).toEqual({ status: "connected" })
       expect(server.state.toolLists).toBe(1)
+    }),
+  )
+})
+
+describe("MCP events", () => {
+  // Answers `events/stream` with one `active` notification, then closes the stream.
+  const eventServer = (input: { events?: boolean } = {}) => {
+    const streams: Array<{ name: string | null; params: unknown }> = []
+    return resourceServer({
+      modern: true,
+      events: input.events,
+      respond: async (request) => {
+        if (request.method !== "POST") return undefined
+        const body: unknown = await request.clone().json()
+        if (!isRecord(body) || body.method !== "events/stream") return undefined
+        streams.push({ name: request.headers.get("mcp-name"), params: body.params })
+        const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
+        const frame = (message: Record<string, unknown>) =>
+          `data: ${JSON.stringify({ jsonrpc: "2.0", ...message })}\n\n`
+        return new Response(
+          frame({ method: "notifications/events/active", params: { cursor: "c1", truncated: false, _meta: meta } }) +
+            frame({ id: body.id, result: { resultType: "complete", _meta: meta } }),
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+    }).pipe(Effect.map((server) => ({ ...server, streams })))
+  }
+  const layer = (url: string, flags: string) =>
+    resourceMcpLayer(
+      new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
+      undefined,
+      undefined,
+      {
+        flags,
+      },
+    )
+
+  testEffect(Layer.empty).live("streams a server's events over Streamable HTTP, naming the event in Mcp-Name", () =>
+    Effect.gen(function* () {
+      const server = yield* eventServer({ events: true })
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* settled(mcp)).toEqual({ status: "connected" })
+        const events = yield* mcp.events("resources")
+        if (!events) throw new Error("expected MCP events")
+        const messages = yield* Stream.runCollect(events.stream({ name: "job.finished", arguments: { job: "j1" } }))
+        expect(messages).toEqual([{ type: "active", cursor: "c1", truncated: false }])
+        expect(server.streams).toEqual([
+          { name: "job.finished", params: expect.objectContaining({ name: "job.finished", arguments: { job: "j1" } }) },
+        ])
+      }).pipe(Effect.provide(layer(server.url, "mcp_events")))
+    }),
+  )
+
+  testEffect(Layer.empty).live("offers no events with the mcp_events flag off, or from a server without them", () =>
+    Effect.gen(function* () {
+      const offering = yield* eventServer({ events: true })
+      const plain = yield* eventServer()
+      const events = (url: string, flags: string) =>
+        Effect.gen(function* () {
+          const mcp = yield* Mcp.Service
+          expect(yield* settled(mcp)).toEqual({ status: "connected" })
+          return yield* mcp.events("resources")
+        }).pipe(Effect.provide(layer(url, flags)))
+      expect(yield* events(offering.url, "-mcp_events")).toBeUndefined()
+      expect(yield* events(plain.url, "mcp_events")).toBeUndefined()
     }),
   )
 })

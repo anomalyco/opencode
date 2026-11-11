@@ -65,11 +65,11 @@ export const copyVariants = {
       "Free models included or connect any model from any provider,\nincluding Claude, GPT, Gemini and more.",
       // From the coding-agents review (positioningRec), adjusted to the site copy rules: no "no
       // account", no plan names, "OpenCode" rather than "It", products in the site's order.
-      "Start with free models or bring any of 200+ providers.\nOpenCode runs on your machine, and you can control it from the desktop, your phone, the terminal or your own code.",
-      "OpenCode is an open source coding agent. Use the free models or any of 200+ providers,\nand steer your sessions from the desktop, your phone or the terminal.",
+      "Start with free models or bring any of 200+ providers.\nOpenCode runs on your machine, and you can control it from the desktop, the terminal, your phone or your own code.",
+      "OpenCode is an open source coding agent. Use the free models or any of 200+ providers,\nand steer your sessions from the desktop, the terminal or your phone.",
       "Start a session in the desktop app, approve it from your phone and pick it up in the terminal.\nUse any model, including the free models.",
       "Use the plan you already pay for, any of 200+ providers or the free models.\nOpenCode is open source and runs on your machine.",
-      "Open source, any model, and sessions that stay on your computer.\nControl OpenCode from the desktop, your phone, the terminal or the SDK.",
+      "Open source, any model, and sessions that stay on your computer.\nControl OpenCode from the desktop, the terminal, your phone or the SDK.",
     ],
   },
   // The button above the product carousel that copies an install prompt. Short labels; its
@@ -97,12 +97,12 @@ export const copyVariants = {
     label: "What is OpenCode? intro",
     lines: 3,
     options: [
-      "OpenCode is an open source coding agent that works with any model. Run it as a desktop app, from your phone, in the terminal or inside your own tools with the SDK.",
-      "OpenCode is an open source coding agent. Use it in the desktop app, on your phone, in your terminal, or from your own code with the SDK.",
-      "OpenCode writes, edits and explains code with the model of your choice. It's open source, and runs on your desktop, your phone, your terminal and your own code.",
-      "One open source coding agent for every place you work: a desktop app, a phone app, a terminal interface and an SDK.",
+      "OpenCode is an open source coding agent that works with any model. Run it as a desktop app, in the terminal, from your phone or inside your own tools with the SDK.",
+      "OpenCode is an open source coding agent. Use it in the desktop app, in your terminal, on your phone, or from your own code with the SDK.",
+      "OpenCode writes, edits and explains code with the model of your choice. It's open source, and runs on your desktop, your terminal, your phone and your own code.",
+      "One open source coding agent for every place you work: a desktop app, a terminal interface, a phone app and an SDK.",
       // From the coding-agents review (positioningRec), adjusted to the site copy rules.
-      "OpenCode is an open source coding agent. It runs on your computer, and the desktop app, phone, terminal and SDK all connect to the same sessions.",
+      "OpenCode is an open source coding agent. It runs on your computer, and the desktop app, terminal, phone and SDK all connect to the same sessions.",
     ],
   },
   "home.logos.label": {
@@ -118,7 +118,7 @@ export const copyVariants = {
       "Used by developers at",
     ],
   },
-  // Home sections and FAQ answers without copy of their own in Design mode until the coding-agents
+  // Home sections without copy of their own in Design mode until the coding-agents
   // review (positioningRec). One line each: editing reads the whole text, links included. Links in
   // an option come from homeContent's copyLinks phrases.
   "home.feature.anyModel.body": {
@@ -130,7 +130,7 @@ export const copyVariants = {
   "home.feature.anyDevice.body": {
     label: "Any device feature",
     lines: 1,
-    options: ["Desktop, phone, terminal and web, all connected to one OpenCode server"],
+    options: ["Desktop, terminal, phone and web, all connected to one OpenCode server"],
   },
   "home.tools.lead": {
     label: "Bring your own tools intro",
@@ -144,32 +144,6 @@ export const copyVariants = {
     lines: 1,
     options: [
       `OpenCode is MIT licensed. ${config.stats.contributors} contributors have made ${config.stats.commits}+ commits, and ${config.stats.monthlyUsers} developers use it every month.`,
-    ],
-  },
-  "home.faq.a3": {
-    label: "FAQ: extra subscriptions",
-    lines: 1,
-    options: [
-      "No. OpenCode includes free models that need no account. You can also connect any of 200+ providers, sign in with ChatGPT or Copilot, or run local models.",
-    ],
-  },
-  "home.faq.a4": {
-    label: "FAQ: existing subscriptions",
-    lines: 1,
-    options: ["Yes. Sign in with ChatGPT (Plus or Pro) or GitHub Copilot, including GitHub Enterprise."],
-  },
-  "home.faq.a6": {
-    label: "FAQ: cost",
-    lines: 1,
-    options: [
-      "OpenCode is free and MIT licensed. The free models cost nothing. With another provider, you pay that provider. OpenCode Go is from $10/month, and OpenCode Models are pay as you go.",
-    ],
-  },
-  "home.faq.a7": {
-    label: "FAQ: data and privacy",
-    lines: 1,
-    options: [
-      "OpenCode runs on your computer and keeps your sessions there. Your code goes only to the model provider you choose. If you choose a model hosted by OpenCode, its training and retention terms are listed in the docs.",
     ],
   },
   // The home page's "New" bar (announcement.ts): each option keeps its own link.
@@ -206,7 +180,7 @@ export const copyVariants = {
     // "Normal" is also the page's own label now; it keeps its place so saved choices still match.
     options: ["All systems normal", "All good", "Online", "Normal", "Up", "Operational"],
   },
-  // Product page intros; the page's own text (product-data.ts) is the first option.
+  // Product page intros; the page's own text (product-details.ts) is the first option.
   "product.desktop.intro": {
     label: "Desktop intro",
     lines: 1,
@@ -351,10 +325,10 @@ export const copyVariants = {
     lines: 1,
     options: [
       "One agent, every surface. Start a session on your desktop, steer it from your phone, pick it up in the terminal or drive it from your own code.",
-      "OpenCode runs on desktop, mobile and the terminal, and from your own code. Every app shares the same sessions, so you start on one and carry on in another.",
-      "Desktop, mobile and terminal on one OpenCode server, and the SDK inside your own code. A session started in one app is already there in the others.",
+      "OpenCode runs on desktop, the terminal and mobile, and from your own code. Every app shares the same sessions, so you start on one and carry on in another.",
+      "Desktop, terminal and mobile on one OpenCode server, and the SDK inside your own code. A session started in one app is already there in the others.",
       "Use OpenCode wherever you work. The apps share one server and the same sessions: start at your desk, approve from your phone, finish in the terminal.",
-      "The same agent on desktop, mobile, the terminal and the SDK, with the same sessions across the apps. Switch surfaces without losing your place.",
+      "The same agent on desktop, the terminal, mobile and the SDK, with the same sessions across the apps. Switch surfaces without losing your place.",
     ],
   },
   // The products after the carousel's four, on /product and their own pages.

@@ -236,6 +236,82 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
+test("Alt+Enter queues a follow-up first without steering, regardless of the follow-up preference", async ({
+  page,
+}) => {
+  const mock = createQueueMock(["Follow-up A", "Follow-up B"])
+
+  const view = await openQueue(page, mock, "steer")
+
+  await view.input.fill("Follow-up C")
+  await view.input.press("Alt+Enter")
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
+    "Follow-up C",
+    "Follow-up A",
+    "Follow-up B",
+  ])
+  await expect
+    .poll(() => mock.rows.map((row) => [row.payload.text, row.delivery]))
+    .toEqual([
+      ["Follow-up C", "queue"],
+      ["Follow-up A", "queue"],
+      ["Follow-up B", "queue"],
+    ])
+  await expect(view.input).toHaveText("")
+  expect(mock.changes.every((change) => change.action === "cancel")).toBe(true)
+  await view.input.fill("Another follow-up")
+  await view.composer.locator('[data-action="composer-alternate-delivery"]').hover()
+  await expect(page.getByRole("tooltip")).toContainText("Queue first")
+})
+
+for (const behavior of ["queue", "steer"] as const) {
+  test(`an empty Mod+Enter steers only the first queued prompt (${behavior} preference)`, async ({ page }) => {
+    const mock = createQueueMock(["Follow-up A", "Follow-up B", "Follow-up C"])
+
+    const view = await openQueue(page, mock, behavior)
+
+    const steer = await holdRoute(page, new RegExp(`/api/session/${sessionID}/inbox/inb_seed_1(\\?|$)`), {
+      method: "PATCH",
+    })
+
+    await view.input.press("Enter")
+    await view.input.press("Alt+Enter")
+    await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
+      "Follow-up A",
+      "Follow-up B",
+      "Follow-up C",
+    ])
+    expect(mock.changes).toEqual([])
+
+    await view.input.press("ControlOrMeta+Enter")
+    await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(["Follow-up B", "Follow-up C"])
+    await steer.arrived
+    // A second press while A is still being steered must not jump to B.
+    await view.input.press("ControlOrMeta+Enter")
+    steer.release()
+    await expect.poll(() => mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "steer" }])
+    await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(["Follow-up B", "Follow-up C"])
+    expect(mock.prompts).toEqual([])
+  })
+}
+
+for (const mode of ["parked", "shell"] as const) {
+  test(`empty Mod+Enter leaves the queue alone when ${mode}`, async ({ page }) => {
+    const mock = createQueueMock(["Keep queued"])
+
+    const view = await openQueue(page, mock, "queue", undefined, mode === "parked" ? "idle" : "running")
+
+    if (mode === "shell") {
+      await view.input.pressSequentially("!")
+      await expect(view.composer.locator('[data-action="composer-exit-shell"]')).toBeVisible()
+    }
+
+    await view.input.press("ControlOrMeta+Enter")
+    await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(["Keep queued"])
+    expect(mock.changes).toEqual([])
+  })
+}
+
 test("a blank Enter leaves the running session alone while Stop still interrupts it, as in the TUI", async ({
   page,
 }) => {

@@ -1,15 +1,15 @@
 import { Link, Title, Meta } from "@solidjs/meta"
 import { Router, useCurrentMatches, useLocation } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
-import { Show, Suspense } from "solid-js"
+import { type JSX, Show, Suspense } from "solid-js"
 import { isServer } from "solid-js/web"
 import { Favicon } from "@opencode/ui/favicon"
 import { Font } from "@opencode/ui/font"
 import "./style/ibm-plex-mono.dev.css"
+import "./style/fonts.css"
 import "./app.css"
 import { LanguageProvider } from "~/context/language"
 import { I18nProvider, useI18n } from "~/context/i18n"
-import { preloadStrings } from "~/i18n/preload"
 import { config } from "~/config"
 import { ogImage } from "~/lib/og"
 import { strip } from "~/lib/language"
@@ -17,18 +17,17 @@ import { HeadMetaProvider, LiveMeta } from "~/component/head-meta"
 import { viewportContent } from "~/lib/viewport"
 // Before the router, so its popstate listener comes first.
 import "~/component/site/popstate"
-import { monoFontFaces } from "~/component/site/mono-fonts"
 
 // Pages that set their own og:image.
 const shareImagePages = [
   "/",
   "/desktop",
-  "/mobile",
   "/terminal",
+  "/mobile",
   "/sdk",
   "/ide",
   "/mini",
-  "/extensions/browse",
+  "/product/browse",
   "/product",
   "/docs",
   "/changelog",
@@ -48,7 +47,6 @@ function AppMeta() {
   const matches = useCurrentMatches()
   // The 404 route and its /dev/404 previews (the dev server shows one for bad URLs).
   const notFound = () => matches().some((match) => match.route.pattern.includes("404"))
-  preloadStrings()
   return (
     <>
       <Title>opencode</Title>
@@ -91,21 +89,23 @@ export default function App() {
       // The browser's own restore lands right after popstate, on the page being left, and shows as
       // a jump at the start of the hero's shrink back into its card.
       scrollRestoration
-      root={(props) => (
-        <LanguageProvider>
-          <I18nProvider>
-            <HeadMetaProvider>
-              <AppMeta />
-              {/* OpenTUI Mono for every page, with or without the site shell (--font-mono and the
-                  token stack name it). A plain style element, which hydration keeps. */}
-              <style innerHTML={monoFontFaces} />
-              <Suspense>{props.children}</Suspense>
-            </HeadMetaProvider>
-          </I18nProvider>
-        </LanguageProvider>
-      )}
+      root={AppRoot}
     >
       <FileRoutes />
     </Router>
+  )
+}
+
+/** Every page's providers and default head tags, here and on the static pages (src/static/render.tsx). */
+export function AppRoot(props: { children?: JSX.Element }) {
+  return (
+    <LanguageProvider>
+      <I18nProvider>
+        <HeadMetaProvider>
+          <AppMeta />
+          <Suspense>{props.children}</Suspense>
+        </HeadMetaProvider>
+      </I18nProvider>
+    </LanguageProvider>
   )
 }

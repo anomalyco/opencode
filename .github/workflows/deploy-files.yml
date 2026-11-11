@@ -1,5 +1,17 @@
 name: deploy-files
 
+# Deploys the files Worker (services/files).
+#
+# - build runs repository code (typecheck and `wrangler deploy --dry-run`) with
+#   no environment and no secrets, and uploads only the bundled index.js with a
+#   SHA256SUMS whose digest it reports.
+# - deploy runs in the dev|production environment and mints a short-lived
+#   Cloudflare token from the token issuer. It checks out only .github/release/,
+#   verifies the artifact against that digest, installs the wrangler CLI pinned
+#   in .github/release/wrangler, and runs only .github/release/deploy-files.sh.
+#   The Worker's name, route, R2 bucket and vars are the complete pinned
+#   wrangler.json in .github/release/targets/files/<stage>/; nothing in the
+#   artifact can name another destination.
 on:
   push:
     branches:
@@ -15,12 +27,16 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  files-build:
     if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: ${{ github.ref_name }}
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-bun
 
@@ -28,8 +44,74 @@ jobs:
         working-directory: services/files
         run: bun run typecheck:tsc
 
-      - name: Deploy
+      - name: Build
         working-directory: services/files
-        run: bun run deploy --env ${{ github.ref_name == 'production' && 'production' || 'dev' }}
+        run: |
+          artifact="$RUNNER_TEMP/files-artifact"
+          rm -rf "$artifact"
+          ./node_modules/.bin/wrangler deploy --dry-run \
+            --env ${{ github.ref_name == 'production' && 'production' || 'dev' }} \
+            --outdir "$artifact"
+          # wrangler writes a README next to the bundle; the deploy only needs index.js.
+          rm -f "$artifact/README.md" "$artifact/index.js.map"
+
+      - id: upload
+        uses: ./.github/release/upload
+        with:
+          name: files-${{ github.ref_name }}
+          path: ${{ runner.temp }}/files-artifact
+          retention-days: 7
+          include-hidden-files: true
+
+  files-deploy:
+    needs: files-build
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the deploy scripts
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Install the pinned wrangler CLI
+        working-directory: .github/release/wrangler
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: files-${{ github.ref_name }}
+          require-digests: true
+          digests: files-${{ github.ref_name }}=${{ needs.files-build.outputs.digest }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-${{ github.ref_name }}
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      # A 15-minute token for this stage, minted by the token issuer (anomalyco/secrets) from the role above.
+      # It is a step output, so only the Deploy step gets it.
+      - name: Cloudflare token
+        id: cloudflare-token
+        run: bash .github/release/cloudflare-token.sh
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
+
+      - name: Deploy
+        env:
+          STAGE: ${{ github.ref_name }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
+        run: bash .github/release/deploy-files.sh "$STAGE" "$RUNNER_TEMP/in/files-$STAGE"

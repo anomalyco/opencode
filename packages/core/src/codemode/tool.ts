@@ -11,8 +11,7 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Option, Ref, Schema, Semaphore } from "effect"
-import { Config } from "../config.js"
+import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
 import { Flag } from "../flag.js"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
@@ -73,27 +72,12 @@ export type Inventory = {
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
 }
 
-/** Reads `experimental.codemode_vm` (or `OPENCODE_FLAGS`) on every call; without one, it is off. */
-const vmEnabled = Effect.gen(function* () {
-  const overrides = (yield* Flag.Overrides) ?? ""
-  for (const item of overrides
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .toReversed()) {
-    if (item === "codemode_vm" || item === "codemodeVm") return true
-    if (item === "-codemode_vm" || item === "-codemodeVm") return false
-  }
-  const config = yield* Effect.serviceOption(Config.Service)
-  if (Option.isNone(config)) return false
-  return Config.latest(yield* config.value.entries(), "experimental")?.codemode_vm === true
-})
-
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+  "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
   "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+  "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
   "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
@@ -103,11 +87,13 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  flag: Flag.Interface,
 ) => {
   return {
     name: "execute",
     description,
     input: CodeMode.Input,
+    freeform: { type: "text" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
@@ -136,7 +122,7 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const result = yield* runtime(inventory, (yield* vmEnabled) ? "vm" : "legacy")
+        const result = yield* runtime(inventory, (yield* flag.enabled("codemode_vm")) ? "vm" : "legacy")
           .execute(code)
           .pipe(
             Effect.provideService(Run, {
@@ -148,6 +134,8 @@ export const create = (
                     ...context,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
+                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
+                    cancel: undefined,
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
@@ -249,7 +237,10 @@ export const catalog = (inventory: Inventory) => {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
       description: tool.description,
-      signature: tool.signature,
+      // Rendered only for the tools the catalog shows.
+      get signature() {
+        return tool.signature
+      },
       pinned: pinned.has(tool.path),
     }
   return {
@@ -309,8 +300,9 @@ export const check = (
   bindings: Readonly<Record<string, CodeMode.DataValue>>,
   limits: CodeMode.ExecutionLimits,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
+  flag: Flag.Interface,
 ) =>
-  vmEnabled.pipe(
+  flag.enabled("codemode_vm").pipe(
     Effect.flatMap((vm) =>
       CodeMode.make({
         tools: inventoryTools(inventory),
@@ -334,6 +326,7 @@ function inventoryTools(inventory: Inventory) {
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
+      freeform: registration.freeform !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
@@ -444,9 +437,10 @@ function formatResult(result: CodeMode.Result) {
   return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
+// Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
 function formatValue(value: CodeMode.DataValue) {
   if (typeof value === "string") return value
-  return JSON.stringify(value, null, 2) ?? String(value)
+  return JSON.stringify(value) ?? String(value)
 }
 
 function outputFiles(content: ReadonlyArray<Content>): Array<typeof ExecuteFile.Type> {

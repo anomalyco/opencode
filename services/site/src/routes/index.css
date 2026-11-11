@@ -41,12 +41,6 @@
     }
   }
 
-  /* The FAQ always spans two card columns, whatever the section width setting, so its plus signs
-     end on the third column's right edge. */
-  &[data-site] [data-component="block"]:has([data-component="faq"]) [data-slot="body"] {
-    max-width: var(--two-cards);
-  }
-
   /* "What is OpenCode?": ten features in five rows of two, one feature per card column, under the
      two-column lead. */
   &[data-site] [data-component="block"]:has([data-component="features"]) [data-slot="body"] {
@@ -957,6 +951,11 @@
         height: 1lh;
       }
     }
+
+    /* A reel keeps its cells once it has spun (SlotDigit); only a spinning reel shows them. */
+    [data-slot="reel"]:not([data-spinning]) [data-slot="strip"] > span + span {
+      display: none;
+    }
   }
 
   [data-component="odometer"] {
@@ -1195,7 +1194,7 @@
 }
 
 /* No divider above, whatever the section spacer is (the second attribute outranks the spacer
-   rules). The gap below the FAQ is half the "space" spacer's (David, 5 Nov: 184px to 92px, and
+   rules). The gap above the Console is half the "space" spacer's (David, 5 Nov: 184px to 92px, and
    96px to 48px on phones). The "section" option keeps the spacer. */
 [data-page="home"][data-site] [data-component="block"][data-console]:not([data-console="section"]) {
   margin-top: calc(var(--block-space) + 1.25rem);
@@ -1797,6 +1796,7 @@
       width: 1.25rem;
       height: 1.25rem;
       background: currentColor;
+      mask-image: var(--logo);
       mask-size: contain;
       mask-repeat: no-repeat;
       mask-position: center;
@@ -1807,9 +1807,16 @@
       height: calc(var(--height) * var(--logo-size));
       translate: 0 calc(var(--shift) * var(--logo-size));
       background: currentColor;
+      mask-image: var(--logo);
       mask-size: contain;
       mask-repeat: no-repeat;
       mask-position: center;
+    }
+
+    /* Until the grid is near the screen (data-near, ToolGrid), its logos stay empty masks, so their
+       SVGs don't load with the page. */
+    &:not([data-near]) :is([data-slot="icon"], [data-slot="wordmark"]) {
+      mask-image: linear-gradient(transparent 0 0);
     }
 
     /* The typed name stays as the tile's accessible text. */

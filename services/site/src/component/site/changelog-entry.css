@@ -71,7 +71,8 @@
     }
   }
 
-  [data-slot="subhead"] {
+  /* Outranks the contents rail's margin for headings (on-this-page.css), which the shell brings to every page. */
+  [data-slot="subhead"][id] {
     scroll-margin-top: var(--content-top);
   }
 
@@ -100,14 +101,22 @@
   /* Settings › Changelog title › mono: the earlier mono titles, headings and labels. */
   [data-title="mono"]
     &
-    :is([data-slot="subhead"], [data-slot="group-label"], [data-slot="area"], [data-slot="show-more"]) {
+    :is(
+      [data-slot="subhead"],
+      [data-slot="group-label"],
+      [data-slot="area"],
+      [data-slot="show-more"],
+      [data-slot="all-highlights"]
+    ) {
     font-family: var(--font-mono);
     font-size: var(--mono-size);
     font-weight: 400;
     line-height: 1.3;
   }
 
-  [data-title="mono"] & :is([data-slot="area"], [data-slot="show-more"], [data-slot="group-label"]) {
+  [data-title="mono"]
+    &
+    :is([data-slot="area"], [data-slot="show-more"], [data-slot="all-highlights"], [data-slot="group-label"]) {
     font-size: var(--fs-meta);
     line-height: 1.55;
   }
@@ -390,8 +399,19 @@
       rotate: 0deg;
     }
 
-    > ul {
+    > ul,
+    > [data-slot="show-more"] {
       margin-top: 0.875rem;
+    }
+
+    /* A deferred list (NoteGroup) shows its link to the entry's page only if loading it takes a while. */
+    > [data-slot="show-more"] {
+      display: inline-block;
+      margin-inline-start: 0;
+    }
+
+    &[aria-busy] > [data-slot="show-more"] {
+      animation: changelog-loading 1s step-end;
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -484,9 +504,17 @@
     }
   }
 
+  /* Under a filtered entry's highlights, a link to the release's page for the ones the filter left out. */
+  [data-slot="all-highlights"] {
+    margin-top: -1.25rem;
+  }
+
   [data-slot="show-more"] {
-    align-self: flex-start;
     margin-inline-start: 7.5rem;
+  }
+
+  :is([data-slot="show-more"], [data-slot="all-highlights"]) {
+    align-self: flex-start;
     font-size: var(--fs-meta);
     color: var(--text-weak);
     text-decoration: none;
@@ -561,6 +589,11 @@
       margin-inline-start: 0;
       padding-block: 0.75rem;
       margin-block: -0.75rem;
+    }
+
+    [data-slot="all-highlights"] {
+      padding-block: 0.75rem;
+      margin-block: -1.75rem -0.75rem;
     }
 
     [data-slot="meta"] :is(a, [data-slot="copy-link"]) {
@@ -909,6 +942,12 @@
     &[data-title="mono"] [data-slot="title"] {
       font-size: 1.1875rem;
     }
+  }
+}
+
+@keyframes changelog-loading {
+  from {
+    visibility: hidden;
   }
 }
 

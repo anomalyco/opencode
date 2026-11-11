@@ -346,7 +346,6 @@ export const dict = {
   "session.new.project.search": "Cari projek",
   "session.new.project.add": "Tambah projek",
   "session.new.workspace.runIn": "Jalankan sesi dalam",
-  "session.new.workspace.triggerLocal": "Setempat",
   "session.new.workspace.local": "Repositori setempat",
   "session.new.git.none": "Tiada Git",
   "session.header.open.finder": "Finder",

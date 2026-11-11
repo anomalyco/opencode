@@ -474,7 +474,6 @@ export const dict = {
   "session.new.project.search": "Etsi projekteja",
   "session.new.project.add": "Lisää projekti",
   "session.new.workspace.runIn": "Suorita istunto kohteessa",
-  "session.new.workspace.triggerLocal": "Paikallinen",
   "session.new.workspace.local": "Paikallinen säilö",
   "session.new.git.none": "Ei Gitiä",
   "session.header.open.finder": "Finder",

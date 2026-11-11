@@ -3,14 +3,12 @@ import "./index.css"
 import "~/component/site/hero-title.css"
 import { rollsByCharacter, titleCells } from "~/component/site/hero-title"
 import { Title, Meta } from "@solidjs/meta"
-import { createAsync } from "@solidjs/router"
 import {
   createEffect,
   createMemo,
   createSignal,
   createUniqueId,
   For,
-  Index,
   lazy,
   on,
   onCleanup,
@@ -20,11 +18,11 @@ import {
   Suspense,
   Switch,
 } from "solid-js"
-import { Faq } from "~/component/faq"
 import { ConsoleField } from "~/component/site/console-field"
 import { ChevronRight, ExternalArrow } from "~/component/site/icons"
 import { LogoWall } from "~/component/site/logo-wall"
-import { createWash, revealMotion, washStartTime, washStep } from "~/component/site/reveal"
+import { revealMotion, washStartTime, washStep } from "~/component/site/reveal"
+import { createWash } from "~/component/site/use-wash"
 import { OpenSourceFork } from "~/component/site/open-source-fork"
 import { OpenSourceProof } from "~/component/site/open-source-proof"
 import { ConsoleWidget } from "~/component/site/console-widget"
@@ -35,6 +33,7 @@ import {
   ProductCarouselSkeleton,
   useDevicePlatform,
 } from "~/component/site/products"
+import ProductsArrows from "~/component/site/products-arrows"
 import { ProviderLogos } from "~/component/site/provider-logos"
 import { PhoneFeatures } from "~/component/site/phone-features"
 import { byos } from "~/lib/byos"
@@ -49,7 +48,7 @@ import { isMobile } from "~/lib/platform"
 import { LocaleLinks } from "~/component/locale-links"
 import { ShareMeta } from "~/component/share-meta"
 import { ogImage } from "~/lib/og"
-import { faqData, JsonLd, organizationData, softwareData, websiteData } from "~/component/structured-data"
+import { JsonLd, organizationData, softwareData, websiteData } from "~/component/structured-data"
 import { Rich } from "~/component/site/rich-text"
 import { homeOrderDefaultCss, homeOrderScript, homeOrderStyleId, useHomeOrder } from "~/component/site/home-order"
 import { designCopy, designEditing } from "~/component/site/design-copy"
@@ -64,13 +63,21 @@ import { useLanguage } from "~/context/language"
 import { homeContent, linkPhrases } from "~/lib/home-content"
 import { tag } from "~/lib/language"
 import { repoStats, type RepoStats } from "~/lib/github"
+import { pageData } from "~/lib/page-data"
 import { inlineKey } from "~/lib/direction"
 import { copyOnClick } from "~/lib/clipboard"
+import { spinReel } from "~/component/site/slot-stat"
 
+// Settings › Hero text and Stats pick these in development; production shows the static title and
+// the slot stats, so the rolling chunk isn't built.
+const HeroTitle = import.meta.env.DEV
+  ? lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.HeroTitle })))
+  : () => undefined
+const RollingStat = import.meta.env.DEV
+  ? lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.RollingStat })))
+  : () => undefined
 // Only rendered inside the settings panel, so it loads with it.
 // Settings rows are a development tool (component/site/settings-panel.tsx), left out of production.
-const HeroTitle = lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.HeroTitle })))
-const RollingStat = lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.RollingStat })))
 const PageSettings = import.meta.env.DEV ? lazy(() => import("~/component/site/page-settings")) : () => undefined
 
 export default function Home() {
@@ -80,7 +87,7 @@ export default function Home() {
   useHomeOrder()
   const [statsVisible, setStatsVisible] = createSignal(false)
   // Live repo numbers (lib/github.ts), streamed in under the config's numbers.
-  const repo = createAsync(() => repoStats())
+  const repo = pageData(() => repoStats())
 
   const heroVariant = () => siteSettings.hero
   // Console layout "block" is the whole section, so it sets the panel option and the name on the
@@ -100,11 +107,11 @@ export default function Home() {
   const subtitleParts = () => designCopy("home.hero.subtitle", content().hero.subtitle.join("\n")).split("\n")
 
   // The open source numbers start as they approach the window (a fifth of a window early), so they
-  // are already spinning when they come into view; the avatars' wash follows once the wall itself is
-  // in view, never before the numbers. Already on screen at load, they start 300ms after the page's
-  // code runs. With reduced motion the numbers simply show. The stats render twice when the live
-  // numbers stream in after the page (first with the config's numbers), so a second one joins a
-  // start already set.
+  // are already spinning when they come into view; the avatars' wash follows once the wall itself
+  // is in view, never before the numbers (on a static page, src/client/islands/home.ts). Already on
+  // screen at load, they start 300ms after the page's code runs. With reduced motion the numbers
+  // simply show. The stats render twice when the live numbers stream in after the page (first with
+  // the config's numbers), so a second one joins a start already set.
   const [openSourceStart, setOpenSourceStart] = createSignal<number>()
   const observeStats = (element: HTMLDListElement) => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return setStatsVisible(true)
@@ -217,7 +224,6 @@ export default function Home() {
           operatingSystem: "macOS, Windows, Linux",
         })}
       />
-      <JsonLd data={faqData(content().faq.items)} />
 
       {/* The default section order from the server; a saved one (Design mode, development only)
           replaces it before the sections paint. */}
@@ -227,7 +233,8 @@ export default function Home() {
           card width): here, ahead of the hero, as the carousel's own copy of these rules only arrives
           with the carousel, and the hero would otherwise resize once it has painted. */}
       <style>{carouselCss()}</style>
-      <Announcement />
+      {/* Production keeps the announcement off (Settings › Announcement), so only development renders it. */}
+      {import.meta.env.DEV && <Announcement />}
       <section
         data-component="hero"
         data-section="hero"
@@ -265,11 +272,9 @@ export default function Home() {
         </Show>
       </section>
 
-      {/* The carousel's frame until the carousel itself has streamed in (products.tsx). */}
-      <ProductCarouselSkeleton />
-      {/* Before first paint: where the carousel's cards start on the page, so on phones a card runs
-          down to the bottom of the small viewport (products.css) and never past it. Again on resize. */}
-      <script innerHTML={cardTopScript} />
+      {/* The carousel's frame until the carousel itself has streamed in (products.tsx), on the
+          development server: production renders the page in one piece (src/static/render.tsx). */}
+      {import.meta.env.DEV && <ProductCarouselSkeleton />}
 
       <Show when={siteSettings.logoWall !== "off"}>
         <Show when={siteSettings.logoLayout === "section"} fallback={logoWall()}>
@@ -298,7 +303,13 @@ export default function Home() {
             <InstallRow />
           </Show>
         }
+        // A mouse wheel can't scroll the cards sideways, so a fine pointer gets arrows.
+        arrows={<ProductsArrows track="products-track" />}
       />
+      {/* Before first paint: where the carousel's cards (or its skeleton's) start on the page, so on
+          phones a card runs down to the bottom of the small viewport (products.css) and never past
+          it. Again on resize. */}
+      <script innerHTML={cardTopScript} />
 
       <section
         data-component="block"
@@ -451,37 +462,6 @@ export default function Home() {
 
       <section
         data-component="block"
-        data-section="faq"
-        data-design="faqColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
-        data-columns={siteSettings.faqColumns.charAt(0)}
-      >
-        <h2 data-slot="label">{content().faq.title}</h2>
-        <div data-slot="body">
-          <ul data-component="faq">
-            <For each={content().faq.items}>
-              {(item) => (
-                <li>
-                  <Faq question={item.question}>
-                    <Show
-                      when={"copy" in item && item.copy ? (item.copy as CopyId) : undefined}
-                      fallback={<Rich value={item.answer} />}
-                    >
-                      {(copy) => (
-                        <span data-design-copy={copy()}>
-                          <Rich value={richCopy(copy(), item.answer, content().copyLinks)} />
-                        </span>
-                      )}
-                    </Show>
-                  </Faq>
-                </li>
-              )}
-            </For>
-          </ul>
-        </div>
-      </section>
-
-      <section
-        data-component="block"
         data-section="console"
         data-design="consoleSection consoleHeight consoleColumns consoleCopyColumns consoleLabel consoleLayout"
         data-columns={siteSettings.consoleColumns.charAt(0)}
@@ -539,7 +519,8 @@ export default function Home() {
  * Settings › Announcement: a "New" bar level with the logo, over the hero's three card columns
  * (in the page's flow on phones). It always renders; the site root's data-home-announcement (set
  * before first paint for a saved value) opens it, and changes animate its height and opacity.
- * ⇧A (or the older ⇧N) toggles it, like ⇧S and ⇧D for Settings and Design mode, except while typing.
+ * On the development server ⇧A (or the older ⇧N) toggles it, like ⇧S and ⇧D for Settings and Design
+ * mode, except while typing.
  */
 function Announcement() {
   const language = useLanguage()
@@ -896,43 +877,21 @@ function SlotStat(props: { value: string; start?: number; stat: number }) {
 }
 
 function SlotDigit(props: { digit: number; start?: number; place: number; stat: number }) {
-  const [reel, setReel] = createSignal([props.digit])
   let strip: HTMLSpanElement | undefined
   createEffect(
     on(
       () => props.start,
       (start) => {
         if (start === undefined || !strip) return
-        // More turns for later digits, so the right of the number spins faster and lands last.
-        const turns = 14 + props.place * 5 + props.stat * 3
-        const digits = [
-          props.digit,
-          ...Array.from({ length: turns }, () => Math.floor(Math.random() * 10)),
-          props.digit,
-        ]
-        setReel(digits)
-        const line = strip.parentElement?.getBoundingClientRect().height ?? 0
-        const animation = strip.animate(
-          [{ transform: "translateY(0)" }, { transform: `translateY(${-(digits.length - 1) * line}px)` }],
-          {
-            duration: 1100,
-            delay: Math.max(0, start - performance.now()) + props.stat * 120 + props.place * 70,
-            easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-            fill: "both",
-          },
-        )
-        animation.onfinish = () => {
-          setReel([props.digit])
-          animation.cancel()
-        }
-        onCleanup(() => animation.cancel())
+        onCleanup(spinReel(strip, props.digit, props.place, props.stat, start))
       },
     ),
   )
+  // spinReel fills the strip with the reel's cells.
   return (
-    <span data-slot="reel" aria-hidden="true" data-spinning={reel().length > 1 ? "" : undefined}>
+    <span data-slot="reel" aria-hidden="true">
       <span data-slot="strip" ref={strip}>
-        <Index each={reel()}>{(digit) => <span>{digit()}</span>}</Index>
+        <span>{props.digit}</span>
       </span>
     </span>
   )
@@ -1341,7 +1300,7 @@ function BringYourOwnSubs() {
 /**
  * "Bring your own tools": a tile per service. With Settings › Tools animation on, the tiles arrive
  * in the shared entrance wash (reveal.ts), diagonally from the top left, the first time the grid
- * scrolls into view. Off by default.
+ * scrolls into view. Off by default. On a static page, src/client/islands/home.ts plays the wash.
  */
 function ToolGrid(props: {
   items: readonly {
@@ -1371,6 +1330,20 @@ function ToolGrid(props: {
     return wash.armed() && style ? { animation: style, vars: revealMotion(style, siteSettings.logoTuning) } : undefined
   }
   createEffect(on([animation, () => siteSettings.toolsStagger], wash.replay, { defer: true }))
+  // The tiles' logos (SVG masks, index.css) load once the grid is within a screen of the window, so
+  // a page doesn't fetch them with its first screen.
+  onMount(() => {
+    const near = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        grid?.setAttribute("data-near", "")
+        near.disconnect()
+      },
+      { rootMargin: "100% 0px" },
+    )
+    if (grid) near.observe(grid)
+    onCleanup(() => near.disconnect())
+  })
 
   return (
     <ul
@@ -1414,7 +1387,7 @@ function ToolGrid(props: {
                           role={props.iconTiles ? "img" : undefined}
                           aria-label={props.iconTiles ? tool.name : undefined}
                           aria-hidden={props.iconTiles ? undefined : "true"}
-                          style={{ "mask-image": `url(${tool.logo})`, "-webkit-mask-image": `url(${tool.logo})` }}
+                          style={{ "--logo": `url(${tool.logo})` }}
                         />
                         {props.iconTiles ? null : tool.name}
                       </>
@@ -1424,8 +1397,7 @@ function ToolGrid(props: {
                       data-slot="wordmark"
                       aria-hidden="true"
                       style={{
-                        "mask-image": `url(${tool.wordmark})`,
-                        "-webkit-mask-image": `url(${tool.wordmark})`,
+                        "--logo": `url(${tool.wordmark})`,
                         ...(tool.metrics ? balanceLogo(tool.metrics) : {}),
                       }}
                     />

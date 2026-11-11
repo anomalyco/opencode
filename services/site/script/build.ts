@@ -4,7 +4,7 @@
 // .output/public as its assets. cf's own build step can't detect this project, so it deploys prebuilt.
 //
 //   bun script/build.ts [--mode dev|production]
-import { cp, mkdir, rm } from "node:fs/promises"
+import { appendFile, cp, mkdir, rm } from "node:fs/promises"
 import path from "node:path"
 import {
   cleanBuildOutputDir,
@@ -15,6 +15,8 @@ import {
 } from "@cloudflare/build-output-utils"
 import { resolveAndParseConfig } from "@cloudflare/config"
 import { mediaFile } from "../src/lib/media"
+import { stageHeaders } from "../src/lib/noindex"
+import { retainAssets } from "./retain-assets"
 
 const root = path.resolve(import.meta.dir, "..")
 const modeIndex = process.argv.indexOf("--mode")
@@ -35,7 +37,7 @@ await Bun.$`bun ./script/og.ts`.cwd(root).env(env)
 await Bun.$`bun ./textjs/script/build.ts`.cwd(root).env(env)
 await Bun.$`vite build`.cwd(root).env(env)
 // The V2 docs at /docs: prerendered pages, Markdown twins and search (src/docs/script/build.ts).
-await Bun.$`bun ./src/docs/script/build.ts --mode ${mode}`.cwd(root).env(env)
+await Bun.$`bun ./src/docs/script/build.ts`.cwd(root).env(env)
 await Bun.$`bun ./script/check-server-bundle.ts`.cwd(root).env(env)
 await Bun.$`bun ./script/check-client-bundle.ts`.cwd(root).env(env)
 await Bun.$`bun ./script/check-css-output.ts`.cwd(root).env(env)
@@ -67,6 +69,11 @@ const fixed = ["config.json", "tui.json", "openapi.json", "v2/cli.json", "docs/o
   (file) => !shipped.includes(file),
 )
 if (fixed.length) throw new Error(`fixed-URL files missing from Worker assets: ${fixed.join(", ")}`)
+// The stage's headers for the assets the Worker never sees; its own responses get them from src/lib/noindex.ts.
+const headers = Object.entries(stageHeaders(mode)).map(([name, value]) => `  ${name}: ${value}\n`)
+if (headers.length) await appendFile(path.join(assets, "_headers"), `\n/*\n${headers.join("")}`)
+// Open pages from earlier builds keep loading their code after this deploy (script/retain-assets.ts).
+await retainAssets(assets, mode === "dev" ? "https://dev.opencode.ai" : "https://opencode.ai")
 await writeAssets({ root, sourceDirectory: assets })
 
 const bundle = getWorkerBundleDir(root)

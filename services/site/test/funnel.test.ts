@@ -4,6 +4,7 @@ import type { Element, Root } from "hast"
 // SolidStart's own file router, as in sitemap.test.ts: every page route the app serves.
 import { DEFAULT_EXTENSIONS } from "../node_modules/@solidjs/start/dist/config/constants.js"
 import { SolidStartServerFileRouter } from "../node_modules/@solidjs/start/dist/config/fs-router.js"
+import { latestDocs } from "~/docs/config"
 import { docsHref, docsSections } from "~/docs/lib/navigation"
 import rehypeShiki from "~/docs/rehype-shiki"
 import { downloadOf, surfaceOf, targetOf } from "~/lib/funnel-config"
@@ -31,7 +32,6 @@ const surfaces: Record<string, string | undefined> = {
   "/changelog/v1.14.40": "www-changelog",
   "/desktop": "www-desktop",
   "/devices": undefined,
-  "/extensions/browse": "www-extensions",
   "/font": "www-font",
   "/ide": "www-ide",
   "/legal": "www-legal",
@@ -42,6 +42,7 @@ const surfaces: Record<string, string | undefined> = {
   "/no-such-page": "www-other",
   "/press": "www-press",
   "/product": "www-product",
+  "/product/browse": "www-browse",
   "/sdk": "www-sdk",
   "/terminal": "www-terminal",
   "/video-editor": undefined,
@@ -56,7 +57,7 @@ describe("funnel config", () => {
     for (const locale of LOCALES)
       for (const path of routes.map(sample)) expect(surfaceOf(strip(route(locale, path)))).toBe(surfaces[path])
     expect(strip("/ja/desktop")).toBe("/desktop")
-    expect(targetOf(strip("/zh/extensions/browse"))).toBe("browse")
+    expect(targetOf(strip("/zh/product/browse"))).toBe("browse")
   })
 
   test("reports every docs page as www-docs, targeting its section", () => {
@@ -65,11 +66,14 @@ describe("funnel config", () => {
     )
     expect(slugs.length).toBeGreaterThan(20)
     for (const slug of slugs) {
-      const path = docsHref(slug)
+      const path = docsHref(slug, latestDocs)
       expect(surfaceOf(strip(path))).toBe("www-docs")
       expect(targetOf(path)).toBe(slug === "index" ? "" : slug.split("/")[0])
     }
     expect([surfaceOf("/docs/"), targetOf("/docs/cli/keybinds/")]).toEqual(["www-docs", "cli"])
+    // The V1 docs, in every language, as one target.
+    for (const path of ["/v1/docs/", "/v1/docs/ja/config/"])
+      expect([surfaceOf(path), targetOf(path)]).toEqual(["www-docs", "v1"])
   })
 
   test("leaves the development tools out", () => {
@@ -124,7 +128,15 @@ describe("funnel markup", () => {
       children: [{ type: "element", tagName: "pre", properties: {}, children: [code] }],
     }
     await rehypeShiki()(tree)
-    const pre = tree.children[0] as Element
+    // The block is in the site's code frame now, whose Copy button carries the language too.
+    const frame = tree.children[0] as unknown as {
+      name: string
+      attributes: { type: string; name: string; value: string }[]
+      children: Element[]
+    }
+    const pre = frame.children[0]
+    expect(frame.name).toBe("CodeFrame")
+    expect(frame.attributes).toContainEqual({ type: "mdxJsxAttribute", name: "method", value: "bash" })
     expect(pre.tagName).toBe("pre")
     expect(pre.properties).toMatchObject({ dataFunnelCopy: "snippet", dataFunnelMethod: "bash" })
   })
@@ -145,13 +157,14 @@ describe("funnel markup", () => {
         /data-funnel=\{`install-tab:\$\{item\.id\}`\}/,
         /data-funnel-copy="terminal"\s+data-funnel-method=\{installs\[selected\(\)\]\.id\}/,
       ],
-      "component/site/code-frame.tsx": [/data-funnel-copy="snippet"/],
+      "component/site/code-frame.tsx": [/data-funnel-copy="snippet"\s+data-funnel-method=\{props\.method\}/],
       "component/site/markdown-view.tsx": [/data-funnel-copy="page-markdown"/],
       "component/site/legal.tsx": [/data-funnel-copy="page-markdown"/],
       "component/site/site.tsx": [/data-funnel=\{markdown\(\) \? "markdown-view:off" : "markdown-view:on"\}/],
       "component/site/arcade3d/not-found-page.tsx": [/data-funnel-surface="www-404"/],
-      "docs/components/CodeBlock.tsx": [/class="docs-code-block" data-funnel-copy="snippet"/],
-      "docs/components/CodeTabs.tsx": [/data-funnel=\{`code-tab:\$\{tab\.label\}`\}/],
+      "docs/components/CodeBlock.tsx": [/<pre tabindex=\{0\} data-funnel-copy="snippet">/],
+      "docs/components/DocsFooter.tsx": [/data-funnel="markdown-view:on"/],
+      "docs/components/CodeTabs.tsx": [/data-funnel=\{`code-tab:\$\{tab\.label\}`\}/, /data-funnel-copy="snippet"/],
       "docs/components/PlanTabs.tsx": [/data-funnel=\{`plan-tab:\$\{plan\.id\}`\}/],
       "docs/layouts/DocsLayout.tsx": [/data-copy-markdown\s+data-funnel-copy="page-markdown"/],
     }
@@ -165,7 +178,7 @@ describe("funnel markup", () => {
     const start = 'Funnel.start(() => import("~/lib/funnel-config").then((module) => module.funnelConfig()))'
     expect(await source("entry-client.tsx")).toContain(start)
     expect(await source("docs/client.ts")).toContain(
-      'Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => "en", base: "", downloadOf }))',
+      'Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => site.dataset.locale ?? "en", base: "", downloadOf }))',
     )
     // The stub imports nothing, so the config and the tracker stay out of every page's first JavaScript.
     expect(await source("lib/funnel.ts")).not.toMatch(/^import /m)
