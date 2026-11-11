@@ -489,13 +489,14 @@ impl Transcript {
             let prefix = if commit.kind == EntryKind::Reasoning { "Thinking: " } else { "" };
             let text = commit.text.strip_prefix(prefix).unwrap_or(&commit.text);
             let fragment = Fragment { message_id: message.clone(), part_id: part.clone() };
-            return match self.fragments.restore(&fragment, text) {
-                Restore::Covered => None,
-                Restore::Append(suffix) if suffix.is_empty() => None,
-                Restore::Append(suffix) if suffix == text => Some(commit.clone()),
-                Restore::Append(suffix) => Some(Commit { text: suffix, ..commit.clone() }),
-                Restore::Conflict => Some(commit.clone()),
-            };
+            match self.fragments.restore(&fragment, text) {
+                Restore::Covered => return None,
+                Restore::Append(suffix) if suffix.is_empty() => return None,
+                Restore::Append(suffix) if suffix == text => return Some(commit.clone()),
+                Restore::Append(suffix) => return Some(Commit { text: suffix, ..commit.clone() }),
+                // A conflict falls through: the row shows unless its message was listed.
+                Restore::Conflict => {}
+            }
         }
         if commit.kind == EntryKind::Error
             && let Some(message) = &commit.message_id
@@ -2029,6 +2030,19 @@ mod tests {
         );
         let mut hidden = Transcript::new("ses_1", true, false, true, None);
         assert_eq!(texts(&hidden.hydrate(&[user], false)), [(EntryKind::User, "tidy up".into())]);
+    }
+
+    /// A local row whose text conflicts with the listed text of its message is not restored: the list shows the
+    /// message (`performResizeReplay` falls through to its `messageIDs` check).
+    #[test]
+    fn a_resize_replay_drops_a_conflicting_row_of_a_listed_message() {
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], true);
+        transcript.event(&delta("msg_a", "x"));
+        transcript.begin_replay();
+        let listed = [message(json!({ "id": "msg_a", "type": "assistant",
+            "content": [{ "type": "text", "text": "yx" }] }))];
+        assert_eq!(texts(&transcript.replayed(&listed, true)), [(EntryKind::Assistant, "yx".into())]);
     }
 
     /// A resize replay restores a local image row even when its message was listed (`performResizeReplay`).
