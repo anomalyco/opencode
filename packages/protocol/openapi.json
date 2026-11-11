@@ -10178,7 +10178,9 @@
                     "installation.update-available",
                     "vcs.branch.updated",
                     "mcp.status.changed",
-                    "mcp.resources.changed"
+                    "mcp.resources.changed",
+                    "experimental.mcp.event",
+                    "experimental.mcp.subscription.changed"
                   ]
                 },
                 {
@@ -10287,7 +10289,9 @@
                           "installation.update-available",
                           "vcs.branch.updated",
                           "mcp.status.changed",
-                          "mcp.resources.changed"
+                          "mcp.resources.changed",
+                          "experimental.mcp.event",
+                          "experimental.mcp.subscription.changed"
                         ]
                       },
                       {
@@ -25620,6 +25624,12 @@
             "$ref": "#/components/schemas/mcp.resources.changed"
           },
           {
+            "$ref": "#/components/schemas/experimental.mcp.event"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.mcp.subscription.changed"
+          },
+          {
             "$ref": "#/components/schemas/V2Event.rpc"
           },
           {
@@ -26330,6 +26340,107 @@
         },
         "required": ["id", "created", "type", "data"],
         "additionalProperties": false
+      },
+      "experimental.mcp.event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.mcp.event"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "server": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "data": {},
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "truncated": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["id", "server", "name", "eventId", "timestamp", "data", "cursor"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false,
+        "description": "An event from an MCP Events subscription. Experimental: MCP Events is a draft extension; may change without compatibility guarantees."
+      },
+      "experimental.mcp.subscription.changed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.mcp.subscription.changed"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false,
+        "description": "An MCP Events subscription's status changed. Experimental: MCP Events is a draft extension; may change without compatibility guarantees."
       },
       "filesystem.changed": {
         "type": "object",

@@ -80,6 +80,7 @@ export type Payload<D extends Definition = Definition> = D extends DurableDefini
 type Input<Type extends string, Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>> = {
   readonly type: Type
   readonly identifier?: string
+  readonly description?: string
   readonly durable?: {
     readonly version: number
     readonly aggregate: string
@@ -114,7 +115,7 @@ export function durable<
     location: optional(Location.Ref),
     data,
   })
-    .annotate({ identifier: input.identifier ?? input.type })
+    .annotate({ identifier: input.identifier ?? input.type, description: input.description })
     .pipe(
       statics(() => ({
         type: input.type,
@@ -138,7 +139,7 @@ export function ephemeral<
     location: optional(Location.Ref),
     data,
   })
-    .annotate({ identifier: input.identifier ?? input.type })
+    .annotate({ identifier: input.identifier ?? input.type, description: input.description })
     .pipe(
       statics(() => ({
         type: input.type,
