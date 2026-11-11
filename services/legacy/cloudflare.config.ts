@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
       },
       workersDev: false,
       previewUrls: false,
-      logpush: true,
+      logpush: !dev,
       observability: { enabled: true },
     },
   }
