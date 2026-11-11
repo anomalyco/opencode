@@ -35,6 +35,11 @@ fn fake(session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Fake {
                 match other.split_once('/') {
                     Some((_, "message")) => (200, json!({ "data": [], "cursor": {} })),
                     Some(_) => (200, json!({ "data": [] })),
+                    // The fork reads itself slowly, so what it opens with is the fork's own answer.
+                    None if other == "ses_fork" => {
+                        std::thread::sleep(Duration::from_millis(300));
+                        (200, json!({ "data": self::session("ses_fork", json!({ "title": "Forked" })) }))
+                    }
                     None => (200, json!({ "data": self::session(other, json!({})) })),
                 }
             }
@@ -160,9 +165,7 @@ impl Kit {
             .unwrap()
             .iter()
             // The goal footer's RPC `get` is a read, as P-REQ counts it.
-            .filter(|seen| {
-                seen.method != "GET" && !(seen.url().starts_with("/api/rpc/") && seen.url().ends_with("/get"))
-            })
+            .filter(|seen| seen.method != "GET" && !(seen.path.starts_with("/api/rpc/") && seen.path.ends_with("/get")))
             .map(|seen| format!("{} {} {}", seen.method, seen.url(), seen.body))
             .collect()
     }
@@ -271,6 +274,42 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     // The fork's composer holds the prompt it was forked before.
     let found = kit.app.wait_until(WAIT, || kit.prompt_text() == "Fix the bug\nin parse");
     assert!(found, "{:?}\n{}", kit.prompt_text(), kit.app.text());
+}
+
+// `dialog-fork.tsx:24-48`: the fork's composer gets the prompt it was forked before with its attachments
+// (`restorePrompt`), and the fork opens known, with the session the server returned.
+#[test]
+fn fork_before_a_prompt_keeps_its_attachments_and_opens_the_returned_session() {
+    let mut messages = turns();
+    messages[2] = json!({
+        "id": "msg_03", "type": "user", "text": "Review @note.ts [Image 1]", "time": { "created": 1_772_539_260_000_u64 },
+        "files": [
+            {
+                "data": "", "mime": "text/plain", "name": "note.ts",
+                "source": { "type": "uri", "uri": "file:///project/note.ts" },
+                "mention": { "start": 7, "end": 15, "text": "@note.ts" },
+            },
+            {
+                "data": "iVBORw0KGgo=", "mime": "image/png", "source": { "type": "inline" },
+                "mention": { "start": 16, "end": 25, "text": "[Image 1]" },
+            },
+        ],
+    });
+    let kit = Kit::new(session("ses_a", json!({})), messages, vec![]);
+    kit.ready();
+    kit.tui.keymap.dispatch("session.fork", None);
+    kit.wait_for("Full session");
+    kit.app.press("down");
+    kit.app.press("return");
+    let fork = SessionID("ses_fork".into());
+    let opened = kit.app.wait_until(WAIT, || kit.tui.route() == Route::Session { id: fork.clone() });
+    assert!(opened, "{:?}", kit.tui.route());
+    let known = kit.tui.data.read(|state| state.session(&fork).and_then(|info| info.title.clone()));
+    assert_eq!(known.as_deref(), Some("Forked"));
+    let restored = kit.app.wait_until(WAIT, || kit.prompt_text() == "Review @note.ts [Image 1]");
+    assert!(restored, "{:?}", kit.prompt_text());
+    let marks = kit.tui.textarea.borrow().as_ref().map(|textarea| textarea.extmarks().len());
+    assert_eq!(marks, Some(2));
 }
 
 #[test]

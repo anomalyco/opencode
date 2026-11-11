@@ -85,7 +85,10 @@ fn fork(tui: &Tui, session: SessionID, message: Option<String>) {
             if let Some(prompt) = prompt {
                 tui.prompt.drafts.save(Some(&info.id), Draft { prompt, cursor: u32::MAX });
             }
-            tui.navigate(Route::Session { id: info.id });
+            // The fork opens with its directory and title known, as `startup` opens a session it read.
+            let id = info.id.clone();
+            tui.data.remember(info);
+            tui.navigate(Route::Session { id });
             tui.toasts
                 .show(ToastOptions::new(Variant::Success, "Forked session").duration(Duration::from_millis(4000)));
         }),
