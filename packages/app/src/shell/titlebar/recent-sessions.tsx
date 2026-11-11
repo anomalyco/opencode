@@ -40,6 +40,7 @@ import {
   recentPageHasMore,
   recentPageLoaded,
   recentPageLoadingMore,
+  recentReloadsOn,
   recentRowUnread,
   recentSessionEndpoints,
   recentSessionKey,
@@ -474,23 +475,9 @@ export function RecentSessions() {
 
   createEffect(() => {
     connections().forEach((item) => {
-      for (const type of [
-        "session.execution.succeeded",
-        "session.execution.failed",
-        "session.archived",
-        "session.unarchived",
-      ] as const) {
-        onCleanup(item.ctx.data.on(type, () => reload(item)))
-      }
-
       onCleanup(
-        item.ctx.data.on("session.execution.interrupted", (event) => {
-          if (event.data.reason !== "shutdown") reload(item)
-        }),
-      )
-      onCleanup(
-        item.ctx.data.on("session.created", (event) => {
-          if (!event.data.parentID) reload(item)
+        item.ctx.data.listen(({ details }) => {
+          if (recentReloadsOn(details, item.ctx.data.session.get)) reload(item)
         }),
       )
     })

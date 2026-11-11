@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
 import { ServerConnection } from "@/runtime/server/registry"
 
 const separator = "\u0000"
@@ -285,6 +285,29 @@ function finishLoading(
     },
     effects: [{ type: "timer.cancel" }],
   }
+}
+
+/**
+ * Whether an event changes which root sessions page one holds or their order, so Recent reloads it: a run that ended
+ * (except a shutdown, which leaves the server's times alone), a new root session, archive and unarchive. A run end
+ * from a known subagent session does not; an unknown session may be a root, so it does.
+ */
+export function recentReloadsOn(event: OpenCodeEvent, session: (sessionID: string) => SessionInfo | undefined) {
+  if (event.type === "session.created") return !event.data.parentID
+
+  if (event.type === "session.archived" || event.type === "session.unarchived") return true
+
+  if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return false
+
+  if (
+    event.type !== "session.execution.succeeded" &&
+    event.type !== "session.execution.failed" &&
+    event.type !== "session.execution.interrupted"
+  ) {
+    return false
+  }
+
+  return !session(event.data.sessionID)?.parentID
 }
 
 /** One server's page lifecycle. I/O lives in the driver; this only says what to fetch and what the rows become. */
