@@ -43,6 +43,8 @@ pub const DEFAULT_REPLAY_LIMIT: u32 = 200;
 pub const LOCAL_ROW_LIMIT: usize = 100;
 /// `RESIZE_DELAY`.
 pub const RESIZE_DELAY: Duration = Duration::from_millis(250);
+/// The events a resize replay holds while it lists. TS holds any number.
+pub const RELIST_LIMIT: usize = 4096;
 
 /// A part of a message whose text arrives in pieces (`FragmentRef`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -176,6 +178,8 @@ pub struct Output {
     /// Events for the subagent tracker: other sessions' events, and this session's tool events, which name the
     /// child sessions its subagent calls start.
     pub subagents: Vec<V2Event>,
+    /// The resize replay's events overflowed and were dropped: a new read lists again under this ticket.
+    pub relist: Option<u64>,
 }
 
 impl Output {
@@ -200,6 +204,7 @@ impl Output {
         }
         self.footer.extend(other.footer);
         self.subagents.extend(other.subagents);
+        self.relist = other.relist.or(self.relist);
     }
 }
 
@@ -232,6 +237,10 @@ pub struct Transcript {
     relist: Option<Relist>,
     /// The tickets handed out to resize replays.
     relists: u64,
+    /// The events a resize replay holds ([`RELIST_LIMIT`]).
+    relist_limit: usize,
+    /// Events were dropped since the last relist cleared the terminal, so the next one must clear it.
+    lost: bool,
     /// Rows printed only locally, newest last (`localRows`).
     local: Vec<Commit>,
     /// With tools hidden, a message's text waits for its step to end, and is dropped when the message turns out
@@ -317,6 +326,8 @@ impl Transcript {
             promoted: HashSet::new(),
             relist: None,
             relists: 0,
+            relist_limit: RELIST_LIMIT,
+            lost: false,
             local: Vec::new(),
             quiet: Vec::new(),
             tool_messages: HashSet::new(),
@@ -428,6 +439,12 @@ impl Transcript {
         self.relist.as_ref().is_some_and(|relist| relist.ticket == ticket)
     }
 
+    /// Whether events were dropped since the last relist cleared the terminal: until one clears it again, rows may
+    /// be missing.
+    pub fn lost(&self) -> bool {
+        self.lost
+    }
+
     /// The stream dropped. A resize replay in flight is abandoned, with its events, as TS abandons one of a stale
     /// attempt: the reconnect lists everything again, and a resize relist must not apply its older list after it.
     pub fn disconnected(&mut self) {
@@ -439,6 +456,7 @@ impl Transcript {
     /// rows only this client printed, then the events that waited.
     pub fn replayed(&mut self, messages: &[SessionMessageInfo], active: bool) -> Output {
         let buffered = self.relist.take().map(|relist| relist.events).unwrap_or_default();
+        self.lost = false;
         self.message_ids.clear();
         self.errors.clear();
         self.fragments.clear();
@@ -911,8 +929,15 @@ impl Transcript {
     /// subagent tracker, and so do this session's tool events.
     pub fn event(&mut self, event: &V2Event) -> Output {
         if let Some(relist) = &mut self.relist {
-            relist.events.push(event.clone());
-            return Output::default();
+            if relist.events.len() < self.relist_limit {
+                relist.events.push(event.clone());
+                return Output::default();
+            }
+            // Bounded storage cannot replay a slow read exactly: drop the events and list again after them.
+            self.relists += 1;
+            *relist = Relist { ticket: self.relists, events: Vec::new() };
+            self.lost = true;
+            return Output { relist: Some(self.relists), ..Output::default() };
         }
         let Some(session) = session_of(event) else {
             return Output::default();
@@ -2201,10 +2226,13 @@ mod tests {
             Fail(usize),
             /// The stream drops: its queued events are lost, and the reconnect lists again.
             Drop,
+            /// The scheduled replay fires.
+            Timer,
         }
 
         fn command(rng: &mut Rng) -> Command {
-            match rng.below(20) {
+            match rng.below(21) {
+                20 => Command::Timer,
                 0..=1 => Command::User,
                 2 => Command::Step,
                 3..=6 => Command::Delta,
@@ -2240,20 +2268,28 @@ mod tests {
             /// The rows since the last clear.
             screen: Vec<Commit>,
             resize_queued: bool,
+            /// A replay is scheduled (`Mini::schedule_replay`).
+            timer: bool,
+            /// The relists an overflow started.
+            overflows: usize,
             next: usize,
         }
 
         impl World {
             fn new() -> Self {
+                let mut transcript = Transcript::new("ses_1", true, true, true, None);
+                transcript.relist_limit = 2;
                 let mut world = Self {
                     messages: Vec::new(),
                     current: None,
                     stream: VecDeque::new(),
                     reads: Vec::new(),
                     hydrating: true,
-                    transcript: Transcript::new("ses_1", true, true, true, None),
+                    transcript,
                     screen: Vec::new(),
                     resize_queued: false,
+                    timer: false,
+                    overflows: 0,
                     next: 0,
                 };
                 world.issue(Read::Hydrate);
@@ -2281,8 +2317,13 @@ mod tests {
                 self.reads.push(Pending { read, listed });
             }
 
+            /// `Mini::incoming`: the rows, then the read an overflow starts.
             fn show(&mut self, output: Output) {
                 self.screen.extend(output.commits);
+                if let Some(ticket) = output.relist {
+                    self.overflows += 1;
+                    self.issue(Read::Relist(ticket));
+                }
             }
 
             fn run(&mut self, command: Command) {
@@ -2325,6 +2366,11 @@ mod tests {
                     Command::Complete(index) => self.complete(index, true),
                     Command::Fail(index) => self.complete(index, false),
                     // The connect loop notices a drop only once its hydration was posted.
+                    Command::Timer => {
+                        if std::mem::take(&mut self.timer) {
+                            self.resize();
+                        }
+                    }
                     Command::Drop if self.hydrating => {}
                     Command::Drop => {
                         self.stream.clear();
@@ -2363,7 +2409,7 @@ mod tests {
                         self.transcript.inbox(&[]);
                         let output = self.transcript.hydrate(&pending.listed, false);
                         self.show(output);
-                        if std::mem::take(&mut self.resize_queued) {
+                        if std::mem::take(&mut self.resize_queued) || self.transcript.lost() {
                             self.resize();
                         }
                     }
@@ -2380,13 +2426,15 @@ mod tests {
                         self.show(output);
                         if std::mem::take(&mut self.resize_queued) {
                             self.resize();
+                        } else if self.transcript.lost() {
+                            self.timer = true;
                         }
                     }
                 }
             }
 
             fn quiet(&self) -> bool {
-                self.reads.is_empty() && !self.hydrating && self.stream.is_empty()
+                self.reads.is_empty() && !self.hydrating && self.stream.is_empty() && !self.timer
             }
 
             fn drain(&mut self) {
@@ -2395,6 +2443,7 @@ mod tests {
                         self.complete(0, true);
                     }
                     self.run(Command::Deliver);
+                    self.run(Command::Timer);
                 }
             }
 
@@ -2420,7 +2469,8 @@ mod tests {
             }
         }
 
-        fn play(commands: &[Command]) -> Result<(), String> {
+        /// Runs `commands`, then drains; the relists an overflow started.
+        fn play(commands: &[Command]) -> Result<usize, String> {
             let mut world = World::new();
             for (step, command) in commands.iter().enumerate() {
                 world.run(*command);
@@ -2429,7 +2479,7 @@ mod tests {
                 }
             }
             world.drain();
-            world.check()
+            world.check().map(|()| world.overflows)
         }
 
         /// Removes one command at a time while the run still fails.
@@ -2451,7 +2501,28 @@ mod tests {
         #[test]
         fn a_drop_during_a_relist_keeps_the_reconnects_rows() {
             let commands = [Command::Complete(0), Command::Resize, Command::User, Command::Drop, Command::Complete(1)];
-            assert_eq!(play(&commands), Ok(()));
+            assert_eq!(play(&commands), Ok(0));
+        }
+
+        /// S5: a relist holds at most its limit of events; one more drops them and starts a new read, and the
+        /// older read no longer applies.
+        #[test]
+        fn an_overflow_relists() {
+            let mut transcript = Transcript::new("ses_1", true, true, true, None);
+            transcript.relist_limit = 2;
+            transcript.hydrate(&[], true);
+            let first = transcript.begin_replay();
+            for text in ["a", "b"] {
+                assert_eq!(transcript.event(&delta("msg_a", text)), Output::default());
+            }
+            let output = transcript.event(&delta("msg_a", "c"));
+            let second = output.relist.expect("the overflow relists");
+            assert!(!transcript.relisting(first) && transcript.relisting(second) && transcript.lost());
+            assert_eq!(transcript.relist.as_ref().map(|relist| relist.events.len()), Some(0));
+            let listed = [message(json!({ "id": "msg_a", "type": "assistant",
+                "content": [{ "type": "text", "text": "abc" }] }))];
+            assert_eq!(texts(&transcript.replayed(&listed, true)), [(EntryKind::Assistant, "abc".into())]);
+            assert!(!transcript.lost());
         }
 
         #[test]
@@ -2460,13 +2531,18 @@ mod tests {
             let cases = env("MODEL_CASES", 300);
             let len = env("MODEL_LEN", 40) as usize;
             let mut rng = Rng(seed);
+            let mut overflows = 0;
             for case in 0..cases {
                 let commands: Vec<Command> = (0..len).map(|_| command(&mut rng)).collect();
-                if let Err(error) = play(&commands) {
-                    let shrunk = shrink(commands);
-                    panic!("seed {seed} case {case}: {error}\nshrunk: {shrunk:?}\n{:?}", play(&shrunk));
+                match play(&commands) {
+                    Ok(count) => overflows += count,
+                    Err(error) => {
+                        let shrunk = shrink(commands);
+                        panic!("seed {seed} case {case}: {error}\nshrunk: {shrunk:?}\n{:?}", play(&shrunk));
+                    }
                 }
             }
+            assert!(overflows >= cases as usize / 10, "the generator overflows the relist: {overflows}");
         }
     }
 }
