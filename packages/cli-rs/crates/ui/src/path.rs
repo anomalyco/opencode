@@ -60,6 +60,11 @@ pub fn format(input: &str, directory: Option<&str>, cwd: &Path, home: Option<&Pa
     format_path(input, base, home.as_deref(), false)
 }
 
+/// `path.relative(from, to)`, by the rules `from` looks like.
+pub fn relative(from: &str, to: &str) -> String {
+    Flavor::of(from).relative(from, to)
+}
+
 fn outside(flavor: Flavor, relative: &str) -> bool {
     relative == ".." || relative.starts_with(&format!("..{}", flavor.sep())) || flavor.is_absolute(relative)
 }
