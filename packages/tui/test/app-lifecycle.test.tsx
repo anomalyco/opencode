@@ -1522,7 +1522,6 @@ test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
 
       setup.mockInput.pressKey("x", { ctrl: true })
       setup.mockInput.pressArrow("up")
-      // The last painted frame can still contain the old terminal after its renderable is destroyed.
       await setup.waitForFrame((frame) => terminal.isDestroyed && !frame.includes("alpha beta gamma"))
       expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
       setup.mockInput.pressKey("x", { ctrl: true })
@@ -2845,4 +2844,3 @@ test.each([44, 100])(
   },
   15_000,
 )
-
