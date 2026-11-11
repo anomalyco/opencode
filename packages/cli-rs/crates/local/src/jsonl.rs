@@ -5,7 +5,8 @@
 //! parse and limit rules, the rewrite on load that heals a broken file, and appends. Both TUIs write all
 //! three files, and TypeScript writes from memory without a lock. So this client writes each under its
 //! lock in `<state>/locks` from what the file holds, never from memory: saves only append, a stash pop
-//! or remove drops its one line, and only a load trims. Rewrites are atomic. Write failures are logged,
+//! or remove drops its one line, and only a load trims. Rewrites are atomic, and replace only a file that
+//! did not change since it was read. Write failures are logged,
 //! and TypeScript ignores them. Prompt entries stay `serde_json::Value`, so fields this client does not
 //! know survive.
 
@@ -18,7 +19,6 @@ use serde_json::{Map, Value, json};
 
 use crate::jsonc;
 use crate::lock;
-use crate::storage::write_text_atomic;
 
 pub const MAX_HISTORY_ENTRIES: usize = 50;
 pub const MAX_STASH_ENTRIES: usize = 50;
@@ -191,31 +191,84 @@ fn with_lock<T>(state: &Path, file: &Path, f: impl FnOnce() -> io::Result<T>) ->
         .map_err(lock::Error::Io)
 }
 
-// Rewrites `file` atomically with `change(text)` when that gives a new text. A client that appends
-// without the lock (the TypeScript TUI) may write to the file the rename replaces; the old file stays
-// open, so the lines it gained are carried over to the end of the new one.
-fn rewrite(file: &Path, change: impl FnOnce(&str) -> Option<String>) -> io::Result<()> {
-    let mut old = match fs::File::open(file) {
-        Ok(old) => Some(old),
+// How often [`rewrite`] reads again after another client changed the file under it.
+const REWRITE_ATTEMPTS: usize = 5;
+
+// Rewrites `file` atomically with `change(text)` when that gives a new text. The TypeScript TUI writes
+// without the lock (deviation O89-jsonl-writes), so the replace happens only while the file is still
+// the one read: same inode, size, and modification time. Otherwise the change is made again against a
+// new read. The new text is synced before the rename, so a crash leaves the old file or the new one.
+// A client that appends to the old file between the check and the rename writes to the open old file;
+// the lines it gained are carried over to the end of the new one.
+fn rewrite(file: &Path, mut change: impl FnMut(&str) -> Option<String>) -> io::Result<()> {
+    for _ in 0..REWRITE_ATTEMPTS {
+        let mut old = match fs::File::open(file) {
+            Ok(old) => Some(old),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+        let read = old.as_ref().map(fs::File::metadata).transpose()?;
+        let mut bytes = Vec::new();
+        if let Some(old) = old.as_mut() {
+            old.read_to_end(&mut bytes)?;
+        }
+        let Some(next) = change(&String::from_utf8_lossy(&bytes)) else {
+            return Ok(());
+        };
+        let temp = PathBuf::from(format!("{}.{}.{}.tmp", file.display(), std::process::id(), crate::id::v4()));
+        let replaced = write_synced(&temp, &next).and_then(|()| {
+            if !unchanged(file, read.as_ref(), bytes.len())? {
+                return Ok(false);
+            }
+            fs::rename(&temp, file).map(|()| true)
+        });
+        if !matches!(replaced, Ok(true)) {
+            let _ = fs::remove_file(&temp);
+        }
+        if !replaced? {
+            continue;
+        }
+        let mut late = Vec::new();
+        if let Some(old) = old.as_mut() {
+            old.read_to_end(&mut late)?;
+        }
+        if !late.is_empty() {
+            append_text(file, &String::from_utf8_lossy(&late))?;
+        }
+        return Ok(());
+    }
+    Err(io::Error::other(format!("{} kept changing while it was rewritten", file.display())))
+}
+
+fn write_synced(file: &Path, text: &str) -> io::Result<()> {
+    let mut new = fs::File::create(file)?;
+    new.write_all(text.as_bytes())?;
+    new.sync_all()
+}
+
+// Whether `file` is still the file whose metadata `read` was taken before `len` bytes were read.
+fn unchanged(file: &Path, read: Option<&fs::Metadata>, len: usize) -> io::Result<bool> {
+    let current = match fs::metadata(file) {
+        Ok(current) => Some(current),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => return Err(error),
     };
-    let mut bytes = Vec::new();
-    if let Some(old) = old.as_mut() {
-        old.read_to_end(&mut bytes)?;
-    }
-    let Some(next) = change(&String::from_utf8_lossy(&bytes)) else {
-        return Ok(());
+    Ok(match (read, current) {
+        (Some(read), Some(current)) => read.len() == len as u64 && same_file(read, &current),
+        (None, None) => true,
+        _ => false,
+    })
+}
+
+fn same_file(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    #[cfg(unix)]
+    let inode = {
+        use std::os::unix::fs::MetadataExt;
+        a.dev() == b.dev() && a.ino() == b.ino()
     };
-    write_text_atomic(file, &next)?;
-    let mut late = Vec::new();
-    if let Some(old) = old.as_mut() {
-        old.read_to_end(&mut late)?;
-    }
-    if !late.is_empty() {
-        append_text(file, &String::from_utf8_lossy(&late))?;
-    }
-    Ok(())
+    #[cfg(not(unix))]
+    let inode = true;
+    inode && a.len() == b.len() && a.modified().ok() == b.modified().ok()
 }
 
 // `Array.prototype.at`.
@@ -616,6 +669,31 @@ mod tests {
         let before = fs::metadata(&file).unwrap().modified().unwrap();
         Stash::load(state.path());
         assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
+    }
+
+    /// The TypeScript TUI rewrites the file from memory, without the lock, between this client's read
+    /// and its replace: the change is made again against what the file now holds.
+    #[test]
+    fn a_rewrite_redoes_its_change_when_another_client_rewrote_the_file() {
+        let state = opencode_util::temp::tempdir().unwrap();
+        let file = state.path().join("prompt-stash.jsonl");
+        ts_stash(&file, "a", 1);
+        ts_stash(&file, "b", 2);
+        let ts = fs::read_to_string(&file).unwrap().replace("\"b\"", "\"c\"").replace(":2}", ":3}");
+        let mut reads = Vec::new();
+        rewrite(&file, |text| {
+            reads.push(text.to_owned());
+            if reads.len() == 1 {
+                // TS pops `b` and stashes `c`: `writeText` truncates and writes its list.
+                fs::write(&file, &ts).unwrap();
+            }
+            let mut entries = parse_stash(text);
+            entries.retain(|entry| entry["prompt"]["text"] != "a");
+            Some(body(entries.iter()))
+        })
+        .unwrap();
+        assert_eq!(reads.len(), 2);
+        assert_eq!(stash_texts(&file), ["c"]);
     }
 
     #[test]
