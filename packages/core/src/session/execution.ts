@@ -178,7 +178,17 @@ export const layer = Layer.effect(
       isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
-          const interrupted = yield* coordinator.interrupt(sessionID, "user")
+          // The user stops pending doorbells along with the current execution. Serialize
+          // their retirement with report acknowledgement; later notices get fresh wakes.
+          const interrupted = yield* db
+            .transaction(() =>
+              Effect.gen(function* () {
+                if (!(yield* coordinator.isActive(sessionID)) || coordinator.interruption(sessionID)) return false
+                yield* SessionInbox.retireWakes(db, sessionID)
+                return yield* coordinator.interrupt(sessionID, "user")
+              }),
+            )
+            .pipe(Effect.orDie)
           if (!options?.resume) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never

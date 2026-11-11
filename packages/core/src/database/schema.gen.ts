@@ -215,6 +215,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`type\` text NOT NULL,
           \`payload\` text NOT NULL,
           \`delivery\` text NOT NULL,
+          \`wake_on_restart\` integer DEFAULT false NOT NULL,
           \`enqueued_seq\` integer NOT NULL,
           \`time_created\` integer NOT NULL,
           CONSTRAINT \`fk_session_inbox_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE

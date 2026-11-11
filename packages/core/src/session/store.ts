@@ -12,6 +12,7 @@ import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { Session } from "@opencode/schema/session"
 import { SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionInbox } from "./inbox.js"
 import { fromRow } from "./info.js"
 
 const ListInputBase = {
@@ -87,7 +88,7 @@ export interface Interface {
    */
   readonly claim: (sessionID: Session.ID) => Effect.Effect<void>
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
-  readonly release: (sessionID: Session.ID) => Effect.Effect<void>
+  readonly release: (sessionID: Session.ID, wakeThroughSeq?: number) => Effect.Effect<void>
   /**
    * Clears orphaned child claims except children owned by recoverable
    * background subagent jobs.
@@ -262,7 +263,10 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      release: Effect.fn("SessionStore.release")(function* (sessionID) {
+      release: Effect.fn("SessionStore.release")(function* (sessionID, wakeThroughSeq) {
+        // A terminal retires wakes this execution started with. A later admission may
+        // have rung the doorbell during settlement and still need a successor.
+        if (wakeThroughSeq !== undefined) yield* SessionInbox.retireWakes(db, sessionID, wakeThroughSeq)
         yield* db
           .update(SessionTable)
           .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })

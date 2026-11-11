@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4f6e16c6-f070-4545-b9d0-19fcb6e5210c",
-  "prevIds": ["0ac88673-a402-45a0-b931-e694d59ccefa"],
+  "id": "6fc278e8-3e28-41db-9dc3-c2ab7b6008ad",
+  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
   "ddl": [
     {
       "name": "account_state",
@@ -1373,6 +1373,16 @@
       "default": null,
       "generated": null,
       "name": "delivery",
+      "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "wake_on_restart",
       "entityType": "columns",
       "table": "session_inbox"
     },
