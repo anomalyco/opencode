@@ -69,8 +69,9 @@ impl Stash {
         self.entries.borrow().is_empty()
     }
 
-    /// `push({prompt})`, stamped now; the oldest entries past the limit go.
-    pub fn push(&self, _app: &App, prompt: Value) {
+    /// `push({prompt})`, stamped now; the oldest entries past the limit go. A failed save shows an
+    /// error toast; TS ignores it (deviation O89-stash-save-toast). The entry stays in memory.
+    pub fn push(&self, tui: &Tui, prompt: Value) {
         let entry = jsonl::stash_entry(prompt, opencode_util::time::now_ms());
         {
             let mut entries = self.entries.borrow_mut();
@@ -78,7 +79,9 @@ impl Stash {
             let excess = entries.len().saturating_sub(MAX_STASH_ENTRIES);
             entries.drain(..excess);
         }
-        self.write(move |state| jsonl::save_stash(state, &entry));
+        if let Some(saved) = self.write(move |state| jsonl::save_stash(state, &entry)) {
+            tui.request(async move { saved.await.unwrap_or(Ok(())) }, |_, ()| {});
+        }
     }
 
     /// `pop()`: the newest entry.
@@ -98,16 +101,22 @@ impl Stash {
         self.write(move |state| jsonl::delete_stash(state, &entry));
     }
 
-    /// Queues a write after the load and every earlier write.
-    fn write(&self, write: impl FnOnce(&Path) -> Result<(), lock::Error> + Send + 'static) {
-        let Some((state, writer)) = self.file.clone() else {
-            return;
-        };
+    /// Queues a write after the load and every earlier write; its failure, as the toast text, arrives on
+    /// the receiver.
+    fn write(
+        &self,
+        write: impl FnOnce(&Path) -> Result<(), lock::Error> + Send + 'static,
+    ) -> Option<oneshot::Receiver<Result<(), String>>> {
+        let (state, writer) = self.file.clone()?;
+        let (send, receive) = oneshot::channel();
         writer.run(move || {
-            if let Err(error) = write(&state) {
+            let result = write(&state).map_err(|error| {
                 log::warn!("prompt-stash.jsonl: {error}");
-            }
+                format!("Could not save the stash: {error}")
+            });
+            let _ = send.send(result);
         });
+        Some(receive)
     }
 }
 
@@ -140,7 +149,7 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
             }
             let mut entry = prompt.prompt.borrow().clone();
             entry["text"] = Value::String(prompt.textarea.text());
-            tui.prompt.stash.push(&tui.app, entry);
+            tui.prompt.stash.push(tui, entry);
             prompt.reset();
             tui.dialogs.clear();
         })
