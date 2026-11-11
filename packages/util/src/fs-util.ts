@@ -37,7 +37,7 @@ export namespace FSUtil {
     readonly readFileStringSafe: (path: string) => Effect.Effect<string | undefined, Error>
     readonly readJson: (path: string) => Effect.Effect<unknown, Error>
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
-    readonly ensureDir: (path: string) => Effect.Effect<void, Error>
+    readonly ensureDir: (path: string, mode?: number) => Effect.Effect<void, Error>
     readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
     readonly resolve: (path: string) => Effect.Effect<string>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
@@ -107,8 +107,8 @@ export namespace FSUtil {
         if (mode) yield* fs.chmod(path, mode)
       })
 
-      const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {
-        yield* fs.makeDirectory(path, { recursive: true }).pipe(
+      const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string, mode?: number) {
+        yield* fs.makeDirectory(path, { recursive: true, mode }).pipe(
           // Bun on Windows can throw EEXIST here despite recursive mode.
           // https://github.com/oven-sh/bun/issues/21901
           Effect.catchIf(
@@ -116,6 +116,7 @@ export namespace FSUtil {
             (error) => isDir(path).pipe(Effect.flatMap((exists) => (exists ? Effect.void : Effect.fail(error)))),
           ),
         )
+        if (mode) yield* fs.chmod(path, mode)
       })
 
       const writeWithDirs = Effect.fn("FileSystem.writeWithDirs")(function* (
