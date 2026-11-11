@@ -42,8 +42,8 @@ struct Inner {
     prompted: RefCell<Prompted>,
     layer: RefCell<Option<Disposer>>,
     reject: RefCell<Option<Textarea>>,
-    /// Sessions whose pending permissions were read since the last full sync.
-    synced: RefCell<HashSet<SessionID>>,
+    /// The family last read (`descendantSessionIDs`).
+    family: RefCell<Vec<SessionID>>,
     /// Requests answered by `autoaccept`.
     approved: RefCell<HashSet<PermissionID>>,
     resize: Cell<Option<HandlerId>>,
@@ -102,7 +102,7 @@ impl Permission {
             prompted: RefCell::default(),
             layer: RefCell::default(),
             reject: RefCell::default(),
-            synced: RefCell::default(),
+            family: RefCell::default(),
             approved: RefCell::default(),
             resize: Cell::new(None),
             settings: RefCell::default(),
@@ -144,16 +144,14 @@ impl Permission {
                 family.iter().flat_map(|id| state.permissions(id).unwrap_or_default()).cloned().collect();
             (requests, family)
         });
-        // A full sync (a reconnect) reads again: the store invalidated what it read before.
-        if changes.all {
-            inner.synced.borrow_mut().clear();
-        }
-        for id in family {
-            if inner.synced.borrow_mut().insert(id.clone()) {
-                // TS ignores failures (`routes/session/index.tsx:333-347`): a session still being
-                // created reads as not found.
-                super::form::quiet(tui, tui.data.permission_sync(&id));
+        // TS reads the family's requests whenever the family or the connection changes (`routes/session/index.tsx:
+        // 331-348`); the store makes a finished read free, and reads a failed one again. TS ignores failures: a
+        // session still being created reads as not found.
+        if changes.all || family.iter().any(|id| changes.session(id)) || *inner.family.borrow() != family {
+            for id in &family {
+                super::form::quiet(tui, tui.data.permission_sync(id));
             }
+            *inner.family.borrow_mut() = family;
         }
         if tui.config().permissions == Permissions::Autoaccept {
             // `prompted` is empty in this mode (`index.tsx:208-215`): a request shown before it began goes.
