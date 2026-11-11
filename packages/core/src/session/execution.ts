@@ -60,13 +60,20 @@ export const layer = Layer.effect(
     const jobs = yield* Job.Service
     const db = (yield* Database.Service).db
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
-      effect.pipe(
-        Effect.tapCause((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.void
-            : Effect.logError("Failed to publish Session execution lifecycle", cause).pipe(
-                Effect.annotateLogs({ sessionID }),
-              ),
+      Effect.gen(function* () {
+        if (!(yield* store.get(sessionID))) return
+        yield* effect
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            if (Cause.hasInterruptsOnly(cause)) return yield* Effect.failCause(cause)
+            const session = yield* store.get(sessionID).pipe(Effect.exit)
+            if (Exit.isSuccess(session) && session.value === undefined) return
+            yield* Effect.logError("Failed to publish Session execution lifecycle", cause).pipe(
+              Effect.annotateLogs({ sessionID }),
+            )
+            return yield* Effect.failCause(cause)
+          }),
         ),
         Effect.asVoid,
       )
@@ -76,7 +83,12 @@ export const layer = Layer.effect(
     // terminal is the signature of a process that died without teardown (crash, SIGKILL, eviction);
     // recovery is a property of the database, never of a shutdown hook that may not run.
     const claimOnCommit = (sessionID: SessionSchema.ID) => ({
-      commit: () => store.claim(sessionID),
+      commit: () =>
+        Effect.gen(function* () {
+          // Recheck inside the publication transaction before it can commit an orphaned start.
+          if (!(yield* store.get(sessionID))) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+          yield* store.claim(sessionID)
+        }),
     })
     const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.release(sessionID),
@@ -91,7 +103,7 @@ export const layer = Layer.effect(
       stepped = false,
     ): Effect.fn.Return<void, SessionRunner.RunError> {
       const session = yield* store.get(sessionID)
-      if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      if (!session) return
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({
           sessionID,
@@ -103,10 +115,14 @@ export const layer = Layer.effect(
         }),
       ).pipe(
         instances.provide(session),
-        Effect.tapCause((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.void
-            : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            if (Cause.hasInterruptsOnly(cause)) return yield* Effect.failCause(cause)
+            const current = yield* store.get(sessionID).pipe(Effect.exit)
+            if (Exit.isSuccess(current) && current.value === undefined) return SessionRunner.DrainResult.Complete()
+            yield* Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID }))
+            return yield* Effect.failCause(cause)
+          }),
         ),
       )
       return yield* SessionRunner.DrainResult.$match(result, {
@@ -124,34 +140,40 @@ export const layer = Layer.effect(
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
-        reportLifecycle(
-          sessionID,
-          Effect.gen(function* () {
-            const outcome = terminal(exit, reason)
-            if (outcome.type === "succeeded") {
-              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
-              return
-            }
-            if (outcome.type === "interrupted") {
-              // Deliberate stops release the claim; shutdown keeps it for restart continuity.
-              if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
-              yield* bus.publish(
+        Effect.gen(function* () {
+          const outcome = terminal(exit, reason)
+          if (outcome.type === "succeeded") {
+            yield* reportLifecycle(
+              sessionID,
+              bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID)),
+            )
+            return
+          }
+          if (outcome.type === "interrupted") {
+            // Deliberate stops release the claim; shutdown keeps it for restart continuity.
+            if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
+            yield* reportLifecycle(
+              sessionID,
+              bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
                 outcome.reason === "shutdown" ? undefined : releaseOnCommit(sessionID),
-              )
-              return
-            }
-            yield* bus.publish(
+              ),
+            )
+            return
+          }
+          yield* reportLifecycle(
+            sessionID,
+            bus.publish(
               SessionEvent.Execution.Failed,
               {
                 sessionID,
                 error: outcome.error,
               },
               releaseOnCommit(sessionID),
-            )
-          }),
-        ),
+            ),
+          )
+        }),
     })
 
     interruption = coordinator.interruption

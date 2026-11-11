@@ -5,6 +5,7 @@ import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+import { EventSequenceTable } from "@opencode/core/event/sql"
 import { Instance } from "@opencode/core/instance/service"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
@@ -56,6 +57,162 @@ describe("SessionExecution lifecycle", () => {
     expect(SessionExecution.terminal(interrupted)).toEqual({ type: "interrupted", reason: "shutdown" })
     expect(SessionExecution.terminal(interrupted, "user")).toEqual({ type: "interrupted", reason: "user" })
   })
+
+  it.effect("settles a run after another execution context deletes its session", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessions = yield* Session.Service
+      const store = yield* SessionStore.Service
+      const sessionID = Session.ID.make("ses_deleted_while_draining")
+      yield* seedSessions(database, [sessionID])
+
+      const running = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Deferred.succeed(running, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const run = yield* execution.resume(sessionID).pipe(Effect.forkIn(scope))
+      yield* Deferred.await(running)
+
+      // The outer Session service has no ownership of this execution, as in a second server.
+      yield* sessions.remove(sessionID)
+      yield* Deferred.succeed(release, undefined)
+
+      expect(yield* Fiber.await(run)).toEqual(Exit.void)
+      expect(yield* execution.isActive(sessionID)).toBe(false)
+      expect(yield* store.get(sessionID)).toBeUndefined()
+    }),
+  )
+
+  it.effect("settles a failed drain after another execution context deletes its session", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessions = yield* Session.Service
+      const store = yield* SessionStore.Service
+      const sessionID = Session.ID.make("ses_deleted_before_drain_failure")
+      yield* seedSessions(database, [sessionID])
+
+      const running = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(running, undefined)
+          yield* Deferred.await(release)
+          return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const run = yield* execution.resume(sessionID).pipe(Effect.forkIn(scope))
+      yield* Deferred.await(running)
+
+      yield* sessions.remove(sessionID)
+      yield* Deferred.succeed(release, undefined)
+
+      expect(yield* Fiber.await(run)).toEqual(Exit.void)
+      expect(yield* execution.isActive(sessionID)).toBe(false)
+      expect(yield* store.get(sessionID)).toBeUndefined()
+    }),
+  )
+
+  it.effect("ignores a wake for a session that has already been deleted", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessions = yield* Session.Service
+      const sessionID = Session.ID.make("ses_deleted_before_execution")
+      yield* seedSessions(database, [sessionID])
+      yield* sessions.remove(sessionID)
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.die("A deleted session must not drain"))
+      const execution = Context.get(context, SessionExecution.Service)
+
+      expect(yield* execution.resume(sessionID).pipe(Effect.exit)).toEqual(Exit.void)
+      expect(yield* execution.isActive(sessionID)).toBe(false)
+    }),
+  )
+
+  for (const lifecycle of [SessionEvent.Execution.Started, SessionEvent.Execution.Succeeded]) {
+    it.effect(`does not publish ${lifecycle.type} when deletion races publication`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const sessions = yield* Session.Service
+        const bus = yield* Bus.Service
+        const sessionID = Session.ID.make("ses_deleted_before_publication")
+        yield* seedSessions(database, [sessionID])
+
+        const publishing = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const delivered: string[] = []
+        const unsubscribe = yield* bus.listen((event) => Effect.sync(() => void delivered.push(event.type)))
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const paused: Bus.Interface = {
+          ...bus,
+          publish: (definition, data, options) =>
+            Effect.gen(function* () {
+              if (definition.type === lifecycle.type) {
+                yield* Deferred.succeed(publishing, undefined)
+                yield* Deferred.await(release)
+              }
+              return yield* bus.publish(definition, data, options)
+            }),
+        }
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const context = yield* buildExecution(scope, () => Effect.void).pipe(Effect.provideService(Bus.Service, paused))
+        const execution = Context.get(context, SessionExecution.Service)
+        const run = yield* execution.resume(sessionID).pipe(Effect.forkIn(scope))
+        yield* Deferred.await(publishing)
+
+        yield* sessions.remove(sessionID)
+        delivered.length = 0
+        yield* Deferred.succeed(release, undefined)
+
+        expect(yield* Fiber.await(run)).toEqual(Exit.void)
+        expect(yield* execution.isActive(sessionID)).toBe(false)
+        expect(delivered).toEqual([])
+        expect(
+          yield* database.db
+            .select()
+            .from(EventSequenceTable)
+            .where(eq(EventSequenceTable.aggregate_id, sessionID))
+            .get()
+            .pipe(Effect.orDie),
+        ).toBeUndefined()
+      }),
+    )
+  }
+
+  it.effect("preserves a drain failure while its session still exists", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_live_drain_failure")
+      yield* seedSessions(database, [sessionID])
+      const error = new AIError({
+        reason: new TransportError({ message: "Disconnected", transport: "http", operation: "request" }),
+      })
+      const failures: SessionEvent.Execution.Failed[] = []
+      yield* bus.project(SessionEvent.Execution.Failed, (event) => Effect.sync(() => void failures.push(event)))
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.fail(error))
+      const execution = Context.get(context, SessionExecution.Service)
+
+      expect(yield* execution.resume(sessionID).pipe(Effect.exit)).toEqual(Exit.fail(error))
+      expect(yield* execution.isActive(sessionID)).toBe(false)
+      expect(failures.map((event) => event.data.error)).toEqual([
+        { type: "provider.transport", message: "Disconnected" },
+      ])
+      expect((yield* claims(database))[sessionID]).toBe(false)
+    }),
+  )
 
   it.effect("the sweep only lists claimed top-level Sessions", () =>
     Effect.gen(function* () {
@@ -183,65 +340,82 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
-  it.effect("does not resume a user-cancelled background child whose notification was not admitted", () =>
-    Effect.gen(function* () {
-      const database = yield* Database.Service
-      const parent = Session.ID.make("ses_cancelled_background_parent")
-      const child = Session.ID.make("ses_cancelled_background_child")
-      yield* seedSessions(database, [parent])
-      yield* seedSessions(database, [child], { parent_id: parent })
+  for (const deleted of [false, true]) {
+    it.effect(`records user cancellation before notification admission (deleted child: ${deleted})`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const sessions = yield* Session.Service
+        const bus = yield* Bus.Service
+        const interrupted: SessionEvent.Execution.Interrupted[] = []
+        yield* bus.project(SessionEvent.Execution.Interrupted, (event) =>
+          Effect.sync(() => void interrupted.push(event)),
+        )
+        const parent = Session.ID.make("ses_cancelled_background_parent")
+        const child = Session.ID.make("ses_cancelled_background_child")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent })
 
-      const running = yield* Deferred.make<void>()
-      const scope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const jobs = yield* Job.make.pipe(Scope.provide(scope))
-      const context = yield* buildExecution(
-        scope,
-        () => Deferred.succeed(running, undefined).pipe(Effect.andThen(Effect.never)),
-        undefined,
-        jobs,
-      )
-      const execution = Context.get(context, SessionExecution.Service)
-      yield* jobs.start({
-        id: child,
-        type: "subagent",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent,
-          childSessionID: child,
-          agent: "general",
-          description: "Cancelled inspection",
-        },
-        run: execution.resume(child).pipe(Effect.as("unused")),
-      })
-      yield* jobs.background(child)
-      yield* Deferred.await(running)
-      expect(yield* execution.interrupt(child)).toBeTrue()
-      yield* execution.awaitIdle(child)
-      expect((yield* jobs.wait({ id: child })).info?.status).toBe("cancelled")
-      expect(yield* jobs.pendingBackground).toMatchObject([{ id: child, status: "cancelled" }])
-      expect((yield* claims(database))[child]).toBe(false)
-      yield* Scope.close(scope, Exit.void)
+        const running = yield* Deferred.make<void>()
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const jobs = yield* Job.make.pipe(Scope.provide(scope))
+        const context = yield* buildExecution(
+          scope,
+          () => Deferred.succeed(running, undefined).pipe(Effect.andThen(Effect.never)),
+          undefined,
+          jobs,
+        )
+        const execution = Context.get(context, SessionExecution.Service)
+        yield* jobs.start({
+          id: child,
+          type: "subagent",
+          recovery: {
+            kind: "subagent",
+            parentSessionID: parent,
+            childSessionID: child,
+            agent: "general",
+            description: "Cancelled inspection",
+          },
+          run: execution.resume(child).pipe(Effect.as("unused")),
+        })
+        yield* jobs.background(child)
+        yield* Deferred.await(running)
+        if (deleted) {
+          // A different execution context removes durable state, not this process-local job.
+          yield* sessions.remove(child)
+          expect(yield* jobs.get(child)).toMatchObject({ status: "running" })
+        }
+        expect(yield* execution.interrupt(child)).toBeTrue()
+        yield* execution.awaitIdle(child)
+        expect((yield* jobs.wait({ id: child })).info?.status).toBe("cancelled")
+        expect(yield* jobs.pendingBackground).toMatchObject([{ id: child, status: "cancelled" }])
+        if (deleted) expect((yield* claims(database))[child]).toBeUndefined()
+        if (!deleted) expect((yield* claims(database))[child]).toBe(false)
+        expect(interrupted.map((event) => event.data.sessionID)).toEqual(deleted ? [] : [child])
+        yield* Scope.close(scope, Exit.void)
 
-      const restartedScope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(restartedScope, Exit.void))
-      const restartedJobs = yield* Job.make.pipe(Scope.provide(restartedScope))
-      const drained: Session.ID[] = []
-      const restarted = yield* buildExecution(
-        restartedScope,
-        ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
-        undefined,
-        restartedJobs,
-      )
-      yield* Context.get(restarted, SessionRestart.Service).resumeSuspendedSessions
-      yield* Context.get(restarted, SessionExecution.Service).awaitIdle(parent)
-      expect(drained).toEqual([parent])
-      expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
-        { payload: { text: expect.stringContaining("Subagent cancelled"), metadata: { state: "cancelled" } } },
-      ])
-      expect(yield* restartedJobs.pendingBackground).toEqual([])
-    }),
-  )
+        const restartedScope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(restartedScope, Exit.void))
+        const restartedJobs = yield* Job.make.pipe(Scope.provide(restartedScope))
+        const drained: Session.ID[] = []
+        const restarted = yield* buildExecution(
+          restartedScope,
+          ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
+          undefined,
+          restartedJobs,
+        )
+        yield* Context.get(restarted, SessionRestart.Service).resumeSuspendedSessions
+        yield* Context.get(restarted, SessionExecution.Service).awaitIdle(parent)
+        expect(drained).toEqual(deleted ? [] : [parent])
+        expect(yield* SessionInbox.list(database.db, parent)).toMatchObject(
+          deleted
+            ? []
+            : [{ payload: { text: expect.stringContaining("Subagent cancelled"), metadata: { state: "cancelled" } } }],
+        )
+        expect(yield* restartedJobs.pendingBackground).toEqual([])
+      }),
+    )
+  }
 
   it.effect("starts every claimed execution without waiting for earlier drains to finish", () =>
     Effect.gen(function* () {
