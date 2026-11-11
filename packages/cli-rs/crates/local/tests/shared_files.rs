@@ -5,7 +5,7 @@
 //! functions. A reader thread checks every state of the files meanwhile.
 //!
 //! The TypeScript side comes from `OPENCODE_TS_ROOT`, else this checkout; without its `node_modules`
-//! the tests are skipped.
+//! the tests are skipped, or fail when `OPENCODE_RS_REQUIRE_TS` is set.
 
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -30,6 +30,11 @@ fn ts_root() -> PathBuf {
 fn available() -> bool {
     let present = ts_root().join("node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
     if !present {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
+            ts_root().display()
+        );
         eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", ts_root().display());
     }
     present

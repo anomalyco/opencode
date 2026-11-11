@@ -562,6 +562,10 @@ fn oracle() -> Option<PathBuf> {
     let script = root.join("parity/oracle/E.16-model-json.ts");
     let present = root.join("../../node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
     if !present {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: needs bun and the workspace node_modules"
+        );
         eprintln!("skipped: needs bun and the workspace node_modules");
         return None;
     }
