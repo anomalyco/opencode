@@ -61,9 +61,9 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: web@${{ github.sha }}
 
-  # The SST stack owns opncd.ai until this push removes its Share Worker, so this job runs after the
+  # The SST stack owned api.opencode.ai until this push removes its Api Worker, so this job runs after the
   # SST deploy to take the hostname without a custom-domain conflict.
-  share:
+  legacy:
     needs: deploy
     if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -89,5 +89,20 @@ jobs:
           secret-ids: CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
           parse-json-secrets: false
 
-      - run: bun run deploy:${{ github.ref_name }}
-        working-directory: services/share
+      # The GitHub App secrets are read here, not in the step above, so only this step ever has them. They reach cf
+      # through a file in the runner's temp directory, never argv, and the file is removed when the step ends.
+      - name: Deploy
+        working-directory: services/legacy
+        env:
+          STAGE: ${{ github.ref_name }}
+        # An explicit bash runs with pipefail, so a failed secret read fails the step.
+        shell: bash
+        run: |
+          umask 077
+          secrets="$RUNNER_TEMP/legacy-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          for name in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY; do
+            aws secretsmanager get-secret-value --secret-id "opencode/$STAGE/$name" --output json |
+              jq --arg name "$name" '{($name): .SecretString}'
+          done | jq -s add > "$secrets"
+          bun run deploy:$STAGE --secrets-file "$secrets"

@@ -158,7 +158,7 @@ const page = `<!doctype html>
   </body>
 </html>`
 
-// V1 clients still create, sync, and remove shares on this host, and the V1 GitHub Action fails its run when share
+// opncd.ai is the retired session-sharing host. V1 clients still create, sync, and remove shares on this host, and the V1 GitHub Action fails its run when share
 // creation fails. Accept those requests without storing anything so existing clients keep working.
 export default new Hono()
   .post("/api/share", async (c) => {
