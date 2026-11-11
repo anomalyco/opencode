@@ -171,7 +171,6 @@
     },
     "packages/cli-rs": {
       "name": "@opencode/cli-rs",
-      "version": "2.2.5",
       "devDependencies": {
         "@opencode/httpapi-codegen": "workspace:*",
         "@opencode/protocol": "workspace:*",
