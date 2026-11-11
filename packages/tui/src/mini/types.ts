@@ -72,6 +72,8 @@ type RunProviderModel = {
 export type RunProvider = {
   id: string
   name: string
+  canonical?: string
+  integrationID?: string
   models: Record<string, RunProviderModel>
 }
 

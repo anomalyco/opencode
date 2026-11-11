@@ -9,12 +9,26 @@
 import { createSession, sessionVariant, type RunSession, type SessionMessages } from "./session.shared"
 import type { RunInput, RunProvider } from "./types"
 import { cycleModelVariant, normalizeModelVariant } from "../model-preference"
+import { modelLabelKey, modelLabels, modelName, modelProviderName, type ModelLabel } from "../util/model-label"
 
-export function modelInfo(providers: RunProvider[] | undefined, model: NonNullable<RunInput["model"]>) {
-  const provider = providers?.find((item) => item.id === model.providerID)
+// The same short names as the prompt: no provider for native Console models, and `OpenCode / <Provider>` only for a
+// managed provider that is also connected directly. Without a catalog, the raw IDs.
+export function modelInfo(providers: RunProvider[] | undefined, model: NonNullable<RunInput["model"]>): ModelLabel {
+  if (!providers) return { provider: model.providerID, model: model.modelID }
+  const models = providers.flatMap((provider) =>
+    Object.entries(provider.models).map(([id, info]) => ({
+      providerID: provider.id,
+      id,
+      name: info.name ?? id,
+      status: info.status,
+    })),
+  )
+  const label = modelLabels(providers, models).get(modelLabelKey(model.providerID, model.modelID))
+  if (label) return label
+  const name = providers.find((item) => item.id === model.providerID)?.models[model.modelID]?.name
   return {
-    provider: provider?.name ?? model.providerID,
-    model: provider?.models[model.modelID]?.name ?? model.modelID,
+    provider: modelProviderName(model.providerID, providers),
+    model: name ? modelName(name) : model.modelID,
   }
 }
 
@@ -25,7 +39,8 @@ export function formatModelLabel(
 ): string {
   const names = modelInfo(providers, model)
   const label = variant ? ` · ${variant}` : ""
-  return `${names.model} · ${names.provider}${label}`
+  const name = names.provider ? `${names.model} · ${names.provider}` : names.model
+  return `${name}${label}`
 }
 
 export function cycleVariant(current: string | undefined, variants: string[]): string | undefined {
