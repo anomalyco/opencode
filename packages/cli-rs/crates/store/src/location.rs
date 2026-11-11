@@ -10,7 +10,7 @@ use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
-use crate::shells::Shell;
+use crate::shells::{Shell, ShellRead};
 use crate::state::{Data, Error, State, Task};
 
 /// Trailing window for event bursts that each ask for the same refetch (`settleMs`).
@@ -120,6 +120,7 @@ pub struct LocationData {
     /// Running shells by ID. Exited and deleted shells are removed.
     pub shell: Option<IndexMap<ShellID, Shell>>,
     pub skill: Option<Vec<SkillInfo>>,
+    pub(crate) shell_read: Option<ShellRead>,
 }
 
 impl LocationData {
@@ -157,7 +158,6 @@ enum Loaded {
     Provider(Vec<ProviderInfo>),
     Reference(Vec<ReferenceInfo>),
     Skill(Vec<SkillInfo>),
-    Shell(IndexMap<ShellID, Shell>),
 }
 
 impl Loaded {
@@ -175,7 +175,6 @@ impl Loaded {
             Loaded::Provider(value) => data.provider = Some(value),
             Loaded::Reference(value) => data.reference = Some(value),
             Loaded::Skill(value) => data.skill = Some(value),
-            Loaded::Shell(value) => data.shell = Some(value),
         }
     }
 }
@@ -392,6 +391,9 @@ impl Data {
     /// answers with; model and provider reads also under the requested one.
     pub fn catalog_sync(&self, catalog: Catalog, location: Option<&Location>) -> Task<()> {
         let location = self.resolve(location);
+        if catalog == Catalog::Shell {
+            return self.shell_read(location);
+        }
         self.sync_run(catalog.key(&location), move |data| async move {
             let (at, loaded) = load(data.client(), catalog, &location).await.map_err(Error::new)?;
             data.write(|state| {
@@ -608,18 +610,6 @@ async fn load(
             let response = client.skill_list(&SkillListInput { location: query }).await?;
             ((&response.location).into(), Loaded::Skill(response.data))
         }
-        Catalog::Shell => {
-            let response = client.shell_list(&ShellListInput { location: query }).await?;
-            let at = Location::from(&response.location);
-            let shells = response
-                .data
-                .into_iter()
-                .map(|info| {
-                    let info = crate::shells::from_list(info);
-                    (info.id.clone(), Shell { info, location: at.clone() })
-                })
-                .collect();
-            (at, Loaded::Shell(shells))
-        }
+        Catalog::Shell => unreachable!("Data::shell_read reads shells"),
     })
 }
