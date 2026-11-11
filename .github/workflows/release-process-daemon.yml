@@ -167,7 +167,7 @@ jobs:
             target: aarch64-pc-windows-msvc
             arch: arm64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         shell: pwsh
