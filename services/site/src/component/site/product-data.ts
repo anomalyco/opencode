@@ -129,13 +129,13 @@ export const extensions = {
  * to /mobile. When the Android app ships, set this to "available" and put its Google Play URL in
  * `mobileStores` below.
  */
-export const androidStatus = "coming-soon" as "coming-soon" | "available"
+export const androidStatus = "available" as "coming-soon" | "available"
 export const androidSoon = androidStatus === "coming-soon"
 
 /**
  * Where to get the mobile apps. iPhone is a public TestFlight beta until the App Store listing ships
- * (David, 5 Nov 2026); swap the link and label for the App Store URL then. Android has no listing yet,
- * so it opens the Mobile page's Download section. `soon` lists a store as "Coming soon", with no link.
+ * (David, 5 Nov 2026); swap the link and label for the App Store URL then. Android is on Google Play.
+ * `soon` lists a store as "Coming soon", with no link.
  */
 export const mobileStores = [
   {
@@ -151,7 +151,7 @@ export const mobileStores = [
     platform: "Android",
     label: "Google Play",
     device: "Android",
-    href: "/mobile#download",
+    href: "https://play.google.com/store/apps/details?id=ai.opencode.mobilecode",
     soon: androidSoon,
     beta: false,
   },
@@ -252,8 +252,7 @@ export const productDetails: Record<
   },
   mobile: {
     title: "OpenCode | Mobile, your coding sessions on your phone",
-    description:
-      "Start and steer OpenCode sessions from your phone. Talk to the agent while it runs on your computer.",
+    description: "Start and steer OpenCode sessions from your phone. Talk to the agent while it runs on your computer.",
     // Android joins when it is available (androidStatus).
     operatingSystem: androidSoon ? "iOS" : "iOS, Android",
     intro:
