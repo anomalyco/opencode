@@ -141,6 +141,26 @@ pub fn enabled(info: &Info) -> bool {
         .unwrap_or_else(|| opencode_local::channel::Channels::from_env().channel == "local")
 }
 
+/// Whether the bar shows: enabled, and not over `/stats` (`app.tsx:1472`).
+fn shown(tui: &Tui, info: &Info) -> bool {
+    enabled(info) && !matches!(tui.route(), Route::Plugin { id, .. } if id == "opencode.stats")
+}
+
+thread_local! {
+    /// The mounted bars, for [`route_changed`].
+    static BARS: RefCell<Vec<Weak<Bar>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The route changed: the bar of `tui` shows or hides with it.
+pub(crate) fn route_changed(tui: &Tui) {
+    let bars: Vec<Rc<Bar>> = BARS.with(|bars| {
+        let mut bars = bars.borrow_mut();
+        bars.retain(|bar| bar.strong_count() > 0);
+        bars.iter().filter_map(Weak::upgrade).collect()
+    });
+    bars.iter().filter(|bar| std::ptr::eq(bar.tui.as_ptr(), tui)).for_each(|bar| bar.render(tui));
+}
+
 struct Bar {
     tui: Weak<Tui>,
     root: View,
@@ -180,6 +200,7 @@ pub fn mount(tui: &Rc<Tui>, parent: &View) {
         pressed: RefCell::default(),
         _layer: RefCell::new(None),
     });
+    BARS.with(|bars| bars.borrow_mut().push(Rc::downgrade(&bar)));
     install_escape(tui, &bar);
     install_connection(tui, &bar);
     install_samples(tui, &bar);
@@ -239,10 +260,17 @@ fn install_connection(tui: &Rc<Tui>, bar: &Rc<Bar>) {
     });
 }
 
-/// Takes a UI sample now and every 2 s: CPU, memory, and how late the sampling timer fired.
+/// Takes a UI sample now and every 2 s while the bar shows: CPU, memory, and how late the sampling timer fired. A
+/// hidden bar reads nothing and starts over when it shows again, as TS mounts the bar afresh.
 fn install_samples(tui: &Rc<Tui>, bar: &Rc<Bar>) {
-    let last = Cell::new((tui.app.now(), cpu_time(), false));
+    let last = Cell::new((tui.app.now(), 0.0, false));
     let sample = bind!(bar, |bar, now: Instant| {
+        let Some(tui) = bar.tui.upgrade() else { return };
+        if !shown(&tui, &tui.settings.info()) {
+            bar.samples.borrow_mut().clear();
+            last.set((now, 0.0, false));
+            return;
+        }
         let (then, cpu_then, ready) = last.get();
         let cpu_now = cpu_time();
         let elapsed = now.saturating_duration_since(then);
@@ -254,12 +282,13 @@ fn install_samples(tui: &Rc<Tui>, bar: &Rc<Bar>) {
         };
         last.set((now, cpu_now, true));
         let mut samples = bar.samples.borrow_mut();
+        let before = runtime_status(&samples);
         samples.push(Sample { cpu, memory: memory(), delay: if ready { delay } else { 0.0 }, time: now });
         samples.retain(|sample| sample.time + SAMPLE_RETENTION >= now);
+        let after = runtime_status(&samples);
         drop(samples);
-        if let Some(tui) = bar.tui.upgrade()
-            && bar.panel.get() == Some(Panel::Ui)
-        {
+        // The bar's own UI icon follows the status; the open UI panel follows every sample.
+        if bar.panel.get() == Some(Panel::Ui) || before != after {
             bar.render(&tui);
         }
     });
@@ -314,8 +343,9 @@ impl Bar {
         let theme = tui.page();
         self.root.clear();
         self.shown.take();
-        self.root.visible(enabled(&info));
-        if !enabled(&info) {
+        let shown = shown(tui, &info);
+        self.root.visible(shown);
+        if !shown {
             if self.panel.take().is_some() {
                 tui.app.request_redraw();
             }

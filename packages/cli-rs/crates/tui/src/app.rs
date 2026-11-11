@@ -226,6 +226,7 @@ impl Tui {
         }
         *self.view.borrow_mut() = Some(view);
         crate::features::title::route_changed(self);
+        crate::features::devtools::route_changed(self);
         crate::features::attention::program_status::sync(self);
         self.app.request_redraw();
     }

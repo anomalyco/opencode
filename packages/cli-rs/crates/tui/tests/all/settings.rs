@@ -265,6 +265,19 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     assert!(!app.text().contains("Experiments"), "{}", app.text());
 }
 
+// Expected (carbon-dialogs-7): the bar hides over `/stats` and comes back on leaving it (`app.tsx:1472`).
+#[test]
+fn the_devtools_bar_hides_over_stats() {
+    let app = TestApp::new(100, 30);
+    let tui = support::mount_empty(&app, support::component_info(json!({ "debug": { "devtools": true } })), None);
+    wait_for(&app, "Experiments");
+    tui.navigate(opencode_tui::Route::Plugin { id: "opencode.stats".into(), name: "stats".into() });
+    app.render();
+    assert!(!app.text().contains("Experiments"), "{}", app.text());
+    tui.navigate(opencode_tui::Route::Home);
+    wait_for(&app, "Experiments");
+}
+
 // Expected (R2-1): the devtools bar draws its items and panels again on each change, and frees the ones it replaced.
 #[test]
 fn the_devtools_bar_frees_what_it_draws_again() {
