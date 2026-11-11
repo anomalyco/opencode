@@ -31,12 +31,14 @@ import {
   dedupePins,
   INITIAL_RECENT_PAGE_STATE,
   RECENT_PAGE_LIMIT,
+  RECENT_RELOAD_DELAY_MS,
   RECENT_VISIBLE_LIMIT,
   mergeRecentSessions,
   partitionRecentSessions,
   recentPageFailed,
   recentPageHasMore,
   recentPageLoaded,
+  recentPageLoadingMore,
   recentRowUnread,
   recentSessionEndpoints,
   recentSessionKey,
@@ -92,6 +94,7 @@ export function RecentSessions() {
 
   const controllers = new Map<AbortController, string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const reloads = new Map<string, ReturnType<typeof setTimeout>>()
   const hydrationControllers = new Map<string, AbortController>()
   const statuses = new Map<string, { ctx: ServerCtx; status: string }>()
   let attempt = 0
@@ -118,6 +121,27 @@ export function RecentSessions() {
 
     clearTimeout(timer)
     timers.delete(server)
+  }
+
+  const cancelReload = (server: string) => {
+    clearTimeout(reloads.get(server))
+    reloads.delete(server)
+  }
+
+  // Order follows each server's last snapshot, so the moments the iOS app reloads its list reload page one here:
+  // run end, a new root session, archive and unarchive, and the window coming back. Bursts coalesce per server.
+  const reload = (item: Connection) => {
+    cancelReload(item.server)
+    reloads.set(
+      item.server,
+      setTimeout(() => {
+        reloads.delete(item.server)
+
+        if (disposed || !isCurrent(item) || item.ctx.sdk.connection.status() !== "connected") return
+
+        dispatch(item, { type: "reload", attempt: ++attempt })
+      }, RECENT_RELOAD_DELAY_MS),
+    )
   }
 
   const abortPages = (server: string) => {
@@ -197,6 +221,7 @@ export function RecentSessions() {
     abortPages(server)
     abortHydration(server)
     clearTimer(server)
+    cancelReload(server)
     setPages(produce((current) => void delete current[server]))
     clearHydration(server)
   }
@@ -245,7 +270,7 @@ export function RecentSessions() {
           if (page?.status !== "loading" || page.attempt !== effect.attempt) return
 
           batch(() => {
-            if (page.kind === "refresh") {
+            if (page.kind === "refresh" || page.kind === "reload") {
               const covered = new Map(response.data.map((info) => [info.id, info]))
 
               for (const key of state.pins) {
@@ -255,7 +280,8 @@ export function RecentSessions() {
                 const info = covered.get(pin.sessionID)
 
                 if (info) rememberPin(item, key, info)
-                else hydrate(item, key, pin.sessionID)
+                // Live events keep other pins current while connected; only a reconnect may have missed some.
+                else if (page.kind === "refresh") hydrate(item, key, pin.sessionID)
               }
             }
 
@@ -297,6 +323,20 @@ export function RecentSessions() {
     controllers.forEach((_, controller) => controller.abort())
     hydrationControllers.forEach((controller) => controller.abort())
     timers.forEach((timer) => clearTimeout(timer))
+    reloads.forEach((timer) => clearTimeout(timer))
+  })
+
+  const reloadAll = () => connections().forEach(reload)
+
+  const onVisible = () => {
+    if (document.visibilityState === "visible") reloadAll()
+  }
+
+  window.addEventListener("focus", reloadAll)
+  document.addEventListener("visibilitychange", onVisible)
+  onCleanup(() => {
+    window.removeEventListener("focus", reloadAll)
+    document.removeEventListener("visibilitychange", onVisible)
   })
 
   // The store is local and long-lived; drop duplicates a previous version or a manual edit left behind.
@@ -351,11 +391,8 @@ export function RecentSessions() {
     connections().flatMap((item) => {
       const fetched = pages[item.server]
 
-      return mergeRecentSessions(
-        item.server,
-        fetched?.sessions ?? [],
-        item.ctx.data.session.known(),
-        item.ctx.data.session.apply,
+      return mergeRecentSessions(item.server, fetched?.sessions ?? [], item.ctx.data.session.known(), (rows) =>
+        item.ctx.data.session.apply(rows, { reloads: true }),
       )
     }),
   )
@@ -373,7 +410,7 @@ export function RecentSessions() {
 
         if (!value) return
 
-        const session = item.ctx.data.session.apply([value])[0]
+        const session = item.ctx.data.session.apply([value], { reloads: true })[0]
 
         if (session) result.set(key, { key, server: item.server, session })
       })
@@ -422,6 +459,30 @@ export function RecentSessions() {
             forget(item.server, event.data.sessionID)
             setHydration(produce((cache) => void delete cache[key]))
           })
+        }),
+      )
+    })
+  })
+
+  createEffect(() => {
+    connections().forEach((item) => {
+      for (const type of [
+        "session.execution.succeeded",
+        "session.execution.failed",
+        "session.archived",
+        "session.unarchived",
+      ] as const) {
+        onCleanup(item.ctx.data.on(type, () => reload(item)))
+      }
+
+      onCleanup(
+        item.ctx.data.on("session.execution.interrupted", (event) => {
+          if (event.data.reason !== "shutdown") reload(item)
+        }),
+      )
+      onCleanup(
+        item.ctx.data.on("session.created", (event) => {
+          if (!event.data.parentID) reload(item)
         }),
       )
     })
@@ -520,13 +581,7 @@ export function RecentSessions() {
     })
   })
 
-  const loadingMore = createMemo(() =>
-    connections().some((item) => {
-      const value = pages[item.server]
-
-      return value?.status === "loading" && value.kind !== "first" && value.sessions.length > 0
-    }),
-  )
+  const loadingMore = createMemo(() => connections().some((item) => recentPageLoadingMore(pages[item.server])))
 
   const failed = createMemo(() => connections().some((item) => recentPageFailed(pages[item.server])))
 

@@ -8,16 +8,10 @@ type SessionMutation = { readonly id: string; readonly type: "remove"; readonly 
 
 type SendRecency = { readonly sentAt: number; readonly serverUpdatedAt: number }
 
-type RenameRecency = { readonly ats: Set<number>; readonly latest: number; previous?: number }
-
-type ObservedRecency = { readonly values: readonly number[] }
-
 const REMOVED_SESSION_LIMIT = 512
 
 // Recency bookkeeping is per session and only needed for lists; bound it like the removed-session set.
 const RECENCY_SESSION_LIMIT = 512
-
-const OBSERVED_VALUE_LIMIT = 4
 
 // Times returned by apply() are projections. Remember their raw server value so remember() never stores the bump.
 const syntheticTimes = new WeakMap<SessionInfo["time"], number>()
@@ -48,16 +42,9 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
       mutation.deleted(event.data.sessionID)
     }),
   )
-  // Renaming advances `time.updated` server-side. Remember the value shown before the rename so a refetch of the
-  // renamed record cannot promote the session; a newer record becomes the floor so stale refetches cannot demote it.
-  onCleanup(
-    input.data.on("session.renamed", (event) => {
-      recency.renamed(event.data.sessionID, session(event.data.sessionID), event.created)
-      changed()
-    }),
-  )
   // The SDK invalidates and syncs loaded sessions on execution end. Desktop also needs a fresh record for roots
-  // that only appear in a fetched index. Coalesce those reads across overlapping ends.
+  // that only appear in an index that does not reload itself at run end (Home, Inbox, the project sidebars).
+  // Coalesce those reads across overlapping ends.
   SESSION_EXECUTION_ENDED.forEach((type) =>
     onCleanup(
       input.data.on(type, (event) => {
@@ -75,12 +62,13 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
     return input.data.session.get(sessionID) ?? input.data.session.list().find((item) => item.id === sessionID)
   }
 
-  const apply = (sessions: readonly SessionInfo[]) => {
+  // `reloads` marks a list that reloads its own snapshot at run end, so its roots need no per-session refresh.
+  const apply = (sessions: readonly SessionInfo[], options?: { reloads: true }) => {
     version.value
 
-    const result = recency.apply(mutation.apply(sessions))
+    const result = recency.apply(mutation.apply(sessions), !options?.reloads)
 
-    // A record can settle a send or a rename while a memo reads it. Rerun the other readers after this computation
+    // A record can settle a send while a memo reads it. Rerun the other readers after this computation
     // so every list converges on the same recency in the next tick.
     if (recency.takeMutated()) queueMicrotask(changed)
 
@@ -96,7 +84,7 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
 
         return mutation.apply(input.data.session.list()).map(recency.project)
       },
-      // Index consumers merge the raw server snapshots before applying pending sends and rename protection.
+      // Index consumers merge the raw server snapshots before applying pending sends.
       known: input.data.session.list,
       apply,
       remember(info: SessionInfo) {
@@ -121,13 +109,9 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
 
 export function createSessionRecency() {
   const sends = new Map<string, SendRecency>()
-  const renames = new Map<string, RenameRecency>()
   // The newest server value a send's catch-up has taught us. Stale list fetches must not drop below it.
   const floors = new Map<string, number>()
-  // Raw non-rename values already rendered, newest first. A rename with no live record recovers its pre-rename
-  // value from here even when a refetched rename record landed before the SSE event.
-  const observed = new Map<string, ObservedRecency>()
-  // Run-end refresh eligibility comes from list reads. A send or rename can also populate timestamp history.
+  // Run-end refresh eligibility comes from reads of lists that do not reload themselves.
   const listedRoots = new Map<string, true>()
   let mutated = false
 
@@ -148,133 +132,49 @@ export function createSessionRecency() {
     mutated = true
   }
 
-  const observe = (sessionID: string, value: number) => {
-    if (renames.get(sessionID)?.ats.has(value)) return
-
-    const values = observed.get(sessionID)?.values ?? []
-
-    if (values.includes(value)) return
-
-    keep(observed, sessionID, {
-      values: [...values, value].sort((a, b) => b - a).slice(0, OBSERVED_VALUE_LIMIT),
-    })
-  }
-
-  const observedPrior = (sessionID: string) => observed.get(sessionID)?.values[0]
-
   // Reading live metadata for status must not settle a send or change another list's ordering.
   function project(info: SessionInfo) {
     const send = sends.get(info.id)
-    const updated = rawTime(info)
+    const updated = Math.max(rawTime(info), floors.get(info.id) ?? 0)
 
-    if (send) return withTime(info, Math.max(updated, send.sentAt, floors.get(info.id) ?? 0))
-
-    const rename = renames.get(info.id)
-
-    const projected = rename
-      ? rename.ats.has(updated)
-        ? (rename.previous ?? observedPrior(info.id) ?? Math.min(info.time.created, rename.latest))
-        : Math.max(updated, rename.previous ?? 0)
-      : updated
-
-    return withTime(info, Math.max(projected, floors.get(info.id) ?? 0))
+    return withTime(info, send ? Math.max(updated, send.sentAt) : updated)
   }
 
   return {
     project,
     wasListedRoot: (sessionID: string) => listedRoots.has(sessionID),
     acceptSend(sessionID: string, info: SessionInfo | undefined, sentAt: number) {
-      const previous = sends.get(sessionID)
-      const renamedAt = renames.get(sessionID)?.latest ?? 0
-      const updated = info ? rawTime(info) : 0
       keep(sends, sessionID, {
         sentAt,
-        // Keep the highest server value known before this send. A pending rename is already on the server, so a
-        // stale fetch at the rename time must not be mistaken for the send catching up.
-        serverUpdatedAt: Math.max(previous?.serverUpdatedAt ?? 0, updated, renamedAt, floors.get(sessionID) ?? 0),
-      })
-
-      if (info) observe(sessionID, updated)
-    },
-    renamed(sessionID: string, info: SessionInfo | undefined, at: number) {
-      const existing = renames.get(sessionID)
-      const ats = new Set(existing?.ats ?? [])
-      ats.add(at)
-
-      if (ats.size > RECENCY_SESSION_LIMIT) {
-        const oldest = ats.values().next().value
-
-        if (oldest !== undefined) ats.delete(oldest)
-      }
-
-      // The rename time itself is not activity. Drop it, and every earlier rename time, from the observed values.
-      const values = (observed.get(sessionID)?.values ?? []).filter((value) => !ats.has(value))
-
-      if (values.length > 0) keep(observed, sessionID, { values })
-      else observed.delete(sessionID)
-
-      const infoUpdated = info ? rawTime(info) : undefined
-      const infoPrior = infoUpdated !== undefined && !ats.has(infoUpdated) ? infoUpdated : undefined
-
-      const previous = Math.max(
-        existing?.previous ?? Number.NEGATIVE_INFINITY,
-        infoPrior ?? Number.NEGATIVE_INFINITY,
-        values[0] ?? Number.NEGATIVE_INFINITY,
-        floors.get(sessionID) ?? Number.NEGATIVE_INFINITY,
-      )
-
-      keep(renames, sessionID, {
-        ats,
-        latest: Math.max(existing?.latest ?? 0, at),
-        previous: previous === Number.NEGATIVE_INFINITY ? undefined : previous,
+        // Keep the highest server value known before this send; only a newer server record settles it.
+        serverUpdatedAt: Math.max(
+          sends.get(sessionID)?.serverUpdatedAt ?? 0,
+          info ? rawTime(info) : 0,
+          floors.get(sessionID) ?? 0,
+        ),
       })
     },
-    apply(infos: readonly SessionInfo[]) {
+    apply(infos: readonly SessionInfo[], listed = true) {
       mutated = false
-      const pending = new Map<string, { newest: number; settled: number }>()
+      const newest = new Map<string, number>()
 
-      // Settle state from the whole batch first, so [stale, fresh] and [fresh, stale] compute the same values.
+      // Settle from the whole batch first, so [stale, fresh] and [fresh, stale] compute the same values.
       for (const [index, info] of infos.entries()) {
-        const rename = renames.get(info.id)
-        const updated = rawTime(info)
-        const renameTime = rename?.ats.has(updated) ?? false
+        if (listed && index < RECENCY_SESSION_LIMIT && !info.parentID) keep(listedRoots, info.id, true)
 
-        if (index < RECENCY_SESSION_LIMIT) {
-          if (!info.parentID) keep(listedRoots, info.id, true)
+        if (!sends.has(info.id)) continue
 
-          if (!renameTime) observe(info.id, updated)
-        }
-
-        if (!sends.has(info.id) && !rename) continue
-
-        const settled = pending.get(info.id) ?? {
-          newest: Number.NEGATIVE_INFINITY,
-          settled: rename?.previous ?? Number.NEGATIVE_INFINITY,
-        }
-
-        if (!renameTime) {
-          settled.newest = Math.max(settled.newest, updated)
-          settled.settled = Math.max(settled.settled, updated)
-        }
-
-        pending.set(info.id, settled)
+        newest.set(info.id, Math.max(newest.get(info.id) ?? Number.NEGATIVE_INFINITY, rawTime(info)))
       }
 
-      pending.forEach((settled, sessionID) => {
+      newest.forEach((updated, sessionID) => {
         const send = sends.get(sessionID)
 
-        if (send && settled.newest > send.serverUpdatedAt) {
-          sends.delete(sessionID)
-          mutated = true
-          grow(floors, sessionID, settled.newest)
-        }
+        if (!send || updated <= send.serverUpdatedAt) return
 
-        const rename = renames.get(sessionID)
-
-        if (rename && settled.settled > (rename.previous ?? Number.NEGATIVE_INFINITY)) {
-          rename.previous = settled.settled
-          mutated = true
-        }
+        sends.delete(sessionID)
+        mutated = true
+        grow(floors, sessionID, updated)
       })
 
       return infos.map(project)
@@ -288,9 +188,7 @@ export function createSessionRecency() {
     },
     forget(sessionID: string) {
       sends.delete(sessionID)
-      renames.delete(sessionID)
       floors.delete(sessionID)
-      observed.delete(sessionID)
       listedRoots.delete(sessionID)
     },
   }

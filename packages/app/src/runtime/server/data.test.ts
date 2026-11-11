@@ -2,6 +2,7 @@ import { afterEach, expect, setSystemTime, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "@opencode/client/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInfo } from "@opencode/client/promise"
+import { mergeRecentSessions } from "@/shell/titlebar/recent-sessions-model"
 import { createDesktopData, createSessionMutations, createSessionRecency, createSessionRefresh } from "./data"
 
 const session: SessionInfo = {
@@ -167,61 +168,33 @@ test("passive session events do not promote a session", () => {
   }
 })
 
-test("a rename does not promote the session, including when a refetch returns the rename time", () => {
-  const setup = setupDesktop(async () => Response.json({ data: session }))
+test("after a reload, Recent shows the order a restarted window shows for the same server data", () => {
+  const other = { ...session, id: "ses_other", time: { created: 0, updated: 20 } }
+  const running = setupDesktop(async () => Response.json({ data: session }))
+  const restarted = setupDesktop(async () => Response.json({ data: session }))
+
+  const order = (setup: typeof running, snapshot: SessionInfo[]) =>
+    mergeRecentSessions("server", snapshot, setup.data.session.known(), (rows) =>
+      setup.data.session.apply(rows, { reloads: true }),
+    ).map((entry) => entry.session.id)
 
   try {
-    setup.seed(10)
-    setup.emit("session.renamed", 50, { title: "Renamed" })
+    // The running window renamed the session, which advanced its server time. It keeps its row until a reload.
+    running.seed(10)
+    running.emit("session.renamed", 30, { title: "Renamed" })
+    expect(order(running, [other, { ...session, time: { created: 0, updated: 10 } }])).toEqual([
+      "ses_other",
+      session.id,
+    ])
 
-    const renamed = { ...session, title: "Renamed", time: { created: 0, updated: 50 } }
-    expect(setup.data.session.apply([renamed])[0].time.updated).toBe(10)
-
-    // A later change promoted the session. A stale refetch at the rename time must not demote it.
-    expect(setup.data.session.apply([{ ...renamed, time: { created: 0, updated: 60 } }])[0].time.updated).toBe(60)
-    expect(setup.data.session.apply([renamed])[0].time.updated).toBe(60)
+    const reloaded = [{ ...session, title: "Renamed", time: { created: 0, updated: 30 } }, other]
+    restarted.seed(30)
+    expect(order(running, reloaded)).toEqual([session.id, "ses_other"])
+    expect(order(restarted, reloaded)).toEqual([session.id, "ses_other"])
   } finally {
-    setup.dispose()
+    running.dispose()
+    restarted.dispose()
   }
-})
-
-test("a rename with no live record waits for a stale copy before settling", () => {
-  const stale = { ...session, time: { created: 0, updated: 10 } }
-  const renamed = { ...session, title: "Renamed", time: { created: 0, updated: 50 } }
-
-  const batch = (records: SessionInfo[]) => {
-    const recency = createSessionRecency()
-    recency.renamed(session.id, undefined, 50)
-
-    return recency.apply(records).map((item) => item.time.updated)
-  }
-
-  // Whichever order the copies appear in, the stale copy supplies the pre-rename value.
-  expect(batch([stale, renamed])).toEqual([10, 10])
-  expect(batch([renamed, stale])).toEqual([10, 10])
-
-  const sequence = (records: SessionInfo[]) => {
-    const recency = createSessionRecency()
-    recency.renamed(session.id, undefined, 50)
-
-    return [...records, stale, renamed].map((record) => recency.apply([record])[0].time.updated)
-  }
-
-  // A renamed-only read has nothing to compare against. It uses the creation floor instead of promoting to `at`.
-  const renamedFirst = sequence([renamed])
-  expect(renamedFirst[0]).toBe(0)
-  expect(renamedFirst.slice(1)).toEqual([10, 10])
-
-  const staleFirst = sequence([stale])
-  expect(staleFirst).toEqual([10, 10, 10])
-})
-
-test("a pre-rename record observed before the rename supplies the guard value", () => {
-  const recency = createSessionRecency()
-  recency.apply([{ ...session, time: { created: 0, updated: 10 } }])
-  recency.renamed(session.id, undefined, 50)
-
-  expect(recency.apply([{ ...session, time: { created: 0, updated: 50 } }])[0].time.updated).toBe(10)
 })
 
 test("an accepted send promotes immediately and survives a stale fetch until the server catches up", () => {
@@ -241,23 +214,6 @@ test("an accepted send promotes immediately and survives a stale fetch until the
 
     // A stale list fetch after the catch-up must not demote it again.
     expect(setup.data.session.apply([{ ...session, time: { created: 0, updated: 100 } }])[0].time.updated).toBe(150)
-  } finally {
-    setup.dispose()
-  }
-})
-
-test("a send after a rename is not demoted by a stale refetch at the rename time", () => {
-  const setup = setupDesktop(async () => Response.json({ data: session }))
-
-  try {
-    setup.seed(10)
-    setup.emit("session.renamed", 50, { title: "Renamed" })
-    setSystemTime(new Date(1_000))
-    setup.data.session.acceptSend(session.id)
-
-    expect(
-      setup.data.session.apply([{ ...session, title: "Renamed", time: { created: 0, updated: 50 } }])[0].time.updated,
-    ).toBe(1_000)
   } finally {
     setup.dispose()
   }
@@ -291,44 +247,6 @@ test("send catch-up does not depend on the order records are applied", () => {
   expect(sequence([fresh, stale])).toBe(150)
 })
 
-test("multiple renames keep the original pre-rename value through either renamed copy", () => {
-  const recency = createSessionRecency()
-  const pre = { ...session, time: { created: 0, updated: 10 } }
-  const first = { ...session, time: { created: 0, updated: 50 } }
-  const second = { ...session, time: { created: 0, updated: 80 } }
-
-  recency.renamed(session.id, pre, 50)
-  expect(recency.apply([first])[0].time.updated).toBe(10)
-
-  // The live store now holds the first rename time, but it is not real activity.
-  recency.renamed(session.id, first, 80)
-  expect(recency.apply([first])[0].time.updated).toBe(10)
-  expect(recency.apply([second])[0].time.updated).toBe(10)
-  expect(recency.apply([first, second]).map((item) => item.time.updated)).toEqual([10, 10])
-})
-
-test("a refetch that lands before the rename event still supplies the pre-rename value", () => {
-  const recency = createSessionRecency()
-  const stale = { ...session, time: { created: 0, updated: 10 } }
-  const renamed = { ...session, time: { created: 0, updated: 50 } }
-
-  recency.apply([stale])
-  recency.apply([renamed])
-  recency.renamed(session.id, undefined, 50)
-
-  expect(recency.apply([renamed])[0].time.updated).toBe(10)
-})
-
-test("a rename during a send does not clamp the session to the local send time", () => {
-  const recency = createSessionRecency()
-  const before = { ...session, time: { created: 0, updated: 200 } }
-
-  recency.acceptSend(session.id, before, 1_000)
-  recency.renamed(session.id, before, 300)
-
-  expect(recency.apply([{ ...session, time: { created: 0, updated: 210 } }])[0].time.updated).toBe(210)
-})
-
 test("remember restores the raw server time after apply projected a send bump", () => {
   const setup = setupDesktop(async () => Response.json({ data: session }))
 
@@ -355,14 +273,6 @@ test("bounds per-session recency state", () => {
   for (let index = 0; index < 600; index++) recency.acceptSend(`ses_${index}`, undefined, 100_000 + index)
 
   expect(recency.apply([{ ...session, id: "ses_0", time: { created: 0, updated: 0 } }])[0].time.updated).toBe(0)
-})
-
-test("the newest indexed row keeps its pre-rename time across a large page batch", () => {
-  const recency = createSessionRecency()
-  const rows = Array.from({ length: 600 }, (_, i) => ({ ...session, id: `ses_${i}`, time: { created: 0, updated: 600 - i } }))
-  recency.apply(rows)
-  recency.renamed(rows[0].id, undefined, 1_000)
-  expect(recency.apply([{ ...rows[0], time: { created: 0, updated: 1_000 } }])[0].time.updated).toBe(600)
 })
 
 test("reading passively synced metadata leaves an accepted send pending for indexed lists", () => {
@@ -427,26 +337,33 @@ test.each(["loaded", "listed"] as const)("an execution end refreshes a %s root e
   }
 })
 
-test.each(["child", "unknown"] as const)("an execution end skips an unloaded %s session", async (source) => {
-  let gets = 0
+test.each(["child", "unknown", "self-reloading"] as const)(
+  "an execution end skips an unloaded %s session",
+  async (source) => {
+    let gets = 0
 
-  const setup = setupDesktop(async () => {
-    gets++
+    const setup = setupDesktop(async () => {
+      gets++
 
-    return Response.json({ data: session })
-  })
+      return Response.json({ data: session })
+    })
 
-  try {
-    if (source === "child") setup.data.session.apply([{ ...session, parentID: "ses_parent" }])
-    setup.emit("session.execution.succeeded", 50)
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    try {
+      if (source === "child") setup.data.session.apply([{ ...session, parentID: "ses_parent" }])
 
-    expect(gets).toBe(0)
-    expect(setup.data.session.get(session.id)).toBeUndefined()
-  } finally {
-    setup.dispose()
-  }
-})
+      // Recent reloads its snapshot at run end, so its roots need no separate refresh.
+      if (source === "self-reloading") setup.data.session.apply([session], { reloads: true })
+
+      setup.emit("session.execution.succeeded", 50)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(gets).toBe(0)
+      expect(setup.data.session.get(session.id)).toBeUndefined()
+    } finally {
+      setup.dispose()
+    }
+  },
+)
 
 test("coalesces overlapping refreshes for one session and keeps a queued one", async () => {
   const calls: string[] = []

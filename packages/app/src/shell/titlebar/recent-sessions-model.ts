@@ -1,6 +1,5 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { ServerConnection } from "@/runtime/server/registry"
-import { mergeHomeSessionIndex } from "@/home/sessions/index"
 
 const separator = "\u0000"
 
@@ -8,6 +7,9 @@ export const RECENT_PAGE_LIMIT = 50
 
 /** Bounds a hanging server request; matches the Home session list's fetch deadline. */
 export const RECENT_PAGE_TIMEOUT_MS = 30_000
+
+/** Coalesces the events that reload a server's first page, like the iOS app's session list. */
+export const RECENT_RELOAD_DELAY_MS = 250
 
 export type RecentSession = {
   /** `${server}\u0000${sessionID}`, the same key the pin order stores. */
@@ -132,19 +134,26 @@ type RecentPageBase = {
   readonly olderLoaded: boolean
 }
 
+/**
+ * How a load joins the rows already held. `refresh` is a reconnect snapshot, which also re-reads pins it does not
+ * cover; `reload` is the same snapshot taken while connected (run end, new session, focus, archive).
+ */
+type RecentPageKind = "first" | "next" | "refresh" | "reload"
+
 /** One server's fetched pages. `loading.kind` decides how a response joins the rows already held. */
 export type RecentPageState =
   | ({ readonly status: "idle" } & RecentPageBase)
   | ({
       readonly status: "loading"
-      readonly kind: "first" | "next" | "refresh"
+      readonly kind: RecentPageKind
       readonly attempt: number
     } & RecentPageBase)
   | ({ readonly status: "ready" } & RecentPageBase)
-  | ({ readonly status: "failed"; readonly kind: "first" | "next" | "refresh" } & RecentPageBase)
+  | ({ readonly status: "failed"; readonly kind: RecentPageKind } & RecentPageBase)
 
 export type RecentPageEvent =
   | { readonly type: "load"; readonly kind: "first" | "next" | "refresh"; readonly attempt: number }
+  | { readonly type: "reload"; readonly attempt: number }
   | { readonly type: "retry"; readonly attempt: number }
   | {
       readonly type: "succeeded"
@@ -190,7 +199,7 @@ function mergeSessions(current: readonly SessionInfo[], next: readonly SessionIn
   return [...new Map([...current, ...next].map((session) => [session.id, session] as const)).values()]
 }
 
-function startLoading(state: RecentPageState, kind: "first" | "next" | "refresh", attempt: number) {
+function startLoading(state: RecentPageState, kind: RecentPageKind, attempt: number) {
   const requestCursor = kind === "next" ? state.cursor : undefined
   const cursor = kind === "first" ? undefined : state.cursor
 
@@ -297,6 +306,16 @@ export function transitionRecentPage(
     return startLoading(state, event.kind, event.attempt)
   }
 
+  // A reload supersedes whatever is in flight, so an older response cannot land after it. Before the first page
+  // there is nothing to reload, and a pending first page or reconnect refresh keeps its own kind.
+  if (event.type === "reload") {
+    if (state.status === "idle") return unchanged(state)
+
+    const pending = state.status !== "ready" && (state.kind === "first" || state.kind === "refresh")
+
+    return startLoading(state, pending ? state.kind : "reload", event.attempt)
+  }
+
   if (event.type === "retry") {
     if (state.status !== "failed") return unchanged(state)
 
@@ -332,18 +351,38 @@ export function recentPageFailed(state: RecentPageState | undefined) {
   return state?.status === "failed"
 }
 
+/** Only Show more's page shows a loader; snapshot reloads replace rows in place. */
+export function recentPageLoadingMore(state: RecentPageState | undefined) {
+  return state?.status === "loading" && state.kind === "next"
+}
+
 export function recentPageHasMore(state: RecentPageState | undefined) {
   return !!state && (state.status === "ready" || state.status === "failed") && !state.exhausted && !!state.cursor
 }
 
-/** One server's sessions plus the live store, keeping root, unarchived sessions. Live entries win. */
+/**
+ * One server's fetched pages plus the live store, keeping root, unarchived sessions. Live entries supply every field
+ * except `time.updated`: a fetched row keeps the time from its page until the next reload, as the iOS app does, so
+ * steps, renames and model or agent changes never reorder it. Sessions the pages do not hold, such as one created
+ * since, use their live time. `apply` adds the local send bump.
+ */
 export function mergeRecentSessions(
   server: string,
   fetched: readonly SessionInfo[],
   known: readonly SessionInfo[],
   apply: (rows: SessionInfo[]) => SessionInfo[] = (rows) => rows,
 ) {
-  const sessions = apply(mergeHomeSessionIndex(fetched, known))
+  const rows = new Map(fetched.map((info) => [info.id, info]))
+
+  for (const info of known) {
+    const updated = rows.get(info.id)?.time.updated
+    rows.set(
+      info.id,
+      updated === undefined || updated === info.time.updated ? info : { ...info, time: { ...info.time, updated } },
+    )
+  }
+
+  const sessions = apply([...rows.values()].filter((info) => !info.parentID && info.time.archived === undefined))
 
   return sortRecentSessions(sessions.map((session) => ({ key: recentSessionKey(server, session.id), server, session })))
 }

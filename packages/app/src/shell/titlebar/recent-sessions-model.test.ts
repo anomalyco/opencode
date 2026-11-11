@@ -11,6 +11,7 @@ import {
   RECENT_WINDOW_MS,
   mergeRecentSessions,
   partitionRecentSessions,
+  recentPageLoadingMore,
   recentSessionEndpoints,
   recentSessionKey,
   recentRowUnread,
@@ -119,8 +120,42 @@ test("merging prefers the live store and keeps root, unarchived sessions", () =>
     item("server", session("ses_a", 10, { title: "loaded" })),
     item("server", session("ses_live", 5)),
   ])
-  const ended = session("ses_a", 30, { time: { created: 1, updated: 30, idle: 29 } })
-  expect(mergeRecentSessions("server", [session("ses_a", 10)], [ended])).toEqual([item("server", ended)])
+})
+
+// Like the iOS app, only a reload of the list or the user's own send moves a row.
+test.each([
+  ["a rename", session("ses_b", 30, { title: "Renamed" })],
+  ["a model selection", session("ses_b", 30, { model: { providerID: "provider", id: "other" } })],
+  ["an agent selection", session("ses_b", 30, { agent: "plan" })],
+  ["a step", session("ses_b", 30, { time: { created: 1, updated: 30, busy: 30 } })],
+  ["a run end", session("ses_b", 30, { time: { created: 1, updated: 30, idle: 30 } })],
+])("%s does not move a row until the next reload, which re-sorts it", (_, live) => {
+  const order = (fetched: readonly SessionInfo[]) =>
+    mergeRecentSessions("server", fetched, [live]).map((entry) => entry.session.id)
+
+  const snapshot = readyPage([session("ses_a", 20), session("ses_b", 10)])
+  expect(order(snapshot.sessions)).toEqual(["ses_a", "ses_b"])
+  expect(mergeRecentSessions("server", snapshot.sessions, [live])[1]?.session).toEqual({
+    ...live,
+    time: { ...live.time, updated: 10 },
+  })
+
+  const started = transitionRecentPage(snapshot, { type: "reload", attempt: 1 })
+
+  const reloaded = transitionRecentPage(started.state, {
+    type: "succeeded",
+    attempt: 1,
+    sessions: [session("ses_b", 30), session("ses_a", 20)],
+    next: undefined,
+  })
+
+  expect(order(reloaded.state.sessions)).toEqual(["ses_b", "ses_a"])
+})
+
+test("a session created since the last reload appears at its live time", () => {
+  expect(
+    mergeRecentSessions("server", [session("ses_a", 20)], [session("ses_new", 30)]).map((entry) => entry.session.id),
+  ).toEqual(["ses_new", "ses_a"])
 })
 
 test("sessions with equal timestamps order by id, and missing updates fall back to creation", () => {
@@ -478,6 +513,82 @@ test("a reconnect snapshot drops page-one ghosts and keeps older rows and the ad
   expect(page.state.sessions.map((session) => session.id).toSorted()).toEqual([...incoming, older].map(s => s.id).toSorted())
   expect(page.state.cursor).toBe("cursor-old")
   expect(page.state.olderLoaded).toBe(true)
+})
+
+test("a reload waits for the first page, and otherwise starts page one again", () => {
+  expect(transitionRecentPage(INITIAL_RECENT_PAGE_STATE, { type: "reload", attempt: 1 }).state).toBe(
+    INITIAL_RECENT_PAGE_STATE,
+  )
+
+  const first = transitionRecentPage(INITIAL_RECENT_PAGE_STATE, { type: "load", kind: "first", attempt: 1 })
+  expect(transitionRecentPage(first.state, { type: "reload", attempt: 2 }).state).toMatchObject({
+    kind: "first",
+    attempt: 2,
+  })
+
+  const reconnect = transitionRecentPage(readyPage([session("ses_a", 20)]), {
+    type: "load",
+    kind: "refresh",
+    attempt: 3,
+  })
+
+  expect(transitionRecentPage(reconnect.state, { type: "reload", attempt: 4 }).state).toMatchObject({
+    kind: "refresh",
+    attempt: 4,
+  })
+
+  const reloaded = transitionRecentPage(readyPage([session("ses_a", 20)], { cursor: "cursor-2" }), {
+    type: "reload",
+    attempt: 5,
+  })
+
+  expect(reloaded.state).toMatchObject({ status: "loading", kind: "reload", cursor: "cursor-2" })
+  expect(reloaded.effects[0]).toEqual({ type: "fetch", attempt: 5, cursor: undefined })
+  expect(recentPageLoadingMore(reloaded.state)).toBe(false)
+})
+
+test("a reload supersedes Show more's page and keeps the older rows already loaded", () => {
+  const first = session("ses_first", 100)
+  const older = session("ses_older", 10)
+  const state = readyPage([first, older], { cursor: "cursor-3", olderLoaded: true })
+  const next = transitionRecentPage(state, { type: "load", kind: "next", attempt: 1 })
+  expect(recentPageLoadingMore(next.state)).toBe(true)
+
+  const reload = transitionRecentPage(next.state, { type: "reload", attempt: 2 })
+
+  // The superseded page cannot land after the reload started.
+  expect(
+    transitionRecentPage(reload.state, { type: "succeeded", attempt: 1, sessions: [session("ses_x", 5)], next: "x" })
+      .state,
+  ).toBe(reload.state)
+
+  const incoming = [
+    session("ses_moved", 200),
+    first,
+    ...Array.from({ length: RECENT_PAGE_LIMIT - 2 }, (_, i) => session(`ses_new${i}`, 99 - i)),
+  ]
+
+  const page = transitionRecentPage(reload.state, {
+    type: "succeeded",
+    attempt: 2,
+    sessions: incoming,
+    next: "cursor-2",
+  })
+
+  expect(page.state).toMatchObject({ status: "ready", cursor: "cursor-3", olderLoaded: true })
+  expect(page.state.sessions.map((entry) => entry.id).toSorted()).toEqual(
+    [...incoming, older].map((entry) => entry.id).toSorted(),
+  )
+
+  const failed = transitionRecentPage(transitionRecentPage(page.state, { type: "reload", attempt: 3 }).state, {
+    type: "failed",
+    attempt: 3,
+  })
+
+  expect(transitionRecentPage(failed.state, { type: "retry", attempt: 4 }).state).toMatchObject({
+    kind: "reload",
+    sessions: page.state.sessions,
+  })
 })
 
 test("removing a server clears its page", () => {
