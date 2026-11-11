@@ -66,13 +66,7 @@ Main keys, with the default leader `ctrl+x`:
 | `ctrl+g` or `home`, `ctrl+alt+g` or `end` | First and last message |
 | `ctrl+c` | Clear the prompt, or quit when it is empty |
 
-Known gaps:
-
-- The event stream can panic on non-ASCII text that is split across chunks. Live updates then stop
-  until a restart, and the panic text corrupts the screen until the next full repaint.
-- The first prompt in a new session can show a spurious "Session not found" toast.
-- Session actions, tabs and panes, system commands, and plugins are not done yet.
-- The release binary keeps line-table debug info (about 180 MB). `strip` brings it to about 40 MB.
+Known gap: the release binary keeps line-table debug info (about 180 MB). `strip` brings it to about 40 MB.
 
 ## Layout
 
