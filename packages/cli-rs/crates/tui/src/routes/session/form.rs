@@ -100,14 +100,14 @@ impl Host {
 pub struct SessionForms {
     host: Host,
     session: SessionID,
-    /// Owners whose pending forms were read since the last full sync.
-    synced: RefCell<HashSet<String>>,
+    /// The owners and the location last read.
+    read: RefCell<(Vec<String>, Option<Location>)>,
 }
 
 impl SessionForms {
     pub fn new(tui: &Tui, session: &SessionID) -> Self {
         let region = View::new(&tui.app).column().shrink(0.0).visible(false);
-        Self { host: Host::new(tui, region), session: session.clone(), synced: RefCell::default() }
+        Self { host: Host::new(tui, region), session: session.clone(), read: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -138,19 +138,18 @@ impl SessionForms {
             let head = first_form(state, &owners, location.as_ref());
             (owners, location, head)
         });
-        // A full sync (a reconnect) reads again: the store invalidated what it read before.
-        if changes.all {
-            self.synced.borrow_mut().clear();
-        }
-        for owner in &owners {
-            if self.synced.borrow_mut().insert(owner.clone()) {
+        // Read again whenever the owners, the location, or the connection change, as the permissions are; the store
+        // makes a finished read free and reads a failed one again.
+        let read = (owners, location);
+        let session = changes.session(&self.session) || read.0.iter().any(|id| changes.session(&SessionID(id.clone())));
+        if changes.all || session || *self.read.borrow() != read {
+            for owner in &read.0 {
                 quiet(tui, tui.data.form_sync(owner, None));
             }
-        }
-        if let Some(location) = &location
-            && self.synced.borrow_mut().insert(format!("{GLOBAL}:{}", location.key()))
-        {
-            quiet(tui, tui.data.form_sync(GLOBAL, Some(location)));
+            if let Some(location) = &read.1 {
+                quiet(tui, tui.data.form_sync(GLOBAL, Some(location)));
+            }
+            *self.read.borrow_mut() = read;
         }
         self.host.show(head.as_ref().filter(|_| !blocked));
     }

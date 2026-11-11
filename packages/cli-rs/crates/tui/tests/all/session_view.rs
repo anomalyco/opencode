@@ -434,6 +434,49 @@ fn the_sidebar_limit_shows_once_the_limits_load() {
     h.wait_for("$5 remaining");
 }
 
+/// Fails the first read of `ses_a`'s permissions, then answers with one pending request.
+struct Flaky {
+    memory: Memory,
+    failed: AtomicBool,
+}
+
+impl Transport for Flaky {
+    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+        if request.url.path() != "/api/session/ses_a/permission" {
+            return self.memory.send(request);
+        }
+        let first = !self.failed.swap(true, Ordering::SeqCst);
+        Box::pin(async move {
+            if first {
+                return Ok(support::respond(500, &json!({ "_tag": "Unknown", "message": "busy" })));
+            }
+            let pending = json!({ "id": "per_1", "sessionID": "ses_a", "action": "read", "resources": ["notes.md"] });
+            Ok(support::respond(200, &json!({ "data": [pending] })))
+        })
+    }
+}
+
+// Expected: a permission read that failed is read again on the session's next change, as TS's family effect
+// does (`routes/session/index.tsx:331-337`), so a pending request shows without a reconnect.
+#[test]
+fn a_failed_permission_read_is_read_again_on_the_next_session_change() {
+    let flaky = Arc::new(Flaky { memory: Memory::new(routes()), failed: AtomicBool::new(false) });
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        route: support::session_route("ses_a"),
+        events: true,
+        ..support::deps(flaky.clone())
+    };
+    let support::Harness { app, tui } = support::mount(100, 30, deps);
+    let h = Harness { app, tui, memory: flaky.memory.clone() };
+    h.wait_for("Answer 30 three.");
+    h.wait("the failed read", || flaky.failed.load(Ordering::SeqCst));
+    h.settle();
+    let tokens = json!({ "input": 1, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
+    h.apply("session.usage.updated", 1, json!({ "sessionID": "ses_a", "cost": 0.01, "tokens": tokens }));
+    h.wait_for("Allow once");
+}
+
 #[test]
 fn usage_limits_are_kept_per_location() {
     let h = mount("ses_a", json!({ "animations": false }));
