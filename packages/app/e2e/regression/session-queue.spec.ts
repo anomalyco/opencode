@@ -99,6 +99,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
     events: () => events.splice(0),
     onInboxEdit: (input: Parameters<NonNullable<MockServerConfig["onInboxEdit"]>>[0]) => {
       const original = rows.find((item) => item.id === input.inboxID && item.delivery === "queue")
+
       if (!original) throw new Error("Original delivered")
       const body = decodePromptBody(input.body)
       prompts.push(body)
@@ -688,6 +689,7 @@ for (const change of ["reorder", "edit"] as const) {
     mock.onInboxEdit = () => {
       throw new Error("Cannot prepare attachment")
     }
+
     // The last prompt's re-admission fails after the server admitted it, so its response is lost.
     mock.onPrompt = (input) => {
       admit(input)
@@ -721,6 +723,7 @@ for (const change of ["reorder", "edit"] as const) {
 
     // The replacements admitted before the failure are withdrawn; the originals stay in place.
     if (change === "edit") await expect(page.getByText("Request failed")).toBeVisible()
+
     if (change === "reorder") await expect.poll(() => mock.log.includes(`cancel:${mock.prompts.at(-1)?.id}`)).toBe(true)
     await expect.poll(() => mock.changes.length).toBe(mock.prompts.length)
     expect(mock.changes.every((entry) => entry.action === "cancel" && !entry.inboxID.startsWith("inb_seed_"))).toBe(
@@ -983,6 +986,7 @@ test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
   // The queue counts the context file; the existing editor still loads its model-visible note as text.
   await view.rows.getByRole("button", { name: "1 attachment", exact: true }).click()
   await expect(view.input).toHaveText(note)
+  await expect(view.input).toBeFocused()
   await view.input.press("End")
   await view.input.pressSequentially(", please")
   await expect(view.input).toHaveText(`${note}, please`)
