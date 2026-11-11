@@ -950,52 +950,65 @@ impl Data {
     }
 }
 
-/// Fetches older pages and publishes them once; false when cancelled before publishing.
+/// Fetches older pages and publishes them once; false when cancelled before publishing. A latest-page
+/// refresh that replaced the cursor meanwhile makes the pages stale: stitching them onto the new
+/// list would leave a gap, so the load starts again from the new cursor (deviation O89-older-page).
 async fn load_pages(
     data: &Data,
     session: &SessionID,
-    cursor: String,
+    mut cursor: String,
     all: bool,
     cancel: Option<&CancellationToken>,
 ) -> Result<bool, Error> {
-    let mut fetched = Vec::new();
-    let mut next = Some(cursor);
-    while let Some(cursor) = next {
-        let input = MessageListInput {
-            session_id: session.clone(),
-            limit: Some(if all { 200 } else { MESSAGE_PAGE }),
-            cursor: Some(cursor),
-            ..Default::default()
-        };
-        let request = data.client().message_list(&input);
-        let response = match cancel {
-            None => request.await,
-            Some(token) => tokio::select! {
-                response = request => response,
-                _ = token.cancelled() => return Ok(false),
-            },
+    loop {
+        let mut fetched = Vec::new();
+        let mut next = Some(cursor.clone());
+        while let Some(page) = next {
+            let input = MessageListInput {
+                session_id: session.clone(),
+                limit: Some(if all { 200 } else { MESSAGE_PAGE }),
+                cursor: Some(page),
+                ..Default::default()
+            };
+            let request = data.client().message_list(&input);
+            let response = match cancel {
+                None => request.await,
+                Some(token) => tokio::select! {
+                    response = request => response,
+                    _ = token.cancelled() => return Ok(false),
+                },
+            }
+            .map_err(Arc::new)?;
+            if cancel.is_some_and(CancellationToken::is_cancelled) {
+                return Ok(false);
+            }
+            fetched.extend(response.data);
+            next = response.cursor.next.flatten();
+            if !all {
+                break;
+            }
         }
-        .map_err(Arc::new)?;
-        if cancel.is_some_and(CancellationToken::is_cancelled) {
-            return Ok(false);
-        }
-        fetched.extend(response.data);
-        next = response.cursor.next.flatten();
-        if !all {
-            break;
+        let stale = data.write(|state| {
+            if state.cursor.get(session) != Some(&cursor) {
+                return Some(state.cursor.get(session).cloned());
+            }
+            let fetched: Vec<_> = fetched.into_iter().map(|item| state.stored(item)).collect();
+            let transcript = state.transcript_mut(session);
+            let mut messages: Vec<_> =
+                fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
+            messages.append(transcript.items_mut());
+            *transcript = Transcript::new(messages);
+            match &next {
+                Some(next) => state.cursor.insert(session.clone(), next.clone()),
+                None => state.cursor.remove(session),
+            };
+            state.log.messages(session);
+            None
+        });
+        match stale {
+            None => return Ok(true),
+            Some(None) => return Ok(false),
+            Some(Some(current)) => cursor = current,
         }
     }
-    data.write(|state| {
-        let fetched: Vec<_> = fetched.into_iter().map(|item| state.stored(item)).collect();
-        let transcript = state.transcript_mut(session);
-        let mut messages: Vec<_> = fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
-        messages.append(transcript.items_mut());
-        *transcript = Transcript::new(messages);
-        match &next {
-            Some(next) => state.cursor.insert(session.clone(), next.clone()),
-            None => state.cursor.remove(session),
-        };
-        state.log.messages(session);
-    });
-    Ok(true)
 }
