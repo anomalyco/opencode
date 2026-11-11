@@ -60,6 +60,12 @@ impl Footer {
         {
             spans.push(Span::styled(format!(" · {value:.1} tok/s"), muted));
         }
+        if cx.tps
+            && width >= 36
+            && let Some(value) = time_to_first_token(cx.messages, index, cx.legacy).filter(|value| *value > 0.0)
+        {
+            spans.push(Span::styled(format!(" · {} ttft", self::duration(value)), muted));
+        }
         if interrupted {
             spans.push(Span::styled(" · interrupted", muted));
         }
@@ -397,21 +403,17 @@ pub fn turn_duration(
     (completed - start).max(0.0)
 }
 
-/// `SessionTurn.tokensPerSecond`: output and reasoning tokens per second across the turn's steps
-/// up to `message`, or none until every step has streamed.
+/// `SessionTurn.tokensPerSecond`: output and reasoning tokens per second while the provider streamed
+/// them, across the turn's steps up to `message`, or none until every step has streamed. Each step
+/// counts from its first streamed token; steps recorded without one count from request dispatch.
 pub fn tokens_per_second(messages: &[SessionMessageInfo], index: Option<usize>, legacy: bool) -> Option<f64> {
-    let end = index.map_or(messages.len(), |index| index + 1);
-    let start = input_index(messages, end, legacy).map_or(0, |input| input + 1);
-    let steps: Vec<_> = messages[start.min(end)..end]
-        .iter()
-        .filter_map(|item| match item {
-            SessionMessageInfo::Assistant(step) => Some(step),
-            _ => None,
-        })
-        .collect();
+    let steps = turn_steps(messages, index, legacy);
     let durations: Vec<f64> = steps
         .iter()
-        .filter_map(|step| step.time.streamed.map(|streamed| (streamed - step.time.created).max(0.0)))
+        .filter_map(|step| {
+            let start = step.time.first_token.unwrap_or(step.time.created);
+            step.time.streamed.map(|streamed| (streamed - start).max(0.0))
+        })
         .collect();
     if steps.is_empty() || durations.len() != steps.len() {
         return None;
@@ -423,6 +425,25 @@ pub fn tokens_per_second(messages: &[SessionMessageInfo], index: Option<usize>, 
         return None;
     }
     Some(output / (total / 1000.0))
+}
+
+/// `SessionTurn.timeToFirstToken`: milliseconds from the dispatch of the turn's first step that
+/// recorded a first token to that token, or none until a step records one.
+pub fn time_to_first_token(messages: &[SessionMessageInfo], index: Option<usize>, legacy: bool) -> Option<f64> {
+    let step = turn_steps(messages, index, legacy).into_iter().find(|step| step.time.first_token.is_some())?;
+    Some((step.time.first_token? - step.time.created).max(0.0))
+}
+
+fn turn_steps(messages: &[SessionMessageInfo], index: Option<usize>, legacy: bool) -> Vec<&SessionMessageAssistant> {
+    let end = index.map_or(messages.len(), |index| index + 1);
+    let start = input_index(messages, end, legacy).map_or(0, |input| input + 1);
+    messages[start.min(end)..end]
+        .iter()
+        .filter_map(|item| match item {
+            SessionMessageInfo::Assistant(step) => Some(step),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The turn's prompt before `end`: the nearest input in legacy sessions, else the first input
@@ -465,6 +486,62 @@ pub fn locale(value: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use opencode_api::generated::{
+        SessionInboxUserTime, SessionMessageAssistantTime, SessionMessageID, SessionMessageUser, TokenUsageInfo,
+    };
+
+    fn input(created: f64) -> SessionMessageInfo {
+        SessionMessageInfo::User(SessionMessageUser {
+            r#type: "user".into(),
+            time: SessionInboxUserTime { created },
+            ..Default::default()
+        })
+    }
+
+    fn step(id: &str, time: [Option<f64>; 4], output: f64, reasoning: f64) -> SessionMessageInfo {
+        SessionMessageInfo::Assistant(SessionMessageAssistant {
+            id: SessionMessageID(id.into()),
+            r#type: "assistant".into(),
+            time: SessionMessageAssistantTime {
+                created: time[0].unwrap(),
+                first_token: time[1],
+                streamed: time[2],
+                completed: time[3],
+            },
+            tokens: Some(TokenUsageInfo { output, reasoning, ..Default::default() }),
+            ..Default::default()
+        })
+    }
+
+    // `session-turn.test.ts`: throughput counts from the first streamed token, and steps recorded
+    // without one count from request dispatch.
+    #[test]
+    fn measures_decode_throughput_from_the_first_streamed_token() {
+        let messages = [
+            input(1_000.0),
+            step("a1", [Some(6_000.0), Some(8_000.0), Some(10_000.0), Some(20_000.0)], 20.0, 5.0),
+            step("a2", [Some(24_000.0), Some(25_000.0), Some(28_000.0), Some(31_000.0)], 30.0, 10.0),
+        ];
+        assert_eq!(tokens_per_second(&messages, Some(2), true), Some(13.0));
+        assert_eq!(time_to_first_token(&messages, Some(2), true), Some(2_000.0));
+
+        let messages = [
+            input(1_000.0),
+            step("a1", [Some(6_000.0), None, Some(10_000.0), Some(20_000.0)], 20.0, 5.0),
+            step("a2", [Some(24_000.0), Some(25_000.0), Some(28_000.0), Some(31_000.0)], 30.0, 10.0),
+        ];
+        assert_eq!(tokens_per_second(&messages, Some(2), true), Some(65.0 / 7.0));
+        assert_eq!(time_to_first_token(&messages, Some(2), true), Some(1_000.0));
+
+        let messages = [
+            input(1_000.0),
+            step("a1", [Some(6_000.0), None, Some(10_000.0), Some(20_000.0)], 20.0, 5.0),
+            step("a2", [Some(24_000.0), None, Some(30_000.0), Some(31_000.0)], 30.0, 10.0),
+        ];
+        assert_eq!(tokens_per_second(&messages, Some(2), true), Some(6.5));
+        assert_eq!(time_to_first_token(&messages, Some(2), true), None);
+    }
 
     #[test]
     fn locale_groups_thousands() {

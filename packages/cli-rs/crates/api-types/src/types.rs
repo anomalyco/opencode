@@ -2089,6 +2089,13 @@ pub struct SessionMessageShell {
 pub struct SessionMessageAssistantTime {
     #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
+    #[serde(
+        rename = "firstToken",
+        default,
+        serialize_with = "crate::ser::option_number",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub first_token: Option<f64>,
     #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub streamed: Option<f64>,
     #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
@@ -4396,11 +4403,25 @@ pub struct SessionStepStarted {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct SessionStepStreamedData {
+pub struct SessionStepFirstTokenData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
     #[serde(rename = "assistantMessageID")]
     pub assistant_message_id: SessionMessageID,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SessionStepFirstToken {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: String,
+    pub durable: SessionCreatedDurable,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: SessionStepFirstTokenData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -4414,7 +4435,7 @@ pub struct SessionStepStreamed {
     pub durable: SessionCreatedDurable,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: SessionStepStreamedData,
+    pub data: SessionStepFirstTokenData,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -5028,6 +5049,7 @@ pub enum SessionEventDurable {
     SessionShellStarted(SessionShellStarted),
     SessionShellEnded(SessionShellEnded),
     SessionStepStarted(SessionStepStarted),
+    SessionStepFirstToken(SessionStepFirstToken),
     SessionStepStreamed(SessionStepStreamed),
     SessionStepEnded(SessionStepEnded),
     SessionStepFailed(SessionStepFailed),
@@ -5083,6 +5105,7 @@ impl<'de> Deserialize<'de> for SessionEventDurable {
             Some("session.shell.started") => raw.variant().map(Self::SessionShellStarted),
             Some("session.shell.ended") => raw.variant().map(Self::SessionShellEnded),
             Some("session.step.started") => raw.variant().map(Self::SessionStepStarted),
+            Some("session.step.first-token") => raw.variant().map(Self::SessionStepFirstToken),
             Some("session.step.streamed") => raw.variant().map(Self::SessionStepStreamed),
             Some("session.step.ended") => raw.variant().map(Self::SessionStepEnded),
             Some("session.step.failed") => raw.variant().map(Self::SessionStepFailed),
@@ -5139,6 +5162,7 @@ impl SessionEventDurable {
             Self::SessionShellStarted(value) => value.r#type.as_str(),
             Self::SessionShellEnded(value) => value.r#type.as_str(),
             Self::SessionStepStarted(value) => value.r#type.as_str(),
+            Self::SessionStepFirstToken(value) => value.r#type.as_str(),
             Self::SessionStepStreamed(value) => value.r#type.as_str(),
             Self::SessionStepEnded(value) => value.r#type.as_str(),
             Self::SessionStepFailed(value) => value.r#type.as_str(),
@@ -5214,6 +5238,7 @@ impl<'de> Deserialize<'de> for SessionLogItem {
             | Some("session.shell.started")
             | Some("session.shell.ended")
             | Some("session.step.started")
+            | Some("session.step.first-token")
             | Some("session.step.streamed")
             | Some("session.step.ended")
             | Some("session.step.failed")
@@ -9358,6 +9383,7 @@ pub enum V2Event {
     SessionShellStarted(SessionShellStarted),
     SessionShellEnded(SessionShellEnded),
     SessionStepStarted(SessionStepStarted),
+    SessionStepFirstToken(SessionStepFirstToken),
     SessionStepStreamed(SessionStepStreamed),
     SessionStepEnded(SessionStepEnded),
     SessionStepFailed(SessionStepFailed),
@@ -9464,6 +9490,7 @@ impl<'de> Deserialize<'de> for V2Event {
             Some("session.shell.started") => raw.variant().map(Self::SessionShellStarted),
             Some("session.shell.ended") => raw.variant().map(Self::SessionShellEnded),
             Some("session.step.started") => raw.variant().map(Self::SessionStepStarted),
+            Some("session.step.first-token") => raw.variant().map(Self::SessionStepFirstToken),
             Some("session.step.streamed") => raw.variant().map(Self::SessionStepStreamed),
             Some("session.step.ended") => raw.variant().map(Self::SessionStepEnded),
             Some("session.step.failed") => raw.variant().map(Self::SessionStepFailed),
@@ -9571,6 +9598,7 @@ impl V2Event {
             Self::SessionShellStarted(value) => value.r#type.as_str(),
             Self::SessionShellEnded(value) => value.r#type.as_str(),
             Self::SessionStepStarted(value) => value.r#type.as_str(),
+            Self::SessionStepFirstToken(value) => value.r#type.as_str(),
             Self::SessionStepStreamed(value) => value.r#type.as_str(),
             Self::SessionStepEnded(value) => value.r#type.as_str(),
             Self::SessionStepFailed(value) => value.r#type.as_str(),
