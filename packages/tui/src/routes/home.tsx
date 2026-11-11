@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
 import { Logo } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
@@ -15,6 +15,7 @@ import { useTheme } from "../context/theme"
 import { useUpdateNotification } from "../context/update-notification"
 import { useExit } from "../context/exit"
 import { FadeInText } from "../component/fade-in-text"
+import { useClient } from "../context/client"
 
 let once = false
 const placeholder = {
@@ -37,6 +38,31 @@ export function Home() {
   const currentLocation = () => route.location ?? data.location.default()
   const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
   let sent = false
+  const client = useClient()
+  const [startup, { refetch }] = createResource(
+    () => !!args.prompt && client.connection.status() === "connected" && currentLocation(),
+    async (target) => {
+      try {
+        const plugins = await client.api.plugin.list({ location: target })
+        if (!plugins.data.length) return false
+        // A cold server publishes its inventory only after activation. Replace any early
+        // built-in-only agent snapshot before selecting the default for --prompt.
+        data.location.agent.invalidate(target)
+        await data.location.agent.sync(target)
+        return true
+      } catch {
+        return false
+      }
+    },
+  )
+  onCleanup(
+    data.on("plugin.updated", (event) => {
+      const target = currentLocation()
+      if (sent || !args.prompt || !target || !event.location) return
+      if (event.location.directory !== target.directory || event.location.workspaceID !== target.workspaceID) return
+      void refetch()
+    }),
+  )
 
   // Track only the route location and (when absent) the default location; location.set
   // reads other signals internally and tracking them would re-assert the route location
@@ -70,6 +96,7 @@ export function Home() {
     const r = ref()
     if (sent) return
     if (!r) return
+    if (startup.loading || !startup()) return
     if (!local.model.ready || !local.model.catalogReady) return
     if (!local.agent.current() || !local.model.current()) return
     if (!args.prompt) return

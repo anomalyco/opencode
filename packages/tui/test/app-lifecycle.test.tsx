@@ -922,12 +922,16 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
-test("home startup prompt is submitted exactly once", async () => {
+test("home startup prompt waits for server plugins and submits the refreshed default agent exactly once", async () => {
   await using state = await tmpdir()
   const cwd = process.cwd()
   const location = { directory: cwd, project: { id: "project", directory: cwd, canonical: cwd } }
   const bodies: unknown[] = []
   const submitted = Promise.withResolvers<void>()
+  const requested = Promise.withResolvers<void>()
+  const refreshing = Promise.withResolvers<void>()
+  const refreshed = Promise.withResolvers<Response>()
+  let activated = false
   let session: unknown
   await using setup = await createAppFixture({
     state: state.path,
@@ -936,8 +940,22 @@ test("home startup prompt is submitted exactly once", async () => {
     fetch: async (url, request) => {
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
-      if (url.pathname === "/api/agent")
+      if (url.pathname === "/api/plugin") {
+        requested.resolve()
+        return json({
+          location,
+          data: activated
+            ? [{ id: "config", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } }]
+            : [],
+        })
+      }
+      if (url.pathname === "/api/agent") {
+        if (activated) {
+          refreshing.resolve()
+          return refreshed.promise.then((response) => response.clone())
+        }
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      }
       if (url.pathname === "/api/model")
         return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
@@ -966,15 +984,32 @@ test("home startup prompt is submitted exactly once", async () => {
   })
 
   await setup.ready
+  // The unfixed client submits Build instead of consulting the server inventory.
+  await Promise.race([requested.promise, submitted.promise])
+  expect(bodies).toHaveLength(0)
   await Promise.race([
     submitted.promise,
-    Bun.sleep(2000).then(() => {
-      throw new Error("startup prompt was not submitted")
-    }),
+    setup.waitForFrame((frame) => frame.includes("HOME_READY") && frame.includes("Build")),
   ])
-  await Bun.sleep(20)
+  expect(bodies).toHaveLength(0)
+  activated = true
+  setup.events.emit({ id: "evt_plugins", type: "plugin.updated", created: 1, location, data: {} })
+  await refreshing.promise
+  // Inventory publication must not release the prompt before the fresh agent response.
+  expect(bodies).toHaveLength(0)
+  refreshed.resolve(
+    json({
+      location,
+      data: ["reviewer", "build"].map((id) => ({ id, mode: "primary", hidden: false, permissions: [] })),
+    }),
+  )
+  await submitted.promise
   expect(bodies).toHaveLength(1)
   expect(bodies[0]).toMatchObject({ text: "HOME_READY" })
+  expect(session).toMatchObject({ agent: "reviewer" })
+  setup.events.emit({ id: "evt_plugins_again", type: "plugin.updated", created: 2, location, data: {} })
+  await setup.waitForVisualIdle()
+  expect(bodies).toHaveLength(1)
 })
 
 test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
