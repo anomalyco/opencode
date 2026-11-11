@@ -31,6 +31,7 @@ import {
   dedupePins,
   INITIAL_RECENT_PAGE_STATE,
   RECENT_PAGE_LIMIT,
+  RECENT_VISIBLE_LIMIT,
   mergeRecentSessions,
   partitionRecentSessions,
   recentPageFailed,
@@ -42,6 +43,7 @@ import {
   reorderPins,
   splitRecentSessionKey,
   transitionRecentPage,
+  windowRecentSessions,
   type RecentPageEffect,
   type RecentPageEvent,
   type RecentPageState,
@@ -60,8 +62,8 @@ const RecentSidebarState = Persistence.struct({
 type Connection = { conn: ServerConnection.Any; ctx: ServerCtx; server: ServerConnection.Key }
 
 /**
- * The experimental Recent sessions sidebar: pinned sessions first, then every server's newest root sessions in one
- * recency list. The desktop titlebar renders it in place of the side tabs only while the setting is on and available.
+ * The experimental Recent sessions sidebar: pinned sessions first, then every server's root sessions from the last
+ * 7 days in one recency list, at most 30 until Show more reveals older ones. The desktop titlebar renders it in place of the side tabs only while the setting is on and available.
  */
 export function RecentSessions() {
   const global = useGlobal()
@@ -80,6 +82,12 @@ export function RecentSessions() {
 
   // Whether each row shows its unread dot, keyed like the rows.
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
+
+  // `revealed` counts the rows Show more added beyond the 7-day window. `now` ticks each minute so the window moves.
+  const [view, setView] = createStore({ revealed: 0, now: Date.now() })
+
+  const clock = setInterval(() => setView("now", Date.now()), 60_000)
+  onCleanup(() => clearInterval(clock))
 
   const controllers = new Map<AbortController, string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -481,14 +489,24 @@ export function RecentSessions() {
   )
 
   const pinned = () => partition().pinned
-  const recent = () => partition().recent
+
+  const windowed = createMemo(() =>
+    windowRecentSessions({
+      items: partition().recent,
+      now: view.now,
+      revealed: view.revealed,
+      serversHaveMore: connections().some((item) => recentPageHasMore(pages[item.server])),
+    }),
+  )
+
+  const recent = () => windowed().visible
   const rows = createMemo(() => [...pinned(), ...recent()])
 
   const firstPageLoading = createMemo(() => {
     if (!servers.hydrated()) return true
 
     // Adding a server should not blank the rows already shown while its first page loads.
-    if (pinned().length > 0 || recent().length > 0) return false
+    if (pinned().length > 0 || partition().recent.length > 0) return false
 
     return connections().some((item) => {
       if (item.ctx.sdk.connection.status() !== "connected") return false
@@ -519,13 +537,15 @@ export function RecentSessions() {
     })
   }
 
-  const empty = createMemo(() => pinned().length === 0 && recent().length === 0 && !firstPageLoading())
+  const empty = createMemo(
+    () => pinned().length === 0 && recent().length === 0 && !windowed().hasMore && !firstPageLoading(),
+  )
 
   // Every server with a cursor loads its next page together, and the merged list re-sorts. Newly loaded rows can
   // therefore appear above rows already shown: one merged recency order is kept rather than holding rows back until
   // every server reaches the same age. A short page or a missing next cursor ends that server's list; a failed page
-  // keeps its cursor so the next scroll retries it.
-  const loadMore = () => {
+  // keeps its cursor so the next Show more retries it.
+  const loadMore = (retry: boolean) => {
     connections().forEach((item) => {
       const current = pages[item.server]
 
@@ -534,7 +554,7 @@ export function RecentSessions() {
       if (item.ctx.sdk.connection.status() !== "connected") return
 
       if (current.status === "failed") {
-        dispatch(item, { type: "retry", attempt: ++attempt })
+        if (retry) dispatch(item, { type: "retry", attempt: ++attempt })
 
         return
       }
@@ -545,35 +565,19 @@ export function RecentSessions() {
     })
   }
 
-  let viewport: HTMLDivElement | undefined
-  let fillFrame: number | undefined
+  const showMore = () => {
+    setView("revealed", (value) => value + RECENT_VISIBLE_LIMIT)
+    loadMore(true)
+  }
 
-  // A short list cannot scroll, so a scroll event never asks for the next page. Fill the viewport once per render
-  // until rows overflow it or every server with a cursor is exhausted.
+  // Show more can reveal more rows than are loaded; fetch further pages until they are, or every server is exhausted.
+  // A failed page waits for the next Show more instead of retrying here.
   createEffect(() => {
-    connections().forEach((item) => pages[item.server]?.status)
-    void items()
+    if (view.revealed === 0 || loadingMore()) return
 
-    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
-    fillFrame = requestAnimationFrame(() => {
-      fillFrame = undefined
+    if (windowed().limit <= partition().recent.length) return
 
-      if (disposed || !viewport || loadingMore()) return
-
-      if (viewport.scrollHeight > viewport.clientHeight) return
-
-      const more = connections().some((item) => {
-        const current = pages[item.server]
-
-        return current?.status === "ready" && recentPageHasMore(current)
-      })
-
-      if (more) loadMore()
-    })
-  })
-
-  onCleanup(() => {
-    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+    untrack(() => loadMore(false))
   })
 
   const reorderPinned = (nextVisible: readonly string[]) => {
@@ -775,18 +779,7 @@ export function RecentSessions() {
       data-shortcut-hints={hints() ? "" : undefined}
       class="flex min-h-0 flex-1 flex-col [app-region:no-drag]"
     >
-      <div
-        ref={(element) => (viewport = element)}
-        data-scrollable
-        class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1"
-        onScroll={(event) => {
-          const element = event.currentTarget
-
-          if (element.scrollTop + element.clientHeight < element.scrollHeight - 160) return
-
-          loadMore()
-        }}
-      >
+      <div data-scrollable class="no-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1">
         <Show
           when={!firstPageLoading()}
           fallback={
@@ -826,7 +819,7 @@ export function RecentSessions() {
               </DragDropProvider>
             </div>
           </Show>
-          <Show when={recent().length > 0}>
+          <Show when={recent().length > 0 || windowed().hasMore}>
             <div role="group" aria-labelledby="sidebar-recent-list" class="flex shrink-0 flex-col gap-2 pb-2.5">
               <SectionHeader id="sidebar-recent-list" label={language.t("sidebar.recent.section.recent")} />
               <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
@@ -834,6 +827,11 @@ export function RecentSessions() {
                   {(item) => row(item)}
                 </Key>
               </div>
+              <Show when={windowed().hasMore && !loadingMore()}>
+                <Button variant="ghost-muted" size="normal" class="w-full justify-start px-2" onClick={showMore}>
+                  {language.t("sidebar.inbox.showMore")}
+                </Button>
+              </Show>
             </div>
           </Show>
           <Show when={empty()}>
