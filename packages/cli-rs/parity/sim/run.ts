@@ -24,6 +24,7 @@ import type { SimScenario, Step } from "./scenario"
 const RUN_DEADLINE = Number(process.env.PARITY_SIM_DEADLINE ?? 240_000)
 const WAIT = 30_000
 const password = "sim-parity"
+const CLOCK = path.join(import.meta.dir, "clock.ts")
 // Both sides of a run share the sandbox path, so it never differs between them; masking its random name keeps the
 // committed captures the same from run to run.
 // Read only: each side gets a copy.
@@ -182,6 +183,12 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
   const configDir = path.join(box.root, "opencode-config")
   await Bun.write(path.join(configDir, "opencode.jsonc"), JSON.stringify(serverConfig(scenario), null, 2))
   const registry = path.join(box.root, "drive")
+  // A scenario's fixed clock: Rust reads the variable itself, and each TS process gets the preload that reads it.
+  const clock: Record<string, string> = scenario.now === undefined ? {} : { OPENCODE_DRIVE_NOW: String(scenario.now) }
+  const start = (side: Side, args: string[]) => {
+    const cmd = command(side, args)
+    return side === "ts" && scenario.now !== undefined ? [cmd[0]!, `--preload=${CLOCK}`, ...cmd.slice(1)] : cmd
+  }
   const [serverPort, backendPort, serverUiPort, uiPort] = await Promise.all([0, 1, 2, 3].map(freePort))
   const backendUrl = `ws://127.0.0.1:${backendPort}`
   const viewport = { cols: scenario.width ?? 100, rows: scenario.height ?? 30 }
@@ -197,7 +204,8 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
   const stopped: (() => void)[] = []
   const debug: { screen?: () => Promise<Fixture>; model?: unknown; requests?: Logged[] } = {}
   try {
-    const server = spawn(command("ts", ["serve", "--port", String(serverPort)]), box, log("server.stderr"), {
+    const server = spawn(start("ts", ["serve", "--port", String(serverPort)]), box, log("server.stderr"), {
+      ...clock,
       OPENCODE_SIMULATE: "1",
       OPENCODE_DRIVE: "server",
       DRIVE_REGISTRY_DIR: registry,
@@ -240,7 +248,8 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     const args = (scenario.args ?? []).map((arg) =>
       arg.startsWith("$session:") ? sessions[Number(arg.slice("$session:".length))] : arg,
     )
-    const client = spawn(command(side, [...args, "--server", proxy.url]), box, log("client.stderr"), {
+    const client = spawn(start(side, [...args, "--server", proxy.url]), box, log("client.stderr"), {
+      ...clock,
       OPENCODE_DRIVE: side,
       DRIVE_REGISTRY_DIR: registry,
       OPENCODE_DRIVE_RENDERER: "headless",
