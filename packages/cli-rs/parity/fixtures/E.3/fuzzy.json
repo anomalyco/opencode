@@ -858,6 +858,10 @@
     "description": "Delete integration account"
    },
    {
+    "display": "/dialog.integration.copy",
+    "description": "Copy authorization link"
+   },
+   {
     "display": "/dialog.worktree.generate",
     "description": "Generate worktree name"
    },
@@ -1836,6 +1840,10 @@
     "description": "Delete integration account"
    },
    {
+    "display": "@dialog.integration.copy",
+    "description": "Copy authorization link"
+   },
+   {
     "display": "@dialog.worktree.generate",
     "description": "Generate worktree name"
    },
@@ -2107,7 +2115,7 @@
     194,
     192,
     118,
-    237,
+    238,
     116
    ]
   },
@@ -2121,10 +2129,10 @@
     78,
     194,
     67,
-    232,
+    233,
     206,
     117,
-    229
+    230
    ]
   },
   {
@@ -2241,7 +2249,7 @@
     117,
     119,
     46,
-    217
+    218
    ]
   },
   {
