@@ -1,4 +1,8 @@
+import type { DateFormat } from "../config"
 import { stringWidth } from "./string-width"
+
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+const pad = (value: number) => String(value).padStart(2, "0")
 
 export function titlecase(str: string) {
   return str.replace(/\b\w/g, (c) => c.toUpperCase())
@@ -9,11 +13,16 @@ export function time(input: number): string {
   return date.toLocaleTimeString(undefined, { timeStyle: "short" })
 }
 
-export function datetime(input: number): string {
-  const date = new Date(input)
-  const localTime = time(input)
-  const localDate = date.toLocaleDateString()
-  return `${localTime} · ${localDate}`
+export function date(input: number, format: DateFormat = "locale"): string {
+  const value = new Date(input)
+  if (format === "locale") return value.toLocaleDateString()
+  if (format === "friendly") return `${months[value.getMonth()]} ${value.getDate()}, ${value.getFullYear()}`
+  if (format === "iso") return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+  return `${pad(value.getDate())}-${months[value.getMonth()]}-${value.getFullYear()}`
+}
+
+export function datetime(input: number, format: DateFormat = "locale"): string {
+  return `${time(input)} · ${date(input, format)}`
 }
 
 export function number(num: number): string {
