@@ -16663,6 +16663,9 @@
               "artifacts": {
                 "type": "boolean"
               },
+              "session_media": {
+                "type": "boolean"
+              },
               "codemode_vm": {
                 "type": "boolean"
               },

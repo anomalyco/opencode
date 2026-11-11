@@ -170,6 +170,14 @@
     font-variant-numeric: tabular-nums;
   }
 
+  [data-slot="image-preview-position"] {
+    min-width: 44px;
+    color: var(--v2-text-text-muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+
   [data-slot="image-preview-divider"] {
     width: 1px;
     height: 16px;

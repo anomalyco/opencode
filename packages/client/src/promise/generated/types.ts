@@ -2560,6 +2560,7 @@ export type ConfigEntry =
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
+          session_media?: boolean
           codemode_vm?: boolean
           shell_timeout_background?: boolean
           console_watches?: boolean
