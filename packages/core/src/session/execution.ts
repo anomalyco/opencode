@@ -158,8 +158,7 @@ export const layer = Layer.effect(
               yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
               return
             }
-            // Classify and claim the Job generation before cancelling it: the settlement commit
-            // owns the outbox row, and a cancel must not race a foreground classification.
+            // Claim the Job generation before cancelling it so the settlement commit owns its outbox row.
             const settlement = yield* subagentReport.prepare(sessionID, outcome)
             if (outcome.type === "interrupted") yield* jobs.cancel(sessionID)
             yield* publishTerminal(bus, sessionID, outcome, settlement.commit)
