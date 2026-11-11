@@ -114,6 +114,7 @@ type MenuMode = false | "mention" | "slash"
 
 type PromptInput = {
   directory: Accessor<string>
+  home: string
   findFiles: (query: string) => Promise<string[]>
   agents: Accessor<RunAgent[]>
   references: Accessor<RunReference[]>
@@ -458,14 +459,15 @@ export function createPromptState(input: PromptInput): PromptState {
       }
 
       const next = parseFileLineRange(value)
-      const mention = mentionFileSearch(next.base)
+      const mention = mentionFileSearch(next.base, input.directory(), input.home)
       const list = await input.findFiles(next.base)
       return list.map((item): Auto => {
+        const directory = item.endsWith("/") || item.endsWith(path.sep)
         const absolute = path.resolve(input.directory(), item)
         const url = pathToFileURL(absolute)
-        const name = mention ? mentionFileName(mention.prefix, absolute, item.endsWith("/")) : item
+        const name = mention ? mentionFileName(mention.prefix, absolute, directory) : item
         let filename = name
-        if (next.lineRange && !item.endsWith("/")) {
+        if (next.lineRange && !directory) {
           filename = `${name}#${next.lineRange.startLine}${next.lineRange.endLine ? `-${next.lineRange.endLine}` : ""}`
           url.searchParams.set("start", String(next.lineRange.startLine))
           if (next.lineRange.endLine !== undefined) {
@@ -477,10 +479,10 @@ export function createPromptState(input: PromptInput): PromptState {
           kind: "mention",
           display: "@" + filename,
           value: filename,
-          directory: item.endsWith("/"),
+          directory,
           part: {
             type: "file",
-            mime: item.endsWith("/") ? "application/x-directory" : "text/plain",
+            mime: directory ? "application/x-directory" : "text/plain",
             filename,
             url: url.href,
             source: {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
+import path from "path"
 import { runInteractiveDeferredMode } from "../../src/mini/runtime"
 import type { LifecycleInput } from "../../src/mini/runtime.lifecycle"
 import type { FooterEvent, MiniHost } from "../../src/mini/types"
@@ -589,7 +590,7 @@ describe("run interactive runtime", () => {
     expect(fileFind).toHaveBeenCalledWith({ query: "index", type: "file", ...query })
   })
 
-  test("routes outside-base mention queries through find with a path", async () => {
+  test("routes outside-base mention queries through list", async () => {
     const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
     const lifecycleStarted = defer<void>()
     const painted = defer<void>()
@@ -600,7 +601,7 @@ describe("run interactive runtime", () => {
     stubCatalogLists(sdk, {
       location: { directory: "/session", workspaceID: "work-1" },
     })
-    const fileFind = spyOn(sdk.file, "find").mockResolvedValue({
+    const fileList = spyOn(sdk.file, "list").mockResolvedValue({
       location: {
         directory: "/session",
         workspaceID: "work-1",
@@ -669,11 +670,9 @@ describe("run interactive runtime", () => {
     await task
 
     expect(mentions).toEqual(["../sibling/other.ts"])
-    expect(fileFind).toHaveBeenCalledWith({
-      query: "oth",
-      type: "file",
+    expect(fileList).toHaveBeenCalledWith({
       location: { directory: "/session" },
-      path: "../sibling",
+      path: path.resolve("/session", "../sibling"),
     })
   })
 })

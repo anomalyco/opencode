@@ -4305,7 +4305,6 @@ export type FileFindInput = {
   readonly query: string
   readonly type?: "file" | "directory" | undefined
   readonly limit?: number | undefined
-  readonly path?: string | undefined
 }
 
 export type FileFindOutput = { location: LocationPublicRef; data: Array<FileSystemEntry> }

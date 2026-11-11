@@ -13,7 +13,7 @@ import type { LocationRef } from "@opencode/client/promise"
 import type { Config } from "../config"
 import { newSessionLocation } from "../config/new-session-location"
 import { errorMessage } from "../util/error"
-import { mentionFileSearch } from "../prompt/directory-completion"
+import { mentionAutocomplete, mentionFileSearch } from "../prompt/directory-completion"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import {
   resolveMiniSettings,
@@ -232,13 +232,21 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     host: input.host,
     getDirectory: () => state.location.directory,
     findFiles: (query) => {
-      const mention = mentionFileSearch(query)
+      const mention = mentionFileSearch(query, state.location.directory, input.host.paths.home)
+      if (mention)
+        return mentionAutocomplete(
+          state.sdk.file,
+          { directory: state.location.directory },
+          query,
+          input.host.paths.home,
+        )
+          .then((result) => result?.entries.map((entry) => entry.path) ?? [])
+          .catch(() => [])
       return state.sdk.file
         .find({
-          query: mention?.fragment ?? query,
+          query,
           type: "file",
           location: { directory: state.location.directory },
-          ...(mention ? { path: mention.path } : {}),
         })
         .then((result) => result.data.map((file) => file.path))
         .catch(() => [])

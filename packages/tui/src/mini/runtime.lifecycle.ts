@@ -215,6 +215,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
 
   const footer = new RunFooter(renderer, {
     directory: input.getDirectory,
+    home: input.host.paths.home,
     findFiles: input.findFiles,
     agents: input.agents,
     references: input.references,

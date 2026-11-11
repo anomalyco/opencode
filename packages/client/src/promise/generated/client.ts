@@ -2227,13 +2227,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/fs/find`,
-            query: {
-              location: input["location"],
-              query: input["query"],
-              type: input["type"],
-              limit: input["limit"],
-              path: input["path"],
-            },
+            query: { location: input["location"], query: input["query"], type: input["type"], limit: input["limit"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,

@@ -10,6 +10,7 @@
 /** @jsxImportSource @opentui/solid */
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { RGBA, TextBuffer, TextBufferView } from "@opentui/core"
+import os from "node:os"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { OneCellSpinner } from "../component/one-cell-spinner"
 import { WORK_SPINNERS, SEED_LAUNCH, SEED_MONO } from "../ui/one-cell-motion"
@@ -81,6 +82,7 @@ const EMPTY_BORDER = {
 
 type RunFooterViewProps = {
   directory: () => string
+  home?: string
   findFiles: (query: string) => Promise<string[]>
   agents: () => RunAgent[]
   references: () => RunReference[]
@@ -366,6 +368,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const [promptRows, setPromptRows] = createSignal(1)
   const composer = createPromptState({
     directory: props.directory,
+    home: props.home ?? os.homedir(),
     findFiles: props.findFiles,
     agents: props.agents,
     references: props.references,

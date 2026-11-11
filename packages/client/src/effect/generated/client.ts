@@ -1365,13 +1365,7 @@ const EndpointFileList = (raw: RawClient["server.fs"]) => (input?: FileListInput
 const EndpointFileFind = (raw: RawClient["server.fs"]) => (input: FileFindInput) =>
   preserveEffect<FileFindOutput>()(
     raw["fs.find"]({
-      query: {
-        location: input["location"],
-        query: input["query"],
-        type: input["type"],
-        limit: input["limit"],
-        path: input["path"],
-      },
+      query: { location: input["location"], query: input["query"], type: input["type"], limit: input["limit"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
