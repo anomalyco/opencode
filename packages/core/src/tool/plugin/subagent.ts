@@ -26,7 +26,7 @@ const backgroundResult = (sessionID: SessionSchema.ID, notify: boolean) => ({
         "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
         "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
       ].join("\n")
-    : `The subagent is working in the background (sessionID: ${sessionID}) and will not notify you when it finishes. To check on it, call the subagent tool with this sessionID or read the session.`,
+    : `The subagent is working in the background (sessionID: ${sessionID}) and will not notify you when it finishes, so you won't receive its result. Only use notify=false for work whose result you don't need. To send it more work, call subagent again with this sessionID.`,
 })
 
 export const Input = Schema.Struct({
@@ -60,7 +60,7 @@ export const description = [
   "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll for progress, or ask the child for status.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Pass the returned sessionID to continue that specific child conversation. A follow-up to a running child joins its current run.",
-  "Pass notify=false for a new subagent to stop receiving its idle reports.",
+  "Pass notify=false for a new subagent only if you don't need its results: you won't receive its idle reports.",
 ].join("\n")
 
 export const Plugin = {
