@@ -146,6 +146,89 @@ fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     assert!(setup.requests("POST", "/prompt").is_empty());
 }
 
+/// Slash commands TS declares that this fixture's session route does not list: `/restart` (deviation K04), and
+/// the ones TS also offers only in a state the fixture lacks (an available update, release highlights, a revert to
+/// redo, terminal support).
+const SLASH_ELSEWHERE: &[&str] = &["restart", "update", "highlights", "redo", "terminal"];
+
+// Every `slash: { name, aliases }` in the TS TUI sources, with the id of the command it sits in, against the
+// commands the Rust keymap registers. E.3's fixture shows only a filtered list.
+#[test]
+fn slash_names_and_aliases_match_the_typescript_sources() {
+    let tui = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tui/src");
+    let mut expected: Vec<String> = typescript_slashes(&tui);
+    expected.sort();
+    let setup = Setup::new();
+    let mut actual: Vec<String> = setup
+        .tui
+        .data
+        .read(|_| setup.tui.keymap.commands())
+        .into_iter()
+        .filter_map(|command| {
+            let slash = command.slash?;
+            let mut aliases = slash.aliases.clone();
+            aliases.sort();
+            Some(format!("{} /{} {aliases:?}", command.id, slash.name))
+        })
+        .collect();
+    actual.sort();
+    actual.dedup();
+    let missing: Vec<_> = expected
+        .iter()
+        .filter(|entry| !actual.contains(entry))
+        .filter(|entry| !SLASH_ELSEWHERE.iter().any(|name| entry.contains(&format!(" /{name} "))))
+        .collect();
+    let extra: Vec<_> = actual.iter().filter(|entry| !expected.contains(entry)).collect();
+    assert!(missing.is_empty() && extra.is_empty(), "TypeScript only: {missing:#?}\nRust only: {extra:#?}");
+}
+
+/// `<command id> /<name> [aliases]` for each `slash: {` block under `dir`. The id is the nearest `id: "…"` or
+/// `name: "…"` before the block, as the TS command objects declare it.
+fn typescript_slashes(dir: &Path) -> Vec<String> {
+    let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|entry| entry.unwrap().path()).collect();
+    entries.sort();
+    entries
+        .into_iter()
+        .flat_map(|path| {
+            if path.is_dir() {
+                return typescript_slashes(&path);
+            }
+            if !path.extension().is_some_and(|extension| extension == "ts" || extension == "tsx") {
+                return Vec::new();
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            text.match_indices("slash: {")
+                .map(|(at, _)| {
+                    let block = &text[at..at + text[at..].find('}').unwrap()];
+                    let name = quoted_after(block, "name: ").unwrap();
+                    let mut aliases: Vec<String> = block
+                        .find("aliases: [")
+                        .map(|start| {
+                            let list = &block[start + "aliases: [".len()..];
+                            list[..list.find(']').unwrap()].split('"').skip(1).step_by(2).map(str::to_owned).collect()
+                        })
+                        .unwrap_or_default();
+                    aliases.sort();
+                    let before = &text[..at];
+                    let id = ["id: \"", "name: \""]
+                        .iter()
+                        .filter_map(|key| before.rfind(key).map(|start| start + key.len() - 1))
+                        .max()
+                        .and_then(|start| quoted_after(&before[start..], ""))
+                        .unwrap();
+                    format!("{id} /{name} {aliases:?}")
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn quoted_after(text: &str, key: &str) -> Option<String> {
+    let rest = &text[text.find(key)? + key.len()..];
+    let rest = &rest[rest.find('"')? + 1..];
+    Some(rest[..rest.find('"')?].to_owned())
+}
+
 #[test]
 fn server_commands_complete_then_send_and_can_be_queued() {
     let setup = Setup::new();
