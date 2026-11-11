@@ -109,8 +109,8 @@ describe("location dialog steps", () => {
     }
   })
 
-  test("a fixed project's worktree step has no projects to step back to", () => {
-    const fixed = createLocationDialogState(opencode, true)
+  test.each([undefined, "branches"] as const)("a fixed project's %s step has no projects to step back to", (step) => {
+    const fixed = createLocationDialogState(opencode, { step, fixed: true })
     expect(fixed.history).toEqual([])
 
     expect(transitionLocationDialog(fixed, key("Escape"))).toMatchObject({ effects: [{ type: "close" }] })

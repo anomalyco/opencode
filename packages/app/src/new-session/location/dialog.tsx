@@ -70,19 +70,27 @@ export function useNewSessionLocationDialog(input: {
   const dialog = useDialog()
   const platform = usePlatform()
 
-  /** Pass `project` to open straight on that project's worktree step; stepping back still reaches the projects. */
+  /**
+   * Pass `project` to open straight on that project's worktree step; stepping back still reaches the projects. A host
+   * that fixes the project offers only its worktrees, with no projects to step back to.
+   */
   return (options?: {
     project?: PromptProject
     step?: "worktrees" | "branches"
     base?: string
     onWorkspace?: (value: string) => void
   }) => {
+    const fixed = !!platform.project
+    const drilled = options?.project ?? (fixed ? input.project.selected() : undefined)
+
+    if (fixed && !drilled) return
     void dialog.show(
       () => (
         <NewSessionLocationDialog
           project={input.project}
           workspace={input.workspace}
-          drilled={options?.project}
+          drilled={drilled}
+          fixed={fixed}
           step={options?.step}
           base={options?.base}
           onWorkspace={options?.onWorkspace}
@@ -97,6 +105,7 @@ function NewSessionLocationDialog(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   drilled?: PromptProject
+  fixed: boolean
   step?: "worktrees" | "branches"
   base?: string
   onWorkspace?: (value: string) => void
@@ -113,6 +122,7 @@ function NewSessionLocationDialog(props: {
     createLocationDialogState(props.drilled, {
       step: props.step === "branches" ? "branches" : undefined,
       base: props.base,
+      fixed: props.fixed,
     }),
   )
 

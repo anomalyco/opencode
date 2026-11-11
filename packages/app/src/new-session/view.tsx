@@ -396,24 +396,33 @@ function NewSessionLocation(props: {
               </span>
             }
           >
-            <button
-              type="button"
-              data-action="prompt-project"
-              aria-haspopup="dialog"
-              aria-description={language.t("session.new.project.trigger.tooltip")}
-              class={`${TRIGGER} min-w-0`}
-              onClick={props.onClick}
-            >
-              <ProjectAvatar
-                class="shrink-0"
-                fallback={displayName(props.project)}
-                src={getProjectAvatarSource(props.project.id, props.project.icon)}
-                variant={getProjectAvatarVariant(props.project.icon?.color)}
-                generated={getProjectAvatarGenerated(props.project)}
-              />
-              <span class="min-w-0 truncate">{displayName(props.project)}</span>
-            </button>
-          </Tooltip>
+            {(onClick) => (
+              <Tooltip
+                placement="top"
+                openDelay={800}
+                value={
+                  <span class="flex items-center gap-2">
+                    {language.t("session.new.project.trigger.tooltip")}
+                    <Show when={command.keybindParts("project.select").length}>
+                      <Keybind keys={command.keybindParts("project.select")} variant="neutral" />
+                    </Show>
+                  </span>
+                }
+                class="flex min-w-0"
+              >
+                <button
+                  type="button"
+                  data-action="prompt-project"
+                  aria-haspopup="dialog"
+                  aria-description={language.t("session.new.project.trigger.tooltip")}
+                  class={`${TRIGGER} min-w-0`}
+                  onClick={onClick()}
+                >
+                  {project()}
+                </button>
+              </Tooltip>
+            )}
+          </Show>
           <Show when={props.onOpen}>
             {(onOpen) => (
               <NewSessionBranch
