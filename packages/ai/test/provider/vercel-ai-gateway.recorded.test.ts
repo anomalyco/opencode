@@ -74,6 +74,17 @@ for (const item of [
         expect(events.filter(LLMEvent.is.finish).every((event) => event.providerMetadata?.gateway !== undefined)).toBe(
           true,
         )
+        const stepFinishes = events.filter(LLMEvent.is.stepFinish)
+        expect(stepFinishes.length).toBeGreaterThan(0)
+        expect(
+          stepFinishes.every(
+            (event) =>
+              event.providerMetadata?.gateway !== undefined &&
+              event.providerMetadata?.["vercel-ai-gateway"]?.gateway !== undefined &&
+              typeof event.usage?.cost === "number" &&
+              event.usage.cost > 0,
+          ),
+        ).toBe(true)
         if (item.reasoning) expect(events.some(LLMEvent.is.reasoningEnd)).toBe(true)
       }),
     120_000,
