@@ -122,6 +122,22 @@ fn loaded_sessions_show_their_titles_and_the_rest_stay_ids() {
     assert_eq!(lookups(&log, &current), 1);
 }
 
+// Expected: as in TS, whose Core never passes table cells to the chunk callback, an ID in a table cell stays as written
+// and does not open the session, while the same ID in the paragraph above links.
+#[test]
+fn ids_in_table_cells_stay_as_written() {
+    let known = id("known");
+    let (h, _) = open(100, 30, &format!("See {known}\n\n| id |\n| -- |\n| {known} |"), Info::default());
+    h.wait_for("@Fix the flaky reconnect test on Windows");
+    let cell = format!("│ {known}");
+    let screen = h.wait_for(&cell);
+    assert_eq!(linked(&h), ["@Fix the flaky reconnect test on Windows"]);
+    let (x, y) = support::at(&screen, &cell).unwrap();
+    h.app.click(x + 4, y);
+    h.app.advance(std::time::Duration::from_millis(1));
+    assert!(opened(&h, &id("current")), "{:?}", h.tui.route());
+}
+
 // Expected: a code span links only when it is exactly an ID, so a command stays copyable; markers shown, the link
 // keeps the source text.
 #[test]
