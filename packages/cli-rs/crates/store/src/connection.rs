@@ -219,6 +219,7 @@ impl State {
             V2Event::SessionShellStarted(event) => self.on_shell_started(event),
             V2Event::SessionShellEnded(event) => self.on_shell_ended(event),
             V2Event::SessionStepStarted(event) => self.on_step_started(event),
+            V2Event::SessionStepFirstToken(event) => self.on_step_first_token(event),
             V2Event::SessionStepStreamed(event) => self.on_step_streamed(event),
             V2Event::SessionStepEnded(event) => self.on_step_ended(event),
             V2Event::SessionStepFailed(event) => {

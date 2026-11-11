@@ -35,6 +35,7 @@
     "session.shell.started",
     "session.shell.ended",
     "session.step.started",
+    "session.step.first-token",
     "session.step.streamed",
     "session.step.ended",
     "session.step.failed",
@@ -13231,11 +13232,367 @@
       }
     },
     {
-      "name": "session.step.streamed",
+      "name": "session.step.first-token",
       "state": "empty",
       "event": {
         "id": "evt_9036",
         "created": 1036,
+        "type": "session.step.first-token",
+        "durable": {
+          "aggregateID": "x",
+          "seq": 0,
+          "version": 1
+        },
+        "data": {
+          "sessionID": "ses_a",
+          "assistantMessageID": "msg_0005"
+        },
+        "location": {
+          "directory": "/project"
+        }
+      },
+      "expected": {
+        "sessions": {},
+        "missing": [],
+        "family": {
+          "ses_a": [],
+          "ses_b": []
+        },
+        "status": {
+          "ses_a": "idle",
+          "ses_b": "idle"
+        },
+        "messages": {
+          "ses_a": [],
+          "ses_b": []
+        },
+        "more": {
+          "ses_a": false,
+          "ses_b": false
+        },
+        "pending": {
+          "ses_a": [],
+          "ses_b": []
+        },
+        "permissions": {},
+        "forms": {},
+        "projects": {},
+        "location": {
+          "shell": []
+        },
+        "requests": []
+      }
+    },
+    {
+      "name": "session.step.first-token",
+      "state": "loaded",
+      "event": {
+        "id": "evt_9036",
+        "created": 1036,
+        "type": "session.step.first-token",
+        "durable": {
+          "aggregateID": "x",
+          "seq": 0,
+          "version": 1
+        },
+        "data": {
+          "sessionID": "ses_a",
+          "assistantMessageID": "msg_0005"
+        },
+        "location": {
+          "directory": "/project"
+        }
+      },
+      "expected": {
+        "sessions": {
+          "ses_a": {
+            "id": "ses_a",
+            "projectID": "project",
+            "agent": "build",
+            "model": {
+              "providerID": "p",
+              "id": "m"
+            },
+            "title": "Title ses_a",
+            "cost": 0.5,
+            "tokens": {
+              "input": 1,
+              "output": 1,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/project"
+            }
+          }
+        },
+        "missing": [],
+        "family": {
+          "ses_a": [
+            "ses_a"
+          ],
+          "ses_b": []
+        },
+        "status": {
+          "ses_a": "idle",
+          "ses_b": "idle"
+        },
+        "messages": {
+          "ses_a": [
+            {
+              "id": "msg_0001",
+              "type": "user",
+              "text": "hello",
+              "time": {
+                "created": 10
+              }
+            },
+            {
+              "id": "msg_0002",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "p",
+                "id": "m"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "done"
+                }
+              ],
+              "time": {
+                "created": 11,
+                "completed": 12
+              }
+            },
+            {
+              "id": "msg_0003",
+              "type": "shell",
+              "shellID": "sh_1",
+              "command": "ls",
+              "status": "running",
+              "time": {
+                "created": 13
+              }
+            },
+            {
+              "id": "msg_0004",
+              "type": "compaction",
+              "status": "running",
+              "reason": "auto",
+              "summary": "sum",
+              "time": {
+                "created": 14
+              }
+            },
+            {
+              "id": "msg_0005",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "p",
+                "id": "m"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hel"
+                },
+                {
+                  "type": "reasoning",
+                  "text": "th",
+                  "time": {
+                    "created": 15
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_1",
+                  "name": "bash",
+                  "state": {
+                    "status": "streaming",
+                    "input": "{"
+                  },
+                  "time": {
+                    "created": 16
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_2",
+                  "name": "read",
+                  "state": {
+                    "status": "running",
+                    "input": {
+                      "path": "a"
+                    },
+                    "metadata": {}
+                  },
+                  "time": {
+                    "created": 17,
+                    "ran": 17
+                  }
+                }
+              ],
+              "time": {
+                "created": 15,
+                "firstToken": 1036
+              }
+            },
+            {
+              "id": "msg_0006",
+              "type": "user",
+              "text": "next",
+              "time": {
+                "created": 18
+              }
+            }
+          ],
+          "ses_b": []
+        },
+        "more": {
+          "ses_a": true,
+          "ses_b": false
+        },
+        "pending": {
+          "ses_a": [
+            {
+              "id": "msg_0006",
+              "sessionID": "ses_a",
+              "time": {
+                "created": 18
+              },
+              "type": "user",
+              "delivery": "steer",
+              "payload": {
+                "text": "next"
+              }
+            }
+          ],
+          "ses_b": []
+        },
+        "permissions": {
+          "ses_a": [
+            {
+              "id": "per_1",
+              "sessionID": "ses_a",
+              "action": "bash",
+              "resources": []
+            }
+          ]
+        },
+        "forms": {
+          "ses_a": [
+            {
+              "id": "frm_1",
+              "sessionID": "ses_a",
+              "title": "Ask",
+              "fields": [
+                {
+                  "key": "x",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "global": []
+        },
+        "projects": {
+          "project": {
+            "id": "project",
+            "canonical": "/project",
+            "time": {
+              "created": 1,
+              "updated": 1,
+              "active": 1
+            },
+            "sandboxes": []
+          }
+        },
+        "location": {
+          "info": {
+            "directory": "/project",
+            "project": {
+              "id": "project",
+              "directory": "/project",
+              "canonical": "/project"
+            }
+          },
+          "vcs": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          },
+          "agent": [],
+          "command": [],
+          "config": [],
+          "integration": [
+            {
+              "id": "openai",
+              "name": "OpenAI",
+              "methods": [],
+              "connections": [
+                {
+                  "type": "credential",
+                  "id": "crd_1",
+                  "label": "crd_1",
+                  "method": "key"
+                },
+                {
+                  "type": "credential",
+                  "id": "crd_2",
+                  "label": "crd_2",
+                  "method": "key"
+                }
+              ]
+            }
+          ],
+          "mcpServer": [],
+          "mcpResource": [],
+          "model": [],
+          "provider": [],
+          "reference": [],
+          "skill": [],
+          "websearch": [],
+          "usageLimits": null,
+          "shell": [
+            {
+              "id": "sh_1",
+              "status": "running",
+              "command": "ls",
+              "cwd": "/project",
+              "shell": "bash",
+              "file": "/tmp/sh_1",
+              "metadata": {
+                "sessionID": "ses_a"
+              },
+              "time": {
+                "started": 13
+              },
+              "location": {
+                "directory": "/project"
+              }
+            }
+          ]
+        },
+        "requests": []
+      }
+    },
+    {
+      "name": "session.step.streamed",
+      "state": "empty",
+      "event": {
+        "id": "evt_9037",
+        "created": 1037,
         "type": "session.step.streamed",
         "durable": {
           "aggregateID": "x",
@@ -13286,8 +13643,8 @@
       "name": "session.step.streamed",
       "state": "loaded",
       "event": {
-        "id": "evt_9036",
-        "created": 1036,
+        "id": "evt_9037",
+        "created": 1037,
         "type": "session.step.streamed",
         "durable": {
           "aggregateID": "x",
@@ -13443,7 +13800,7 @@
               ],
               "time": {
                 "created": 15,
-                "streamed": 1036
+                "streamed": 1037
               }
             },
             {
@@ -13590,8 +13947,8 @@
       "name": "session.step.ended",
       "state": "empty",
       "event": {
-        "id": "evt_9037",
-        "created": 1037,
+        "id": "evt_9038",
+        "created": 1038,
         "type": "session.step.ended",
         "durable": {
           "aggregateID": "x",
@@ -13653,8 +14010,8 @@
       "name": "session.step.ended",
       "state": "loaded",
       "event": {
-        "id": "evt_9037",
-        "created": 1037,
+        "id": "evt_9038",
+        "created": 1038,
         "type": "session.step.ended",
         "durable": {
           "aggregateID": "x",
@@ -13821,7 +14178,7 @@
               ],
               "time": {
                 "created": 15,
-                "completed": 1037
+                "completed": 1038
               },
               "finish": "stop",
               "cost": 1,
@@ -13979,8 +14336,8 @@
       "name": "session.step.failed",
       "state": "empty",
       "event": {
-        "id": "evt_9038",
-        "created": 1038,
+        "id": "evt_9039",
+        "created": 1039,
         "type": "session.step.failed",
         "durable": {
           "aggregateID": "x",
@@ -14035,8 +14392,8 @@
       "name": "session.step.failed",
       "state": "loaded",
       "event": {
-        "id": "evt_9038",
-        "created": 1038,
+        "id": "evt_9039",
+        "created": 1039,
         "type": "session.step.failed",
         "durable": {
           "aggregateID": "x",
@@ -14196,7 +14553,7 @@
               ],
               "time": {
                 "created": 15,
-                "completed": 1038
+                "completed": 1039
               },
               "finish": "error",
               "error": {
@@ -14348,8 +14705,8 @@
       "name": "session.text.started",
       "state": "empty",
       "event": {
-        "id": "evt_9039",
-        "created": 1039,
+        "id": "evt_9040",
+        "created": 1040,
         "type": "session.text.started",
         "durable": {
           "aggregateID": "x",
@@ -14401,8 +14758,8 @@
       "name": "session.text.started",
       "state": "loaded",
       "event": {
-        "id": "evt_9039",
-        "created": 1039,
+        "id": "evt_9040",
+        "created": 1040,
         "type": "session.text.started",
         "durable": {
           "aggregateID": "x",
@@ -14709,8 +15066,8 @@
       "name": "session.text.delta",
       "state": "empty",
       "event": {
-        "id": "evt_9040",
-        "created": 1040,
+        "id": "evt_9041",
+        "created": 1041,
         "type": "session.text.delta",
         "data": {
           "sessionID": "ses_a",
@@ -14758,8 +15115,8 @@
       "name": "session.text.delta",
       "state": "loaded",
       "event": {
-        "id": "evt_9040",
-        "created": 1040,
+        "id": "evt_9041",
+        "created": 1041,
         "type": "session.text.delta",
         "data": {
           "sessionID": "ses_a",
@@ -15058,8 +15415,8 @@
       "name": "session.text.ended",
       "state": "empty",
       "event": {
-        "id": "evt_9041",
-        "created": 1041,
+        "id": "evt_9042",
+        "created": 1042,
         "type": "session.text.ended",
         "durable": {
           "aggregateID": "x",
@@ -15112,8 +15469,8 @@
       "name": "session.text.ended",
       "state": "loaded",
       "event": {
-        "id": "evt_9041",
-        "created": 1041,
+        "id": "evt_9042",
+        "created": 1042,
         "type": "session.text.ended",
         "durable": {
           "aggregateID": "x",
@@ -15417,8 +15774,8 @@
       "name": "session.reasoning.started",
       "state": "empty",
       "event": {
-        "id": "evt_9042",
-        "created": 1042,
+        "id": "evt_9043",
+        "created": 1043,
         "type": "session.reasoning.started",
         "durable": {
           "aggregateID": "x",
@@ -15470,8 +15827,8 @@
       "name": "session.reasoning.started",
       "state": "loaded",
       "event": {
-        "id": "evt_9042",
-        "created": 1042,
+        "id": "evt_9043",
+        "created": 1043,
         "type": "session.reasoning.started",
         "durable": {
           "aggregateID": "x",
@@ -15629,7 +15986,7 @@
                   "type": "reasoning",
                   "text": "",
                   "time": {
-                    "created": 1042
+                    "created": 1043
                   }
                 }
               ],
@@ -15781,8 +16138,8 @@
       "name": "session.reasoning.delta",
       "state": "empty",
       "event": {
-        "id": "evt_9043",
-        "created": 1043,
+        "id": "evt_9044",
+        "created": 1044,
         "type": "session.reasoning.delta",
         "data": {
           "sessionID": "ses_a",
@@ -15830,8 +16187,8 @@
       "name": "session.reasoning.delta",
       "state": "loaded",
       "event": {
-        "id": "evt_9043",
-        "created": 1043,
+        "id": "evt_9044",
+        "created": 1044,
         "type": "session.reasoning.delta",
         "data": {
           "sessionID": "ses_a",
@@ -16130,8 +16487,8 @@
       "name": "session.reasoning.ended",
       "state": "empty",
       "event": {
-        "id": "evt_9044",
-        "created": 1044,
+        "id": "evt_9045",
+        "created": 1045,
         "type": "session.reasoning.ended",
         "durable": {
           "aggregateID": "x",
@@ -16184,8 +16541,8 @@
       "name": "session.reasoning.ended",
       "state": "loaded",
       "event": {
-        "id": "evt_9044",
-        "created": 1044,
+        "id": "evt_9045",
+        "created": 1045,
         "type": "session.reasoning.ended",
         "durable": {
           "aggregateID": "x",
@@ -16310,7 +16667,7 @@
                   "text": "think",
                   "time": {
                     "created": 15,
-                    "completed": 1044
+                    "completed": 1045
                   }
                 },
                 {
@@ -16490,8 +16847,8 @@
       "name": "session.tool.input.started",
       "state": "empty",
       "event": {
-        "id": "evt_9045",
-        "created": 1045,
+        "id": "evt_9046",
+        "created": 1046,
         "type": "session.tool.input.started",
         "durable": {
           "aggregateID": "x",
@@ -16544,8 +16901,8 @@
       "name": "session.tool.input.started",
       "state": "loaded",
       "event": {
-        "id": "evt_9045",
-        "created": 1045,
+        "id": "evt_9046",
+        "created": 1046,
         "type": "session.tool.input.started",
         "durable": {
           "aggregateID": "x",
@@ -16705,7 +17062,7 @@
                   "id": "call_3",
                   "name": "edit",
                   "time": {
-                    "created": 1045
+                    "created": 1046
                   },
                   "state": {
                     "status": "streaming",
@@ -16861,8 +17218,8 @@
       "name": "session.tool.input.delta",
       "state": "empty",
       "event": {
-        "id": "evt_9046",
-        "created": 1046,
+        "id": "evt_9047",
+        "created": 1047,
         "type": "session.tool.input.delta",
         "data": {
           "sessionID": "ses_a",
@@ -16910,8 +17267,8 @@
       "name": "session.tool.input.delta",
       "state": "loaded",
       "event": {
-        "id": "evt_9046",
-        "created": 1046,
+        "id": "evt_9047",
+        "created": 1047,
         "type": "session.tool.input.delta",
         "data": {
           "sessionID": "ses_a",
@@ -17210,8 +17567,8 @@
       "name": "session.tool.input.ended",
       "state": "empty",
       "event": {
-        "id": "evt_9047",
-        "created": 1047,
+        "id": "evt_9048",
+        "created": 1048,
         "type": "session.tool.input.ended",
         "durable": {
           "aggregateID": "x",
@@ -17264,8 +17621,8 @@
       "name": "session.tool.input.ended",
       "state": "loaded",
       "event": {
-        "id": "evt_9047",
-        "created": 1047,
+        "id": "evt_9048",
+        "created": 1048,
         "type": "session.tool.input.ended",
         "durable": {
           "aggregateID": "x",
@@ -17569,8 +17926,8 @@
       "name": "session.tool.called",
       "state": "empty",
       "event": {
-        "id": "evt_9048",
-        "created": 1048,
+        "id": "evt_9049",
+        "created": 1049,
         "type": "session.tool.called",
         "durable": {
           "aggregateID": "x",
@@ -17626,8 +17983,8 @@
       "name": "session.tool.called",
       "state": "loaded",
       "event": {
-        "id": "evt_9048",
-        "created": 1048,
+        "id": "evt_9049",
+        "created": 1049,
         "type": "session.tool.called",
         "durable": {
           "aggregateID": "x",
@@ -17770,7 +18127,7 @@
                   },
                   "time": {
                     "created": 16,
-                    "ran": 1048
+                    "ran": 1049
                   },
                   "executed": false
                 },
@@ -17939,8 +18296,8 @@
       "name": "session.tool.progress",
       "state": "empty",
       "event": {
-        "id": "evt_9049",
-        "created": 1049,
+        "id": "evt_9050",
+        "created": 1050,
         "type": "session.tool.progress",
         "data": {
           "sessionID": "ses_a",
@@ -17990,8 +18347,8 @@
       "name": "session.tool.progress",
       "state": "loaded",
       "event": {
-        "id": "evt_9049",
-        "created": 1049,
+        "id": "evt_9050",
+        "created": 1050,
         "type": "session.tool.progress",
         "data": {
           "sessionID": "ses_a",
@@ -18294,8 +18651,8 @@
       "name": "session.tool.success",
       "state": "empty",
       "event": {
-        "id": "evt_9050",
-        "created": 1050,
+        "id": "evt_9051",
+        "created": 1051,
         "type": "session.tool.success",
         "durable": {
           "aggregateID": "x",
@@ -18354,8 +18711,8 @@
       "name": "session.tool.success",
       "state": "loaded",
       "event": {
-        "id": "evt_9050",
-        "created": 1050,
+        "id": "evt_9051",
+        "created": 1051,
         "type": "session.tool.success",
         "durable": {
           "aggregateID": "x",
@@ -18519,7 +18876,7 @@
                   "time": {
                     "created": 17,
                     "ran": 17,
-                    "completed": 1050
+                    "completed": 1051
                   },
                   "executed": true
                 }
@@ -18672,8 +19029,8 @@
       "name": "session.tool.failed",
       "state": "empty",
       "event": {
-        "id": "evt_9051",
-        "created": 1051,
+        "id": "evt_9052",
+        "created": 1052,
         "type": "session.tool.failed",
         "durable": {
           "aggregateID": "x",
@@ -18730,8 +19087,8 @@
       "name": "session.tool.failed",
       "state": "loaded",
       "event": {
-        "id": "evt_9051",
-        "created": 1051,
+        "id": "evt_9052",
+        "created": 1052,
         "type": "session.tool.failed",
         "durable": {
           "aggregateID": "x",
@@ -18876,7 +19233,7 @@
                   },
                   "time": {
                     "created": 16,
-                    "completed": 1051
+                    "completed": 1052
                   },
                   "executed": false
                 },
@@ -19045,8 +19402,8 @@
       "name": "session.retry.scheduled",
       "state": "empty",
       "event": {
-        "id": "evt_9052",
-        "created": 1052,
+        "id": "evt_9053",
+        "created": 1053,
         "type": "session.retry.scheduled",
         "durable": {
           "aggregateID": "x",
@@ -19103,8 +19460,8 @@
       "name": "session.retry.scheduled",
       "state": "loaded",
       "event": {
-        "id": "evt_9052",
-        "created": 1052,
+        "id": "evt_9053",
+        "created": 1053,
         "type": "session.retry.scheduled",
         "durable": {
           "aggregateID": "x",
@@ -19420,8 +19777,8 @@
       "name": "session.compaction.started",
       "state": "empty",
       "event": {
-        "id": "evt_9053",
-        "created": 1053,
+        "id": "evt_9054",
+        "created": 1054,
         "type": "session.compaction.started",
         "durable": {
           "aggregateID": "x",
@@ -19457,7 +19814,7 @@
               "reason": "manual",
               "summary": "",
               "time": {
-                "created": 1053
+                "created": 1054
               }
             }
           ],
@@ -19484,8 +19841,8 @@
       "name": "session.compaction.started",
       "state": "loaded",
       "event": {
-        "id": "evt_9053",
-        "created": 1053,
+        "id": "evt_9054",
+        "created": 1054,
         "type": "session.compaction.started",
         "durable": {
           "aggregateID": "x",
@@ -19659,7 +20016,7 @@
               "reason": "manual",
               "summary": "",
               "time": {
-                "created": 1053
+                "created": 1054
               }
             }
           ],
@@ -19798,8 +20155,8 @@
       "name": "session.compaction.delta",
       "state": "empty",
       "event": {
-        "id": "evt_9054",
-        "created": 1054,
+        "id": "evt_9055",
+        "created": 1055,
         "type": "session.compaction.delta",
         "data": {
           "sessionID": "ses_a",
@@ -19845,8 +20202,8 @@
       "name": "session.compaction.delta",
       "state": "loaded",
       "event": {
-        "id": "evt_9054",
-        "created": 1054,
+        "id": "evt_9055",
+        "created": 1055,
         "type": "session.compaction.delta",
         "data": {
           "sessionID": "ses_a",
@@ -20143,8 +20500,8 @@
       "name": "session.compaction.ended",
       "state": "empty",
       "event": {
-        "id": "evt_9055",
-        "created": 1055,
+        "id": "evt_9056",
+        "created": 1056,
         "type": "session.compaction.ended",
         "durable": {
           "aggregateID": "x",
@@ -20184,7 +20541,7 @@
         "messages": {
           "ses_a": [
             {
-              "id": "msg_9055",
+              "id": "msg_9056",
               "type": "compaction",
               "status": "completed",
               "reason": "auto",
@@ -20200,7 +20557,7 @@
                 }
               },
               "time": {
-                "created": 1055
+                "created": 1056
               }
             }
           ],
@@ -20227,8 +20584,8 @@
       "name": "session.compaction.ended",
       "state": "loaded",
       "event": {
-        "id": "evt_9055",
-        "created": 1055,
+        "id": "evt_9056",
+        "created": 1056,
         "type": "session.compaction.ended",
         "durable": {
           "aggregateID": "x",
@@ -20551,8 +20908,8 @@
       "name": "session.compaction.failed",
       "state": "empty",
       "event": {
-        "id": "evt_9056",
-        "created": 1056,
+        "id": "evt_9057",
+        "created": 1057,
         "type": "session.compaction.failed",
         "durable": {
           "aggregateID": "x",
@@ -20585,7 +20942,7 @@
         "messages": {
           "ses_a": [
             {
-              "id": "msg_9056",
+              "id": "msg_9057",
               "type": "compaction",
               "status": "failed",
               "reason": "auto",
@@ -20594,7 +20951,7 @@
                 "message": "no"
               },
               "time": {
-                "created": 1056
+                "created": 1057
               }
             }
           ],
@@ -20621,8 +20978,8 @@
       "name": "session.compaction.failed",
       "state": "loaded",
       "event": {
-        "id": "evt_9056",
-        "created": 1056,
+        "id": "evt_9057",
+        "created": 1057,
         "type": "session.compaction.failed",
         "durable": {
           "aggregateID": "x",
@@ -20931,8 +21288,8 @@
       "name": "session.revert.staged",
       "state": "empty",
       "event": {
-        "id": "evt_9057",
-        "created": 1057,
+        "id": "evt_9058",
+        "created": 1058,
         "type": "session.revert.staged",
         "durable": {
           "aggregateID": "x",
@@ -20985,8 +21342,8 @@
       "name": "session.revert.staged",
       "state": "loaded",
       "event": {
-        "id": "evt_9057",
-        "created": 1057,
+        "id": "evt_9058",
+        "created": 1058,
         "type": "session.revert.staged",
         "durable": {
           "aggregateID": "x",
@@ -21293,8 +21650,8 @@
       "name": "session.revert.cleared",
       "state": "empty",
       "event": {
-        "id": "evt_9058",
-        "created": 1058,
+        "id": "evt_9059",
+        "created": 1059,
         "type": "session.revert.cleared",
         "durable": {
           "aggregateID": "x",
@@ -21344,8 +21701,8 @@
       "name": "session.revert.cleared",
       "state": "loaded",
       "event": {
-        "id": "evt_9058",
-        "created": 1058,
+        "id": "evt_9059",
+        "created": 1059,
         "type": "session.revert.cleared",
         "durable": {
           "aggregateID": "x",
@@ -21646,8 +22003,8 @@
       "name": "session.revert.committed",
       "state": "empty",
       "event": {
-        "id": "evt_9059",
-        "created": 1059,
+        "id": "evt_9060",
+        "created": 1060,
         "type": "session.revert.committed",
         "durable": {
           "aggregateID": "x",
@@ -21698,8 +22055,8 @@
       "name": "session.revert.committed",
       "state": "loaded",
       "event": {
-        "id": "evt_9059",
-        "created": 1059,
+        "id": "evt_9060",
+        "created": 1060,
         "type": "session.revert.committed",
         "durable": {
           "aggregateID": "x",
@@ -21917,8 +22274,8 @@
       "name": "filesystem.changed",
       "state": "empty",
       "event": {
-        "id": "evt_9060",
-        "created": 1060,
+        "id": "evt_9061",
+        "created": 1061,
         "type": "filesystem.changed",
         "data": {
           "file": "x",
@@ -21964,8 +22321,8 @@
       "name": "filesystem.changed",
       "state": "loaded",
       "event": {
-        "id": "evt_9060",
-        "created": 1060,
+        "id": "evt_9061",
+        "created": 1061,
         "type": "filesystem.changed",
         "data": {
           "file": "x",
@@ -22262,8 +22619,8 @@
       "name": "reference.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9061",
-        "created": 1061,
+        "id": "evt_9062",
+        "created": 1062,
         "type": "reference.updated",
         "data": {},
         "location": {
@@ -22306,8 +22663,8 @@
       "name": "reference.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9061",
-        "created": 1061,
+        "id": "evt_9062",
+        "created": 1062,
         "type": "reference.updated",
         "data": {},
         "location": {
@@ -22603,8 +22960,8 @@
       "name": "permission.asked",
       "state": "empty",
       "event": {
-        "id": "evt_9062",
-        "created": 1062,
+        "id": "evt_9063",
+        "created": 1063,
         "type": "permission.asked",
         "data": {
           "id": "per_2",
@@ -22665,8 +23022,8 @@
       "name": "permission.asked",
       "state": "loaded",
       "event": {
-        "id": "evt_9062",
-        "created": 1062,
+        "id": "evt_9063",
+        "created": 1063,
         "type": "permission.asked",
         "data": {
           "id": "per_2",
@@ -22975,8 +23332,8 @@
       "name": "permission.replied",
       "state": "empty",
       "event": {
-        "id": "evt_9063",
-        "created": 1063,
+        "id": "evt_9064",
+        "created": 1064,
         "type": "permission.replied",
         "data": {
           "sessionID": "ses_a",
@@ -23023,8 +23380,8 @@
       "name": "permission.replied",
       "state": "loaded",
       "event": {
-        "id": "evt_9063",
-        "created": 1063,
+        "id": "evt_9064",
+        "created": 1064,
         "type": "permission.replied",
         "data": {
           "sessionID": "ses_a",
@@ -23315,8 +23672,8 @@
       "name": "plugin.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9064",
-        "created": 1064,
+        "id": "evt_9065",
+        "created": 1065,
         "type": "plugin.updated",
         "data": {},
         "location": {
@@ -23359,8 +23716,8 @@
       "name": "plugin.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9064",
-        "created": 1064,
+        "id": "evt_9065",
+        "created": 1065,
         "type": "plugin.updated",
         "data": {},
         "location": {
@@ -23654,8 +24011,8 @@
       "name": "project.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9065",
-        "created": 1065,
+        "id": "evt_9066",
+        "created": 1066,
         "type": "project.updated",
         "data": {
           "id": "project",
@@ -23720,8 +24077,8 @@
       "name": "project.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9065",
-        "created": 1065,
+        "id": "evt_9066",
+        "created": 1066,
         "type": "project.updated",
         "data": {
           "id": "project",
@@ -24026,8 +24383,8 @@
       "name": "worktree.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9066",
-        "created": 1066,
+        "id": "evt_9067",
+        "created": 1067,
         "type": "worktree.updated",
         "data": {
           "projectID": "x"
@@ -24072,8 +24429,8 @@
       "name": "worktree.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9066",
-        "created": 1066,
+        "id": "evt_9067",
+        "created": 1067,
         "type": "worktree.updated",
         "data": {
           "projectID": "x"
@@ -24369,8 +24726,8 @@
       "name": "worktree.resolved",
       "state": "empty",
       "event": {
-        "id": "evt_9067",
-        "created": 1067,
+        "id": "evt_9068",
+        "created": 1068,
         "type": "worktree.resolved",
         "durable": {
           "aggregateID": "x",
@@ -24425,8 +24782,8 @@
       "name": "worktree.resolved",
       "state": "loaded",
       "event": {
-        "id": "evt_9067",
-        "created": 1067,
+        "id": "evt_9068",
+        "created": 1068,
         "type": "worktree.resolved",
         "durable": {
           "aggregateID": "x",
@@ -24732,8 +25089,8 @@
       "name": "command.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9068",
-        "created": 1068,
+        "id": "evt_9069",
+        "created": 1069,
         "type": "command.updated",
         "data": {},
         "location": {
@@ -24776,8 +25133,8 @@
       "name": "command.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9068",
-        "created": 1068,
+        "id": "evt_9069",
+        "created": 1069,
         "type": "command.updated",
         "data": {},
         "location": {
@@ -25073,8 +25430,8 @@
       "name": "config.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9069",
-        "created": 1069,
+        "id": "evt_9070",
+        "created": 1070,
         "type": "config.updated",
         "data": {},
         "location": {
@@ -25117,8 +25474,8 @@
       "name": "config.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9069",
-        "created": 1069,
+        "id": "evt_9070",
+        "created": 1070,
         "type": "config.updated",
         "data": {},
         "location": {
@@ -25415,8 +25772,8 @@
       "name": "skill.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9070",
-        "created": 1070,
+        "id": "evt_9071",
+        "created": 1071,
         "type": "skill.updated",
         "data": {},
         "location": {
@@ -25459,8 +25816,8 @@
       "name": "skill.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9070",
-        "created": 1070,
+        "id": "evt_9071",
+        "created": 1071,
         "type": "skill.updated",
         "data": {},
         "location": {
@@ -25756,8 +26113,8 @@
       "name": "pty.created",
       "state": "empty",
       "event": {
-        "id": "evt_9071",
-        "created": 1071,
+        "id": "evt_9072",
+        "created": 1072,
         "type": "pty.created",
         "data": {
           "info": {
@@ -25810,8 +26167,8 @@
       "name": "pty.created",
       "state": "loaded",
       "event": {
-        "id": "evt_9071",
-        "created": 1071,
+        "id": "evt_9072",
+        "created": 1072,
         "type": "pty.created",
         "data": {
           "info": {
@@ -26115,8 +26472,8 @@
       "name": "pty.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9072",
-        "created": 1072,
+        "id": "evt_9073",
+        "created": 1073,
         "type": "pty.updated",
         "data": {
           "info": {
@@ -26169,8 +26526,8 @@
       "name": "pty.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9072",
-        "created": 1072,
+        "id": "evt_9073",
+        "created": 1073,
         "type": "pty.updated",
         "data": {
           "info": {
@@ -26474,8 +26831,8 @@
       "name": "pty.exited",
       "state": "empty",
       "event": {
-        "id": "evt_9073",
-        "created": 1073,
+        "id": "evt_9074",
+        "created": 1074,
         "type": "pty.exited",
         "data": {
           "id": "pty_x",
@@ -26521,8 +26878,8 @@
       "name": "pty.exited",
       "state": "loaded",
       "event": {
-        "id": "evt_9073",
-        "created": 1073,
+        "id": "evt_9074",
+        "created": 1074,
         "type": "pty.exited",
         "data": {
           "id": "pty_x",
@@ -26819,8 +27176,8 @@
       "name": "pty.deleted",
       "state": "empty",
       "event": {
-        "id": "evt_9074",
-        "created": 1074,
+        "id": "evt_9075",
+        "created": 1075,
         "type": "pty.deleted",
         "data": {
           "id": "pty_x"
@@ -26865,8 +27222,8 @@
       "name": "pty.deleted",
       "state": "loaded",
       "event": {
-        "id": "evt_9074",
-        "created": 1074,
+        "id": "evt_9075",
+        "created": 1075,
         "type": "pty.deleted",
         "data": {
           "id": "pty_x"
@@ -27162,8 +27519,8 @@
       "name": "persistent-pty.added",
       "state": "empty",
       "event": {
-        "id": "evt_9075",
-        "created": 1075,
+        "id": "evt_9076",
+        "created": 1076,
         "type": "persistent-pty.added",
         "data": {
           "sessionID": "ses_a",
@@ -27228,8 +27585,8 @@
       "name": "persistent-pty.added",
       "state": "loaded",
       "event": {
-        "id": "evt_9075",
-        "created": 1075,
+        "id": "evt_9076",
+        "created": 1076,
         "type": "persistent-pty.added",
         "data": {
           "sessionID": "ses_a",
@@ -27545,8 +27902,8 @@
       "name": "persistent-pty.removed",
       "state": "empty",
       "event": {
-        "id": "evt_9076",
-        "created": 1076,
+        "id": "evt_9077",
+        "created": 1077,
         "type": "persistent-pty.removed",
         "data": {
           "sessionID": "ses_a",
@@ -27592,8 +27949,8 @@
       "name": "persistent-pty.removed",
       "state": "loaded",
       "event": {
-        "id": "evt_9076",
-        "created": 1076,
+        "id": "evt_9077",
+        "created": 1077,
         "type": "persistent-pty.removed",
         "data": {
           "sessionID": "ses_a",
@@ -27890,8 +28247,8 @@
       "name": "persistent-pty.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9077",
-        "created": 1077,
+        "id": "evt_9078",
+        "created": 1078,
         "type": "persistent-pty.updated",
         "data": {
           "sessionID": "ses_a",
@@ -27956,8 +28313,8 @@
       "name": "persistent-pty.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9077",
-        "created": 1077,
+        "id": "evt_9078",
+        "created": 1078,
         "type": "persistent-pty.updated",
         "data": {
           "sessionID": "ses_a",
@@ -28273,8 +28630,8 @@
       "name": "shell.created",
       "state": "empty",
       "event": {
-        "id": "evt_9078",
-        "created": 1078,
+        "id": "evt_9079",
+        "created": 1079,
         "type": "shell.created",
         "data": {
           "info": {
@@ -28350,8 +28707,8 @@
       "name": "shell.created",
       "state": "loaded",
       "event": {
-        "id": "evt_9078",
-        "created": 1078,
+        "id": "evt_9079",
+        "created": 1079,
         "type": "shell.created",
         "data": {
           "info": {
@@ -28677,8 +29034,8 @@
       "name": "shell.exited",
       "state": "empty",
       "event": {
-        "id": "evt_9079",
-        "created": 1079,
+        "id": "evt_9080",
+        "created": 1080,
         "type": "shell.exited",
         "data": {
           "id": "sh_1",
@@ -28724,8 +29081,8 @@
       "name": "shell.exited",
       "state": "loaded",
       "event": {
-        "id": "evt_9079",
-        "created": 1079,
+        "id": "evt_9080",
+        "created": 1080,
         "type": "shell.exited",
         "data": {
           "id": "sh_1",
@@ -29004,8 +29361,8 @@
       "name": "shell.deleted",
       "state": "empty",
       "event": {
-        "id": "evt_9080",
-        "created": 1080,
+        "id": "evt_9081",
+        "created": 1081,
         "type": "shell.deleted",
         "data": {
           "id": "sh_1"
@@ -29050,8 +29407,8 @@
       "name": "shell.deleted",
       "state": "loaded",
       "event": {
-        "id": "evt_9080",
-        "created": 1080,
+        "id": "evt_9081",
+        "created": 1081,
         "type": "shell.deleted",
         "data": {
           "id": "sh_1"
@@ -29329,8 +29686,8 @@
       "name": "form.created",
       "state": "empty",
       "event": {
-        "id": "evt_9081",
-        "created": 1081,
+        "id": "evt_9082",
+        "created": 1082,
         "type": "form.created",
         "data": {
           "form": {
@@ -29399,8 +29756,8 @@
       "name": "form.created",
       "state": "loaded",
       "event": {
-        "id": "evt_9081",
-        "created": 1081,
+        "id": "evt_9082",
+        "created": 1082,
         "type": "form.created",
         "data": {
           "form": {
@@ -29717,8 +30074,8 @@
       "name": "form.replied",
       "state": "empty",
       "event": {
-        "id": "evt_9082",
-        "created": 1082,
+        "id": "evt_9083",
+        "created": 1083,
         "type": "form.replied",
         "data": {
           "id": "frm_1",
@@ -29765,8 +30122,8 @@
       "name": "form.replied",
       "state": "loaded",
       "event": {
-        "id": "evt_9082",
-        "created": 1082,
+        "id": "evt_9083",
+        "created": 1083,
         "type": "form.replied",
         "data": {
           "id": "frm_1",
@@ -30052,8 +30409,8 @@
       "name": "form.cancelled",
       "state": "empty",
       "event": {
-        "id": "evt_9083",
-        "created": 1083,
+        "id": "evt_9084",
+        "created": 1084,
         "type": "form.cancelled",
         "data": {
           "id": "frm_1",
@@ -30099,8 +30456,8 @@
       "name": "form.cancelled",
       "state": "loaded",
       "event": {
-        "id": "evt_9083",
-        "created": 1083,
+        "id": "evt_9084",
+        "created": 1084,
         "type": "form.cancelled",
         "data": {
           "id": "frm_1",
@@ -30385,8 +30742,8 @@
       "name": "websearch.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9084",
-        "created": 1084,
+        "id": "evt_9085",
+        "created": 1085,
         "type": "websearch.updated",
         "data": {},
         "location": {
@@ -30429,8 +30786,8 @@
       "name": "websearch.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9084",
-        "created": 1084,
+        "id": "evt_9085",
+        "created": 1085,
         "type": "websearch.updated",
         "data": {},
         "location": {
@@ -30726,8 +31083,8 @@
       "name": "artifact.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9085",
-        "created": 1085,
+        "id": "evt_9086",
+        "created": 1086,
         "type": "artifact.updated",
         "data": {},
         "location": {
@@ -30770,8 +31127,8 @@
       "name": "artifact.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9085",
-        "created": 1085,
+        "id": "evt_9086",
+        "created": 1086,
         "type": "artifact.updated",
         "data": {},
         "location": {
@@ -31065,8 +31422,8 @@
       "name": "session.status",
       "state": "empty",
       "event": {
-        "id": "evt_9086",
-        "created": 1086,
+        "id": "evt_9087",
+        "created": 1087,
         "type": "session.status",
         "data": {
           "sessionID": "ses_a",
@@ -31114,8 +31471,8 @@
       "name": "session.status",
       "state": "loaded",
       "event": {
-        "id": "evt_9086",
-        "created": 1086,
+        "id": "evt_9087",
+        "created": 1087,
         "type": "session.status",
         "data": {
           "sessionID": "ses_a",
@@ -31414,8 +31771,8 @@
       "name": "session.idle",
       "state": "empty",
       "event": {
-        "id": "evt_9087",
-        "created": 1087,
+        "id": "evt_9088",
+        "created": 1088,
         "type": "session.idle",
         "data": {
           "sessionID": "ses_a"
@@ -31460,8 +31817,8 @@
       "name": "session.idle",
       "state": "loaded",
       "event": {
-        "id": "evt_9087",
-        "created": 1087,
+        "id": "evt_9088",
+        "created": 1088,
         "type": "session.idle",
         "data": {
           "sessionID": "ses_a"
@@ -31757,8 +32114,8 @@
       "name": "tui.prompt.append",
       "state": "empty",
       "event": {
-        "id": "evt_9088",
-        "created": 1088,
+        "id": "evt_9089",
+        "created": 1089,
         "type": "tui.prompt.append",
         "data": {
           "text": "x"
@@ -31803,8 +32160,8 @@
       "name": "tui.prompt.append",
       "state": "loaded",
       "event": {
-        "id": "evt_9088",
-        "created": 1088,
+        "id": "evt_9089",
+        "created": 1089,
         "type": "tui.prompt.append",
         "data": {
           "text": "x"
@@ -32100,8 +32457,8 @@
       "name": "tui.command.execute",
       "state": "empty",
       "event": {
-        "id": "evt_9089",
-        "created": 1089,
+        "id": "evt_9090",
+        "created": 1090,
         "type": "tui.command.execute",
         "data": {
           "command": "session.list"
@@ -32146,8 +32503,8 @@
       "name": "tui.command.execute",
       "state": "loaded",
       "event": {
-        "id": "evt_9089",
-        "created": 1089,
+        "id": "evt_9090",
+        "created": 1090,
         "type": "tui.command.execute",
         "data": {
           "command": "session.list"
@@ -32443,8 +32800,8 @@
       "name": "tui.toast.show",
       "state": "empty",
       "event": {
-        "id": "evt_9090",
-        "created": 1090,
+        "id": "evt_9091",
+        "created": 1091,
         "type": "tui.toast.show",
         "data": {
           "message": "x",
@@ -32490,8 +32847,8 @@
       "name": "tui.toast.show",
       "state": "loaded",
       "event": {
-        "id": "evt_9090",
-        "created": 1090,
+        "id": "evt_9091",
+        "created": 1091,
         "type": "tui.toast.show",
         "data": {
           "message": "x",
@@ -32788,8 +33145,8 @@
       "name": "tui.session.select",
       "state": "empty",
       "event": {
-        "id": "evt_9091",
-        "created": 1091,
+        "id": "evt_9092",
+        "created": 1092,
         "type": "tui.session.select",
         "data": {
           "sessionID": "ses_a"
@@ -32834,8 +33191,8 @@
       "name": "tui.session.select",
       "state": "loaded",
       "event": {
-        "id": "evt_9091",
-        "created": 1091,
+        "id": "evt_9092",
+        "created": 1092,
         "type": "tui.session.select",
         "data": {
           "sessionID": "ses_a"
@@ -33131,8 +33488,8 @@
       "name": "installation.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9092",
-        "created": 1092,
+        "id": "evt_9093",
+        "created": 1093,
         "type": "installation.updated",
         "data": {
           "version": "x"
@@ -33177,8 +33534,8 @@
       "name": "installation.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9092",
-        "created": 1092,
+        "id": "evt_9093",
+        "created": 1093,
         "type": "installation.updated",
         "data": {
           "version": "x"
@@ -33474,8 +33831,8 @@
       "name": "installation.update-available",
       "state": "empty",
       "event": {
-        "id": "evt_9093",
-        "created": 1093,
+        "id": "evt_9094",
+        "created": 1094,
         "type": "installation.update-available",
         "data": {
           "version": "x"
@@ -33520,8 +33877,8 @@
       "name": "installation.update-available",
       "state": "loaded",
       "event": {
-        "id": "evt_9093",
-        "created": 1093,
+        "id": "evt_9094",
+        "created": 1094,
         "type": "installation.update-available",
         "data": {
           "version": "x"
@@ -33817,8 +34174,8 @@
       "name": "vcs.branch.updated",
       "state": "empty",
       "event": {
-        "id": "evt_9094",
-        "created": 1094,
+        "id": "evt_9095",
+        "created": 1095,
         "type": "vcs.branch.updated",
         "data": {},
         "location": {
@@ -33861,8 +34218,8 @@
       "name": "vcs.branch.updated",
       "state": "loaded",
       "event": {
-        "id": "evt_9094",
-        "created": 1094,
+        "id": "evt_9095",
+        "created": 1095,
         "type": "vcs.branch.updated",
         "data": {},
         "location": {
@@ -34158,8 +34515,8 @@
       "name": "mcp.status.changed",
       "state": "empty",
       "event": {
-        "id": "evt_9095",
-        "created": 1095,
+        "id": "evt_9096",
+        "created": 1096,
         "type": "mcp.status.changed",
         "data": {
           "server": "x"
@@ -34204,8 +34561,8 @@
       "name": "mcp.status.changed",
       "state": "loaded",
       "event": {
-        "id": "evt_9095",
-        "created": 1095,
+        "id": "evt_9096",
+        "created": 1096,
         "type": "mcp.status.changed",
         "data": {
           "server": "x"
@@ -34503,8 +34860,8 @@
       "name": "mcp.resources.changed",
       "state": "empty",
       "event": {
-        "id": "evt_9096",
-        "created": 1096,
+        "id": "evt_9097",
+        "created": 1097,
         "type": "mcp.resources.changed",
         "data": {
           "server": "x"
@@ -34549,8 +34906,8 @@
       "name": "mcp.resources.changed",
       "state": "loaded",
       "event": {
-        "id": "evt_9096",
-        "created": 1096,
+        "id": "evt_9097",
+        "created": 1097,
         "type": "mcp.resources.changed",
         "data": {
           "server": "x"
@@ -34848,8 +35205,8 @@
       "name": "rpc.x",
       "state": "empty",
       "event": {
-        "id": "evt_9097",
-        "created": 1097,
+        "id": "evt_9098",
+        "created": 1098,
         "type": "rpc.x",
         "location": {
           "directory": "/project"
@@ -34892,8 +35249,8 @@
       "name": "rpc.x",
       "state": "loaded",
       "event": {
-        "id": "evt_9097",
-        "created": 1097,
+        "id": "evt_9098",
+        "created": 1098,
         "type": "rpc.x",
         "location": {
           "directory": "/project"
@@ -35187,10 +35544,10 @@
       "name": "server.connected",
       "state": "empty",
       "event": {
-        "id": "evt_9098",
+        "id": "evt_9099",
         "type": "server.connected",
         "data": {},
-        "created": 1098,
+        "created": 1099,
         "location": {
           "directory": "/project"
         }
@@ -35261,10 +35618,10 @@
       "name": "server.connected",
       "state": "loaded",
       "event": {
-        "id": "evt_9098",
+        "id": "evt_9099",
         "type": "server.connected",
         "data": {},
-        "created": 1098,
+        "created": 1099,
         "location": {
           "directory": "/project"
         }
@@ -35559,8 +35916,8 @@
       "name": "session.execution.interrupted#shutdown",
       "state": "empty",
       "event": {
-        "id": "evt_9099",
-        "created": 1099,
+        "id": "evt_9100",
+        "created": 1100,
         "type": "session.execution.interrupted",
         "durable": {
           "aggregateID": "x",
@@ -35611,8 +35968,8 @@
       "name": "session.execution.interrupted#shutdown",
       "state": "loaded",
       "event": {
-        "id": "evt_9099",
-        "created": 1099,
+        "id": "evt_9100",
+        "created": 1100,
         "type": "session.execution.interrupted",
         "durable": {
           "aggregateID": "x",
@@ -35914,8 +36271,8 @@
       "name": "session.step.failed#budget",
       "state": "empty",
       "event": {
-        "id": "evt_9100",
-        "created": 1100,
+        "id": "evt_9101",
+        "created": 1101,
         "type": "session.step.failed",
         "durable": {
           "aggregateID": "x",
@@ -35970,8 +36327,8 @@
       "name": "session.step.failed#budget",
       "state": "loaded",
       "event": {
-        "id": "evt_9100",
-        "created": 1100,
+        "id": "evt_9101",
+        "created": 1101,
         "type": "session.step.failed",
         "durable": {
           "aggregateID": "x",
@@ -36131,7 +36488,7 @@
               ],
               "time": {
                 "created": 15,
-                "completed": 1100
+                "completed": 1101
               },
               "finish": "error",
               "error": {
@@ -36285,8 +36642,8 @@
       "name": "session.step.started#existing",
       "state": "empty",
       "event": {
-        "id": "evt_9101",
-        "created": 1101,
+        "id": "evt_9102",
+        "created": 1102,
         "type": "session.step.started",
         "durable": {
           "aggregateID": "x",
@@ -36357,8 +36714,8 @@
       "name": "session.step.started#existing",
       "state": "loaded",
       "event": {
-        "id": "evt_9101",
-        "created": 1101,
+        "id": "evt_9102",
+        "created": 1102,
         "type": "session.step.started",
         "durable": {
           "aggregateID": "x",
@@ -36666,8 +37023,8 @@
       "name": "session.instructions.updated#baseline",
       "state": "empty",
       "event": {
-        "id": "evt_9102",
-        "created": 1102,
+        "id": "evt_9103",
+        "created": 1103,
         "type": "session.instructions.updated",
         "durable": {
           "aggregateID": "x",
@@ -36718,8 +37075,8 @@
       "name": "session.instructions.updated#baseline",
       "state": "loaded",
       "event": {
-        "id": "evt_9102",
-        "created": 1102,
+        "id": "evt_9103",
+        "created": 1103,
         "type": "session.instructions.updated",
         "durable": {
           "aggregateID": "x",
@@ -37021,8 +37378,8 @@
       "name": "session.model.selected#no-previous",
       "state": "empty",
       "event": {
-        "id": "evt_9103",
-        "created": 1103,
+        "id": "evt_9104",
+        "created": 1104,
         "type": "session.model.selected",
         "durable": {
           "aggregateID": "x",
@@ -37076,8 +37433,8 @@
       "name": "session.model.selected#no-previous",
       "state": "loaded",
       "event": {
-        "id": "evt_9103",
-        "created": 1103,
+        "id": "evt_9104",
+        "created": 1104,
         "type": "session.model.selected",
         "durable": {
           "aggregateID": "x",
@@ -37247,7 +37604,7 @@
               }
             },
             {
-              "id": "msg_9103",
+              "id": "msg_9104",
               "type": "model-switched",
               "model": {
                 "id": "n",
@@ -37258,7 +37615,7 @@
                 "id": "n"
               },
               "time": {
-                "created": 1103
+                "created": 1104
               }
             }
           ],
@@ -37391,7 +37748,7 @@
           ]
         },
         "requests": [
-          "GET /api/session/ses_a/message/msg_9103"
+          "GET /api/session/ses_a/message/msg_9104"
         ]
       }
     },
@@ -37399,8 +37756,8 @@
       "name": "session.inbox.enqueued#compaction",
       "state": "empty",
       "event": {
-        "id": "evt_9104",
-        "created": 1104,
+        "id": "evt_9105",
+        "created": 1105,
         "type": "session.inbox.enqueued",
         "durable": {
           "aggregateID": "x",
@@ -37445,7 +37802,7 @@
               "id": "msg_0010",
               "sessionID": "ses_a",
               "time": {
-                "created": 1104
+                "created": 1105
               },
               "type": "compaction",
               "delivery": "steer",
@@ -37467,8 +37824,8 @@
       "name": "session.inbox.enqueued#compaction",
       "state": "loaded",
       "event": {
-        "id": "evt_9104",
-        "created": 1104,
+        "id": "evt_9105",
+        "created": 1105,
         "type": "session.inbox.enqueued",
         "durable": {
           "aggregateID": "x",
@@ -37664,7 +38021,7 @@
               "id": "msg_0010",
               "sessionID": "ses_a",
               "time": {
-                "created": 1104
+                "created": 1105
               },
               "type": "compaction",
               "delivery": "steer",
@@ -37785,8 +38142,8 @@
       "name": "form.created#global",
       "state": "empty",
       "event": {
-        "id": "evt_9105",
-        "created": 1105,
+        "id": "evt_9106",
+        "created": 1106,
         "type": "form.created",
         "data": {
           "form": {
@@ -37858,8 +38215,8 @@
       "name": "form.created#global",
       "state": "loaded",
       "event": {
-        "id": "evt_9105",
-        "created": 1105,
+        "id": "evt_9106",
+        "created": 1106,
         "type": "form.created",
         "data": {
           "form": {
