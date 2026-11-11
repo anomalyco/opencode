@@ -156,6 +156,7 @@ impl State {
         self.syncs.invalidate_prefix(&format!("session.form:{}:", id.0));
         self.info.remove(id);
         self.active.remove(id);
+        self.end_transcript(id);
         self.messages.remove(id);
         self.cursor.remove(id);
         self.loading.remove(id);
@@ -191,6 +192,7 @@ impl State {
         let pending: Vec<_> = self.pending(id).iter().filter(|item| self.outbox.contains(item.id())).cloned().collect();
         let messages: Vec<_> =
             self.messages(id).iter().filter(|item| self.outbox.contains(item.id())).cloned().collect();
+        self.end_transcript(id);
         self.messages.remove(id);
         self.cursor.remove(id);
         self.loading.remove(id);
@@ -362,6 +364,7 @@ impl State {
         let pending = self.pending.entry(id.clone()).or_default();
         pending.retain(|item| item.id() < data.to.as_str());
         self.log.pending(id);
+        self.end_transcript(id);
         self.revert_messages(id, &data.to);
     }
 
@@ -582,15 +585,21 @@ async fn list_children(data: &Data, parent: &SessionID) -> Result<Vec<SessionInf
 }
 
 impl Data {
-    /// Refetches one projected message and upserts it (the `session.model.selected` read).
+    /// Refetches one projected message and upserts it (the `session.model.selected` read). A response that
+    /// arrives after the transcript was deleted, evicted or reverted publishes nothing (deviation
+    /// O6-held-message-read).
     pub(crate) fn fetch_message(&self, session: SessionID, message: SessionMessageID) {
-        self.refresh(|data| async move {
+        let incarnation = self.read(|state| state.incarnation(&session));
+        self.refresh(move |data| async move {
             let item = data
                 .client()
                 .session_message_get(&SessionMessageGetInput { session_id: session.clone(), message_id: message })
                 .await
                 .map_err(Error::new)?;
             data.write(|state| {
+                if state.incarnation(&session) != incarnation {
+                    return;
+                }
                 let item = state.stored(item);
                 state.upsert_message(&session, item);
             });
