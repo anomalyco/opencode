@@ -778,6 +778,7 @@ test("Recent and Pinned rows show the side tabs' status dots and shortcuts for s
 test("Recent shows the last 7 days, and Show more reveals 30 more rows, fetching pages on demand", async ({ page }) => {
   const day = 24 * 60 * 60 * 1000
   const now = Date.now()
+
   // The mock lists sessions newest last; 10 are from today and 55 are over a week old.
   const sessions = Array.from({ length: 65 }, (_, index) => {
     const updated = index < 55 ? now - 8 * day - (55 - index) * 60_000 : now - (65 - index) * 60_000

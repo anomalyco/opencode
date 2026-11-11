@@ -128,6 +128,7 @@ test("pins keep their order, leave Recent, and hide archived sessions without dr
 })
 
 const now = 1_000 * RECENT_WINDOW_MS
+
 const hour = 60 * 60 * 1000
 
 // Newest first, one hour apart, ending `older` rows past the 7-day cutoff.
@@ -155,6 +156,7 @@ test("Recent shows only the last 7 days, newest first", () => {
     revealed: 0,
     serversHaveMore: false,
   })
+
   expect(ids(later.visible)).toEqual(["ses_r0", "ses_r1"])
 })
 
@@ -191,6 +193,7 @@ test("Show more stays while a server still has pages, even when every loaded row
 test("pinned sessions do not count toward the Recent limit", () => {
   const items = timeline(40, 0)
   const pins = items.slice(0, 5).map((entry) => entry.key)
+
   const partition = partitionRecentSessions({
     items,
     endpoints: new Map(),
@@ -199,6 +202,7 @@ test("pinned sessions do not count toward the Recent limit", () => {
     resolvePin: () => undefined,
     archived: () => false,
   })
+
   const result = windowRecentSessions({ items: partition.recent, now, revealed: 0, serversHaveMore: false })
 
   expect(partition.pinned).toHaveLength(5)
