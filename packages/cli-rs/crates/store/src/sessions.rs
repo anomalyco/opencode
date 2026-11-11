@@ -157,6 +157,7 @@ impl State {
         self.info.remove(id);
         self.active.remove(id);
         self.end_transcript(id);
+        self.head_reads.remove(id);
         self.messages.remove(id);
         self.cursor.remove(id);
         self.loading.remove(id);
@@ -193,6 +194,7 @@ impl State {
         let messages: Vec<_> =
             self.messages(id).iter().filter(|item| self.outbox.contains(item.id())).cloned().collect();
         self.end_transcript(id);
+        self.head_reads.remove(id);
         self.messages.remove(id);
         self.cursor.remove(id);
         self.loading.remove(id);
@@ -290,7 +292,8 @@ impl State {
             data.previous.clone().or_else(|| self.info.get(&data.session_id).and_then(|info| info.model.clone()));
         self.edit_info(&data.session_id, |info| info.model = Some(data.model.clone()));
         self.log_selected(&data.session_id);
-        if !self.messages.contains_key(&data.session_id) {
+        // A head read in flight places the row (models M2, O3).
+        if !self.messages.contains_key(&data.session_id) && !self.head_reads.contains_key(&data.session_id) {
             return Vec::new();
         }
         let id = from_event(&event.id);
@@ -597,7 +600,8 @@ impl Data {
                 .await
                 .map_err(Error::new)?;
             data.write(|state| {
-                if state.incarnation(&session) != incarnation {
+                // A head read dropped the row as older than its page, or the window ended.
+                if state.incarnation(&session) != incarnation || state.message(&session, item.id()).is_none() {
                     return;
                 }
                 let item = state.stored(item);

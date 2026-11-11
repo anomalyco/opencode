@@ -117,45 +117,14 @@ pub struct State {
     /// The form read in flight per owner (and location, for [`crate::forms::GLOBAL`]), with the
     /// forms created and settled that overtook it.
     pub(crate) form_reads: HashMap<crate::forms::Read, Overlay<Form>>,
-    /// Messages events created or changed, for transcript reads in flight.
-    pub(crate) message_live: Live,
-}
-
-/// Messages that events added or changed, by event sequence, so a transcript read can keep what
-/// overtook it (deviation O89-transcript-refresh). It keeps the newest [`DELETED_LIMIT`] IDs; a
-/// read that more events overtake than that is a reconnect's business.
-#[derive(Default)]
-pub(crate) struct Live {
-    seq: u64,
-    added: IndexMap<String, u64>,
-}
-
-impl Live {
-    /// The sequence a read starts at.
-    pub(crate) fn now(&self) -> u64 {
-        self.seq
-    }
-
-    pub(crate) fn add(&mut self, id: &str) {
-        self.seq += 1;
-        if let Some(at) = self.added.get_mut(id) {
-            *at = self.seq;
-            return;
-        }
-        self.added.insert(id.to_owned(), self.seq);
-        if self.added.len() > DELETED_LIMIT {
-            self.added.shift_remove_index(0);
-        }
-    }
-
-    /// Whether an event added `id` after the read that started at `started`.
-    pub(crate) fn added_since(&self, id: &str, started: u64) -> bool {
-        self.added.get(id).is_some_and(|at| *at > started)
-    }
+    /// The head read in flight per transcript, with what overtook it.
+    pub(crate) head_reads: HashMap<SessionID, crate::messages::HeadRead>,
+    /// The `durable.seq` of the event being applied, for the rows it creates.
+    pub(crate) event_seq: Option<i64>,
 }
 
 /// Changes one list read may record before it overflows (O-92 Q1).
-const OVERLAY_LIMIT: usize = 1024;
+pub(crate) const OVERLAY_LIMIT: usize = 1024;
 
 /// What overtook one list read (model M1, deviation O89-list-snapshots): the items events added
 /// (`Some`) or settled (`None`) while it was in flight, by ID in arrival order. Only the read whose

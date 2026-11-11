@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use crate::inbox::InboxExt;
-use crate::state::{Data, Error, MESSAGE_PAGE, State, Task, evict_missing};
+use crate::state::{Data, Error, MESSAGE_PAGE, OVERLAY_LIMIT, State, Task, evict_missing};
 
 /// One session's loaded messages, oldest first, with an index by ID.
 #[derive(Debug, Clone, Default)]
@@ -263,17 +263,19 @@ impl State {
         self.messages.entry(session.clone()).or_default()
     }
 
-    /// Logs an event's change to a message and records it for transcript reads in flight.
     pub(crate) fn message_changed(&mut self, session: &SessionID, message: &SessionMessageID) {
-        self.message_live.add(&message.0);
         self.log.message(session, message);
     }
 
     /// Appends `item` unless present (`message.insert`).
     pub(crate) fn insert_message(&mut self, session: &SessionID, item: SessionMessageInfo) {
+        // A session the store found missing shows nothing, whatever arrives late (model O9).
+        if self.missing.contains(session) {
+            return;
+        }
         let id = item.id().to_owned();
         if self.transcript_mut(session).append(item) {
-            self.message_live.add(&id);
+            self.created(session, &id);
             self.log.messages(session);
         }
     }
@@ -287,8 +289,122 @@ impl State {
             return;
         }
         transcript.append(item);
-        self.message_live.add(&id.0);
         self.log.messages(session);
+    }
+
+    /// Records a row the current event created, with its `durable.seq`, for the head read in flight.
+    pub(crate) fn created(&mut self, session: &SessionID, id: &str) {
+        let (Some(seq), Some(read)) = (self.event_seq, self.head_reads.get_mut(session)) else {
+            return;
+        };
+        if read.room() {
+            read.created.push((id.to_owned(), seq));
+        }
+    }
+
+    /// Records a durable edit for the head read of its session in flight, to replay onto the page.
+    pub(crate) fn record_edit(&mut self, event: &V2Event) {
+        let Some(read) = edit_session(event).and_then(|session| self.head_reads.get_mut(session)) else {
+            return;
+        };
+        if read.room() {
+            read.edits.push(event.clone());
+        }
+    }
+
+    /// Publishes the head page of a transcript (models M2); true when the order of what overtook the read is unknown,
+    /// so it must read again.
+    ///
+    /// The page wins. A row an event created during the read that the page lacks is placed by its `durable.seq`
+    /// against a page row also created during the read: higher means newer than the page, so it is appended; lower
+    /// means older than the page, so it is dropped, and an older page brings it back. A row created before the read
+    /// and missing from the page is older too. Without such a page row (and with older rows on the server) the order
+    /// is unknown: the page is published alone and read again. Message IDs never decide the order. A page row created
+    /// during the read keeps its local copy; the durable edits that overtook the read then replay onto the rest. Each
+    /// sets a whole value, so a replay the page holds changes nothing.
+    fn publish_head(
+        &mut self,
+        session: &SessionID,
+        read: HeadRead,
+        page: Vec<SessionMessageInfo>,
+        next: Option<String>,
+    ) -> bool {
+        let seq = |id: &str| read.created.iter().find(|(created, _)| created == id).map(|(_, seq)| *seq);
+        // The stream saw the whole life of a row it created during the read, deltas included.
+        let fetched: Vec<_> = page
+            .into_iter()
+            .rev()
+            .map(|item| match seq(item.id()).and_then(|_| self.message(session, item.id())) {
+                Some(local) => local.clone(),
+                None => self.stored(item),
+            })
+            .collect();
+        let ids: HashSet<String> = fetched.iter().map(|item| item.id().to_owned()).collect();
+        let anchor = fetched.iter().filter_map(|item| seq(item.id())).min();
+        let mut streamed: Vec<&(String, i64)> = read.created.iter().filter(|(id, _)| !ids.contains(id)).collect();
+        let unknown = read.overflowed || (next.is_some() && anchor.is_none() && !streamed.is_empty());
+        streamed.sort_by_key(|(_, seq)| *seq);
+        let mut kept = ids.clone();
+        let streamed: Vec<_> = streamed
+            .into_iter()
+            .filter(|(id, seq)| !unknown && (next.is_none() || Some(*seq) > anchor) && kept.insert(id.clone()))
+            .filter_map(|(id, _)| self.message(session, id).cloned())
+            .collect();
+        // A read racing an admission must not wipe its local transcript row.
+        let admitted: HashSet<&str> = self
+            .pending
+            .get(session)
+            .into_iter()
+            .flatten()
+            .filter(|item| matches!(item.tag(), "user" | "synthetic"))
+            .map(|item| item.id())
+            .collect();
+        let local: Vec<_> = self
+            .messages(session)
+            .iter()
+            .filter(|item| {
+                (self.outbox.contains(item.id()) || admitted.contains(item.id())) && kept.insert(item.id().to_owned())
+            })
+            .cloned()
+            .collect();
+        // The transcript only holds delivered input, so a pending row it contains missed its
+        // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
+        let delivered: Vec<String> =
+            admitted.iter().filter(|id| ids.contains(**id)).map(|id| (*id).to_owned()).collect();
+        let mut messages = fetched;
+        messages.extend(streamed);
+        messages.extend(local);
+        for id in &delivered {
+            self.outbox.remove(id);
+            self.remove_pending(session, id);
+        }
+        let paged = self.cursor.contains_key(session) == next.is_some();
+        match next {
+            Some(next) => self.cursor.insert(session.clone(), next),
+            None => self.cursor.remove(session),
+        };
+        // Like TS `reconcile`: the same IDs in the same order only update the changed messages.
+        let current = self.messages.get_mut(session).filter(|transcript| {
+            paged && transcript.items().iter().map(MessageExt::id).eq(messages.iter().map(MessageExt::id))
+        });
+        match current {
+            None => {
+                self.messages.insert(session.clone(), Transcript::new(messages));
+                self.log.messages(session);
+            }
+            Some(transcript) => {
+                for (item, message) in transcript.items_mut().iter_mut().zip(messages) {
+                    if *item != message {
+                        self.log.message(session, &SessionMessageID(message.id().to_owned()));
+                        *item = message;
+                    }
+                }
+            }
+        }
+        for event in &read.edits {
+            self.apply_event(event);
+        }
+        unknown
     }
 
     /// Edits one loaded assistant message; drops the edit when it is not loaded (`editAssistant`).
@@ -370,6 +486,9 @@ impl State {
         let data = &event.data;
         let session = &data.session_id;
         let started = data.started as f64;
+        if self.missing.contains(session) {
+            return;
+        }
         let transcript = self.transcript_mut(session);
         if let Some(SessionMessageInfo::Assistant(existing)) = transcript.get_mut(&data.assistant_message_id.0) {
             existing.agent = data.agent.clone();
@@ -816,90 +935,124 @@ fn merge_native(target: &mut Option<SessionMessageNative>, next: &Option<Session
     }
 }
 
+/// What overtook one head read of a transcript (models M2): the rows events created, each with its event's
+/// `durable.seq`, and the durable edits in arrival order. Past [`OVERLAY_LIMIT`] records it overflows: the read then
+/// publishes its page alone and reads again.
+#[derive(Default)]
+pub(crate) struct HeadRead {
+    ticket: u64,
+    created: Vec<(String, i64)>,
+    edits: Vec<V2Event>,
+    overflowed: bool,
+}
+
+impl HeadRead {
+    /// Ends the read `ticket` of `session`: its records, while that read is still the current one.
+    fn take(state: &mut State, session: &SessionID, ticket: u64) -> Option<Self> {
+        if state.head_reads.get(session)?.ticket != ticket {
+            return None;
+        }
+        state.head_reads.remove(session)
+    }
+
+    /// False once overflowed; it then records nothing more.
+    fn room(&mut self) -> bool {
+        if !self.overflowed && self.created.len() + self.edits.len() >= OVERLAY_LIMIT {
+            self.overflowed = true;
+            self.created = Vec::new();
+            self.edits = Vec::new();
+        }
+        !self.overflowed
+    }
+}
+
+/// The `durable.seq` of an event that may create a transcript row.
+pub(crate) fn durable_seq(event: &V2Event) -> Option<i64> {
+    Some(match event {
+        V2Event::SessionAgentSelected(event) => event.durable.seq,
+        V2Event::SessionModelSelected(event) => event.durable.seq,
+        V2Event::SessionMoved(event) => event.durable.seq,
+        V2Event::SessionInboxDelivered(event) => event.durable.seq,
+        V2Event::SessionInstructionsUpdated(event) => event.durable.seq,
+        V2Event::SessionSynthetic(event) => event.durable.seq,
+        V2Event::SessionShellStarted(event) => event.durable.seq,
+        V2Event::SessionStepStarted(event) => event.durable.seq,
+        V2Event::SessionCompactionStarted(event) => event.durable.seq,
+        V2Event::SessionCompactionEnded(event) => event.durable.seq,
+        V2Event::SessionCompactionFailed(event) => event.durable.seq,
+        V2Event::SessionExecutionSucceeded(event) => event.durable.seq,
+        V2Event::SessionExecutionFailed(event) => event.durable.seq,
+        V2Event::SessionExecutionInterrupted(event) => event.durable.seq,
+        _ => return None,
+    })
+}
+
+/// The session of a durable edit that only changes rows by ID, so replaying it onto a page is safe.
+fn edit_session(event: &V2Event) -> Option<&SessionID> {
+    Some(match event {
+        V2Event::SessionShellEnded(event) => &event.data.session_id,
+        V2Event::SessionStepStreamed(event) => &event.data.session_id,
+        V2Event::SessionStepEnded(event) => &event.data.session_id,
+        V2Event::SessionStepFailed(event) => &event.data.session_id,
+        V2Event::SessionTextStarted(event) => &event.data.session_id,
+        V2Event::SessionTextEnded(event) => &event.data.session_id,
+        V2Event::SessionReasoningStarted(event) => &event.data.session_id,
+        V2Event::SessionReasoningEnded(event) => &event.data.session_id,
+        V2Event::SessionToolInputStarted(event) => &event.data.session_id,
+        V2Event::SessionToolInputEnded(event) => &event.data.session_id,
+        V2Event::SessionToolCalled(event) => &event.data.session_id,
+        V2Event::SessionToolSuccess(event) => &event.data.session_id,
+        V2Event::SessionToolFailed(event) => &event.data.session_id,
+        V2Event::SessionRetryScheduled(event) => &event.data.session_id,
+        _ => return None,
+    })
+}
+
 impl Data {
-    /// Reads the newest page of a transcript once per invalidation (`message.sync`). Messages that
-    /// events created or changed while the read was in flight keep their local rows (deviation
-    /// O89-transcript-refresh).
+    /// Reads the newest page of a transcript once per invalidation (`message.sync`). What events
+    /// created or edited while the read was in flight is merged by `durable.seq` (models M2,
+    /// deviation O89-transcript-refresh, see [`State::publish_head`]).
     pub fn message_sync(&self, session: &SessionID) -> Task<()> {
+        let key = format!("session.message:{}", session.0);
+        let begin = session.clone();
         let session = session.clone();
         let limit = self.inner.options.initial_message_limit.unwrap_or(MESSAGE_PAGE);
         self.sync_start(
-            format!("session.message:{}", session.0),
-            |state| (state.deletion_epoch, state.message_live.now()),
-            move |data, (started, seq)| async move {
+            key.clone(),
+            move |state| {
+                let ticket = state.token();
+                state.head_reads.insert(begin.clone(), HeadRead { ticket, ..HeadRead::default() });
+                (state.incarnation(&begin), ticket)
+            },
+            move |data, (incarnation, ticket)| async move {
                 let input = MessageListInput {
                     session_id: session.clone(),
                     limit: Some(limit),
                     order: Some(MessageListInputOrder::Desc),
                     ..Default::default()
                 };
-                let response = data.client().message_list(&input).await.map_err(|error| evict_missing(&data, error))?;
-                data.write(|state| {
-                    if state.deleted_since(&session, started) {
-                        return;
+                let response = match data.client().message_list(&input).await {
+                    Ok(response) => response,
+                    Err(error) => {
+                        data.write(|state| HeadRead::take(state, &session, ticket));
+                        return Err(evict_missing(&data, error));
                     }
-                    let newer = |id: &str| {
-                        state.message_live.added_since(id, seq).then(|| state.message(&session, id).cloned()).flatten()
+                };
+                let reread = data.write(|state| {
+                    // Deletion and eviction drop the read; a revert ends the window under it, so it reads again.
+                    let Some(read) = HeadRead::take(state, &session, ticket) else {
+                        return false;
                     };
-                    let fetched: Vec<_> = response
-                        .data
-                        .into_iter()
-                        .rev()
-                        .map(|item| newer(item.id()).unwrap_or_else(|| state.stored(item)))
-                        .collect();
-                    // A read racing an admission must not wipe its local transcript row.
-                    let ids: HashSet<&str> = fetched.iter().map(MessageExt::id).collect();
-                    let admitted: HashSet<&str> = state
-                        .pending
-                        .get(&session)
-                        .into_iter()
-                        .flatten()
-                        .filter(|item| matches!(item.tag(), "user" | "synthetic"))
-                        .map(|item| item.id())
-                        .collect();
-                    let local: Vec<_> = state
-                        .messages(&session)
-                        .iter()
-                        .filter(|item| {
-                            !ids.contains(item.id())
-                                && (state.outbox.contains(item.id())
-                                    || admitted.contains(item.id())
-                                    || state.message_live.added_since(item.id(), seq))
-                        })
-                        .cloned()
-                        .collect();
-                    // The transcript only holds delivered input, so a pending row it contains missed its
-                    // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
-                    let delivered: Vec<String> =
-                        admitted.iter().filter(|id| ids.contains(*id)).map(|id| (*id).to_owned()).collect();
-                    let mut messages = fetched;
-                    messages.extend(local);
-                    for id in &delivered {
-                        state.outbox.remove(id);
-                        state.remove_pending(&session, id);
+                    let reread = state.incarnation(&session) != incarnation
+                        || state.publish_head(&session, read, response.data, response.cursor.next.flatten());
+                    if reread {
+                        state.syncs.invalidate(&key);
                     }
-                    let next = response.cursor.next.flatten();
-                    let paged = state.cursor.contains_key(&session) == next.is_some();
-                    match next {
-                        Some(next) => state.cursor.insert(session.clone(), next),
-                        None => state.cursor.remove(&session),
-                    };
-                    // Like TS `reconcile`: the same IDs in the same order only update the changed messages.
-                    let current = state.messages.get_mut(&session).filter(|transcript| {
-                        paged && transcript.items().iter().map(MessageExt::id).eq(messages.iter().map(MessageExt::id))
-                    });
-                    let Some(transcript) = current else {
-                        state.messages.insert(session.clone(), Transcript::new(messages));
-                        state.log.messages(&session);
-                        return;
-                    };
-                    for (item, message) in transcript.items_mut().iter_mut().zip(messages) {
-                        if *item != message {
-                            state.log.message(&session, &SessionMessageID(message.id().to_owned()));
-                            *item = message;
-                        }
-                    }
+                    reread
                 });
+                if reread {
+                    data.refresh(|data| data.message_sync(&session));
+                }
                 Ok(())
             },
         )
@@ -949,6 +1102,7 @@ impl Data {
     fn start_load(&self, session: &SessionID, options: LoadMore) -> Option<Task<bool>> {
         let mut state = self.lock();
         let cursor = state.cursor.get(session).cloned()?;
+        let incarnation = state.incarnation(session);
         // No view reads `messages_loading` (the transcript keeps its own flag), so it logs no change.
         state.loading.insert(session.clone());
         let token = state.token();
@@ -957,7 +1111,7 @@ impl Data {
         let all = options.all;
         let cancel = options.cancel.clone();
         let task = self.spawn(async move {
-            let result = load_pages(&data, &id, cursor, all, cancel.as_ref()).await;
+            let result = load_pages(&data, &id, (cursor, incarnation), all, cancel.as_ref()).await;
             data.write(|state| {
                 state.loading.remove(&id);
                 if state.message_loads.get(&id).is_some_and(|(current, _)| *current == token) {
@@ -976,12 +1130,13 @@ impl Data {
 }
 
 /// Fetches older pages and publishes them once; false when cancelled before publishing. A latest-page
-/// refresh that replaced the cursor meanwhile makes the pages stale: stitching them onto the new
-/// list would leave a gap, so the load starts again from the new cursor (deviation O89-older-page).
+/// refresh that replaced the cursor meanwhile, or a window that ended (models M2 rule 5), makes the
+/// pages stale: stitching them onto the new list would leave a gap, so the load starts again from
+/// the current cursor (deviation O89-older-page).
 async fn load_pages(
     data: &Data,
     session: &SessionID,
-    mut cursor: String,
+    (mut cursor, mut incarnation): (String, u64),
     all: bool,
     cancel: Option<&CancellationToken>,
 ) -> Result<bool, Error> {
@@ -1014,8 +1169,8 @@ async fn load_pages(
             }
         }
         let stale = data.write(|state| {
-            if state.cursor.get(session) != Some(&cursor) {
-                return Some(state.cursor.get(session).cloned());
+            if state.cursor.get(session) != Some(&cursor) || state.incarnation(session) != incarnation {
+                return Some(state.cursor.get(session).cloned().map(|cursor| (cursor, state.incarnation(session))));
             }
             let fetched: Vec<_> = fetched.into_iter().map(|item| state.stored(item)).collect();
             let transcript = state.transcript_mut(session);
@@ -1033,7 +1188,7 @@ async fn load_pages(
         match stale {
             None => return Ok(true),
             Some(None) => return Ok(false),
-            Some(Some(current)) => cursor = current,
+            Some(Some(current)) => (cursor, incarnation) = current,
         }
     }
 }

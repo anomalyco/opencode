@@ -1326,7 +1326,7 @@ fn forms_converge_to_the_server() {
 }
 
 #[test]
-#[ignore = "red until plan step 4 to 6 (O1 to O6); run with --ignored"]
+#[ignore = "red at 5,000 cases on O10 only (models-6); run with --ignored"]
 fn transcripts_are_a_gapless_suffix_of_the_server() {
     assert_converges(Mix { permissions: false, forms: false, messages: true, shells: false });
 }
@@ -1356,7 +1356,7 @@ fn an_overflowed_shell_read_reads_again() {
 }
 
 #[test]
-#[ignore = "red until plan step 6 (every OPEN defect); run with --ignored"]
+#[ignore = "red at 5,000 cases on O10 only (models-6); run with --ignored"]
 fn everything_together() {
     assert_converges(ALL);
 }
@@ -1451,24 +1451,35 @@ fn the_checker_catches_wrong_clients() {
     assert!(missed.is_empty(), "the checker misses {missed:?}");
 }
 
-/// The shrinker keeps the class of the failure it started from: a sequence that first fails on transcript order and
-/// also on permissions must not shrink to the shorter permission failure (models-review bigboi-5).
+/// The shrinker keeps the class of the failure it started from: a sequence that first fails on transcript order (O10)
+/// and also on permissions (the `Reversed` mutant) must not shrink to the shorter permission failure (models-review
+/// bigboi-5).
 #[test]
 fn the_shrinker_keeps_the_failure_class() {
-    let ops = [Op::Step(0), Op::Model(0), Op::Step(0), Op::SyncMessages(0), Op::SyncPermissions(1), Op::Burst(1)];
-    let first = run(&ops, Mutant::None).expect("fails");
+    let ops = [
+        Op::Step(0),
+        Op::Step(0),
+        Op::Model(0),
+        Op::SyncMessages(0),
+        Op::Release(Read::Head, 0),
+        Op::Ask(1),
+        Op::Ask(1),
+        Op::SyncPermissions(1),
+        Op::Release(Read::Permissions, 1),
+    ];
+    let first = run(&ops, Mutant::Reversed).expect("fails");
     assert_eq!(first.class, "order ses_0");
     // The first pilot's shrinker accepted any failure.
-    let (any, found) = shrink_any(ops.to_vec());
+    let (any, found) = shrink_any(ops.to_vec(), Mutant::Reversed);
     eprintln!("any failure: {} commands, [{}] {any:?}", any.len(), found.class);
-    let (kept, found) = shrink(ops.to_vec(), &|ops| run(ops, Mutant::None));
+    let (kept, found) = shrink(ops.to_vec(), &|ops| run(ops, Mutant::Reversed));
     eprintln!("same class: {} commands, [{}] {kept:?}", kept.len(), found.class);
     assert_eq!(found.class, "order ses_0");
 }
 
 /// The first pilot's shrinker, which accepted any failure; kept only to show the difference.
-fn shrink_any(mut ops: Vec<Op>) -> (Vec<Op>, Failure) {
-    let mut failure = run(&ops, Mutant::None).expect("fails");
+fn shrink_any(mut ops: Vec<Op>, mutant: Mutant) -> (Vec<Op>, Failure) {
+    let mut failure = run(&ops, mutant).expect("fails");
     let mut chunk = ops.len().div_ceil(2);
     while chunk > 0 {
         let mut start = 0;
@@ -1476,7 +1487,7 @@ fn shrink_any(mut ops: Vec<Op>) -> (Vec<Op>, Failure) {
         while start < ops.len() {
             let mut candidate = ops.clone();
             candidate.drain(start..(start + chunk).min(ops.len()));
-            match run(&candidate, Mutant::None) {
+            match run(&candidate, mutant) {
                 Some(found) => {
                     ops = candidate;
                     failure = found;
@@ -1564,23 +1575,20 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "deleted ses_0",
         &[Op::Step(0), Op::Model(0), Op::Deliver(4), Op::Delete(0)],
     ),
-];
-
-const OPEN: &[(&str, &str, &[Op])] = &[
-    // Both reviews: a `step.started` emitted before the head read but delivered after its rows is appended after
-    // newer rows (`message_live` treats "added during the read" as "newer than the page").
+    // O1 (both reviews): a `step.started` emitted before the head read but delivered during it was appended after
+    // newer rows (`message_live` treated "added during the read" as "newer than the page"; fixed by the merge by
+    // `durable.seq`, models M2).
     ("late step below the newest page", "order ses_0", &[Op::Step(0), Op::Model(0), Op::Step(0), Op::SyncMessages(0)]),
-    // New: the first head read of a transcript drops rows and edits that arrive while it is in flight
-    // (`on_model_selected` needs a loaded transcript; `edit_*` drop edits to unloaded messages; `message_live`
-    // records neither).
+    // O3, O4: the first head read of a transcript dropped rows and edits that arrived while it was in flight (fixed
+    // by the read's records and the durable edit replay; O3-model-row-during-first-read, O4-edit-during-first-read).
     ("model row during the first head read", "transcript ses_0", &[Op::SyncMessages(0), Op::Model(0)]),
     (
         "text.ended during the first head read",
         "transcript ses_1",
         &[Op::Model(1), Op::Step(1), Op::Reconnect, Op::SyncMessages(1), Op::Text(1), Op::End(1)],
     ),
-    // New: a row loaded before the head read and edited during it (the next step completes it) is kept as
-    // "changed" but appended after the page.
+    // O2: a row loaded before the head read and edited during it (the next step completes it) was kept as "changed"
+    // but appended after the page.
     (
         "edited row outside the page",
         "order ses_1",
@@ -1594,6 +1602,23 @@ const OPEN: &[(&str, &str, &[Op])] = &[
             Op::Reconnect,
             Op::Step(1),
         ],
+    ),
+    // O9, transcript half: a late `step.started` for a session the store found missing recreated its transcript.
+    (
+        "late step for a missing session",
+        "missing ses_0",
+        &[Op::Step(0), Op::Delete(0), Op::SyncMessages(0), Op::Release(Read::Head, 0)],
+    ),
+];
+
+const OPEN: &[(&str, &str, &[Op])] = &[
+    // O10: the stream lags behind a head page that already holds newer rows. A `step.started` delivered after the
+    // read published has no page row with a known `durable.seq` to compare with, so it is appended after newer rows.
+    // TS and the old `message_live` do the same (models-6 report).
+    (
+        "late step after the newest page",
+        "order ses_0",
+        &[Op::Step(0), Op::Step(0), Op::Model(0), Op::SyncMessages(0), Op::Release(Read::Head, 0)],
     ),
 ];
 
