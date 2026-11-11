@@ -18,7 +18,7 @@ use opentui::syntax::SyntaxTheme;
 use serde_json::Value;
 
 use crate::app::Tui;
-use crate::routes::session::messages::footer::duration;
+use opencode_ui::locale::duration;
 use opencode_ui::prompt_input::paste::strip_ansi;
 
 /// The open dialog: the call it shows and how to redraw it.

@@ -51,16 +51,3 @@ impl TextPart {
         }
     }
 }
-
-/// `Locale.titlecase`: upper-cases the first character of each word.
-pub fn titlecase(text: &str) -> String {
-    let mut previous_word = false;
-    text.chars()
-        .map(|character| {
-            let word = character.is_alphanumeric() || character == '_';
-            let next = if word && !previous_word { character.to_ascii_uppercase() } else { character };
-            previous_word = word;
-            next
-        })
-        .collect()
-}

@@ -12,6 +12,7 @@ pub mod fuzzy;
 pub mod grammars;
 pub mod help;
 pub mod keymap;
+pub mod locale;
 pub mod markdown;
 pub mod motion;
 pub mod palette;
