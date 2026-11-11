@@ -26,6 +26,10 @@ export const description = [
 
 export const toModelOutput = Skill.toModelOutput
 
+/** Persisted with the tool result so the note stays at a fixed point in the cached conversation. */
+export const loadedNote =
+  "<skill_loaded>These instructions are now in the conversation. Do not load this skill again in this session; use the content above.</skill_loaded>"
+
 const unableToLoad = (name: string, error?: unknown) =>
   new ToolFailure({ message: `Unable to load skill ${name}`, error })
 
@@ -60,7 +64,7 @@ export const Plugin = {
             }).pipe(
               Effect.map((output) => ({
                 output,
-                content: output.output,
+                content: `${output.output}\n\n${loadedNote}`,
                 metadata: { name: output.name, directory: output.directory },
               })),
             ),
