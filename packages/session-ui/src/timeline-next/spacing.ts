@@ -52,14 +52,17 @@ export function timelineGaps(
 
 /**
  * The gap above the status line below a working turn. It stands in for the agent's next row, so it continues agent work
- * a small gap below, and starts it a large gap below anything else.
+ * a small gap below, and starts it a large gap below anything else. Before the turn shows anything, such as while a
+ * hidden thought streams, it stands in for the turn's first row, so it sits where that row will land.
  */
 export function laneGap(
   rows: readonly TimelineRow.TimelineRow[],
   turnID: string,
   messageByID: ReadonlyMap<string, SessionMessageInfo>,
 ): Exclude<TimelineGap, "m"> | undefined {
-  const last = rows.findLast((row) => row.userMessageID === turnID && rowBlock(row, messageByID))
+  const last =
+    rows.findLast((row) => row.userMessageID === turnID && rowBlock(row, messageByID)) ??
+    rows.findLast((row) => rowBlock(row, messageByID))
 
   if (!last) return undefined
 
