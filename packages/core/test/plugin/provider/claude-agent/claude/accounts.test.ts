@@ -117,6 +117,41 @@ describe("Claude accounts", () => {
     }),
   )
 
+  it.effect("a chat skips its account while that account is known to be limited", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectStartup(),
+        limitTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn({ index: 1 }),
+        FakeClaude.expectInterrupt(),
+        FakeClaude.expectInterrupt(),
+      ])
+      const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)
+      yield* TestSessions.reply(test.model, first)
+      // Another chat finds the first account limited and moves on.
+      yield* TestSessions.reply(test.model, first, "session-b")
+      // The first chat goes straight to an account that still has room, without asking the limited one again.
+      const two = yield* TestSessions.reply(test.model, TestSessions.followup())
+      expect(two.some((part) => part.type === "error")).toBe(false)
+      expect(claude.runs.map((run) => run.env.CLAUDE_CONFIG_DIR)).toEqual([
+        "/accounts/a",
+        "/accounts/a",
+        "/accounts/b",
+        "/accounts/b",
+      ])
+      expect(test.storage.data.get("accounts/session-a")).toBe("/accounts/b")
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
   it.effect("a side call starts on its chat's account and can rotate without moving the chat", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([

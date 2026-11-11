@@ -7,6 +7,8 @@ export class Failure extends Error {
     message: string,
     // A subscription limit refused the request, rather than an API error that Claude Code already retried.
     readonly limited: boolean,
+    // Epoch milliseconds when the limit that refused the request resets, when Claude Code reported it.
+    readonly resetsAt?: number,
   ) {
     super(message)
   }
@@ -40,11 +42,12 @@ export function make() {
     const window = rejected?.rateLimitType?.replaceAll("_", " ")
     const limit =
       limited && !failure ? `Claude Code subscription limit reached${window ? ` (${window})` : ""}.` : failure
-    const reset = limited && rejected?.resetsAt ? ` Resets at ${new Date(rejected.resetsAt * 1000).toISOString()}.` : ""
+    const resetsAt = limited && rejected?.resetsAt ? rejected.resetsAt * 1000 : undefined
+    const reset = resetsAt ? ` Resets at ${new Date(resetsAt).toISOString()}.` : ""
     const text = limit + reset
 
-    if (text) return new Failure(text, limited)
-    if (status) return new Failure(`Claude Code could not finish its reply (HTTP ${status})`, limited)
-    return new Failure("Claude Code could not finish its reply", limited)
+    if (text) return new Failure(text, limited, resetsAt)
+    if (status) return new Failure(`Claude Code could not finish its reply (HTTP ${status})`, limited, resetsAt)
+    return new Failure("Claude Code could not finish its reply", limited, resetsAt)
   }
 }

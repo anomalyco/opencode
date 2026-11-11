@@ -1,13 +1,13 @@
 export * as ClaudeAccounts from "./accounts.js"
 
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
-import { Effect, Option, Schema } from "effect"
+import { Clock, Effect, Option, Schema } from "effect"
 import { ClaudeAgentError } from "../language-model/claude-agent-error.js"
 import type { ClaudeSessions } from "./sessions.js"
 
 export interface Storage {
   readonly get: (key: string) => Effect.Effect<unknown>
-  readonly set: (key: string, value: string) => Effect.Effect<void>
+  readonly set: (key: string, value: string | number) => Effect.Effect<void>
 }
 
 export interface Interface {
@@ -19,6 +19,9 @@ const LAST = "last-account"
 export function make(input: { readonly sessions: ClaudeSessions.Interface; readonly storage: Storage }) {
   const read = Effect.fn("ClaudeAccounts.read")(function* (key: string) {
     return Option.getOrUndefined(Schema.decodeUnknownOption(Schema.String)(yield* input.storage.get(key)))
+  })
+  const readTime = Effect.fn("ClaudeAccounts.readTime")(function* (key: string) {
+    return Option.getOrUndefined(Schema.decodeUnknownOption(Schema.Number)(yield* input.storage.get(key)))
   })
 
   const run = Effect.fn("ClaudeAccounts.run")(function* (
@@ -36,7 +39,12 @@ export function make(input: { readonly sessions: ClaudeSessions.Interface; reado
     const parent = !own && request.sourceID ? yield* read(`accounts/${request.sourceID}`) : undefined
     const from = own ?? parent ?? last
     const start = from ? Math.max(0, configDirs.indexOf(from)) : 0
-    const dirs = [...configDirs.slice(start), ...configDirs.slice(0, start)]
+    const rotated = [...configDirs.slice(start), ...configDirs.slice(0, start)]
+    const now = yield* Clock.currentTimeMillis
+    const limits = yield* Effect.forEach(rotated, (dir) => readTime(`limited/${dir}`))
+    const open = rotated.filter((_, i) => now >= (limits[i] ?? 0))
+    // With every account limited, still ask Claude, so the chat shows its real error.
+    const dirs = open.length > 0 ? open : rotated
     for (let i = 0; i < dirs.length; i++) {
       const dir = dirs[i]
       const attempt = watch(request.emit)
@@ -46,6 +54,7 @@ export function make(input: { readonly sessions: ClaudeSessions.Interface; reado
         emit: attempt.emit,
       })
       const error = attempt.error()
+      if (error?.limited && error.resetsAt) yield* input.storage.set(`limited/${dir}`, error.resetsAt)
       if (!error) {
         // A side call never moves its chat, because the side call's model may have hit a limit of its own.
         if (request.sessionID && dir !== own) yield* input.storage.set(`accounts/${request.sessionID}`, dir)

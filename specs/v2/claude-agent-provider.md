@@ -94,6 +94,7 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 - Without an explicit max output, we drop opencode's automatic limit and let Claude pick its own.
 - `configDir` expands a leading `~/`, because Claude Code does not. Each config folder has its own transcripts, so a session keeps one record per folder, and forks are made and deleted in the folder they belong to.
 - `configDir` can be a list. When a subscription limit refuses a request before any output, the request retries on the next folder. A session starts on the folder that last answered it, then the last folder that worked; a side call starts on its parent's folder and never moves it. API keys and auth tokens never rotate.
+- A refusal that reports when its limit resets marks that folder limited until then, and requests skip it meanwhile. When every folder is marked, requests still try them all, so the user sees Claude's own error.
 
 ## History and Switching Models
 

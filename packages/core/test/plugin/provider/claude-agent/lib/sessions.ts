@@ -18,7 +18,7 @@ export function storage() {
   return {
     data,
     get: (key: string) => Effect.sync(() => data.get(key)),
-    set: (key: string, value: SessionRecord.Record | string) =>
+    set: (key: string, value: SessionRecord.Record | string | number) =>
       Effect.sync(() => {
         data.set(key, value)
       }),
