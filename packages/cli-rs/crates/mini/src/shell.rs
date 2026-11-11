@@ -1250,6 +1250,9 @@ impl Mini {
                 mini.admit_next();
                 match result {
                     Ok(_) if command => {
+                        if mini.settle_admissions(&session.id, started) {
+                            return;
+                        }
                         mini.turn_summary(cx, started);
                         mini.finish(cx);
                     }
@@ -1269,11 +1272,29 @@ impl Mini {
                             transcript.end_wait();
                         }
                         mini.prompt_error(cx, &id, error);
+                        if mini.settle_admissions(&session.id, started) {
+                            return;
+                        }
                         mini.finish(cx);
                     }
                 }
             },
         );
+    }
+
+    /// Prompts admitted while the turn ran: once every one reached the server, the session settles once more
+    /// before the turn ends, so no later work (a queued `/new`) starts while they are admitted (`await admissions`,
+    /// `input.settle`). False when there were none.
+    fn settle_admissions(self: &Rc<Self>, session: &str, started: std::time::Instant) -> bool {
+        if !self.queue.borrow_mut().take_admissions() {
+            return false;
+        }
+        if self.queue.borrow().admissions_idle() {
+            self.settle(session, started);
+        } else {
+            self.settle_after.replace(Some((session.to_owned(), started)));
+        }
+        true
     }
 
     /// `session.shell` answered: the turn ends with the shell's `session.shell.ended` event, or after the grace.
@@ -1496,13 +1517,7 @@ impl Mini {
                     Err(error) => log::warn!("mini settle failed: {error}"),
                 }
                 mini.output(cx, output);
-                // Prompts admitted meanwhile: once every one reached the server, settle once more.
-                if mini.queue.borrow_mut().take_admissions() {
-                    if mini.queue.borrow().admissions_idle() {
-                        mini.settle(&session, started);
-                    } else {
-                        mini.settle_after.replace(Some((session, started)));
-                    }
+                if mini.settle_admissions(&session, started) {
                     return;
                 }
                 let error = mini.transcript.borrow_mut().as_mut().and_then(Transcript::end_wait);
