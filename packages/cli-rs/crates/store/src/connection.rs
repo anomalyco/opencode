@@ -230,7 +230,7 @@ impl State {
                 }
             }
             V2Event::SessionTextStarted(event) => {
-                self.on_text_started(&event.data.session_id, &event.data.assistant_message_id)
+                self.on_text_started(&event.data.session_id, &event.data.assistant_message_id, event.data.ordinal)
             }
             V2Event::SessionTextDelta(event) => self.on_text_delta(&event.data),
             V2Event::SessionTextEnded(event) => self.on_text_ended(&event.data),

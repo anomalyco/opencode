@@ -448,8 +448,18 @@ impl State {
         });
     }
 
-    pub(crate) fn on_text_started(&mut self, session: &SessionID, message: &SessionMessageID) {
+    /// A start the snapshot already holds (its `ordinal` counts the message's text parts) is skipped, so a replay
+    /// over a fresh page does not show the part twice.
+    pub(crate) fn on_text_started(&mut self, session: &SessionID, message: &SessionMessageID, ordinal: i64) {
         self.edit_assistant(session, message, |assistant| {
+            let held = assistant
+                .content
+                .iter()
+                .filter(|part| matches!(part, SessionMessageAssistantContentItem::Text(_)))
+                .count();
+            if held as i64 > ordinal {
+                return;
+            }
             assistant.content.push(SessionMessageAssistantContentItem::Text(SessionMessageAssistantText {
                 r#type: "text".into(),
                 ..Default::default()
@@ -468,6 +478,14 @@ impl State {
     pub(crate) fn on_reasoning_started(&mut self, event: &SessionReasoningStarted) {
         let data = &event.data;
         self.edit_assistant(&data.session_id, &data.assistant_message_id, |assistant| {
+            let held = assistant
+                .content
+                .iter()
+                .filter(|part| matches!(part, SessionMessageAssistantContentItem::Reasoning(_)))
+                .count();
+            if held as i64 > data.ordinal {
+                return;
+            }
             assistant.content.push(SessionMessageAssistantContentItem::Reasoning(SessionMessageAssistantReasoning {
                 r#type: "reasoning".into(),
                 text: String::new(),
@@ -500,6 +518,13 @@ impl State {
     pub(crate) fn on_tool_input_started(&mut self, event: &SessionToolInputStarted) {
         let data = &event.data;
         self.edit_assistant(&data.session_id, &data.assistant_message_id, |assistant| {
+            if assistant
+                .content
+                .iter()
+                .any(|part| matches!(part, SessionMessageAssistantContentItem::Tool(tool) if tool.id == data.id))
+            {
+                return;
+            }
             assistant.content.push(SessionMessageAssistantContentItem::Tool(SessionMessageAssistantTool {
                 r#type: "tool".into(),
                 id: data.id.clone(),
