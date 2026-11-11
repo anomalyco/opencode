@@ -55,10 +55,11 @@ export function createLocalProviderPlugin<Discovered>(input: {
             ? undefined
             : input.origin)
         const source = { current: configured(yield* config.entries(), input.providerID, defaultOrigin, suffix) }
-        const loaded = { models: [] as readonly Discovered[], hash: "[]" }
+        const loaded = { models: [] as readonly Discovered[], connected: false, hash: "[]" }
 
         yield* ctx.integration.transform((integrations) => {
-          if (loaded.models.length === 0) return
+          // A key connection lives on the integration (env keys only exist while it does), so keep it then.
+          if (loaded.models.length === 0 || loaded.connected) return
           integrations.remove(input.providerID)
         })
 
@@ -76,7 +77,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
               provider: input.providerID,
               apiKey: source.current.apiKey ?? "",
             }
-            provider.integrationID = undefined
+            if (!loaded.connected) provider.integrationID = undefined
           })
           for (const item of loaded.models) {
             const spec = input.model(item)
@@ -101,14 +102,15 @@ export function createLocalProviderPlugin<Discovered>(input: {
         const discover = Effect.fn("LocalProviderPlugin.discover")(function* () {
           const current = source.current
           if (!current.endpoint) return undefined
-          // A key saved with /connect wins over config, as it does for requests.
-          const stored = (yield* activeCredential(ctx, input.providerID)).credential
-          const apiKey = stored?.type === "key" ? stored.key : current.apiKey
           return yield* discoveryLock.withPermit(
             Effect.gen(function* () {
+              // A key saved with /connect or set in the integration's env var wins over config, as it does for requests.
+              const active = yield* activeCredential(ctx, input.providerID)
+              const connected = active.connection !== undefined
+              const apiKey = active.credential?.type === "key" ? active.credential.key : current.apiKey
               const cached = discovery.get(current.root)
               if (cached && cached.apiKey === apiKey && Date.now() - cached.checked < Duration.toMillis(interval))
-                return { source: current, models: cached.models }
+                return { source: current, connected, models: cached.models }
               discovery.set(current.root, {
                 checked: Date.now(),
                 apiKey,
@@ -116,7 +118,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
               })
               const models = yield* input.discover(createClient(http, current.root, apiKey, current.endpoint))
               discovery.set(current.root, { checked: Date.now(), apiKey, models })
-              return { source: current, models }
+              return { source: current, connected, models }
             }),
           )
         })
@@ -124,9 +126,10 @@ export function createLocalProviderPlugin<Discovered>(input: {
         const refresh = Effect.fn("LocalProviderPlugin.refresh")(function* () {
           const result = yield* discover()
           if (!result?.models || result.source !== source.current) return
-          const hash = JSON.stringify(result.models)
+          const hash = JSON.stringify([result.connected, result.models])
           if (hash === loaded.hash) return
           loaded.models = result.models
+          loaded.connected = result.connected
           loaded.hash = hash
           yield* ctx.integration.reload()
           yield* ctx.provider.reload()
@@ -145,6 +148,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
             return
           source.current = next
           loaded.models = []
+          loaded.connected = false
           loaded.hash = "[]"
           yield* ctx.integration.reload()
           yield* ctx.provider.reload()

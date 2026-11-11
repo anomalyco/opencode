@@ -296,6 +296,67 @@ describe("LMStudioPlugin", () => {
     ),
   )
 
+  it.live("keeps sending the integration's env key after models load", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        process.env.OPENCODE_TEST_LMSTUDIO_KEY = "env-key"
+        const requests: Array<string | null> = []
+        return {
+          requests,
+          server: Bun.serve({
+            port: 0,
+            fetch: (request) => {
+              requests.push(request.headers.get("authorization"))
+              if (request.headers.get("authorization") !== "Bearer env-key")
+                return Response.json({ error: { code: "invalid_api_key" } }, { status: 401 })
+              return Response.json({
+                models: [
+                  {
+                    type: "llm",
+                    key: "secured-model",
+                    display_name: "Secured",
+                    loaded_instances: [],
+                    max_context_length: 8192,
+                  },
+                ],
+              })
+            },
+          }),
+        }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          const integrations = yield* Integration.Service
+          const modelState = yield* Model.Service
+          yield* integrations.transform((editor) => {
+            editor.update(Integration.ID.make("lmstudio"), (integration) => {
+              integration.name = "LMStudio"
+            })
+            editor.method.update({
+              integrationID: Integration.ID.make("lmstudio"),
+              method: { type: "env", names: ["OPENCODE_TEST_LMSTUDIO_KEY"] },
+            })
+          })
+          yield* addPlugin(server.url.origin, "5 millis")
+          yield* eventually(
+            modelState.get(Provider.ID.make("lmstudio"), Model.ID.make("secured-model")),
+            (model) => model !== undefined,
+          )
+          yield* eventually(
+            Effect.sync(() => requests.length),
+            (count) => count >= 3,
+          )
+
+          expect(requests.every((authorization) => authorization === "Bearer env-key")).toBe(true)
+          expect(yield* integrations.get(Integration.ID.make("lmstudio"))).toBeDefined()
+        }),
+      ({ server }) =>
+        Effect.promise(() => server.stop(true)).pipe(
+          Effect.ensuring(Effect.sync(() => delete process.env.OPENCODE_TEST_LMSTUDIO_KEY)),
+        ),
+    ),
+  )
+
   it.live("shares discovery requests across plugin instances", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
