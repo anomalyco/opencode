@@ -43,6 +43,7 @@ const session: ComposerSession = {
     switchModel: async () => undefined,
     revert: { commit: async () => undefined },
   },
+  file: { list: async () => ({ data: [] }) },
   data: {
     location: { command: { list: () => [] } },
     session: {
@@ -55,6 +56,7 @@ const session: ComposerSession = {
         delivery: value.delivery ?? "steer",
       }),
       setStatus() {},
+      acceptSend() {},
     },
   },
   current: () => undefined,

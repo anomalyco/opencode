@@ -1,5 +1,5 @@
 import { DateTime, Effect } from "effect"
-import { Resource } from "sst/resource"
+import { Resource } from "./resource"
 import { DatabaseError } from "./database"
 import {
   fromCatalogSnapshot,

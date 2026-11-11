@@ -1,5 +1,5 @@
 import { Client } from "@planetscale/database"
-import { Resource } from "sst/resource"
+import { Resource } from "./resource"
 
 const tables = ["geo_stat", "model_stat", "provider_stat"] as const
 const checkOnly = process.argv.includes("--check")

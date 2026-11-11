@@ -457,6 +457,59 @@ describe("Job", () => {
     }),
   )
 
+  it.live("interrupts observers without settling a background job, or running its cancel hook, on teardown", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      const jobs = yield* Job.make.pipe(Scope.provide(scope))
+      let cancels = 0
+      const job = yield* jobs.start({
+        id: "shell_teardown",
+        type: "shell",
+        recovery: {
+          kind: "shell",
+          sessionID: SessionSchema.ID.make("ses_teardown"),
+          shellID: "shell_teardown",
+          command: "sleep 60",
+        },
+        run: Effect.never,
+        cancel: Effect.sync(() => void cancels++),
+      })
+      const background = yield* jobs.background(job.id)
+      const observer = yield* jobs.wait({ id: job.id }).pipe(Effect.forkChild({ startImmediately: true }))
+
+      yield* Scope.close(scope, Exit.void)
+
+      const observed = yield* Fiber.await(observer).pipe(Effect.timeout("1 second"))
+      expect(Exit.isFailure(observed) && Cause.hasInterruptsOnly(observed.cause)).toBe(true)
+      expect(cancels).toBe(0)
+      const current = yield* Job.make
+      expect(yield* current.pendingBackground).toMatchObject([
+        { id: job.id, notificationID: background?.notificationID, status: "running" },
+      ])
+      if (background?.notificationID) yield* current.completeBackground(background.notificationID)
+    }),
+  )
+
+  it.live("runs a job's cancel hook when it is cancelled, alone or with its session", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const cancelled: string[] = []
+      const start = (id: string) =>
+        jobs.start({
+          id,
+          type: "shell",
+          recovery: { kind: "shell", sessionID: SessionSchema.ID.make("ses_cancel_hook"), shellID: id, command: "x" },
+          run: Effect.never,
+          cancel: Effect.sync(() => void cancelled.push(id)),
+        })
+      yield* start("shell_cancel_one")
+      yield* start("shell_cancel_session")
+      yield* jobs.cancel("shell_cancel_one")
+      yield* jobs.cancelSession(SessionSchema.ID.make("ses_cancel_hook"))
+      expect(cancelled).toEqual(["shell_cancel_one", "shell_cancel_session"])
+    }),
+  )
+
   it.live("cancels running session jobs and removes unacknowledged SQLite job rows on cancelSession", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service

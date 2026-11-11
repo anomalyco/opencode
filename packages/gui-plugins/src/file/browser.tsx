@@ -29,6 +29,7 @@ import {
 } from "@opencode/plugin/gui"
 import { current, useShared } from "./context"
 import SessionFileList, { applyFileListKeyDown } from "./list"
+import OpenInAppButton, { useOpenInApp } from "./open-in-app"
 import { fileTabPath, isFileTab } from "./path"
 import PierreFileTree from "./pierre-tree"
 import {
@@ -70,6 +71,19 @@ export function SessionFileBrowserTab(props: {
   const setExplicitHighlight = (value: string) => setStore("explicitHighlight", value)
   const sidebarOpened = () => props.placeholder || props.state.opened()
   const query = createMemo(() => filter().trim())
+
+  const openIn = ctx.desktop
+    ? useOpenInApp({
+        get session() {
+          return props.session
+        },
+        path: () => file.root,
+      })
+    : undefined
+
+  // A file tab's header ends with "Open in": the tree's header while the tree is open, else the preview's.
+  const openInShown = () => !props.mobile && !props.placeholder && !!file.root && !!openIn?.canOpen()
+  const openInButton = () => <OpenInAppButton session={props.session} screen={props.screen} />
 
   // The filter's search. It asks the server directly: the screen's search reads a failure as no results.
   const [searchState, setSearchState] = createSignal<FileSearchState>(INITIAL_FILE_SEARCH_STATE)
@@ -226,6 +240,7 @@ export function SessionFileBrowserTab(props: {
     <SessionFilePanelV2
       toolbar={!props.mobile && !props.placeholder && !sidebarOpened()}
       toolbarStart={<span class="truncate font-[530]">{title()}</span>}
+      toolbarEnd={openInShown() ? openInButton() : undefined}
       sidebarCollapsed={!sidebarOpened()}
       sidebarToggleGap={10}
       sidebarToggle={
@@ -242,6 +257,7 @@ export function SessionFileBrowserTab(props: {
           open={sidebarOpened()}
           transition={props.state.transition()}
           title={<span class="truncate font-[530]">{title()}</span>}
+          actions={openInShown() ? openInButton() : undefined}
           filter={filter()}
           onFilterChange={setFilter}
           onFilterKeyDown={onFilterKeyDown}

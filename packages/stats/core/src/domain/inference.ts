@@ -1,4 +1,4 @@
-import { Resource } from "sst/resource"
+import { Resource } from "../resource"
 import type { R2SqlData } from "../r2-sql"
 import type { CatalogIdentity } from "./catalog-identity"
 import type { GeoStatAggregate } from "./geo"
@@ -42,8 +42,8 @@ const WEEK_MS = 7 * DAY_MS
 // boundary. Use one exclusive handoff so the overlapping rows are never counted
 // from both sources.
 const LIVE_SOURCE_START = "2026-08-11T10:57:48.186Z"
-// Go Plus is a level of the Go subscription, but the lake records it as its own product.
-const GO_PRODUCTS = ["go", "go-plus"]
+// Go Plus and Go Teams are levels of the Go subscription, but the lake records each as its own product.
+const GO_PRODUCTS = ["go", "go-plus", "go-teams"]
 // Requests rejected before routing (unknown model, auth, rate limit) never reach an upstream
 // and carry no usage. Counting them would publish any requested model name as a stats page.
 const ROUTED_ONLY = "attempts > 0"

@@ -1,0 +1,214 @@
+/* Settings › Subscriptions style A, B and C (byos-options.tsx). Development only until one is chosen:
+   every option renders, and the section's data-style shows one and its lead in place of the
+   section's own. */
+[data-page="home"][data-site] [data-component="block"][data-section="byos"] {
+  [data-slot="lead"] > [data-option],
+  [data-slot="options"] > [data-option] {
+    display: none;
+  }
+
+  &:is([data-style="A rows"], [data-style="B wall"], [data-style="C names"]) [data-slot="lead"] > :not([data-option]) {
+    display: none;
+  }
+
+  &[data-style="A rows"] [data-option="A rows"],
+  &[data-style="B wall"] [data-option="B wall"],
+  &[data-style="C names"] [data-option="C names"] {
+    display: revert;
+  }
+
+  [data-slot="options"] {
+    display: flex;
+    flex-direction: column;
+    max-width: var(--two-cards);
+  }
+
+  [data-slot="options"] [data-slot="mark"] {
+    display: inline-block;
+    flex-shrink: 0;
+    width: var(--mark, 16px);
+    height: var(--mark, 16px);
+    background: currentColor;
+    mask: var(--logo) center / contain no-repeat;
+  }
+
+  [data-slot="options"] a {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-decoration-color: var(--border-strong);
+    text-underline-offset: 0.2em;
+    transition: text-decoration-color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        text-decoration-color: currentColor;
+      }
+    }
+  }
+
+  /* A: a ruled list, one row per way in. The kind sits in a narrow mono column, like the split
+     style's headings; on phones it stacks above its row. */
+  &[data-style="A rows"] [data-slot="options"] > [data-option="A rows"] {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    border-bottom: 1px solid var(--border);
+
+    > div {
+      display: grid;
+      grid-template-columns: 8.5rem minmax(0, 1fr);
+      gap: 0.75rem var(--gutter);
+      padding-block: 1.25rem;
+      border-top: 1px solid var(--border);
+
+      @media (max-width: 40rem) {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    dt {
+      padding-top: 0.125rem;
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-weak);
+    }
+
+    dd {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+      margin: 0;
+    }
+
+    ul {
+      display: flex;
+      flex-wrap: wrap;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    [data-slot="names"] {
+      gap: 0.625rem 1.5rem;
+      font-size: var(--fs-read);
+      color: var(--text-strong);
+
+      li {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+    }
+
+    [data-slot="marks"] {
+      --mark: 20px;
+      gap: 1rem 1.25rem;
+      color: var(--text-weak);
+
+      li {
+        display: grid;
+        place-items: center;
+        transition: color 150ms ease;
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--text-strong);
+          }
+        }
+      }
+    }
+
+    dd > a {
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+    }
+  }
+
+  /* B: every mark in the tools grid's ruled cells, six across, then four (a multiple of twelve fills
+     every row), and the count under it. */
+  &[data-style="B wall"] [data-slot="options"] > [data-option="B wall"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+
+    ul {
+      --mark: 28px;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border-top: 1px solid var(--border);
+      border-inline-start: 1px solid var(--border);
+
+      @media (max-width: 60rem) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      @media (max-width: 40rem) {
+        --mark: 24px;
+      }
+    }
+
+    li {
+      display: grid;
+      place-items: center;
+      height: 4.5rem;
+
+      @media (max-width: 40rem) {
+        height: 4rem;
+      }
+      border-inline-end: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      transition: color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+    }
+
+    p {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+      color: var(--text-weak);
+    }
+  }
+
+  /* C: the names as one wrapping run of text, subscriptions in ink and the rest muted, each mark the
+     height of its name. */
+  &[data-style="C names"] [data-slot="options"] > [data-option="C names"] {
+    --mark: 1em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-lead);
+    line-height: 1.5;
+    color: var(--text-weak);
+
+    @media (max-width: 40rem) {
+      gap: 0.375rem 1rem;
+      font-size: var(--fs-read);
+    }
+
+    li {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      white-space: nowrap;
+    }
+
+    [data-kind="subscription"] {
+      color: var(--text-strong);
+    }
+  }
+}

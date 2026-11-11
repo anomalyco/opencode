@@ -2,7 +2,7 @@ import { Client } from "@planetscale/database"
 import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { Config, ConfigProvider, Effect, Layer, Option, Schema } from "effect"
 import * as Context from "effect/Context"
-import { Resource } from "sst/resource"
+import { Resource } from "./resource"
 
 export const DatabaseUrl = Schema.NonEmptyString.pipe(Schema.brand("DatabaseUrl"))
 export type DatabaseUrl = typeof DatabaseUrl.Type

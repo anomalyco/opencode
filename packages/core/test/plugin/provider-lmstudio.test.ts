@@ -69,6 +69,14 @@ describe("LMStudioPlugin", () => {
                   loaded_instances: [],
                   max_context_length: 2048,
                 },
+                {
+                  type: "decision",
+                  key: "clef-flash",
+                  display_name: "Clef Flash",
+                  loaded_instances: [],
+                  max_context_length: null,
+                  has_vision_adapter: true,
+                },
               ],
             }),
         }),
@@ -106,6 +114,17 @@ describe("LMStudioPlugin", () => {
             limit: { context: 200_000, output: 32_000 },
           })
           expect(yield* modelState.get(providerID, Model.ID.make("nomic-embed"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("clef-flash"))).toBeUndefined()
+          expect(
+            (yield* modelState.available(["decision"])).find((model) => model.providerID === providerID),
+          ).toMatchObject({
+            id: "clef-flash",
+            type: "decision",
+            name: "Clef Flash",
+            package: "@opencode/ai/providers/openai-compatible/decisions",
+            capabilities: { tools: false, input: ["text", "image"], output: ["decision"] },
+            limit: { context: 200_000 },
+          })
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),

@@ -283,6 +283,7 @@ function MenuSubContent(props: ComponentProps<typeof DropdownMenu.SubContent>) {
   return (
     <DropdownMenu.SubContent
       {...r}
+      data-kb-top-layer=""
       data-component="menu-v2-content"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
@@ -360,6 +361,8 @@ function MenuContent(props: ComponentProps<typeof DropdownMenu.Content>) {
       {...r}
       onCloseAutoFocus={onCloseAutoFocus}
       onInteractOutside={onInteractOutside}
+      // A modal dialog hides what's outside it from assistive tech, and a non-modal menu is portaled outside it.
+      data-kb-top-layer=""
       data-component="menu-v2-content"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}

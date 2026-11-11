@@ -12,10 +12,12 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { sessionBusy, sessionRequests, type SessionRequests } from "@/shell/layout/project-avatar-state"
 import { pathKey } from "@/workspaces/path-key"
 import { parseHomeSessionIndex } from "@/home/sessions/index"
+import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
+import { createSessionRenamer } from "@/session/commands/rename-session"
 import { workingSince } from "./inbox-working"
 import {
   INITIAL_INBOX_BRANCH_STATE,
@@ -66,6 +68,8 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   const tabs = useTabs()
   const language = useLanguage()
   const queryClient = useQueryClient()
+
+  const rename = createSessionRenamer()
 
   const [clock, setClock] = createStore({ second: Date.now(), minute: Date.now() })
   const timer = setInterval(() => setClock("minute", Date.now()), 60_000)
@@ -189,16 +193,16 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
         }
 
         // Locally known sessions come last so live archive and unarchive events win over cached indexes.
-        const sessions = new Map(
+        const sessions = mergeRootSessionIndex(
           [
             ...(queries[index]?.data?.() ?? []),
             ...(options.archived ? (archivedQueries[index]?.data?.() ?? []) : []),
-            ...data.session.list(),
-          ].map((session) => [session.id, session] as const),
+          ],
+          data.session.known(),
         )
 
         return data.session
-          .apply([...sessions.values()].filter((session) => !session.parentID))
+          .apply(sessions)
           .map((session): InboxEntry => {
             const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
             const requests = sessionRequests(item.ctx, session.id, true, settings.permissions.autoApproves(project))
@@ -394,7 +398,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     })
     void startTransition(() => {
       tabs.select(tabs.addSessionTab({ server: entry.server, sessionId: entry.session.id }))
-      entry.ctx.data.session.remember(entry.session)
+      entry.ctx.data.session.remember(entry.ctx.data.session.get(entry.session.id) ?? entry.session)
       entry.ctx.projects.touch(directory)
     })
   }
@@ -454,8 +458,9 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     // Marking viewed reads the loaded session, and rows from the index usually are not loaded, so load it first.
     markViewed: (entry: InboxEntry) => {
       if (!entry.ctx.data.session.get(entry.session.id)) entry.ctx.data.session.remember(entry.session)
-      entry.ctx.notification.session.markViewed(entry.session.id)
+      entry.ctx.notification.session.markRead(entry.session.id)
     },
+    rename: (entry: InboxEntry, title: string) => rename(entry.server, entry.session, title),
     archive: (entry: InboxEntry) =>
       entry.ctx.sdk.api.session
         .update({ sessionID: entry.session.id, archived: true })

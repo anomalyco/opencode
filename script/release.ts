@@ -9,14 +9,11 @@ import path from "path"
 import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dir, "..")
-// Commits that only touch these folders, such as the console, stats, cloud functions, docs, websites, and infra, are
+// Commits that only touch these folders, such as the console, stats, services, docs, websites, and infra, are
 // left out of the changelog.
 const changelogExclusions = [
   ":(exclude)packages/console",
-  ":(exclude)packages/function",
-  ":(exclude)packages/posts",
   ":(exclude)packages/stats",
-  ":(exclude)packages/web",
   ":(exclude)services",
   ":(exclude)infra",
 ]

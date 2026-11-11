@@ -339,7 +339,6 @@ export const dict = {
   "session.new.project.search": "Төсөл хайх",
   "session.new.project.add": "Төсөл нэмэх",
   "session.new.workspace.runIn": "Сессийг ажиллуулах",
-  "session.new.workspace.triggerLocal": "Орон нутгийн",
   "session.new.workspace.local": "Орон нутгийн хадгалах газар",
   "session.new.git.none": "Үгүй Git",
   "session.header.open.finder": "Хайгч",

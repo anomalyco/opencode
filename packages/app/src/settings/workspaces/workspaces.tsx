@@ -196,13 +196,13 @@ export const SettingsWorkspaces: Component<{
 
     if (!updated) return undefined
 
-    return getRelativeTime(new Date(updated).toISOString(), language.t)
+    return getRelativeTime(new Date(updated).toISOString(), language.t, language.intl())
   }
 
   const sessionTime = (session: SessionInfo) => {
     if (!session.time.updated) return undefined
 
-    return getRelativeTime(new Date(session.time.updated).toISOString(), language.t)
+    return getRelativeTime(new Date(session.time.updated).toISOString(), language.t, language.intl())
   }
 
   const inspect = async (directory: string, active: string | undefined, signal?: AbortSignal) => {

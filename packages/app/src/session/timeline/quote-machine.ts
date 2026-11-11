@@ -71,7 +71,8 @@ export type QuoteState =
     }
 
 export type QuoteEvent =
-  | { readonly type: "pointer.down"; readonly clearRange?: Range }
+  /** `collapsed`: nothing is selected as the press starts. */
+  | { readonly type: "pointer.down"; readonly collapsed: boolean; readonly clearRange?: Range }
   | { readonly type: "pointer.up"; readonly collapsed: boolean }
   | { readonly type: "selection.changed"; readonly collapsed: boolean }
   | { readonly type: "settle.ready"; readonly attempt: number }
@@ -155,12 +156,16 @@ export function transitionQuote(state: QuoteState, event: QuoteEvent): QuoteTran
     const attempt = state.attempt + 1
     const clear = state.status === "shown" && event.clearRange ? { attempt, range: event.clearRange } : undefined
 
-    // A press ends any settling selection: the release reads it again.
+    // A press ends any settling selection: the release reads it again. A press that finds nothing selected also ends a
+    // dismissal, as Chrome can coalesce the clear's selectionchange with those of the next drag, which may select the
+    // dismissed range again.
     return {
       state:
         state.status === "shown"
           ? { ...state, attempt, pressing: true, settle: undefined, clear }
-          : { ...state, attempt, pressing: true, settle: undefined },
+          : state.status === "dismissed" && event.collapsed
+            ? { status: "idle", attempt, pressing: true }
+            : { ...state, attempt, pressing: true, settle: undefined },
       effects: [
         ...(state.settle !== undefined ? [SETTLE_CANCEL] : NO_EFFECTS),
         ...(state.status === "shown" && state.clear ? [CLEAR_CANCEL] : NO_EFFECTS),

@@ -9,6 +9,6 @@
     "noEmit": true,
     "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["src", "../core/src/resource.d.ts"],
+  "include": ["src"],
   "exclude": ["src/**/*.test.ts"]
 }
