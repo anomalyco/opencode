@@ -1,4 +1,4 @@
-import { ToolReference } from "../../tool-runtime.js"
+import { ToolReference } from "../tool-runtime.js"
 import type { Builtins } from "./intrinsics.js"
 import { checkArrayLength } from "./limits.js"
 import {

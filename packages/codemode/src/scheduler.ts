@@ -1,5 +1,5 @@
 import type { Json } from "./data.js"
-import type { ExtensionInvocation } from "../tool-runtime.js"
+import type { ExtensionInvocation } from "./tool-runtime.js"
 import { locate } from "./runtime/errors.js"
 import type { AstNode } from "./runtime/model.js"
 import type { Callable, Cursor, GeneratorObj, Obj, PromiseObj, Value } from "./runtime/objects.js"

@@ -1,4 +1,4 @@
-import type { DiagnosticKind } from "../codemode.js"
+import type { DiagnosticKind } from "./codemode.js"
 import type { ErrorType } from "./runtime/intrinsics.js"
 
 /** Uninitialized lexical binding sentinel (temporal dead zone). */

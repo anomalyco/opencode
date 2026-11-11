@@ -1,5 +1,5 @@
 import type { Expression, MemberExpression, NewExpression, Super } from "acorn"
-import { ToolReference } from "../../tool-runtime.js"
+import { ToolReference } from "../tool-runtime.js"
 import { type AstNode, invalidData, typeError } from "./model.js"
 import { checkStringLength } from "./limits.js"
 import { locate } from "./errors.js"

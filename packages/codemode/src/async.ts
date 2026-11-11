@@ -1,4 +1,4 @@
-import type { Diagnostic } from "../codemode.js"
+import type { Diagnostic } from "./codemode.js"
 import { normalizeError, locate } from "./runtime/errors.js"
 import { MAX_PENDING_PROMISES } from "./runtime/limits.js"
 import { type AstNode, IteratorSymbol, rangeError, typeError } from "./runtime/model.js"

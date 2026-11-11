@@ -1,7 +1,7 @@
 import { Cause, type Context, Effect, Exit, Fiber } from "effect"
 import type { Json } from "../data.js"
 import type { HostCall } from "../scheduler.js"
-import { type ToolRuntime, toolExpression } from "../../tool-runtime.js"
+import { type ToolRuntime, toolExpression } from "../tool-runtime.js"
 import { locate } from "./errors.js"
 import { PendingThrow } from "./model.js"
 import type { Vm } from "../vm.js"

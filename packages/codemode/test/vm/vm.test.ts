@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { disassembleSource } from "../../script/disasm.js"
-import { hashOf } from "../../src/vm/code.js"
-import { compileSource } from "../../src/vm/compiler/compile.js"
+import { hashOf } from "../../src/code.js"
+import { compileSource } from "../../src/compiler/compile.js"
 import { verifyAll } from "./verify.js"
 import { parseVmSource, runProgram, warmupVm } from "./run.js"
 

@@ -1,4 +1,4 @@
-import packageJson from "../../package.json" with { type: "json" }
+import packageJson from "../package.json" with { type: "json" }
 import type { Interruption } from "./runtime/signals.js"
 import { staticNames, unchanged } from "./runtime/intrinsic-names.js"
 import { Fn, Obj } from "./runtime/objects.js"

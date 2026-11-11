@@ -1,4 +1,4 @@
-import { ToolReference } from "../../tool-runtime.js"
+import { ToolReference } from "../tool-runtime.js"
 import { invalidData } from "./model.js"
 import { Callable, getOwn, isRuntimeReference, Obj, Opaque, ownKeys, type Value } from "./objects.js"
 

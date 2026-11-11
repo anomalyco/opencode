@@ -22,7 +22,7 @@ import { primitivePrototype } from "../runtime/intrinsics.js"
 import { describeValue, rejectCircularInsertion } from "../runtime/references.js"
 import { invokeMethod } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
-import { ToolReference } from "../../tool-runtime.js"
+import { ToolReference } from "../tool-runtime.js"
 
 // ToObject for enumeration.
 export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: Value, node?: AstNode): Obj => {

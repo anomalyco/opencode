@@ -39,8 +39,8 @@ import { deleted, OrderedTable } from "../runtime/table.js"
 import { AsyncFromSyncIterator } from "../generators.js"
 import { HostCall, Resolving } from "../scheduler.js"
 import { TextDecoderObj } from "../stdlib/bytes.js"
-import { ToolError, toolError } from "../../tool-error.js"
-import { ToolReference, ToolRuntimeError } from "../../tool-runtime.js"
+import { ToolError, toolError } from "../tool-error.js"
+import { ToolReference, ToolRuntimeError } from "../tool-runtime.js"
 
 // A graph codec for a run's state: every object reachable from the roots becomes one record, so identity, sharing,
 // and cycles survive, and every value inside a record is tagged JSON. Built-ins, AST nodes, bytecode, and the VM's

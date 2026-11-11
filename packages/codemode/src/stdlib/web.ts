@@ -24,7 +24,7 @@ import {
 import { createErrorValue, isErrorType } from "../runtime/intrinsics.js"
 import { describeValue } from "../runtime/references.js"
 import type { Interpreter } from "../runtime/interpreter.js"
-import { ToolReference } from "../../tool-runtime.js"
+import { ToolReference } from "../tool-runtime.js"
 
 // WebIDL DOMString conversion: a missing argument is a TypeError, anything else stringifies. Invalid input is a
 // TypeError as well; browsers throw a DOMException named InvalidCharacterError, which CodeMode does not have.

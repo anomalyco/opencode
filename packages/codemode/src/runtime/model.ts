@@ -1,6 +1,6 @@
 import type { Node } from "acorn"
 import type { ErrorType } from "./intrinsics.js"
-import type { DiagnosticKind } from "../../codemode.js"
+import type { DiagnosticKind } from "../codemode.js"
 import type { ErrorObj, Value } from "./objects.js"
 
 /** Any parsed node; the compiler narrows on `type`, and diagnostics read `loc`. */

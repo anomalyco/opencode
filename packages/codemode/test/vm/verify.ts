@@ -1,5 +1,5 @@
-import type { Code } from "../../src/vm/code.js"
-import { CheckBaseKind, CondKind, ImportKind, Op, OpNames } from "../../src/vm/opcodes.js"
+import type { Code } from "../../src/code.js"
+import { CheckBaseKind, CondKind, ImportKind, Op, OpNames } from "../../src/opcodes.js"
 
 /**
  * Stack-depth verifier (C5): runs abstract interpretation over packed bytecode independent of `CodeBuilder`,

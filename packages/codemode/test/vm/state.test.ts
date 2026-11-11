@@ -3,18 +3,18 @@ import { Glob } from "bun"
 import path from "node:path"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../lib/index.js"
-import { parseProgram } from "../../src/vm/runtime/execute.js"
-import { Interpreter } from "../../src/vm/runtime/interpreter.js"
-import { createBuiltins } from "../../src/vm/runtime/intrinsics.js"
-import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../../src/vm/runtime/objects.js"
-import { normal } from "../../src/vm/runtime/signals.js"
+import { parseProgram } from "../../src/runtime/execute.js"
+import { Interpreter } from "../../src/runtime/interpreter.js"
+import { createBuiltins } from "../../src/runtime/intrinsics.js"
+import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../../src/runtime/objects.js"
+import { normal } from "../../src/runtime/signals.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
-import { Code } from "../../src/vm/code.js"
-import { AsyncFromSyncIterator } from "../../src/vm/generators.js"
-import { VmIntrinsic } from "../../src/vm/internal-prelude.js"
-import { Cell, CodeFlags } from "../../src/vm/opcodes.js"
-import type { Stop } from "../../src/vm/scheduler.js"
-import { CustomIter, Frame, Mode, Vm } from "../../src/vm/vm.js"
+import { Code } from "../../src/code.js"
+import { AsyncFromSyncIterator } from "../../src/generators.js"
+import { VmIntrinsic } from "../../src/internal-prelude.js"
+import { Cell, CodeFlags } from "../../src/opcodes.js"
+import type { Stop } from "../../src/scheduler.js"
+import { CustomIter, Frame, Mode, Vm } from "../../src/vm.js"
 
 // The VM (`src/vm`) runs programs as bytecode frames, and keeps the jobs, promises, and host calls they wait on as
 // data: a frame is its code, pc, and registers, and every suspension point is one. The Effect driver only does what
@@ -384,10 +384,23 @@ describe("vm", () => {
 
   test("the VM does not import Effect", async () => {
     const root = path.join(import.meta.dir, "../..")
+    const host = new Set([
+      "src/codemode.ts",
+      "src/extension.ts",
+      "src/scan.ts",
+      "src/tool-error.ts",
+      "src/tool-runtime.ts",
+      "src/tool-schema.ts",
+      "src/tool.ts",
+      "src/runtime/driver.ts",
+      "src/runtime/execute.ts",
+      "src/runtime/extensions.ts",
+      "src/runtime/signals.ts",
+    ])
     // Glob paths use the platform's separator.
-    const files = (await Array.fromAsync(new Glob("src/vm/**/*.ts").scan({ cwd: root }))).filter(
-      (file) => !file.split(path.sep).join("/").startsWith("src/vm/runtime/"),
-    )
+    const files = (await Array.fromAsync(new Glob("src/**/*.ts").scan({ cwd: root })))
+      .map((file) => file.split(path.sep).join("/"))
+      .filter((file) => !file.startsWith("src/openapi/") && !host.has(file))
     expect(files.length).toBeGreaterThan(0)
     for (const file of files) {
       expect(await Bun.file(path.join(root, file)).text()).not.toMatch(/from "effect"/)

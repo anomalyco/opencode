@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../../src/index.js"
-import { createBuiltins } from "../../src/vm/runtime/intrinsics.js"
-import { Interpreter } from "../../src/vm/runtime/interpreter.js"
-import { type Snapshot, SnapshotError } from "../../src/vm/snapshot/snapshot.js"
+import { createBuiltins } from "../../src/runtime/intrinsics.js"
+import { Interpreter } from "../../src/runtime/interpreter.js"
+import { type Snapshot, SnapshotError } from "../../src/snapshot/snapshot.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
-import { hashOf } from "../../src/vm/code.js"
-import { compileSource } from "../../src/vm/compiler/compile.js"
+import { hashOf } from "../../src/code.js"
+import { compileSource } from "../../src/compiler/compile.js"
 import { moduleUrl, parseVmSource, runProgram } from "./run.js"
-import { buildId } from "../../src/vm/snapshot.js"
+import { buildId } from "../../src/snapshot.js"
 
 // The VM's snapshots: a run saved and restored into a fresh runtime anywhere it slices goes on as if it never stopped.
 
@@ -268,12 +268,12 @@ describe("determinism", () => {
     const codes = Object.values(programs)
     const local = { hashes: codes.map((code) => hashOf(compileSource(parse(code)))), build: (runtime(), buildId()) }
     const script = `
-      import { hashOf } from ${moduleUrl("../../src/vm/code.js")}
-      import { compileSource } from ${moduleUrl("../../src/vm/compiler/compile.js")}
+      import { hashOf } from ${moduleUrl("../../src/code.js")}
+      import { compileSource } from ${moduleUrl("../../src/compiler/compile.js")}
       import { parseVmSource } from ${moduleUrl("run.js")}
-      import { buildId } from ${moduleUrl("../../src/vm/snapshot.js")}
-      import { createBuiltins } from ${moduleUrl("../../src/vm/runtime/intrinsics.js")}
-      import { Interpreter } from ${moduleUrl("../../src/vm/runtime/interpreter.js")}
+      import { buildId } from ${moduleUrl("../../src/snapshot.js")}
+      import { createBuiltins } from ${moduleUrl("../../src/runtime/intrinsics.js")}
+      import { Interpreter } from ${moduleUrl("../../src/runtime/interpreter.js")}
       import { ToolRuntime } from ${moduleUrl("../../src/tool-runtime.js")}
       new Interpreter({ tools: ToolRuntime.make(ToolRuntime.prepare({}), undefined, {}), builtins: createBuiltins() })
       const codes = ${JSON.stringify(codes)}

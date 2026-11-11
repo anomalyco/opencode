@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { type Extension, isAsync } from "../../extension.js"
-import { hooked } from "../../tool-runtime.js"
+import { type Extension, isAsync } from "../extension.js"
+import { hooked } from "../tool-runtime.js"
 import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue } from "./intrinsics.js"

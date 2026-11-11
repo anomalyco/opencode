@@ -1,5 +1,5 @@
 import type { Interpreter } from "../runtime/interpreter.js"
-import type { ToolCall } from "../../tool-runtime.js"
+import type { ToolCall } from "../tool-runtime.js"
 import { type Encoded, type Record, SnapshotError } from "./codec.js"
 
 export { SnapshotError }

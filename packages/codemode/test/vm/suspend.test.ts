@@ -450,7 +450,7 @@ describe("suspend", () => {
 
   test("the snapshot codec does not import Effect", async () => {
     for (const file of ["codec.ts", "snapshot.ts"]) {
-      expect(await Bun.file(path.join(import.meta.dir, "../../src/vm/snapshot", file)).text()).not.toMatch(
+      expect(await Bun.file(path.join(import.meta.dir, "../../src/snapshot", file)).text()).not.toMatch(
         /from "effect"/,
       )
     }

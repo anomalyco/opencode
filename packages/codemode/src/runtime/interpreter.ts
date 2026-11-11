@@ -1,4 +1,4 @@
-import type { ToolRuntime } from "../../tool-runtime.js"
+import type { ToolRuntime } from "../tool-runtime.js"
 import type { ExtensionRequest } from "../scheduler.js"
 import type { HostBridge } from "../snapshot/codec.js"
 import { Vm } from "../vm.js"

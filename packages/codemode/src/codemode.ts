@@ -3,11 +3,11 @@ import type { Extension } from "./extension.js"
 import { scanTools } from "./scan.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
-import { fromJson } from "./vm/data.js"
-import { finishExecution, resumeProgram, type Running, type Setup, startProgram, SuspendError } from "./vm/runtime/execute.js"
-import { extensionGlobals } from "./vm/runtime/extensions.js"
-import { globalNames } from "./vm/runtime/globals.js"
-import { fromBytes, type Snapshot, SnapshotError, type SnapshotHeader, toBytes } from "./vm/snapshot/snapshot.js"
+import { fromJson } from "./data.js"
+import { finishExecution, resumeProgram, type Running, type Setup, startProgram, SuspendError } from "./runtime/execute.js"
+import { extensionGlobals } from "./runtime/extensions.js"
+import { globalNames } from "./runtime/globals.js"
+import { fromBytes, type Snapshot, SnapshotError, type SnapshotHeader, toBytes } from "./snapshot/snapshot.js"
 
 export { fromBytes, scanTools, SnapshotError, SuspendError, toBytes }
 export type { Snapshot, SnapshotHeader }

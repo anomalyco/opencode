@@ -33,7 +33,7 @@ import {
 } from "../runtime/objects.js"
 import { builtinCursor, requireIteratorObject } from "../runtime/operations.js"
 import { containsOpaqueReference, describeValue, isOpaque } from "../runtime/references.js"
-import { compareText } from "../../tool-runtime.js"
+import { compareText } from "../tool-runtime.js"
 import { Invoke } from "../runtime/signals.js"
 
 // The prelude's privileged helpers: leaf built-ins (they never call program code) bound only in the prelude's scope.
