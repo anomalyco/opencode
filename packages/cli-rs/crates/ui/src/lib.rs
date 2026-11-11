@@ -51,11 +51,48 @@ pub fn terminal_title(title: &str) -> String {
     out
 }
 
+/// Untrusted text (model, tool, server or file data) as it may be written to the terminal outside the renderer:
+/// escape sequences removed, then every other C0 control except newline and tab, DEL, and C1. Text without them
+/// is returned as it is. TS writes such text raw (`parity/deviations/O89-terminal-text.md`).
+pub fn terminal_text(text: &str) -> std::borrow::Cow<'_, str> {
+    static ANSI: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        // `ansi-regex` 6.3, as `normalizeText` in the attention feature.
+        regex::Regex::new(concat!(
+            r"\x1b\][^\x07\x1b\x{9c}]*(?:\x07|\x1b\\|\x{9c})",
+            r"|[\x1b\x{9b}][\[\]()#;?]*(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]",
+        ))
+        .unwrap()
+    });
+    let control = |char: char| matches!(char, '\u{0}'..='\u{8}' | '\u{b}'..='\u{1f}' | '\u{7f}'..='\u{9f}');
+    if !text.contains(control) {
+        return text.into();
+    }
+    ANSI.replace_all(text, "").replace(control, "").into()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn terminal_title_collapses_control_runs() {
         assert_eq!(super::terminal_title("OC | a\r\nb\tc\u{85}"), "OC | a b c ");
         assert_eq!(super::terminal_title("plain"), "plain");
+    }
+
+    #[test]
+    fn terminal_text_drops_escape_sequences_and_controls() {
+        use super::terminal_text;
+        let cases = [
+            ("x\x1b]52;c;cHduZWQ=\x07y", "xy"),
+            // `ansi-regex` does not match a C1 OSC; its controls go, its text stays.
+            ("x\u{9d}52;c;cHduZWQ=\u{9c}y", "x52;c;cHduZWQ=y"),
+            ("\x1b[31mred\x1b[0m", "red"),
+            ("a\r\nb\tc\x08d\x7fe\u{85}f", "a\nb\tcdef"),
+            ("lone \x1b escape", "lone  escape"),
+        ];
+        for (input, want) in cases {
+            assert_eq!(terminal_text(input), want, "{input:?}");
+        }
+        let plain = "plain text\n\twith ✓ unicode";
+        assert!(matches!(terminal_text(plain), std::borrow::Cow::Borrowed(text) if text == plain));
     }
 }

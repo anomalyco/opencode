@@ -26,7 +26,7 @@ pub fn run(context: &Context, args: &StatsArgs) -> error::Result<()> {
     let Err(error) = stats(context, args) else {
         return Ok(());
     };
-    eprintln!("{}", message(&error));
+    eprintln!("{}", opencode_ui::terminal_text(&message(&error)));
     Err(Exit(1).into())
 }
 
@@ -353,7 +353,7 @@ fn render_models(stats: &SessionStatsInfo, limit: usize, width: usize) -> Vec<St
             .filter(|variant| !variant.is_empty())
             .map(|variant| format!("#{variant}"))
             .unwrap_or_default();
-        format!("{}/{}{variant}", item.model.provider_id, item.model.id)
+        opencode_ui::terminal_text(&format!("{}/{}{variant}", item.model.provider_id, item.model.id)).into_owned()
     };
     let mut lines = vec![title];
     if width < 68 {
@@ -406,18 +406,23 @@ fn render_tools(stats: &SessionStatsInfo, limit: usize, width: usize) -> Vec<Str
     let p50 = |tool: &opencode_api::generated::types::SessionStatsToolUsage| {
         tool.duration_p50.map_or_else(|| "-".to_owned(), format_duration)
     };
+    let name = |tool: &opencode_api::generated::types::SessionStatsToolUsage| {
+        opencode_ui::terminal_text(&tool.name).into_owned()
+    };
     let mut lines = vec![title];
     if width < 68 {
         lines.extend(tools.iter().flat_map(|tool| {
             [
-                truncate(&tool.name, width),
+                truncate(&name(tool), width),
                 format!("  {} calls · {} error · {} p50", format_number(tool.calls as f64), error(tool), p50(tool)),
             ]
         }));
     } else {
         lines.push(table_row("tool", "calls", "error", "p50"));
         lines.extend(
-            tools.iter().map(|tool| table_row(&tool.name, &format_number(tool.calls as f64), &error(tool), &p50(tool))),
+            tools
+                .iter()
+                .map(|tool| table_row(&name(tool), &format_number(tool.calls as f64), &error(tool), &p50(tool))),
         );
     }
     lines.push(String::new());
@@ -620,6 +625,28 @@ mod tests {
             }
         }
         assert!(checked > 150);
+    }
+
+    #[test]
+    fn model_and_tool_names_cannot_write_escape_sequences() {
+        let mut stats = fixture()["stats"]["full"].clone();
+        stats["models"][0]["model"]["id"] = "m\x1b]52;c;cHduZWQ=\x07".into();
+        stats["tools"]["usage"][0]["name"] = "t\x1b]52;c;cHduZWQ=\x07".into();
+        let stats: SessionStatsInfo = serde_json::from_value(stats).unwrap();
+        for width in [40, 100] {
+            let options = RenderOptions {
+                label: "today".to_owned(),
+                scope: "all projects".to_owned(),
+                models: true,
+                tools: true,
+                cost: false,
+                limit: 5,
+                color: true,
+                width,
+            };
+            let output = render_stats(&stats, &options, &Palette::from_colorfgbg(None), time::UTC);
+            assert!(!output.contains("]52"), "{output:?}");
+        }
     }
 
     #[tokio::test]

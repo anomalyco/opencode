@@ -69,6 +69,12 @@ fn completions_match_the_typescript_cli() {
 }
 
 #[test]
+fn usage_errors_escape_c1_controls_too() {
+    let errors = ["Unrecognized flag: -\u{9b}2J\x1b]0;x\x07".to_string()];
+    assert_eq!(help::render_errors(&errors, false), "\nERROR\n  Unrecognized flag: -\\x9b2J\\x1b]0;x\\x07");
+}
+
+#[test]
 fn usage_errors_match_the_typescript_cli() {
     let records: Vec<Value> =
         serde_json::from_str(&std::fs::read_to_string(fixtures().join("errors.json")).unwrap()).unwrap();

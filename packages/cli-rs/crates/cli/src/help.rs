@@ -15,7 +15,10 @@ pub const VERSION: &str = match option_env!("OPENCODE_VERSION") {
 
 /// The program name in help, version, and completions (plan 6.1).
 pub fn name() -> String {
-    std::env::var("OPENCODE_CLI_NAME").ok().filter(|name| !name.is_empty()).unwrap_or_else(|| "opencode-rs".into())
+    std::env::var("OPENCODE_CLI_NAME")
+        .ok()
+        .filter(|name| !name.is_empty())
+        .map_or_else(|| "opencode-rs".into(), |name| opencode_ui::terminal_text(&name).into_owned())
 }
 
 /// `TerminalCapabilities.canColor`: never for `TERM=dumb` or with `NO_COLOR`, always with `FORCE_COLOR`, else when
@@ -116,12 +119,13 @@ fn tag(message: &str) -> &'static str {
     .map_or("Error", |(_, tag)| tag)
 }
 
-// Control characters other than tab, newline, and carriage return print as `\xNN`.
+// Control characters other than tab, newline, and carriage return print as `\xNN`. TS leaves C1 raw
+// (`parity/deviations/O89-terminal-text.md`).
 fn escape_controls(text: &str) -> String {
     text.chars()
         .map(|char| match char {
             '\t' | '\n' | '\r' => char.to_string(),
-            '\0'..='\x1f' | '\x7f' => format!("\\x{:02x}", char as u32),
+            '\0'..='\x1f' | '\x7f'..='\u{9f}' => format!("\\x{:02x}", char as u32),
             _ => char.to_string(),
         })
         .collect()
