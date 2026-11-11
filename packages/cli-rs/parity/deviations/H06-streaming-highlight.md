@@ -19,6 +19,6 @@ content, which highlights before the first frame.
 
 Reason: no stall on the UI thread. Before, every streamed delta highlighted the whole fence again on the UI thread:
 48 ms per frame for a 1,000-line fence (350 ms at 4,000 lines), during which input waited. Now such a frame costs
-0.08 ms. One frame per worker highlight also pays 1.6 ms to apply the result (`perf_probe::markdown_stream_cost`;
-`/home/simon/src/opendocs/oc-rust/steps/stream-highlight.md`). Showing the new text at once also keeps streamed text from
+0.08 ms. One frame per worker highlight also pays 1.6 ms to apply the result (the `markdown_stream_cost` case of an
+out-of-tree probe, `/home/simon/src/opendocs/oc-rust/steps/stream-highlight.md`). Showing the new text at once also keeps streamed text from
 lagging behind the reply.
