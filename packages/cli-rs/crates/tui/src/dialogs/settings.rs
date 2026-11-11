@@ -838,22 +838,9 @@ fn open(tui: &Tui, current: usize, restore: Option<Restore>) {
 
 /// Calls `refresh` after each config change while the dialog of `cx` is open.
 pub(crate) fn refresh_on_change(tui: &Tui, cx: Weak<opencode_ui::dialog::DialogCx>, refresh: impl Fn(&Tui) + 'static) {
-    let open = Rc::new(Cell::new(true));
     if let Some(cx) = cx.upgrade() {
-        let open = open.clone();
-        cx.on_close(Disposer::new(move || open.set(false)));
+        cx.on_close(tui.settings.subscribe(refresh));
     }
-    // The listener holds the refresh until the TUI drops; it does nothing once the dialog closed.
-    let refresh = RefCell::new(Some(refresh));
-    tui.settings.on_change(move |tui| {
-        if !open.get() {
-            refresh.borrow_mut().take();
-            return;
-        }
-        if let Some(refresh) = refresh.borrow().as_ref() {
-            refresh(tui);
-        }
-    });
 }
 
 /// Registers `opencode.settings` (`/settings`) and `opencode.debug` (`/debug`) as `app.tsx:1044-1128` does.
