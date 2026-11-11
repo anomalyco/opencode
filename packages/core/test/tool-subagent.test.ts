@@ -109,7 +109,6 @@ const executionNode = makeGlobalNode({
         resume: complete,
         wake: () => Effect.void,
         interrupt: () => Effect.succeed(false),
-        periodStartSeq: () => Effect.succeed(undefined),
         awaitIdle: (sessionID) => complete(sessionID).pipe(Effect.exit, Effect.asVoid),
       })
     }),
@@ -1077,7 +1076,6 @@ describe("SubagentJob cancellation", () => {
   it.live("interrupts the child only for an explicit cancel and preserves shutdown claims", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const store = yield* SessionStore.Service
       const scope = yield* Scope.make()
       const cancelStarted = yield* Deferred.make<void>()
       const shutdownStarted = yield* Deferred.make<void>()
@@ -1100,7 +1098,6 @@ describe("SubagentJob cancellation", () => {
             Effect.onInterrupt(() => Effect.sync(() => interrupted.add(sessionID))),
           ),
         wake: () => Effect.void,
-        periodStartSeq: () => Effect.succeed(0),
         interrupt: (sessionID) =>
           Effect.sync(() => {
             interrupts.push(sessionID)
@@ -1113,9 +1110,7 @@ describe("SubagentJob cancellation", () => {
       const context = yield* Layer.buildWithScope(
         SubagentJob.layer.pipe(
           Layer.provide(Layer.succeed(SessionExecution.Service, execution)),
-          Layer.provide(Layer.succeed(SessionStore.Service, store)),
           Layer.provide(Layer.succeed(Job.Service, jobs)),
-          Layer.provide(Layer.succeed(Database.Service, database)),
         ),
         scope,
       )
@@ -1128,7 +1123,7 @@ describe("SubagentJob cancellation", () => {
         description: "review",
       })
 
-      yield* subagents.start(recovery("ses_job_cancel_parent", cancelChild), { background: true })
+      yield* subagents.start(recovery("ses_job_cancel_parent", cancelChild))
       yield* Deferred.await(cancelStarted)
       yield* jobs.cancel(cancelChild)
       expect(interrupted.has(cancelChild)).toBe(true)
@@ -1136,7 +1131,7 @@ describe("SubagentJob cancellation", () => {
       expect(claimed.has(cancelChild)).toBe(false)
 
       // A server shutdown interrupts the job fiber but must not release the child's claim.
-      yield* subagents.start(recovery("ses_job_shutdown_parent", shutdownChild), { background: true })
+      yield* subagents.start(recovery("ses_job_shutdown_parent", shutdownChild))
       yield* Deferred.await(shutdownStarted)
       yield* Scope.close(scope, Exit.void)
       expect(interrupted.has(shutdownChild)).toBe(true)
