@@ -12,6 +12,7 @@
     "./database/*": "./src/database/*.ts",
     "./domain/*": "./src/domain/*.ts",
     "./r2-sql": "./src/r2-sql.ts",
+    "./resource": "./src/resource.ts",
     "./runtime": "./src/runtime.ts",
     "./stat-sync": "./src/stat-sync.ts",
     "./sync-range": "./src/sync-range.ts"
@@ -31,8 +32,7 @@
   "dependencies": {
     "@planetscale/database": "1.19.0",
     "drizzle-orm": "catalog:",
-    "effect": "catalog:",
-    "sst": "catalog:"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/node22": "catalog:",

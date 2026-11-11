@@ -1,6 +1,6 @@
 import { Client } from "@planetscale/database"
 import { Effect } from "effect"
-import { Resource } from "sst/resource"
+import { Resource } from "../resource"
 import type { ModelStatMetric } from "./model"
 import { RETIRED_STAT_PROVIDERS, statProvider } from "./model-normalization"
 import { isMissingRetentionTable } from "./retention"

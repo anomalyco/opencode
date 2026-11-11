@@ -19,5 +19,5 @@
       "~/*": ["./src/*"]
     }
   },
-  "include": ["*.ts", "src", "../core/src/resource.d.ts"]
+  "include": ["*.ts", "src"]
 }

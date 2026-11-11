@@ -1,1 +1,1 @@
-To start the stats site locally, run `bun dev:stats` from the repo root.
+To start the stats site locally, run `bun run --cwd packages/stats/app dev` with the database variables in README.md exported.

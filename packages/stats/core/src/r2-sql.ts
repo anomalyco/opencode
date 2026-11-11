@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schedule, Schema } from "effect"
-import { Resource } from "sst/resource"
+import { Resource } from "./resource"
 
 const R2_SQL_MAX_ROWS = 10_000
 const R2_SQL_TIMEOUT_MS = 10 * 60_000

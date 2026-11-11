@@ -2,10 +2,14 @@ import { Hono } from "hono"
 import { jwtVerify, createRemoteJWKSet } from "jose"
 import { createAppAuth } from "@octokit/auth-app"
 import { Octokit } from "@octokit/rest"
-import { Resource } from "sst"
 import { parseRepositoryClaim } from "./github"
 
-export default new Hono()
+export interface Env {
+  GITHUB_APP_ID: string
+  GITHUB_APP_PRIVATE_KEY: string
+}
+
+export default new Hono<{ Bindings: Env }>()
   .get("/", (c) => c.text("Hello, world!"))
   /**
    * Used by the GitHub action to get GitHub installation access token given the OIDC token
@@ -35,8 +39,8 @@ export default new Hono()
 
     try {
       const auth = createAppAuth({
-        appId: Resource.GITHUB_APP_ID.value,
-        privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+        appId: c.env.GITHUB_APP_ID,
+        privateKey: c.env.GITHUB_APP_PRIVATE_KEY,
       })
       const appAuth = await auth({ type: "app" })
       const octokit = new Octokit({ auth: appAuth.token })

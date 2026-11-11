@@ -5,7 +5,6 @@ on:
     branches:
       - dev
       - production
-      - beta
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
@@ -14,58 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
-    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production' || github.ref_name == 'beta')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: ${{ github.ref_name }}
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-
-      - uses: ./.github/actions/setup-bun
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: "24"
-
-      # beta has no branch, environment or AWS role. Running it again needs a role trusting environment `beta` and
-      # opencode/beta/CLOUDFLARE_API_TOKEN and opencode/beta/PLANETSCALE_SERVICE_TOKEN.
-      - name: Configure AWS credentials
-        if: github.ref_name != 'beta'
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-${{ github.ref_name }}
-          role-session-name: opencode-${{ github.run_id }}
-          aws-region: us-east-1
-
-      - name: Read deploy secrets
-        if: github.ref_name != 'beta'
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: |
-            CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
-            PLANETSCALE_SERVICE_TOKEN,opencode/${{ github.ref_name }}/PLANETSCALE_SERVICE_TOKEN
-          parse-json-secrets: false
-
-      - run: bun sst deploy --stage=${{ github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PLANETSCALE_SERVICE_TOKEN_NAME: ${{ vars.PLANETSCALE_SERVICE_TOKEN_NAME }}
-          # Only the beta stage's web app uploads sourcemaps; packages/app skips the upload without a token.
-          SENTRY_AUTH_TOKEN: ${{ github.ref_name == 'beta' && secrets.SENTRY_AUTH_TOKEN || '' }}
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
-          SENTRY_RELEASE: web@${{ github.sha }}
-          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
-          VITE_SENTRY_RELEASE: web@${{ github.sha }}
-
-  # The SST stack owns opncd.ai until this push removes its Share Worker, so this job runs after the
-  # SST deploy to take the hostname without a custom-domain conflict.
-  share:
-    needs: deploy
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+  legacy:
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: ${{ github.ref_name }}
     permissions:
@@ -89,5 +38,68 @@ jobs:
           secret-ids: CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
           parse-json-secrets: false
 
-      - run: bun run deploy:${{ github.ref_name }}
-        working-directory: services/share
+      # The GitHub App secrets are read here, not in the step above, so only this step ever has them. They reach cf
+      # through a file in the runner's temp directory, never argv, and the file is removed when the step ends.
+      - name: Deploy
+        working-directory: services/legacy
+        env:
+          STAGE: ${{ github.ref_name }}
+        # An explicit bash runs with pipefail, so a failed secret read fails the step.
+        shell: bash
+        run: |
+          umask 077
+          secrets="$RUNNER_TEMP/legacy-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          for name in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY; do
+            aws secretsmanager get-secret-value --secret-id "opencode/$STAGE/$name" --output json |
+              jq --arg name "$name" '{($name): .SecretString}'
+          done | jq -s add > "$secrets"
+          bun run deploy:$STAGE --secrets-file "$secrets"
+
+  # The /data site, its OG image Worker and the sync Workflow (services/data).
+  data:
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-${{ github.ref_name }}
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Read deploy secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
+          parse-json-secrets: false
+
+      # The Workers' secrets are read here, not in the step above, so only this step ever has them. They reach cf
+      # through files in the runner's temp directory, never argv, and are removed when the step ends.
+      - name: Deploy
+        working-directory: services/data
+        env:
+          STAGE: ${{ github.ref_name }}
+        # An explicit bash runs with pipefail, so a failed secret read fails the step.
+        shell: bash
+        run: |
+          umask 077
+          secrets="$RUNNER_TEMP/data-secrets.json"
+          trap 'rm -f "$secrets" "$secrets".*' EXIT
+          for name in DATA_DATABASE_HOST DATA_DATABASE_USERNAME DATA_DATABASE_PASSWORD R2_SQL_AUTH_TOKEN DATA_HIDDEN_MODELS; do
+            aws secretsmanager get-secret-value --secret-id "opencode/$STAGE/$name" --output json |
+              jq --arg name "$name" '{($name): .SecretString}'
+          done | jq -s add > "$secrets"
+          bun run deploy:$STAGE --secrets-file "$secrets"
