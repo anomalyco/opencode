@@ -1,84 +1,239 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { SyntaxStyle, TextAttributes } from "@opentui/core"
-import { ManualClock } from "@opentui/core/testing"
 import { testRender, useRenderer } from "@opentui/solid"
-import { onCleanup } from "solid-js"
-import { clickedSession, linkSessions } from "../../src/ui/session-link"
+import { onCleanup, onMount, type JSX } from "solid-js"
+import { ConfigProvider } from "../../src/config"
+import { ClientProvider } from "../../src/context/client"
+import { DataProvider, useData } from "../../src/context/data"
+import { Keymap } from "../../src/context/keymap"
+import { RouteProvider, useRoute } from "../../src/context/route"
+import { TuiAppProvider } from "../../src/context/runtime"
+import { StorageProvider } from "../../src/context/storage"
+import { ThemeProvider } from "../../src/context/theme"
+import { DialogProvider, useDialog } from "../../src/ui/dialog"
+import { useSessionLinks } from "../../src/ui/session-link"
+import { ToastProvider } from "../../src/ui/toast"
+import { emptyThemeSource, tmpdir } from "../fixture/fixture"
+import { createApi, createFetch, directory, json } from "../fixture/tui-client"
+import { TestTuiContexts } from "../fixture/tui-environment"
+import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-const id = "ses_0123456789abcdefghijABCDEF"
-const other = "ses_ZYXWVUTSRQponmlkjih9876543"
-const partial = "ses_0123456789abcdef"
+const session = (id: string, title: string, archived?: number) => ({
+  id,
+  title,
+  projectID: "project",
+  location: { directory },
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  time: { created: 0, updated: 0, ...(archived === undefined ? {} : { archived }) },
+})
+const id = (name: string) => `ses_${name.repeat(26).slice(0, 26)}`
+const current = id("current")
+const known = session(id("known"), "Fix the flaky reconnect test on Windows")
+const archived = session(id("archived"), "Old work", 1)
+const unknown = id("unknown")
+const missing = id("missing")
 
-test.each(["top-level", "coalesced"] as const)(
-  "session IDs in %s markdown prose are styled and open on a plain click",
-  async (mode) => {
-    const opened: string[] = []
-    function Transcript() {
-      const renderer = useRenderer()
-      const syntaxStyle = SyntaxStyle.fromStyles(
-        { default: { fg: "#ffffff" }, "markup.link.url": { fg: "#00ff00" } },
-        renderer.nativeScene,
-      )
-      onCleanup(() => syntaxStyle.destroy())
-      return (
-        <box
-          onMouseUp={(event) => {
-            const sessionID = clickedSession(renderer, event)
-            if (sessionID) opened.push(sessionID)
-          }}
-        >
-          <markdown
-            ref={linkSessions}
-            internalBlockMode={mode}
-            syntaxStyle={syntaxStyle}
-            content={[
-              `**中文** see \`it\` in ${id} now`,
-              "",
-              `- nested ${other}`,
-              "",
-              "```",
-              `code ${id}`,
-              "```",
-              "",
-              `partial ${partial}`,
-            ].join("\n")}
-          />
-        </box>
-      )
+test.each(["top-level", "coalesced"] as const)("session links in %s markdown", async (mode) => {
+  await using state = await tmpdir()
+  const lookup = Promise.withResolvers<void>()
+  const requested: string[] = []
+  const calls = createFetch(async (url) => {
+    const sessionID = url.pathname.match(/^\/api\/session\/(ses_\w+)$/)?.[1]
+    if (!sessionID) return
+    requested.push(sessionID)
+    if (sessionID === unknown) return lookup.promise.then(() => json({ data: session(unknown, "Looked up") }))
+    return json(
+      { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` },
+      { status: 404 },
+    )
+  })
+  let data!: ReturnType<typeof useData>
+  let route!: ReturnType<typeof useRoute>
+
+  function Transcript() {
+    data = useData()
+    route = useRoute()
+    data.session.remember({ ...known })
+    data.session.remember({ ...archived })
+    const renderer = useRenderer()
+    const syntaxStyle = SyntaxStyle.fromStyles(
+      { default: { fg: "#ffffff" }, "markup.link.url": { fg: "#00ff00" } },
+      renderer.nativeScene,
+    )
+    onCleanup(() => syntaxStyle.destroy())
+    return (
+      <markdown
+        ref={useSessionLinks()}
+        internalBlockMode={mode}
+        syntaxStyle={syntaxStyle}
+        content={[
+          `**中文** see ${known.id} now`,
+          "",
+          `- current ${current}`,
+          `- archived ${archived.id}`,
+          `- unknown ${unknown}`,
+          `- missing ${missing}`,
+          "",
+          "```",
+          known.id,
+          "```",
+        ].join("\n")}
+      />
+    )
+  }
+
+  const app = await mount(state.path, calls.fetch, () => <Transcript />, 40, 16)
+  // Highlighting runs on the tree-sitter worker and lookups on the fixture server.
+  const linked = () =>
+    app
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .filter((span) => span.attributes & TextAttributes.UNDERLINE)
+      .map((span) => span.text.trim())
+      .join(" ")
+  const until = async (done: () => boolean) => {
+    for (let attempt = 0; attempt < 200 && !done(); attempt++) {
+      await app.renderOnce()
+      await Bun.sleep(5)
     }
-    const app = await testRender(() => <Transcript />, { width: 36, height: 14, clock: new ManualClock() })
+    expect(done()).toBe(true)
+  }
 
-    try {
-      // Highlighting runs on the tree-sitter worker; the first frame is unstyled.
-      const linked = () =>
-        app
-          .captureSpans()
-          .lines.flatMap((line) => line.spans)
-          .filter((span) => span.attributes & TextAttributes.UNDERLINE)
-          .map((span) => span.text.trim())
-      for (let attempt = 0; attempt < 100 && !linked().includes(other); attempt++) {
-        await app.renderOnce()
-        await Bun.sleep(10)
-      }
-      const rows = app.captureCharFrame().split("\n")
-      const row = (text: string) => rows.findIndex((line) => line.includes(text))
-      // Wraps onto its own row after the wide characters and concealed markers.
-      expect(rows[row(id)]!.trim()).toBe(`${id} now`)
-      expect(linked()).toEqual([id, other])
+  try {
+    await until(() => linked().length > 0 && data.session.missing(missing))
+    const frame = app.captureCharFrame()
+    // The long title wraps; the current, archived, missing and still-loading sessions stay IDs.
+    expect(linked()).toBe("@Fix the flaky reconnect test on Windows")
+    for (const plain of [current, archived.id, unknown, missing, known.id]) expect(frame).toContain(plain)
+    expect(requested.toSorted()).toEqual([missing, unknown])
 
-      await app.mockMouse.click(rows[row(id)]!.indexOf(id) + 5, row(id))
-      await app.mockMouse.click(rows[row(other)]!.indexOf(other) + 20, row(other))
-      expect(opened).toEqual([id, other])
+    lookup.resolve()
+    await until(() => linked().includes("@Looked up"))
+    data.session.remember({ ...known, title: "Renamed" })
+    await until(() => linked() === "@Renamed @Looked up")
+    // Lookups are cached, misses included.
+    expect(requested.toSorted()).toEqual([missing, unknown])
 
-      app.renderer.clearSelection()
-      await app.mockMouse.click(rows[row("code")]!.indexOf("ses_") + 2, row("code"))
-      await app.mockMouse.click(rows[row("partial")]!.indexOf("ses_") + 2, row("partial"))
-      await app.mockMouse.click(rows[row("nested")]!.indexOf("nested"), row("nested"))
-      await app.mockMouse.drag(rows[row(id)]!.indexOf(id), row(id), rows[row(id)]!.indexOf(id) + 4, row(id))
-      expect(opened).toEqual([id, other])
-    } finally {
-      app.renderer.destroy()
+    const rows = app.captureCharFrame().split("\n")
+    const clicked = rows.findIndex((row) => row.includes("@Looked up"))
+    app.renderer.clearSelection()
+    await app.mockMouse.click(rows[clicked]!.indexOf("@Looked up") + 4, clicked)
+    expect(route.data).toEqual({ type: "session", sessionID: unknown })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("a wrapped title opens its session from either row, and plain text does not", async () => {
+  await using state = await tmpdir()
+  const calls = createFetch(async () => undefined)
+  let route!: ReturnType<typeof useRoute>
+
+  function Transcript() {
+    useData().session.remember({ ...known })
+    route = useRoute()
+    const renderer = useRenderer()
+    const syntaxStyle = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, renderer.nativeScene)
+    onCleanup(() => syntaxStyle.destroy())
+    return (
+      <markdown
+        ref={useSessionLinks()}
+        internalBlockMode="top-level"
+        syntaxStyle={syntaxStyle}
+        content={`**中文** see ${known.id} now`}
+      />
+    )
+  }
+
+  const app = await mount(state.path, calls.fetch, () => <Transcript />, 30, 6)
+
+  try {
+    for (let attempt = 0; attempt < 200 && !app.captureCharFrame().includes("@Fix"); attempt++) {
+      await app.renderOnce()
+      await Bun.sleep(5)
     }
-  },
-)
+    const rows = app.captureCharFrame().split("\n")
+    const head = rows.findIndex((row) => row.includes("@Fix"))
+    const tail = rows.findIndex((row) => row.includes("Windows"))
+    expect(tail).toBeGreaterThan(head)
+
+    await app.mockMouse.click(rows[head]!.indexOf("see"), head)
+    await app.mockMouse.click(rows[tail]!.indexOf("now"), tail)
+    await app.mockMouse.drag(rows[head]!.indexOf("@Fix"), head, rows[head]!.indexOf("@Fix") + 3, head)
+    expect(route.data).toEqual({ type: "session", sessionID: current })
+
+    app.renderer.clearSelection()
+    await app.mockMouse.click(rows[tail]!.indexOf("Windows") + 2, tail)
+    expect(route.data).toEqual({ type: "session", sessionID: known.id })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("clicking a session link in a dialog closes it and opens the session", async () => {
+  await using state = await tmpdir()
+  const calls = createFetch(async () => undefined)
+  let route!: ReturnType<typeof useRoute>
+  let dialog!: ReturnType<typeof useDialog>
+
+  function Answer() {
+    const renderer = useRenderer()
+    const syntaxStyle = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, renderer.nativeScene)
+    onCleanup(() => syntaxStyle.destroy())
+    return <markdown ref={useSessionLinks()} syntaxStyle={syntaxStyle} content={`See ${known.id}`} />
+  }
+  function Probe() {
+    useData().session.remember({ ...known })
+    route = useRoute()
+    dialog = useDialog()
+    onMount(() => dialog.replace(() => <Answer />))
+    return null
+  }
+
+  const app = await mount(state.path, calls.fetch, () => <Probe />, 80, 12)
+
+  try {
+    for (let attempt = 0; attempt < 200 && !app.captureCharFrame().includes("@Fix"); attempt++) {
+      await app.renderOnce()
+      await Bun.sleep(5)
+    }
+    const rows = app.captureCharFrame().split("\n")
+    const y = rows.findIndex((row) => row.includes("@Fix"))
+    await app.mockMouse.click(rows[y]!.indexOf("@Fix") + 2, y)
+    expect(route.data).toEqual({ type: "session", sessionID: known.id })
+    expect(dialog.stack).toHaveLength(0)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+function mount(state: string, fetch: typeof globalThis.fetch, view: () => JSX.Element, width: number, height: number) {
+  return testRender(
+    () => (
+      <TestTuiContexts paths={{ state }}>
+        <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+          <StorageProvider>
+            <ConfigProvider config={createTuiResolvedConfig()}>
+              <Keymap.Provider>
+                <ToastProvider>
+                  <RouteProvider initialRoute={{ type: "session", sessionID: current }}>
+                    <ClientProvider api={createApi(fetch)}>
+                      <DataProvider directory={directory}>
+                        <ThemeProvider mode="dark" source={emptyThemeSource}>
+                          <DialogProvider>{view()}</DialogProvider>
+                        </ThemeProvider>
+                      </DataProvider>
+                    </ClientProvider>
+                  </RouteProvider>
+                </ToastProvider>
+              </Keymap.Provider>
+            </ConfigProvider>
+          </StorageProvider>
+        </TuiAppProvider>
+      </TestTuiContexts>
+    ),
+    { width, height },
+  )
+}
