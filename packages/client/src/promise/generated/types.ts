@@ -2567,6 +2567,7 @@ export type ConfigEntry =
           codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
+          session_search?: boolean
           background_compaction?: boolean
           media_blob?: boolean
           schedules?: boolean

@@ -16656,6 +16656,9 @@
               "todo": {
                 "type": "boolean"
               },
+              "session_search": {
+                "type": "boolean"
+              },
               "background_compaction": {
                 "type": "boolean"
               },
