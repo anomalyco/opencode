@@ -28,6 +28,7 @@ import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
+import { Flag } from "../flag.js"
 import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
@@ -182,6 +183,8 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
+  /** Experimental: MCP Events of a connected server that offers them, while the `mcp_events` flag is on. */
+  readonly events: (server: ServerName | string) => Effect.Effect<McpClient.Events | undefined, NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
@@ -208,6 +211,7 @@ export const layer = (options?: Options) =>
       const credentials = yield* Credential.Service
       const fetch = yield* FetchHttpClient.Fetch
       const pool = yield* McpPool.Service
+      const mcpEvents = yield* Flag.enabled("mcp_events")
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -420,6 +424,7 @@ export const layer = (options?: Options) =>
             config: config.pool && config.protocol === undefined ? { ...config, protocol: "auto" } : config,
             directory: location.directory,
             clientInfo: options?.clientInfo,
+            mcpEvents,
             authProvider: Effect.suspend(() =>
               selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
             ),
@@ -897,6 +902,9 @@ export const layer = (options?: Options) =>
             ),
           })
         }),
+        events: Effect.fn("MCP.events")(function* (server) {
+          return (yield* connected(ServerName.make(server))).client?.events
+        }),
       })
     }),
   )
@@ -926,6 +934,7 @@ export function configured(options?: Options) {
     deps: [
       Location.node,
       Environment.node,
+      Flag.node,
       Bus.node,
       Form.node,
       Integration.node,

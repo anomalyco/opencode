@@ -2563,6 +2563,7 @@ export type ConfigEntry =
           codemode_vm?: boolean
           shell_timeout_background?: boolean
           console_watches?: boolean
+          mcp_events?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number

@@ -19,5 +19,7 @@ export const registry = {
   shell_timeout_background: "Move foreground shell commands to the background when their timeout expires.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
+  mcp_events:
+    "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
