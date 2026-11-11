@@ -74,7 +74,7 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
     let built = mcp.clone();
     tui.dialogs.replace(
         move |cx| {
-            let mcp = built;
+            let mcp = built.clone();
             let weak = Rc::downgrade(&mcp);
             let mut props = SelectProps::new("MCP servers", mcp.options(&cx.theme));
             props.search_in_title = true;
@@ -103,7 +103,7 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
                 vec![FooterHint { title: "view error".into(), label: "enter".into(), group: Some(Group::Primary) }]
             })));
             let (view, handle) = select::select(cx, props);
-            if let Some(name) = &initial {
+            if let Some(name) = initial.as_ref().filter(|_| !cx.rebuilt()) {
                 handle.move_to(name);
             }
             *mcp.select.borrow_mut() = Some(handle);
@@ -331,8 +331,9 @@ impl Mcp {
                 })
             }),
         };
+        let weak = tui.weak();
         tui.app.defer(bind!(tui, |tui, _| tui.dialogs.replace(
-            |cx| error_details::view(&tui, cx, props),
+            bind!(weak, |tui, cx| error_details::view(&tui, cx, props.clone()), else View::new(&cx.app)),
             None,
             DialogOptions::default()
         )));

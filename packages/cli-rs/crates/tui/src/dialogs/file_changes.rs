@@ -44,12 +44,12 @@ pub fn show(tui: &Tui, files: Vec<VcsFileStatus>, texts: Texts, on_choice: Rc<dy
             }
         })
     };
-    let page = tui.page();
     let pick = resolve.clone();
     tui.dialogs.replace(
         move |cx| {
             let app = &cx.app;
             let theme = &cx.theme;
+            let page = theme.page();
             let (title, key) = texts.confirm.clone().unwrap_or_else(|| ("confirm".into(), "enter".into()));
             let choose = |choice: Choice| {
                 let (pick, dialogs) = (pick.clone(), cx.dialogs.clone());
@@ -72,6 +72,8 @@ pub fn show(tui: &Tui, files: Vec<VcsFileStatus>, texts: Texts, on_choice: Rc<dy
             for file in &files {
                 list.add(&file_row(app, &page, file, name_width));
             }
+            cx.keep_scroll(&list);
+
             let body = View::new(app)
                 .gap(1)
                 .child(

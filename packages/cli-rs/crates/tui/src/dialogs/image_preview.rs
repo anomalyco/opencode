@@ -38,7 +38,8 @@ pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
     let built = viewer.clone();
     tui.dialogs.replace(
         move |cx| {
-            let viewer = built;
+            let viewer = built.clone();
+
             cx.dialogs.set_centered(true);
             *viewer.cx.borrow_mut() = Rc::downgrade(cx);
             let step = |direction: isize| {
