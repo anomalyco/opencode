@@ -12587,6 +12587,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_events: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_generate: Option<ConfigEntryDocumentInfoExperimentalImageGenerate>,
