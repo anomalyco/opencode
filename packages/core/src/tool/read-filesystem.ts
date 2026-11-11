@@ -354,8 +354,12 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
   return { entries, offset, next, consumed }
 }
 
-const clampLine = (line: string) =>
-  line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : line
+const clampLine = (line: string) => {
+  if (line.length <= MAX_LINE_LENGTH) return line
+  const code = line.charCodeAt(MAX_LINE_LENGTH - 1)
+  const end = code >= 0xd800 && code <= 0xdbff ? MAX_LINE_LENGTH - 1 : MAX_LINE_LENGTH
+  return line.slice(0, end) + MAX_LINE_SUFFIX
+}
 
 // A trailing newline ends the last line instead of starting an empty one.
 const lineCount = (newlines: number, last: number | undefined) => newlines + (last === undefined || last === 10 ? 0 : 1)

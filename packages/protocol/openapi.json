@@ -3790,7 +3790,7 @@
             }
           }
         },
-        "description": "Generate transient text from the current session context without mutating session history.",
+        "description": "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
         "summary": "Generate text from session context",
         "requestBody": {
           "content": {
@@ -10118,6 +10118,7 @@
                     "session.shell.started",
                     "session.shell.ended",
                     "session.step.started",
+                    "session.step.first-token",
                     "session.step.streamed",
                     "session.step.ended",
                     "session.step.failed",
@@ -10227,6 +10228,7 @@
                           "session.shell.started",
                           "session.shell.ended",
                           "session.step.started",
+                          "session.step.first-token",
                           "session.step.streamed",
                           "session.step.ended",
                           "session.step.failed",
@@ -16645,6 +16647,9 @@
               "portable_shell_scanner": {
                 "type": "boolean"
               },
+              "codemode_vm": {
+                "type": "boolean"
+              },
               "all_flags": {
                 "type": "boolean"
               },
@@ -16663,7 +16668,13 @@
               "artifacts": {
                 "type": "boolean"
               },
-              "codemode_vm": {
+              "shell_timeout_background": {
+                "type": "boolean"
+              },
+              "console_watches": {
+                "type": "boolean"
+              },
+              "mcp_events": {
                 "type": "boolean"
               },
               "part_rows": {
@@ -16797,6 +16808,12 @@
         "properties": {
           "tools": {
             "type": "boolean"
+          },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
           },
           "input": {
             "type": "array",
@@ -20506,6 +20523,12 @@
           "tools": {
             "type": "boolean"
           },
+          "freeform": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool.FreeformFormat"
+            }
+          },
           "input": {
             "type": "array",
             "items": {
@@ -22906,6 +22929,9 @@
             "$ref": "#/components/schemas/session.step.started"
           },
           {
+            "$ref": "#/components/schemas/session.step.first-token"
+          },
+          {
             "$ref": "#/components/schemas/session.step.streamed"
           },
           {
@@ -23448,6 +23474,9 @@
             "type": "object",
             "properties": {
               "created": {
+                "type": "number"
+              },
+              "firstToken": {
                 "type": "number"
               },
               "streamed": {
@@ -25078,6 +25107,10 @@
         "required": ["type", "uri", "mime"],
         "additionalProperties": false
       },
+      "Tool.FreeformFormat": {
+        "type": "string",
+        "enum": ["text", "regex", "lark"]
+      },
       "Tool.TextContent": {
         "type": "object",
         "properties": {
@@ -25410,6 +25443,9 @@
           },
           {
             "$ref": "#/components/schemas/session.step.started"
+          },
+          {
+            "$ref": "#/components/schemas/session.step.first-token"
           },
           {
             "$ref": "#/components/schemas/session.step.streamed"
@@ -29281,6 +29317,58 @@
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
+      "session.step.first-token": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.step.first-token"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "assistantMessageID": {
+                "$ref": "#/components/schemas/Session.Message.ID"
+              }
+            },
+            "required": ["sessionID", "assistantMessageID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
       "session.step.started": {
         "type": "object",
         "properties": {
@@ -30132,7 +30220,7 @@
               },
               "source": {
                 "type": "string",
-                "enum": ["title", "compaction"]
+                "enum": ["title", "compaction", "generate"]
               },
               "cost": {
                 "$ref": "#/components/schemas/Money.USD"

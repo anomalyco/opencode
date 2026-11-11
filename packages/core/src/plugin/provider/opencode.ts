@@ -20,6 +20,7 @@ import { ConfigProviderPlugin } from "../../config/plugin/provider.js"
 import { SkillFile } from "../../config/plugin/skill-file.js"
 import { ConsoleAccess } from "../../console-access.js"
 import { Credential } from "../../credential.js"
+import { Flag } from "../../flag.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -64,6 +65,8 @@ const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
 const ConsoleInstructions = Schema.Struct({
   instructions: Schema.Array(Schema.Struct({ id: Schema.String, content: Schema.String })),
 })
+/** The `GET /api/v2/config` response header Console sends while the caller has workspace instructions and skills. */
+const listsHeader = "x-opencode-instructions-skills"
 const ConsoleSkills = Schema.Struct({
   skills: Schema.Array(Schema.Struct({ slug: Schema.String, version: Schema.String })),
 })
@@ -179,6 +182,7 @@ export const OpencodePlugin = define<
   | HttpClient.HttpClient
   | Bus.Service
   | Config.Service
+  | Flag.Service
   | InstructionDiscovery.Service
   | SharedCache.Service
   | Skill.Service
@@ -192,6 +196,7 @@ export const OpencodePlugin = define<
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const config = yield* Config.Service
+    const flags = yield* Flag.Service
     const discovery = yield* InstructionDiscovery.Service
     const skills = yield* Skill.Service
     const cache = yield* SharedCache.Service
@@ -256,7 +261,7 @@ export const OpencodePlugin = define<
                 "failed" in result ? Effect.fail(result.failed) : Effect.succeed(result.remote),
               ),
               Effect.flatMap((remote) =>
-                remote
+                remote?.lists
                   ? Effect.all(
                       {
                         instructions: list(
@@ -274,7 +279,7 @@ export const OpencodePlugin = define<
                       },
                       { concurrency: 2 },
                     ).pipe(Effect.map((lists): ConsoleConfig => ({ ...remote, ...lists })))
-                  : Effect.succeed(undefined),
+                  : Effect.succeed(remote && { ...remote, instructions: [], skills: [] }),
               ),
               Effect.map((remote) => ({
                 remote,
@@ -331,9 +336,11 @@ export const OpencodePlugin = define<
       // content.
       const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
       yield* syncInstructionsAndSkills(next, allowed)
-      yield* syncWatches(allowed && next.remote?.watches === true ? next.connection : undefined)
+      const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
+      yield* syncWatches(watching ? next.connection : undefined)
     })
-    // Watching starts when the Console's config says the workspace has event watches, and stops when it no longer does.
+    // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
+    // and stops when either no longer holds.
     const syncWatches = Effect.fnUntraced(
       function* (connection: ActiveConnection) {
         const credential = connection && (yield* ctx.integration.connection.resolve(connection))
@@ -599,8 +606,9 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
               })
           }
           const watches = response.headers[OpencodeWatches.header] !== undefined
+          const lists = response.headers[listsHeader] !== undefined
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
-          return { ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)), watches }
+          return { ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)), watches, lists }
         }),
       ),
       Effect.scoped,

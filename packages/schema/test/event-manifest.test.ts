@@ -134,6 +134,7 @@ describe("public event manifest", () => {
         "session.shell.started.1",
         "session.shell.ended.1",
         "session.step.started.1",
+        "session.step.first-token.1",
         "session.step.streamed.1",
         "session.step.ended.1",
         "session.step.failed.1",

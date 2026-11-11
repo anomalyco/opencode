@@ -1,4 +1,4 @@
-import { createContext } from "solid-js"
+import { createContext, useContext } from "solid-js"
 import type { Key } from "~/i18n"
 
 export type I18n = {
@@ -13,3 +13,10 @@ export type I18n = {
  * the app already rendered and the pages that reloaded still share one context.
  */
 export const I18nContext = createContext<I18n>()
+
+/** The page's translations. Here rather than in i18n.tsx, so a component can read them without the language provider's router. */
+export function useI18n() {
+  const value = useContext(I18nContext)
+  if (!value) throw new Error("I18n context must be used within a context provider")
+  return value
+}

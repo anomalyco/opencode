@@ -93,7 +93,6 @@ describe("createSessionBackground", () => {
       expect(background.tasks().map((task) => task.id)).toEqual(["stuck", "noticed"])
       setStore("status", { stuck: "idle", noticed: "idle" })
       expect(background.tasks()).toEqual([])
-      expect(background.subagents()).toEqual([])
       dispose()
     })
   })
@@ -103,21 +102,17 @@ describe("createSessionBackground", () => {
       const background = createSessionBackground({
         sessionID: () => "root",
         messages: () => [],
-        sessions: () => [
-          session("child"),
-          session("grandchild", "child"),
-          session("other-child", "other"),
-        ],
+        sessions: () => [session("child"), session("grandchild", "child"), session("other-child", "other")],
         status: () => "running",
         shells: () => [],
       })
 
-      expect(background.subagents().map((task) => task.id)).toEqual(["child", "grandchild"])
+      expect(background.tasks().map((task) => task.id)).toEqual(["child", "grandchild"])
       dispose()
     })
   })
 
-  test("shows a blocking call until its child session is known, then follows the child's status", () => {
+  test("ignores a legacy blocking subagent call and counts its running child", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore<{
         messages: ReturnType<typeof assistant>[]
@@ -126,10 +121,14 @@ describe("createSessionBackground", () => {
       }>({
         messages: [
           assistant("current", [
-            tool("call", "subagent", {}, { description: "Inspect", agent: "explore" }, "running", {
-              created: 5,
-              ran: 6,
-            }),
+            tool(
+              "call",
+              "subagent",
+              { status: "running", sessionID: "child" },
+              { description: "Inspect", agent: "explore" },
+              "running",
+              { created: 5, ran: 6 },
+            ),
           ]),
         ],
         sessions: [],
@@ -144,27 +143,24 @@ describe("createSessionBackground", () => {
         shells: () => [],
       })
 
-      const pending = {
-        id: "call",
+      // Subagents always run in the background, so a leftover running call blocks nothing.
+      expect(background.blocking()).toEqual([])
+      expect(background.tasks()).toEqual([])
+
+      setStore("sessions", [session("child")])
+      expect(background.tasks()).toEqual([])
+      setStore("status", "child", "running")
+
+      const task = {
+        id: "child",
         type: "subagent",
-        sessionID: undefined,
-        partID: "call",
+        sessionID: "child",
         label: "Inspect",
         agent: "explore",
         started: 6,
       }
-      expect(background.subagents()).toEqual([pending])
-      setStore("messages", 0, "content", 0, "state", "metadata", { sessionID: "child" })
-      expect(background.subagents()).toEqual([{ ...pending, id: "child", sessionID: "child" }])
-      setStore("sessions", [session("child")])
-      expect(background.subagents()).toEqual([])
-      setStore("status", "child", "running")
-      expect(background.subagents()).toEqual([{ ...pending, id: "child", sessionID: "child" }])
-      // Blocking work is not background work.
-      expect(background.tasks()).toEqual([])
-      setStore("messages", 0, "time", "completed", 7)
-      expect(background.blocking()).toEqual([])
-      expect(background.tasks()).toEqual([{ ...pending, id: "child", sessionID: "child", partID: undefined }])
+
+      expect(background.tasks()).toEqual([task])
       dispose()
     })
   })
@@ -212,11 +208,10 @@ describe("createSessionBackground", () => {
           id: "live-child",
           type: "subagent",
           sessionID: "live-child",
-          partID: undefined,
           label: "live-child",
           started: 40,
         },
-        { id: "child", type: "subagent", sessionID: "child", partID: undefined, label: "renamed", started: 0 },
+        { id: "child", type: "subagent", sessionID: "child", label: "renamed", started: 0 },
         { id: "shell", type: "shell", label: "updated command", started: 0 },
       ])
       expect(background.blocking()).toBe(blocking)

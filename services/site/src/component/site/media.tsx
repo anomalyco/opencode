@@ -21,17 +21,18 @@ type Manifest = {
   // Original → per format, [width, hash][].
   image: Record<string, Partial<Record<"avif" | "webp", [width: number, hash: string][]>>>
 }
-type MediaKey = "hi" | "phone"
+type MediaKey = "hi" | "lo"
 
 const manifest: Manifest = Object.values(
   import.meta.glob<Manifest>("./media-manifest.json", { eager: true, import: "default" }),
 )[0] ?? { video: {}, image: {} }
 
 // The 1080-wide card and 1200-wide clip files go to screens of 2.5 device pixels per CSS pixel or
-// more (most phones); the 1280-wide hero files to phone-width windows.
+// more (most phones); the 1344-wide hero files (the hero's widest CSS size) to 1× screens and
+// phone-width windows.
 const queries: Record<MediaKey, string> = {
   hi: "(min-resolution: 2.5dppx)",
-  phone: "(max-width: 40rem)",
+  lo: "(max-resolution: 1dppx), (max-width: 40rem)",
 }
 
 const base = (src: string) => `/media/${src.replace(/^\/(product-videos\/)?/, "").replace(/\.\w+$/, "")}`
@@ -68,12 +69,7 @@ export function posterFile(src: string) {
   return imageSources(src).src
 }
 
-/** The display sizes the stills are made for, as `sizes` values. */
-export const stillSizes = {
-  card: "(max-width: 40rem) 90vw, 342px",
-  hero: "(min-width: 90rem) 1344px, 100vw",
-  clip: "(max-width: 40rem) 90vw, 385px",
-}
+export { stillSizes } from "./still-sizes"
 
 /**
  * Loads a still the way a <picture> on the page would pick it (AVIF where the browser decodes it,

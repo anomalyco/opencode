@@ -28,6 +28,7 @@ import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
+import { useMarkdown } from "@opencode/session-ui/context/markdown"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
 import { CommentCard, commentCardTarget, quoteTooltip } from "@opencode/session-ui/comment-card"
@@ -92,12 +93,15 @@ export type ComposerEditorProps = {
   attachKeybind?: string[]
   attachShortcut?: string
   alternateKeybind?: string[]
+  queueFirstKeybind?: string[]
+  queueFirstLabel?: string
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
   const i18n = useI18n()
+  const markdown = useMarkdown()
   const state = props.controller.state
   const view = props.controller.view
   const suggestionsID = createUniqueId()
@@ -324,6 +328,16 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 "unicode-bidi": mode() === "normal" ? "plaintext" : undefined,
                 "text-align": "start",
               }}
+              onContextMenu={(event) => {
+                const target = event.target instanceof Element ? event.target : undefined
+                const mention = target?.closest<HTMLElement>('[data-mention="session"]')
+                const part = mention ? mentionParts.get(mention) : undefined
+                const menu = markdown?.sessionMenu
+
+                if (part?.type !== "session" || !menu) return
+                event.preventDefault()
+                menu({ sessionID: part.id, x: event.clientX, y: event.clientY })
+              }}
               onInput={(event) => {
                 const prompt = parseComposerEditor(event.currentTarget)
                 const cursor = getCursorPosition(event.currentTarget) ?? promptLength(prompt)
@@ -369,7 +383,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
                   if (event.repeat) return
                   // On touch, Cmd+Return is the touch bar's primary action, since plain Return cannot send.
-                  props.controller.submit(mod && !touch() ? { alternate: true } : undefined)
+                  props.controller.submit(
+                    !touch() && event.altKey && !mod
+                      ? { first: true }
+                      : mod && !touch()
+                        ? { alternate: true }
+                        : undefined,
+                  )
                 }
               }}
               // The editor holds one flat run of text, mentions and <br>s. A touch keyboard's Return arrives as a
@@ -494,6 +514,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 <ComposerEditorAlternateDelivery
                   controller={props.controller}
                   keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+                  firstKeybind={props.queueFirstKeybind ?? ["Alt", "Enter"]}
+                  firstLabel={props.queueFirstLabel}
                 />
               </Show>
               <Show when={mode() === "shell"}>
@@ -1426,7 +1448,12 @@ function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean, hi
 // delivery opposite to what plain Enter does. Visible only while the queue
 // exposes an alternate (turn running and composer holding a value), so it
 // disappears on its own when the current turn ends.
-function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorModel; keybind: string[] }) {
+function ComposerEditorAlternateDelivery(props: {
+  controller: ComposerEditorModel
+  keybind: string[]
+  firstKeybind: string[]
+  firstLabel?: string
+}) {
   const i18n = useI18n()
   const view = props.controller.view
 
@@ -1444,7 +1471,27 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
   return (
     <Show when={action()} keyed>
       {(delivery) => (
-        <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
+        <Tooltip
+          placement="top"
+          inactive={delivery !== "steer" && !view.submit.queue?.count()}
+          value={
+            <Show
+              when={view.submit.queue?.count() && !view.submit.queue?.editing() && props.firstLabel}
+              fallback={i18n.t("ui.promptInput.steerHint")}
+            >
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center justify-between gap-4">
+                  <span>{delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}</span>
+                  <Keybind keys={props.keybind} variant="neutral" />
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span>{props.firstLabel}</span>
+                  <Keybind keys={props.firstKeybind} variant="neutral" />
+                </div>
+              </div>
+            </Show>
+          }
+        >
           <Button
             data-action="composer-alternate-delivery"
             type="button"

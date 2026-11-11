@@ -351,7 +351,6 @@ export const dict = {
   "session.new.project.search": "Претрага пројеката",
   "session.new.project.add": "Додај пројекат",
   "session.new.workspace.runIn": "Покрените сесију у",
-  "session.new.workspace.triggerLocal": "локално",
   "session.new.workspace.local": "Локално спремиште",
   "session.new.git.none": "Не Git",
   "session.header.open.finder": "Финдер",

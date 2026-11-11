@@ -206,6 +206,19 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       // Off the tool call's path: the result never waits on Console, and a failure only skips the watch.
       return create(member, event.sessionID, { target }).pipe(
         Effect.scoped,
+        // A refusal, such as a GitHub sign-in the member hasn't made, is told once per reason: the ID repeats with it.
+        Effect.catchIf(
+          (cause): cause is ToolFailure => cause instanceof ToolFailure && cause.metadata?.status === 403,
+          (refusal) =>
+            ctx.session.synthetic({
+              sessionID: event.sessionID,
+              id: SessionMessage.ID.make(
+                `msg_watch_${Hash.sha256(`${event.sessionID}\n${refusal.message}`).slice(0, 26)}`,
+              ),
+              text: `OpenCode Console didn't watch a pull request or push from this session, so its updates won't wake the session: ${refusal.message}`,
+              metadata: { source: "console.watch" },
+            }),
+        ),
         Effect.catch((cause) => Effect.logDebug("skipped watching a shell command's work", { cause })),
         Effect.forkIn(lease, { startImmediately: true }),
         Effect.asVoid,
@@ -240,12 +253,12 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       editor.namespace({
         name: namespace,
         description:
-          "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console. The session wakes on its own when they change.",
+          "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console. The session wakes on its own when they change. A pull request it opened wakes it as each check finishes, so don't wait on CI with `gh pr checks --watch`, `gh run watch` or `sleep`.",
       })
       editor.add({
         name: "watch",
         description:
-          "Wake this session when a Slack thread or a GitHub pull request, issue, commit or Actions run gets a reply or changes status, or one of the workspace's MCP servers sends an event `events` lists. Slack and GitHub writes through OpenCode Console, `gh pr create` and `git push` are already watched, so don't watch what you just made. Use it for anything else, such as `gh workflow run` or a link the user shared. People often answer a Slack post in the channel rather than its thread, so after each top-level post the channel's new top-level messages are watched for 15 minutes too. The session wakes with the update, so don't poll.",
+          "Wake this session when a Slack thread or a GitHub pull request, issue, commit or Actions run gets a reply or changes status, or one of the workspace's MCP servers sends an event `events` lists. Slack and GitHub writes through OpenCode Console, `gh pr create` and `git push` are already watched, a pull request's checks included, so don't watch what you just made (the session is told if Console refuses). Use it for anything else, such as a deploy's Actions run, `gh workflow run` or a link the user shared. People often answer a Slack post in the channel rather than its thread, so after each top-level post the channel's new top-level messages are watched for 15 minutes too. The session wakes with the update, so don't poll.",
         input: Schema.Struct({
           target: Schema.optional(
             Schema.String.annotate({
@@ -269,7 +282,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
           ),
         }),
         output: Watch,
-        options: { namespace, codemode: true },
+        options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
           Effect.gen(function* () {
             // A link or shorthand, or one event type of a server with its arguments; never both.
@@ -590,7 +603,7 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
           : response.status === 404
             ? "Event watches are off for this OpenCode Console workspace."
             : (body?.message ?? `OpenCode Console answered ${response.status}`)
-      return Effect.fail(new ToolFailure({ message }))
+      return Effect.fail(new ToolFailure({ message, metadata: { status: response.status } }))
     }),
   )
 }

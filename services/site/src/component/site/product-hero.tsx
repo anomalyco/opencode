@@ -1,7 +1,17 @@
 import { Link } from "@solidjs/meta"
 import { createEffect, createSignal, Index, on, onCleanup, onMount, Show } from "solid-js"
 import { useI18n } from "~/context/i18n"
-import { imageSources, pageScheme, posterFile, prefersReducedMotion, rescueMedia, stillSizes, videoSources } from "./media"
+import {
+  imageSources,
+  pageScheme,
+  posterFile,
+  prefersReducedMotion,
+  rescueMedia,
+  stillSizes,
+  videoSources,
+} from "./media"
+import { heroVideo } from "./hero-video"
+import { staticRender } from "~/lib/static-render"
 
 type HeroFile = { src?: string; poster: string }
 
@@ -12,9 +22,15 @@ export type HeroMedia = HeroFile & { themes?: { light: HeroFile; dark: HeroFile 
  * The hero at the top of a product page (product-page.tsx) and of Browse's page (extension-page.tsx):
  * the poster, then the video over it once it can play. Black when there is no media.
  */
-export function ProductHero(props: { slug: string; media: HeroMedia | undefined; design?: string }) {
+export function ProductHero(props: {
+  /** A product page's slug: the card that grows into this hero (card-morph.ts). */
+  slug?: string
+  media: HeroMedia | undefined
+  design?: string
+}) {
   // The page's colour scheme for the hero's themed files: read while hydrating, so the files match
-  // what the hero's inline script picked, then kept in step with the theme and the system setting.
+  // what the hero's inline script picked, then kept in step with the theme and the system setting
+  // (on a static page, src/client/islands/product-hero.ts).
   const [scheme, setScheme] = createSignal(pageScheme())
   onMount(() => {
     const sync = () => setScheme(pageScheme())
@@ -185,28 +201,19 @@ function posterPreload(poster: string) {
 
 // Runs as soon as the themed hero is parsed, before first paint. Points the video's sources and
 // poster at the page's theme (the site root's data-theme, else the system's), the same choice
-// pageScheme() makes on the client. The poster's picture already shows the system's theme, so only
-// when the chosen theme differs does it point the picture's sources and img at the chosen one.
-const heroThemeScript = `(()=>{const box=document.currentScript.parentElement;const t=box.closest("[data-site]")?.dataset.theme;const s=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";const k=t==="light"||t==="dark"?t:s;if(k!==s)box.querySelectorAll("picture [data-light-srcset]").forEach((e)=>{const v=e.dataset[k+"Srcset"];if(v)e.setAttribute("srcset",v);if(e.dataset[k])e.setAttribute("src",e.dataset[k])});box.querySelectorAll("video[data-light-poster]").forEach((v)=>{v.setAttribute("poster",v.dataset[k+"Poster"]);v.querySelectorAll("source[data-light]").forEach((e)=>e.setAttribute("src",e.dataset[k]));v.load()})})()`
+// pageScheme() makes on the client. It doesn't load the video (a load() fetches it even with
+// preload="none"): hero-video.ts does, once the page has loaded. The poster's picture already shows
+// the system's theme, so only when the chosen theme differs does it point the picture's sources and
+// img at the chosen one.
+const heroThemeScript = `(()=>{const box=document.currentScript.parentElement;const t=box.closest("[data-site]")?.dataset.theme;const s=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";const k=t==="light"||t==="dark"?t:s;if(k!==s)box.querySelectorAll("picture [data-light-srcset]").forEach((e)=>{const v=e.dataset[k+"Srcset"];if(v)e.setAttribute("srcset",v);if(e.dataset[k])e.setAttribute("src",e.dataset[k])});box.querySelectorAll("video[data-light-poster]").forEach((v)=>{v.setAttribute("poster",v.dataset[k+"Poster"]);v.querySelectorAll("source[data-light]").forEach((e)=>e.setAttribute("src",e.dataset[k]))})})()`
 
-/**
- * The product hero's video: muted, looping, playing while the hero is on screen and the tab is
- * visible, from a direct load or after a card grows into it. With reduced motion it rests on its
- * first frame and a button plays it.
- */
+/** The product hero's video (hero-video.ts plays it, here and on the static pages). */
 function HeroVideo(props: { src?: string; poster?: string; themes?: { light: HeroFile; dark: HeroFile } }) {
   const i18n = useI18n()
   const [reduced, setReduced] = createSignal(false)
   const [running, setRunning] = createSignal(false)
-  // With reduced motion the video plays only after the button is pressed, and stops when pressed again.
-  const [wanted, setWanted] = createSignal(false)
   let video!: HTMLVideoElement
-  let visible = false
-
-  const sync = () => {
-    if (visible && !document.hidden && (!reduced() || wanted())) return void video.play().catch(() => {})
-    video.pause()
-  }
+  let toggle = () => {}
 
   // The sources (media.tsx), each with both themes' files for the theme script; a themed hero's are
   // unnamed in the server's markup (props.src is unset until the client knows the theme).
@@ -221,11 +228,12 @@ function HeroVideo(props: { src?: string; poster?: string; themes?: { light: Her
       dark: dark?.[index]?.src,
     }))
   }
-  // A theme change names other files: load again to pick among them.
+  // A theme change names other files: load again to pick among them, once it plays (hero-video.ts).
+  let refresh = () => {}
   createEffect(
     on(
       () => props.src,
-      () => video.load(),
+      () => refresh(),
       { defer: true },
     ),
   )
@@ -233,18 +241,10 @@ function HeroVideo(props: { src?: string; poster?: string; themes?: { light: Her
   onMount(() => {
     setReduced(prefersReducedMotion())
     rescueMedia(video)
-    // The server-rendered video may have loaded before hydration attached onLoadedData.
-    if (video.readyState >= 2) video.setAttribute("data-loaded", "")
-    const view = new IntersectionObserver(([entry]) => {
-      visible = entry.isIntersecting
-      sync()
-    })
-    view.observe(video)
-    document.addEventListener("visibilitychange", sync)
-    onCleanup(() => {
-      view.disconnect()
-      document.removeEventListener("visibilitychange", sync)
-    })
+    const hero = heroVideo(video)
+    toggle = hero.toggle
+    refresh = hero.refresh
+    onCleanup(hero.stop)
   })
 
   return (
@@ -256,17 +256,13 @@ function HeroVideo(props: { src?: string; poster?: string; themes?: { light: Her
         data-dark-poster={props.themes && posterFile(props.themes.dark.poster)}
         data-set
         aria-hidden="true"
-        // Also after a theme change swaps the file: it plays again once the new one can.
-        onLoadedData={(event) => {
-          event.currentTarget.setAttribute("data-loaded", "")
-          sync()
-        }}
         onPlay={() => setRunning(true)}
         onPause={() => setRunning(false)}
         muted
         loop
         playsinline
-        preload="auto"
+        // Nothing before the page has loaded: its poster is the same frame (hero-video.ts).
+        preload="none"
       >
         <Index each={sources()}>
           {(source) => (
@@ -280,15 +276,15 @@ function HeroVideo(props: { src?: string; poster?: string; themes?: { light: Her
           )}
         </Index>
       </video>
-      <Show when={reduced()}>
+      {/* With reduced motion only; a static page has it in its markup, shown by CSS then
+          (product-page.css), and its script switches the label to data-pause as the video plays. */}
+      <Show when={reduced() || staticRender()}>
         <button
           type="button"
           data-slot="play"
           aria-label={running() ? i18n.t("changelog.media.pause") : i18n.t("changelog.media.play")}
-          onClick={() => {
-            setWanted(!running())
-            sync()
-          }}
+          data-pause={staticRender() ? i18n.t("changelog.media.pause") : undefined}
+          onClick={() => toggle()}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
             <Show when={running()} fallback={<path d="M3 1.5v9l7.5-4.5z" />}>

@@ -17,12 +17,14 @@ import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenAISpeech } from "../protocols/openai-speech.js"
 import { OpenAITranscription } from "../protocols/openai-transcription.js"
 import { OpenAIDecisions, type OptionsInput as OpenAIDecisionOptionsInput } from "../protocols/openai-decisions.js"
+import { OpenAIEmbeddings, type OptionsInput as OpenAIEmbeddingOptionsInput } from "../protocols/openai-embeddings.js"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable, OpenAIServiceTier } from "./openai-options.js"
 export type { OpenAIImageOptions } from "../protocols/openai-images.js"
 export type { OpenAISpeechOptions } from "../protocols/openai-speech.js"
 export type { OpenAITranscriptionOptions } from "../protocols/openai-transcription.js"
 export type { OptionsInput as OpenAIDecisionOptions } from "../protocols/openai-decisions.js"
+export type { OptionsInput as OpenAIEmbeddingOptions } from "../protocols/openai-embeddings.js"
 
 export const id = ProviderID.make("openai")
 
@@ -126,6 +128,14 @@ export const configure = (input: Config = {}) => {
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID, providerOptions })
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    endpoint: { baseURL: media.baseURL },
+    auth: media.auth,
+    headers: media.headers,
+    http: media.http,
+  })
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    embeddingRoute.model<OpenAIEmbeddingOptionsInput>({ id: modelID, providerOptions })
 
   return {
     id,
@@ -136,6 +146,7 @@ export const configure = (input: Config = {}) => {
     speech,
     transcription,
     decision,
+    embedding,
     configure,
   }
 }
@@ -185,9 +196,14 @@ export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).decision(modelID, input.providerOptions)
 }
+export const embeddingModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
+}
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
 export const speech = provider.speech
 export const transcription = provider.transcription
 export const decision = provider.decision
+export const embedding = provider.embedding

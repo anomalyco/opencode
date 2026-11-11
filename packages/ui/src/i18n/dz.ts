@@ -169,6 +169,7 @@ export const dict = {
   "ui.common.dismiss": "ཁུངས༌མེད༌བརྩི༌ནི",
   "ui.common.close": "སྒོ་བསྡམ",
   "ui.common.next": "ཤུལ༌མའི",
+  "ui.common.continue": "འཕྲོ༌མཐུད",
   "ui.common.submit": "སྤྲོད་ནི",
   "ui.common.showMore": "མང་སུ་སྟོན།",
   "ui.common.moreCount.one": "+{{count}} མངམ།",

@@ -6,7 +6,7 @@ import "./github-link.css"
 import "./tap-targets.css"
 import "./asset-buttons.css"
 import { Link, Meta } from "@solidjs/meta"
-import { A, createAsync, useLocation, useNavigate, usePreloadRoute } from "@solidjs/router"
+import { A, useLocation, useNavigate } from "@solidjs/router"
 import {
   createEffect,
   createMemo,
@@ -21,7 +21,7 @@ import {
   Suspense,
 } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
-import { interFaces, interLatin } from "./inter-fonts"
+import { interLatin } from "./inter-fonts"
 import { AgentIcon, Bracket, PersonIcon, ThemeCycle } from "./site-controls"
 import logoLight from "../../asset/brand/opencode-logo-light.svg"
 import logoDark from "../../asset/brand/opencode-logo-dark.svg"
@@ -32,11 +32,16 @@ import { LanguageSheet } from "~/component/language-sheet"
 import { useI18n } from "~/context/i18n"
 import type { Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
-import { strip } from "~/lib/language"
+import { LOCALES, strip } from "~/lib/language"
 import { brandAssets } from "~/lib/media"
 import { installConsoleStub } from "~/lib/console-stub"
 import { status, type ServiceStatus } from "~/lib/status"
+import { pageData } from "~/lib/page-data"
+import { staticRender } from "~/lib/static-render"
+import { staticPaths } from "~/static/routes"
+import { clientStrings } from "~/client/strings"
 import { useViewportCover } from "~/lib/viewport"
+import { markdownShortcut } from "./markdown-key"
 import { loadMarkdownPages, markdownKey, markdownPagesLoaded } from "./use-markdown"
 import type { MarkdownPages } from "./markdown-pages"
 import { LiveMeta } from "~/component/head-meta"
@@ -56,21 +61,18 @@ import {
   removeNavItem,
   sortableNav,
 } from "./nav-order"
-// The Markdown view's styles load with the page: they also hide the page while the view loads.
-import "./markdown-view.css"
 import { monoFontChoice, monoFontLatin } from "./mono-fonts"
 import { NavVersions } from "./nav-versions"
 import { closeAllMenus, closeMenusOnLinks, onCloseMenus, takeMenuNavigation } from "./menu-open"
+import { keepOnPixels, sectionNavScroll, watchNavAway } from "./site-frame"
 import { watchSurfaces } from "./surface"
 import { designCopy, designMode } from "./design-copy"
 import { bannerDismissScript, bannerThemeColorScript, bannerTopColor, bannerVisible } from "./site-banner-script"
 import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
 import { navMenusOnIntent } from "./nav-intent"
-import { preloadTouchedLinks } from "./preload-touched"
 import { adoptVoice, dropVoice } from "./voice/host"
-// The logo menu's other styles (Settings › Logo menu: list, cards) and the shared nav menus in the site's colours.
-import "./logo-fan.css"
+// The shared nav menus in the site's colours.
 import "./nav-menus.css"
 import { logoVariantSvgs } from "./logo-variants"
 import { AnomalyLogo, Logo, LogoIcon, Wordmark } from "./marks"
@@ -116,14 +118,16 @@ const SiteBanner =
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
 
-// Pages of this site that render client-side; everything else keeps a full page load. The docs
-// (/docs) are served separately, and /download redirects on the server.
+// Pages of this site that render client-side on the development server (production hydrates none,
+// static/routes.ts); everything else keeps a full page load. The docs (/docs) are served separately,
+// and /download redirects on the server.
 const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?)?\/?$/
 function clientPage(pathname: string) {
   return clientPages.test(strip(pathname))
 }
-// The full page loads a link here can lead to on this domain (this site's other pages, in any
-// language, the docs and Stats), fetched once the pointer rests on the link so the page opens sooner.
+// The full page loads a link here can lead to on this domain (this site's pages, in any language,
+// the docs and Stats), fetched once the pointer rests on the link so the page opens sooner. The
+// development server prefetches none of the site's pages.
 // Only addresses that are safe to request ahead of time: never the Console or a download, and never a
 // language link (hreflang), whose page sets the language cookie. Browsers without Speculation Rules
 // ignore it.
@@ -136,9 +140,13 @@ const speculationRules = JSON.stringify({
         and: [
           {
             href_matches: [
-              "{/:locale}?/:page(product|ide|mini|font)",
-              "{/:locale}?/product/*",
               "{/:locale}?/extensions/*",
+              // The home page is "/" and "/ja", not "/ja/".
+              ...(import.meta.env.DEV
+                ? []
+                : staticPaths.flatMap((path) =>
+                    path === "/" ? ["/", `/:locale(${LOCALES.join("|")})`] : [`{/:locale}?${path}`],
+                  )),
               "/docs{/*}?",
               "/data{/*}?",
             ],
@@ -216,7 +224,6 @@ export function Site(props: {
   const enter = !isServer && navigated && !document.documentElement.hasAttribute("data-card-grow")
   const routed = !isServer && navigated
   onMount(() => (navigated = true))
-  const preloadRoute = usePreloadRoute()
   // The page runs under the notch and home indicator; edge elements pad by the safe-area insets.
   useViewportCover()
   // Read the saved theme before the first client render so hydration doesn't flip it back to
@@ -379,7 +386,7 @@ export function Site(props: {
   const logoVariant = () => siteSettings.logo
   const popoverTheme = () => siteSettings.popover
   const statusPreview = () => (props.status ? "live" : siteSettings.status)
-  const liveStatus = props.status ?? createAsync(() => status())
+  const liveStatus = props.status ?? pageData(() => status())
   const statusBars = () => {
     const preview = statusPreview()
     if (preview !== "live") return statusSamples[preview]
@@ -580,30 +587,11 @@ export function Site(props: {
       ? { logo: logoDark, wordmark: wordmarkDark, suffix: "dark" as const }
       : { logo: logoLight, wordmark: wordmarkLight, suffix: "light" as const }
 
-  // A page's own nav (the docs nav) scrolls in its own box under the fixed logo and lockup. It holds
-  // the wheel only while it has something to scroll (data-scrolls, site.css), fades out at an edge
-  // only while items pass under it (data-fade-top, data-fade-bottom), and starts with the current
-  // page in view.
+  // A page's own nav (the docs nav) scrolls in its own box under the fixed logo and lockup (site-frame.ts).
   onMount(() => {
-    if (!props.nav) return
-    const nav = document.querySelector<HTMLElement>('[data-component="sidebar"] > [data-component="section-nav"]')
-    if (!nav) return
-    const update = () => {
-      nav.toggleAttribute("data-scrolls", nav.scrollHeight > nav.clientHeight)
-      nav.toggleAttribute("data-fade-top", nav.scrollTop > 0)
-      nav.toggleAttribute("data-fade-bottom", nav.scrollTop + nav.clientHeight < nav.scrollHeight - 1)
-    }
-    const current = nav.querySelector<HTMLElement>('[aria-current="page"]')
-    if (current && current.offsetTop + current.offsetHeight > nav.clientHeight)
-      nav.scrollTop = current.offsetTop - nav.clientHeight / 2
-    const resize = new ResizeObserver(update)
-    ;[nav, ...nav.children].forEach((element) => resize.observe(element))
-    nav.addEventListener("scroll", update, { passive: true })
-    update()
-    onCleanup(() => {
-      resize.disconnect()
-      nav.removeEventListener("scroll", update)
-    })
+    const nav =
+      props.nav && document.querySelector<HTMLElement>('[data-component="sidebar"] > [data-component="section-nav"]')
+    if (nav) onCleanup(sectionNavScroll(nav))
   })
 
   // In the docs layout the sidebar leaves with the article at the page's end, but the logo and the
@@ -657,7 +645,8 @@ export function Site(props: {
     syncDark()
     media.addEventListener("change", syncDark)
 
-    // Number keys 1-n open the matching nav item, unless the user is typing or using a shortcut.
+    // Number keys 1-n open the matching nav item, unless the user is typing or using a shortcut. The
+    // static pages have their own copy of these listeners (src/client/entry.ts and menus.ts).
     const navigateWithNumber = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
       if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return
@@ -679,8 +668,7 @@ export function Site(props: {
     // The app's router only handles links marked with a `link` attribute (explicitLinks), so the
     // older console pages and proxied paths like /docs keep full page loads. Links between pages
     // of this site get the attribute as soon as a pointer, focus or click reaches them, so the
-    // router swaps the page in place and preloads it on intent: hover or focus, and on touch screens,
-    // which have no hover, a finger landing on the link.
+    // router swaps the page in place and preloads it on intent (hover or focus).
     const markLink = (event: Event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]")
       if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("link") || anchor.target) return
@@ -689,10 +677,6 @@ export function Site(props: {
     }
     for (const type of ["pointerover", "focusin", "touchstart", "click"])
       document.addEventListener(type, markLink, true)
-    const stopPreloads = preloadTouchedLinks(
-      (link) => link.hasAttribute("link") || clientPage(new URL(link.href).pathname),
-      (path) => preloadRoute(path, { preloadData: false }),
-    )
 
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
     // window.opencode and its hint for developers who open DevTools (Settings › Other › Console API).
@@ -741,29 +725,8 @@ export function Site(props: {
       setMenu(false)
       setSectionNav(false)
     }
-    // Typing "m" then "d" toggles the Markdown view.
-    let lastKey = { key: "", time: 0 }
-    const markdownShortcut = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
-      if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return
-      const key = event.key.toLowerCase()
-      if (key === "m") prefetchMarkdown()
-      const quick = lastKey.key === "m" && event.timeStamp - lastKey.time < 600
-      lastKey = { key, time: event.timeStamp }
-      if (key !== "d" || !quick) return
-      lastKey = { key: "", time: 0 }
-      // The funnel's queue (lib/funnel.ts), as the switch reports its own clicks.
-      window.__ocFunnel?.push({
-        event: {
-          name: "ui.clicked",
-          action: "clicked",
-          target: `markdown-view:${markdown() ? "off" : "on"}`,
-          properties: { via: "shortcut" },
-        },
-        at: performance.now(),
-      })
-      toggleMarkdown()
-    }
+    // Typing "m" then "d" toggles the Markdown view (markdown-key.ts).
+    const markdownKeys = markdownShortcut({ prefetch: prefetchMarkdown, toggle: toggleMarkdown, shown: markdown })
     // The pre-paint script hid the page while it waited for the Markdown view, whose code it started
     // loading (entry-server.tsx).
     const booted = () => delete document.querySelector<HTMLElement>("[data-site]")?.dataset.markdownBoot
@@ -781,7 +744,7 @@ export function Site(props: {
         .finally(booted)
 
     document.addEventListener("keydown", navigateWithNumber)
-    document.addEventListener("keydown", markdownShortcut)
+    document.addEventListener("keydown", markdownKeys)
     document.addEventListener("keydown", closeOnEscape)
     document.addEventListener("click", closeLogoMenu)
     document.addEventListener("contextmenu", closeLogoMenu)
@@ -807,12 +770,11 @@ export function Site(props: {
       navMenus = undefined
       document.removeEventListener("opencode-nav-menu-open", closeSiteMenus)
       stopMenuLinks()
-      stopPreloads()
       for (const type of ["pointerover", "focusin", "touchstart", "click"])
         document.removeEventListener(type, markLink, true)
       media.removeEventListener("change", syncDark)
       document.removeEventListener("keydown", navigateWithNumber)
-      document.removeEventListener("keydown", markdownShortcut)
+      document.removeEventListener("keydown", markdownKeys)
       document.removeEventListener("keydown", closeOnEscape)
       document.removeEventListener("click", closeLogoMenu)
       document.removeEventListener("contextmenu", closeLogoMenu)
@@ -822,27 +784,12 @@ export function Site(props: {
     })
   })
 
-  // The fixed sidebar nav fades out once the footer's own list scrolls up into its space, so the two
-  // never overlap; it comes back as the footer leaves. Footer columns keep the sidebar column empty.
+  // The fixed sidebar nav steps aside for the footer's own list (site-frame.ts). Footer columns keep
+  // the sidebar column empty.
   createEffect(() => {
-    const list = siteSettings.footerLayout === "list"
-    let observer: IntersectionObserver | undefined
-    const watch = () => {
-      observer?.disconnect()
-      setNavAway(false)
-      if (!list || !sidebarNav || !footerNav) return
-      const clear = window.innerHeight - sidebarNav.getBoundingClientRect().bottom - 24
-      observer = new IntersectionObserver(([entry]) => setNavAway(entry.isIntersecting), {
-        rootMargin: `0px 0px ${-Math.max(0, clear)}px 0px`,
-      })
-      observer.observe(footerNav)
-    }
-    watch()
-    window.addEventListener("resize", watch)
-    onCleanup(() => {
-      observer?.disconnect()
-      window.removeEventListener("resize", watch)
-    })
+    setNavAway(false)
+    if (siteSettings.footerLayout === "list" && sidebarNav && footerNav)
+      onCleanup(watchNavAway(sidebarNav, footerNav, setNavAway))
   })
 
   // Any navigation (another page, its query or a hash) closes every open menu (menu-open.ts).
@@ -1102,6 +1049,7 @@ export function Site(props: {
     </A>
   )
 
+  // The pages that never hydrate show the theme with theme-switch.ts.
   const chooseTheme = (value: (typeof themes)[number]) => {
     setTheme(value)
     localStorage.setItem("opencode-theme", value)
@@ -1239,6 +1187,13 @@ export function Site(props: {
       }
       data-site
       data-page={props.page}
+      // The static pages' script shows these in the page's language (src/client/dom.ts). Server only,
+      // so the browser's build leaves the list out.
+      data-strings={
+        import.meta.env.SSR && staticRender()
+          ? JSON.stringify(Object.fromEntries(clientStrings.map((key) => [key, i18n.t(key)])))
+          : undefined
+      }
       data-theme={theme()}
       data-popover={popoverTheme()}
       data-letters-bar={lettersBarShown() && lettersBarInView() ? "" : undefined}
@@ -1295,10 +1250,6 @@ export function Site(props: {
           (siteSettings.spacer === "dither gradient" ? ditherGradientRule(siteSettings, "") : "")
         }
       />
-      {/* A plain style element, which hydration keeps: the meta <Style> is inserted again on
-          hydration, and the new faces then miss font-display: optional's window, so the page
-          swaps to the fallback font and reflows. */}
-      <style innerHTML={interFaces} />
       {/* Fetched with the page, so Inter is ready for the first paint instead of arriving inside
           font-display: optional's short wait and reflowing the text (CLS). Only the Latin file:
           most pages need nothing else. */}
@@ -1771,27 +1722,7 @@ function ThemeToggle(props: { theme: (typeof themes)[number]; onChange: (theme: 
   )
 }
 
-// The content above the footer has fluid heights (wrapping text, media sized by width), so the
-// theme control often lands between device pixels and its thin icon strokes blur at 1x. This
-// moves it back onto the pixel grid whenever the page's size changes.
-function snapToPixels(el: HTMLElement) {
-  let frame = 0
-  const snap = () => {
-    frame = 0
-    el.style.translate = ""
-    const rect = el.getBoundingClientRect()
-    const shift = (value: number) =>
-      (Math.round(value * devicePixelRatio) - value * devicePixelRatio) / devicePixelRatio
-    const x = shift(rect.left)
-    const y = shift(rect.top)
-    if (Math.abs(x) > 0.001 || Math.abs(y) > 0.001) el.style.translate = `${x}px ${y}px`
-  }
-  const observer = new ResizeObserver(() => {
-    if (!frame) frame = requestAnimationFrame(snap)
-  })
-  onMount(() => observer.observe(document.body))
-  onCleanup(() => {
-    observer.disconnect()
-    cancelAnimationFrame(frame)
-  })
+// The theme switch, kept on whole pixels (site-frame.ts).
+function snapToPixels(element: HTMLElement) {
+  onMount(() => onCleanup(keepOnPixels(element)))
 }
