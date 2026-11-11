@@ -32,7 +32,7 @@ pub async fn history(
             for update in updates(message, &attached.cwd, capabilities) {
                 let source = completed_source(message, &update);
                 let enriched = permission::with_completed_diffs(update, source.as_ref(), &attached.cwd).await;
-                connection.session_update(&attached.id, enriched)?;
+                connection.session_update_written(&attached.id, enriched).await?;
             }
         }
         cursor = page.get("cursor").and_then(|cursor| cursor.get("next")).and_then(Value::as_str).map(str::to_owned);
