@@ -35,8 +35,6 @@ const FORBIDDEN_CODE_TOOLS = new Set([
   "opencode.schedule_delete",
   "opencode.session_move",
   "opencode.session_rename",
-  "opencode.worktree_create",
-  "opencode.worktree_remove",
 ])
 
 const decodeCodeObjectResult = Schema.decodeUnknownResult(

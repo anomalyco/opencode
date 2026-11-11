@@ -255,22 +255,13 @@ Rename this session to "Timeout cleanup", then move it to the new worktree.
 
 ### Worktrees
 
-The same namespace manages worktrees for the session's project:
-
-- `worktree_create` creates a worktree from a `name` and returns its
-  `directory`. The project's worktree configuration selects the destination and
-  strategy.
-- `worktree_list` lists the project's worktrees.
-- `worktree_remove` removes a worktree OpenCode recorded for the project. Set
-  `force` to discard uncommitted changes.
+There are no worktree tools. When [`worktree.directory`](/config#worktrees) is set and the built-in Git strategy is
+selected, OpenCode tells the model where to create worktrees and how to list and remove them with `git worktree`,
+unless the user asks for something else. A worktree strategy plugin can add its own instructions instead.
 
 ```text
 Create a worktree named "login" and move this session into it.
 ```
-
-`worktree_remove` uses the `edit` permission with the worktree directory as its
-resource. The other worktree utilities do not request a built-in permission
-action.
 
 ## Browser
 
