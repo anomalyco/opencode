@@ -107,13 +107,7 @@ const browser = (app: App.Info) =>
             Effect.flatMap((value) => exchange(value, redirect, pkce, app)),
             Effect.map((tokens) => credential(browserMethodID, tokens)),
           ),
-          submit: (pasted: string) =>
-            OauthRedirect.pasted(pasted, state).pipe(
-              Effect.flatMap((result) =>
-                "error" in result ? Deferred.fail(code, new Error(result.error)) : Deferred.succeed(code, result.code),
-              ),
-              Effect.asVoid,
-            ),
+          submit: OauthRedirect.submit({ state, callback: code, received: (value) => value }),
         }
       }),
     refresh: (value) => refresh(browserMethodID, value, app),

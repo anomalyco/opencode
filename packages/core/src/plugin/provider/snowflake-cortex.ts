@@ -165,15 +165,7 @@ export const SnowflakeCortexPlugin = define({
                   code_verifier: verifier,
                 })
               }),
-              submit: (pasted: string) =>
-                OauthRedirect.pasted(pasted, state).pipe(
-                  Effect.flatMap((result) =>
-                    "error" in result
-                      ? Deferred.fail(code, new Error(result.error))
-                      : Deferred.succeed(code, result.code),
-                  ),
-                  Effect.asVoid,
-                ),
+              submit: OauthRedirect.submit({ state, callback: code, received: (value) => value }),
             }
           }),
       })

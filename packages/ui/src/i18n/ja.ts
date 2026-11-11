@@ -170,6 +170,7 @@ export const dict = {
   "ui.common.dismiss": "閉じる",
   "ui.common.close": "閉じる",
   "ui.common.next": "次へ",
+  "ui.common.continue": "続行",
   "ui.common.submit": "送信",
   "ui.common.showMore": "さらに表示",
 

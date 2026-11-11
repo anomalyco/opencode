@@ -109,6 +109,7 @@ export const PoePlugin = define({
                   Effect.onInterrupt(() => Effect.sync(() => request.response?.destroy())),
                 )
               }),
+              // Not `OauthRedirect.submit`: a pasted redirect also has to pass Poe's issuer check.
               submit: (pasted: string) =>
                 OauthRedirect.pasted(pasted, state).pipe(
                   Effect.flatMap((result) => {

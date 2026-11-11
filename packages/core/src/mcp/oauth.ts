@@ -625,15 +625,11 @@ export const authorize = (input: {
       callback: Deferred.await(completed),
       // A pasted URL is held to the same checks as the browser's redirect, but a wrong paste keeps the login waiting.
       submit: (pasted: string) =>
-        Effect.gen(function* () {
-          const result = yield* OauthRedirect.pasted(pasted, state)
-          if ("error" in result) {
-            yield* Deferred.fail(code, new Error(result.error))
-            return
-          }
-          yield* Effect.logInfo("mcp oauth redirect pasted", fields)
-          yield* Deferred.succeed(code, { code: result.code, iss: result.params.get("iss") ?? undefined })
-        }),
+        OauthRedirect.submit({
+          state,
+          callback: code,
+          received: (value, params) => ({ code: value, iss: params.get("iss") ?? undefined }),
+        })(pasted).pipe(Effect.tap(() => Effect.logInfo("mcp oauth redirect pasted", fields))),
     }
   }).pipe(
     Effect.onError((cause) =>

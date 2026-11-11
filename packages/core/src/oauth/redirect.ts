@@ -1,4 +1,24 @@
-import { Effect } from "effect"
+import { Deferred, Effect } from "effect"
+
+/**
+ * Builds an automatic sign-in's `submit`: reads the redirect URL the user pasted with `pasted`, then settles the
+ * sign-in's pending `callback` as the browser's redirect would. `received` turns the redirect into that value.
+ */
+export const submit =
+  <A>(input: {
+    state: string
+    callback: Deferred.Deferred<A, Error>
+    received: (code: string, params: URLSearchParams) => A
+  }) =>
+  (text: string) =>
+    pasted(text, input.state).pipe(
+      Effect.flatMap((result) =>
+        "error" in result
+          ? Deferred.fail(input.callback, new Error(result.error))
+          : Deferred.succeed(input.callback, input.received(result.code, result.params)),
+      ),
+      Effect.asVoid,
+    )
 
 /**
  * Reads the redirect URL a user pasted when the browser could not reach this machine's callback server

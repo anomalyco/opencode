@@ -261,16 +261,7 @@ export const GitLabPlugin = define({
                   Effect.onInterrupt(() => Effect.sync(() => request.response?.destroy())),
                 )
               }),
-              submit: (pasted: string) =>
-                OauthRedirect.pasted(pasted, state).pipe(
-                  Effect.flatMap((result) => {
-                    const error = callbackError(result.params, state)
-                    return error
-                      ? Deferred.fail(callback, new Error(error))
-                      : Deferred.succeed(callback, { code: result.params.get("code") ?? "" })
-                  }),
-                  Effect.asVoid,
-                ),
+              submit: OauthRedirect.submit({ state, callback, received: (code) => ({ code }) }),
             }
           }),
       })

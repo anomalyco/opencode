@@ -240,6 +240,10 @@ const source = {
 
   "ui.tabs.close": "Close tab",
 
+  "ui.redirectPaste.label": "Redirect URL",
+  "ui.redirectPaste.placeholder": "http://127.0.0.1:…/callback?code=…",
+  "ui.redirectPaste.required": "Paste the URL from the browser's address bar",
+
   "ui.textField.copyToClipboard": "Copy to clipboard",
   "ui.textField.copyLink": "Copy link",
   "ui.textField.copied": "Copied",
@@ -312,6 +316,7 @@ const source = {
   "ui.common.dismiss": "Dismiss",
   "ui.common.close": "Close",
   "ui.common.next": "Next",
+  "ui.common.continue": "Continue",
   "ui.common.submit": "Submit",
   "ui.common.showMore": "Show more",
   "ui.common.showLess": "Show less",

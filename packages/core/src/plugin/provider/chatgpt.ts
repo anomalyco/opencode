@@ -193,18 +193,11 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
               Effect.onInterrupt(() => Effect.sync(() => result.response?.destroy())),
             )
           }),
-          submit: (pasted: string) =>
-            OauthRedirect.pasted(pasted, state).pipe(
-              Effect.flatMap((result) =>
-                "error" in result
-                  ? Deferred.fail(received, new Error(result.error))
-                  : Deferred.succeed(received, {
-                      code: result.code,
-                      clientID: result.params.get("client_id") ?? undefined,
-                    }),
-              ),
-              Effect.asVoid,
-            ),
+          submit: OauthRedirect.submit({
+            state,
+            callback: received,
+            received: (code, params) => ({ code, clientID: params.get("client_id") ?? undefined }),
+          }),
         }
       }),
     refresh: (value) => refresh(value, app),

@@ -7,6 +7,7 @@ import { Checkbox } from "@opencode/ui/checkbox"
 import { Loader } from "@opencode/ui/loader"
 import { TextField } from "@opencode/ui/text-field"
 import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
+import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { TextInput } from "@opencode/ui/text-input"
 import { type Component, createMemo, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -910,18 +911,6 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
   }
 
   function OAuthAutoView() {
-    let pasteInput: HTMLInputElement | undefined
-    const pasteErrorID = createUniqueId()
-
-    const pasteError = () => {
-      const error = connect().paste
-      if (error?.status !== "editing" || !error.error) return
-
-      return error.error.type === "rejected"
-        ? error.error.message
-        : language.t("provider.connect.oauth.auto.paste.required")
-    }
-
     return (
       <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
         <div>
@@ -956,43 +945,14 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
         </Show>
         <Show when={connect().paste}>
           {(paste) => (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                props.controller.input({ type: "paste.submitted", value: pasteInput?.value ?? "" })
-              }}
-              class="flex flex-col items-start gap-5 self-stretch"
-            >
-              <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-                {language.t("provider.connect.oauth.auto.paste.label")}
-                <TextInput
-                  ref={pasteInput}
-                  class="!w-full"
-                  name="redirect"
-                  placeholder={language.t("provider.connect.oauth.auto.paste.placeholder")}
-                  readOnly={paste().status === "submitting"}
-                  invalid={pasteError() !== undefined}
-                  aria-describedby={pasteError() ? pasteErrorID : undefined}
-                  autocomplete="off"
-                  spellcheck={false}
-                />
-              </label>
-              <Show when={pasteError()}>
-                {(error) => (
-                  <div id={pasteErrorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
-                    {error()}
-                  </div>
-                )}
-              </Show>
-              <Button
-                type="submit"
-                variant="contrast"
-                disabled={paste().status === "submitting"}
-                aria-busy={paste().status === "submitting"}
-              >
-                {language.t("common.continue")}
-              </Button>
-            </form>
+            <RedirectPasteForm
+              value={paste().value}
+              error={paste().error}
+              locked={paste().locked}
+              submitting={paste().submitting}
+              onInput={(value) => props.controller.input({ type: "paste.changed", value })}
+              onSubmit={() => props.controller.input({ type: "paste.submitted" })}
+            />
           )}
         </Show>
       </div>
