@@ -38,12 +38,18 @@ jobs:
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
 
-      - name: Read deploy secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
-          parse-json-secrets: false
+      # A 15-minute token for this stage's Workers only, minted by the token issuer (anomalyco/secrets) from the role
+      # above. It is a step output, so only the Deploy step gets it.
+      - name: Cloudflare token
+        id: cloudflare-token
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
 
+      # wrangler.jsonc has no account id, and the token can't list accounts.
       - name: Deploy
         working-directory: services/files
         run: bun run deploy --env ${{ github.ref_name == 'production' && 'production' || 'dev' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}

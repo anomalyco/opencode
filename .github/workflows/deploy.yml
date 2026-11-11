@@ -32,18 +32,21 @@ jobs:
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
 
-      - name: Read deploy secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
-          parse-json-secrets: false
+      # A 15-minute token for this stage's Workers only, minted by the token issuer (anomalyco/secrets) from the role
+      # above. It is a step output, so only the Deploy step gets it.
+      - name: Cloudflare token
+        id: cloudflare-token
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
 
-      # The GitHub App secrets are read here, not in the step above, so only this step ever has them. They reach cf
-      # through a file in the runner's temp directory, never argv, and the file is removed when the step ends.
+      # The GitHub App secrets are read here, so only this step ever has them. They reach cf through a file in the
+      # runner's temp directory, never argv, and the file is removed when the step ends.
       - name: Deploy
         working-directory: services/legacy
         env:
           STAGE: ${{ github.ref_name }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
         # An explicit bash runs with pipefail, so a failed secret read fails the step.
         shell: bash
         run: |
@@ -80,18 +83,19 @@ jobs:
           role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
 
-      - name: Read deploy secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: CLOUDFLARE_API_TOKEN,opencode/${{ github.ref_name }}/CLOUDFLARE_API_TOKEN
-          parse-json-secrets: false
+      - name: Cloudflare token
+        id: cloudflare-token
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
 
-      # The Workers' secrets are read here, not in the step above, so only this step ever has them. They reach cf
-      # through files in the runner's temp directory, never argv, and are removed when the step ends.
+      # The Workers' secrets are read here, so only this step ever has them. They reach cf through files in the
+      # runner's temp directory, never argv, and are removed when the step ends.
       - name: Deploy
         working-directory: services/data
         env:
           STAGE: ${{ github.ref_name }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
         # An explicit bash runs with pipefail, so a failed secret read fails the step.
         shell: bash
         run: |
