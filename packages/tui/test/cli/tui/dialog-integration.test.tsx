@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { InputRenderable, TextareaRenderable } from "@opentui/core"
+import { InputRenderable, Renderable, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import type { FormFields, LocationRef } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
@@ -508,7 +508,57 @@ test("keeps the OAuth paste prompt layout without new designs", async () => {
   expect(frame.split("Authorize opensend in your browser.").length).toBe(2)
 })
 
-async function renderOAuth(input: { paste?: true; newDesigns: boolean }) {
+test.each([false, true])("scrolls a long OAuth link and submits the redirect (new designs: %s)", async (newDesigns) => {
+  await using fixture = await renderOAuth({
+    paste: true,
+    newDesigns,
+    url: `https://example.com/authorize?${"x".repeat(600)}ENDMARKER`,
+    width: 50,
+    height: 20,
+  })
+  await fixture.app.waitForFrame((frame) => frame.includes("Redirect URL") && frame.includes("copy link"))
+  await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+
+  const find = (node: Renderable): Renderable | undefined =>
+    node.id === "oauth-paste-description" ? node : node.getChildren().map(find).find(Boolean)
+  const scroll = find(fixture.app.renderer.root)
+  if (!(scroll instanceof ScrollBoxRenderable)) throw new Error("expected scrollable authorization description")
+  await fixture.app.mockMouse.scroll(scroll.viewport.x + 1, scroll.viewport.y + 1, "down")
+  await fixture.app.waitFor(() => scroll.scrollTop > 0)
+  const mousePosition = scroll.scrollTop
+  fixture.app.mockInput.pressKey("\x1b[57355u")
+  await fixture.app.waitFor(() => scroll.scrollTop > mousePosition)
+  const keyboardPosition = scroll.scrollTop
+  fixture.app.mockInput.pressKey("\x1b[57354u")
+  await fixture.app.waitFor(() => scroll.scrollTop < keyboardPosition)
+  let frame = fixture.app.captureCharFrame()
+  for (let i = 0; i < 12 && !frame.includes("ENDMARKER"); i++) {
+    const position = scroll.scrollTop
+    fixture.app.mockInput.pressKey("\x1b[57355u")
+    await fixture.app.waitFor(() => scroll.scrollTop > position)
+    frame = await fixture.app.waitForFrame((value) => value !== frame)
+  }
+  expect(frame).toContain("ENDMARKER")
+  expect(frame).toContain("Redirect URL")
+  expect(frame).toContain("copy link")
+  fixture.app.mockInput.pressTab()
+  await fixture.app.waitFor(() => fixture.copied.length === 1)
+  expect(fixture.copied[0]).toBe(`https://example.com/authorize?${"x".repeat(600)}ENDMARKER`)
+  await fixture.app.mockInput.typeText("https://example.com/callback")
+  const editor = fixture.app.renderer.currentFocusedEditor
+  if (!(editor instanceof TextareaRenderable)) throw new Error("expected focused redirect prompt")
+  expect(editor.plainText).toBe("https://example.com/callback")
+  fixture.app.mockInput.pressEnter()
+  await fixture.app.waitFor(() => fixture.completions.length === 1)
+  expect(fixture.completions[0]).toEqual({ code: "https://example.com/callback" })
+  const errorFrame = await fixture.app.waitForFrame((frame) => frame.includes("Invalid redirect"))
+  expect(errorFrame).toContain("copy link")
+  expect(errorFrame).toContain("https://example.com/callback")
+})
+
+async function renderOAuth(input: { paste?: true; newDesigns: boolean; url?: string; width?: number; height?: number }) {
+  const completions: unknown[] = []
+  const copied: string[] = []
   const calls = createFetch(async (url, request) => {
     const directory = decodeURIComponent(request.headers.get("x-opencode-directory") ?? process.cwd())
     const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
@@ -530,13 +580,17 @@ async function renderOAuth(input: { paste?: true; newDesigns: boolean }) {
         location,
         data: {
           attemptID: "att_test",
-          url: "https://opensend.example.com/api/auth/oauth2/authorize?response_type=code",
+          url: input.url ?? "https://opensend.example.com/api/auth/oauth2/authorize?response_type=code",
           instructions: "Authorize opensend in your browser. This window will close automatically.",
           mode: "auto",
           ...(input.paste ? { paste: true } : {}),
           time: { created: Date.now(), expires: Date.now() + 60_000 },
         },
       })
+    if (request.method === "POST" && url.pathname === "/api/integration/opensend/connect/oauth/att_test/complete") {
+      completions.push(await request.json())
+      return json({ _tag: "InvalidRequestError", message: `Invalid redirect: ${"details ".repeat(20)}` }, { status: 400 })
+    }
     if (request.method === "DELETE" && url.pathname === "/api/integration/opensend/connect/oauth/att_test")
       return new Response(null, { status: 204 })
     if (url.pathname === "/api/integration/opensend/connect/oauth/att_test")
@@ -557,7 +611,14 @@ async function renderOAuth(input: { paste?: true; newDesigns: boolean }) {
 
   const app = await testRender(
     () => (
-      <TestTuiContexts>
+      <TestTuiContexts
+        clipboard={{
+          read: async () => undefined,
+          write: async (text) => {
+            copied.push(text)
+          },
+        }}
+      >
         <ConfigProvider config={createTuiResolvedConfig({ experimental: { "new-designs": input.newDesigns } })}>
           <Keymap.Provider>
             <ToastProvider>
@@ -577,12 +638,14 @@ async function renderOAuth(input: { paste?: true; newDesigns: boolean }) {
         </ConfigProvider>
       </TestTuiContexts>
     ),
-    { width: 100, height: 30, kittyKeyboard: true },
+    { width: input.width ?? 100, height: input.height ?? 30, kittyKeyboard: true },
   )
   app.renderer.start()
 
   return {
     app,
+    completions,
+    copied,
     [Symbol.asyncDispose]: async () => app.renderer.destroy(),
   }
 }

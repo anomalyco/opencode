@@ -667,6 +667,8 @@ function OAuthAuto(props: {
   const clipboard = useClipboard()
   const newDesigns = useNewDesigns()
   const theme = useTheme().surface("dialog")
+  const dimensions = useTerminalDimensions()
+  let scroll: ScrollBoxRenderable | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
 
@@ -698,7 +700,10 @@ function OAuthAuto(props: {
         location: locationQuery(props.location),
         code: value,
       })
-      .catch((cause) => setError(errorMessage(cause)))
+      .catch((cause) => {
+        setError(errorMessage(cause))
+        scroll?.scrollTo(0)
+      })
   }
 
   Keymap.createLayer(() => ({
@@ -708,6 +713,26 @@ function OAuthAuto(props: {
     commands: [
       { bind: newDesigns() ? "return" : "o", title: "Open authorization URL", group: "Dialog", run: open },
       { bind: "c", title: "Copy authorization details", group: "Dialog", run: copy },
+    ],
+  }))
+
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    enabled: !!props.attempt.paste,
+    priority: 2,
+    commands: [
+      {
+        bind: "pageup",
+        title: "Scroll authorization up",
+        group: "Dialog",
+        run: () => scroll?.scrollBy(-Math.max(1, scroll.viewport.height - 1)),
+      },
+      {
+        bind: "pagedown",
+        title: "Scroll authorization down",
+        group: "Dialog",
+        run: () => scroll?.scrollBy(Math.max(1, scroll.viewport.height - 1)),
+      },
     ],
   }))
 
@@ -778,13 +803,21 @@ function OAuthAuto(props: {
         ]}
         description={() => (
           <box gap={1}>
-            <text fg={theme.text.muted}>{props.attempt.instructions}</text>
-            <Link href={props.attempt.url} fg={theme.markdown.link} />
-            <text fg={theme.text.muted}>
-              Waiting for authorization… Press enter to open the link. If the browser can't reach this machine, paste
-              the URL it was redirected to.
-            </text>
-            <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
+            <scrollbox
+              id="oauth-paste-description"
+              ref={(value: ScrollBoxRenderable) => (scroll = value)}
+              maxHeight={Math.max(1, dimensions().height - Math.floor(dimensions().height / 4) - 11)}
+            >
+              <box gap={1}>
+                <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
+                <text fg={theme.text.muted}>{props.attempt.instructions} Scroll with Page Up/Down.</text>
+                <Link href={props.attempt.url} fg={theme.markdown.link} />
+                <text fg={theme.text.muted}>
+                  Waiting for authorization… Press enter to open the link. If the browser can't reach this machine, paste
+                  the URL it was redirected to.
+                </text>
+              </box>
+            </scrollbox>
           </box>
         )}
       />
