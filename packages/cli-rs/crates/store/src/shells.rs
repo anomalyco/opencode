@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use opencode_api::generated::*;
 
 use crate::location::{Catalog, Location};
-use crate::state::{Data, Error, State, Task};
+use crate::state::{Data, Error, Overlay, State, Task};
 
 /// A running shell and the location that reported it.
 #[derive(Debug, Clone, PartialEq)]
@@ -66,23 +66,15 @@ impl State {
 
     /// Adds a create (`Some`) or an exit to the overlay of the location's shell read in flight, if any.
     fn record_shell(&mut self, location: &Location, id: &ShellID, change: Option<Shell>) {
-        let Some(read) = self.locations.get_mut(location).and_then(|data| data.shell_read.as_mut()) else {
-            return;
-        };
-        let Some(changes) = read.changes.as_mut() else {
-            return;
-        };
-        changes.insert(id.clone(), change);
-        if changes.len() > OVERLAY {
-            read.changes = None;
+        if let Some(read) = self.locations.get_mut(location).and_then(|data| data.shell_read.as_mut()) {
+            read.record(&id.0, change);
         }
     }
 
     /// Starts a shell read of `location` with an empty overlay; the returned ticket alone may publish it.
     fn begin_shell_read(&mut self, location: &Location) -> u64 {
         let ticket = self.token();
-        let read = ShellRead { ticket, changes: Some(IndexMap::new()) };
-        self.locations.entry(location.clone()).or_default().shell_read = Some(read);
+        self.locations.entry(location.clone()).or_default().shell_read = Some(Overlay::new(ticket));
         ticket
     }
 
@@ -90,7 +82,7 @@ impl State {
     /// list is published alone and the read is invalidated, so the caller reads again.
     fn publish_shells(&mut self, location: &Location, ticket: u64, response: ShellListOutput) -> bool {
         let read =
-            self.locations.get_mut(location).and_then(|data| data.shell_read.take_if(|read| read.ticket == ticket));
+            self.locations.get_mut(location).and_then(|data| data.shell_read.take_if(|read| read.ticket() == ticket));
         let Some(read) = read else {
             return false;
         };
@@ -103,14 +95,15 @@ impl State {
                 (info.id.clone(), Shell { info, location: at.clone() })
             })
             .collect();
-        let overflowed = read.changes.is_none();
-        for (id, change) in read.changes.into_iter().flatten() {
+        let changes = read.into_changes();
+        let overflowed = changes.is_none();
+        for (id, change) in changes.into_iter().flatten() {
             match change {
                 Some(shell) => {
-                    shells.insert(id, shell);
+                    shells.insert(ShellID(id), shell);
                 }
                 None => {
-                    shells.shift_remove(&id);
+                    shells.shift_remove(&ShellID(id));
                 }
             }
         }
@@ -122,16 +115,9 @@ impl State {
     }
 }
 
-/// Creates and exits one shell read keeps (O-92 Q1 (a)); past it the read publishes its list alone and reads again.
-const OVERLAY: usize = 1024;
-
-/// A location's shell read in flight (M1): the ticket that may publish it, and the shells created (`Some`) and
-/// exited (`None`) since it began, or `None` once more than [`OVERLAY`] arrived.
-#[derive(Debug, Clone)]
-pub(crate) struct ShellRead {
-    ticket: u64,
-    changes: Option<IndexMap<ShellID, Option<Shell>>>,
-}
+/// A location's shell read in flight (M1): the shells created (`Some`) and exited (`None`) since it began. Unlike
+/// the other list reads, an overflowed overlay still publishes its list, then reads again.
+pub(crate) type ShellRead = Overlay<Shell>;
 
 impl Data {
     /// Reads a location's running shells once per invalidation.
