@@ -100,6 +100,8 @@ type Input = {
   active?: Accessor<boolean>
   sessionKey: Accessor<string>
   presentationKey?: Accessor<string>
+  /** Whether what the user opened or closed survives a change of detail setting, as in the New timeline. */
+  keepsDisclosure?: boolean
   projection: Projection
   showHeader: Accessor<boolean>
   /** Whether the timeline follows the newest content. Drives every anchoring decision. */
@@ -166,14 +168,19 @@ export function createTimelineVirtualizer(input: Input) {
   const [visibleArea, setVisibleArea] = createSignal<HTMLDivElement>()
   const [viewRoot, setViewRoot] = createSignal<HTMLDivElement>()
   const bottomInset = () => input.bottomInset?.() ?? 0
-  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
+
+  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(
+    (input.keepsDisclosure ? entry : cached)?.toolOpen ?? {},
+  )
+
   const patchGroupKeys = cached?.patchGroupKeys ?? new Map<string, string>()
   createEffect(
     on(
       () => input.presentationKey?.(),
       () => {
         patchGroupKeys.clear()
-        setToolOpen(reconcile({}))
+
+        if (!input.keepsDisclosure) setToolOpen(reconcile({}))
       },
       { defer: true },
     ),

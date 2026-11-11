@@ -134,3 +134,11 @@ push_git() {
     commit -q -m "$message"
   git -C "$dir" push -q origin HEAD:master
 }
+
+# expect_json <artifact-file> <pinned-target> <label>: the artifact's resolved
+# config must equal the pinned target exactly before anything is deployed.
+# Deploy scripts use this with targets/; release scripts do not.
+expect_json() {
+  jq -e --slurp '.[0] == .[1]' "$1" "$2" > /dev/null ||
+    die "$3 in the artifact is not the pinned target ($2)"
+}

@@ -105,6 +105,7 @@ const setup = Effect.fnUntraced(function* (options?: {
       }),
     awaitIdle: () => Effect.void,
     interrupt: () => Effect.succeed(false),
+    periodStartSeq: () => Effect.succeed(undefined),
     wake: (id) =>
       Effect.gen(function* () {
         const pending = yield* SessionInbox.list(database.db, id)
@@ -125,7 +126,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   const services = Layer.mergeAll(
     Layer.succeed(PluginHooks.Service, hooks),
     Layer.mock(Image.Service, {}),
-    options?.shell ?? Layer.mock(Shell.Service, {}),
+    options?.shell ?? Layer.mock(Shell.Service, { handoffPrepared: () => false }),
   )
   const servicesFor = (ref: Location.Ref) => {
     locations.push(ref)
@@ -508,6 +509,7 @@ describe("Session-owned handles", () => {
       })
       const fixture = yield* setup({
         shell: Layer.mock(Shell.Service, {
+          handoffPrepared: () => false,
           create: (input) =>
             Effect.sync(() => {
               expect(input).toEqual({
@@ -636,6 +638,7 @@ describe("Session-owned handles", () => {
             }),
           wake: coordinator.wake,
           awaitIdle: coordinator.awaitIdle,
+          periodStartSeq: () => Effect.succeed(undefined),
           interrupt: (id, options) =>
             Effect.sync(() => void interrupts.push({ sessionID: id, options })).pipe(
               Effect.andThen(coordinator.interrupt(id)),

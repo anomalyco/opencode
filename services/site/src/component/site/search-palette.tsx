@@ -8,15 +8,9 @@ import { strip } from "~/lib/language"
 import { devicePreviewOpenEvent, inDevicePreview } from "~/lib/platform"
 import { siteSettings, type SiteSettings } from "./settings"
 import { onCloseMenus } from "./menu-open"
+import { isSearchShortcut } from "./search-key"
 import { handOff, reveal, trim } from "./search-reveal"
-import {
-  isSearchShortcut,
-  searchOpenEvent,
-  setSearchAnnouncement,
-  setSearchShown,
-  type SearchVia,
-  type SiteSearchProps,
-} from "./search"
+import { searchOpenEvent, setSearchAnnouncement, setSearchShown, type SearchVia, type SiteSearchProps } from "./search"
 import type { SearchAction, SearchGroup, SearchItem, SearchResult } from "./search-index"
 
 /**

@@ -53,9 +53,16 @@ export function SessionHeaderDrag(props: { pane?: HTMLElement; gap?: HTMLElement
     const resize = new ResizeObserver(measure)
     resize.observe(pane)
     resize.observe(gap)
+
     // The row's sections catch moves that keep the gap's size, such as the breadcrumb and the actions trading width.
     for (const section of row.children) resize.observe(section)
-    onCleanup(() => resize.disconnect())
+    // A direction change mirrors the row without resizing anything, so no size observer sees the gap move sides.
+    const direction = new MutationObserver(measure)
+    direction.observe(document.documentElement, { attributes: true, attributeFilter: ["dir"] })
+    onCleanup(() => {
+      resize.disconnect()
+      direction.disconnect()
+    })
   })
 
   return (

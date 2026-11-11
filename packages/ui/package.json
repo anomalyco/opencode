@@ -67,6 +67,7 @@
     "./progress-circle": "./src/feedback/progress-circle/progress-circle.tsx",
     "./project-avatar": "./src/data-display/project-avatar/project-avatar.tsx",
     "./radio": "./src/forms/radio/radio.tsx",
+    "./redirect-paste": "./src/forms/redirect-paste/redirect-paste.tsx",
     "./search-list": "./src/forms/search-list/search-list.tsx",
     "./segmented-control": "./src/navigation/segmented-control/segmented-control.tsx",
     "./select": "./src/forms/select/select.tsx",

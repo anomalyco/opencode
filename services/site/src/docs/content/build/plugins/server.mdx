@@ -1013,6 +1013,25 @@ execute: async ({ url }, context) => {
 }
 ```
 
+#### Freeform tool input
+
+A direct tool with exactly one required string field can let the model write that string without a JSON wrapper. Set `freeform` to `{ type: "text" }`, `{ type: "regex", pattern }`, or `{ type: "lark", grammar }`.
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+If the selected model's API lists `regex` in models.dev, the model can write `OPS-42` directly. Otherwise Core omits **only** `freeform`: the model still has the `ticket` tool and calls it with `{"id":"OPS-42"}`. Missing or empty format lists mean no freeform support. The executor receives `{ id }` either way.
+
+Inside Code Mode (`codemode: true`), a freeform tool takes its string directly, as in `await tools.ticket("OPS-42")`. `await tools.ticket({ id: "OPS-42" })` also works.
+
 Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
 changing their order; it does not rerun plugin setup.
 
@@ -1361,6 +1380,14 @@ so later hooks see changes made by earlier hooks.
 ### Sessions
 
 Session hooks intercept prompt admission, model calls, native HTTP, and retries.
+
+#### Forks
+
+The `fork` hook runs after OpenCode copies the history and before the fork call returns. `sessionID` identifies the new session.
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
 
 #### Prompt admission
 

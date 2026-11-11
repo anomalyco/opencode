@@ -31,6 +31,7 @@ import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { SubagentMetadata } from "@opencode/core/session/subagent-metadata"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { Workspace } from "@opencode/core/workspace"
 import { Expected } from "./lib/session-message"
@@ -474,6 +475,42 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("does not inherit the per-link subagent notify switch through children", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+
+      const parent = yield* session.create({
+        location,
+        metadata: { threadID: "t1", "subagent.notify": false },
+      })
+      const child = yield* session.create({ parentID: parent.id })
+      expect(child.metadata).toEqual({ threadID: "t1" })
+      expect(SubagentMetadata.notify(child.metadata)).toBe(true)
+
+      const silent = yield* session.create({ parentID: parent.id, metadata: { "subagent.notify": false } })
+      expect(silent.metadata).toEqual({ "subagent.notify": false })
+      expect(SubagentMetadata.notify(silent.metadata)).toBe(false)
+    }),
+  )
+
+  it.effect("strips the per-link subagent notify switch when forking", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({
+        location,
+        metadata: { threadID: "t1", "subagent.notify": false },
+      })
+      yield* session.prompt({ sessionID: parent.id, text: "Fork context", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+
+      const forked = yield* session.fork({ sessionID: parent.id })
+      expect(forked.metadata).toEqual({ threadID: "t1" })
+      expect(SubagentMetadata.notify(forked.metadata)).toBe(true)
+    }),
+  )
+
   it.effect("stores permission rules, inherits them through children and forks, and replaces them", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -671,6 +708,31 @@ describe("Session.create", () => {
       ).toEqual([0, 5, 6])
       expect(yield* SessionInbox.find(db, admitted.id)).toBeUndefined()
     }),
+  )
+
+  liveIt.live("queues a fork notice after copied history and before the first prompt", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const bus = yield* Bus.Service
+        const { db } = yield* Database.Service
+        const parent = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+        })
+        yield* session.prompt({ sessionID: parent.id, text: "Original", resume: false })
+        yield* SessionInbox.promote(db, bus, parent.id, "steer")
+        const fork = yield* session.fork({ sessionID: parent.id })
+        expect(yield* session.inbox(fork.id)).toMatchObject([{ type: "synthetic", delivery: "steer" }])
+        yield* session.prompt({ sessionID: fork.id, text: "Continue", resume: false })
+        yield* SessionInbox.promote(db, bus, fork.id, "steer")
+        expect(yield* session.context(fork.id)).toMatchObject([
+          Expected.user("Original"),
+          { type: "synthetic", text: expect.stringContaining("<fork-notice>") },
+          Expected.user("Continue"),
+        ])
+        expect(yield* session.context(parent.id)).toMatchObject([Expected.user("Original")])
+      }),
+    ),
   )
 
   it.effect("keeps a fork untitled when its parent is untitled", () =>

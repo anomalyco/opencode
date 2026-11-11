@@ -75,7 +75,7 @@
     /* × at the right end, centred on the GitHub mark's vertical line below it: the fixed corner
        mark beside the sidebar and on bare pages; on small screens the top bar's mark, left of the
        menu button (the button ends 2rem in from the page edge, the mark sits 0.5rem before it).
-       A 40px target, in the body colour (the shared styles below). */
+       A 40px target, in the body colour (the blue bars' shared styles, site.css). */
     [data-slot="dismiss"] {
       position: absolute;
       --dismiss-centre: calc(var(--github-right, 1.5rem) + var(--github-size, 2.5rem) / 2);
@@ -98,89 +98,6 @@
       color: var(--bar-highlight);
       font-size: var(--fs-read);
       letter-spacing: 0.06em;
-    }
-  }
-}
-
-/* The two blue bars, the announcement banner above and the footer's letters bar (site.css), share
-   one look: a highlight in solid white ("NEW", "Like letters?") and a body at 92% white (the message
-   or the font line, with its chevron, and the banner's ×), 4.5:1 on the blue. Hover and keyboard
-   focus bring the body to full white in 150ms and nudge the chevron 2px right; focus adds a white
-   ring inset in the bar; a press dims the blue a little. */
-:is([data-component="letters-bar"], [data-component="announcement-banner"]) {
-  --bar-highlight: #fff;
-  --bar-body: rgb(255 255 255 / 0.92);
-
-  a {
-    color: var(--bar-highlight);
-  }
-
-  [data-slot="body"] {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    min-width: 0;
-    color: var(--bar-body);
-    transition: color 150ms ease;
-  }
-
-  /* The home announcement's light chevron (icons.tsx), drawn for 13px text, scaled to the 15px
-     text (10/13 em) with its stroke kept at 1px. */
-  [data-slot="chevron-right"] {
-    flex-shrink: 0;
-    width: calc(1em * 10 / 13);
-    height: calc(1em * 10 / 13);
-    transition: translate 150ms var(--ease-out, ease-out);
-
-    path {
-      vector-effect: non-scaling-stroke;
-    }
-  }
-
-  [data-slot="dismiss"] {
-    color: var(--bar-body);
-    transition: color 150ms ease;
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    a:hover [data-slot="body"],
-    [data-slot="dismiss"]:hover {
-      color: var(--bar-highlight);
-    }
-
-    a:hover [data-slot="chevron-right"] {
-      translate: calc(2px * var(--x-dir, 1)) 0;
-    }
-  }
-
-  a:focus-visible [data-slot="body"],
-  [data-slot="dismiss"]:focus-visible {
-    color: var(--bar-highlight);
-  }
-
-  a:focus-visible [data-slot="chevron-right"] {
-    translate: calc(2px * var(--x-dir, 1)) 0;
-  }
-
-  a:focus-visible {
-    outline: 2px solid var(--bar-highlight);
-    outline-offset: -6px;
-  }
-
-  [data-slot="dismiss"]:focus-visible {
-    outline: 2px solid var(--bar-highlight);
-    outline-offset: -8px;
-  }
-
-  a:active {
-    background-color: color-mix(in srgb, var(--bar-blue) 90%, #000);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    [data-slot="body"],
-    [data-slot="chevron-right"],
-    [data-slot="dismiss"] {
-      transition: none;
     }
   }
 }

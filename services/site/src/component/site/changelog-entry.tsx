@@ -226,6 +226,8 @@ export function ChangelogTimeline(props: {
   limit: number
   /** Product pages link the rest of a long list to the entry's page. */
   more?: boolean
+  /** A collapsed list holds only a link to the entry's page, which the changelog's script loads it from. */
+  defer?: boolean
 }) {
   const language = useLanguage()
   let list!: HTMLOListElement
@@ -278,6 +280,7 @@ export function ChangelogTimeline(props: {
                 media={entryMedia(entry)}
                 limit={props.limit}
                 more={props.more ? language.route(entryPath(entry)) : undefined}
+                defer={props.defer ? language.route(entryPath(entry)) : undefined}
               />
             </li>
           )
@@ -587,7 +590,14 @@ const areaNames = {
 } as const satisfies Record<string, Key>
 
 /** An entry's title and notes: the summary, the other highlights, then breaking changes, improvements and fixes. */
-function EntryBody(props: { entry: ChangelogEntry; level: 1 | 2 | 3; media?: Slide[]; limit: number; more?: string }) {
+function EntryBody(props: {
+  entry: ChangelogEntry
+  level: 1 | 2 | 3
+  media?: Slide[]
+  limit: number
+  more?: string
+  defer?: string
+}) {
   const i18n = useI18n()
   const language = useLanguage()
   const page = () => language.route(entryPath(props.entry))
@@ -699,17 +709,21 @@ function EntryBody(props: { entry: ChangelogEntry; level: 1 | 2 | 3; media?: Sli
 
       <NoteGroup
         title={i18n.t("changelog.improvements")}
+        kind="improved"
         level={props.level + 1}
         notes={props.entry.improved}
         limit={props.limit}
         more={props.more}
+        defer={props.defer}
       />
       <NoteGroup
         title={i18n.t("changelog.fixes")}
+        kind="fixed"
         level={props.level + 1}
         notes={props.entry.fixed}
         limit={props.limit}
         more={props.more}
+        defer={props.defer}
       />
 
       <footer data-slot="meta">
@@ -737,10 +751,25 @@ function EntryBody(props: { entry: ChangelogEntry; level: 1 | 2 | 3; media?: Sli
 /**
  * Improvements or fixes. A list longer than `limit` collapses behind its heading (a disclosure that
  * says how many there are), or, on product pages, shows the first few and links to the entry's
- * page for the rest.
+ * page for the rest. With `defer`, a collapsed list holds only that link, and
+ * src/client/islands/changelog.ts moves the list in from the entry's page when it opens.
  */
-function NoteGroup(props: { title: string; level: number; notes: ChangelogNote[]; limit: number; more?: string }) {
+function NoteGroup(props: {
+  title: string
+  kind: "improved" | "fixed"
+  level: number
+  notes: ChangelogNote[]
+  limit: number
+  more?: string
+  defer?: string
+}) {
   const i18n = useI18n()
+  const more = (href: string, count: number) => (
+    <a data-slot="show-more" href={href}>
+      {i18n.t("changelog.list.more", { count })}
+      <span data-slot="sr-only"> {props.title.toLowerCase()}</span>
+    </a>
+  )
   const items = (notes: ChangelogNote[]) => (
     <ul>
       <For each={notes}>
@@ -757,7 +786,7 @@ function NoteGroup(props: { title: string; level: number; notes: ChangelogNote[]
     <Show when={props.notes.length > 0}>
       <Switch>
         <Match when={long() && !props.more}>
-          <details data-slot="group">
+          <details data-slot="group" data-kind={props.kind}>
             <summary>
               <Dynamic component={`h${props.level}`} data-slot="group-label">
                 {props.title}
@@ -765,22 +794,17 @@ function NoteGroup(props: { title: string; level: number; notes: ChangelogNote[]
               </Dynamic>
               <Chevron />
             </summary>
-            {items(props.notes)}
+            {props.defer ? more(props.defer, props.notes.length) : items(props.notes)}
           </details>
         </Match>
         <Match when={true}>
-          <section data-slot="group">
+          <section data-slot="group" data-kind={props.kind}>
             <Dynamic component={`h${props.level}`} data-slot="group-label">
               {props.title}
             </Dynamic>
             {items(long() ? props.notes.slice(0, props.limit) : props.notes)}
             <Show when={long() && props.more}>
-              {(_) => (
-                <a data-slot="show-more" href={props.more}>
-                  {i18n.t("changelog.list.more", { count: props.notes.length - props.limit })}
-                  <span data-slot="sr-only"> {props.title.toLowerCase()}</span>
-                </a>
-              )}
+              {(href) => more(href(), props.notes.length - props.limit)}
             </Show>
           </section>
         </Match>

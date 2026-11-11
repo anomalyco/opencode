@@ -1,9 +1,9 @@
-import { createUniqueId, onMount, Show } from "solid-js"
+import { Show } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Loader } from "@opencode/ui/loader"
 import { createMcpSignIn, type McpSignInFailure } from "@opencode/ui/mcp-sign-in"
-import { TextInput } from "@opencode/ui/text-input"
+import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
@@ -28,7 +28,6 @@ export function DialogMcpSignIn(props: {
   const language = useLanguage()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
-  const errorID = createUniqueId()
   const attempt = { integrationID: props.integrationID, attemptID: props.attemptID, location: props.location }
 
   const signIn = createMcpSignIn({
@@ -45,7 +44,6 @@ export function DialogMcpSignIn(props: {
 
   const view = signIn.view
   const dispatch = signIn.dispatch
-  let input: HTMLInputElement | undefined
 
   const failure = (value: McpSignInFailure) => {
     if (value.type === "auth-expired")
@@ -58,16 +56,6 @@ export function DialogMcpSignIn(props: {
 
     return language.t("mcp.timedOut", { name: props.name })
   }
-
-  const entryError = () => {
-    const error = view().entryError
-
-    if (!error) return
-
-    return error.type === "rejected" ? error.message : language.t("dialog.mcp.signIn.paste.required")
-  }
-
-  onMount(() => input?.focus({ preventScroll: true }))
 
   return (
     <Dialog size="normal">
@@ -107,40 +95,15 @@ export function DialogMcpSignIn(props: {
             </div>
           </Show>
           <Show when={view().showForm}>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                dispatch({ type: "paste.submitted" })
-              }}
-              class="flex flex-col items-start gap-5 self-stretch"
-            >
-              <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-                {language.t("dialog.mcp.signIn.paste.label")}
-                <TextInput
-                  ref={input}
-                  class="!w-full"
-                  name="redirect"
-                  placeholder={language.t("dialog.mcp.signIn.paste.placeholder")}
-                  value={view().value}
-                  readOnly={view().locked}
-                  invalid={entryError() !== undefined}
-                  aria-describedby={entryError() ? errorID : undefined}
-                  autocomplete="off"
-                  spellcheck={false}
-                  onInput={(event) => dispatch({ type: "paste.changed", value: event.currentTarget.value })}
-                />
-              </label>
-              <Show when={entryError()}>
-                {(error) => (
-                  <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
-                    {error()}
-                  </div>
-                )}
-              </Show>
-              <Button type="submit" variant="contrast" disabled={view().locked} aria-busy={view().submitting}>
-                {language.t("common.continue")}
-              </Button>
-            </form>
+            <RedirectPasteForm
+              value={view().value}
+              error={view().entryError}
+              locked={view().locked}
+              submitting={view().submitting}
+              autofocus
+              onInput={(value) => dispatch({ type: "paste.changed", value })}
+              onSubmit={() => dispatch({ type: "paste.submitted" })}
+            />
           </Show>
         </div>
       </DialogBody>

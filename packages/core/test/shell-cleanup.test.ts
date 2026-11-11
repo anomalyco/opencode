@@ -6,13 +6,16 @@ import { Shell } from "@opencode/core/shell"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { PersistentPty } from "@opencode/core/persistent-pty"
+import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
 import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const withStore = <A, E, R>(body: (fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>) =>
   withTempDir((tmp) => {
-    const layer = AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node]), [
+    const layer = AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node, PersistentPty.node]), [
       Global.node.replace(Global.layerWith({ data: tmp.path })),
+      PersistentPty.node.replace(disabledPersistentPtyLayer),
     ])
     return Effect.gen(function* () {
       const fs = yield* FSUtil.Service

@@ -43,6 +43,10 @@ export default defineConfig(({ mode }) => {
               triggers.fetch({ pattern: `${host}/*`, zone: "opencode.ai" }),
             ]
           : [],
+      // The bare host is a custom domain (it also supplies the DNS record), and cf detaches any domain
+      // not listed here. docs.<host> is the old docs host: the Worker sends its URLs to the same path
+      // on the V1 docs at /v1/docs.
+      domains: [host, `docs.${host}`],
       workersDev: false,
       previewUrls: false,
       // Workers Logs: requests, errors and console output, searchable in the Cloudflare dashboard.

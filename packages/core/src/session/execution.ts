@@ -7,12 +7,13 @@ import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionEvent } from "./event.js"
+import { SessionInbox } from "./inbox.js"
+import { SubagentReport } from "./execution/subagent-report.js"
 import { SessionRunCoordinator } from "./run-coordinator.js"
 import { SessionRunner } from "./runner/index.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
-import { SessionInbox } from "./inbox.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -23,6 +24,11 @@ export interface Interface {
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /**
+   * The durable sequence where the Session's current busy period started, if one is bound.
+   * Sequence-bounded lookups use it to find only work created by this period.
+   */
+  readonly periodStartSeq: (sessionID: SessionSchema.ID) => Effect.Effect<number | undefined>
   /**
    * Interrupt active work owned by this process. Idle interruption is a no-op. Resolves once
    * the interruption is accepted; cleanup settles asynchronously in the execution fiber.
@@ -58,6 +64,7 @@ export const layer = Layer.effect(
     const instances = yield* Instance.Service
     const bus = yield* Bus.Service
     const jobs = yield* Job.Service
+    const inbox = yield* SessionInbox.Service
     const db = (yield* Database.Service).db
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
@@ -78,9 +85,23 @@ export const layer = Layer.effect(
     const claimOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.claim(sessionID),
     })
-    const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
-      commit: () => store.release(sessionID),
+    // The report coordinator is built first so the run coordinator's hooks can use it, while its
+    // wake and draining dependencies bind late to the coordinator the hooks belong to.
+    const holder: {
+      coordinator?: SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError, InterruptReason>
+    } = {}
+    const subagentReport = SubagentReport.make({
+      store,
+      jobs,
+      inbox,
+      wake: (sessionID) =>
+        Effect.suspend(() => (holder.coordinator ? holder.coordinator.wake(sessionID) : Effect.void)),
+      draining: Effect.suspend<ReadonlySet<SessionSchema.ID>, never, never>(() =>
+        holder.coordinator ? holder.coordinator.draining : Effect.succeed(new Set<SessionSchema.ID>()),
+      ),
     })
+    // Why a Session's execution is being interrupted, read from the coordinator once it exists.
+    let interruption: (sessionID: SessionSchema.ID) => InterruptReason | undefined = () => undefined
     const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
       force: boolean,
@@ -91,7 +112,14 @@ export const layer = Layer.effect(
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       const result = yield* SessionRunner.Service.use((runner) =>
-        runner.drain({ sessionID, force, continuation, promotable, stepped }),
+        runner.drain({
+          sessionID,
+          force,
+          continuation,
+          promotable,
+          stepped,
+          interruption: () => interruption(sessionID),
+        }),
       ).pipe(
         instances.provide(session),
         Effect.tapCause((cause) =>
@@ -110,7 +138,17 @@ export const layer = Layer.effect(
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
-          bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
+          Effect.gen(function* () {
+            // Bind before the started publication yields to SQLite so a cancel arriving during
+            // that window still matches this generation.
+            const before = yield* jobs.currentGeneration(sessionID)
+            const event = yield* bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID))
+            const bound = before?.running ? before : yield* jobs.currentGeneration(sessionID)
+            subagentReport.started(sessionID, {
+              startedSeq: event.durable.seq,
+              boundGeneration: bound?.running ? bound.generation : undefined,
+            })
+          }),
         ),
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
@@ -119,35 +157,32 @@ export const layer = Layer.effect(
           sessionID,
           Effect.gen(function* () {
             const outcome = terminal(exit, reason)
-            if (outcome.type === "succeeded") {
-              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
+            if (outcome.type === "interrupted" && outcome.reason === "shutdown") {
+              subagentReport.clear(sessionID)
+              // Shutdown keeps the claim and the running Job row for restart continuity.
+              yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
               return
             }
-            if (outcome.type === "interrupted") {
-              // Deliberate stops release the claim; shutdown keeps it for restart continuity.
-              if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
-              yield* bus.publish(
-                SessionEvent.Execution.Interrupted,
-                { sessionID, reason: outcome.reason },
-                outcome.reason === "shutdown" ? undefined : releaseOnCommit(sessionID),
-              )
-              return
-            }
-            yield* bus.publish(
-              SessionEvent.Execution.Failed,
-              {
-                sessionID,
-                error: outcome.error,
-              },
-              releaseOnCommit(sessionID),
+            // Classify and claim the Job generation before cancelling it: the settlement commit
+            // owns the outbox row, and a cancel must not race a foreground classification.
+            const settlement = yield* subagentReport.prepare(sessionID, outcome)
+            if (outcome.type === "interrupted") yield* jobs.cancel(sessionID)
+            yield* publishTerminal(bus, sessionID, outcome, settlement.commit)
+            // Post-commit delivery is best effort: a retained outbox marker is recovered on the
+            // next restart, and a delivery defect must not fail the settled hook.
+            yield* settlement.deliver.pipe(
+              Effect.ignoreCause({ log: "Error", message: "Subagent report delivery failed" }),
             )
           }),
         ),
     })
+    holder.coordinator = coordinator
 
+    interruption = coordinator.interruption
     return Service.of({
       active: coordinator.active,
       isActive: coordinator.isActive,
+      periodStartSeq: subagentReport.periodStartSeq,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
           const interrupted = yield* coordinator.interrupt(sessionID, "user")
@@ -173,10 +208,24 @@ export const layer = Layer.effect(
   }),
 )
 
+/** Publishes the terminal event with the settlement's atomic commit. */
+function publishTerminal(
+  bus: Bus.Interface,
+  sessionID: SessionSchema.ID,
+  outcome: ReturnType<typeof terminal>,
+  commit: (seq: number) => Effect.Effect<void>,
+) {
+  if (outcome.type === "succeeded") return bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { commit })
+  if (outcome.type === "interrupted") {
+    return bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason }, { commit })
+  }
+  return bus.publish(SessionEvent.Execution.Failed, { sessionID, error: outcome.error }, { commit })
+}
+
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node],
+  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionInbox.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
@@ -187,6 +236,7 @@ export const noopLayer = Layer.succeed(
     isActive: () => Effect.succeed(false),
     resume: () => Effect.void,
     wake: () => Effect.void,
+    periodStartSeq: () => Effect.succeed(undefined),
     interrupt: () => Effect.succeed(false),
     awaitIdle: () => Effect.void,
   }),

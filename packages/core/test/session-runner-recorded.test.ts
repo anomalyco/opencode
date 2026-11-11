@@ -125,6 +125,7 @@ const execution = (llmClient: Layer.Layer<LLMClientService>) =>
         wake: coordinator.wake,
         interrupt: (sessionID) => coordinator.interrupt(sessionID),
         awaitIdle: coordinator.awaitIdle,
+        periodStartSeq: () => Effect.succeed(undefined),
       })
     }),
   ).pipe(Layer.provide(runnerLayer(llmClient)), Layer.orDie)
@@ -247,6 +248,7 @@ describe("SessionRunnerLLM recorded", () => {
         "session.instructions.updated.2",
         "session.inbox.delivered.1",
         "session.step.started.1",
+        "session.step.first-token.1",
         "session.text.started.1",
         "session.text.ended.1",
         "session.step.streamed.1",

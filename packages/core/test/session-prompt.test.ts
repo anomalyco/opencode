@@ -75,6 +75,7 @@ const execution = Layer.succeed(
         wakeCalls.push(sessionID)
       }),
     awaitIdle: () => Effect.void,
+    periodStartSeq: () => Effect.succeed(undefined),
   }),
 )
 const mediaDirectory = "/media"

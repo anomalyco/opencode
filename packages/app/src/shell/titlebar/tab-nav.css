@@ -77,7 +77,7 @@
 
 @media (hover: hover) {
   [data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(:hover, :has(:focus-visible))
-    [data-slot="tab-status"] {
+    [data-slot="tab-close"]:has(> button) [data-slot="tab-status"] {
     opacity: 0;
   }
 }
@@ -462,6 +462,67 @@
   }
 }
 
+/* Under a project header the avatar is left out, but shortcut numbers still show in its slot. */
+[data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: hidden;
+}
+
+[data-shortcut-hints] [data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: visible;
+}
+
+/* Holding the mod key slides each tab's initial out as its shortcut number rises in. */
+[data-titlebar-tab]
+  :is(
+    [data-slot="project-avatar-initial"],
+    [data-slot="project-avatar-label"],
+    [data-slot="tab-icon-face"],
+    [data-slot="tab-shortcut-face"]
+  ) {
+  transition:
+    opacity 160ms ease-out,
+    transform 160ms ease-out,
+    filter 160ms ease-out,
+    visibility 160ms;
+}
+
+[data-titlebar-tab] [data-slot="project-avatar-initial"] {
+  display: block;
+}
+
+[data-titlebar-tab] [data-slot="project-avatar-label"] {
+  opacity: 0;
+  transform: translateY(6px);
+  filter: blur(1px);
+}
+
+[data-shortcut-hints] [data-titlebar-tab] [data-slot="project-avatar-label"] {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+[data-shortcut-hints] [data-titlebar-tab] [data-slot="project-avatar-initial"]:has(~ [data-slot="project-avatar-label"]),
+[data-shortcut-hints] [data-titlebar-tab] [data-slot="tab-icon-face"]:has(~ [data-slot="tab-shortcut-face"]) {
+  opacity: 0;
+  transform: translateY(-6px);
+  filter: blur(1px);
+}
+
+/* A draft has no avatar, so its neutral tile fades in under the rising number. */
+[data-titlebar-tab] [data-slot="tab-shortcut-face"] {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-shortcut-hints] [data-titlebar-tab] [data-slot="tab-shortcut-face"] {
+  opacity: 1;
+}
+
 /* A prompt that arrives in a background tab rings it once, like the TUI's prompt pulse. */
 [data-titlebar-tab] [data-slot="tab-prompt-pulse"] {
   position: absolute;
@@ -486,5 +547,15 @@
 :root[data-motion="reduce"] {
   [data-titlebar-tab] [data-slot="tab-prompt-pulse"] {
     animation: none;
+  }
+
+  [data-titlebar-tab]
+    :is(
+      [data-slot="project-avatar-initial"],
+      [data-slot="project-avatar-label"],
+      [data-slot="tab-icon-face"],
+      [data-slot="tab-shortcut-face"]
+    ) {
+    transition: none;
   }
 }
