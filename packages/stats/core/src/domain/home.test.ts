@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test"
 import type { ModelStatMetric } from "./model"
 import type { RetentionMetricRow } from "./home"
 
-process.env.SST_RESOURCE_App = JSON.stringify({ name: "opencode", stage: "test" })
-process.env.SST_RESOURCE_StatsDatabase = JSON.stringify({ url: "mysql://localhost/stats" })
+process.env.DATA_DATABASE_HOST = "localhost"
+process.env.DATA_DATABASE_USERNAME = "stats"
+process.env.DATA_DATABASE_PASSWORD = "stats"
 
 const { buildRetentionEntries, buildStatsHomeData, normalizeStatRows } = await import("./home")
 

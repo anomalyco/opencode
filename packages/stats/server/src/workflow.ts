@@ -69,10 +69,6 @@ export class StatsSyncWorkflow extends WorkflowEntrypoint<unknown, StatsSyncPara
   }
 }
 
-// SST's generated entry wraps the default export; workerd rejects a module whose
-// default export is undefined.
-export default {}
-
 function run<A>(effect: Effect.Effect<A, SyncStatsError, Layer.Success<typeof runtimeLayer>>) {
   return Effect.runPromise(effect.pipe(Effect.provide(runtimeLayer)))
 }

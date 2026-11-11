@@ -2,7 +2,9 @@ export * as McpClient from "./client.js"
 
 import { pathToFileURL } from "node:url"
 import {
+  type AuthProvider,
   Client,
+  InsufficientScopeError,
   OAuthError,
   OAuthErrorCode,
   ProtocolError,
@@ -20,7 +22,6 @@ import {
   type ElicitResult,
   type GetPromptResult,
   type Implementation,
-  type OAuthClientProvider,
   type Prompt,
   type ReadResourceResult,
   type Resource,
@@ -192,8 +193,8 @@ export interface ConnectOptions {
   readonly config: typeof ConfigMCP.Server.Type | Attached
   /** Resolves a relative stdio `cwd` and is the default one, and is the root `roots/list` answers with. */
   readonly directory: string
-  /** Remote only. A provider with no stored token and a no-op redirect ends in UnauthorizedError → needs_auth. */
-  readonly authProvider?: OAuthClientProvider
+  /** Remote only. A 401 the provider cannot recover from ends in UnauthorizedError → needs_auth. */
+  readonly authProvider?: AuthProvider
   readonly elicitation?: ElicitationHandler
   readonly clientInfo?: Implementation
   /** False declares no roots and leaves `roots/list` unanswered, for a connection no one directory owns. */
@@ -341,7 +342,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       return yield* initialize(transport)
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-    const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory }, options.authProvider)
+    const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
@@ -567,7 +568,8 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   }
 
   const error = Cause.squash(exit.cause)
-  if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server, message: error.message })
+  if (error instanceof UnauthorizedError || error instanceof InsufficientScopeError)
+    return yield* new NeedsAuthError({ server, message: error.message })
   if (error instanceof UnsupportedProtocolVersionError)
     return yield* new ConnectError({
       server,

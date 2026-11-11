@@ -4,15 +4,7 @@ import { catalogIdentity, type CatalogSnapshot } from "./domain/catalog-identity
 import type { StatPeriodScope } from "./domain/stat"
 import type { R2SqlData } from "./r2-sql"
 
-process.env.SST_RESOURCE_App = JSON.stringify({ name: "opencode", stage: "test" })
-process.env.SST_RESOURCE_R2Sql = JSON.stringify({
-  accountId: "account",
-  bucket: "bucket",
-  namespace: "inference",
-  table: "generation",
-})
-process.env.SST_RESOURCE_StatsSyncConfig = JSON.stringify({ dataset: "zen" })
-process.env.SST_RESOURCE_StatsHiddenModels = JSON.stringify({ value: "secret-model" })
+process.env.DATA_HIDDEN_MODELS = "secret-model"
 
 const { GeoStatRepo } = await import("./domain/geo")
 const { ModelStatRepo } = await import("./domain/model")

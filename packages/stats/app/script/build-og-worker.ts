@@ -1,5 +1,5 @@
-// Builds the StatsOg Worker (src/og/worker.ts) into .og-worker: the bundle, the Wasm engines, and the site's OpenTUI
-// Mono fonts as TrueType (Satori can't read WOFF2). infra/stats.ts runs this and uploads every file there. It is
+// Builds the OG Worker (src/og/worker.ts) into .og-worker: the bundle, the Wasm engines, and the site's OpenTUI
+// Mono fonts as TrueType (Satori can't read WOFF2). services/data/script/build.ts runs this and deploys every file there. It is
 // outside .output because the site's own build replaces that directory. test/og.test.ts builds it too, so PR CI
 // catches a broken build before the deploy does.
 import { mkdir, rm } from "node:fs/promises"

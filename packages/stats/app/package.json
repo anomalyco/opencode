@@ -35,7 +35,6 @@
     "nitro": "3.0.260903-beta",
     "satori": "0.63.2",
     "solid-js": "catalog:",
-    "sst": "catalog:",
     "vite": "8.2.4"
   },
   "devDependencies": {

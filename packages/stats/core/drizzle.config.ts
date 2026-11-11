@@ -1,4 +1,4 @@
-import { Resource } from "sst/resource"
+import { Resource } from "./src/resource"
 import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({

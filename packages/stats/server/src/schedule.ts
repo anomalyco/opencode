@@ -1,4 +1,4 @@
-// Keep in sync with the StatsSyncCron schedules in infra/stats.ts.
+// Keep in sync with the schedules in services/data/sync.config.ts.
 export const HOURLY_SCHEDULE = "5 * * * *"
 export const HISTORY_SCHEDULE = "20 3 * * *"
 

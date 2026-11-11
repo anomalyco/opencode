@@ -1,4 +1,4 @@
-import { Resource } from "sst/resource"
+import { Resource } from "../resource"
 import type { R2SqlData } from "../r2-sql"
 import type { CatalogIdentity } from "./catalog-identity"
 import type { GeoStatAggregate } from "./geo"
