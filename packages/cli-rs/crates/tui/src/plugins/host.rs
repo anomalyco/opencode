@@ -228,15 +228,7 @@ impl Host for Tui {
     }
 
     fn markdown(&self, text: &str) -> AnyWidget {
-        let page = self.page();
-        let conceal = self.config().info.session.as_ref().and_then(|session| session.markdown)
-            != Some(opencode_local::cli_config::Markdown::Source);
-        let syntax = opencode_ui::code::syntax_theme(&page);
-        let markdown = opencode_ui::markdown::view(&self.app, &page, &syntax, &code_blocks(self), conceal, false);
-        // The `/btw` answer links sessions, as a message does.
-        crate::features::session_links::pin(self, &markdown);
-        markdown.set_markdown(text);
-        markdown.as_any()
+        markdown(self).set_markdown(text).as_any()
     }
 
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
@@ -832,6 +824,16 @@ pub fn route(tui: &Tui, id: &str, name: &str) -> Option<RouteMount> {
 /// The plugins' Markdown code-block renderers in the page theme.
 pub fn code_blocks(tui: &Tui) -> CodeBlockRenderers {
     tui.plugins.code_blocks(&tui.page())
+}
+
+/// An empty [`abi::Node::Markdown`] widget: Markdown in the page theme with the plugins' fences, markers hidden unless
+/// `session.markdown` is `source`.
+pub fn markdown(tui: &Tui) -> opentui::widget::Markdown {
+    let page = tui.page();
+    let conceal = tui.config().info.session.as_ref().and_then(|session| session.markdown)
+        != Some(opencode_local::cli_config::Markdown::Source);
+    let syntax = opencode_ui::code::syntax_theme(&page);
+    opencode_ui::markdown::view(&tui.app, &page, &syntax, &code_blocks(tui), conceal, false)
 }
 
 #[cfg(test)]

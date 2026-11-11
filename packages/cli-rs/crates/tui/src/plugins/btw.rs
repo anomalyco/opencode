@@ -23,8 +23,10 @@ const INSTRUCTIONS: &str = "The user is asking a quick side question about the c
 Answer directly and concisely in markdown from what you already know. \
 Do not call any tools and do not take any actions.";
 
+pub const ID: &str = "opencode.btw";
+
 pub fn plugin() -> abi::Plugin {
-    abi::Plugin { id: "opencode.btw", setup }
+    abi::Plugin { id: ID, setup }
 }
 
 #[derive(Default)]
