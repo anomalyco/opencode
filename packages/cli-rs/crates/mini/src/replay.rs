@@ -228,8 +228,10 @@ pub struct Transcript {
     fragments: Fragments,
     pending: HashMap<String, Pending>,
     promoted: HashSet<String>,
-    /// Events that arrive while a resize replay lists the messages again.
-    buffered: Option<Vec<V2Event>>,
+    /// The resize replay in flight, and the events that wait for it.
+    relist: Option<Relist>,
+    /// The tickets handed out to resize replays.
+    relists: u64,
     /// Rows printed only locally, newest last (`localRows`).
     local: Vec<Commit>,
     /// With tools hidden, a message's text waits for its step to end, and is dropped when the message turns out
@@ -251,6 +253,13 @@ pub struct Transcript {
     admitted: HashSet<String>,
     /// The prompt turn this client waits for (`state.wait`).
     wait: Option<Wait>,
+}
+
+/// A resize replay in flight. Its read applies only while it holds the current ticket.
+#[derive(Debug)]
+struct Relist {
+    ticket: u64,
+    events: Vec<V2Event>,
 }
 
 /// A prompt turn in flight (`Wait`): the error the session's terminal event names, shown after it settles unless a
@@ -306,7 +315,8 @@ impl Transcript {
             fragments: Fragments::default(),
             pending: HashMap::new(),
             promoted: HashSet::new(),
-            buffered: None,
+            relist: None,
+            relists: 0,
             local: Vec::new(),
             quiet: Vec::new(),
             tool_messages: HashSet::new(),
@@ -401,19 +411,34 @@ impl Transcript {
             .collect();
     }
 
-    /// Starts a resize replay: events wait until [`Self::replayed`].
-    pub fn begin_replay(&mut self) {
-        self.buffered.get_or_insert_with(Vec::new);
+    /// Starts a resize replay: events wait until [`Self::replayed`]. Its read applies while
+    /// [`Self::relisting`] holds for the returned ticket.
+    pub fn begin_replay(&mut self) -> u64 {
+        self.relists += 1;
+        self.relist = Some(Relist { ticket: self.relists, events: Vec::new() });
+        self.relists
     }
 
     pub fn replaying(&self) -> bool {
-        self.buffered.is_some()
+        self.relist.is_some()
+    }
+
+    /// Whether the resize replay of `ticket` is still the one in flight.
+    pub fn relisting(&self, ticket: u64) -> bool {
+        self.relist.as_ref().is_some_and(|relist| relist.ticket == ticket)
+    }
+
+    /// The stream dropped. A resize replay in flight is abandoned, with its events, as TS abandons one of a stale
+    /// attempt: the reconnect lists everything again, and a resize relist must not apply its older list after it.
+    pub fn disconnected(&mut self) {
+        self.connected = false;
+        self.relist = None;
     }
 
     /// Ends a resize replay (`performResizeReplay`) after the terminal was cleared: the listed messages, then the
     /// rows only this client printed, then the events that waited.
     pub fn replayed(&mut self, messages: &[SessionMessageInfo], active: bool) -> Output {
-        let buffered = self.buffered.take().unwrap_or_default();
+        let buffered = self.relist.take().map(|relist| relist.events).unwrap_or_default();
         self.message_ids.clear();
         self.errors.clear();
         self.fragments.clear();
@@ -448,7 +473,7 @@ impl Transcript {
     /// apply.
     pub fn abort_replay(&mut self) -> Output {
         let mut output = Output::default();
-        for event in self.buffered.take().unwrap_or_default() {
+        for event in self.relist.take().map(|relist| relist.events).unwrap_or_default() {
             output.extend(self.event(&event));
         }
         output
@@ -502,7 +527,7 @@ impl Transcript {
 
     /// Commits of a live event remembered as local rows: streamed text is remembered whole.
     fn remember_all(&mut self, commits: &[Commit]) {
-        if self.initial || self.buffered.is_some() {
+        if self.initial || self.relist.is_some() {
             return;
         }
         for commit in commits {
@@ -884,8 +909,8 @@ impl Transcript {
     /// `apply`: one live event. A form of no session goes to the footer; events of other sessions go to the
     /// subagent tracker, and so do this session's tool events.
     pub fn event(&mut self, event: &V2Event) -> Output {
-        if let Some(buffered) = &mut self.buffered {
-            buffered.push(event.clone());
+        if let Some(relist) = &mut self.relist {
+            relist.events.push(event.clone());
             return Output::default();
         }
         let Some(session) = session_of(event) else {
@@ -2112,5 +2137,322 @@ mod tests {
         assert_eq!(fragments.restore(&part, "abcdef"), Restore::Append("ef".into()));
         assert_eq!(fragments.restore(&part, "xyz"), Restore::Conflict);
         assert_eq!(fragments.end(&part, "final").previous, "abcdef");
+    }
+
+    /// The hydration model (M6): a server that makes prompts and streams answers, a stream that drops, reads that
+    /// return in any order, and resizes. After every quiet point, the rows since the last clear show each listed
+    /// message exactly once and whole. The harness drives [`Transcript`] as `Mini::incoming`, `Mini::resized` and
+    /// `Mini::replay_on_resize` do.
+    mod model {
+        use super::*;
+        use std::collections::VecDeque;
+
+        /// SplitMix64.
+        struct Rng(u64);
+
+        impl Rng {
+            fn next(&mut self) -> u64 {
+                self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+                let mut z = self.0;
+                z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+                z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+                z ^ (z >> 31)
+            }
+
+            fn below(&mut self, n: usize) -> usize {
+                (self.next() % n as u64) as usize
+            }
+        }
+
+        fn env(name: &str, default: u64) -> u64 {
+            std::env::var(name).ok().and_then(|value| value.parse().ok()).unwrap_or(default)
+        }
+
+        #[derive(Clone, Copy, Debug)]
+        enum Command {
+            /// The server admits and delivers a prompt.
+            User,
+            /// The server starts an assistant message.
+            Step,
+            /// A text delta of the current assistant message.
+            Delta,
+            /// The current assistant message's text ends.
+            End,
+            /// The next event reaches the UI.
+            Deliver,
+            Resize,
+            /// A read in flight returns, by index.
+            Complete(usize),
+            /// A resize read in flight fails, by index.
+            Fail(usize),
+            /// The stream drops: its queued events are lost, and the reconnect lists again.
+            Drop,
+        }
+
+        fn command(rng: &mut Rng) -> Command {
+            match rng.below(20) {
+                0..=1 => Command::User,
+                2 => Command::Step,
+                3..=6 => Command::Delta,
+                7 => Command::End,
+                8..=12 => Command::Deliver,
+                13..=14 => Command::Resize,
+                15..=17 => Command::Complete(rng.below(4)),
+                18 => Command::Fail(rng.below(4)),
+                _ => Command::Drop,
+            }
+        }
+
+        enum Read {
+            Hydrate,
+            Relist(u64),
+        }
+
+        /// A read the server answered when it was sent; the UI sees the answer when it completes.
+        struct Pending {
+            read: Read,
+            listed: Vec<SessionMessageInfo>,
+        }
+
+        struct World {
+            /// The server's messages: ID, whether a prompt, and text.
+            messages: Vec<(String, bool, String)>,
+            current: Option<usize>,
+            stream: VecDeque<V2Event>,
+            reads: Vec<Pending>,
+            /// The stream's events wait behind a hydration in flight.
+            hydrating: bool,
+            transcript: Transcript,
+            /// The rows since the last clear.
+            screen: Vec<Commit>,
+            resize_queued: bool,
+            next: usize,
+        }
+
+        impl World {
+            fn new() -> Self {
+                let mut world = Self {
+                    messages: Vec::new(),
+                    current: None,
+                    stream: VecDeque::new(),
+                    reads: Vec::new(),
+                    hydrating: true,
+                    transcript: Transcript::new("ses_1", true, true, true, None),
+                    screen: Vec::new(),
+                    resize_queued: false,
+                    next: 0,
+                };
+                world.issue(Read::Hydrate);
+                world
+            }
+
+            fn id(&mut self) -> usize {
+                self.next += 1;
+                self.next
+            }
+
+            fn listed(&self) -> Vec<SessionMessageInfo> {
+                self.messages
+                    .iter()
+                    .map(|(id, user, text)| match user {
+                        true => message(json!({ "id": id, "type": "user", "text": text })),
+                        false => message(json!({ "id": id, "type": "assistant",
+                            "content": [{ "type": "text", "text": text }] })),
+                    })
+                    .collect()
+            }
+
+            fn issue(&mut self, read: Read) {
+                let listed = self.listed();
+                self.reads.push(Pending { read, listed });
+            }
+
+            fn show(&mut self, output: Output) {
+                self.screen.extend(output.commits);
+            }
+
+            fn run(&mut self, command: Command) {
+                match command {
+                    Command::User => {
+                        let id = format!("msg_u{}", self.id());
+                        let text = format!("u{}", self.next);
+                        let item = json!({ "type": "user", "payload": { "text": text }, "delivery": "steer" });
+                        self.stream.push_back(event("session.inbox.enqueued", json!({ "inboxID": id, "item": item })));
+                        self.stream.push_back(event("session.inbox.delivered", json!({ "inboxID": id })));
+                        self.messages.push((id, true, text));
+                    }
+                    Command::Step => {
+                        let id = format!("msg_a{}", self.id());
+                        self.messages.push((id, false, String::new()));
+                        self.current = Some(self.messages.len() - 1);
+                    }
+                    Command::Delta => {
+                        let Some(index) = self.current else { return };
+                        let token = format!("[{}]", self.id());
+                        let message = &mut self.messages[index];
+                        message.2.push_str(&token);
+                        self.stream.push_back(delta(&message.0, &token));
+                    }
+                    Command::End => {
+                        let Some(index) = self.current.take() else { return };
+                        let (id, _, text) = &self.messages[index];
+                        let data = json!({ "assistantMessageID": id, "ordinal": 0, "text": text });
+                        self.stream.push_back(event("session.text.ended", data));
+                    }
+                    Command::Deliver => {
+                        if self.hydrating {
+                            return;
+                        }
+                        let Some(event) = self.stream.pop_front() else { return };
+                        let output = self.transcript.event(&event);
+                        self.show(output);
+                    }
+                    Command::Resize => self.resize(),
+                    Command::Complete(index) => self.complete(index, true),
+                    Command::Fail(index) => self.complete(index, false),
+                    // The connect loop notices a drop only once its hydration was posted.
+                    Command::Drop if self.hydrating => {}
+                    Command::Drop => {
+                        self.stream.clear();
+                        self.transcript.disconnected();
+                        self.hydrating = true;
+                        self.issue(Read::Hydrate);
+                    }
+                }
+            }
+
+            /// `Mini::replay_on_resize`.
+            fn resize(&mut self) {
+                if !self.transcript.replay || !self.transcript.connected {
+                    return;
+                }
+                if self.transcript.replaying() {
+                    self.resize_queued = true;
+                    return;
+                }
+                let ticket = self.transcript.begin_replay();
+                self.issue(Read::Relist(ticket));
+            }
+
+            fn complete(&mut self, index: usize, ok: bool) {
+                if self.reads.is_empty() {
+                    return;
+                }
+                let index = index % self.reads.len();
+                if !ok && matches!(self.reads[index].read, Read::Hydrate) {
+                    return;
+                }
+                let pending = self.reads.remove(index);
+                match pending.read {
+                    Read::Hydrate => {
+                        self.hydrating = false;
+                        self.transcript.inbox(&[]);
+                        let output = self.transcript.hydrate(&pending.listed, false);
+                        self.show(output);
+                        if std::mem::take(&mut self.resize_queued) {
+                            self.resize();
+                        }
+                    }
+                    Read::Relist(ticket) if !self.transcript.relisting(ticket) => {}
+                    Read::Relist(_) => {
+                        let output = match ok {
+                            true => {
+                                self.screen.clear();
+                                self.transcript.inbox(&[]);
+                                self.transcript.replayed(&pending.listed, false)
+                            }
+                            false => self.transcript.abort_replay(),
+                        };
+                        self.show(output);
+                        if std::mem::take(&mut self.resize_queued) {
+                            self.resize();
+                        }
+                    }
+                }
+            }
+
+            fn quiet(&self) -> bool {
+                self.reads.is_empty() && !self.hydrating && self.stream.is_empty()
+            }
+
+            fn drain(&mut self) {
+                while !self.quiet() {
+                    if !self.reads.is_empty() {
+                        self.complete(0, true);
+                    }
+                    self.run(Command::Deliver);
+                }
+            }
+
+            /// Every message shows once and whole since the last clear, and nothing else shows.
+            fn check(&self) -> Result<(), String> {
+                for (id, user, text) in &self.messages {
+                    let rows: Vec<&Commit> =
+                        self.screen.iter().filter(|row| row.message_id.as_deref() == Some(id.as_str())).collect();
+                    let shown = match user {
+                        true => rows.iter().filter(|row| row.kind == EntryKind::User).count().to_string(),
+                        false => rows.iter().map(|row| row.text.as_str()).collect(),
+                    };
+                    let expected = if *user { "1".to_owned() } else { text.clone() };
+                    if shown != expected {
+                        return Err(format!("{id} shows {shown:?}, expected {expected:?}"));
+                    }
+                }
+                let known = |row: &&Commit| self.messages.iter().any(|(id, _, _)| row.message_id.as_ref() == Some(id));
+                if let Some(row) = self.screen.iter().find(|row| !known(row)) {
+                    return Err(format!("unknown row {row:?}"));
+                }
+                Ok(())
+            }
+        }
+
+        fn play(commands: &[Command]) -> Result<(), String> {
+            let mut world = World::new();
+            for (step, command) in commands.iter().enumerate() {
+                world.run(*command);
+                if world.quiet() {
+                    world.check().map_err(|error| format!("after {step}: {error}"))?;
+                }
+            }
+            world.drain();
+            world.check()
+        }
+
+        /// Removes one command at a time while the run still fails.
+        fn shrink(mut commands: Vec<Command>) -> Vec<Command> {
+            let mut index = 0;
+            while index < commands.len() {
+                let mut shorter = commands.clone();
+                shorter.remove(index);
+                if play(&shorter).is_err() {
+                    commands = shorter;
+                } else {
+                    index += 1;
+                }
+            }
+            commands
+        }
+
+        /// S4: a relist in flight when the stream drops must not clear the reconnect's rows and print its older list.
+        #[test]
+        fn a_drop_during_a_relist_keeps_the_reconnects_rows() {
+            let commands = [Command::Complete(0), Command::Resize, Command::User, Command::Drop, Command::Complete(1)];
+            assert_eq!(play(&commands), Ok(()));
+        }
+
+        #[test]
+        fn every_quiet_screen_shows_the_listed_messages_once() {
+            let seed = env("MODEL_SEED", 1);
+            let cases = env("MODEL_CASES", 300);
+            let len = env("MODEL_LEN", 40) as usize;
+            let mut rng = Rng(seed);
+            for case in 0..cases {
+                let commands: Vec<Command> = (0..len).map(|_| command(&mut rng)).collect();
+                if let Err(error) = play(&commands) {
+                    let shrunk = shrink(commands);
+                    panic!("seed {seed} case {case}: {error}\nshrunk: {shrunk:?}\n{:?}", play(&shrunk));
+                }
+            }
+        }
     }
 }
