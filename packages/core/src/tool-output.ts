@@ -77,39 +77,22 @@ const layer = Layer.effect(
       if (lines.length <= limits.maxLines && totalBytes <= limits.maxBytes)
         return { ...result, metadata: { ...result.metadata, truncated: false } }
 
-      const kept: string[] = []
-      let bytes = 0
-      let partial: { line: number; shown: number; total: number } | undefined
-      for (const line of lines.slice(0, limits.maxLines)) {
-        const separator = kept.length > 0 ? 1 : 0
-        const size = Buffer.byteLength(line, "utf-8")
-        if (bytes + separator + size <= limits.maxBytes) {
-          kept.push(line)
-          bytes += separator + size
-          continue
-        }
-        // A line longer than the space left (a long log line, or a whole JSON result on one line) shows as much of
-        // its start as fits rather than vanishing.
-        const prefix = utf8Prefix(line, limits.maxBytes - bytes - separator)
-        if (prefix.length > 0) {
-          kept.push(prefix)
-          partial = { line: kept.length, shown: Buffer.byteLength(prefix, "utf-8"), total: size }
-        }
-        break
-      }
+      // One cut: the end of the last line allowed, or the byte limit, whichever comes first. A line longer than what
+      // is left (a long log line, or a whole JSON result on one line) shows its start instead of vanishing.
+      const byLines = lineEnd(text, limits.maxLines)
+      const cut = Math.min(byLines, byteBoundary(text, limits.maxBytes))
+      const shown = text.slice(0, cut)
       const file = path.join(directory, fileName())
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
-      const whole = partial === undefined ? kept.length : kept.length - 1
-      const lineRange = whole > 0 ? `lines 1-${whole} of ${lines.length}` : undefined
-      const cut =
-        partial === undefined
-          ? undefined
-          : `the first ${partial.shown} of ${partial.total} bytes of line ${partial.line}${lineRange === undefined ? ` of ${lines.length}` : ""}`
-      const shown = [lineRange, cut].filter((part) => part !== undefined).join(" and ") || `0 lines of ${lines.length}`
-      const marker = `[showing ${shown}; full output saved to ${file}]`
+      const shownLines = shown === "" ? 0 : shown.split("\n").length
+      const lineCut = cut < text.length && text[cut] !== "\n"
+      const marker =
+        cut === byLines
+          ? `[showing lines 1-${shownLines} of ${lines.length}; full output saved to ${file}]`
+          : `[showing ${Buffer.byteLength(shown, "utf-8")} of ${totalBytes} bytes (${shownLines === 0 ? "0 lines" : `lines 1-${shownLines}`} of ${lines.length}${lineCut ? ", last line cut" : ""}); full output saved to ${file}]`
       const bounded: Tool.Content[] = []
-      let remaining = kept.join("\n").length
+      let remaining = shown.length
       let seenText = false
       let marked = false
       for (const item of content) {
@@ -176,12 +159,32 @@ export const node = makeLocationNode({
   deps: [FSUtil.node, Global.node, cleanupNode],
 })
 
-/** The longest start of `line` that fits in `budget` UTF-8 bytes without splitting a character. */
-function utf8Prefix(line: string, budget: number) {
-  if (budget <= 0) return ""
-  const bytes = Buffer.from(line, "utf-8")
-  let end = Math.min(budget, bytes.length)
-  // Back up over continuation bytes so the cut lands on a character boundary.
-  while (end > 0 && end < bytes.length && (bytes[end]! & 0xc0) === 0x80) end--
-  return bytes.subarray(0, end).toString("utf-8")
+/** The index just before the newline that ends line `count`, or the end of `text` when it has no more lines. */
+function lineEnd(text: string, count: number) {
+  let index = -1
+  for (let line = 0; line < count; line++) {
+    index = text.indexOf("\n", index + 1)
+    if (index === -1) return text.length
+  }
+  return index
+}
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+/**
+ * The longest prefix of `text`, as a string index, that fits in `budget` UTF-8 bytes and ends between user-perceived
+ * characters, so a cut never splits a code point, a surrogate pair, or a multi-code-point emoji (ZWJ sequences, skin
+ * tones, flags, keycaps).
+ */
+function byteBoundary(text: string, budget: number) {
+  const bytes = Buffer.from(text, "utf-8")
+  if (bytes.length <= budget) return text.length
+  let end = Math.max(0, budget)
+  // Back up over UTF-8 continuation bytes to a code point boundary.
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end--
+  const index = bytes.subarray(0, end).toString("utf-8").length
+  // Then back up to a grapheme boundary. Clusters are short, so a window before the cut is enough to find it.
+  const start = Math.max(0, index - 64)
+  const boundaries = Array.from(graphemes.segment(text.slice(start, index + 64)), (segment) => start + segment.index)
+  return boundaries.findLast((boundary) => boundary <= index) ?? index
 }

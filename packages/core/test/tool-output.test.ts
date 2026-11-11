@@ -48,7 +48,7 @@ describe("ToolOutput", () => {
     ),
   )
 
-  it.live("fills the byte limit with the start of the line that does not fit", () =>
+  it.live("cuts at the byte limit, inside a line when it falls there", () =>
     withStore(
       (output) =>
         Effect.gen(function* () {
@@ -58,7 +58,7 @@ describe("ToolOutput", () => {
             {
               type: "text",
               text: expect.stringMatching(
-                /^\[showing lines 1-1 of 2 and the first 1 of 3 bytes of line 2; full output saved to .+\]$/,
+                /^\[showing 5 of 7 bytes \(lines 1-2 of 2, last line cut\); full output saved to .+\]$/,
               ),
             },
           ])
@@ -78,7 +78,9 @@ describe("ToolOutput", () => {
             {
               type: "text",
               text: expect.stringMatching(
-                new RegExp(`^\\[showing the first 20 of ${text.length} bytes of line 1 of 1; full output saved to .+\\]$`),
+                new RegExp(
+                  `^\\[showing 20 of ${text.length} bytes \\(lines 1-1 of 1, last line cut\\); full output saved to .+\\]$`,
+                ),
               ),
             },
           ])
@@ -87,18 +89,24 @@ describe("ToolOutput", () => {
     ),
   )
 
-  it.live("cuts a long line on a character boundary", () =>
+  it.live("never splits a character or an emoji at the cut", () =>
     withStore(
       (output) =>
         Effect.gen(function* () {
-          const result = yield* output.truncate({ content: [{ type: "text", text: "ab✓✓✓" }] })
-          expect(result.content).toEqual([
-            { type: "text", text: "ab✓" },
-            {
-              type: "text",
-              text: expect.stringMatching(/^\[showing the first 5 of 11 bytes of line 1 of 1; full output saved to /),
-            },
-          ])
+          const family = "👨‍👩‍👧‍👦"
+          const cases = [
+            { text: "ab✓✓✓", shown: "ab✓" },
+            { text: `ab${family}cd`, shown: "ab" },
+            { text: "ab👍🏽cd", shown: "ab" },
+            { text: "ab🇯🇵cd", shown: "ab" },
+            { text: "ab𝒳𝒳", shown: "ab𝒳" },
+          ]
+          for (const item of cases) {
+            const result = yield* output.truncate({ content: [{ type: "text", text: item.text }] })
+            const first = result.content[0]
+            expect(first).toEqual({ type: "text", text: item.shown })
+            expect(first?.type === "text" && first.text.isWellFormed()).toBe(true)
+          }
         }),
       { maxLines: 100, maxBytes: 7 },
     ),
@@ -164,7 +172,7 @@ describe("ToolOutput", () => {
           const result = yield* output.truncate({ content: [{ type: "text", text: "one\n" }] })
           expect(result.content).toEqual([
             { type: "text", text: "one" },
-            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 1; full output saved to /) },
+            { type: "text", text: expect.stringMatching(/^\[showing 3 of 4 bytes \(lines 1-1 of 1\); full output saved to /) },
           ])
         }),
       { maxLines: 2, maxBytes: 3 },
