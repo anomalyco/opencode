@@ -287,6 +287,18 @@ fn previews_show_above_the_prompt_and_a_click_opens_the_dialog() {
     assert!(!off.app.text().contains("No preview"));
 }
 
+/// A stash the file cannot take is reported, not only logged (deviation O89-stash-save-toast).
+#[test]
+fn a_failed_stash_save_shows_a_toast() {
+    let setup = Setup::new();
+    std::fs::create_dir_all(setup.home.path().join("state/prompt-stash.jsonl")).unwrap();
+    setup.app.type_text("draft");
+    setup.dispatch("prompt.stash");
+    setup.wait_text("");
+    setup.wait_for("Could not save the stash");
+    assert_eq!(setup.tui.prompt.stash.list().len(), 1, "the entry stays in memory");
+}
+
 #[test]
 fn stash_pushes_pops_and_lists_with_delete_confirm() {
     let setup = Setup::new();
@@ -420,7 +432,7 @@ fn a_stash_made_while_the_stash_loads_is_kept() {
     assert!(healed);
     std::thread::sleep(Duration::from_millis(50));
     let early = json!({ "text": "early", "files": [], "agents": [], "skills": [], "pasted": [] });
-    setup.tui.prompt.stash.push(&setup.tui.app, early);
+    setup.tui.prompt.stash.push(&setup.tui, early);
     let texts = || {
         setup
             .tui
