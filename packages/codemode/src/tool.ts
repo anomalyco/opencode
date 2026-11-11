@@ -57,8 +57,6 @@ export type ExecuteFn<Input = unknown, Output = unknown, R = never> = (
  * with the same `key` without double-counting against `maxToolCalls`.
  */
 export type Idempotent<Input = unknown, Output = unknown, R = never> = {
-  // Carries Input, Output, and R as a call signature so TypeScript infers them from Tool.make's schema options.
-  (input: Input, context: ToolContext): Effect.Effect<Output, unknown, R>
   readonly _tag: "CodeModeIdempotent"
   readonly execute: ExecuteFn<Input, Output, R>
 }
@@ -85,7 +83,20 @@ export type DurableOptions<
 
 /** A tool execution wrapper for work that keeps running across a suspend and reconnects through its JSON data. */
 export type Durable<Input = unknown, Output = unknown, R = never> = {
-  // Carries Input, Output, and R as a call signature so TypeScript infers them from Tool.make's schema options.
+  readonly _tag: "CodeModeDurable"
+  readonly start: (input: Input, context: ToolContext) => Effect.Effect<Schema.Json, unknown, R>
+  readonly wait: (data: never, context: ToolContext) => Effect.Effect<Output, unknown, R>
+  readonly cancel: (data: never) => Effect.Effect<void, unknown, R>
+}
+
+// Carries Input, Output, and R as a call signature on Tool.make options so TypeScript infers them from the schemas.
+type IdempotentOption<Input = unknown, Output = unknown, R = never> = {
+  (input: Input, context: ToolContext): Effect.Effect<Output, unknown, R>
+  readonly _tag: "CodeModeIdempotent"
+  readonly execute: ExecuteFn<Input, Output, R>
+}
+
+type DurableOption<Input = unknown, Output = unknown, R = never> = {
   (input: Input, context: ToolContext): Effect.Effect<Output, unknown, R>
   readonly _tag: "CodeModeDurable"
   readonly start: (input: Input, context: ToolContext) => Effect.Effect<Schema.Json, unknown, R>
@@ -119,8 +130,8 @@ export type Options<I extends SchemaType, O extends SchemaType | undefined, R = 
   readonly output?: O
   readonly execute:
     | ExecuteFn<InputType<I>, ResultType<O>, R>
-    | Idempotent<InputType<I>, ResultType<O>, R>
-    | Durable<InputType<I>, ResultType<O>, R>
+    | IdempotentOption<InputType<I>, ResultType<O>, R>
+    | DurableOption<InputType<I>, ResultType<O>, R>
 }
 
 export const isTool = <R = never>(value: Tool<R> | Namespace<R> | Tools<R> | undefined): value is Tool<R> =>
@@ -129,11 +140,11 @@ export const isTool = <R = never>(value: Tool<R> | Namespace<R> | Tools<R> | und
 /** Marks a tool's `execute` function as safe to interrupt on suspend and re-run on resume with the same key. */
 export const idempotent = <Input, Output, R = never>(
   execute: ExecuteFn<Input, Output, R>,
-): Idempotent<Input, Output, R> =>
+): IdempotentOption<Input, Output, R> =>
   ({
     _tag: "CodeModeIdempotent",
     execute,
-  }) as Idempotent<Input, Output, R>
+  }) as IdempotentOption<Input, Output, R>
 
 /**
  * Wraps a tool's execution as `start`, `wait`, and `cancel` so work started before a suspend keeps running and
@@ -148,13 +159,13 @@ export const durable = <
   RCancel = never,
 >(
   options: DurableOptions<Data, Input, Output, RStart, RWait, RCancel>,
-): Durable<Input, Output, RStart | RWait | RCancel> =>
+): DurableOption<Input, Output, RStart | RWait | RCancel> =>
   ({
     _tag: "CodeModeDurable",
     start: options.start,
     wait: options.wait,
     cancel: options.cancel,
-  }) as unknown as Durable<Input, Output, RStart | RWait | RCancel>
+  }) as unknown as DurableOption<Input, Output, RStart | RWait | RCancel>
 
 /**
  * Declares one schema-described tool available to a CodeMode program through `tools.*`.

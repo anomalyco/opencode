@@ -16645,6 +16645,9 @@
               "portable_shell_scanner": {
                 "type": "boolean"
               },
+              "codemode_vm": {
+                "type": "boolean"
+              },
               "all_flags": {
                 "type": "boolean"
               },

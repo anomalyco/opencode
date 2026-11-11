@@ -624,9 +624,9 @@ describe("ConfigNormalize", () => {
     ])
   })
 
-  test("ignores retired codemode_vm and codemodeVm experimental keys without diagnostics", () => {
+  test("accepts deprecated codemode_vm and ignores retired codemodeVm without diagnostics", () => {
     const result = normalized({ experimental: { codemode_vm: true, codemodeVm: false } })
-    expect(result.encoded.experimental).toBeUndefined()
+    expect(result.encoded.experimental).toEqual({ codemode_vm: true })
     expect(result.diagnostics).toEqual([])
   })
 

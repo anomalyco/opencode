@@ -214,7 +214,7 @@ describe("synchronous host calls", () => {
     "a loop of sync extension calls can be suspended and resumed",
     async () => {
       const draw = counter()
-      const runtime = CodeMode.make({extensions: [draw.extension] })
+      const runtime = CodeMode.make({ extensions: [draw.extension] })
       const run = background(runtime.program("let n = 0\nwhile (n < 200000) draw(n++)\nreturn n"))
       await draw.reached()
       const suspended = suspendedOf(await Effect.runPromise(run.suspend))
@@ -227,7 +227,7 @@ describe("synchronous host calls", () => {
   test("a loop of sync extension calls is interrupted by the timeout", async () => {
     const draw = counter()
     const outcome = await Effect.runPromise(
-      CodeMode.make({extensions: [draw.extension], limits: { timeoutMs: 100 } }).execute(
+      CodeMode.make({ extensions: [draw.extension], limits: { timeoutMs: 100 } }).execute(
         "let n = 0\nwhile (true) draw(n++)",
       ),
     )
@@ -253,7 +253,7 @@ describe("suspend", () => {
 
     for (const state of [suspended.state, CodeMode.toBytes(suspended.state)] as const) {
       const outcome = await Effect.runPromise(
-        background(CodeMode.make({tools: { step: step.tool } }).resume(state)).result,
+        background(CodeMode.make({ tools: { step: step.tool } }).resume(state)).result,
       )
       expect(outcome).toEqual({
         ok: true,
@@ -360,7 +360,7 @@ describe("suspend", () => {
   test("every running call that blocks a suspend is named", async () => {
     const slow = manual()
     const run = background(
-      CodeMode.make({tools: { slow: slow.tool, "a-b": { work: slow.tool } } }).program(
+      CodeMode.make({ tools: { slow: slow.tool, "a-b": { work: slow.tool } } }).program(
         `return await Promise.all([tools["a-b"].work({ value: 1 }), tools.slow({ value: 2 })])`,
         undefined,
         { runId: "n" },
@@ -380,14 +380,14 @@ describe("suspend", () => {
   })
 
   test("a program runs inline in the current fiber", async () => {
-    const runtime = CodeMode.make({tools: { step: stepTool().tool } })
+    const runtime = CodeMode.make({ tools: { step: stepTool().tool } })
     expect(
       await Effect.runPromise(runtime.program(`return (await tools.step({ value: x })).value`, { x: 21 }).run()),
     ).toEqual({ ok: true, value: 42, toolCalls: [{ name: "step" }] })
   })
 
   test("a suspend from another fiber stops a background run, which returns the same state", async () => {
-    const runtime = CodeMode.make({tools: {} })
+    const runtime = CodeMode.make({ tools: {} })
     const code = `let n = 0; for (let i = 0; i < 2_000_000; i++) n = (n + i) % 1_000_003; return n`
     const expected = await Effect.runPromise(runtime.execute(code))
     const [suspended, outcome] = await Effect.runPromise(
@@ -400,7 +400,7 @@ describe("suspend", () => {
       }),
     )
     expect(outcome).toBe(suspended)
-    const fresh = CodeMode.make({tools: {} })
+    const fresh = CodeMode.make({ tools: {} })
     expect(await Effect.runPromise(fresh.resume(CodeMode.toBytes(suspendedOf(suspended).state)).run())).toEqual(
       expected,
     )
@@ -426,7 +426,7 @@ describe("suspend", () => {
           Effect.onInterrupt(() => Effect.sync(() => interrupted.resolve())),
         ),
     })
-    const program = CodeMode.make({tools: { hang } }).program(`return await tools.hang({ value: 1 })`)
+    const program = CodeMode.make({ tools: { hang } }).program(`return await tools.hang({ value: 1 })`)
     const fiber = Effect.runFork(program.run())
     await called.promise
     await Effect.runPromise(Fiber.interrupt(fiber))
@@ -466,7 +466,7 @@ describe("resume", () => {
   test("a run saved to a file resumes in another process", async () => {
     const step = stepTool()
     const run = background(
-      CodeMode.make({tools: { slow: step.tool } }).program(`
+      CodeMode.make({ tools: { slow: step.tool } }).program(`
         const seen = new Map([["first", await tools.slow({ value: 10 })]])
         const started = Date.now()
         while (Date.now() - started < 300) {}
@@ -500,7 +500,7 @@ describe("resume", () => {
     expect(suspended.state.header.limits).toEqual({ timeoutMs: null, maxToolCalls: 2, maxOutputBytes: 10 })
     // The resuming runtime has no limits of its own; the saved ones apply.
     const result = await Effect.runPromise(
-      background(CodeMode.make({tools: { step: step.tool } }).resume(suspended.state)).result,
+      background(CodeMode.make({ tools: { step: step.tool } }).resume(suspended.state)).result,
     )
     expect(result).toMatchObject({ ok: false, error: { kind: "ToolCallLimitExceeded" } })
 
@@ -511,14 +511,14 @@ describe("resume", () => {
     const saved = suspendedOf(await Effect.runPromise(long.suspend))
     expect(
       await Effect.runPromise(
-        background(CodeMode.make({tools: { step: step2.tool } }).resume(saved.state)).result,
+        background(CodeMode.make({ tools: { step: step2.tool } }).resume(saved.state)).result,
       ),
     ).toMatchObject({ ok: true, truncated: true })
   })
 
   test("active time and tool calls count across resumes", async () => {
     const step = stepTool()
-    const runtime = CodeMode.make({tools: { step: step.tool }, limits: { timeoutMs: 300 } })
+    const runtime = CodeMode.make({ tools: { step: step.tool }, limits: { timeoutMs: 300 } })
     const run = background(
       runtime.program(`
         await tools.step({ value: 1 })
@@ -544,11 +544,11 @@ describe("resume", () => {
     )
     const state = suspended.state
     const header = state.header
-    const runtime = CodeMode.make({tools: {} })
+    const runtime = CodeMode.make({ tools: {} })
     expect((await refusal(runtime.resume({ ...state, header: { ...header, build: "0.0.0+0" } }))).message).toMatch(
       /saved by another Code Mode build \(0\.0\.0\+0\)/,
     )
-    const other = CodeMode.make({extensions: [Extension.make({ name: "x", globals: { f: () => 1 } })] })
+    const other = CodeMode.make({ extensions: [Extension.make({ name: "x", globals: { f: () => 1 } })] })
     expect((await refusal(other.resume(state))).message).toMatch("saved by a runtime with other host globals")
     const source = header.sources[0]!
     expect(
@@ -588,7 +588,7 @@ describe("resume", () => {
     )
     const outcome = await Effect.runPromise(
       background(
-        CodeMode.make({tools: { step: step.tool }, extensions: [extension] }).resume(suspended.state),
+        CodeMode.make({ tools: { step: step.tool }, extensions: [extension] }).resume(suspended.state),
       ).result,
     )
     expect(outcome).toMatchObject({
@@ -647,7 +647,7 @@ describe("resume", () => {
       }`
     const { step, suspended } = await suspendAt(code)
     const outcome = await Effect.runPromise(
-      background(CodeMode.make({tools: { step: step.tool } }).resume(CodeMode.toBytes(suspended.state)))
+      background(CodeMode.make({ tools: { step: step.tool } }).resume(CodeMode.toBytes(suspended.state)))
         .result,
     )
     expect(outcome).toMatchObject({
@@ -692,7 +692,7 @@ describe("resume", () => {
       }`
     const { step, suspended } = await suspendAt(code)
     step.reset()
-    const runtime = CodeMode.make({tools: { step: step.tool } })
+    const runtime = CodeMode.make({ tools: { step: step.tool } })
     const again = background(runtime.resume(CodeMode.toBytes(suspended.state)))
     await step.called()
     await Bun.sleep(10)
@@ -727,7 +727,7 @@ describe("idempotent and durable tools", () => {
       const b = await tools.read({ value: 22 })
       return a.value + b.value`
     const run = background(
-      CodeMode.make({tools: { read: read.tool }, hooks }).program(code, undefined, { runId: "rr" }),
+      CodeMode.make({ tools: { read: read.tool }, hooks }).program(code, undefined, { runId: "rr" }),
     )
     await read.called()
     expect(read.attempts).toHaveLength(1)
@@ -741,7 +741,7 @@ describe("idempotent and durable tools", () => {
 
     read.reset()
     const resumed = background(
-      CodeMode.make({tools: { read: read.tool }, hooks }).resume(CodeMode.toBytes(suspended.state)),
+      CodeMode.make({ tools: { read: read.tool }, hooks }).resume(CodeMode.toBytes(suspended.state)),
     )
     await read.called()
     expect(read.attempts).toHaveLength(2)
@@ -828,7 +828,7 @@ describe("idempotent and durable tools", () => {
       log.push("after " + a.value)
       return { log, total: a.value + 1 }`
     const run = background(
-      CodeMode.make({tools: { job: jobs.tool }, hooks }).program(code, undefined, { runId: "rec" }),
+      CodeMode.make({ tools: { job: jobs.tool }, hooks }).program(code, undefined, { runId: "rec" }),
     )
     await jobs.started()
     const duringStart = await blocked(run)
@@ -843,7 +843,7 @@ describe("idempotent and durable tools", () => {
 
     jobs.reset()
     const bytes = CodeMode.toBytes(suspended.state)
-    const resumed = background(CodeMode.make({tools: { job: jobs.tool }, hooks }).resume(bytes))
+    const resumed = background(CodeMode.make({ tools: { job: jobs.tool }, hooks }).resume(bytes))
     await jobs.waiting()
     // The data survived serialization to bytes and was passed to wait(data) without running start again.
     expect(jobs.log).toEqual(["start rec:0", "wait rec:0 rec:0", "wait rec:0 rec:0"])
@@ -873,7 +873,7 @@ describe("idempotent and durable tools", () => {
       const chainedValue = await chained
       const storedValue = (await stored).value
       return [storedValue, chainedValue, allJob.value, allRead.value]`
-    const run = background(CodeMode.make({tools }).program(code, undefined, { runId: "p" }))
+    const run = background(CodeMode.make({ tools }).program(code, undefined, { runId: "p" }))
     await read.called()
     // All three durable calls ran start and wait before the suspend, even though `stored` has not been awaited.
     expect(jobs.log).toEqual(["start p:0", "wait p:0 p:0", "start p:1", "wait p:1 p:1", "start p:2", "wait p:2 p:2"])
@@ -881,7 +881,7 @@ describe("idempotent and durable tools", () => {
     const suspended = suspendedOf(await Effect.runPromise(run.suspend))
     read.reset()
     jobs.reset()
-    const resumed = background(CodeMode.make({tools }).resume(CodeMode.toBytes(suspended.state)))
+    const resumed = background(CodeMode.make({ tools }).resume(CodeMode.toBytes(suspended.state)))
     await read.called()
     // Right at resume, the VM calls wait(data) on all three `started` calls before any of them settles.
     expect(jobs.log.slice(6)).toEqual(["wait p:0 p:0", "wait p:1 p:1", "wait p:2 p:2"])
@@ -904,7 +904,7 @@ describe("idempotent and durable tools", () => {
     const hooks: CodeMode.Hooks = {
       "tool.after": (call, result) => Effect.sync(() => void events.push(`${call.key} ${result.status}`)),
     }
-    const runtime = CodeMode.make({tools: { job: jobs.tool }, hooks })
+    const runtime = CodeMode.make({ tools: { job: jobs.tool }, hooks })
 
     // 1. Background work left running when the program returns is interrupted and cancelled once.
     const leftRunning = background(
@@ -950,7 +950,7 @@ describe("idempotent and durable tools", () => {
         tools.job({ value: 30 }),
       ])
       return [a.value, b.value, c.value]`
-    const run = background(CodeMode.make({tools }).program(code, undefined, { runId: "mix" }))
+    const run = background(CodeMode.make({ tools }).program(code, undefined, { runId: "mix" }))
     await Promise.all([slow.called(), read.called(), jobs.waiting()])
 
     // While `slow` (plain) is still running, suspend is refused and lists only `tools.slow`.
@@ -966,7 +966,7 @@ describe("idempotent and durable tools", () => {
 
     read.reset()
     jobs.reset()
-    const resumed = background(CodeMode.make({tools }).resume(CodeMode.toBytes(suspended.state)))
+    const resumed = background(CodeMode.make({ tools }).resume(CodeMode.toBytes(suspended.state)))
     await Promise.all([read.called(), jobs.waiting()])
     // `slow` was not called again; `read` reran with key `mix:1`; `job` waited on data `mix:2`.
     expect(slow.calls).toHaveLength(1)
@@ -1092,6 +1092,12 @@ describe("idempotent and durable tools", () => {
     })
     expect(idempotentTyped._tag).toBe("CodeModeTool")
     expect(durableTyped._tag).toBe("CodeModeTool")
+    if (false as boolean) {
+      // @ts-expect-error resolved Tool.execute is not callable without narrowing
+      idempotentTyped.execute({ name: "a" }, { key: "k" })
+      // @ts-expect-error resolved Tool.execute is not callable without narrowing
+      durableTyped.execute({ name: "b", count: 1 }, { key: "k" })
+    }
 
     const runtime = CodeMode.make({
       tools: { idem: idempotentTyped, dur: durableTyped },
@@ -1269,7 +1275,7 @@ describe("idempotent and durable tools", () => {
   test("resuming a started durable call fails with SnapshotError when the tool was removed or is no longer durable, and completed calls clear their data", async () => {
     const jobs = durableJobs()
     const read = idempotentManual()
-    const runtime = CodeMode.make({tools: { job: jobs.tool, read: read.tool } })
+    const runtime = CodeMode.make({ tools: { job: jobs.tool, read: read.tool } })
     const run = background(
       runtime.program(
         `const first = await tools.job({ value: 1 }); const second = await tools.read({ value: 2 }); return first.value + second.value`,
@@ -1290,7 +1296,7 @@ describe("idempotent and durable tools", () => {
     const toolSets: ReadonlyArray<Record<string, Tool.Tool>> = [{}, { job: plainTool }, { job: read.tool }]
     for (const tools of toolSets) {
       expect(
-        (await refusal(CodeMode.make({tools }).resume(suspendedWhileStarted.state))).message,
+        (await refusal(CodeMode.make({ tools }).resume(suspendedWhileStarted.state))).message,
       ).toContain("cannot resume because that tool is no longer a durable tool")
     }
 
@@ -1298,7 +1304,7 @@ describe("idempotent and durable tools", () => {
     const jobs2 = durableJobs()
     const read2 = idempotentManual()
     const run2 = background(
-      CodeMode.make({tools: { job: jobs2.tool, read: read2.tool } }).program(
+      CodeMode.make({ tools: { job: jobs2.tool, read: read2.tool } }).program(
         `const [a, b] = await Promise.all([tools.job({ value: 1 }), tools.read({ value: 2 })]); return a.value + b.value`,
         undefined,
         { runId: "chg2" },
@@ -1311,7 +1317,7 @@ describe("idempotent and durable tools", () => {
     expect(JSON.stringify(suspendedAfterJob.state)).not.toContain('"tags"')
     read2.reset()
     const resumedAfterJob = background(
-      CodeMode.make({tools: { job: jobs2.tool, read: read2.tool } }).resume(suspendedAfterJob.state),
+      CodeMode.make({ tools: { job: jobs2.tool, read: read2.tool } }).resume(suspendedAfterJob.state),
     )
     await read2.called()
     read2.attempts[1]!.answer(20)
@@ -1383,7 +1389,7 @@ describe("extension snapshot hooks", () => {
   const suspendWith = async (extension: Extension.Extension) => {
     const jobs = durableJobs()
     const run = background(
-      CodeMode.make({tools: { job: jobs.tool }, extensions: [extension] }).program(code, undefined, {
+      CodeMode.make({ tools: { job: jobs.tool }, extensions: [extension] }).program(code, undefined, {
         runId: "h",
       }),
     )
@@ -1402,7 +1408,7 @@ describe("extension snapshot hooks", () => {
     jobs.reset()
     const fresh = web()
     const resumed = background(
-      CodeMode.make({tools: { job: jobs.tool }, extensions: [fresh.extension] }).resume(
+      CodeMode.make({ tools: { job: jobs.tool }, extensions: [fresh.extension] }).resume(
         CodeMode.toBytes(suspended.state),
       ),
     )
@@ -1487,7 +1493,7 @@ describe("extension snapshot hooks", () => {
     ])
     const fresh = web()
     const resumed = background(
-      CodeMode.make({tools: { job: jobs.tool }, extensions: [fresh.extension] }).resume(
+      CodeMode.make({ tools: { job: jobs.tool }, extensions: [fresh.extension] }).resume(
         CodeMode.toBytes(suspended.state),
       ),
     )

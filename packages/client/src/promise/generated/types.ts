@@ -2554,6 +2554,7 @@ export type ConfigEntry =
         }
         experimental?: {
           portable_shell_scanner?: boolean
+          codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
           background_compaction?: boolean
