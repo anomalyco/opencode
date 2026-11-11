@@ -11,8 +11,8 @@ use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use opentui::widget::Markdown;
 
-use super::footer::duration;
 use super::list::Context;
+use opencode_ui::locale::duration;
 
 pub struct Reasoning(Rc<Inner>);
 
