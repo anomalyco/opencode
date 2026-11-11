@@ -222,9 +222,8 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
                 return Some(format!("Must be at most {max} characters"));
             }
             if let Some(pattern) = &field.pattern {
-                // `new RegExp(field.pattern).test(value)`: an ECMAScript pattern, without flags.
-                match regress::Regex::new(pattern) {
-                    Ok(regex) if regex.find(text).is_none() => {
+                match regex::Regex::new(pattern) {
+                    Ok(regex) if !regex.is_match(text) => {
                         return Some(format!("Must match pattern: {pattern}"));
                     }
                     Ok(_) => {}
