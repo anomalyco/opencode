@@ -757,6 +757,22 @@ test("Recent and Pinned rows show the side tabs' status dots and shortcuts for s
   await expect(link(a.id)).toHaveAttribute("aria-current", "page")
   await expect(row(c.id).locator('[data-mark="unread"]')).toBeHidden()
   await expect(row(b.id).locator('[data-mark="failed"]')).toBeVisible()
+
+  // The hover preview sits level with the hovered row, as on side tabs, rather than clamped inside the row.
+  const preview = page.locator('[data-component="session-tab-popover"]')
+
+  for (const id of [b.id, c.id]) {
+    await row(id).hover()
+    await expect(preview).toBeVisible()
+    await expect
+      .poll(async () => {
+        const card = await preview.boundingBox()
+        const box = await row(id).boundingBox()
+
+        return card && box ? Math.round(card.y - box.y) : undefined
+      })
+      .toBe(0)
+  }
 })
 
 test("Recent shows the last 7 days, and Show more reveals 30 more rows, fetching pages on demand", async ({ page }) => {

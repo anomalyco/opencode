@@ -779,7 +779,7 @@ export function RecentSessions() {
       data-shortcut-hints={hints() ? "" : undefined}
       class="flex min-h-0 flex-1 flex-col [app-region:no-drag]"
     >
-      <div data-scrollable class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1">
+      <div data-scrollable class="no-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1">
         <Show
           when={!firstPageLoading()}
           fallback={
