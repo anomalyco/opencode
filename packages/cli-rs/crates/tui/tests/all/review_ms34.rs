@@ -142,7 +142,11 @@ fn catalogs(directory: &str, query: Option<&str>) -> Vec<MemoryRoute> {
         { "id": "opencode", "name": "OpenCode", "integrationID": "opencode", "activation": "auto", "package": "@ai-sdk/test" },
         { "id": "demo", "name": "Demo", "activation": "auto", "package": "@ai-sdk/test" },
     ]);
-    let agents = json!([agent("build", Some(json!({ "providerID": "opencode", "id": "big" }))), agent("plan", None)]);
+    let agents = json!([
+        agent("build", Some(json!({ "providerID": "opencode", "id": "big" }))),
+        agent("plan", None),
+        agent("code-review", None),
+    ]);
     let routes = [
         MemoryRoute::json("GET", "/api/location", 200, &location_at(directory)),
         MemoryRoute::json("GET", "/api/agent", 200, &list(agents)),
@@ -395,6 +399,16 @@ fn startup_model_keeps_a_saved_session_model_and_leads_the_fallback() {
     h.tui.local.set(&Model::new("opencode", "big"), true);
     h.tui.local.set_agent("plan");
     h.wait("the fallback", || h.tui.local.current() == Some(Model::new("demo", "other")));
+}
+
+// The prompt footer shows `Local`'s agent and model, with the agent through `Locale.titlecase` (`\b\w`,
+// `packages/tui/src/util/locale.ts:3-5`), as the assistant footer does.
+#[test]
+fn the_prompt_footer_shows_the_local_agent_titlecased_per_word() {
+    let h = mount(Route::Home, Args::default(), animations_off());
+    h.tui.local.set_agent("code-review");
+    h.tui.local.set(&Model::new("demo", "other"), false);
+    h.wait_for("Code-Review · Other Model Demo");
 }
 
 #[test]
