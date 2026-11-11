@@ -354,17 +354,17 @@ fn guttered(
         .child(&code)
 }
 
-/// `highlightedOutput`: a JSON result, optionally followed by `Warnings:` and `Logs:` sections.
+/// `highlightedOutput` (`formatExecuteOutput`): a JSON result, indented because code mode returns it compact,
+/// optionally followed by `Warnings:` and `Logs:` sections.
 fn highlighted(text: &str) -> Option<(String, Option<String>)> {
     if !text.starts_with('{') && !text.starts_with('[') {
         return None;
     }
     let end =
         ["\n\nWarnings:\n", "\n\nLogs:\n"].iter().filter_map(|marker| text.find(marker)).min().unwrap_or(text.len());
-    let json = &text[..end];
-    serde_json::from_str::<Value>(json).ok()?;
+    let json = serde_json::from_str::<Value>(&text[..end]).ok()?;
     let rest = text[end..].trim();
-    Some((json.to_owned(), (!rest.is_empty()).then(|| rest.to_owned())))
+    Some((opencode_local::jsonc::stringify_pretty(&json), (!rest.is_empty()).then(|| rest.to_owned())))
 }
 
 /// `wrappedRows`: the rows `text` takes when each line breaks every `width` characters.
@@ -385,9 +385,16 @@ mod tests {
         assert_eq!(highlighted("{ not json"), None);
         assert_eq!(
             highlighted("{\"a\":1}\n\nLogs:\nhello\n"),
-            Some(("{\"a\":1}".to_owned(), Some("Logs:\nhello".to_owned())))
+            Some(("{\n  \"a\": 1\n}".to_owned(), Some("Logs:\nhello".to_owned())))
         );
-        assert_eq!(highlighted("[1]"), Some(("[1]".to_owned(), None)));
+        assert_eq!(
+            highlighted("{\"a\":1,\"b\":[2]}"),
+            Some(("{\n  \"a\": 1,\n  \"b\": [\n    2\n  ]\n}".to_owned(), None))
+        );
+        assert_eq!(
+            highlighted("[\"x\"]\n\nWarnings:\n- [unhandled] boom\n\nLogs:\nhi"),
+            Some(("[\n  \"x\"\n]".to_owned(), Some("Warnings:\n- [unhandled] boom\n\nLogs:\nhi".to_owned())))
+        );
     }
 
     #[test]

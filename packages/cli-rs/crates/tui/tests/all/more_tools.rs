@@ -332,7 +332,18 @@ fn execute_lists_its_calls_and_opens_the_dialog() {
     h.app.click(x + 2, y);
     h.app.advance(Duration::from_millis(1));
     let screen = h.wait_for("Completed · 1.3s");
-    for text in ["Code", "1 const a = 1", "2 return a", "Output", "{\"a\":1}", "Logs:", "copy code", "copy output"] {
+    for text in [
+        "Code",
+        "1 const a = 1",
+        "2 return a",
+        "Output",
+        "1 {",
+        "2   \"a\": 1",
+        "3 }",
+        "Logs:",
+        "copy code",
+        "copy output",
+    ] {
         assert!(screen.contains(text), "{text:?} missing:\n{screen}");
     }
 }
