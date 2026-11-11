@@ -72,6 +72,8 @@ export type PaneEvent = typeof PaneEvent.Type
  *
  * - `"browser.pane.unsupported"`: the server has no browser plugin, or its `attached` handshake names a protocol this
  *   desktop cannot speak. The event carries no tabs. A control event of an unknown type closes nothing.
+ * - `"browser.pane.rpc-unavailable"`: the server did not expose the browser RPC during registration. It may still be
+ *   starting, so the window retries before treating the server as unsupported.
  * - `"browser.pane.replaced"`: another window attached to the same session. The event carries no tabs.
  * - `"browser.pane.suspended"`: the server dropped an attached binding (idle eviction), or main's plugin is going away.
  *   The event carries the tabs the binding had.
@@ -81,6 +83,7 @@ export type PaneEvent = typeof PaneEvent.Type
  */
 export const PaneCloseReason = Schema.Literals([
   "browser.pane.unsupported",
+  "browser.pane.rpc-unavailable",
   "browser.pane.replaced",
   "browser.pane.suspended",
   "browser.pane.missing",

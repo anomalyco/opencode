@@ -258,6 +258,78 @@ describe("browser pane machine", () => {
     expect(types(replay(attach(), changed.state).effects)).toEqual(["open-registration", "schedule-register-timeout"])
   })
 
+  test("a temporarily unavailable browser RPC retries, then accepts the restored pane", () => {
+    const start = replay(attach()).state
+    const unavailable = transition(start, paneState(start, null, "browser.pane.rpc-unavailable"))
+    expect(serverSupported(unavailable.state, server)).toBe(true)
+    expect(phase(unavailable.state)).toMatchObject({ status: "backoff", attempts: 1 })
+    expect(unavailable.effects).toContainEqual(expect.objectContaining({ type: "schedule-retry", delayMs: 1_000 }))
+
+    const retry = transition(unavailable.state, {
+      type: "retry.due",
+      sessionKey: key,
+      attempt: attempt(unavailable.state),
+    })
+
+    expect(phase(retry.state)).toMatchObject({ status: "registering", attempts: 1 })
+    const connected = transition(retry.state, paneState(retry.state, inventory(tab(tabA))))
+    expect(phase(connected.state)).toMatchObject({ status: "ready" })
+    expect(attachment(connected.state)?.browser).toEqual(inventory(tab(tabA)))
+  })
+
+  test("a browser RPC that remains unavailable stops retrying", () => {
+    let state = replay(attach()).state
+
+    for (let i = 0; i < 4; i++) {
+      const failed = transition(state, paneState(state, null, "browser.pane.rpc-unavailable"))
+      expect(phase(failed.state)).toMatchObject({ status: "backoff", attempts: i + 1 })
+      state = transition(failed.state, { type: "retry.due", sessionKey: key, attempt: attempt(failed.state) }).state
+    }
+
+    const exhausted = transition(state, paneState(state, null, "browser.pane.rpc-unavailable"))
+    expect(serverSupported(exhausted.state, server)).toBe(false)
+    expect(attachment(exhausted.state)).toBeUndefined()
+    expect(exhausted.effects).toContainEqual({ type: "watch-server", serverID: server })
+    expect(exhausted.effects.some((effect) => effect.type === "schedule-retry")).toBe(false)
+  })
+
+  test("a rejected registration followed by an unavailable RPC still schedules one retry", () => {
+    const start = replay(attach()).state
+
+    const rejected = transition(start, {
+      type: "register.failed",
+      sessionKey: key,
+      attempt: attempt(start),
+      unavailable: false,
+      closed: true,
+    })
+
+    const retry = transition(rejected.state, paneState(start, null, "browser.pane.rpc-unavailable"))
+    expect(phase(retry.state)).toMatchObject({ status: "backoff", attempts: 1 })
+    expect(retry.effects.filter((effect) => effect.type === "schedule-retry")).toHaveLength(1)
+    expect(transition(retry.state, paneState(start, null, "browser.pane.rpc-unavailable")).effects).toEqual([])
+  })
+
+  test("transport failures do not consume the browser RPC startup retries", () => {
+    let state = replay(attach()).state
+
+    for (let i = 0; i < 4; i++) {
+      const failed = transition(state, {
+        type: "register.failed",
+        sessionKey: key,
+        attempt: attempt(state),
+        unavailable: false,
+        closed: false,
+      })
+
+      state = transition(failed.state, { type: "retry.due", sessionKey: key, attempt: attempt(failed.state) }).state
+    }
+
+    const unavailable = transition(state, paneState(state, null, "browser.pane.rpc-unavailable"))
+    expect(serverSupported(unavailable.state, server)).toBe(true)
+    expect(unavailable.effects.some((effect) => effect.type === "schedule-retry")).toBe(true)
+  })
+
   test("a focus held while the strip cannot be written is dropped when its tab closes first", () => {
     const start = replay(attach(key, false)).state
 

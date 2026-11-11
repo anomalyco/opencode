@@ -269,10 +269,10 @@ function closeReason(state: ActiveBinding, event: BindingEvent): PaneCloseReason
 
   if (event.outcome === "unsupported") return "browser.pane.unsupported"
 
-  // A server that drops an attachment it accepted, as on idle eviction, suspends it; one that never accepted it has no
-  // browser plugin.
+  // An unavailable RPC during registration can mean the plugin is still loading. After attachment, preserve the
+  // inventory so a location evicted while idle can be resumed.
   if (event.outcome === "unavailable")
-    return state.status === "attached" ? "browser.pane.suspended" : "browser.pane.unsupported"
+    return state.status === "attached" ? "browser.pane.suspended" : "browser.pane.rpc-unavailable"
 
   return "browser.pane.registration.closed"
 }

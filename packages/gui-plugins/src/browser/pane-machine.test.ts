@@ -150,7 +150,7 @@ describe("binding close reason", () => {
     expect(transitionBinding(closed, { type: "pane.disposed" })).toEqual({ state: closed, effects: [] })
   })
 
-  test("an unavailable server suspends an attached binding with its tabs and rejects a connecting one", () => {
+  test("an unavailable server suspends an attached binding and lets a connecting one retry", () => {
     const restore = { tabs: [tab(tabA, dashboard)], focusedTabID: tabA }
     const suspended = play(attached(restore), on({ type: "attachment.ended", outcome: "unavailable" }))
     expect(closeEvents(suspended.effects)).toEqual([
@@ -164,7 +164,7 @@ describe("binding close reason", () => {
       on({ type: "attachment.ended", outcome: attachmentFailure({ type: "rpc.unavailable", message: "gone" }) }),
     )
 
-    expect(closeEvents(connecting.effects)).toEqual([{ state: null, error: "browser.pane.unsupported" }])
+    expect(closeEvents(connecting.effects)).toEqual([{ state: null, error: "browser.pane.rpc-unavailable" }])
     expect(connecting.effects.at(-1)).toEqual({ type: "teardown", binding: "b1" })
   })
 
