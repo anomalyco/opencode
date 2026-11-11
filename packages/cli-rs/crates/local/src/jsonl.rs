@@ -10,7 +10,7 @@
 //! know survive.
 
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 
 use indexmap::IndexMap;
@@ -24,6 +24,9 @@ pub const MAX_HISTORY_ENTRIES: usize = 50;
 pub const MAX_STASH_ENTRIES: usize = 50;
 pub const MAX_FRECENCY_ENTRIES: usize = 1000;
 
+/// How much of a file's end [`last_line`] reads at a time.
+const TAIL_CHUNK: u64 = 64 * 1024;
+
 /// `emptyPrompt()`.
 pub fn empty_prompt() -> Value {
     json!({"text": "", "files": [], "agents": [], "skills": [], "pasted": []})
@@ -36,6 +39,48 @@ pub fn is_prompt(value: &Value) -> bool {
 
 fn lines(text: &str) -> impl Iterator<Item = Value> + '_ {
     text.split('\n').filter(|line| !line.is_empty()).filter_map(|line| serde_json::from_str(line).ok())
+}
+
+/// The last line of `file` that parses and that `keep` accepts, as [`lines`] would find it. Reads the file
+/// backwards from its end in `chunk`-sized pieces, so a save reads the tail it needs, not every entry the
+/// file has gained since the last load.
+fn last_line<T>(file: &Path, chunk: u64, keep: impl Fn(Value) -> Option<T>) -> io::Result<Option<T>> {
+    let mut file = match fs::File::open(file) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let mut position = file.seek(SeekFrom::End(0))?;
+    // The start of the line the previous piece began inside.
+    let mut rest = Vec::new();
+    while position > 0 {
+        let size = chunk.min(position);
+        position -= size;
+        let mut bytes = vec![0; size as usize];
+        file.seek(SeekFrom::Start(position))?;
+        file.read_exact(&mut bytes)?;
+        bytes.extend_from_slice(&rest);
+        let start = match bytes.iter().position(|byte| *byte == b'\n') {
+            _ if position == 0 => 0,
+            Some(newline) => newline + 1,
+            None => {
+                rest = bytes;
+                continue;
+            }
+        };
+        let found = bytes[start..]
+            .split(|byte| *byte == b'\n')
+            .rev()
+            .filter(|line| !line.is_empty())
+            .filter_map(|line| std::str::from_utf8(line).ok().and_then(|line| serde_json::from_str(line).ok()))
+            .find_map(&keep);
+        if found.is_some() {
+            return Ok(found);
+        }
+        bytes.truncate(start);
+        rest = bytes;
+    }
+    Ok(None)
 }
 
 fn last<T>(mut items: Vec<T>, limit: usize) -> Vec<T> {
@@ -128,8 +173,8 @@ pub fn save_history(state: &Path, entry: &Value) -> Result<(), lock::Error> {
     let file = history_file(state);
     let line = jsonc::stringify(entry);
     with_lock(state, &file, || {
-        let text = fs::read_to_string(&file).unwrap_or_default();
-        let repeat = lines(&text).filter(is_prompt).last().is_some_and(|previous| jsonc::stringify(&previous) == line);
+        let previous = last_line(&file, TAIL_CHUNK, |entry| is_prompt(&entry).then_some(entry)).ok().flatten();
+        let repeat = previous.is_some_and(|previous| jsonc::stringify(&previous) == line);
         if !repeat {
             append_text(&file, &(line.clone() + "\n"))?;
         }
@@ -374,12 +419,13 @@ pub fn save_frecency(state: &Path, cwd: &Path, path: &str, now: i64) -> Result<(
     let file = frecency_file(state);
     let path = resolve(cwd, path);
     let visit = with_lock(state, &file, || {
-        let text = fs::read_to_string(&file).unwrap_or_default();
-        let frequency = lines(&text)
-            .filter(|entry| entry.get("path").and_then(Value::as_str) == Some(&path))
-            .last()
-            .and_then(|entry| visit(&entry))
-            .map_or(0.0, |visit| visit.frequency);
+        let frequency = last_line(&file, TAIL_CHUNK, |entry| {
+            (entry.get("path").and_then(Value::as_str) == Some(&path)).then_some(entry)
+        })
+        .ok()
+        .flatten()
+        .and_then(|entry| visit(&entry))
+        .map_or(0.0, |visit| visit.frequency);
         let visit = Visit { frequency: frequency + 1.0, last_open: now as f64 };
         append_text(&file, &(line(&path, &visit) + "\n"))?;
         Ok(visit)
@@ -472,6 +518,30 @@ mod tests {
         let before = fs::metadata(&file).unwrap().modified().unwrap();
         History::load(state.path());
         assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
+    }
+
+    #[test]
+    fn last_line_reads_backwards_like_lines() {
+        let state = opencode_util::temp::tempdir().unwrap();
+        let file = state.path().join("lines.jsonl");
+        let texts = [
+            "",
+            "\n\n",
+            "{\"text\":\"a\",\"pasted\":[]}\n",
+            "{\"text\":\"a\",\"pasted\":[]}",
+            "{\"text\":\"a\",\"pasted\":[]}\n{\"text\":\"é😀 long enough to split\",\"pasted\":[1]}\r\nbroken\n{\"text\":1}\n\n",
+            "broken\n{\"text\":\"b\",\"pasted\":[]}\n{\"text\":\"c\",\"pasted\":[]}\n{\"x\n",
+            "{\"text\":\"\u{ff}\",\"pasted\":[]}\n\u{ff}\n",
+        ];
+        for text in texts {
+            fs::write(&file, text).unwrap();
+            let expected = lines(text).filter(is_prompt).last();
+            for chunk in 1..=text.len() as u64 + 1 {
+                let found = last_line(&file, chunk, |entry| is_prompt(&entry).then_some(entry)).unwrap();
+                assert_eq!(found, expected, "{text:?} in pieces of {chunk}");
+            }
+        }
+        assert_eq!(last_line(&state.path().join("missing"), 4, Some).unwrap(), None);
     }
 
     #[test]
