@@ -12,9 +12,6 @@ interface Metadata {
   [key: string]: any
 }
 
-// TODO: remove this hack
-export type DynamicDescription = (agent: Agent.Info) => Effect.Effect<string>
-
 /**
  * Raised when the LLM calls a tool with arguments that fail the parameter
  * schema. This is the canonical "rewrite the input" tool error: the typed
