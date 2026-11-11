@@ -125,7 +125,13 @@ export function PluginsDialog(props: { context: Plugin.Context; plugins: ReturnT
     setLocked(true)
     void (current.active ? props.plugins.deactivate(current.id) : props.plugins.activate(current.id))
       .then((ok) => {
-        if (ok) return
+        if (ok) {
+          props.context.ui.toast.show({
+            variant: "success",
+            message: `Plugin ${current.id} ${current.active ? "disabled" : "enabled"}`,
+          })
+          return
+        }
         props.context.ui.toast.show({ variant: "error", message: `Failed to update plugin ${current.id}` })
       })
       .catch((cause) => {
