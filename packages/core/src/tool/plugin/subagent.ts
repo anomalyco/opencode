@@ -121,9 +121,9 @@ export const Plugin = {
                   ),
                 )
               let current = parent
-              let depth = 0
+              let level = 0
               while (current.parentID) {
-                depth++
+                level++
                 current = yield* sessions
                   .get(current.parentID)
                   .pipe(
@@ -132,10 +132,16 @@ export const Plugin = {
                     ),
                   )
               }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
-              if (depth >= limit)
+              const entries = yield* config.entries()
+              const depth = Config.latest(entries, "experimental")?.subagent_depth ?? 1
+              if (level >= depth)
                 return yield* new ToolFailure({
-                  message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
+                  message: `Subagent depth limit reached (${depth}). Increase "experimental.subagent_depth" to allow nested subagents.`,
+                })
+              const concurrency = SubagentJob.limits({ entries, override: yield* SubagentJob.Concurrency })
+              if (concurrency.ignored !== undefined)
+                yield* Effect.logWarning("ignoring invalid OPENCODE_SUBAGENT_CONCURRENCY", {
+                  value: concurrency.ignored,
                 })
               const agent = yield* agents.resolve(input.agent)
               if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
@@ -182,10 +188,25 @@ export const Plugin = {
               }
 
               const model = override ?? agent.model ?? parent.model
+              // Slots are keyed by child session ID, so a new child's ID is picked before it exists and a
+              // rejected call leaves no orphan session behind.
+              const childID = existing?.id ?? SessionSchema.ID.create()
+              const acquired = yield* subagents.acquire({
+                parentSessionID: context.sessionID,
+                childSessionID: childID,
+                limit: concurrency.limit,
+                mode: concurrency.mode,
+                ...(context.cancel === undefined ? {} : { cancel: context.cancel }),
+              })
+              if (!acquired)
+                return yield* new ToolFailure({
+                  message: `Subagent concurrency limit reached (${concurrency.limit}). Increase "experimental.subagent_concurrency" or wait for a running subagent to finish.`,
+                })
               const child =
                 existing ??
                 (yield* sessions
                   .create({
+                    id: childID,
                     parentID: context.sessionID,
                     title: input.description,
                     agent: agent.id,
@@ -200,60 +221,71 @@ export const Plugin = {
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              // Standard prompt admission outside the job: Job.start joining a running child skips
-              // its run effect, and the default wake starts an idle child or steers a running one.
-              yield* sessions
-                .prompt({
-                  sessionID: child.id,
-                  text:
-                    existing === undefined
-                      ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
-                      : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
-                })
-                .pipe(
-                  Effect.mapError(
-                    (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
+              // A backgrounded child's slot belongs to its completion observer from the handoff on;
+              // until then this call owns it, including when it is interrupted mid-flight.
+              let handoff = false
+              return yield* Effect.gen(function* () {
+                // Standard prompt admission outside the job: Job.start joining a running child skips
+                // its run effect, and the default wake starts an idle child or steers a running one.
+                yield* sessions
+                  .prompt({
+                    sessionID: child.id,
+                    text:
+                      existing === undefined
+                        ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
+                        : input.prompt,
+                    ...(background && existing === undefined ? { resume: false } : {}),
+                  })
+                  .pipe(
+                    Effect.mapError(
+                      (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
+                    ),
+                  )
+
+                const recovery = {
+                  kind: "subagent" as const,
+                  parentSessionID: context.sessionID,
+                  childSessionID: child.id,
+                  agent: agent.name,
+                  description: input.description,
+                }
+                yield* subagents.start(recovery)
+
+                if (background) {
+                  handoff = true
+                  yield* subagents.background(recovery)
+                  return backgroundResult(child.id)
+                }
+
+                const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
+                  Effect.onInterrupt(() =>
+                    Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
+                      discard: true,
+                    }),
                   ),
                 )
-
-              const recovery = {
-                kind: "subagent" as const,
-                parentSessionID: context.sessionID,
-                childSessionID: child.id,
-                agent: agent.name,
-                description: input.description,
-              }
-              yield* subagents.start(recovery)
-
-              if (background) {
-                yield* subagents.background(recovery)
-                return backgroundResult(child.id)
-              }
-
-              const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() =>
-                  Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
-                    discard: true,
-                  }),
+                if (result?.type === "backgrounded") {
+                  handoff = true
+                  yield* subagents.notify(recovery, result.info.started_at)
+                  return backgroundResult(child.id)
+                }
+                // Failure surfaces keep the sessionID visible so the model can continue the child.
+                if (result?.info.status === "error")
+                  return yield* new ToolFailure({
+                    message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
+                  })
+                if (result?.info.status === "cancelled")
+                  return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
+                return {
+                  sessionID: child.id,
+                  status: "completed" as const,
+                  output: result?.info.output ?? SubagentCompletion.NO_TEXT,
+                }
+              }).pipe(
+                Effect.ensuring(
+                  Effect.suspend(() => (handoff ? Effect.void : subagents.release(context.sessionID, child.id))),
                 ),
               )
-              if (result?.type === "backgrounded") {
-                yield* subagents.notify(recovery, result.info.started_at)
-                return backgroundResult(child.id)
-              }
-              // Failure surfaces keep the sessionID visible so the model can continue the child.
-              if (result?.info.status === "error")
-                return yield* new ToolFailure({
-                  message: `Subagent failed (sessionID: ${child.id}): ${result.info.error ?? "unknown error"}`,
-                })
-              if (result?.info.status === "cancelled")
-                return yield* new ToolFailure({ message: `Subagent cancelled (sessionID: ${child.id})` })
-              return {
-                sessionID: child.id,
-                status: "completed" as const,
-                output: result?.info.output ?? SubagentCompletion.NO_TEXT,
-              }
             }).pipe(
               Effect.map((output) => ({
                 output,
@@ -283,6 +315,15 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
+        const limits = SubagentJob.limits({
+          entries: yield* config.entries(),
+          override: yield* SubagentJob.Concurrency,
+        })
+        // Zero allows no subagents, so the model is not offered a call that can only fail.
+        if (limits.limit === 0) {
+          delete event.tools[name]
+          return
+        }
         const selected = yield* agents.resolve(event.agent)
         if (!selected) return
         const available = (yield* agents.list())
