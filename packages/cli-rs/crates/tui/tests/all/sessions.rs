@@ -35,9 +35,13 @@ fn fake(mode: Mode, now: f64, delete_status: u16) -> Fake {
         let path = seen.path.as_str();
         let param = |name: &str| Some(seen.param(name)).filter(|value| !value.is_empty());
         match (seen.method.as_str(), path) {
+            // The store files the info under the directory the server answers for, as TS does.
             ("GET", "/api/location") => (
                 200,
-                json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
+                json!({
+                    "directory": param("location[directory]").unwrap_or_else(|| DIRECTORY.to_owned()),
+                    "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY },
+                }),
             ),
             ("GET", "/api/project") => (200, projects()),
             ("GET", "/api/worktree") => (200, json!([{ "directory": "/tmp/opencode/app-feature" }])),
@@ -324,7 +328,12 @@ fn evented() -> (Harness, opencode_api::memory::Memory) {
     let mut routes = vec![
         MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [session], "cursor": {} })),
         MemoryRoute::json("GET", "/api/project", 200, &projects()),
-        MemoryRoute::json("GET", "/api/location", 200, &support::location(DIRECTORY)),
+        MemoryRoute::json(
+            "GET",
+            "/api/location",
+            200,
+            &json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
+        ),
         MemoryRoute::json("GET", "/api/worktree", 200, &json!([{ "directory": "/tmp/opencode/app-feature" }])),
         MemoryRoute::body("POST", "/api/worktree/refresh", 204, None, ""),
     ];
@@ -371,20 +380,53 @@ fn open_reads_the_worktrees_again_on_worktree_updated() {
     harness.wait("worktree.updated read nothing", || reads() == 2);
 }
 
+// Both dialogs read the store's projects (`dialog-open.tsx:210,239`, `dialog-session-list.tsx:138-157`), so a
+// project renamed while one is open shows its new name.
+#[test]
+fn open_and_session_list_follow_project_updated() {
+    let (harness, memory) = evented();
+    let rename = |name: &str| {
+        memory.emit(&json!({
+            "id": format!("evt_{name}"), "created": 1, "type": "project.updated",
+            "data": { "id": "proj_app", "canonical": DIRECTORY, "name": name, "vcs": "git",
+                      "time": { "created": 1, "updated": 3, "active": 3 }, "sandboxes": [] },
+        }));
+    };
+    harness.app.press("ctrl+o");
+    harness.wait_for("App");
+    harness.wait_gone("Refreshing");
+    rename("Renamed");
+    harness.wait_for("Renamed");
+    harness.app.press("escape");
+
+    harness.app.press("ctrl+x");
+    harness.app.press("l");
+    harness.wait_for("Search sessions in Renamed");
+    rename("Again");
+    harness.wait_for("Search sessions in Again");
+}
+
 #[test]
 fn session_list_and_open_read_the_home_location_not_the_launch_directory() {
     let kit = Kit::new(Mode::List);
     opencode_tui::features::location::navigate_home(&kit.tui, Some(opencode_store::Location::new("/tmp/other")));
     kit.clear_log();
+    // The home read the location's info into the store, where both dialogs find it (`dialog-session-list.tsx:60`).
+    let launch = "/api/location?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp";
     kit.open_list();
     kit.wait_gone("Loading");
-    assert_eq!(kit.dialog_reads()[0], "/api/location?location%5Bdirectory%5D=%2Ftmp%2Fother");
+    let reads = kit.dialog_reads();
+    assert!(!reads.contains(&launch.to_owned()), "{reads:?}");
+    assert!(
+        reads.iter().any(|url| url.starts_with("/api/session?") && url.ends_with("subpath=..%2F..%2Fother")),
+        "{reads:?}"
+    );
     kit.app.press("escape");
     kit.clear_log();
     kit.app.press("ctrl+o");
     kit.wait_gone("Refreshing");
     let reads = kit.dialog_reads();
-    assert!(reads.contains(&"/api/location?location%5Bdirectory%5D=%2Ftmp%2Fother".to_owned()), "{reads:?}");
+    assert!(!reads.contains(&launch.to_owned()), "{reads:?}");
 }
 
 #[test]
@@ -393,8 +435,11 @@ fn session_list_reads_the_scoped_list_then_all_projects_and_saves_the_scope() {
     kit.clear_log();
     kit.open_list();
     kit.wait_gone("Loading");
+    // The location and the projects load together into the store, then the list reads.
+    let mut reads = kit.dialog_reads();
+    reads[..2].sort();
     assert_eq!(
-        kit.dialog_reads(),
+        reads,
         [
             "/api/location?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp",
             "/api/project",
