@@ -46,12 +46,14 @@ export const layer = Layer.effect(
 // A compatible service the entry module already found is adopted at once; the machine still verifies it with
 // `ensure("initial")` (which also completes a terminal handoff), off the renderer's path.
 const probe = Effect.fn("BackgroundService.probe")(function* () {
+  // Consume the startup probe before resolving the CLI, whose preparation can fail. Leaving a result stored would
+  // let a later initial attempt adopt a service that exited between launch and that attempt; the file check still
+  // rejects probes from another state directory.
+  const probed = yield* Effect.promise(() => takeSidecarProbe())
   const setup = yield* prepare("initial")
-  const service = yield* Effect.promise(() => takeSidecarProbe(setup.file))
+  if (!probed || probed.file !== setup.file) return undefined
 
-  if (!service) return undefined
-
-  return (yield* adopt(setup, service, true)).credentials
+  return (yield* adopt(setup, probed.service, true)).credentials
 })
 
 const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: BackgroundServiceMachine.ConnectMode) {

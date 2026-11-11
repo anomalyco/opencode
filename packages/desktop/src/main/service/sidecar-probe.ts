@@ -27,12 +27,15 @@ export function startSidecarProbe() {
 }
 
 /** The probe's result, once: a later connect must not adopt a service that may have exited since boot. */
-export async function takeSidecarProbe(file: string) {
+export async function takeSidecarProbe() {
+  if (!probe) return undefined
   const result = probe
   probe = undefined
-  const endpoint = await result
+  const service = await result
+  const file = probeFile
+  probeFile = undefined
 
-  return file === probeFile ? endpoint : undefined
+  return service && file ? { service, file } : undefined
 }
 
 function bundledVersion() {
