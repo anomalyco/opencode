@@ -6,7 +6,7 @@ import type {
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { SessionTurn } from "@opencode/util/session-turn"
-import { Option, Predicate, Schema } from "effect"
+import { Predicate } from "effect"
 import {
   For,
   Match,
@@ -30,34 +30,14 @@ import type { SessionUserActions, SessionUserAttachmentReference, SessionUserCom
 import { useData } from "../context"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
-import { TimelineSeparator } from "../components/timeline-separator"
-import {
-  SessionAssistantContent,
-  SessionContextToolGroup,
-  SessionFileToolGroup,
-  SessionReadToolGroup,
-  SessionShellMessage,
-  SessionUserMessage,
-  currentContentDefaultOpen,
-} from "../message/current-message"
-import {
-  AssistantReasoningContent,
-  SessionCompactionMessage,
-  SessionCompactionQueued,
-} from "../message/message-content"
-import { taskAgentName, ToolRegistry, type ContextGroupPart } from "../tools/tool-renderer"
-import { GenericTool } from "../components/basic-tool"
+import { SessionReadToolGroup, SessionUserMessage } from "../message/current-message"
+import { SessionCompactionMessage, SessionCompactionQueued } from "../message/message-content"
+import { taskAgentName, type ContextGroupPart } from "../tools/tool-renderer"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
-import { timelineCategory, type TimelineDetail } from "../timeline/detail"
-import { currentToolFailed } from "../message/current-tool-state"
-import { userMessageRuns, userRunSpring } from "../timeline/user-runs"
-import { attached } from "../components/message-file"
-import { contentEntries, createNextTimelineProjection, resolveContent } from "./projection"
+import type { TimelineDetail } from "../timeline/detail"
 import { TimelineRow, type PartRef } from "../timeline/timeline-row"
-import { unwrapErrorMessage } from "./errors"
-
-type ReasoningMode = "hidden" | "compact" | "full"
+import { userMessageRuns, userRunSpring } from "../timeline/user-runs"
 import { IDLE_TURN_PHASE, sameRef, viewTurnPhase } from "../timeline/turn-phase-machine"
 import {
   DISPOSED_STEER_ARRIVAL_EVENT,
@@ -66,13 +46,27 @@ import {
   shouldSnapUserRun,
   transitionSteerArrival,
 } from "../timeline/steer-arrival-machine"
+import { Badge } from "@opencode/ui/badge"
+import { attached } from "../components/message-file"
+import { unwrapErrorMessage } from "./errors"
+import { TimelineEventRow } from "./event-row"
+import { noticeEvent, toolEvent } from "./events"
+import { trackNestedRails } from "./nested-rail"
+import { contentEntries, createNextTimelineProjection, resolveContent } from "./projection"
+import { contentOpens, diffOpens, goal as goalMessage, thinkingOpens, toolRule, userShellOpens } from "./rules"
+import { Separator } from "./separator"
+import { timelineGaps } from "./spacing"
+import { AssistantContent } from "./tools/assistant-content"
+import { ContextGroup } from "./tools/context-group"
+import { FileGroup } from "./tools/file-group"
+import { PatchTool } from "./tools/patch"
+import { ShellMessage } from "./tools/shell"
+import { ThoughtRow } from "./tools/thought"
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 
 // Past this many files, the rest of a turn's changes wait behind "Show all".
 const turnDiffFileLimit = 5
-
-const decodeMetadataFile = Schema.decodeUnknownOption(Schema.Struct({ file: Schema.String }))
 
 type Projection = ReturnType<typeof createNextTimelineProjection>
 
@@ -88,16 +82,14 @@ export type SessionUserPresentation = {
   voice?: boolean
 }
 
+/** Draws the New timeline's rows. */
 export function createNextTimelineRowRenderer(input: {
   sessionID: Accessor<string>
   status: Accessor<SessionStatus>
   projection: Projection
   presentation: (message: SessionMessageUser) => SessionUserPresentation | undefined
   actions?: SessionUserActions
-  reasoningMode: Accessor<ReasoningMode>
-  shellToolDefaultOpen: Accessor<boolean>
-  editToolDefaultOpen: Accessor<boolean>
-  timelineDetail?: Accessor<TimelineDetail>
+  timelineDetail: Accessor<TimelineDetail>
   foldUserMessages?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
@@ -137,12 +129,7 @@ export function createNextTimelineRowRenderer(input: {
       row.group.refs.forEach((ref) => {
         const content = resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
 
-        if (
-          content?.type !== "tool" ||
-          !["edit", "write", "patch"].includes(content.name) ||
-          content.state.status === "error"
-        )
-          return
+        if (content?.type !== "tool" || toolRule(content).shape !== "file" || content.state.status === "error") return
         const part = `${ref.messageID}:${ref.partID}`
         const key = patchGroupKeys.get(part)
 
@@ -372,14 +359,11 @@ export function createNextTimelineRowRenderer(input: {
               {
                 type: "text",
                 id: ref.partID,
-                render: () => <SessionAssistantContent message={message} content={content} contentID={ref.partID} />,
+                render: () => <AssistantContent message={message} content={content} contentID={ref.partID} />,
               },
             ]
 
           if (ref.messageID !== ref.partID || !message) return []
-
-          if (message.type === "shell")
-            return [{ type: "shell", id: ref.partID, render: () => <Shell messageID={ref.messageID} grouped /> }]
 
           if (message.type !== "assistant" && message.type !== "user")
             return [{ type: "notice", id: ref.partID, render: () => <Notice messageID={ref.messageID} grouped /> }]
@@ -392,7 +376,7 @@ export function createNextTimelineRowRenderer(input: {
 
       return (
         <div class="contents" data-notices-only={parts().every((part) => part.type === "notice") ? "" : undefined}>
-          <SessionContextToolGroup
+          <ContextGroup
             parts={parts()}
             patchGroupKey={(tools) => {
               const parts = tools.map((tool) => patchPartKeys.get(tool)!)
@@ -407,31 +391,54 @@ export function createNextTimelineRowRenderer(input: {
 
               return key
             }}
-            reasoningDefaultOpen={
-              input.timelineDetail
-                ? input.timelineDetail().thinking.details === "expanded"
-                : input.reasoningMode() === "full"
-            }
+            reasoningDefaultOpen={thinkingOpens(input.timelineDetail())}
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
-            toolDefaultOpen={(tool) =>
-              input.timelineDetail || tool.name === "execute" ? contentDefaultOpen(tool) : false
-            }
+            toolDefaultOpen={(tool) => contentOpens(input.timelineDetail(), tool)}
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
-            fileOpen={(path) =>
-              input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
-            }
+            fileOpen={(path) => input.disclosure.value(`patch:${path}`) ?? diffOpens(input.timelineDetail())}
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
-            busy={
-              phase(row().userMessageID).live &&
-              input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
-            }
             onOpenChange={(open) => input.disclosure.set(key(), open)}
             onSizeChange={onSizeChange}
           />
         </div>
+      )
+    }
+
+    if (row().group.type === "events") {
+      const events = createMemo(() => {
+        const group = row().group
+
+        if (group.type !== "events") return []
+        const contents = indexGroupContents(group.refs)
+
+        // A call starts the work; a notice under its message's own ID reports it back.
+        return group.refs.flatMap((ref) => {
+          const message = input.projection.messageByID().get(ref.messageID)
+          const content = contents.get(ref.messageID)?.get(ref.partID)
+          const event =
+            ref.messageID === ref.partID
+              ? message && noticeEvent(message)
+              : content?.type === "tool"
+                ? toolEvent(content)
+                : undefined
+
+          return event ? [event] : []
+        })
+      })
+
+      return (
+        <TimelineEventRow
+          events={events()}
+          open={input.disclosure.value(`events:${row().group.key}`) === true}
+          onOpenChange={(open) => {
+            input.disclosure.set(`events:${row().group.key}`, open)
+            onSizeChange?.()
+          }}
+          onRevealShell={input.revealPart}
+        />
       )
     }
 
@@ -473,31 +480,12 @@ export function createNextTimelineRowRenderer(input: {
         })
       })
 
-      const firstPath = createMemo(() => {
-        const tool = tools()[0]
-
-        if (!tool || !("metadata" in tool.state)) return undefined
-        const files = tool.state.metadata?.files
-
-        if (!Array.isArray(files)) return undefined
-
-        return Option.getOrUndefined(decodeMetadataFile(files[0]))?.file
-      })
-
       return (
-        <SessionFileToolGroup
+        <FileGroup
           tools={tools()}
-          fileOpen={(path) => {
-            const open = input.disclosure.value(`${row().group.key}:file:${path}`)
-
-            if (open !== undefined) return open
-
-            if (input.timelineDetail) return input.timelineDetail().edit.details === "expanded"
-
-            if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
-
-            return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
-          }}
+          fileOpen={(path) =>
+            input.disclosure.value(`${row().group.key}:file:${path}`) ?? diffOpens(input.timelineDetail())
+          }
           onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
           onSizeChange={onSizeChange}
         />
@@ -526,7 +514,7 @@ export function createNextTimelineRowRenderer(input: {
     const defaultOpen = createMemo(() => {
       const item = content()
 
-      return item ? contentDefaultOpen(item) : undefined
+      return item ? contentOpens(input.timelineDetail(), item) : undefined
     })
 
     // Only the finished turn's footer part derives them, and only while the host shows sources.
@@ -566,7 +554,7 @@ export function createNextTimelineRowRenderer(input: {
         {(message) => (
           <Show when={content()}>
             {(content) => (
-              <SessionAssistantContent
+              <AssistantContent
                 message={message()}
                 content={content()}
                 contentID={ref()!.partID}
@@ -585,29 +573,6 @@ export function createNextTimelineRowRenderer(input: {
         )}
       </Show>
     )
-  }
-
-  function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
-    if (item.type === "tool" && item.name === "execute") return true
-
-    if (input.timelineDetail) {
-      const category = timelineCategory(item)
-
-      if (
-        category &&
-        input.timelineDetail()[category].placement === "hidden" &&
-        item.type === "tool" &&
-        currentToolFailed(item)
-      )
-        return true
-
-      if (category === "shell" || category === "edit" || category === "thinking")
-        return input.timelineDetail()[category].details === "expanded"
-    }
-
-    if (item.type === "reasoning") return input.reasoningMode() === "full"
-
-    return currentContentDefaultOpen(item, input.shellToolDefaultOpen(), input.editToolDefaultOpen())
   }
 
   const notice = (message: SessionMessageInfo) => {
@@ -679,21 +644,30 @@ export function createNextTimelineRowRenderer(input: {
     return { label: message.description ?? message.text }
   }
 
+  const gaps = createMemo(() => timelineGaps(input.projection.rows(), input.projection.messageByID()))
+
+  // Each row's space above comes from its block, and none of its own. A message joining the user's message above
+  // already sits its run's 4 px below it.
+  const gap = (row: FramedTimelineRow) => {
+    if (Predicate.isTagged(row, "UserMessage") && runs().get(row.userMessageID)?.above) return undefined
+
+    return gaps().get(TimelineRow.key(row))
+  }
+
   const Frame = (props: { row: FramedTimelineRow; grow?: boolean; children: JSX.Element }) => (
     <div
       ref={(el) => {
         if (props.grow) growIn(el, () => grown(props.row.userMessageID))
+        onCleanup(trackNestedRails(el))
       }}
       id={Predicate.isTagged(props.row, "UserMessage") ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
+      data-timeline="next"
       data-timeline-row={props.row._tag}
-      data-timeline-spacing={Predicate.isTagged(props.row, "AssistantPart") ? props.row.spacing : undefined}
+      data-timeline-gap={gap(props.row)}
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-session md:mx-auto": input.centered?.(),
-        "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
-        "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
-        "pt-6": Predicate.isTagged(props.row, "Error"),
       }}
     >
       <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>
@@ -747,10 +721,19 @@ export function createNextTimelineRowRenderer(input: {
       }
     })
 
+    // The goal the user set shows as their own message. Core describes it as "Goal: <objective>".
+    const goal = createMemo(() => {
+      const value = message()
+
+      if (!goalMessage(value)) return
+
+      return value.description?.replace(/^Goal: /, "") || undefined
+    })
+
     const content = createMemo(() => {
       const value = message()
 
-      return value ? notice(value) : undefined
+      return value && !goal() ? notice(value) : undefined
     })
 
     const childID = createMemo(() => {
@@ -807,7 +790,23 @@ export function createNextTimelineRowRenderer(input: {
 
     return (
       <>
-        <Show when={compaction()}>
+        <Show when={goal()}>
+          {(objective) => (
+            <div data-slot="session-turn-message-container" class={`w-full ${inset()}`}>
+              <div data-component="user-message" data-goal="">
+                <div data-slot="user-message-body">
+                  <div data-slot="user-message-text" dir="auto">
+                    <Badge data-slot="user-message-goal-badge" dir="ltr">
+                      /goal
+                    </Badge>
+                    <bdi>{objective()}</bdi>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </Show>
+        <Show when={!goal() && compaction()}>
           {(message) => (
             <div data-slot="session-turn-message-container" class={`w-full ${inset()}`}>
               <div data-slot="session-turn-compaction">
@@ -831,7 +830,7 @@ export function createNextTimelineRowRenderer(input: {
                           component={href() ? "a" : "div"}
                           data-slot="session-timeline-notice"
                           data-outcome={content().outcome}
-                          class={`block w-full truncate ${props.grouped ? "py-1" : "pt-3 pb-1"} text-13-regular leading-text-compact text-v2-text-text-faint ${inset()}`}
+                          class={`block w-full truncate ${props.grouped ? "py-1" : ""} text-13-regular leading-text-compact text-v2-text-text-faint ${inset()}`}
                           classList={{ "cursor-pointer hover:text-v2-text-text-base": clickable() }}
                           href={href()}
                           role={clickable() && !href() ? (shellID() ? "button" : "link") : undefined}
@@ -866,7 +865,7 @@ export function createNextTimelineRowRenderer(input: {
                         </Dynamic>
                       }
                     >
-                      <div data-slot="session-timeline-notice" class={`w-full py-1 ${inset()}`}>
+                      <div data-slot="session-timeline-notice" class={`w-full ${inset()}`}>
                         <div class="flex min-h-5 min-w-0 items-center gap-2 overflow-hidden">
                           <bdi
                             dir="auto"
@@ -892,16 +891,16 @@ export function createNextTimelineRowRenderer(input: {
               }
             >
               {(model) => (
-                <div data-slot="session-timeline-notice" data-type="model-switched" class={`w-full py-2 ${inset()}`}>
-                  <TimelineSeparator label={model().label} providerID={model().providerID} variant={model().variant} />
+                <div data-slot="session-timeline-notice" data-type="model-switched" class={`w-full ${inset()}`}>
+                  <Separator label={model().label} providerID={model().providerID} variant={model().variant} />
                 </div>
               )}
             </Show>
           }
         >
           {(message) => (
-            <div data-slot="session-timeline-notice" data-type="location-switched" class={`w-full py-2 ${inset()}`}>
-              <TimelineSeparator
+            <div data-slot="session-timeline-notice" data-type="location-switched" class={`w-full ${inset()}`}>
+              <Separator
                 label={i18n.t("ui.sessionTimeline.notice.movedTo")}
                 value={message().location.directory}
                 tooltip={i18n.t("ui.sessionTimeline.notice.movedTooltip")}
@@ -913,32 +912,20 @@ export function createNextTimelineRowRenderer(input: {
     )
   }
 
-  function Shell(props: { messageID: string; grouped?: boolean }) {
+  function Shell(props: { messageID: string }) {
     const message = createMemo(() => {
       const value = input.projection.messageByID().get(props.messageID)
 
       return value?.type === "shell" ? value : undefined
     })
 
-    const defaultOpen = createMemo(() => {
-      if (!input.timelineDetail) return input.shellToolDefaultOpen()
-      const value = message()
-
-      return (
-        input.timelineDetail().shell.details === "expanded" ||
-        (input.timelineDetail().shell.placement === "hidden" &&
-          (value?.status === "timeout" || (value?.status === "exited" && value.exit !== undefined && value.exit !== 0)))
-      )
-    })
-
     return (
       <Show when={message()}>
         {(message) => (
-          <div data-slot="session-turn-message-container" class={`w-full ${props.grouped ? "" : padding()}`}>
-            <SessionShellMessage
+          <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
+            <ShellMessage
               message={message()}
-              defaultOpen={defaultOpen()}
-              open={input.disclosure.value(message().id) ?? (input.timelineDetail ? defaultOpen() : undefined)}
+              open={input.disclosure.value(message().id) ?? userShellOpens}
               onOpenChange={(open) => input.disclosure.set(message().id, open)}
             />
           </div>
@@ -948,7 +935,6 @@ export function createNextTimelineRowRenderer(input: {
   }
 
   function TurnDiff(props: { row: TimelineRow.TurnDiff; onSizeChange?: () => void }) {
-    const render = ToolRegistry.render("patch") ?? GenericTool
     // Until the diff loads, and if it fails, list the paths the turn's steps recorded, without change counts.
     const turn = () => ({ sessionID: input.sessionID(), from: props.row.from })
     const state = createMemo(() => data.turnDiff?.state(turn()))
@@ -972,7 +958,7 @@ export function createNextTimelineRowRenderer(input: {
 
     return (
       <Show when={data.turnDiff && paths().length > 0}>
-        <div data-slot="session-turn-diffs" class="flex flex-col gap-2 pt-4">
+        <div data-slot="session-turn-diffs" class="flex flex-col gap-2">
           <div class="flex h-6 min-w-0 items-center gap-2">
             <span class="shrink-0 text-14-medium text-v2-text-text-base tabular-nums">
               {i18n.plural("ui.sessionTurn.diffs.changed", paths().length)}
@@ -1010,8 +996,7 @@ export function createNextTimelineRowRenderer(input: {
               </div>
             </Show>
           </div>
-          <Dynamic
-            component={render}
+          <PatchTool
             tool="patch"
             input={{}}
             metadata={{ files: limit(diffs() ?? []) }}
@@ -1034,7 +1019,7 @@ export function createNextTimelineRowRenderer(input: {
     const joined = run(props.messageID)
     springStyle(
       () => element,
-      () => ({ height: joined()?.above ? 4 : 16 }),
+      () => ({ height: joined()?.above ? 4 : 0 }),
       (el, value) => {
         el.style.height = `${value.height}px`
       },
@@ -1047,7 +1032,7 @@ export function createNextTimelineRowRenderer(input: {
         ref={element}
         data-timeline-row="TurnGap"
         aria-hidden="true"
-        style={{ height: untrack(joined)?.above ? "4px" : "16px" }}
+        style={{ height: untrack(joined)?.above ? "4px" : "0px" }}
       />
     )
   }
@@ -1167,9 +1152,7 @@ export function createNextTimelineRowRenderer(input: {
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-compaction">
-              <div class="py-2">
-                <TimelineSeparator label={i18n.t("ui.message.interrupted")} />
-              </div>
+              <Separator label={i18n.t("ui.message.interrupted")} />
             </div>
           </div>
         </Frame>
@@ -1235,31 +1218,62 @@ export function createNextTimelineRowRenderer(input: {
         return content?.type === "reasoning" ? content : undefined
       })
 
+      // The live thought stands in for the status line, so it streams in view.
+
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-thinking-row">
+            <div data-slot="session-turn-thinking-row" data-live-slot="">
               <Show when={content()}>
                 {(content) => (
-                  <AssistantReasoningContent
+                  <ThoughtRow
                     id={current().ref.partID}
                     content={content()}
                     streaming
-                    defaultOpen={
-                      input.timelineDetail
-                        ? input.timelineDetail().thinking.details === "expanded"
-                        : input.reasoningMode() === "full"
-                    }
-                    open={
-                      input.disclosure.value(current().ref.partID) ??
-                      (input.timelineDetail ? input.timelineDetail().thinking.details === "expanded" : undefined)
-                    }
+                    defaultOpen
+                    open={input.disclosure.value(current().ref.partID) ?? true}
                     onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
                     onContentRendered={onSizeChange}
                   />
                 )}
               </Show>
             </div>
+          </div>
+        </Frame>
+      )
+    }
+
+    if (Predicate.isTagged(row(), "Worked")) {
+      const current = () => {
+        const value = row()
+
+        if (!Predicate.isTagged(value, "Worked")) throw new Error("Expected a worked timeline row")
+
+        return value
+      }
+
+      const label = createMemo(() => {
+        const ms = duration(current().userMessageID)
+
+        if (ms === null || ms === undefined || !(ms >= 0)) return i18n.t("ui.timeline.activity.workedUnknown")
+        const total = Math.round(ms / 1000)
+        const numfmt = new Intl.NumberFormat(i18n.locale())
+
+        return i18n.t("ui.timeline.activity.worked", {
+          duration:
+            total < 60
+              ? i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
+              : i18n.t("ui.message.duration.minutesSeconds", {
+                  minutes: numfmt.format(Math.floor(total / 60)),
+                  seconds: numfmt.format(total % 60),
+                }),
+        })
+      })
+
+      return (
+        <Frame row={current()}>
+          <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
+            <div class="text-13-regular leading-text-compact text-v2-text-text-muted">{label()}</div>
           </div>
         </Frame>
       )
@@ -1303,9 +1317,6 @@ export function createNextTimelineRowRenderer(input: {
         </Frame>
       )
     }
-
-    // Drawn once the New timeline's rows are ported.
-    if (Predicate.isTagged(row(), "Worked")) return null
 
     const current = () => {
       const value = row()

@@ -659,6 +659,12 @@ export const dict = {
   "session.todo.label.one": "{{done}} of {{count}} todo done",
   "session.todo.label.other": "{{done}} of {{count}} todos done",
   "session.timeline.working": "Working",
+  "session.timeline.status.waitingApproval": "Waiting for approval",
+  "session.timeline.status.waitingAnswer": "Waiting for your answer",
+  "session.timeline.status.waitingShell": "Waiting for shell",
+  "session.timeline.status.waitingAgent": "Waiting for subagent",
+  "session.timeline.status.waitingAgents": "Waiting for subagents",
+  "session.timeline.status.working": "Working",
   "session.running.stop.subagent": "Interrupt subagent",
   "session.running.stop.shell": "Kill shell command",
 

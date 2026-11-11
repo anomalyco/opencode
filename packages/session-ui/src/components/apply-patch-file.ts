@@ -32,7 +32,8 @@ export function changedFileDiff(value: unknown): value is FileDiffInfo {
   return value.additions > 0 || value.deletions > 0
 }
 
-export function patchFile(value: unknown): ApplyPatchFile | undefined {
+/** `context` is how many unchanged lines the diff keeps around each change. */
+export function patchFile(value: unknown, context?: number): ApplyPatchFile | undefined {
   if (!changedFileDiff(value)) return
   let view: ViewDiff | undefined
 
@@ -42,20 +43,20 @@ export function patchFile(value: unknown): ApplyPatchFile | undefined {
     additions: value.additions,
     deletions: value.deletions,
     get view() {
-      return (view ??= normalize(value))
+      return (view ??= normalize(value, context))
     },
     contents: completePatchContents(value.patch),
   }
 }
 
-export function patchFiles(value: unknown) {
+export function patchFiles(value: unknown, context?: number) {
   if (!Array.isArray(value)) return []
 
-  return value.map(patchFile).filter((file): file is ApplyPatchFile => !!file)
+  return value.map((file) => patchFile(file, context)).filter((file): file is ApplyPatchFile => !!file)
 }
 
-export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
-  const groups = patchFiles(value).reduce((result, file) => {
+export function patchFileGroups(value: unknown, context?: number): ApplyPatchFileGroup[] {
+  const groups = patchFiles(value, context).reduce((result, file) => {
     const files = result.get(file.path)
 
     if (files) files.push(file)
@@ -87,14 +88,17 @@ export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
     const view =
       files.length === 1
         ? first.view
-        : normalize({
-            file: path,
-            before: first.contents!.before,
-            after: last.contents!.after,
-            status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
-            additions: 0,
-            deletions: 0,
-          })
+        : normalize(
+            {
+              file: path,
+              before: first.contents!.before,
+              after: last.contents!.after,
+              status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
+              additions: 0,
+              deletions: 0,
+            },
+            context,
+          )
 
     // Parsed hunks already contain net change counts, excluding unchanged context.
     const counts = view.fileDiff.hunks.reduce(

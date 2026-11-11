@@ -146,6 +146,11 @@ export function contentOpens(detail: TimelineDetail, content: Content) {
   return false
 }
 
+/** Whether a file's diff starts open, cut to its first rows, where edits show in detail. */
+export function diffOpens(detail: TimelineDetail) {
+  return detail.edit.details === "expanded"
+}
+
 /** Whether a thought starts open. */
 export function thinkingOpens(detail: TimelineDetail) {
   return detail.thinking.details === "expanded"
@@ -187,7 +192,9 @@ export function sessionEvent(message: SessionMessageInfo) {
 }
 
 /** A goal the user set, which reads as their own message. */
-export function goal(message: SessionMessageInfo | undefined) {
+export function goal(
+  message: SessionMessageInfo | undefined,
+): message is Extract<SessionMessageInfo, { type: "synthetic" }> {
   return message?.type === "synthetic" && message.metadata?.source === "goal"
 }
 

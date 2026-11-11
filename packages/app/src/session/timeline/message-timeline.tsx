@@ -2,6 +2,7 @@ import { createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } fr
 import { Predicate } from "effect"
 import { abort } from "@opencode/util/abort"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
@@ -297,12 +298,12 @@ function MessageTimelineView(
 
   const settings = useSettings()
 
-  const rowRenderer = (props.next ? createNextTimelineRowRenderer : createSessionTimelineRowRenderer)({
+  const rowInput = {
     foldUserMessages: settings.general.foldUserMessages,
     sessionID: () => sessionID()!,
     status: sessionStatus,
     projection,
-    presentation: (message) => {
+    presentation: (message: SessionMessageUser) => {
       const value = readPromptPresentation(message.metadata)
       const parsed = value ? undefined : parseCommentNote(message.text)
       const voice = parseVoiceDelegation(value?.displayText ?? message.text)
@@ -315,16 +316,22 @@ function MessageTimelineView(
       }
     },
     actions: props.actions,
-    reasoningMode: props.data.reasoningMode,
-    shellToolDefaultOpen: props.data.shellToolPartsExpanded,
-    editToolDefaultOpen: props.data.editToolPartsExpanded,
     timelineDetail: props.data.timelineDetail,
     disclosure: virtualized.disclosure,
     centered: () => props.centered,
     padding: turnPadding,
     anchor: props.anchor,
     revealPart: virtualized.revealPart,
-  })
+  }
+
+  const rowRenderer = props.next
+    ? createNextTimelineRowRenderer(rowInput)
+    : createSessionTimelineRowRenderer({
+        ...rowInput,
+        reasoningMode: props.data.reasoningMode,
+        shellToolDefaultOpen: props.data.shellToolPartsExpanded,
+        editToolDefaultOpen: props.data.editToolPartsExpanded,
+      })
 
   const backgroundHintPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))

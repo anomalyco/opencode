@@ -22,7 +22,7 @@ const setting = [
   "app/src/runtime/i18n/en.ts",
 ]
 
-const root = '[data-component="timeline-next"]'
+const root = '[data-timeline="next"]'
 
 describe("New timeline boundary", () => {
   test("only the switches import the New timeline", async () => {
