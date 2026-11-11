@@ -637,3 +637,21 @@
     }
   }
 }
+
+/* A row's line clips only sideways, where its subtitle truncates, so a tag as tall as the line is never cut at the
+   top or bottom by rounding. */
+[data-timeline="next"] [data-slot="basic-tool-tool-info-main"] {
+  overflow: clip visible;
+}
+
+/* Keyboard focus marks the row's line of text, rounded, inside its click area. The trigger itself also holds that
+   area and, open, the gap below the row, so filling it would paint a band across the gap. */
+[data-timeline="next"] [data-slot="collapsible-trigger"]:focus-visible {
+  background-color: transparent;
+
+  > [data-component="tool-trigger"] {
+    border-radius: 4px;
+    background-color: var(--surface-raised-base-hover);
+    box-shadow: 0 0 0 4px var(--surface-raised-base-hover);
+  }
+}

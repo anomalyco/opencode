@@ -53,7 +53,7 @@ import { TimelineEventRow } from "./event-row"
 import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
-import { contentOpens, diffOpens, goal as goalMessage, thinkingOpens, toolRule, userShellOpens } from "./rules"
+import { contentOpens, diffOpens, goal as goalMessage, thoughtOpens, toolRule, userShellOpens } from "./rules"
 import { Separator } from "./separator"
 import { timelineGaps } from "./spacing"
 import { AssistantContent } from "./tools/assistant-content"
@@ -391,7 +391,7 @@ export function createNextTimelineRowRenderer(input: {
 
               return key
             }}
-            reasoningDefaultOpen={thinkingOpens(input.timelineDetail())}
+            reasoningDefaultOpen={thoughtOpens(false)}
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
             toolDefaultOpen={(tool) => contentOpens(input.timelineDetail(), tool)}
@@ -1218,7 +1218,7 @@ export function createNextTimelineRowRenderer(input: {
         return content?.type === "reasoning" ? content : undefined
       })
 
-      // The live thought stands in for the status line, so it streams in view.
+      // The live thought stands in for the status line. It streams in view, and the row it settles into starts closed.
 
       return (
         <Frame row={current()}>
@@ -1230,8 +1230,8 @@ export function createNextTimelineRowRenderer(input: {
                     id={current().ref.partID}
                     content={content()}
                     streaming
-                    defaultOpen
-                    open={input.disclosure.value(current().ref.partID) ?? true}
+                    defaultOpen={thoughtOpens(true)}
+                    open={input.disclosure.value(current().ref.partID) ?? thoughtOpens(true)}
                     onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
                     onContentRendered={onSizeChange}
                   />

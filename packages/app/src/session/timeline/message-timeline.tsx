@@ -253,7 +253,8 @@ function MessageTimelineView(
       const content = Timeline.resolveContent(message, row.group.ref.partID)
 
       if (content?.type === "reasoning")
-        return !(disclosure[row.group.ref.partID] ?? props.data.reasoningMode() === "full")
+        // The New timeline's finished thoughts start closed, so they render at once like any closed row.
+        return !(disclosure[row.group.ref.partID] ?? (!props.next && props.data.reasoningMode() === "full"))
 
       return (
         content?.type === "text" &&

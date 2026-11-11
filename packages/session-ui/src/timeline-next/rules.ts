@@ -134,7 +134,7 @@ export function contentGroup(detail: TimelineDetail, content: Content, commentar
 export function contentOpens(detail: TimelineDetail, content: Content) {
   if (content.type === "text") return false
 
-  if (content.type === "reasoning") return thinkingOpens(detail)
+  if (content.type === "reasoning") return thoughtOpens(false)
   const rule = toolRule(content)
 
   if (content.state.status !== "error" && (rule.shape === "card" || rule.shape === "file")) return false
@@ -151,9 +151,12 @@ export function diffOpens(detail: TimelineDetail) {
   return detail.edit.details === "expanded"
 }
 
-/** Whether a thought starts open. */
-export function thinkingOpens(detail: TimelineDetail) {
-  return detail.thinking.details === "expanded"
+/**
+ * A thought is open while the model writes it, so it streams in view, and starts closed once finished, when the next
+ * step follows it; opening it shows the thought. This holds whatever the setting.
+ */
+export function thoughtOpens(streaming: boolean) {
+  return streaming
 }
 
 /** Whether a thought the model is writing shows, at the end of its turn, in place of the status line. */
