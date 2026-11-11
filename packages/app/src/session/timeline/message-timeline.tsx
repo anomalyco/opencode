@@ -197,7 +197,8 @@ function MessageTimelineView(
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
-    presentationKey: () => JSON.stringify(props.data.timelineDetail()),
+    // Each timeline measures and opens its own rows, so they keep separate caches.
+    presentationKey: () => `${props.next ? "next:" : ""}${JSON.stringify(props.data.timelineDetail())}`,
     keepsDisclosure: props.next,
     projection,
     showHeader,
@@ -353,10 +354,11 @@ function MessageTimelineView(
   const [settledBlockingPartID, setSettledBlockingPartID] = createSignal<string>()
 
   createEffect(() => {
+    if (!props.next) return
     const partID = blockingPartID()
     const started = props.background.blocking().find((task) => task.partID === partID)?.started
 
-    if (!props.next || !partID || started === undefined) return
+    if (!partID || started === undefined) return
     const timer = setTimeout(() => setSettledBlockingPartID(partID), Math.max(0, started + 300 - Date.now()))
     onCleanup(() => clearTimeout(timer))
   })
@@ -447,10 +449,11 @@ function MessageTimelineView(
   // In the New timeline, the status line is the one live indicator: it stays below the turn while it works and says
   // the most useful thing happening, in place of each group showing its own.
   const nextStatus = createMemo(() => {
+    if (!props.next) return
     const id = sessionID()
     const active = projection.activeMessageID()
 
-    if (!props.next || !id || !active || sessionStatus().type !== "busy") return
+    if (!id || !active || sessionStatus().type !== "busy") return
 
     return timelineStatus({
       blocked: data.session.permission.list(id)?.length
@@ -465,15 +468,17 @@ function MessageTimelineView(
   // A thought the model is writing stands in for Working, as its row says Thinking. A wait still shows, so the user
   // sees what to act on.
   const liveThought = createMemo(() => {
+    if (!props.next) return false
     const active = projection.activeMessageID()
 
     return projection.rows().some((row) => Predicate.isTagged(row, "Thinking") && row.userMessageID === active)
   })
 
   const laneSpacing = createMemo(() => {
+    if (!props.next) return
     const active = projection.activeMessageID()
 
-    if (!props.next || !active) return
+    if (!active) return
 
     return laneGap(projection.rows(), active, messageByID())
   })
