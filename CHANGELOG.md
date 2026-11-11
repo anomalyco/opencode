@@ -2,6 +2,12 @@
 
 Release notes for OpenCode V2, newest first.
 
+## Unreleased
+
+### Bug fixes
+
+- Keep OAuth sign-in inputs and actions accessible in short terminals.
+
 ## v2.2.7 — 2026-11-10
 
 ### Highlights

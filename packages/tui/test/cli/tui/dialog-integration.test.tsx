@@ -508,13 +508,18 @@ test("keeps the OAuth paste prompt layout without new designs", async () => {
   expect(frame.split("Authorize opensend in your browser.").length).toBe(2)
 })
 
-test.each([false, true])("scrolls a long OAuth link and submits the redirect (new designs: %s)", async (newDesigns) => {
+test.each([
+  [false, 20],
+  [true, 20],
+  [false, 12],
+  [true, 12],
+] as const)("scrolls and submits OAuth (new designs: %s, height: %s)", async (newDesigns, height) => {
   await using fixture = await renderOAuth({
     paste: true,
     newDesigns,
     url: `https://example.com/authorize?${"x".repeat(600)}ENDMARKER`,
     width: 50,
-    height: 20,
+    height,
   })
   await fixture.app.waitForFrame((frame) => frame.includes("Redirect URL") && frame.includes("copy link"))
   await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
@@ -523,7 +528,7 @@ test.each([false, true])("scrolls a long OAuth link and submits the redirect (ne
     node.id === "oauth-paste-description" ? node : node.getChildren().map(find).find(Boolean)
   const scroll = find(fixture.app.renderer.root)
   if (!(scroll instanceof ScrollBoxRenderable)) throw new Error("expected scrollable authorization description")
-  await fixture.app.mockMouse.scroll(scroll.viewport.x + 1, scroll.viewport.y + 1, "down")
+  await fixture.app.mockMouse.scroll(scroll.viewport.x + 1, scroll.viewport.y, "down")
   await fixture.app.waitFor(() => scroll.scrollTop > 0)
   const mousePosition = scroll.scrollTop
   fixture.app.mockInput.pressKey("\x1b[57355u")
@@ -532,11 +537,12 @@ test.each([false, true])("scrolls a long OAuth link and submits the redirect (ne
   fixture.app.mockInput.pressKey("\x1b[57354u")
   await fixture.app.waitFor(() => scroll.scrollTop < keyboardPosition)
   let frame = fixture.app.captureCharFrame()
-  for (let i = 0; i < 12 && !frame.includes("ENDMARKER"); i++) {
+  for (let i = 0; i < 40 && !frame.includes("ENDMARKER"); i++) {
     const position = scroll.scrollTop
     fixture.app.mockInput.pressKey("\x1b[57355u")
     await fixture.app.waitFor(() => scroll.scrollTop > position)
-    frame = await fixture.app.waitForFrame((value) => value !== frame)
+    await fixture.app.renderOnce()
+    frame = fixture.app.captureCharFrame()
   }
   expect(frame).toContain("ENDMARKER")
   expect(frame).toContain("Redirect URL")
@@ -554,6 +560,18 @@ test.each([false, true])("scrolls a long OAuth link and submits the redirect (ne
   const errorFrame = await fixture.app.waitForFrame((frame) => frame.includes("Invalid redirect"))
   expect(errorFrame).toContain("copy link")
   expect(errorFrame).toContain("https://example.com/callback")
+  expect(errorFrame).toContain("submit")
+})
+
+test.each([false, true])("resizes an OAuth dialog (new designs: %s)", async (newDesigns) => {
+  await using fixture = await renderOAuth({ paste: true, newDesigns, url: `https://example.com/${"x".repeat(600)}`, width: 50, height: 20 })
+  await fixture.app.waitForFrame((frame) => frame.includes("Redirect URL") && frame.includes("copy link"))
+  fixture.app.resize(50, 12)
+  await fixture.app.renderOnce()
+  const frame = fixture.app.captureCharFrame()
+  expect(frame).toContain("Redirect URL")
+  expect(frame).toContain("copy link")
+  expect(frame).toContain("submit")
 })
 
 async function renderOAuth(input: { paste?: true; newDesigns: boolean; url?: string; width?: number; height?: number }) {

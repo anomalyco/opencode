@@ -667,7 +667,6 @@ function OAuthAuto(props: {
   const clipboard = useClipboard()
   const newDesigns = useNewDesigns()
   const theme = useTheme().surface("dialog")
-  const dimensions = useTerminalDimensions()
   let scroll: ScrollBoxRenderable | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
@@ -802,23 +801,24 @@ function OAuthAuto(props: {
           },
         ]}
         description={() => (
-          <box gap={1}>
-            <scrollbox
-              id="oauth-paste-description"
-              ref={(value: ScrollBoxRenderable) => (scroll = value)}
-              maxHeight={Math.max(1, dimensions().height - Math.floor(dimensions().height / 4) - 11)}
-            >
-              <box gap={1}>
-                <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
-                <text fg={theme.text.muted}>{props.attempt.instructions} Scroll with Page Up/Down.</text>
-                <Link href={props.attempt.url} fg={theme.markdown.link} />
-                <text fg={theme.text.muted}>
-                  Waiting for authorization… Press enter to open the link. If the browser can't reach this machine, paste
-                  the URL it was redirected to.
-                </text>
-              </box>
-            </scrollbox>
-          </box>
+          <scrollbox
+            id="oauth-paste-description"
+            ref={(value: ScrollBoxRenderable) => (scroll = value)}
+            flexShrink={1}
+            flexGrow={1}
+            flexBasis={0}
+            minHeight={1}
+          >
+            <box gap={1}>
+              <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
+              <text fg={theme.text.muted}>{props.attempt.instructions} Scroll with Page Up/Down.</text>
+              <Link href={props.attempt.url} fg={theme.markdown.link} />
+              <text fg={theme.text.muted}>
+                Waiting for authorization… Press enter to open the link. If the browser can't reach this machine, paste
+                the URL it was redirected to.
+              </text>
+            </box>
+          </scrollbox>
         )}
       />
     </Show>

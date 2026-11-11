@@ -64,11 +64,13 @@ export function Dialog(
         justifyContent={props.centered ? "center" : undefined}
         position="absolute"
         zIndex={3000}
-        paddingTop={props.centered ? 0 : dimensions().height / 4}
         left={0}
         top={0}
         backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
       >
+        <Show when={!props.centered}>
+          <box height={dimensions().height / 4} flexShrink={1} />
+        </Show>
         <box
           onMouseUp={(e: { stopPropagation(): void }) => {
             // A selection release must bubble up to the copy-on-select handler in
@@ -79,6 +81,9 @@ export function Dialog(
           }}
           width={dialogWidth(props.size ?? "medium")}
           maxWidth={dimensions().width - 2}
+          maxHeight={dimensions().height}
+          flexShrink={1}
+          minHeight={0}
           backgroundColor={theme.background.base}
           paddingTop={1}
         >
@@ -156,9 +161,22 @@ export function DialogLayout(
   const newDesigns = useNewDesigns()
   const footerGap = () => (newDesigns() && props.footer && props.buttons === undefined ? (props.footerGap ?? 1) : 1)
   return (
-    <box id={props.id} paddingLeft={inset()} paddingRight={inset()} paddingBottom={1} gap={1}>
-      {props.header}
-      <box paddingBottom={Math.max(0, footerGap() - 1)} marginBottom={Math.min(0, footerGap() - 1)}>
+    <box
+      id={props.id}
+      paddingLeft={inset()}
+      paddingRight={inset()}
+      paddingBottom={1}
+      gap={1}
+      flexShrink={1}
+      minHeight={0}
+    >
+      <box flexShrink={0}>{props.header}</box>
+      <box
+        flexShrink={1}
+        minHeight={0}
+        paddingBottom={Math.max(0, footerGap() - 1)}
+        marginBottom={Math.min(0, footerGap() - 1)}
+      >
         {props.children}
       </box>
       <Show when={props.buttons === undefined} fallback={props.buttons}>
