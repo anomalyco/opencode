@@ -211,7 +211,6 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
-  const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = Keymap.use()
   const renderer = useRenderer()
@@ -369,6 +368,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPart: new Map(),
     interrupt: 0,
   })
+  const history = usePromptHistory(() => ({ ...unwrap(store.prompt), mode: store.mode }))
   let disposed = false
   let pasteQueue = Promise.resolve()
 
