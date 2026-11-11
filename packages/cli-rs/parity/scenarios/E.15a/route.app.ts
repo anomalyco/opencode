@@ -39,6 +39,20 @@ export default defineApp({
     { path: "/api/vcs/diff", json: { location: here, data: files } },
   ],
   steps: [
+    // Typing before the prompt is mounted loses the keys.
+    {
+      checkpoint: "ready",
+      until: "Ask anything",
+      masks: [
+        {
+          x: 26,
+          y: 16,
+          width: 94,
+          height: 1,
+          reason: "the placeholder example: random in TS and Rust",
+        },
+      ],
+    },
     { type: "/diff" },
     { keys: ["enter"] },
     { checkpoint: "open", until: "vs origin/main" },
