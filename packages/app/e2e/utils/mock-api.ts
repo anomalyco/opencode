@@ -486,6 +486,13 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.put("sessionInboxEdit", "/api/session/:sessionID/inbox/:inboxID", {
+      params: { ...SessionParams, inboxID: Schema.String },
+      payload: JsonPayload,
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.patch("sessionInboxUpdate", "/api/session/:sessionID/inbox/:inboxID", {
       params: { ...SessionParams, inboxID: Schema.String },
       payload: Schema.Struct({ delivery: Schema.Literals(["steer", "queue"]) }),

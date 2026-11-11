@@ -28,15 +28,10 @@ const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
 
 const later = { ...queued[0], id: "msg_later", payload: { text: "later" } }
 
-const laterCopy = { ...later, id: "msg_later_copy" }
-
 const sent = (change: Partial<SentEdit> = {}): SentEdit => ({
   original: "msg_original",
-  delivery: "queue",
   text: "edited",
   attachments: 1,
-  moved: { msg_original: "msg_replacement", msg_later: "msg_later_copy" },
-  admitted: false,
   ...change,
 })
 
@@ -49,8 +44,6 @@ const row = (item: (typeof queued)[number], pending?: boolean) => ({
 
 const edited = (id: string) => ({ id, text: "edited", attachments: 1, pending: true })
 
-// One edit's life in the strip: sent from the composer, re-admitted by the server, its originals
-// cancelled last first, then settled once the server's queue reflects it, or rolled back on failure.
 describe("queuedPromptRows", () => {
   const quote = { type: "quote" as const, text: "Earlier answer" }
 
@@ -136,34 +129,10 @@ describe("queuedPromptRows", () => {
 
   test.each([
     [
-      "shows a sent edit on the original row and marks the rows it rewrites as pending",
+      "shows a pending edit on its original row and leaves the rest of the queue available",
       [other, queued[0], later],
       [sent()],
-      [row(other), edited("msg_original"), row(later, true)],
-    ],
-    [
-      "hides re-admitted copies while their originals are listed",
-      [other, queued[0], later, queued[1], laterCopy],
-      [sent()],
-      [row(other), edited("msg_original"), row(later, true)],
-    ],
-    [
-      "keeps the order as the originals are cancelled last first",
-      [other, queued[0], queued[1], laterCopy],
-      [sent({ admitted: true })],
-      [row(other), edited("msg_original"), row(laterCopy, true)],
-    ],
-    [
-      "shows the edit on its replacement once the original is gone",
-      [other, queued[1], laterCopy],
-      [sent({ admitted: true })],
-      [row(other), edited("msg_replacement"), row(laterCopy, true)],
-    ],
-    [
-      "drops the original row once a steered edit is admitted",
-      [queued[0], other],
-      [sent({ delivery: "steer", moved: { msg_original: "msg_replacement" }, admitted: true })],
-      [row(other)],
+      [row(other), edited("msg_original"), row(later)],
     ],
     ["shows the server's queue once the edit settles", [other, queued[1]], [], [row(other), row(queued[1])]],
     ["restores the original row when a failed edit settles", [queued[0], other], [], [row(queued[0]), row(other)]],
@@ -172,12 +141,12 @@ describe("queuedPromptRows", () => {
   })
 
   test("shows each of several edits in flight on its own row", () => {
-    const second = sent({ original: "msg_other", text: "other edited", moved: { msg_other: "msg_other_copy" } })
+    const second = sent({ original: "msg_other", text: "other edited" })
 
     expect(queuedPromptRows([queued[0], other, later], [sent(), second])).toEqual([
       edited("msg_original"),
       { id: "msg_other", text: "other edited", attachments: 1, pending: true },
-      row(later, true),
+      row(later),
     ])
   })
 

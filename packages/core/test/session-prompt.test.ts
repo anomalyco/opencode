@@ -285,6 +285,29 @@ const forkInlineParent = Effect.fnUntraced(function* (id: string, directory: str
 })
 
 describe("Session.prompt", () => {
+  it.effect("edits a queued prompt in place and rejects an edit after delivery", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const original = yield* session.prompt({ sessionID, text: "B", delivery: "queue", resume: false })
+      const next = yield* session.prompt({ sessionID, text: "C", delivery: "queue", resume: false })
+      const edit = { sessionID, inboxID: original.id, delivery: "queue" as const }
+      yield* session.editInbox({ ...edit, text: "B2" })
+      expect(yield* session.inbox(sessionID)).toEqual([
+        { ...original, payload: { ...original.payload, text: "B2" } },
+        next,
+      ])
+      yield* SessionInbox.promote(db, bus, sessionID, "input")
+      expect(yield* session.editInbox({ ...edit, text: "too late" }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.InboxConflictError",
+      })
+      expect(yield* session.inbox(sessionID)).toEqual([next])
+      expect(yield* session.message({ sessionID, messageID: original.id })).toMatchObject({ text: "B2" })
+    }),
+  )
+
   it.effect("exposes the execution registry", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

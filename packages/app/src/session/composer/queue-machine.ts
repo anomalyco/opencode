@@ -32,8 +32,7 @@ export type QueueRow = {
   readonly pending?: boolean
 }
 
-// An edit confirmed from the composer. `moved` maps each inbox ID the edit replaces to the ID admitted in its place:
-// the original's replacement and, for a queued edit, the prompts after it, re-admitted to keep their order.
+// An edit confirmed from the composer keeps its inbox ID.
 export type EditOperation = {
   readonly type: "edit"
   readonly original: string
@@ -43,7 +42,6 @@ export type EditOperation = {
   readonly raw: string
   readonly text: string
   readonly attachments: number
-  readonly moved: Readonly<Record<string, string>>
 }
 
 export type QueuedOperation =
@@ -52,10 +50,9 @@ export type QueuedOperation =
   | { readonly type: "remove"; readonly id: string }
   | { readonly type: "first"; readonly id: string }
 
-// Operations that leave the composer free, so a row can be edited while one runs. `cancelling` means the server
-// admitted every replacement, so a later failure must not hand the edit back to the composer.
+// Operations that leave the composer free, so a row can be edited while one runs.
 export type ConcurrentOperation =
-  | (EditOperation & { readonly attempt: number; readonly phase: "admitting" | "cancelling" })
+  | (EditOperation & { readonly attempt: number })
   | { readonly type: "steer"; readonly attempt: number; readonly id: string }
   | { readonly type: "remove"; readonly attempt: number; readonly id: string }
 
@@ -81,7 +78,7 @@ type QueueBase = {
   readonly seq: number
   readonly items: readonly QueuedPrompt[]
   readonly gone: readonly GoneEntry[]
-  // Each inbox ID a finished edit or reorder replaced, mapped to the ID admitted in its place, so the strip can swap
+  // Each inbox ID a finished reorder replaced, mapped to the ID admitted in its place, so the strip can swap
   // the row in place. An entry is dropped once no ID along its chain is queued.
   readonly moved: Readonly<Record<string, string>>
 }
@@ -96,8 +93,8 @@ const NO_MOVES: Readonly<Record<string, string>> = Object.freeze({})
 export const QUEUE_MUTATION_TIMEOUT_MS = 60_000
 
 /**
- * How far a timed-out operation got. `committed`: a step it cannot take back is in flight (an undo's cancel, a steered
- * edit's admission, or the cancels of a rewrite's originals once every copy is in), so the operation waits for its
+ * How far a timed-out operation got. `committed`: a step it cannot take back is in flight (an undo's cancel, a queued
+ * edit's write, or the cancels of a rewrite's originals once every copy is in), so the operation waits for its
  * result. `settled`: the server holds the whole change and only re-reading its queue stalled.
  */
 export type QueueMutationStage = "running" | "committed" | "settled"
@@ -137,8 +134,6 @@ export type QueueEvent =
       readonly delivery: ComposerDelivery
       readonly reverted: boolean
       readonly prompt: Prompt
-      // Fresh inbox IDs, one per queued prompt, for the replacements an edit admits.
-      readonly ids: readonly string[]
     }
   | { readonly type: "reorder.requested"; readonly inboxIDs: readonly string[]; readonly reverted: boolean }
   | { readonly type: "first.requested"; readonly id: string; readonly reverted: boolean }
@@ -147,7 +142,6 @@ export type QueueEvent =
   | { readonly type: "remove.requested"; readonly id: string }
   | { readonly type: "undo.requested"; readonly id: string; readonly mode: "normal" | "shell" }
   | { readonly type: "mutation.moved"; readonly attempt: number; readonly moved: Readonly<Record<string, string>> }
-  | { readonly type: "mutation.admitted"; readonly attempt: number }
   | { readonly type: "mutation.succeeded"; readonly attempt: number }
   | {
       readonly type: "mutation.undone"
@@ -205,7 +199,7 @@ export type QueueView = {
   readonly undoing: boolean
   readonly delivery: ComposerDelivery
   readonly alternate: ComposerDelivery | undefined
-  /** Inbox IDs replaced by an edit or reorder, finished or in flight, mapped to their replacements. */
+  /** Inbox IDs replaced by a reorder, finished or in flight, mapped to their replacements. */
   readonly moved: Readonly<Record<string, string>>
 }
 
@@ -269,14 +263,9 @@ export function transitionQueue(state: QueueState, event: QueueEvent): QueueTran
     const edit = editOf(state)
     const active = state.status === "mutating" || state.status === "editing-while-mutating" ? state.active : undefined
 
-    const returning: DisposedReturn | undefined =
-      active?.type === "edit" && active.phase === "admitting"
-        ? { type: "edit", attempt: active.attempt, prompt: active.prompt }
-        : active?.type === "undo"
-          ? { type: "undo", attempt: active.attempt }
-          : undefined
+    const returning = active?.type === "edit" || active?.type === "undo" ? active : undefined
 
-    // Operations in flight still finish, since the server may already hold half of an edit, but waiting ones never
+    // Operations in flight still finish, since the server may already have applied an edit, but waiting ones never
     // start. An undo stops before its cancel if it can: nothing would show the restored prompt.
     return changed(returning ? { status: "disposed", returning } : { status: "disposed" }, [
       ...(edit ? [restore(edit, false)] : []),
@@ -295,7 +284,7 @@ function settleDisposed(state: Extract<QueueState, { status: "disposed" }>, even
 
   if (!returning || !("attempt" in event) || event.attempt !== returning.attempt) return unchanged(state)
 
-  if (event.type === "mutation.admitted" || event.type === "mutation.succeeded") return changed({ status: "disposed" })
+  if (event.type === "mutation.succeeded") return changed({ status: "disposed" })
 
   if (event.type === "mutation.undone")
     return changed({ status: "disposed" }, [
@@ -338,21 +327,7 @@ export function selectQueueRows(state: QueueState): QueueRow[] {
     ),
   ]
 
-  const edits = operations.flatMap((operation): SentEdit[] =>
-    operation.type === "edit"
-      ? [
-          {
-            original: operation.original,
-            delivery: operation.delivery,
-            text: operation.text,
-            attachments: operation.attachments,
-            moved: operation.moved,
-            admitted: "phase" in operation && operation.phase === "cancelling",
-          },
-        ]
-      : [],
-  )
-
+  const edits = operations.filter((operation) => operation.type === "edit")
   const rows = queuedPromptRows(state.items, edits, hidden)
   const active = operations[0]
 
@@ -386,7 +361,7 @@ export function selectQueueMoved(state: QueueState) {
   if (state.status === "disposed") return NO_MOVES
   const active = state.status === "mutating" || state.status === "editing-while-mutating" ? state.active : undefined
 
-  if ((active?.type !== "edit" && active?.type !== "reorder") || !Object.keys(active.moved).length) return state.moved
+  if (active?.type !== "reorder" || !Object.keys(active.moved).length) return state.moved
 
   return { ...state.moved, ...active.moved }
 }
@@ -444,7 +419,7 @@ function startEdit(state: LiveQueueState, event: Extract<QueueEvent, { type: "ed
 
   if (!row || row.pending || !item) return unchanged(state)
 
-  // Re-admitting a queued prompt commits a staged revert, which drops every prompt queued after its boundary.
+  // Keep queue edits closed during a staged revert, as for reordering.
   if (event.reverted) return changed(state, [{ type: "toast", key: "session.queue.reverted" }])
   const current = editOf(state)
 
@@ -453,8 +428,7 @@ function startEdit(state: LiveQueueState, event: Extract<QueueEvent, { type: "ed
   const attachments = queuedPromptAttachments(item)
   const edit = { id: item.id, item, pin: state.seq + 1, stash: current?.stash ?? event.draft }
 
-  // The edit cancels the original once its replacement is admitted, so the draft takes local copies of the queued
-  // media as soon as they load.
+  // Pin the media for a draft that may outlive the queued item.
   const effects: QueueEffect[] = [
     {
       type: "draft.load",
@@ -489,16 +463,13 @@ function confirmEdit(state: LiveQueueState, event: Extract<QueueEvent, { type: "
   const attachments = event.prompt.filter(isAttachment)
 
   if (!raw.trim() && !attachments.length) return changed(closed, [restored])
-  const position = state.items.findIndex((entry) => entry.id === state.edit.id)
-  const item = state.items[position] ?? state.edit.item
+  const item = state.items.find((entry) => entry.id === state.edit.id) ?? state.edit.item
   const pristine = isPristine(item, event.prompt)
 
   if (pristine && event.delivery === "queue") return changed(closed, [restored])
 
-  // An unchanged prompt steers in place instead of being replaced.
+  // An unchanged prompt only needs its delivery mode updated.
   if (pristine) return enqueue(closed, { type: "steer", id: item.id }, [restored])
-  // A queued edit re-admits the prompts after it, so they are pending too; their IDs are minted now.
-  const after = event.delivery === "queue" && position >= 0 ? state.items.slice(position + 1) : []
 
   return enqueue(
     closed,
@@ -511,7 +482,6 @@ function confirmEdit(state: LiveQueueState, event: Extract<QueueEvent, { type: "
       raw,
       text: raw.trim(),
       attachments: attachments.length,
-      moved: Object.fromEntries([item, ...after].map((entry, index) => [entry.id, event.ids[index]])),
     },
     [restored],
   )
@@ -579,10 +549,7 @@ function undo(state: LiveQueueState, event: Extract<QueueEvent, { type: "undo.re
 
 function settle(
   state: LiveQueueState,
-  event: Extract<
-    QueueEvent,
-    { type: "mutation.moved" | "mutation.admitted" | "mutation.succeeded" | "mutation.undone" | "mutation.failed" }
-  >,
+  event: Extract<QueueEvent, { type: "mutation.moved" | "mutation.succeeded" | "mutation.undone" | "mutation.failed" }>,
 ): QueueTransition {
   // A result for an operation that is no longer in flight is stale, for example one that settles after unmount.
   if (state.status !== "mutating" && state.status !== "editing-while-mutating") return unchanged(state)
@@ -591,15 +558,9 @@ function settle(
   if (active.attempt !== event.attempt) return unchanged(state)
 
   if (event.type === "mutation.moved") {
-    if (active.type !== "edit" && active.type !== "reorder") return unchanged(state)
+    if (active.type !== "reorder") return unchanged(state)
 
     return changed(withActive(state, { ...active, moved: event.moved }))
-  }
-
-  if (event.type === "mutation.admitted") {
-    if (active.type !== "edit") return unchanged(state)
-
-    return changed(withActive(state, { ...active, phase: "cancelling" }))
   }
 
   if (event.type === "mutation.undone") {
@@ -615,15 +576,8 @@ function settle(
   }
 
   if (event.type === "mutation.succeeded") {
-    const confirmed =
-      active.type === "steer" || active.type === "remove"
-        ? [active.id]
-        : active.type === "undo"
-          ? [active.item.id]
-          : Object.keys(active.moved)
-
-    const hidden = hide(state, confirmed)
-    const moved = active.type === "edit" || active.type === "reorder" ? active.moved : NO_MOVES
+    const hidden = hide(state, removedBy(active))
+    const moved = active.type === "reorder" ? active.moved : NO_MOVES
 
     const next = advance(
       moved === NO_MOVES ? hidden.state : { ...hidden.state, moved: { ...hidden.state.moved, ...moved } },
@@ -636,7 +590,7 @@ function settle(
   const hidden = hide(state, event.hidden)
   // Nothing typed is lost: an edit that never reached the server returns to the composer, merged into what it holds
   // now, or into the draft an open edit stashed.
-  const returned = active.type === "edit" && active.phase === "admitting"
+  const returned = active.type === "edit"
 
   const restored =
     returned && hidden.state.status === "editing-while-mutating"
@@ -665,6 +619,16 @@ type Mutating = Extract<QueueState, { status: "mutating" | "editing-while-mutati
 
 type MutatingTransition = { readonly state: Mutating; readonly effects: readonly QueueEffect[] }
 
+function removedBy(operation: ActiveOperation) {
+  if (operation.type === "undo") return [operation.item.id]
+
+  if (operation.type === "reorder") return Object.keys(operation.moved)
+
+  if (operation.type === "edit") return operation.delivery === "steer" ? [operation.original] : []
+
+  return [operation.id]
+}
+
 function hide(state: Mutating, ids: readonly string[]): MutatingTransition {
   const listed = ids.filter((id) => state.items.some((item) => item.id === id))
 
@@ -685,11 +649,7 @@ function advance(state: Mutating, moved: Readonly<Record<string, string>>): Queu
   const [head, ...rest] = state.pending.map(
     (operation): QueuedOperation =>
       operation.type === "edit"
-        ? {
-            ...operation,
-            original: remap(operation.original),
-            moved: Object.fromEntries(Object.entries(operation.moved).map(([id, next]) => [remap(id), next])),
-          }
+        ? { ...operation, original: remap(operation.original) }
         : { ...operation, id: remap(operation.id) },
   )
 
@@ -765,8 +725,6 @@ function activate(operation: QueuedOperation, attempt: number, state: LiveQueueS
     return { type: "reorder", attempt, inboxIDs: rows.map((row) => row.id), rows, moved: {} }
   }
 
-  if (operation.type === "edit") return { ...operation, attempt, phase: "admitting" }
-
   return { ...operation, attempt }
 }
 
@@ -813,52 +771,30 @@ function unchanged(state: QueueState): QueueTransition {
 }
 
 // An edit in flight, as the strip shows it.
-export type SentEdit = {
-  readonly original: string
-  readonly delivery: ComposerDelivery
-  readonly text: string
-  readonly attachments: number
-  readonly moved: Readonly<Record<string, string>>
-  // The server admitted every replacement.
-  readonly admitted: boolean
-}
+export type SentEdit = Pick<EditOperation, "original" | "text" | "attachments">
 
-// An edit in flight shows its edited text on the original row, and every row it rewrites shows as
-// pending. A re-admitted copy stays hidden while the row it replaces is listed, so the strip keeps
-// its order; a steered edit leaves the strip once the server admits it. Hidden rows (confirmed gone
-// or optimistically steered or removed) stay out.
 export function queuedPromptRows(
   items: readonly QueuedPrompt[],
   sent: readonly SentEdit[] = [],
   hidden: readonly string[] = [],
 ) {
   const queued = items.filter((item) => !hidden.includes(item.id))
-  const listed = new Set(queued.map((item) => item.id))
-  const moves = sent.flatMap((edit) => Object.entries(edit.moved))
 
-  return queued.flatMap((item): { id: string; text: string; attachments: number; pending?: boolean }[] => {
-    // The latest edit of this prompt, on its original row or, once that is gone, on its replacement.
-    const edit = sent.findLast((entry) => entry.original === item.id || entry.moved[entry.original] === item.id)
-
-    if (moves.some(([old, next]) => next === item.id && listed.has(old))) return []
-
-    if (sent.some((entry) => entry.original === item.id && entry.admitted && entry.delivery === "steer")) return []
-
+  return queued.map((item): QueueRow => {
+    const edit = sent.find((entry) => entry.original === item.id)
     const presentation = readPromptPresentation(item.payload.metadata)
     // Text-only edits preserve the original context suffix. A context-only edit currently loads that suffix as text.
     const comments = !edit || presentation?.displayText.trim() ? (presentation?.comments ?? []) : []
 
-    return [
-      {
-        id: item.id,
-        text: edit ? edit.text : (presentation?.displayText.trim() ?? queuedPromptText(item)),
-        attachments:
-          (edit ? edit.attachments : (item.payload.files?.length ?? 0) + (presentation?.attachments.length ?? 0)) +
-          // File comments already contribute their context file; quotes and plugin notes have no file.
-          comments.filter((comment) => comment.type === "quote" || comment.type === "note").length,
-        pending: moves.some(([old, next]) => old === item.id || next === item.id) ? true : undefined,
-      },
-    ]
+    return {
+      id: item.id,
+      text: edit ? edit.text : (presentation?.displayText.trim() ?? queuedPromptText(item)),
+      attachments:
+        (edit ? edit.attachments : (item.payload.files?.length ?? 0) + (presentation?.attachments.length ?? 0)) +
+        // File comments already contribute their context file; quotes and plugin notes have no file.
+        comments.filter((comment) => comment.type === "quote" || comment.type === "note").length,
+      pending: edit ? true : undefined,
+    }
   })
 }
 

@@ -259,6 +259,18 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
+  const edit = Effect.fn("SessionInbox.edit")((input: PendingRef, item: Extract<Item, { type: "user" }>) =>
+    publishMutation(
+      input,
+      Effect.gen(function* () {
+        const original = yield* find(db, input.id)
+        if (original?.type !== "user" || original.sessionID !== input.sessionID || original.delivery !== "queue")
+          return yield* new LifecycleConflict({ id: input.id })
+        yield* bus.publish(SessionEvent.InboxEdited, { ...original, ...item })
+      }),
+    ),
+  )
+
   const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
     publishMutation(
       input,
@@ -286,6 +298,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     reconcile,
     admit,
     admitCompaction,
+    edit,
     cancel,
     steer,
     queue,
@@ -374,6 +387,26 @@ const delivered = (row: typeof SessionInboxTable.$inferSelect): Delivered => {
   if (row.type === "synthetic") return { id: row.id, type: "synthetic", payload: decodeSynthetic(row.payload) }
   return { id: row.id, type: row.type }
 }
+
+export const projectEdited = Effect.fn("SessionInbox.projectEdited")(function* (db: DatabaseService, item: User) {
+  const payload = encodeStoredUser(yield* SessionBlob.externalizePayload(db, item.payload))
+  const updated = yield* db
+    .update(SessionInboxTable)
+    .set({ payload, delivery: item.delivery })
+    .where(
+      and(
+        eq(SessionInboxTable.id, item.id),
+        eq(SessionInboxTable.session_id, item.sessionID),
+        eq(SessionInboxTable.type, "user"),
+        eq(SessionInboxTable.delivery, "queue"),
+      ),
+    )
+    .returning({ seq: SessionInboxTable.enqueued_seq })
+    .get()
+    .pipe(Effect.orDie)
+  if (!updated) return yield* Effect.die(new LifecycleConflict({ id: item.id }))
+  yield* SessionBlob.syncRefs(db, { sessionID: item.sessionID, messageID: item.id, seq: updated.seq }, payload)
+})
 
 export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(function* (
   db: DatabaseService,

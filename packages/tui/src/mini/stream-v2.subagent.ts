@@ -650,6 +650,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   }
 
   const reduce = (child: ChildState, event: V2Event) => {
+    if (event.type === "session.inbox.edited") {
+      child.prompts.set(event.data.id, event.data.payload)
+      return
+    }
     if (event.type === "session.inbox.enqueued") {
       if (event.data.item.type === "user") child.prompts.set(event.data.inboxID, event.data.item.payload)
       return

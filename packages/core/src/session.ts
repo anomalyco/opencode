@@ -181,6 +181,9 @@ export interface Interface {
   /** Experimental: {@link Interface.inbox} with files stored in `blob` left as `media:` refs when the session's location enables `experimental.media_blob`. */
   readonly inboxWithRefs: (sessionID: SessionSchema.ID) => Effect.Effect<SessionInbox.MediaInfo[], NotFoundError>
   readonly cancelInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
+  readonly editInbox: (
+    input: InboxItemRef & Parameters<Session.Handle["editInbox"]>[0],
+  ) => ReturnType<Session.Handle["editInbox"]>
   readonly steerInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
   readonly queueInbox: (input: InboxItemRef) => Effect.Effect<void, NotFoundError | InboxConflictError>
   /**
@@ -479,6 +482,7 @@ const layer = Layer.effect(
         return yield* SessionInbox.listWithRefs(db, sessionID)
       }),
       cancelInbox: (input) => sessions.forSession(input.sessionID).cancelInbox(input.inboxID),
+      editInbox: (input) => sessions.forSession(input.sessionID).editInbox(input),
       steerInbox: (input) => sessions.forSession(input.sessionID).steerInbox(input.inboxID),
       queueInbox: (input) => sessions.forSession(input.sessionID).queueInbox(input.inboxID),
       log: (input) =>

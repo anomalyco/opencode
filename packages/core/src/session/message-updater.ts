@@ -143,6 +143,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.forked": () => Effect.void,
       "session.inbox.delivered": () => Effect.void,
       "session.inbox.enqueued": () => Effect.void,
+      "session.inbox.edited": () => Effect.void,
       "session.inbox.cancelled": () => Effect.void,
       "session.inbox.delivery.changed": () => Effect.void,
       "session.execution.started": () => Effect.void,

@@ -31,8 +31,6 @@ const draft = (content: string): EditStash => ({
   retry: undefined,
 })
 
-const ids = ["new_1", "new_2", "new_3", "new_4"]
-
 // Replays events through the pure transition, collecting every effect in order.
 function replay(state: QueueState, events: QueueEvent[]) {
   const effects: QueueEffect[] = []
@@ -140,7 +138,7 @@ describe("an edit always returns the draft it replaced", () => {
   test("when the server delivers it while another row's edit is in flight", () => {
     const result = replay(createQueueState([one, two]), [
       { type: "edit.start", id: "inb_2", reverted: false, draft: draft("") },
-      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_2 edited"), ids },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_2 edited") },
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("my unsent draft") },
     ])
 
@@ -167,7 +165,7 @@ describe("an edit always returns the draft it replaced", () => {
   test("a failed edit that never reached the server returns to the composer", () => {
     const sent = replay(createQueueState([one, two]), [
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
-      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited"), ids },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited") },
     ])
 
     const attempt = runs(sent.effects)[0].attempt
@@ -176,12 +174,6 @@ describe("an edit always returns the draft it replaced", () => {
     expect(failed.state.status).toBe("idle")
     expect(failed.effects).toContainEqual({ type: "draft.merge", prompt: prompt("inb_1 edited"), context: [] })
     expect(rowIDs(failed.state)).toEqual(["inb_1", "inb_2"])
-
-    // Once every replacement is admitted, a failure leaves the edit with the server.
-    const admitted = transitionQueue(sent.state, { type: "mutation.admitted", attempt })
-    const late = transitionQueue(admitted.state, { type: "mutation.failed", attempt, hidden: [] })
-
-    expect(late.effects.some((effect) => effect.type === "draft.merge")).toBe(false)
   })
 })
 
@@ -227,9 +219,9 @@ describe("queue changes run one at a time", () => {
   test("confirming an unchanged edit as a steer waits behind the edit in flight", () => {
     const result = replay(createQueueState([one, two]), [
       { type: "edit.start", id: "inb_2", reverted: false, draft: draft("") },
-      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_2 edited"), ids },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_2 edited") },
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("my draft") },
-      { type: "edit.confirm", delivery: "steer", reverted: false, prompt: prompt("inb_1 text"), ids },
+      { type: "edit.confirm", delivery: "steer", reverted: false, prompt: prompt("inb_1 text") },
     ])
 
     expect(result.state).toMatchObject({ status: "mutating", pending: [{ type: "steer", id: "inb_1" }] })
@@ -241,33 +233,26 @@ describe("queue changes run one at a time", () => {
 describe("replaced inbox IDs", () => {
   const moved = (state: QueueState) => viewQueue(state, { working: true, behavior: "queue" }).moved
 
-  // Edits `id` as a queued prompt; its replacement and the prompts after it take `next`.
-  function edit(state: QueueState, id: string, next: string[]) {
-    const confirmed = replay(state, [
-      { type: "edit.start", id, reverted: false, draft: draft("") },
-      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt(`${id} edited`), ids: next },
-    ])
+  function reorder(state: QueueState, first: string, second: string, moved: Record<string, string>) {
+    const requested = transitionQueue(state, { type: "reorder.requested", inboxIDs: [second, first], reverted: false })
+    const attempt = runs(requested.effects)[0].attempt
 
-    return { state: confirmed.state, attempt: runs(confirmed.effects)[0].attempt }
+    return { state: transitionQueue(requested.state, { type: "mutation.moved", moved, attempt }).state, attempt }
   }
 
-  test("an edit's replacements chain across later edits until their prompts leave the queue", () => {
-    const first = edit(createQueueState([one]), "inb_1", ["msg_1"])
-    // In flight, the panel already sees the replacement it may swap in.
-    expect(moved(first.state)).toEqual({ inb_1: "msg_1" })
+  test("a reorder's replacements chain across later reorders until their prompts leave the queue", () => {
+    const first = reorder(createQueueState([one, two]), one.id, two.id, { inb_1: "msg_1", inb_2: "other_1" })
+    expect(moved(first.state)).toEqual({ inb_1: "msg_1", inb_2: "other_1" })
 
     const settled = replay(first.state, [
-      { type: "inbox.synced", items: [item("msg_1")] },
+      { type: "inbox.synced", items: [item("other_1"), item("msg_1")] },
       { type: "mutation.succeeded", attempt: first.attempt },
     ]).state
 
-    expect(settled.status).toBe("idle")
-    expect(moved(settled)).toEqual({ inb_1: "msg_1" })
-
-    const second = edit(settled, "msg_1", ["msg_2"])
+    const second = reorder(settled, "other_1", "msg_1", { msg_1: "msg_2", other_1: "other_2" })
 
     const chained = replay(second.state, [
-      { type: "inbox.synced", items: [item("msg_2")] },
+      { type: "inbox.synced", items: [item("msg_2"), item("other_2")] },
       { type: "mutation.succeeded", attempt: second.attempt },
     ]).state
 
@@ -276,14 +261,6 @@ describe("replaced inbox IDs", () => {
 
     // Once the last replacement is delivered, nothing it maps is queued.
     expect(moved(transitionQueue(chained, { type: "inbox.synced", items: [] }).state)).toEqual({})
-  })
-
-  test("a failed edit leaves no replacement behind", () => {
-    const sent = edit(createQueueState([one, two]), "inb_1", ["msg_1", "msg_2"])
-    expect(moved(sent.state)).toEqual({ inb_1: "msg_1", inb_2: "msg_2" })
-
-    const failed = transitionQueue(sent.state, { type: "mutation.failed", attempt: sent.attempt, hidden: [] })
-    expect(moved(failed.state)).toEqual({})
   })
 })
 
@@ -320,12 +297,12 @@ describe("optimistic rows", () => {
   test("an edit in flight shows on its row as pending", () => {
     const result = replay(createQueueState([one, two]), [
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
-      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited"), ids },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited") },
     ])
 
     expect(selectQueueRows(result.state)).toEqual([
       { id: "inb_1", text: "inb_1 edited", attachments: 0, pending: true },
-      { id: "inb_2", text: "inb_2 text", attachments: 0, pending: true },
+      { id: "inb_2", text: "inb_2 text", attachments: 0, pending: undefined },
     ])
     // A pending row cannot be opened again.
     expect(
@@ -385,7 +362,7 @@ describe("stale results", () => {
   test("an edit the server never admitted before dispose returns to the saved draft if it then fails", () => {
     const sent = replay(createQueueState([one]), [
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
-      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited"), ids },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited") },
       { type: "dispose" },
     ])
 
@@ -395,7 +372,7 @@ describe("stale results", () => {
       { type: "draft.merge", prompt: prompt("inb_1 edited"), context: [], focus: false },
     ])
 
-    const admitted = transitionQueue(sent.state, { type: "mutation.admitted", attempt }).state
+    const admitted = transitionQueue(sent.state, { type: "mutation.succeeded", attempt }).state
 
     expect(transitionQueue(admitted, { type: "mutation.failed", attempt, hidden: [] }).effects).toEqual([])
   })
@@ -441,7 +418,7 @@ describe("an operation past its bound", () => {
   test("a steered edit whose admission is in flight keeps the edit until the server answers", () => {
     const sent = replay(createQueueState([one, two]), [
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
-      { type: "edit.confirm", delivery: "steer", reverted: false, prompt: prompt("inb_1 edited"), ids },
+      { type: "edit.confirm", delivery: "steer", reverted: false, prompt: prompt("inb_1 edited") },
     ])
 
     const attempt = runs(sent.effects)[0].attempt
@@ -451,14 +428,7 @@ describe("an operation past its bound", () => {
     expect(waiting.state).toBe(sent.state)
     expect(waiting.effects).toEqual([])
 
-    // Delivered, a later failure of the original's cancel leaves the edit with the server.
-    const admitted = transitionQueue(waiting.state, { type: "mutation.admitted", attempt }).state
-
-    expect(
-      transitionQueue(admitted, { type: "mutation.failed", attempt, hidden: [] }).effects.some(
-        (effect) => effect.type === "draft.merge",
-      ),
-    ).toBe(false)
+    expect(transitionQueue(waiting.state, { type: "mutation.succeeded", attempt }).state.status).toBe("idle")
 
     // Refused, it really did not go out, so it returns to the composer.
     expect(transitionQueue(waiting.state, { type: "mutation.failed", attempt, hidden: [] }).effects).toContainEqual({
@@ -505,7 +475,7 @@ describe("an operation past its bound", () => {
   test("an edit the server holds whose queue re-read stalled counts as done", () => {
     const sent = replay(createQueueState([one]), [
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("") },
-      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited"), ids },
+      { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_1 edited") },
     ])
 
     const attempt = runs(sent.effects)[0].attempt

@@ -547,6 +547,28 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.inbox.edit",
+        Effect.fn(function* (ctx) {
+          yield* session.editInbox({ ...ctx.params, ...ctx.payload }).pipe(
+            Effect.catchTag("Session.NotFoundError", missingSession),
+            Effect.catchTag(
+              "Session.InboxConflictError",
+              (error) => new ConflictError({ resource: error.inboxID, message: "Prompt is no longer queued" }),
+            ),
+            Effect.catchTag(
+              "Session.AttachmentError",
+              (error) => new InvalidRequestError({ message: error.message, field: "files" }),
+            ),
+            Effect.catchTag(
+              "Session.SkillNotFoundError",
+              (error) => new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" }),
+            ),
+            locationErrors,
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "session.inbox.update",
         Effect.fn(function* (ctx) {
           return yield* pendingMutation(

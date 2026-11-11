@@ -256,7 +256,7 @@ export function createSessionQueue(input: {
     }
 
     const settled = await (
-      operation.type === "reorder" ? rewrite(attempt, progress, [...operation.inboxIDs]) : sendEdit(operation, progress)
+      operation.type === "reorder" ? rewrite(attempt, progress, operation.inboxIDs) : sendEdit(operation, progress)
     ).then(
       () => true,
       () => false,
@@ -264,7 +264,7 @@ export function createSessionQueue(input: {
 
     if (settled) progress.stage = "settled"
 
-    if (operation.type === "reorder") data.session.pending.invalidate(input.sessionID)
+    data.session.pending.invalidate(input.sessionID)
     // The rows keep their optimistic state until the server's queue has caught up.
     await data.session.pending.sync(input.sessionID).catch(() => undefined)
     dispatch(
@@ -283,48 +283,14 @@ export function createSessionQueue(input: {
       operation.raw,
     )
 
-    // Admit before cancelling so a failed replacement never discards the original. A queued edit rebuilds its position
-    // in one rewrite, which leaves the queue unchanged if any admission fails.
-    const admission = { ...replacement, id: operation.moved[operation.original], delivery: operation.delivery }
-
-    if (operation.delivery === "queue")
-      return rewrite(operation.attempt, progress, undefined, {
-        original: operation.original,
-        admission: { ...admission, resume: false },
-        moved: operation.moved,
-      })
-
     signal.throwIfAborted()
-    // Like a queued edit, an original the server delivered meanwhile keeps the edit draft instead of sending twice.
-    const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
-
-    if (!pending.some((item) => item.id === operation.original && item.type === "user" && item.delivery === "queue"))
-      throw new Error("Queued prompt was delivered before the edit")
-    signal.throwIfAborted()
-    const background = input.background()
-    // A steered replacement can be delivered before a withdrawal reaches it, so the bound waits for the admission and
-    // the edit returns to the composer only if it really did not go out.
+    const background = operation.delivery === "steer" ? input.background() : undefined
     progress.stage = "committed"
-    await data.session.prompt(admission)
+    await server.api.session.inbox.edit({ ...replacement, inboxID: operation.original, delivery: operation.delivery })
     void background?.move()
-    dispatch({ type: "mutation.admitted", attempt: operation.attempt })
-    // Cancelling is a no-op once the original is gone, so one retry is safe.
-    const cancel = () => server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: operation.original })
-    await cancel().catch(cancel)
   }
 
-  // `replace` substitutes an edited prompt for the original at its position in the same rewrite.
-  // Without `inboxIDs` the server's current order is kept.
-  const rewrite = async (
-    attempt: number,
-    progress: MutationProgress,
-    inboxIDs: string[] | undefined,
-    replace?: {
-      original: string
-      admission: Parameters<typeof data.session.prompt>[0]
-      moved: Readonly<Record<string, string>>
-    },
-  ) => {
+  const rewrite = async (attempt: number, progress: MutationProgress, inboxIDs: readonly string[]) => {
     const signal = progress.controller.signal
     signal.throwIfAborted()
     const pending = await server.api.session.inbox.list({ sessionID: input.sessionID })
@@ -333,12 +299,10 @@ export function createSessionQueue(input: {
     if (pending.some((item) => item.delivery === "queue" && item.type !== "user"))
       throw new Error("Queued control items block reordering")
     const current = pending.filter((item): item is QueuedPrompt => item.type === "user" && item.delivery === "queue")
-    const ordered = inboxIDs ? inboxIDs.flatMap((id) => current.filter((item) => item.id === id)) : current
+    const ordered = inboxIDs.flatMap((id) => current.filter((item) => item.id === id))
 
-    // An edited prompt delivered meanwhile is no longer queued; fail so the edit draft stays.
-    if (ordered.length !== current.length || (replace && !current.some((item) => item.id === replace.original)))
-      throw new Error("Queued prompts changed before reordering")
-    const changed = ordered.findIndex((item, index) => item.id !== current[index]?.id || item.id === replace?.original)
+    if (ordered.length !== current.length) throw new Error("Queued prompts changed before reordering")
+    const changed = ordered.findIndex((item, index) => item.id !== current[index]?.id)
 
     if (changed < 0) return
 
@@ -364,39 +328,31 @@ export function createSessionQueue(input: {
       signal.throwIfAborted()
     }
 
-    // An edit's pending rows follow the queue as the server has it now, keeping the IDs minted at confirm.
-    const moved = Object.fromEntries(
-      ordered.slice(changed).map((item) => [item.id, replace?.moved[item.id] ?? SessionMessage.ID.create()]),
-    )
+    const moved = Object.fromEntries(ordered.slice(changed).map((item) => [item.id, SessionMessage.ID.create()]))
 
     dispatch({ type: "mutation.moved", attempt, moved })
 
     for (const item of ordered.slice(changed)) {
-      const admission =
-        item.id === replace?.original
-          ? replace.admission
-          : {
-              id: moved[item.id],
-              sessionID: input.sessionID,
-              text: item.payload.text,
-              files: item.payload.files?.map((file) => ({
-                uri: storedFileUri(file),
-                name: file.name,
-                description: file.description,
-                mention: file.mention,
-              })),
-              agents: item.payload.agents,
-              skills: item.payload.skills,
-              metadata: item.payload.metadata,
-              delivery: "queue" as const,
-              resume: false,
-            }
-
-      const id = admission.id ?? SessionMessage.ID.create()
+      const admission = {
+        id: moved[item.id],
+        sessionID: input.sessionID,
+        text: item.payload.text,
+        files: item.payload.files?.map((file) => ({
+          uri: storedFileUri(file),
+          name: file.name,
+          description: file.description,
+          mention: file.mention,
+        })),
+        agents: item.payload.agents,
+        skills: item.payload.skills,
+        metadata: item.payload.metadata,
+        delivery: "queue" as const,
+        resume: false,
+      }
 
       await stopped()
-      replacements.push(id)
-      await data.session.prompt({ ...admission, id }).catch(async (error) => {
+      replacements.push(admission.id)
+      await data.session.prompt(admission).catch(async (error) => {
         await withdraw()
         throw error
       })
@@ -406,13 +362,7 @@ export function createSessionQueue(input: {
     // Every copy is in, so the originals must go, however long that takes, or the queue holds both.
     progress.stage = "committed"
 
-    if (replace) dispatch({ type: "mutation.admitted", attempt })
-
-    // An edit cancels last first: the strip shows each original until it goes, so its copies never
-    // show out of order.
-    const replaced = current.slice(changed)
-
-    for (const item of replace ? replaced.reverse() : replaced) {
+    for (const item of current.slice(changed)) {
       await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: item.id })
       progress.hidden.push(item.id)
     }
@@ -456,7 +406,6 @@ export function createSessionQueue(input: {
         delivery,
         reverted: reverted(),
         prompt: clonePrompt(input.draft.current()),
-        ids: queued().map(() => SessionMessage.ID.create()),
       }),
     cancelEdit: () => dispatch({ type: "edit.cancel" }),
     editFirst: () => {

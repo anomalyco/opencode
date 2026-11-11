@@ -212,7 +212,23 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         expect(await plain.session.inbox.list({ sessionID })).toMatchObject([
           { id: queued.id, payload: { files: [{ data: png, mime: "image/png", name: "again.png" }] } },
         ])
+        const edit = { sessionID, inboxID: queued.id, text: "Updated", delivery: "queue" as const }
+        await opted.session.inbox.edit({ ...edit, files: [{ uri: media(text), name: "edited.txt" }] })
+        expect(await opted.session.inbox.list({ sessionID })).toMatchObject([
+          { id: queued.id, payload: { text: "Updated", files: [{ uri: media(text), name: "edited.txt" }] } },
+        ])
         await opted.session.inbox.cancel({ sessionID, inboxID: queued.id })
+        expect(
+          (
+            await handler(
+              new Request(`http://opencode.local/api/session/${sessionID}/inbox/${queued.id}`, {
+                method: "PUT",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ text: "Too late", delivery: "queue" }),
+              }),
+            )
+          ).status,
+        ).toBe(409)
 
         // A ref whose blob is gone reaches opted-in clients as the same placeholder inline readers get.
         const gone = "e".repeat(64)

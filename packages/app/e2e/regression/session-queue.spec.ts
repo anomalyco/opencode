@@ -97,6 +97,20 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
     shells,
     emit,
     events: () => events.splice(0),
+    onInboxEdit: (input: Parameters<NonNullable<MockServerConfig["onInboxEdit"]>>[0]) => {
+      const original = rows.find((item) => item.id === input.inboxID && item.delivery === "queue")
+      if (!original) throw new Error("Original delivered")
+      const body = decodePromptBody(input.body)
+      prompts.push(body)
+      original.payload = {
+        text: body.text,
+        metadata: body.metadata,
+        files: body.files?.map(storedFile),
+        agents: body.agents?.map((agent) => ({ ...agent })),
+      }
+      original.delivery = body.delivery ?? "queue"
+      emit("session.inbox.edited", original)
+    },
     onPrompt: (input: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]) => {
       const body = decodePromptBody(input.body)
       prompts.push(body)
@@ -188,6 +202,7 @@ async function openQueue(
     sessionStatus: () => ({ [sessionID]: { type: status } }),
     inbox: () => [...mock.rows.map((row) => ({ ...row, payload: { ...row.payload } })), ...mock.compactions],
     onPrompt: mock.onPrompt,
+    onInboxEdit: mock.onInboxEdit,
     onCompact: mock.onCompact,
     onInboxChange: mock.onInboxChange,
     onBackground: mock.onBackground,
@@ -666,10 +681,13 @@ test("a partially cancelled reorder reconciles the server's queue instead of res
 })
 
 for (const change of ["reorder", "edit"] as const) {
-  test(`a ${change} that cannot re-admit a prompt leaves the queue unchanged`, async ({ page }) => {
+  test(`a ${change} that the server rejects leaves the queue unchanged`, async ({ page }) => {
     const order = ["first queued prompt", "second queued prompt", "third queued prompt"]
     const mock = createQueueMock(order)
     const admit = mock.onPrompt
+    mock.onInboxEdit = () => {
+      throw new Error("Cannot prepare attachment")
+    }
     // The last prompt's re-admission fails after the server admitted it, so its response is lost.
     mock.onPrompt = (input) => {
       admit(input)
@@ -702,7 +720,8 @@ for (const change of ["reorder", "edit"] as const) {
     }
 
     // The replacements admitted before the failure are withdrawn; the originals stay in place.
-    await expect.poll(() => mock.log.includes(`cancel:${mock.prompts.at(-1)?.id}`)).toBe(true)
+    if (change === "edit") await expect(page.getByText("Request failed")).toBeVisible()
+    if (change === "reorder") await expect.poll(() => mock.log.includes(`cancel:${mock.prompts.at(-1)?.id}`)).toBe(true)
     await expect.poll(() => mock.changes.length).toBe(mock.prompts.length)
     expect(mock.changes.every((entry) => entry.action === "cancel" && !entry.inboxID.startsWith("inb_seed_"))).toBe(
       true,
@@ -746,19 +765,31 @@ test("editing restores the existing draft and replaces only the original queue p
     "third queued prompt",
   ])
   await expect(view.input).toHaveText("my in-progress draft")
-  // The strip shows the edit before the server confirms it; wait for the rewrite to finish.
-  await expect.poll(() => mock.changes.length).toBe(2)
-  // One rewrite from the edited position: the replacement, then the prompts after it.
-  expect(mock.prompts.map((prompt) => prompt.text)).toEqual([
-    "tighten the error copy and add a retry hint",
-    "third queued prompt",
-  ])
-  expect(mock.prompts.every((prompt) => prompt.delivery === "queue" && prompt.resume === false)).toBe(true)
-  expect(mock.changes).toEqual([
-    { inboxID: "inb_seed_3", action: "cancel" },
-    { inboxID: "inb_seed_2", action: "cancel" },
-  ])
-  expect(mock.log[0]).toBe("prompt:queue")
+  await expect
+    .poll(() => mock.prompts.map((prompt) => prompt.text))
+    .toEqual(["tighten the error copy and add a retry hint"])
+  expect(mock.rows.map((item) => item.id)).toEqual(["inb_seed_1", "inb_seed_2", "inb_seed_3"])
+  expect(mock.changes).toEqual([])
+})
+
+test("an edit racing delivery keeps the edit draft and sends only the original", async ({ page }) => {
+  const mock = createQueueMock(["B"])
+  const view = await openQueue(page, mock, "queue")
+  await view.rows.getByText("B", { exact: true }).click()
+  await expect(view.input).toBeFocused()
+  await view.input.press("End")
+  await view.input.pressSequentially("2")
+
+  // Let the runner take B just before the write that would change or remove B.
+  // In the admit/cancel implementation the replacement is already queued at this point.
+  await page.route(`**/api/session/${sessionID}/**`, async (route) => {
+    if (["DELETE", "PUT"].includes(route.request().method()) && mock.rows[0]?.payload.text === "B") mock.rows.shift()
+    await route.fallback()
+  })
+  await view.input.press("Enter")
+  await expect(page.getByText("Request failed")).toBeVisible()
+  await expect(view.input).toHaveText("B2")
+  expect(mock.rows.map((row) => row.payload.text)).toEqual([])
 })
 
 test("a queued prompt the server delivers mid-edit returns the draft typed before the edit", async ({ page }) => {
@@ -801,7 +832,7 @@ for (const delivery of ["queue", "steer"] as const) {
 }
 
 for (const change of ["reorder", "edit"] as const) {
-  test(`a staged revert refuses a queue ${change}, whose admission would commit it`, async ({ page }) => {
+  test(`a staged revert refuses a queue ${change}`, async ({ page }) => {
     const order = ["first queued prompt", "second queued prompt"]
 
     const mock = createQueueMock(order, [
@@ -843,11 +874,9 @@ for (const delivery of ["steer", "queue"] as const) {
       },
     ]
     const view = await openQueue(page, mock)
-    // A loaded server answers admissions and cancellations late; hold both until the strip is checked.
-    const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
 
-    const cancellation = await holdRoute(page, new RegExp(`/api/session/${sessionID}/inbox/[^/?]+(\\?|$)`), {
-      method: "DELETE",
+    const edit = await holdRoute(page, new RegExp(`/api/session/${sessionID}/inbox/inb_seed_2(\\?|$)`), {
+      method: "PUT",
     })
 
     const texts = view.rows.locator('[data-action="session-queue-edit"]')
@@ -859,7 +888,7 @@ for (const delivery of ["steer", "queue"] as const) {
     await view.input.press("End")
     await view.input.pressSequentially(", edited")
     await view.input.press(delivery === "queue" ? "Enter" : "ControlOrMeta+Enter")
-    await admission.arrived
+    await edit.arrived
 
     // The composer is free at once and the strip shows the edit, pending, in the original's place.
     const edited = view.rows.filter({ hasText: "second queued prompt, edited" })
@@ -885,13 +914,12 @@ for (const delivery of ["steer", "queue"] as const) {
         ? ["first queued prompt, edited too", "second queued prompt, edited"]
         : ["first queued prompt, edited too"]
 
-    admission.release()
-    await cancellation.arrived
-    cancellation.release()
+    edit.release()
 
     await expect(texts).toHaveText(final)
     await expect(view.rows.and(page.locator('[aria-busy="true"]'))).toHaveCount(0)
-    // The steered or queued edit was admitted once, with its attachment, and no original is left.
+    // The same two items survive the edits with their IDs and attachment intact.
+    expect(mock.rows.map((row) => row.id)).toEqual(["inb_seed_1", "inb_seed_2"])
     expect(mock.prompts[0]).toMatchObject({ text: "second queued prompt, edited", delivery })
     expect(mock.prompts[0].files?.map((file) => file.uri.startsWith("data:image/png;"))).toEqual([true])
     await expect

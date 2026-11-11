@@ -1026,8 +1026,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (!current(attempt)) return
     const client = attempt.client
     if (catalogEvents.has(event.type)) {
-      if (input.location && event.location && event.location.directory !== input.location.directory)
-        return
+      if (input.location && event.location && event.location.directory !== input.location.directory) return
       void refreshCatalog(attempt)
       return
     }
@@ -1054,6 +1053,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     subagents.main(client, event, attempt.signal)
     if (event.type === "session.renamed") {
       input.onSessionTitle?.(event.data.title)
+      return
+    }
+    if (event.type === "session.inbox.edited") {
+      mergePending(event.data)
       return
     }
     if (event.type === "session.inbox.enqueued") {

@@ -903,6 +903,12 @@ export function createData(config: CreateDataInput) {
         compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
+      case "session.inbox.edited": {
+        const item = event.data
+        pendingUpdates.get(item.sessionID)?.set(item.id, item)
+        admitLocal(item)
+        return
+      }
       case "session.inbox.enqueued": {
         outbox.delete(event.data.inboxID)
         const item = {

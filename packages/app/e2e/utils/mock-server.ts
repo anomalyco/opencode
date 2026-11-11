@@ -161,6 +161,7 @@ export interface MockServerConfig {
   sessionStatus?: Resolvable<Record<string, { type: string }>>
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  onInboxEdit?: (input: { sessionID: string; inboxID: string; body: Schema.JsonObject }) => void
   onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   // POST /api/session/:id/fork creates `<id>_fork` in the same directory. The hook may hold the request, or return an
   // answer to replace the response.
@@ -1342,6 +1343,10 @@ function mockHandlers(
               text: "Side-question answer",
             },
           })),
+        sessionInboxEdit: (ctx) =>
+          Effect.sync(() =>
+            config.onInboxEdit?.({ ...ctx.params, body: Option.getOrElse(decodeJsonObject(ctx.payload), () => ({})) }),
+          ).pipe(Effect.andThen(noContent)),
         sessionInboxCancel: (ctx) =>
           Effect.sync(() =>
             config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "cancel" }),

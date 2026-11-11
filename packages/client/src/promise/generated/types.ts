@@ -2631,6 +2631,23 @@ export type SessionInboxUser = {
   delivery: SessionInboxDelivery
 }
 
+export type SessionInboxEdited = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.inbox.edited"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    id: SessionMessageID
+    sessionID: SessionID
+    time: { created: number }
+    type: "user"
+    payload: SessionInboxUserPayload1
+    delivery: SessionInboxDelivery
+  }
+}
+
 export type SessionMessageAssistantTool = {
   type: "tool"
   id: string
@@ -2848,6 +2865,7 @@ export type SessionEventDurable =
   | SessionForked
   | SessionInboxDelivered
   | SessionInboxEnqueued
+  | SessionInboxEdited
   | SessionInboxCancelled
   | SessionInboxDeliveryChanged
   | SessionExecutionStarted
@@ -2907,6 +2925,7 @@ export type V2Event =
   | SessionForked
   | SessionInboxDelivered
   | SessionInboxEnqueued
+  | SessionInboxEdited
   | SessionInboxCancelled
   | SessionInboxDeliveryChanged
   | SessionExecutionStarted
@@ -3554,6 +3573,37 @@ export type SessionInboxListOutput = { data: Array<SessionInboxInfo> }["data"]
 export type SessionInboxCancelInput = { readonly sessionID: string; readonly inboxID: string }
 
 export type SessionInboxCancelOutput = void
+
+export type SessionInboxEditInput = {
+  readonly sessionID: string
+  readonly inboxID: string
+  readonly text: string
+  readonly files?:
+    | ReadonlyArray<{
+        readonly uri: string
+        readonly source?: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
+        readonly name?: string
+        readonly description?: string
+        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    | undefined
+  readonly agents?:
+    | ReadonlyArray<{
+        readonly name: string
+        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    | undefined
+  readonly skills?:
+    | ReadonlyArray<{
+        readonly id: string
+        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    | undefined
+  readonly metadata?: { readonly [x: string]: JsonValue } | undefined
+  readonly delivery: "steer" | "queue"
+}
+
+export type SessionInboxEditOutput = void
 
 export type SessionInboxUpdateInput = {
   readonly sessionID: string
@@ -4406,6 +4456,7 @@ export type EventSubscribeInput = {
         | "session.forked"
         | "session.inbox.delivered"
         | "session.inbox.enqueued"
+        | "session.inbox.edited"
         | "session.inbox.cancelled"
         | "session.inbox.delivery.changed"
         | "session.execution.started"

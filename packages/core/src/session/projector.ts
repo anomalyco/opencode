@@ -1046,6 +1046,7 @@ const layer = Layer.effectDiscard(
         yield* touch(db, event)
       }),
     )
+    yield* bus.project(SessionEvent.InboxEdited, (event) => SessionInbox.projectEdited(db, event.data))
     yield* bus.project(SessionEvent.InboxCancelled, (event) =>
       SessionInbox.projectCancelled(db, {
         id: event.data.inboxID,
