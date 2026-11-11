@@ -277,6 +277,67 @@
         "@anthropic-ai/claude-agent-sdk",
       ],
     },
+    "packages/data/app": {
+      "name": "@opencode/data-app",
+      "version": "2.2.7",
+      "dependencies": {
+        "@kobalte/core": "catalog:",
+        "@opencode/data-core": "workspace:*",
+        "@opencode/nav-menus": "workspace:*",
+        "@opencode/ui": "workspace:*",
+        "@resvg/resvg-wasm": "2.6.2",
+        "@solidjs/meta": "catalog:",
+        "@solidjs/router": "catalog:",
+        "@solidjs/start": "catalog:",
+        "d3-scale": "4.0.2",
+        "effect": "catalog:",
+        "i18n-iso-countries": "7.14.0",
+        "nitro": "3.0.260903-beta",
+        "satori": "0.63.2",
+        "solid-js": "catalog:",
+        "vite": "8.2.4",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/d3-scale": "4.0.9",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
+        "wawoff2": "2.0.1",
+      },
+    },
+    "packages/data/core": {
+      "name": "@opencode/data-core",
+      "version": "2.2.7",
+      "dependencies": {
+        "@planetscale/database": "1.19.0",
+        "drizzle-orm": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/node22": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native": "catalog:",
+        "drizzle-kit": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/data/server": {
+      "name": "@opencode/data-server",
+      "version": "2.2.7",
+      "dependencies": {
+        "@opencode/data-core": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "catalog:",
+        "@tsconfig/node22": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/desktop": {
       "name": "@opencode/desktop",
       "version": "2.2.7",
@@ -665,67 +726,6 @@
         "@typescript/native": "catalog:",
       },
     },
-    "packages/stats/app": {
-      "name": "@opencode/stats-app",
-      "version": "2.2.7",
-      "dependencies": {
-        "@kobalte/core": "catalog:",
-        "@opencode/nav-menus": "workspace:*",
-        "@opencode/stats-core": "workspace:*",
-        "@opencode/ui": "workspace:*",
-        "@resvg/resvg-wasm": "2.6.2",
-        "@solidjs/meta": "catalog:",
-        "@solidjs/router": "catalog:",
-        "@solidjs/start": "catalog:",
-        "d3-scale": "4.0.2",
-        "effect": "catalog:",
-        "i18n-iso-countries": "7.14.0",
-        "nitro": "3.0.260903-beta",
-        "satori": "0.63.2",
-        "solid-js": "catalog:",
-        "vite": "8.2.4",
-      },
-      "devDependencies": {
-        "@types/bun": "catalog:",
-        "@types/d3-scale": "4.0.9",
-        "@typescript/native": "catalog:",
-        "typescript": "catalog:",
-        "wawoff2": "2.0.1",
-      },
-    },
-    "packages/stats/core": {
-      "name": "@opencode/stats-core",
-      "version": "2.2.7",
-      "dependencies": {
-        "@planetscale/database": "1.19.0",
-        "drizzle-orm": "catalog:",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@tsconfig/node22": "catalog:",
-        "@types/bun": "catalog:",
-        "@types/node": "catalog:",
-        "@typescript/native": "catalog:",
-        "drizzle-kit": "catalog:",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/stats/server": {
-      "name": "@opencode/stats-server",
-      "version": "2.2.7",
-      "dependencies": {
-        "@opencode/stats-core": "workspace:*",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@cloudflare/workers-types": "catalog:",
-        "@tsconfig/node22": "catalog:",
-        "@types/bun": "catalog:",
-        "@types/node": "catalog:",
-        "@typescript/native": "catalog:",
-        "typescript": "catalog:",
-      },
-    },
     "packages/stories": {
       "name": "@opencode/stories",
       "devDependencies": {
@@ -870,8 +870,8 @@
       "devDependencies": {
         "@cloudflare/build-output-utils": "0.8.5",
         "@cloudflare/config": "0.23.0",
-        "@opencode/stats-app": "workspace:*",
-        "@opencode/stats-server": "workspace:*",
+        "@opencode/data-app": "workspace:*",
+        "@opencode/data-server": "workspace:*",
         "@types/bun": "catalog:",
         "@typescript/native": "catalog:",
         "cf": "1.0.0-beta.12",
@@ -1798,6 +1798,12 @@
 
     "@opencode/data": ["@opencode/data@workspace:services/data"],
 
+    "@opencode/data-app": ["@opencode/data-app@workspace:packages/data/app"],
+
+    "@opencode/data-core": ["@opencode/data-core@workspace:packages/data/core"],
+
+    "@opencode/data-server": ["@opencode/data-server@workspace:packages/data/server"],
+
     "@opencode/desktop": ["@opencode/desktop@workspace:packages/desktop"],
 
     "@opencode/files": ["@opencode/files@workspace:services/files"],
@@ -1857,12 +1863,6 @@
     "@opencode/simulation": ["@opencode/simulation@workspace:packages/simulation"],
 
     "@opencode/site": ["@opencode/site@workspace:services/site"],
-
-    "@opencode/stats-app": ["@opencode/stats-app@workspace:packages/stats/app"],
-
-    "@opencode/stats-core": ["@opencode/stats-core@workspace:packages/stats/core"],
-
-    "@opencode/stats-server": ["@opencode/stats-server@workspace:packages/stats/server"],
 
     "@opencode/stories": ["@opencode/stories@workspace:packages/stories"],
 
@@ -3084,7 +3084,7 @@
 
     "ffi-rs": ["ffi-rs@1.3.7", "", { "optionalDependencies": { "@yuuang/ffi-rs-android-arm64": "1.3.7", "@yuuang/ffi-rs-darwin-arm64": "1.3.7", "@yuuang/ffi-rs-darwin-x64": "1.3.7", "@yuuang/ffi-rs-linux-arm-gnueabihf": "1.3.7", "@yuuang/ffi-rs-linux-arm64-gnu": "1.3.7", "@yuuang/ffi-rs-linux-arm64-musl": "1.3.7", "@yuuang/ffi-rs-linux-x64-gnu": "1.3.7", "@yuuang/ffi-rs-linux-x64-musl": "1.3.7", "@yuuang/ffi-rs-win32-arm64-msvc": "1.3.7", "@yuuang/ffi-rs-win32-ia32-msvc": "1.3.7", "@yuuang/ffi-rs-win32-x64-msvc": "1.3.7" } }, "sha512-5MMZQS2t/6f/ec3sx0f51gBcKGZPGfolPAW04lvLOSYnr7gmOKs8YzH1Rh+34WGO+VtcgcTuxaUUoJLcR4Tirg=="],
 
-    "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
+    "fflate": ["fflate@0.7.3", "", {}, "sha512-0Zz1jOzJWERhyhsimS54VTqOteCNwRtIlh8isdL0AXLo0g7xNTfTL7oWrkmCnPhZGocKIkWHBistBrrpoNH3aw=="],
 
     "filelist": ["filelist@1.0.6", "", { "dependencies": { "minimatch": "^5.0.1" } }, "sha512-5giy2PkLYY1cP39p17Ech+2xlpTRL9HLspOfEgm0L6CwBXBTgsK5ou0JtzYuepxkaQ/tvhCFIJ5uXo0OrM2DxA=="],
 
@@ -3800,7 +3800,7 @@
 
     "path-scurry": ["path-scurry@2.0.2", "", { "dependencies": { "lru-cache": "^11.0.0", "minipass": "^7.1.2" } }, "sha512-3O/iVVsJAPsOnpwWIeD+d6z/7PmqApyQePUtCndjatj/9I5LylHvt5qluFaBT3I5h3r1ejfR056c+FCv+NnNXg=="],
 
-    "path-to-regexp": ["path-to-regexp@6.3.0", "", {}, "sha512-Yhpw4T9C6hPpgPeA28us07OJeqZ5EzQTkbfwuhsUg0c237RomFoETJgmp2sa3F/41gfLE6G5cqcYwznmeEeOlQ=="],
+    "path-to-regexp": ["path-to-regexp@8.4.2", "", {}, "sha512-qRcuIdP69NPm4qbACK+aDogI5CBDMi1jKe0ry5rSQJz8JVLsC7jV8XpiJjGRLLol3N+R5ihGYcrPLTno6pAdBA=="],
 
     "pathe": ["pathe@2.0.3", "", {}, "sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w=="],
 
@@ -4646,10 +4646,6 @@
 
     "@sentry/server-utils/@sentry/core": ["@sentry/core@10.73.0", "", { "dependencies": { "@sentry/conventions": "^0.16.0" } }, "sha512-FLO1UgH19RyasVpofu612WCOgb2nEH0dZy+R72d7p65XU9i0wxlMKm3+sgfwKmiSJp1Qhilaaxs4Jg6BbiM5HA=="],
 
-    "@shuding/opentype.js/fflate": ["fflate@0.7.3", "", {}, "sha512-0Zz1jOzJWERhyhsimS54VTqOteCNwRtIlh8isdL0AXLo0g7xNTfTL7oWrkmCnPhZGocKIkWHBistBrrpoNH3aw=="],
-
-    "@solidjs/start/path-to-regexp": ["path-to-regexp@8.4.2", "", {}, "sha512-qRcuIdP69NPm4qbACK+aDogI5CBDMi1jKe0ry5rSQJz8JVLsC7jV8XpiJjGRLLol3N+R5ihGYcrPLTno6pAdBA=="],
-
     "@tailwindcss/node/lightningcss": ["lightningcss@1.32.0", "", { "dependencies": { "detect-libc": "^2.0.3" }, "optionalDependencies": { "lightningcss-android-arm64": "1.32.0", "lightningcss-darwin-arm64": "1.32.0", "lightningcss-darwin-x64": "1.32.0", "lightningcss-freebsd-x64": "1.32.0", "lightningcss-linux-arm-gnueabihf": "1.32.0", "lightningcss-linux-arm64-gnu": "1.32.0", "lightningcss-linux-arm64-musl": "1.32.0", "lightningcss-linux-x64-gnu": "1.32.0", "lightningcss-linux-x64-musl": "1.32.0", "lightningcss-win32-arm64-msvc": "1.32.0", "lightningcss-win32-x64-msvc": "1.32.0" } }, "sha512-NXYBzinNrblfraPGyrbPoD19C1h9lfI/1mzgWYvXUTe414Gz/X1FD2XBZSZM7rRTrMA8JL3OtAaGifrIKhQ5yQ=="],
 
     "@tailwindcss/oxide-wasm32-wasi/@emnapi/core": ["@emnapi/core@1.11.3", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.3", "tslib": "^2.4.0" }, "bundled": true }, "sha512-zLpS5asjEb7lq8jYLq37N6XKaE41DIexlY1rF/z4/tIl3wo13Sqm28fRyfIsKZD+NZ8mM5RoKkpW/rBcuoSZSg=="],
@@ -4667,6 +4663,8 @@
     "@textjs/app/@vitejs/plugin-react": ["@vitejs/plugin-react@4.7.0", "", { "dependencies": { "@babel/core": "^7.28.0", "@babel/plugin-transform-react-jsx-self": "^7.27.1", "@babel/plugin-transform-react-jsx-source": "^7.27.1", "@rolldown/pluginutils": "1.0.0-beta.27", "@types/babel__core": "^7.20.5", "react-refresh": "^0.17.0" }, "peerDependencies": { "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" } }, "sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA=="],
 
     "@textjs/app/vite": ["vite@6.4.5", "", { "dependencies": { "esbuild": "^0.25.0", "fdir": "^6.4.4", "picomatch": "^4.0.2", "postcss": "^8.5.3", "rollup": "^4.34.9", "tinyglobby": "^0.2.13" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0", "jiti": ">=1.21.0", "less": "*", "lightningcss": "^1.21.0", "sass": "*", "sass-embedded": "*", "stylus": "*", "sugarss": "*", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-4enwjFfi4IwtEh0w+jPzpLVOFQiPHmmzPxcHXQOyEur47o6u0jE573DmGpjA+7irXoMLYRZD5ZaFUEneS3abPg=="],
+
+    "@types/three/fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "app-builder-lib/js-yaml": ["js-yaml@4.3.2", "", { "dependencies": { "argparse": "^2.0.1" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA=="],
 
@@ -4820,13 +4818,9 @@
 
     "roarr/sprintf-js": ["sprintf-js@1.1.3", "", {}, "sha512-Oo+0REFV59/rz3gfJNKQiBlwfHaSESl1pcGyABQsnnIfWOFt6JNj5gCog2U6MLZ//IGYD+nA8nI+mTShREReaA=="],
 
-    "router/path-to-regexp": ["path-to-regexp@8.4.2", "", {}, "sha512-qRcuIdP69NPm4qbACK+aDogI5CBDMi1jKe0ry5rSQJz8JVLsC7jV8XpiJjGRLLol3N+R5ihGYcrPLTno6pAdBA=="],
-
     "safe-array-concat/isarray": ["isarray@2.0.5", "", {}, "sha512-xHjhDr3cNBK0BzdUJSPXZntQUx/mwMS5Rw4A7lPJ90XGAO6ISP/ePDNuo0vhqOZU+UD5JoodwCAAoZQd3FeAKw=="],
 
     "safe-push-apply/isarray": ["isarray@2.0.5", "", {}, "sha512-xHjhDr3cNBK0BzdUJSPXZntQUx/mwMS5Rw4A7lPJ90XGAO6ISP/ePDNuo0vhqOZU+UD5JoodwCAAoZQd3FeAKw=="],
-
-    "satori/fflate": ["fflate@0.7.3", "", {}, "sha512-0Zz1jOzJWERhyhsimS54VTqOteCNwRtIlh8isdL0AXLo0g7xNTfTL7oWrkmCnPhZGocKIkWHBistBrrpoNH3aw=="],
 
     "serialize-error/type-fest": ["type-fest@0.13.1", "", {}, "sha512-34R7HTnG0XIJcBSn5XhDd7nNFPRcXYRZrBB2O2jdKqYODldSzBAqzsWoZYYvduky73toYS/ESqxPvkDf/F0XMg=="],
 
@@ -4883,6 +4877,8 @@
     "wrangler/esbuild": ["esbuild@0.28.1", "", { "optionalDependencies": { "@esbuild/aix-ppc64": "0.28.1", "@esbuild/android-arm": "0.28.1", "@esbuild/android-arm64": "0.28.1", "@esbuild/android-x64": "0.28.1", "@esbuild/darwin-arm64": "0.28.1", "@esbuild/darwin-x64": "0.28.1", "@esbuild/freebsd-arm64": "0.28.1", "@esbuild/freebsd-x64": "0.28.1", "@esbuild/linux-arm": "0.28.1", "@esbuild/linux-arm64": "0.28.1", "@esbuild/linux-ia32": "0.28.1", "@esbuild/linux-loong64": "0.28.1", "@esbuild/linux-mips64el": "0.28.1", "@esbuild/linux-ppc64": "0.28.1", "@esbuild/linux-riscv64": "0.28.1", "@esbuild/linux-s390x": "0.28.1", "@esbuild/linux-x64": "0.28.1", "@esbuild/netbsd-arm64": "0.28.1", "@esbuild/netbsd-x64": "0.28.1", "@esbuild/openbsd-arm64": "0.28.1", "@esbuild/openbsd-x64": "0.28.1", "@esbuild/openharmony-arm64": "0.28.1", "@esbuild/sunos-x64": "0.28.1", "@esbuild/win32-arm64": "0.28.1", "@esbuild/win32-ia32": "0.28.1", "@esbuild/win32-x64": "0.28.1" }, "bin": { "esbuild": "bin/esbuild" } }, "sha512-HrJrvZv5ayxBzPfwphOoNzkzOIIlifzk0KJrGK2c8R4+LKpMtpYLQeUdjnwjWv/LZlkH2laZk+4w78pi99D4Vw=="],
 
     "wrangler/miniflare": ["miniflare@4.20260708.1", "", { "dependencies": { "@cspotcode/source-map-support": "0.8.1", "sharp": "0.34.5", "undici": "7.28.0", "workerd": "1.20260708.1", "ws": "8.21.0", "youch": "4.1.0-beta.10" }, "bin": { "miniflare": "bootstrap.js" } }, "sha512-c94O9zRDISdqO18EHt6l0iF/fWgWt8p18PJvRsA/L/NJZ9Cfke3s/F5Blg1XXF7WDutVRzWVWy8Vy4LaT5ifsA=="],
+
+    "wrangler/path-to-regexp": ["path-to-regexp@6.3.0", "", {}, "sha512-Yhpw4T9C6hPpgPeA28us07OJeqZ5EzQTkbfwuhsUg0c237RomFoETJgmp2sa3F/41gfLE6G5cqcYwznmeEeOlQ=="],
 
     "wrap-ansi/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g=="],
 
@@ -4957,6 +4953,8 @@
     "@opencode/legacy/wrangler/esbuild": ["esbuild@0.28.2", "", { "optionalDependencies": { "@esbuild/aix-ppc64": "0.28.2", "@esbuild/android-arm": "0.28.2", "@esbuild/android-arm64": "0.28.2", "@esbuild/android-x64": "0.28.2", "@esbuild/darwin-arm64": "0.28.2", "@esbuild/darwin-x64": "0.28.2", "@esbuild/freebsd-arm64": "0.28.2", "@esbuild/freebsd-x64": "0.28.2", "@esbuild/linux-arm": "0.28.2", "@esbuild/linux-arm64": "0.28.2", "@esbuild/linux-ia32": "0.28.2", "@esbuild/linux-loong64": "0.28.2", "@esbuild/linux-mips64el": "0.28.2", "@esbuild/linux-ppc64": "0.28.2", "@esbuild/linux-riscv64": "0.28.2", "@esbuild/linux-s390x": "0.28.2", "@esbuild/linux-x64": "0.28.2", "@esbuild/netbsd-arm64": "0.28.2", "@esbuild/netbsd-x64": "0.28.2", "@esbuild/openbsd-arm64": "0.28.2", "@esbuild/openbsd-x64": "0.28.2", "@esbuild/openharmony-arm64": "0.28.2", "@esbuild/sunos-x64": "0.28.2", "@esbuild/win32-arm64": "0.28.2", "@esbuild/win32-ia32": "0.28.2", "@esbuild/win32-x64": "0.28.2" }, "hasInstallScript": true, "bin": { "esbuild": "bin/esbuild" } }, "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA=="],
 
     "@opencode/legacy/wrangler/miniflare": ["miniflare@5.20261102.0-beta", "", { "dependencies": { "@cspotcode/source-map-support": "0.8.1", "sharp": "0.35.5", "undici": "7.30.1", "workerd": "1.20261102.1", "ws": "8.21.0", "youch": "4.1.0-beta.10" } }, "sha512-FGqoi2BF7Vq6v8aSraq9Tmhg8ORpUBC5RkNGhfa11J597cWlLJ5QP9vJwDMOzwJx+W4U+IuHWSidVceBK6VRZQ=="],
+
+    "@opencode/legacy/wrangler/path-to-regexp": ["path-to-regexp@6.3.0", "", {}, "sha512-Yhpw4T9C6hPpgPeA28us07OJeqZ5EzQTkbfwuhsUg0c237RomFoETJgmp2sa3F/41gfLE6G5cqcYwznmeEeOlQ=="],
 
     "@opencode/legacy/wrangler/workerd": ["workerd@1.20261102.1", "", { "optionalDependencies": { "@cloudflare/workerd-darwin-64": "1.20261102.1", "@cloudflare/workerd-darwin-arm64": "1.20261102.1", "@cloudflare/workerd-linux-64": "1.20261102.1", "@cloudflare/workerd-linux-arm64": "1.20261102.1", "@cloudflare/workerd-windows-64": "1.20261102.1" }, "hasInstallScript": true, "bin": { "workerd": "bin/workerd" } }, "sha512-5A+/vm0M5oc98pB3aR+DZ5cIOvRMhVWVS9tg+CrjUap7PIo8tqAnvNdvuiHBIE47/wkxtNM3jToAaU38dBsZTw=="],
 

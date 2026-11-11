@@ -10118,6 +10118,7 @@
                     "session.shell.started",
                     "session.shell.ended",
                     "session.step.started",
+                    "session.step.first-token",
                     "session.step.streamed",
                     "session.step.ended",
                     "session.step.failed",
@@ -10227,6 +10228,7 @@
                           "session.shell.started",
                           "session.shell.ended",
                           "session.step.started",
+                          "session.step.first-token",
                           "session.step.streamed",
                           "session.step.ended",
                           "session.step.failed",
@@ -16645,6 +16647,9 @@
               "portable_shell_scanner": {
                 "type": "boolean"
               },
+              "codemode_vm": {
+                "type": "boolean"
+              },
               "all_flags": {
                 "type": "boolean"
               },
@@ -16661,9 +16666,6 @@
                 "type": "boolean"
               },
               "artifacts": {
-                "type": "boolean"
-              },
-              "codemode_vm": {
                 "type": "boolean"
               },
               "shell_timeout_background": {
@@ -22927,6 +22929,9 @@
             "$ref": "#/components/schemas/session.step.started"
           },
           {
+            "$ref": "#/components/schemas/session.step.first-token"
+          },
+          {
             "$ref": "#/components/schemas/session.step.streamed"
           },
           {
@@ -23469,6 +23474,9 @@
             "type": "object",
             "properties": {
               "created": {
+                "type": "number"
+              },
+              "firstToken": {
                 "type": "number"
               },
               "streamed": {
@@ -25435,6 +25443,9 @@
           },
           {
             "$ref": "#/components/schemas/session.step.started"
+          },
+          {
+            "$ref": "#/components/schemas/session.step.first-token"
           },
           {
             "$ref": "#/components/schemas/session.step.streamed"
@@ -29300,6 +29311,58 @@
               }
             },
             "required": ["sessionID", "assistantMessageID", "error"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.step.first-token": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.step.first-token"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "assistantMessageID": {
+                "$ref": "#/components/schemas/Session.Message.ID"
+              }
+            },
+            "required": ["sessionID", "assistantMessageID"],
             "additionalProperties": false
           }
         },

@@ -48,6 +48,27 @@ describe("ToolOutput", () => {
     ),
   )
 
+  it.live("keeps the preview when the full output cannot be saved", () =>
+    withStore(
+      (service, fs, root) =>
+        Effect.gen(function* () {
+          yield* fs.writeFileString(path.join(root, ToolOutput.DIRECTORY), "not a directory")
+          const result = yield* service.truncate({ content: [{ type: "text", text: "one\ntwo\nthree" }] })
+          expect(result.metadata).toEqual({ truncated: true })
+          expect(result.content).toEqual([
+            { type: "text", text: "one\ntwo" },
+            {
+              type: "text",
+              text: expect.stringMatching(
+                /^\[showing lines 1-2 of 3; full output could not be saved: E[A-Z]+: [^\n]+\]$/,
+              ),
+            },
+          ])
+        }),
+      { maxLines: 2, maxBytes: 1_000 },
+    ),
+  )
+
   it.live("cuts at the byte limit, inside a line when it falls there", () =>
     withStore(
       (output) =>

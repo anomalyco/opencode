@@ -1,8 +1,9 @@
 import { defineConfig } from "cf/config"
+import { stage } from "./stage"
 
-export const ogWorkerName = (mode: string | undefined) => `opencode-data-og-${mode === "dev" ? "dev" : "production"}`
+export const ogWorkerName = (mode: string | undefined) => `opencode-data-og-${stage(mode)}`
 
-// The private Worker that renders the data pages' Open Graph images (packages/stats/app/src/og/worker.ts). It has no
+// The private Worker that renders the data pages' Open Graph images (packages/data/app/src/og/worker.ts). It has no
 // URL or route; the data Worker reaches it through its OG_WORKER Service Binding. It is its own Worker so the data
 // Worker doesn't load the Wasm engines and fonts it ships as modules (script/build.ts).
 export default defineConfig(({ mode }) => ({

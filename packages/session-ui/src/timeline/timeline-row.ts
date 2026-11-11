@@ -18,7 +18,8 @@ export type PartGroup =
     }
   | {
       key: string
-      type: "file" | "read"
+      /** `events`: subagents and background shells counted in one row, in the New timeline. */
+      type: "file" | "read" | "events"
       refs: PartRef[]
     }
 
@@ -97,6 +98,11 @@ export namespace TimelineRow {
     files: readonly string[]
   }> {}
 
+  /** How long a turn the user stopped worked, in the New timeline where the setting hides all the agent's activity. */
+  export class Worked extends Data.TaggedClass("Worked")<{
+    userMessageID: string
+  }> {}
+
   /** Where the host shows the active turn's live status when undelivered input waits below it. */
   export class Activity extends Data.TaggedClass("Activity")<{
     userMessageID: string
@@ -114,6 +120,7 @@ export namespace TimelineRow {
     | Retry
     | CompactionQueued
     | TurnDiff
+    | Worked
     | Activity
 
   export const key: (row: TimelineRow) => string = Match.typeTags<TimelineRow>()({
@@ -131,6 +138,7 @@ export namespace TimelineRow {
     Retry: (row) => `retry:${row.userMessageID}`,
     CompactionQueued: (row) => `compaction-queued:${row.inboxID}`,
     TurnDiff: (row) => `turn-diff:${row.messageID}`,
+    Worked: (row) => `worked:${row.userMessageID}`,
     // One live status exists at a time; it keeps its identity when the active turn changes.
     Activity: () => "activity",
   })
@@ -168,6 +176,7 @@ export namespace TimelineRow {
       other.from === row.from &&
       other.files.length === row.files.length &&
       other.files.every((file, index) => file === row.files[index]),
+    Worked: () => (other: TimelineRow) => Predicate.isTagged(other, "Worked"),
     Activity: () => (other: TimelineRow) => Predicate.isTagged(other, "Activity"),
   })
 
@@ -218,5 +227,6 @@ export type TimelineRowMap = {
   }
   CompactionQueued: { userMessageID: string; inboxID: string }
   TurnDiff: { userMessageID: string; messageID: string; from: string; files: readonly string[] }
+  Worked: { userMessageID: string }
   Activity: { userMessageID: string }
 }

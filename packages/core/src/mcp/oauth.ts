@@ -28,6 +28,7 @@ import type { AddressInfo } from "node:net"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "../credential.js"
 import { OauthCallbackPage } from "../oauth/page.js"
+import { OauthRedirect } from "../oauth/redirect.js"
 import type { Integration } from "../integration.js"
 import { ErrorSummary } from "../util/error-summary.js"
 
@@ -624,23 +625,11 @@ export const authorize = (input: {
       callback: Deferred.await(completed),
       // A pasted URL is held to the same checks as the browser's redirect, but a wrong paste keeps the login waiting.
       submit: (pasted: string) =>
-        Effect.gen(function* () {
-          const text = pasted.trim()
-          if (!URL.canParse(text))
-            return yield* Effect.fail(new Error("Paste the full URL from the browser's address bar"))
-          const url = new URL(text)
-          if (url.searchParams.get("state") !== state)
-            return yield* Effect.fail(new Error("This URL belongs to a different sign-in"))
-          const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
-          if (error) {
-            yield* Deferred.fail(code, new Error(error))
-            return
-          }
-          const value = url.searchParams.get("code")
-          if (!value) return yield* Effect.fail(new Error("The URL does not contain an authorization code"))
-          yield* Effect.logInfo("mcp oauth redirect pasted", fields)
-          yield* Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined })
-        }),
+        OauthRedirect.submit({
+          state,
+          callback: code,
+          received: (value, params) => ({ code: value, iss: params.get("iss") ?? undefined }),
+        })(pasted).pipe(Effect.tap(() => Effect.logInfo("mcp oauth redirect pasted", fields))),
     }
   }).pipe(
     Effect.onError((cause) =>

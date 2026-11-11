@@ -1422,6 +1422,16 @@ export type SessionStepStarted = {
   }
 }
 
+export type SessionStepFirstToken = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.step.first-token"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; assistantMessageID: SessionMessageID }
+}
+
 export type SessionStepStreamed = {
   id: EventID
   created: number
@@ -2554,13 +2564,13 @@ export type ConfigEntry =
         }
         experimental?: {
           portable_shell_scanner?: boolean
+          codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
-          codemode_vm?: boolean
           shell_timeout_background?: boolean
           console_watches?: boolean
           mcp_events?: boolean
@@ -2700,7 +2710,7 @@ export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | Sessio
 export type SessionMessageAssistant = {
   id: SessionMessageID
   metadata?: { [x: string]: JsonValue }
-  time: { created: number; streamed?: number; completed?: number }
+  time: { created: number; firstToken?: number; streamed?: number; completed?: number }
   type: "assistant"
   agent: AgentID
   model: ModelRef
@@ -2832,6 +2842,7 @@ export type SessionEventDurable =
   | SessionShellStarted
   | SessionShellEnded
   | SessionStepStarted
+  | SessionStepFirstToken
   | SessionStepStreamed
   | SessionStepEnded
   | SessionStepFailed
@@ -2890,6 +2901,7 @@ export type V2Event =
   | SessionShellStarted
   | SessionShellEnded
   | SessionStepStarted
+  | SessionStepFirstToken
   | SessionStepStreamed
   | SessionStepEnded
   | SessionStepFailed
@@ -4387,6 +4399,7 @@ export type EventSubscribeInput = {
         | "session.shell.started"
         | "session.shell.ended"
         | "session.step.started"
+        | "session.step.first-token"
         | "session.step.streamed"
         | "session.step.ended"
         | "session.step.failed"

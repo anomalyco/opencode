@@ -1,6 +1,6 @@
 # Data
 
-Deploys the opencode.ai/data site from `packages/stats` as three Workers with `cf`:
+Deploys the opencode.ai/data site from `packages/data` as three Workers with `cf`:
 
 | Worker                       | Config                 | What it is                                                                    |
 | ---------------------------- | ---------------------- | ----------------------------------------------------------------------------- |
@@ -18,7 +18,12 @@ its config declares.
 The database is the `opencode-stats` PlanetScale database: the `dev` branch for dev and `production`
 for production, through the `data-worker-<stage>` password. It is not managed as code.
 
+Every config, `script/build.ts` and `script/deploy.ts` take the stage from `--mode`, which must be `dev` or
+`production` (`stage.ts`). Anything else, including no mode, throws instead of falling back to production, so pass
+`--mode` to `cf` commands that read the configs too (`cf deploy --dry-run --mode dev`).
+
 ```bash
-bun run build --mode dev
+bun run dev               # the site on your machine (packages/data/app)
+bun run build:dev         # or build:production
 bun run typecheck
 ```

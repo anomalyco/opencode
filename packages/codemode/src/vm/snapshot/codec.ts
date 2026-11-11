@@ -66,9 +66,9 @@ export type Encoded = string | number | boolean | null | ReadonlyArray<Json>
 export type Record = { readonly t: string; readonly [field: string]: Json }
 
 /** A saved state can't be read, or doesn't fit this runtime. */
-import { SnapshotError } from "../../suspend-error.js"
-
-export { SnapshotError }
+export class SnapshotError extends Error {
+  override readonly name = "SnapshotError"
+}
 
 /**
  * Where a function inside a value an extension returned came from, so a saved state can name it instead of losing it:

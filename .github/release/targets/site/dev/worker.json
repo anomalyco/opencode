@@ -1,0 +1,38 @@
+{
+  "name": "opencode-site-dev",
+  "compatibilityDate": "2026-07-25",
+  "compatibilityFlags": ["nodejs_compat"],
+  "assets": {
+    "htmlHandling": "drop-trailing-slash",
+    "runWorkerFirst": [
+      "/docs",
+      "/docs/*",
+      "!/docs/_build/*",
+      "!/docs/assets/*",
+      "!/docs/pagefind/*",
+      "!/docs/favicon.svg",
+      "!/docs/llms.txt",
+      "!/docs/sitemap.xml",
+      "!/docs/openapi.json",
+      "/v1/docs",
+      "/v1/docs/*",
+      "!/v1/docs/assets/*",
+      "!/v1/docs/pagefind/*",
+      "!/v1/docs/llms.txt",
+      "!/v1/docs/theme.json"
+    ]
+  },
+  "domains": ["dev.opencode.ai", "docs.dev.opencode.ai"],
+  "triggers": [
+    { "type": "fetch", "pattern": "dev.opencode.ai", "zone": "opencode.ai" },
+    { "type": "fetch", "pattern": "dev.opencode.ai/*", "zone": "opencode.ai" }
+  ],
+  "observability": { "enabled": true },
+  "workersDev": false,
+  "previewUrls": false,
+  "env": {
+    "ASSETS": { "type": "assets" },
+    "STAGE": { "type": "text", "value": "dev" }
+  },
+  "manifest": { "type": "partial", "mainModule": "index.mjs", "modules": {} }
+}

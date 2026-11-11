@@ -49,6 +49,12 @@ const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface,
   )
 })
 
+// The system error message ("ENOSPC: no space left on device, write") without the stack or wrapper text.
+const describe = (error: FSUtil.Error) => {
+  const cause = error._tag === "PlatformError" ? error.reason.cause : error.cause
+  return cause instanceof Error ? cause.message.split("\n")[0] : error.message
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -87,15 +93,22 @@ const layer = Layer.effect(
       const cut = withoutLineBreak(text, Math.min(byLines, byteBoundary(text, limits.maxBytes)))
       const shown = text.slice(0, cut)
       const file = path.join(directory, fileName())
-      yield* fs.ensureDir(directory).pipe(Effect.orDie)
-      yield* fs.writeFileString(file, text).pipe(Effect.orDie)
+      const failure = yield* fs.ensureDir(directory).pipe(
+        Effect.andThen(fs.writeFileString(file, text)),
+        Effect.as(undefined),
+        Effect.catch((error) =>
+          Effect.logWarning("failed to save full tool output", { file, cause: error }).pipe(Effect.as(describe(error))),
+        ),
+      )
+      const saved =
+        failure === undefined ? `full output saved to ${file}` : `full output could not be saved: ${failure}`
       const shownLines = shown === "" ? 0 : shown.split("\n").length
       const range = shownLines === 0 ? "0 lines" : `lines 1-${shownLines}`
       const lineCut = cut < text.length && !/^\r?\n/.test(text.slice(cut, cut + 2))
       const marker =
         cut === byLines
-          ? `[showing lines 1-${Math.min(limits.maxLines, lines.length)} of ${lines.length}; full output saved to ${file}]`
-          : `[showing ${Buffer.byteLength(shown, "utf-8")} of ${totalBytes} bytes (${range} of ${lines.length}${lineCut ? ", last line cut" : ""}); full output saved to ${file}]`
+          ? `[showing lines 1-${Math.min(limits.maxLines, lines.length)} of ${lines.length}; ${saved}]`
+          : `[showing ${Buffer.byteLength(shown, "utf-8")} of ${totalBytes} bytes (${range} of ${lines.length}${lineCut ? ", last line cut" : ""}); ${saved}]`
       const bounded: Tool.Content[] = []
       let remaining = shown.length
       // Whether a line break joins the next text part to the text before it, as when `text` was built.
@@ -123,7 +136,7 @@ const layer = Layer.effect(
       return {
         ...result,
         content: bounded,
-        metadata: { ...result.metadata, truncated: true, outputPath: file },
+        metadata: { ...result.metadata, truncated: true, ...(failure === undefined && { outputPath: file }) },
       }
     })
 

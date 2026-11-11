@@ -10,6 +10,9 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),
+  codemode_vm: Schema.Boolean.pipe(optional).annotate({
+    description: "Deprecated: ignored because Code Mode always runs on the VM.",
+  }),
   all_flags: Schema.Boolean.pipe(optional).annotate({
     description:
       "Turn every feature flag on regardless of the build channel, like OPENCODE_FLAGS=all; explicit per-flag settings still win, and false is not a kill switch.",
