@@ -1,5 +1,5 @@
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { For, onMount, type JSX } from "solid-js"
+import { For, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { Menu } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -27,6 +27,9 @@ const accelerators = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((e
   return [{ action: entry.action, keybind: parseKeybind(entry.accelerator.windows) }]
 })
 
+// Let pointer motion cross a sibling trigger without selecting it while keeping an intentional hover responsive.
+const SUBMENU_POINTER_SETTLE_DELAY = 150
+
 export function windowsMenuAccelerator(event: KeyboardEvent) {
   return accelerators.find((entry) => matchKeybind(entry.keybind, event))?.action
 }
@@ -38,6 +41,42 @@ export function WindowsAppMenu(props: {
   let lastFocused: HTMLElement | undefined
   const language = useLanguage()
   const menubar = useMenubarItems()
+  const [openMenu, setOpenMenu] = createSignal<string>()
+  const [pointerMenu, setPointerMenu] = createSignal<string>()
+  const [ignoredPointerMenu, setIgnoredPointerMenu] = createSignal<string>()
+  let pointerSettleTimeout: number | undefined
+
+  const clearPendingPointerMenu = () => {
+    window.clearTimeout(pointerSettleTimeout)
+    pointerSettleTimeout = undefined
+    setPointerMenu(undefined)
+  }
+
+  const activateMenu = (id: string) => {
+    if (pointerMenu() && pointerMenu() !== id) setIgnoredPointerMenu(pointerMenu())
+    clearPendingPointerMenu()
+    setOpenMenu(id)
+  }
+
+  const pointerMove = (id: string) => {
+    if (!openMenu() || openMenu() === id) return
+    window.clearTimeout(pointerSettleTimeout)
+    setPointerMenu(id)
+    pointerSettleTimeout = window.setTimeout(() => {
+      pointerSettleTimeout = undefined
+      if (pointerMenu() !== id) return
+      setPointerMenu(undefined)
+      if (openMenu() && openMenu() !== id) setOpenMenu(id)
+    }, SUBMENU_POINTER_SETTLE_DELAY)
+  }
+
+  const pointerLeave = (id: string) => {
+    if (ignoredPointerMenu() === id) setIgnoredPointerMenu(undefined)
+    if (pointerMenu() !== id) return
+    clearPendingPointerMenu()
+  }
+
+  onCleanup(clearPendingPointerMenu)
 
   const entries = (menu: DesktopMenu) =>
     desktopMenuWithPlugins(
@@ -127,7 +166,25 @@ export function WindowsAppMenu(props: {
             <Menu.GroupLabel class="desktop-app-menu-heading">OpenCode</Menu.GroupLabel>
             <For each={DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows"))}>
               {(menu) => (
-                <DesktopMenuSubmenu label={language.t(menu.labelKey)}>
+                <DesktopMenuSubmenu
+                  label={language.t(menu.labelKey)}
+                  open={openMenu() === menu.id}
+                  onPointerMove={() => pointerMove(menu.id)}
+                  onPointerLeave={() => pointerLeave(menu.id)}
+                  onActivate={() => activateMenu(menu.id)}
+                  onOpenChange={(open) => {
+                    if (open && ignoredPointerMenu() === menu.id) {
+                      setIgnoredPointerMenu(undefined)
+                      return
+                    }
+                    if (open && openMenu() && openMenu() !== menu.id && pointerMenu() === menu.id) return
+                    setOpenMenu((current) => {
+                      if (open) return menu.id
+                      // A delayed close from a previous submenu must not clear the section that opened after it.
+                      return current === menu.id ? undefined : current
+                    })
+                  }}
+                >
                   <For each={entries(menu)}>
                     {(item) => {
                       const entry = item.entry
@@ -173,10 +230,39 @@ export function WindowsAppMenu(props: {
   )
 }
 
-function DesktopMenuSubmenu(props: { label: string; children: JSX.Element }) {
+function DesktopMenuSubmenu(props: {
+  label: string
+  children: JSX.Element
+  open: boolean
+  onPointerMove: () => void
+  onPointerLeave: () => void
+  onActivate: () => void
+  onOpenChange: (open: boolean) => void
+}) {
+  const pointerMove = (event: PointerEvent) => {
+    if (event.pointerType === "mouse") props.onPointerMove()
+  }
+
+  const pointerLeave = () => {
+    props.onPointerLeave()
+  }
+
+  const keyDown = (event: KeyboardEvent) => {
+    if (event.key === "ArrowRight" || event.key === "Enter" || event.key === " ") props.onActivate()
+  }
+
+  onCleanup(props.onPointerLeave)
+
   return (
-    <Menu.Sub>
-      <Menu.SubTrigger>{props.label}</Menu.SubTrigger>
+    <Menu.Sub open={props.open} onOpenChange={props.onOpenChange}>
+      <Menu.SubTrigger
+        onPointerMove={pointerMove}
+        onPointerLeave={pointerLeave}
+        onClick={props.onActivate}
+        onKeyDown={keyDown}
+      >
+        {props.label}
+      </Menu.SubTrigger>
       <Menu.Portal>
         <Menu.SubContent class="desktop-app-menu desktop-app-menu-sub">{props.children}</Menu.SubContent>
       </Menu.Portal>

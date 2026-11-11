@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import {
   NO_PROVIDER,
@@ -1736,6 +1736,159 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await paste.click()
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
 })
+
+test("the Windows titlebar menu closes the previous submenu when hovering another parent", async ({ page }) => {
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+
+  const hoverCenter = async (locator: Locator) => {
+    const box = (await locator.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 })
+  }
+
+  const file = page.getByRole("menuitem", { name: "File", exact: true })
+  const edit = page.getByRole("menuitem", { name: "Edit", exact: true })
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+
+  await hoverCenter(file)
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+
+  await hoverCenter(edit)
+  await expect(edit).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toHaveAttribute("aria-expanded", "false")
+
+  await hoverCenter(view)
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  await expect(edit).toHaveAttribute("aria-expanded", "false")
+
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  await expect(view).toHaveAttribute("aria-expanded", "false")
+})
+
+test("the Windows titlebar menu switches submenus immediately from keyboard and click", async ({ page }) => {
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+
+  const file = page.getByRole("menuitem", { name: "File", exact: true })
+  const edit = page.getByRole("menuitem", { name: "Edit", exact: true })
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+
+  await file.click()
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+
+  await edit.focus()
+  await page.keyboard.press("ArrowDown")
+  await expect(view).toBeFocused()
+  await expect(edit).toHaveAttribute("aria-expanded", "false")
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+  await page.keyboard.press("ArrowRight")
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toHaveAttribute("aria-expanded", "false")
+
+  await edit.click()
+  await expect(edit).toHaveAttribute("aria-expanded", "true")
+  await expect(view).toHaveAttribute("aria-expanded", "false")
+})
+
+test("the Windows titlebar menu discards a pending hover after explicit selection", async ({ page }) => {
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+
+  const file = page.getByRole("menuitem", { name: "File", exact: true })
+  const edit = page.getByRole("menuitem", { name: "Edit", exact: true })
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+
+  await file.click()
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+  await page.clock.install()
+
+  const editBox = (await edit.boundingBox())!
+  await page.mouse.move(editBox.x + editBox.width / 2, editBox.y + editBox.height / 2)
+  await page.clock.fastForward(110)
+  await view.focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  await page.clock.fastForward(200)
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  await expect(edit).toHaveAttribute("aria-expanded", "false")
+
+  const fileBox = (await file.boundingBox())!
+  await page.mouse.move(fileBox.x + fileBox.width / 2, fileBox.y + fileBox.height / 2)
+  await page.clock.fastForward(110)
+  await edit.click()
+  await expect(edit).toHaveAttribute("aria-expanded", "true")
+  await page.clock.fastForward(200)
+  await expect(edit).toHaveAttribute("aria-expanded", "true")
+  await expect(view).toHaveAttribute("aria-expanded", "false")
+})
+
+test("the Windows titlebar menu ignores a Kobalte hover request after keyboard selection", async ({ page }) => {
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+
+  const file = page.getByRole("menuitem", { name: "File", exact: true })
+  const edit = page.getByRole("menuitem", { name: "Edit", exact: true })
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+
+  await file.click()
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+  await page.clock.install()
+  await edit.hover()
+
+  const editBox = (await edit.boundingBox())!
+  await page.mouse.move(editBox.x + editBox.width / 2 - 2, editBox.y + editBox.height / 2)
+  await page.mouse.move(editBox.x + editBox.width / 2 - 4, editBox.y + editBox.height / 2)
+  await page.clock.fastForward(50)
+  await view.focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  await page.keyboard.press("ArrowLeft")
+  await page.clock.fastForward(150)
+  await expect(view).toHaveAttribute("aria-expanded", "false")
+  await expect(edit).toHaveAttribute("aria-expanded", "false")
+
+  await page.keyboard.press("Escape")
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  await edit.hover()
+  await page.clock.fastForward(200)
+  await expect(edit).toHaveAttribute("aria-expanded", "true")
+})
+
+for (const tempo of [
+  { name: "normal", stepDuration: 0 },
+  { name: "slow", stepDuration: 20 },
+]) {
+  test(`the Windows titlebar menu keeps a submenu open during a ${tempo.name} diagonal move`, async ({ page }) => {
+    await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+    await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+    await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+
+    const file = page.getByRole("menuitem", { name: "File", exact: true })
+    const closeWindow = page.getByRole("menuitem", { name: /^Close Window/ })
+    const fileBox = (await file.boundingBox())!
+
+    await page.clock.install()
+    await page.mouse.move(fileBox.x + fileBox.width / 2, fileBox.y + fileBox.height / 2, { steps: 5 })
+    await page.clock.fastForward(110)
+    await expect(file).toHaveAttribute("aria-expanded", "true")
+
+    const closeWindowBox = (await closeWindow.boundingBox())!
+    const from = { x: fileBox.x + fileBox.width / 2, y: fileBox.y + fileBox.height / 2 }
+    const to = { x: closeWindowBox.x + 20, y: closeWindowBox.y + closeWindowBox.height / 2 }
+
+    for (let step = 1; step <= 25; step++) {
+      await page.mouse.move(from.x + ((to.x - from.x) * step) / 25, from.y + ((to.y - from.y) * step) / 25)
+      if (tempo.stepDuration) await page.clock.fastForward(tempo.stepDuration)
+    }
+
+    await expect(closeWindow).toBeVisible()
+  })
+}
 
 test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {
   await mockWorkspace(page, {
