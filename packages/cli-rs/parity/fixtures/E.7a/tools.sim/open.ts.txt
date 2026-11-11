@@ -3,14 +3,14 @@
   ┃
 
   ┃
-  ┃  $ printf 'running 2 tests\ntest next_stops_early ... FAILED\ntest next_reads ... ok\n'; exit
-  ┃  101
+  ┃  $ printf 'running 2 tests\ntest next_stops_early ... FAILED\ntest next_reads ... ok\n'; exi
+  ┃  t 101
   ┃
   ┃  running 2 tests
   ┃  test next_stops_early ... FAILED
   ┃  test next_reads ... ok
   ┃
-  ┃  Exited with code 101
+  ┃  Exit code: 101
   ┃
 
      → Read src/parser.rs:1-4
