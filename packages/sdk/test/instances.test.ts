@@ -118,7 +118,10 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   expect(fork.fork?.sessionID).toBe(sessionID)
   const inherited = await first.sessions.prompt({ sessionID: fork.id, text: "Review the fork", resume: false })
   expect(inherited.payload.text).toBe(`first:alpha@${directory.path}: Review the fork`)
-  expect(await first.sessions.inbox.list({ sessionID: fork.id })).toEqual([inherited])
+  expect(await first.sessions.inbox.list({ sessionID: fork.id })).toEqual([
+    expect.objectContaining({ type: "synthetic", sessionID: fork.id, id: `msg_fork_notice_${fork.id}` }),
+    inherited,
+  ])
 
   expect(configured.toSorted()).toEqual(["first:alpha", "first:alpha", "first:beta", "second:alpha"])
   expect(setups.toSorted()).toEqual(
