@@ -3,7 +3,8 @@
 //! `parity/oracle/F.5-config.ts`.
 //!
 //! The TypeScript side comes from `OPENCODE_TS_ROOT`, else this checkout; without its `node_modules`
-//! the tests print "skipped" and pass. Every test uses temporary directories.
+//! the tests print "skipped" and pass, or fail when `OPENCODE_RS_REQUIRE_TS` is set. Every test uses
+//! temporary directories.
 
 #![recursion_limit = "512"]
 
@@ -33,6 +34,11 @@ fn ts_root() -> PathBuf {
 fn available() -> bool {
     let present = ts_root().join("node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
     if !present {
+        assert!(
+            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
+            "OPENCODE_RS_REQUIRE_TS is set, but skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
+            ts_root().display()
+        );
         eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", ts_root().display());
     }
     present
@@ -296,6 +302,45 @@ fn decode_and_resolve_match_typescript() {
         assert_eq!(sorted(&actual), sorted(expected), "{value}");
     }
     eprintln!("{} decode and {} resolve cases match", corpus.as_array().unwrap().len(), valid.len());
+}
+
+// Pins the key set to `Config.Info` itself rather than to the corpus above: the oracle walks the TS schema and
+// sets every leaf it finds, so a key or literal TS adds and Rust drops fails here.
+#[test]
+fn every_cli_json_key_and_literal_typescript_decodes_is_kept() {
+    if !available() {
+        return;
+    }
+    let keys = oracle(&["keys"], None, &Value::Null).remove(0);
+    // One leaf at a time: a value Rust rejects fails the whole object and would hide which key it is.
+    let missing: Vec<&str> = keys["paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|path| path.as_str().unwrap())
+        .filter(|path| {
+            let leaf = path.split('.').try_fold(&keys["value"], |node, key| node.get(key)).unwrap();
+            let config = path.rsplit('.').fold(leaf.clone(), |inner, key| json!({ key: inner }));
+            let actual = Info::decode(&config).map_or(Value::Null, |info| info.to_value());
+            path.split('.').try_fold(&actual, |node, key| node.get(key)).is_none()
+        })
+        .collect();
+    assert!(missing.is_empty(), "Rust drops these cli.json keys TypeScript decodes: {missing:?}");
+    let actual = Info::decode(&keys["value"]).map_or(Value::Null, |info| info.to_value());
+    assert_eq!(sorted(&actual), sorted(&keys["decoded"]));
+    let rejected: Vec<String> = keys["literals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|config| Info::decode(config).map(|info| info.to_value()).as_ref() != Some(*config))
+        .map(Value::to_string)
+        .collect();
+    assert!(rejected.is_empty(), "Rust rejects these cli.json values TypeScript decodes: {rejected:?}");
+    eprintln!(
+        "{} key paths and {} literals match",
+        keys["paths"].as_array().unwrap().len(),
+        keys["literals"].as_array().unwrap().len()
+    );
 }
 
 // Resolve spreads its input, so its key order is not the schema's; compare without order.
