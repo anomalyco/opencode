@@ -659,6 +659,12 @@ export const dict = {
   "session.todo.label.one": "{{done}} of {{count}} todo done",
   "session.todo.label.other": "{{done}} of {{count}} todos done",
   "session.timeline.working": "Working",
+  "session.timeline.status.waitingApproval": "Waiting for approval",
+  "session.timeline.status.waitingAnswer": "Waiting for your answer",
+  "session.timeline.status.waitingShell": "Waiting for shell",
+  "session.timeline.status.waitingAgent": "Waiting for subagent",
+  "session.timeline.status.waitingAgents": "Waiting for subagents",
+  "session.timeline.status.working": "Working",
   "session.running.stop.subagent": "Interrupt subagent",
   "session.running.stop.shell": "Kill shell command",
 
@@ -855,6 +861,9 @@ export const dict = {
   "settings.experimental.row.foldUserMessages.title": "Fold long messages",
   "settings.experimental.row.foldUserMessages.description":
     "Fold your messages past 12 lines behind a Read more button",
+  "settings.experimental.row.newTimeline.title": "New timeline",
+  "settings.experimental.row.newTimeline.description":
+    "A redesigned session timeline that groups what the agent did, with one status line below the turn",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
