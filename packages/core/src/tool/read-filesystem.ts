@@ -166,38 +166,15 @@ export const read = Effect.fn("ReadTool.read")(function* (
   }
 
   if (first.bytes.length >= first.info.size) return yield* completePage(input, resource, first.bytes, page)
-  // A negative offset counts back from the last line, so count the lines first, then read forward from there.
-  if (page.offset !== undefined && page.offset < 0) {
-    const counted = yield* countLines(files, input, resource, first)
-    // Read up to where the count ended, which the stat size may overstate.
-    return yield* streamPage(
-      files,
-      input,
-      resource,
-      { bytes: first.bytes, info: { size: counted.bytes } },
-      { ...page, offset: Math.max(1, counted.lines + page.offset + 1) },
-    )
-  }
-  return yield* streamPage(files, input, resource, first, page)
-})
 
-type First = { readonly bytes: Uint8Array; readonly info: { readonly size: number } }
-
-// Reads a file larger than its first chunk forward, dropping the chunks that end before line `keep`.
-const streamPage = Effect.fnUntraced(function* (
-  files: Files,
-  input: AbsolutePath,
-  resource: string,
-  first: First,
-  page: PageInput,
-  keep = page.offset || 1,
-): Effect.fn.Return<TextPage, ReadError> {
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
+  // Lines kept at the end while reading: the lines a negative offset counts back, otherwise the tail shown
+  // when the offset turns out to be past the end. Chunks before both are dropped as the read goes.
+  const keep = offset < 0 ? -offset : Math.min(page.limit || TAIL_LINES, TAIL_LINES)
   const leaves = [textLeaf(first.bytes)]
-  // Newlines in the dropped chunks, and whether any were dropped or had a NUL byte.
+  // Newlines in the dropped chunks, and whether any of them had a NUL byte.
   let before = 0
-  let dropped = false
   let binaryBefore = false
   let bytes = first.bytes.length
   let lines = leaves[0].summary.lines
@@ -209,9 +186,6 @@ const streamPage = Effect.fnUntraced(function* (
     const total = lineCount(lines, leaves.at(-1)?.bytes.at(-1))
     if (eof && offset > total) {
       const skipped = Math.max(0, total - Math.min(page.limit || TAIL_LINES, TAIL_LINES))
-      // The tail started in a dropped chunk, so read again, keeping from its first line.
-      if (dropped && skipped <= before)
-        return yield* streamPage(files, input, resource, first, page, Math.max(1, skipped))
       // Decode from the newline ending the last skipped line, so a byte order mark
       // starting the tail stays content. That empty first line is never in the tail.
       const tree = textTree(leaves)
@@ -228,17 +202,19 @@ const streamPage = Effect.fnUntraced(function* (
         binaryBefore || leaves.some((leaf) => leaf.bytes.includes(0)),
       )
     }
-    if (eof || (ending && lines >= offset - 1)) {
+    if (eof || (offset > 0 && ending && lines >= offset - 1)) {
+      // A negative offset only resolves at EOF, counting back from the last line.
+      const from = offset < 0 ? Math.max(1, total + offset + 1) : offset
       const tree = textTree(leaves)
-      const start = textOffset(tree, offset - 1 - before)
+      const start = textOffset(tree, from - 1 - before)
       // Decode only the requested lines plus one byte, enough to tell whether more follow.
-      const end = Math.min(tree.summary.bytes, textOffset(tree, offset - 1 - before + limit) + 1)
+      const end = Math.min(tree.summary.bytes, textOffset(tree, from - 1 - before + limit) + 1)
       const result = textPage(textSlice(leaves, start, end), eof && end === tree.summary.bytes, { limit })
       if (result !== undefined) {
         const translated = {
           ...result,
-          offset,
-          ...(result.next === undefined ? { next: undefined } : { next: offset + result.next - 1 }),
+          offset: from,
+          ...(result.next === undefined ? { next: undefined } : { next: from + result.next - 1 }),
         }
         const consumed = start + result.consumed
         let checked = 0
@@ -263,28 +239,14 @@ const streamPage = Effect.fnUntraced(function* (
     bytes += leaf.summary.bytes
     lines += leaf.summary.lines
     ending = leaf.summary.lines > 0
-    while (leaves.length > 1 && before + leaves[0].summary.lines < keep - 1) {
+    // Keep a chunk while it holds the newline before the page start or before the last `keep` lines.
+    const bound = Math.min(offset < 0 ? Infinity : offset - 1, lineCount(lines, leaf.bytes.at(-1)) - keep)
+    while (leaves.length > 1 && before + leaves[0].summary.lines < bound) {
       const oldest = leaves.shift()!
       before += oldest.summary.lines
-      dropped = true
       binaryBefore ||= oldest.bytes.includes(0)
     }
   }
-})
-
-// Counts the lines of a file larger than its first chunk without keeping it.
-const countLines = Effect.fnUntraced(function* (files: Files, input: AbsolutePath, resource: string, first: First) {
-  let bytes = first.bytes.length
-  let lines = textLeaf(first.bytes).summary.lines
-  let last = first.bytes.at(-1)
-  while (bytes < first.info.size) {
-    const next = yield* readFile(files, input, resource, { offset: bytes, length: FIRST_CHUNK })
-    if (next.bytes.length === 0) break
-    bytes += next.bytes.length
-    lines += textLeaf(next.bytes).summary.lines
-    last = next.bytes.at(-1)
-  }
-  return { lines: lineCount(lines, last), bytes }
 })
 
 const readFile = (
