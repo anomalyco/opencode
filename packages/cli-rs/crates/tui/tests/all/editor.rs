@@ -148,10 +148,7 @@ fn ide_mentions_insert_file_parts_with_their_lines() {
     setup.wait("the prompt", || setup.posts().iter().any(|(path, _)| path.ends_with("/prompt")));
     let prompt = setup.posts().into_iter().find(|(path, _)| path.ends_with("/prompt")).unwrap().1;
     // `pathToFileURL`: on Windows the path takes the working directory's drive, `file:///D:/project/…`.
-    let url = |path: &str| {
-        let cwd = std::env::current_dir().unwrap();
-        file_url(Flavor::NATIVE, &Flavor::NATIVE.resolve(&[&cwd.to_string_lossy(), path]))
-    };
+    let url = |path: &str| file_url(Flavor::NATIVE, path);
     assert_eq!(
         prompt["files"],
         json!([
