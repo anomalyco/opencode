@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { join } from "node:path"
 import { Context, Deferred, Effect, Schema, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Agent } from "@opencode/schema/agent"
@@ -204,5 +205,27 @@ it.live("wait pauses, and polls for an element or an address", () =>
       met: false,
       observed: "The address was https://example.test/ after 150 ms.",
     })
+  }),
+)
+
+it.live("preview fails for a missing file, and without a desktop names the file to tell the user", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup((action) => success(action.type === "preview" ? { path: action.path } : tab))
+    yield* Effect.promise(() => Bun.write(join(browser.directory, "chart.svg"), "<svg/>"))
+    expect(JSON.parse(yield* browser.run(`return await tools.browser.preview({ path: "chart.svg" })`))).toEqual({
+      path: "chart.svg",
+    })
+    expect(
+      yield* browser.run(`return await tools.browser.preview({ path: "chart.png" }).catch((error) => error.message)`),
+    ).toContain(`browser.preview found no file at ${join(browser.directory, "chart.png")}.`)
+    expect(browser.commands).toEqual([{ type: "preview", path: "chart.svg" }])
+
+    const detached = yield* setup(() => success(tab), { attach: false })
+    yield* Effect.promise(() => Bun.write(join(detached.directory, "chart.svg"), "<svg/>"))
+    expect(
+      yield* detached.run(`return await tools.browser.preview({ path: "chart.svg" }).catch((error) => error.message)`),
+    ).toContain(
+      `[browser.disconnected] ${join(detached.directory, "chart.svg")} was not shown: no OpenCode desktop app is connected to this session`,
+    )
   }),
 )

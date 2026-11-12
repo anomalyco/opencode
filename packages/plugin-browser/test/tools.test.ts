@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { rm } from "node:fs/promises"
-import { basename, dirname } from "node:path"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { basename, dirname, join } from "node:path"
+import { pathToFileURL } from "node:url"
 import { Effect } from "effect"
 import { Browser } from "../src/rpc.js"
 import { BrowserFiles } from "../src/files.js"
@@ -213,4 +215,41 @@ describe("wait reads the condition from the keys models write", () => {
     expect(BrowserTools.matchesURL("https://app.test/a.b", "*/a.b")).toBe(true)
     expect(BrowserTools.matchesURL("https://app.test/axb", "*/a.b")).toBe(false)
   })
+})
+
+test("preview paths resolve the way the Review pane resolves them", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "browser-preview-"))
+  try {
+    await mkdir(join(directory, "site", "docs"), { recursive: true })
+    await Bun.write(join(directory, "site", "index.html"), "<h1>hi</h1>")
+    const locate = (path: string) => Effect.runPromise(BrowserFiles.locate(path, directory))
+    const page = join(directory, "site", "index.html")
+    for (const path of [
+      "site/index.html",
+      "./site/index.html",
+      "site\\index.html",
+      "site/index.html:3",
+      "site/index.html#L2",
+      page,
+    ])
+      expect(await locate(path)).toEqual({ absolute: page, found: true, directory: false })
+    expect(await locate(pathToFileURL(page).href)).toEqual({ absolute: page, found: true, directory: false })
+    // The pane opens the one workspace file whose path ends with a relative path that does not resolve.
+    expect(await locate("index.html")).toMatchObject({ found: true })
+    expect(await locate("missing.html")).toEqual({
+      absolute: join(directory, "missing.html"),
+      found: false,
+      directory: false,
+    })
+    expect(await locate(join(directory, "nowhere", "x.png"))).toMatchObject({ found: false })
+    expect(await locate("site/docs")).toEqual({
+      absolute: join(directory, "site", "docs"),
+      found: false,
+      directory: true,
+    })
+    for (const path of ["https://example.com/report.html", "skill://browser/SKILL.md"])
+      expect(await locate(path)).toBeUndefined()
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })

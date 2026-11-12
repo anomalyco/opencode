@@ -21,13 +21,15 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       catch: (error) => (error instanceof Tool.Error ? error : new Tool.Error({ message: String(error), error })),
     })
     const started = yield* Clock.currentTimeMillis
-    const current = connection.target(tool.sessionID, { type: "tabs.focus", tabID: input.tabID }).pipe(
-      Effect.flatMap((target) =>
-        target.tab
-          ? Effect.succeed(target.tab)
-          : Effect.fail(new Tool.Error({ message: "Browser tab is unavailable. Call browser.tabs.list({})." })),
-      ),
-    )
+    const current = connection
+      .target(tool.sessionID, { type: "tabs.focus", tabID: input.tabID })
+      .pipe(
+        Effect.flatMap((target) =>
+          target.tab
+            ? Effect.succeed(target.tab)
+            : Effect.fail(new Tool.Error({ message: "Browser tab is unavailable. Call browser.tabs.list({})." })),
+        ),
+      )
     const finish = (tab: Browser.Tab, met: boolean, observed?: string) =>
       Clock.currentTimeMillis.pipe(
         Effect.flatMap((now) =>
@@ -45,9 +47,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     if (plan.kind === "desktop") {
       const target = yield* connection.target(tool.sessionID, plan.action)
       return yield* target.request([]).pipe(
-        Effect.flatMap((response) =>
-          Effect.fromResult(decodeResult({ name: "wait", output: Browser.Tab }, response)),
-        ),
+        Effect.flatMap((response) => Effect.fromResult(decodeResult({ name: "wait", output: Browser.Tab }, response))),
         Effect.flatMap((tab) => finish(tab, true)),
         Effect.catchIf(
           (error) => /Condition was not met within \d+ ms/.test(error.message),
@@ -108,6 +108,24 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     )
   })
 
+  // The desktop acknowledges a preview before the pane opens it, so a missing file used to report success (#61625).
+  const previewable = Effect.fn("BrowserTools.previewable")(function* (path: string, tool: Tool.Context) {
+    const located = yield* BrowserFiles.locate(path, ctx.location.directory)
+    if (located?.directory)
+      return yield* new Tool.Error({
+        message: `${located.absolute} is a folder. browser.preview shows one file: pass the path of a file in it.`,
+      })
+    if (located?.found === false)
+      return yield* new Tool.Error({
+        message: `browser.preview found no file at ${located.absolute}. Paths are on the server, relative to the workspace (${ctx.location.directory}) or absolute. Check the path, for example with glob, then call browser.preview again.`,
+      })
+    if (yield* connection.attached(tool.sessionID)) return
+    const shown = located?.absolute ?? path
+    return yield* new Tool.Error({
+      message: `[browser.disconnected] ${shown} was not shown: no OpenCode desktop app is connected to this session, so nothing can open in its Review pane. Tell the user the file is at ${shown}; do not call browser.preview again until they open this session in the desktop app.`,
+    })
+  })
+
   const execute = Effect.fn("BrowserTools.execute")(function* (
     operation: Browser.Operation,
     input: Browser.Input,
@@ -118,6 +136,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       try: () => normalizeAction(input),
       catch: (error) => (error instanceof Tool.Error ? error : new Tool.Error({ message: String(error), error })),
     })
+    if (action.type === "preview") yield* previewable(action.path, tool)
     const target = yield* connection.target(tool.sessionID, action)
     const uploads =
       action.type === "files.upload" || action.type === "files.drop"
@@ -267,7 +286,9 @@ export function waitPlan(input: WaitInput): WaitPlan {
   const timeoutMs = Math.min(Browser.MAX_WAIT_MS, Math.round(input.timeoutMs ?? input.timeout ?? 10_000))
   // Playwright MCP's `time` is in seconds; agents also wrote milliseconds there.
   const pause =
-    input.delayMs ?? input.ms ?? (input.time === undefined ? undefined : input.time <= 60 ? input.time * 1_000 : input.time)
+    input.delayMs ??
+    input.ms ??
+    (input.time === undefined ? undefined : input.time <= 60 ? input.time * 1_000 : input.time)
   const given = Object.entries({
     text: input.text,
     textGone: input.textGone,
@@ -311,12 +332,19 @@ export function waitPlan(input: WaitInput): WaitPlan {
 
   if (condition === "url") {
     if (input.url === undefined)
-      throw new Tool.Error({ message: 'browser.wait needs url, for example browser.wait({ tabID, url: "/dashboard" }).' })
+      throw new Tool.Error({
+        message: 'browser.wait needs url, for example browser.wait({ tabID, url: "/dashboard" }).',
+      })
     return { kind: "url", url: input.url, timeoutMs }
   }
 
   if (condition === "element" || condition === "elementGone") {
-    const element = input.ref !== undefined ? { ref: input.ref } : input.selector !== undefined ? { selector: input.selector } : undefined
+    const element =
+      input.ref !== undefined
+        ? { ref: input.ref }
+        : input.selector !== undefined
+          ? { selector: input.selector }
+          : undefined
     if (!element)
       throw new Tool.Error({
         message: 'browser.wait needs selector or ref, for example browser.wait({ tabID, selector: "#save" }).',
