@@ -342,7 +342,7 @@ impl Parser {
             }
             _ => {}
         }
-        if is_big(command) {
+        if matches!(command.strip_suffix(['l', 'r', 'm']).unwrap_or(command), "big" | "Big" | "bigg" | "Bigg") {
             return Ok(Node::Symbol { value: self.read_delimiter()?, role: None });
         }
         if let Some(width) = symbols::spacing(command) {
@@ -418,7 +418,8 @@ impl Parser {
             }
             // Empty cells are valid only when a cell, row, or closing delimiter advances the parser.
             if self.position == cell_start {
-                return self.fail(format!("Unexpected \"{}\" in {}", self.peek_str(), environment_name(environment)));
+                let name = ENVIRONMENTS.iter().find(|(_, value)| *value == environment).map_or("", |(name, _)| name);
+                return self.fail(format!("Unexpected \"{}\" in {name}", self.peek_str()));
             }
         }
         if !self.starts_with(end) {
@@ -682,11 +683,6 @@ fn is_command_letter(char: char) -> bool {
     char.is_ascii_alphabetic() || char == '@'
 }
 
-fn is_big(command: &str) -> bool {
-    let base = command.strip_suffix(['l', 'r', 'm']).unwrap_or(command);
-    matches!(base, "big" | "Big" | "bigg" | "Bigg")
-}
-
 /// The spacing role of a literal character. As in TS, an empty value (read at the end) is binary.
 fn infer_role(value: &str) -> Role {
     if "+-*/×÷±∓".contains(value) {
@@ -777,8 +773,4 @@ const ENVIRONMENTS: &[(&str, Environment)] = &[
 
 fn environment(name: &str) -> Option<Environment> {
     ENVIRONMENTS.iter().find(|(key, _)| *key == name).map(|(_, environment)| *environment)
-}
-
-fn environment_name(environment: Environment) -> &'static str {
-    ENVIRONMENTS.iter().find(|(_, value)| *value == environment).map_or("", |(name, _)| name)
 }
