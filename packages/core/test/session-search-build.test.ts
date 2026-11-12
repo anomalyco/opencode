@@ -1,15 +1,10 @@
-import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
 import { sql } from "drizzle-orm"
-import { Duration, Effect, Fiber, Layer, LayerMap } from "effect"
+import { Effect, Exit, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
-import { Location } from "@opencode/core/location"
-import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -17,71 +12,20 @@ import { Session } from "@opencode/core/session"
 import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { SessionSearchIndex } from "@opencode/core/session/search-index"
 import { SessionTable } from "@opencode/core/session/sql"
-import { Workspace } from "@opencode/core/workspace"
-import { Document, Info } from "@opencode/schema/config"
-import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { testEffect } from "./lib/effect"
 
-// experimental.sqlite_fts per workspace, read by each location's Config when it loads.
-const flags = new Map<string, boolean>()
-
-const locations = Layer.effect(
-  LocationServiceMap.Service,
-  Effect.gen(function* () {
-    const map = yield* LayerMap.make(
-      (ref: Location.Ref) =>
-        // The build only reads Config from a location.
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-        Layer.mergeAll(
-          Config.testLayer([
-            new Document({
-              type: "document",
-              info: new Info({
-                experimental: new ConfigExperimental.Info({ sqlite_fts: flags.get(ref.workspaceID ?? "") }),
-              }),
-            }),
-          ]),
-          Layer.succeed(
-            Location.Service,
-            Location.Service.of({
-              directory: ref.directory,
-              workspaceID: ref.workspaceID,
-              project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
-            }),
-          ),
-        ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-      { idleTimeToLive: Duration.infinity },
-    )
-    return {
-      ...map,
-      get: (ref: Location.Ref) => map.get(LocationServiceMap.canonical(ref)),
-      contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.canonical(ref)),
-      contextEffectOption: (ref: Location.Ref) => map.contextEffectOption(LocationServiceMap.canonical(ref)),
-      invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.canonical(ref)),
-    }
-  }),
-)
-
-const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, LocationServiceMap.node, SessionSearchBuild.node]), [
-    LocationServiceMap.node.replace(
-      makeGlobalNode({ service: LocationServiceMap.Service, layer: locations, deps: [] }),
-    ),
-  ]),
-)
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, SessionSearchBuild.node])))
 
 const directory = AbsolutePath.make("/project")
 
-/** Loads a location whose config sets the flag to `enabled`, or reloads it with a new value. */
-const load = (workspace: string, enabled: boolean) =>
+/** Holds the build, as a location with the flag on does, until the returned scope closes. */
+const hold = (build: SessionSearchBuild.Interface) =>
   Effect.gen(function* () {
-    const workspaceID = Workspace.ID.make(`wrk_${workspace}`)
-    const ref = Location.Ref.make({ directory, workspaceID })
-    flags.set(workspaceID, enabled)
-    const map = yield* LocationServiceMap.Service
-    yield* map.invalidate(ref)
-    yield* Location.Service.pipe(Effect.provide(map.get(ref)), Effect.scoped)
+    const scope = yield* Scope.make()
+    yield* build.hold.pipe(Scope.provide(scope))
+    return scope
   })
+const release = (scope: Scope.Closeable) => Scope.close(scope, Exit.void)
 
 const setup = Effect.gen(function* () {
   const db = (yield* Database.Service).db
@@ -98,15 +42,12 @@ const setup = Effect.gen(function* () {
       .pipe(Effect.orDie)
   yield* Effect.forEach(["ses_a", "ses_b", "ses_c"], (id) => insert(id, `Existing walrus ${id}`))
   const build = yield* SessionSearchBuild.Service
-  const fiber = yield* build.run.pipe(Effect.forkScoped)
-  return { db, insert, build, fiber }
+  return { db, insert, build }
 })
 
-// A real macrotask lets the build's file reads finish before the clock moves past its next sleep.
 const step = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 1))).pipe(
-  Effect.andThen(TestClock.adjust("5 seconds")),
+  Effect.andThen(TestClock.adjust("1 second")),
 )
-/** Long enough for several flag polls, so a no-op assertion afterwards means something. */
 const elapse = Effect.repeat(step, { times: 10 })
 const until = (condition: Effect.Effect<boolean>) =>
   Effect.gen(function* () {
@@ -133,42 +74,42 @@ const failOn = (db: Database.Interface["db"], ids: string) =>
   )
 
 describe("SessionSearchBuild", () => {
-  it.effect("does nothing while the flag is off", () =>
+  it.effect("does nothing until held", () =>
     Effect.gen(function* () {
       const { db, build } = yield* setup
-      yield* load("off", false)
       yield* elapse
       expect(yield* objects(db)).toBe(0)
       expect(yield* build.status).toEqual({ status: "disabled" })
     }),
   )
 
-  it.effect("builds once a location enables it, records it done and exits; triggers keep it current", () =>
+  it.effect("builds while held, records it done; triggers keep it current after release", () =>
     Effect.gen(function* () {
-      const { db, insert, build, fiber } = yield* setup
-      yield* load("mixed_off", false)
-      yield* load("mixed_on", true)
+      const { db, insert, build } = yield* setup
+      const first = yield* hold(build)
+      const second = yield* hold(build)
       yield* settled(build, "completed")
       expect(yield* titles(db, "walrus")).toEqual(["ses_a", "ses_b", "ses_c"])
       expect(yield* build.status).toEqual({ status: "completed", skipped: 0 })
-      yield* Fiber.join(fiber)
 
-      // Off stops nothing: the triggers maintain the index without the job.
-      yield* load("mixed_on", false)
+      // Off stops nothing: the triggers maintain the index without the build.
+      yield* release(first)
+      yield* release(second)
       yield* insert("ses_d", "Fresh narwhal plans")
       expect(yield* titles(db, "narwhal")).toEqual(["ses_d"])
     }),
   )
 
-  it.effect("skips a row that fails alone; fails when every row does, and retries only once turned off and on", () =>
+  it.effect("skips a row that fails alone; fails when every row does, and retries only once released and held", () =>
     Effect.gen(function* () {
       const { db, build } = yield* setup
       yield* SessionSearchIndex.ensure(db)
       yield* failOn(db, "'ses_b'")
-      yield* load("flaky", true)
+      const flaky = yield* hold(build)
       yield* settled(build, "completed")
       expect(yield* titles(db, "walrus")).toEqual(["ses_a", "ses_c"])
       expect(yield* build.status).toEqual({ status: "completed", skipped: 1 })
+      yield* release(flaky)
 
       // Built again from the start, every row fails, so the build stops and records why.
       yield* db.run("DROP TRIGGER fail_queue")
@@ -177,25 +118,24 @@ describe("SessionSearchBuild", () => {
         UPDATE kv SET value = json_remove(json_set(value, '$.status', 'building', '$.phase', 'titles', '$.skipped', 0), '$.after')
         WHERE key = 'session.search'
       `)
-      const again = yield* build.run.pipe(Effect.forkScoped)
+      const again = yield* hold(build)
       yield* settled(build, "error")
       expect(yield* SessionSearchIndex.state(db)).toMatchObject({ status: "failed" })
 
-      // Still on, it is not retried.
+      // Still held, it is not retried; released and held again, it is.
       yield* db.run("DROP TRIGGER fail_queue")
       yield* elapse
       expect(yield* build.status).toMatchObject({ status: "error" })
-      yield* load("flaky", false)
-      yield* elapse
-      yield* load("flaky", true)
+      yield* release(again)
+      const retried = yield* hold(build)
       yield* settled(build, "completed")
       expect(yield* build.status).toEqual({ status: "completed", skipped: 0 })
       expect(yield* titles(db, "walrus")).toEqual(["ses_a", "ses_b", "ses_c"])
-      yield* Fiber.join(again)
+      yield* release(retried)
     }),
   )
 
-  it.effect("pauses while the flag is off and resumes from its cursor", () =>
+  it.effect("pauses when released and resumes from its cursor", () =>
     Effect.gen(function* () {
       const { db, build } = yield* setup
       yield* SessionSearchIndex.ensure(db)
@@ -204,9 +144,10 @@ describe("SessionSearchBuild", () => {
         status: "paused",
         progress: { label: "Indexing session history", numerator: 1, denominator: 3 },
       })
-      yield* load("resume", true)
+      const resumed = yield* hold(build)
       yield* settled(build, "completed")
       expect(yield* SessionSearchIndex.state(db)).toMatchObject({ status: "done", processed: 3, total: 3 })
+      yield* release(resumed)
     }),
   )
 })

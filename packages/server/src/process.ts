@@ -4,7 +4,6 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Schedule } from "@opencode/core/schedule"
-import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
@@ -118,8 +117,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     }
     // Schedules fire from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
     yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
-    // Likewise the one-time search index build, in the background so startup never waits on it.
-    yield* Effect.forkIn(Context.get(context, SessionSearchBuild.Service).run, applicationScope)
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
     const bus = Context.get(context, Bus.Service)
