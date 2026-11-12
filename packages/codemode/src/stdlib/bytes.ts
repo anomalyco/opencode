@@ -196,13 +196,73 @@ export const textEncoderGlobal = <R>(ctx: Interpreter<R>) => {
   })
 }
 
-/** A `TextDecoder` holding the host decoder its label and options configured. */
+// Replacement mode only needs to identify an incomplete suffix (at most three bytes).
+// Fatal mode also needs the queue position after the first error, which the host doesn't expose.
+const streamBoundary = (bytes: Uint8Array, fatal: boolean) => {
+  let next = fatal ? 0 : Math.max(0, bytes.length - 3)
+  while (next < bytes.length) {
+    const start = next
+    const lead = bytes[next++]!
+    if (lead < 0x80) continue
+    if (lead < 0xc2 || lead > 0xf4) {
+      if (fatal) return { end: next, error: true }
+      continue
+    }
+    const width = lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4
+    let lower = lead === 0xe0 ? 0xa0 : lead === 0xf0 ? 0x90 : 0x80
+    let upper = lead === 0xed ? 0x9f : lead === 0xf4 ? 0x8f : 0xbf
+    while (next < start + width) {
+      if (next === bytes.length) return { end: start, error: false }
+      const byte = bytes[next]!
+      // A bad continuation is reprocessed as a leading byte, even after a fatal error.
+      if (byte < lower || byte > upper) {
+        if (fatal) return { end: next, error: true }
+        break
+      }
+      next++
+      lower = 0x80
+      upper = 0xbf
+    }
+  }
+  return { end: next, error: false }
+}
+
+const empty = new Uint8Array()
+
 export class TextDecoderObj extends Obj {
+  queued: Uint8Array = empty
+  seen = false
+
   constructor(
     proto: Obj,
     readonly decoder: TextDecoder,
+    readonly ignoreBOM: boolean,
   ) {
     super(proto)
+  }
+
+  decode(bytes: Uint8Array, stream: boolean) {
+    if (this.queued.length && bytes.length) {
+      checkArrayLength(this.queued.length + bytes.length)
+      const joined = new Uint8Array(this.queued.length + bytes.length)
+      joined.set(this.queued)
+      joined.set(bytes, this.queued.length)
+      bytes = joined
+    }
+    if (!bytes.length) bytes = this.queued
+    const { end, error } = stream ? streamBoundary(bytes, this.decoder.fatal) : { end: bytes.length, error: false }
+    this.queued = end < bytes.length ? bytes.slice(end) : empty
+    if (error) throw typeError("TextDecoder.decode: the input is not valid utf-8.")
+    const stripBOM = !this.ignoreBOM && !this.seen
+    if (!stream) this.seen = false
+    try {
+      // Keep the host decoder stateless: snapshots own the pending bytes and BOM decision.
+      const text = this.decoder.decode(end === bytes.length ? bytes : bytes.subarray(0, end))
+      if (stream && text.length) this.seen = true
+      return stripBOM && text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+    } catch {
+      throw typeError("TextDecoder.decode: the input is not valid utf-8.")
+    }
   }
 }
 
@@ -215,22 +275,22 @@ export const textDecoderGlobal = <R>(ctx: Interpreter<R>) => {
   const self = (thisValue: Value, name: string) => receiver(TextDecoderObj, thisValue, `TextDecoder.prototype.${name}`)
   defineAccessor(proto, "encoding", (thisValue) => self(thisValue, "encoding").decoder.encoding)
   defineAccessor(proto, "fatal", (thisValue) => self(thisValue, "fatal").decoder.fatal)
-  defineAccessor(proto, "ignoreBOM", (thisValue) => self(thisValue, "ignoreBOM").decoder.ignoreBOM)
+  defineAccessor(proto, "ignoreBOM", (thisValue) => self(thisValue, "ignoreBOM").ignoreBOM)
   methods(builtins, proto, [
     [
       "decode",
       0,
       (thisValue, args) => {
-        const decoder = self(thisValue, "decode").decoder
-        if (args[0] === undefined) return ""
-        if (!(args[0] instanceof Bytes)) {
+        const decoder = self(thisValue, "decode")
+        if (args[0] !== undefined && !(args[0] instanceof Bytes)) {
           throw typeError(`TextDecoder.decode expects a Uint8Array, received ${describeValue(args[0])}.`)
         }
-        try {
-          return decoder.decode(args[0].bytes)
-        } catch {
-          throw typeError(`TextDecoder.decode: the input is not valid ${decoder.encoding}.`)
+        const options = args[1]
+        if (options !== undefined && typeof options !== "object") {
+          throw typeError("TextDecoder.decode expects an options object.")
         }
+        const stream = options instanceof Obj && Boolean(get(options, "stream"))
+        return decoder.decode(args[0]?.bytes ?? empty, stream)
       },
     ],
   ])
@@ -244,7 +304,8 @@ export const textDecoderGlobal = <R>(ctx: Interpreter<R>) => {
       const flag = (name: string) => options !== undefined && Boolean(get(options, name))
       return new TextDecoderObj(
         prototypeFrom(newTarget, proto),
-        new TextDecoder("utf-8", { fatal: flag("fatal"), ignoreBOM: flag("ignoreBOM") }),
+        new TextDecoder("utf-8", { fatal: flag("fatal"), ignoreBOM: true }),
+        flag("ignoreBOM"),
       )
     },
   })
