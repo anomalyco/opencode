@@ -1674,21 +1674,34 @@ test("review file navigation focuses the arrow for the keyboard direction", asyn
 })
 
 test("branch review uses the local base for its list, full patches, and expanded folders", async ({ page }) => {
-  await openSession(page, {
+  const bases: string[] = []
+  const vcs = { current: "feature", default: "main" }
+  const hint = { name: "main" }
+  const stacked = [fileDiff("stacked.ts")]
+
+  const workspace = await openSession(page, {
     name: "ReviewBranchBase",
-    vcs: { current: "feature", default: "main" },
-    vcsBase: { name: "main", ref: "refs/heads/main", source: "reflog" },
+    vcs,
+    vcsBase: (directory) => {
+      bases.push(directory)
+
+      return { name: hint.name, ref: `refs/heads/${hint.name}`, source: "reflog" }
+    },
     vcsDiff: (input) => {
       if (input.mode !== "branch") return []
 
       // Comparing with the remote default includes an unpushed commit already present on local main.
-      if (input.base !== "refs/heads/main") return [fileDiff("inherited.ts")]
+      if (input.base !== (vcs.current === "feature" ? "refs/heads/main" : "refs/heads/parent"))
+        return [fileDiff("inherited.ts")]
+
+      if (vcs.current === "stacked") return stacked
 
       if (input.directory.endsWith("/untracked")) return [fileDiff("untracked/notes.ts", { status: "added" })]
 
       return [fileDiff("src/big.ts", { loaded: input.context === "3" }), fileDiff("untracked/", { status: "added" })]
     },
   })
+
   const panel = page.locator("#review-panel")
 
   await page.getByRole("button", { name: "Toggle review", exact: true }).click()
@@ -1698,8 +1711,87 @@ test("branch review uses the local base for its list, full patches, and expanded
   await expect(panel.getByRole("treeitem", { name: "big.ts", exact: true })).toBeVisible()
   await expect(panel.getByRole("treeitem", { name: "inherited.ts", exact: true })).toHaveCount(0)
   await expect(panel.locator("diffs-container")).toContainText("export const value = 'after'")
+  // A changed reflog hint must not give the folder a different base from the list and patch already shown.
+  hint.name = "parent"
   await panel.getByRole("treeitem", { name: "untracked", exact: true }).click()
   await expect(panel.getByRole("treeitem", { name: "notes.ts", exact: true })).toBeVisible()
+  expect(bases).toEqual([workspace.directory])
+
+  vcs.current = "stacked"
+  await workspace.push([
+    {
+      id: "evt_review_branch_stacked",
+      created: 1,
+      type: "vcs.branch.updated",
+      location: { directory: workspace.directory },
+      data: { branch: "stacked" },
+    },
+  ])
+  await expect(panel.getByRole("treeitem", { name: "stacked.ts", exact: true })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "big.ts", exact: true })).toHaveCount(0)
+
+  stacked.push(fileDiff("refreshed.ts"))
+  await workspace.push([filesystemEvent(workspace.directory, "refreshed.ts", "add")])
+  await expect(panel.getByRole("treeitem", { name: "refreshed.ts", exact: true })).toBeVisible()
+  expect(bases).toEqual([workspace.directory, workspace.directory])
+})
+
+test("branch review retries unavailable bases and shares a pending lookup across mode switches", async ({ page }) => {
+  const state = { base: "missing" }
+  const bases: string[] = []
+  const diffs: (string | undefined)[] = []
+
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+
+    if (url.pathname === "/api/vcs/base") bases.push(url.searchParams.get("location[directory]") ?? "")
+  })
+
+  const workspace = await openSession(page, {
+    name: "ReviewBaseRecovery",
+    vcs: { current: "feature", default: "main" },
+    vcsBase: () => {
+      if (state.base === "missing") return undefined
+
+      if (state.base === "cold") return null
+
+      return { name: "main", ref: "refs/heads/main", source: "reflog" }
+    },
+    vcsDiff: (input) => {
+      if (input.mode !== "branch") return [fileDiff("working.ts")]
+      diffs.push(input.base)
+
+      return [fileDiff(input.base === "refs/heads/main" ? "resolved.ts" : `${state.base}.ts`)]
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await panel.getByRole("button", { name: "Git changes", exact: true }).click()
+  await page.getByRole("option", { name: "Branch changes", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "missing.ts", exact: true })).toBeVisible()
+
+  state.base = "cold"
+  await workspace.push([filesystemEvent(workspace.directory, "cold.ts", "add")])
+  await expect(panel.getByRole("treeitem", { name: "cold.ts", exact: true })).toBeVisible()
+
+  const pending = await holdRoute(page, /\/api\/vcs\/base\?/)
+
+  state.base = "ready"
+  await workspace.push([filesystemEvent(workspace.directory, "resolved.ts", "add")])
+  await pending.arrived
+  await panel.getByRole("button", { name: "Branch changes", exact: true }).click()
+  await page.getByRole("option", { name: "Git changes", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "working.ts", exact: true })).toBeVisible()
+  await panel.getByRole("button", { name: "Git changes", exact: true }).click()
+  await page.getByRole("option", { name: "Branch changes", exact: true }).click()
+  await expect(panel.getByRole("button", { name: "Branch changes", exact: true })).toBeVisible()
+  pending.release()
+  await expect(panel.getByRole("treeitem", { name: "resolved.ts", exact: true })).toBeVisible()
+  expect(bases).toEqual([workspace.directory, workspace.directory, workspace.directory])
+  expect(diffs).toEqual([undefined, undefined, "refs/heads/main"])
 })
 
 test("restores review state and the side-panel tab per session", async ({ page }) => {

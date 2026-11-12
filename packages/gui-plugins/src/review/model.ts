@@ -321,18 +321,54 @@ export function createReviewModel(input: {
     }
   }
 
-  // Lists, folder expansions, and full patches must all use the branch's local or stacked base.
-  const vcsDiff = async (input: VcsDiffInput, signal: AbortSignal) => {
-    const client = view().server.client
+  // A restarted or re-authenticated server gets a new client, so its old bases must not carry over.
+  const bases = createMemo(
+    on(
+      () => view().server.client,
+      () => new Map<string, Promise<string | undefined>>(),
+    ),
+  )
 
-    const base =
-      input.mode === "branch"
-        ? await client.vcs.base({ location: input.location }, { signal }).then(
-            (result) => result.data?.ref,
-            // Some branches have no creation hint; keep the existing default-branch fallback in that case.
-            () => undefined,
-          )
-        : undefined
+  const baseController = new AbortController()
+
+  onCleanup(() => baseController.abort())
+
+  const loadBase = () => {
+    const cache = bases()
+    const root = reviewRootDirectory(directory())
+    const key = JSON.stringify([root, vcs()?.branch.current])
+    const cached = cache.get(key)
+
+    if (cached) return cached
+
+    // Concurrent diffs share the lookup, so cancelling one consumer must not cancel it for the others.
+    const pending = view()
+      .server.client.vcs.base(
+        { location: { directory: root } },
+        { signal: AbortSignal.any([ctx.signal, baseController.signal, AbortSignal.timeout(REVIEW_DIFF_TIMEOUT_MS)]) },
+      )
+      .then(
+        (result) => result.data?.ref,
+        // Keep the default-branch fallback when no creation hint resolves.
+        () => undefined,
+      )
+      .then((ref) => {
+        // An unavailable or still-activating provider must be allowed to recover on the next request.
+        if (ref === undefined) cache.delete(key)
+
+        return ref
+      })
+
+    cache.set(key, pending)
+
+    return pending
+  }
+
+  // Lists, folder expansions, and full patches share the review root's local or stacked base.
+  const vcsDiff = async (input: VcsDiffInput, signal: AbortSignal) => {
+    signal.throwIfAborted()
+    const client = view().server.client
+    const base = input.mode === "branch" ? await loadBase() : undefined
 
     signal.throwIfAborted()
 

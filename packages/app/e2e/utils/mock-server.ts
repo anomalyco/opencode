@@ -88,7 +88,7 @@ export interface MockServerConfig {
     cursor?: string
   }
   vcs?: { current?: string; default: string } | ((directory: string) => { current?: string; default: string })
-  vcsBase?: VcsBase | null
+  vcsBase?: VcsBase | null | ((directory: string) => VcsBase | null | undefined)
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
@@ -1017,12 +1017,14 @@ function mockHandlers(
           }).pipe(Effect.andThen(noContent))
         },
         vcsBase: (ctx) =>
-          config.vcsBase === undefined
-            ? Effect.fail(new MockServiceUnavailable({ message: "Choose a review base" }))
-            : Effect.succeed({
-                location: location(config, requestDirectory(config, ctx.request)),
-                data: config.vcsBase,
-              }),
+          Effect.suspend(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const base = Predicate.isFunction(config.vcsBase) ? config.vcsBase(directory) : config.vcsBase
+
+            return base === undefined
+              ? Effect.fail(new MockServiceUnavailable({ message: "Choose a review base" }))
+              : Effect.succeed({ location: location(config, directory), data: base })
+          }),
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
         vcsBranches: (ctx) => {
           const query = new URL(ctx.request.url, "http://localhost").searchParams
