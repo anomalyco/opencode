@@ -228,7 +228,7 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   {
     name: "TextDecoderObj",
     ctor: TextDecoderObj,
-    fields: ["decoder", "ignoreBOM", "pending", "seen"],
+    fields: ["decoder", "ignoreBOM", "queued", "seen"],
     obj: true,
     constants: { tag: "Object" },
   },

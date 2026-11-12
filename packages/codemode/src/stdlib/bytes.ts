@@ -196,31 +196,41 @@ export const textEncoderGlobal = <R>(ctx: Interpreter<R>) => {
   })
 }
 
-// A valid but incomplete final code point can span at most three bytes. Invalid prefixes
-// (including overlong forms, surrogates and values above U+10FFFF) must be decoded now.
-const completeEnd = (bytes: Uint8Array) => {
-  for (let i = bytes.length - 1; i >= Math.max(0, bytes.length - 3); i--) {
-    const lead = bytes[i]!
-    if (lead >= 0x80 && lead <= 0xbf) continue
-    if (lead < 0xc2 || lead > 0xf4) break
-    const width = lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4
-    if (bytes.length - i >= width) break
-    const second = bytes[i + 1]
-    if (second !== undefined) {
-      if (lead === 0xe0 && second < 0xa0) break
-      if (lead === 0xed && second > 0x9f) break
-      if (lead === 0xf0 && second < 0x90) break
-      if (lead === 0xf4 && second > 0x8f) break
+// Replacement mode only needs to identify an incomplete suffix (at most three bytes).
+// Fatal mode also needs the queue position after the first error, which the host doesn't expose.
+const streamBoundary = (bytes: Uint8Array, fatal: boolean) => {
+  let next = fatal ? 0 : Math.max(0, bytes.length - 3)
+  while (next < bytes.length) {
+    const start = next
+    const lead = bytes[next++]!
+    if (lead < 0x80) continue
+    if (lead < 0xc2 || lead > 0xf4) {
+      if (fatal) return { end: next, error: true }
+      continue
     }
-    return i
+    const width = lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4
+    let lower = lead === 0xe0 ? 0xa0 : lead === 0xf0 ? 0x90 : 0x80
+    let upper = lead === 0xed ? 0x9f : lead === 0xf4 ? 0x8f : 0xbf
+    while (next < start + width) {
+      if (next === bytes.length) return { end: start, error: false }
+      const byte = bytes[next]!
+      // A bad continuation is reprocessed as a leading byte, even after a fatal error.
+      if (byte < lower || byte > upper) {
+        if (fatal) return { end: next, error: true }
+        break
+      }
+      next++
+      lower = 0x80
+      upper = 0xbf
+    }
   }
-  return bytes.length
+  return { end: next, error: false }
 }
 
 const empty = new Uint8Array()
 
 export class TextDecoderObj extends Obj {
-  pending: Uint8Array = empty
+  queued: Uint8Array = empty
   seen = false
 
   constructor(
@@ -232,20 +242,22 @@ export class TextDecoderObj extends Obj {
   }
 
   decode(bytes: Uint8Array, stream: boolean) {
-    if (this.pending.length) {
-      const joined = new Uint8Array(this.pending.length + bytes.length)
-      joined.set(this.pending)
-      joined.set(bytes, this.pending.length)
+    if (this.queued.length && bytes.length) {
+      checkArrayLength(this.queued.length + bytes.length)
+      const joined = new Uint8Array(this.queued.length + bytes.length)
+      joined.set(this.queued)
+      joined.set(bytes, this.queued.length)
       bytes = joined
     }
-    const end = stream ? completeEnd(bytes) : bytes.length
+    if (!bytes.length) bytes = this.queued
+    const { end, error } = stream ? streamBoundary(bytes, this.decoder.fatal) : { end: bytes.length, error: false }
+    this.queued = end < bytes.length ? bytes.slice(end) : empty
+    if (error) throw typeError("TextDecoder.decode: the input is not valid utf-8.")
     const stripBOM = !this.ignoreBOM && !this.seen
     if (!stream) this.seen = false
-    this.pending = empty
     try {
       // Keep the host decoder stateless: snapshots own the pending bytes and BOM decision.
       const text = this.decoder.decode(end === bytes.length ? bytes : bytes.subarray(0, end))
-      if (end < bytes.length) this.pending = bytes.slice(end)
       if (stream && text.length) this.seen = true
       return stripBOM && text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
     } catch {
@@ -273,7 +285,11 @@ export const textDecoderGlobal = <R>(ctx: Interpreter<R>) => {
         if (args[0] !== undefined && !(args[0] instanceof Bytes)) {
           throw typeError(`TextDecoder.decode expects a Uint8Array, received ${describeValue(args[0])}.`)
         }
-        const stream = args[1] instanceof Obj && Boolean(get(args[1], "stream"))
+        const options = args[1]
+        if (options !== undefined && typeof options !== "object") {
+          throw typeError("TextDecoder.decode expects an options object.")
+        }
+        const stream = options instanceof Obj && Boolean(get(options, "stream"))
         return decoder.decode(args[0]?.bytes ?? empty, stream)
       },
     ],
