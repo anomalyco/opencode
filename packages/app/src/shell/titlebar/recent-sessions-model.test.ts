@@ -7,15 +7,19 @@ import {
   INITIAL_RECENT_PAGE_STATE,
   RECENT_PAGE_TIMEOUT_MS,
   RECENT_PAGE_LIMIT,
+  RECENT_VISIBLE_LIMIT,
+  RECENT_WINDOW_MS,
   mergeRecentSessions,
   partitionRecentSessions,
   recentSessionEndpoints,
   recentSessionKey,
+  recentRowUnread,
   removePin,
   reorderPins,
   sortRecentSessions,
   transitionRecentPage,
   splitRecentSessionKey,
+  windowRecentSessions,
   type RecentSession,
 } from "./recent-sessions-model"
 
@@ -34,6 +38,33 @@ const item = (server: string, value: SessionInfo): RecentSession => ({
   key: recentSessionKey(server, value.id),
   server,
   session: value,
+})
+
+test("hiding filters hydrated pins and recent rows only on their server", () => {
+  const pin = item("local", session("pinned", 1))
+  const recent = item("local", session("recent", 2))
+  const remote = item("remote", recent.session)
+
+  const input = {
+    items: [recent, remote],
+    pins: [pin.key],
+    endpoints: new Map<string, string>(),
+    open: new Set<string>(),
+    archived: () => false,
+    resolvePin: () => pin,
+  }
+
+  expect(partitionRecentSessions({ ...input, hidden: (server) => server === "local" })).toEqual({
+    pinned: [],
+    recent: [remote],
+  })
+  expect(partitionRecentSessions(input).pinned).toEqual([pin])
+})
+
+test("muting hides the unread dot until unmuted", () => {
+  expect(recentRowUnread(true, false, true)).toBe(false)
+  expect(recentRowUnread(true, false, false)).toBe(true)
+  expect(recentRowUnread(true, true, false)).toBe(false)
 })
 
 test("pin keys round trip server keys that contain the separator's neighbours", () => {
@@ -122,6 +153,88 @@ test("pins keep their order, leave Recent, and hide archived sessions without dr
 
   expect(result.pinned).toEqual([a])
   expect(result.recent).toEqual([c])
+})
+
+const now = 1_000 * RECENT_WINDOW_MS
+
+const hour = 60 * 60 * 1000
+
+// Newest first, one hour apart, ending `older` rows past the 7-day cutoff.
+const timeline = (recent: number, older: number) =>
+  sortRecentSessions([
+    ...Array.from({ length: recent }, (_, index) => item("server", session(`ses_r${index}`, now - index * hour))),
+    ...Array.from({ length: older }, (_, index) =>
+      item("server", session(`ses_o${index}`, now - RECENT_WINDOW_MS - (index + 1) * hour)),
+    ),
+  ])
+
+const ids = (rows: readonly RecentSession[]) => rows.map((row) => row.session.id)
+
+test("Recent shows only the last 7 days, newest first", () => {
+  const items = timeline(3, 4)
+  const result = windowRecentSessions({ items, now, revealed: 0, serversHaveMore: false })
+
+  expect(ids(result.visible)).toEqual(["ses_r0", "ses_r1", "ses_r2"])
+  expect(result.hasMore).toBe(true)
+
+  // The window moves with time: the oldest recent row ages out once it is more than 7 days old.
+  const later = windowRecentSessions({
+    items,
+    now: now + RECENT_WINDOW_MS - 2 * hour + 1,
+    revealed: 0,
+    serversHaveMore: false,
+  })
+
+  expect(ids(later.visible)).toEqual(["ses_r0", "ses_r1"])
+})
+
+test("Recent caps the last 7 days at 30 rows", () => {
+  const result = windowRecentSessions({ items: timeline(45, 0), now, revealed: 0, serversHaveMore: false })
+
+  expect(result.visible).toHaveLength(RECENT_VISIBLE_LIMIT)
+  expect(result.visible.at(-1)?.session.id).toBe("ses_r29")
+  expect(result.hasMore).toBe(true)
+})
+
+test("Show more reveals 30 more rows regardless of age", () => {
+  const items = timeline(5, 40)
+  const result = windowRecentSessions({ items, now, revealed: RECENT_VISIBLE_LIMIT, serversHaveMore: false })
+
+  expect(result.visible).toHaveLength(5 + RECENT_VISIBLE_LIMIT)
+  expect(result.visible.at(-1)?.session.id).toBe("ses_o29")
+  expect(result.hasMore).toBe(true)
+
+  const all = windowRecentSessions({ items, now, revealed: 2 * RECENT_VISIBLE_LIMIT, serversHaveMore: false })
+  expect(all.visible).toHaveLength(45)
+  expect(all.hasMore).toBe(false)
+  // More rows than are loaded tells the driver to fetch further pages.
+  expect(all.limit).toBe(65)
+})
+
+test("Show more stays while a server still has pages, even when every loaded row shows", () => {
+  const items = timeline(10, 0)
+
+  expect(windowRecentSessions({ items, now, revealed: 0, serversHaveMore: false }).hasMore).toBe(false)
+  expect(windowRecentSessions({ items, now, revealed: 0, serversHaveMore: true }).hasMore).toBe(true)
+})
+
+test("pinned sessions do not count toward the Recent limit", () => {
+  const items = timeline(40, 0)
+  const pins = items.slice(0, 5).map((entry) => entry.key)
+
+  const partition = partitionRecentSessions({
+    items,
+    endpoints: new Map(),
+    open: new Set(),
+    pins,
+    resolvePin: () => undefined,
+    archived: () => false,
+  })
+
+  const result = windowRecentSessions({ items: partition.recent, now, revealed: 0, serversHaveMore: false })
+
+  expect(partition.pinned).toHaveLength(5)
+  expect(ids(result.visible)).toEqual(ids(items.slice(5, 5 + RECENT_VISIBLE_LIMIT)))
 })
 
 test("opening a sidecar pin excludes its HTTP alias while keeping a different server's session", () => {

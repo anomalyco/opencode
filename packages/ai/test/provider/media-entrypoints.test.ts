@@ -300,6 +300,16 @@ const decisions: ReadonlyArray<Case<DecisionModel>> = [
     provider: "digitalocean",
   },
   {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/decisions")
+      return model("gemini-decision-eap", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/decisions",
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
+  },
+  {
     name: "vercel-ai-gateway",
     load: async () => {
       const { model } = await import("@opencode/ai/providers/vercel-ai-gateway/decisions")

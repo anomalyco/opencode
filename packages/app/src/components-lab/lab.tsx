@@ -509,9 +509,9 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
     >
       <Workspace>
         <Plugin file={entry.file}>
-          <DialogProvider container={canvas()}>
-            <Show when={render()} keyed fallback={language.t("lab.empty")}>
-              {(fn) => (
+          <Show when={render()} keyed fallback={language.t("lab.empty")}>
+            {(fn) => (
+              <DialogProvider container={canvas()}>
                 <ErrorBoundary
                   fallback={(error, reset) => {
                     // A failing state does not stick: the next state or edit tries again.
@@ -526,9 +526,9 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
                 >
                   {untrack(() => fn(args))}
                 </ErrorBoundary>
-              )}
-            </Show>
-          </DialogProvider>
+              </DialogProvider>
+            )}
+          </Show>
         </Plugin>
       </Workspace>
     </div>
@@ -724,11 +724,7 @@ function Tile(props: { entry: LabEntry }) {
 }
 
 function isDialogEntry(entry: LabEntry) {
-  return (
-    entry.title.startsWith("App/Dialogs/") ||
-    entry.file.endsWith("/beta-dialog.stories.tsx") ||
-    entry.file.endsWith("/overlays/dialog/dialog.stories.tsx")
-  )
+  return entry.title.startsWith("App/Dialogs/") || entry.file.endsWith("/overlays/dialog/dialog.stories.tsx")
 }
 
 function tileSize(entry: LabEntry) {

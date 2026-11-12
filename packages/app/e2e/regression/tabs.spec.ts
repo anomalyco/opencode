@@ -707,14 +707,16 @@ test("Recent and Pinned rows show the side tabs' status dots and shortcuts for s
   page,
 }) => {
   const d = { id: "ses_tab_d", title: "Tab D session" }
+  // Recent lists only the last 7 days.
+  const t = Date.now() - 60_000
 
   await mockWorkspace(page, {
     name: "RecentUnread",
     sessions: [
-      { ...a, time: { created: T0 + 3, updated: T0 + 3 } },
-      { ...b, outcome: "failed", time: { created: T0 + 1, updated: T0 + 1, idle: T0 + 1 } },
-      { ...c, outcome: "succeeded", time: { created: T0 + 2, updated: T0 + 2, idle: T0 + 2 } },
-      { ...d, time: { created: T0, updated: T0 } },
+      { ...a, time: { created: t + 3, updated: t + 3 } },
+      { ...b, outcome: "failed", time: { created: t + 1, updated: t + 1, idle: t + 1 } },
+      { ...c, outcome: "succeeded", time: { created: t + 2, updated: t + 2, idle: t + 2 } },
+      { ...d, time: { created: t, updated: t } },
     ],
     sessionStatus: { [d.id]: { type: "running" } },
     sessionPermissions: {
@@ -755,6 +757,61 @@ test("Recent and Pinned rows show the side tabs' status dots and shortcuts for s
   await expect(link(a.id)).toHaveAttribute("aria-current", "page")
   await expect(row(c.id).locator('[data-mark="unread"]')).toBeHidden()
   await expect(row(b.id).locator('[data-mark="failed"]')).toBeVisible()
+
+  // The hover preview sits level with the hovered row, as on side tabs, rather than clamped inside the row.
+  const preview = page.locator('[data-component="session-tab-popover"]')
+
+  for (const id of [b.id, c.id]) {
+    await row(id).hover()
+    await expect(preview).toBeVisible()
+    await expect
+      .poll(async () => {
+        const card = await preview.boundingBox()
+        const box = await row(id).boundingBox()
+
+        return card && box ? Math.round(card.y - box.y) : undefined
+      })
+      .toBe(0)
+  }
+})
+
+test("Recent shows the last 7 days, and Show more reveals 30 more rows, fetching pages on demand", async ({ page }) => {
+  const day = 24 * 60 * 60 * 1000
+  const now = Date.now()
+
+  // The mock lists sessions newest last; 10 are from today and 55 are over a week old.
+  const sessions = Array.from({ length: 65 }, (_, index) => {
+    const updated = index < 55 ? now - 8 * day - (55 - index) * 60_000 : now - (65 - index) * 60_000
+
+    return { id: `ses_cap_${index}`, title: `Cap session ${index}`, time: { created: updated, updated } }
+  })
+
+  await mockWorkspace(page, {
+    name: "RecentCap",
+    sessions,
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: sessionHref("ses_cap_64", "sidecar") })}`,
+  )
+  const recent = page.locator('[data-slot="sidebar-recent"]').getByRole("group", { name: "Recent", exact: true })
+  const rows = recent.locator("[data-titlebar-tab-slot]")
+  const more = recent.getByRole("button", { name: "Show more", exact: true })
+
+  await expect(rows).toHaveCount(10)
+  await expect(rows.first()).toContainText("Cap session 64")
+  await expect(rows.last()).toContainText("Cap session 55")
+  await more.click()
+  await expect(rows).toHaveCount(40)
+  await expect(rows.last()).toContainText("Cap session 25")
+  // The first page held 50 sessions, so the next 30 need the server's second page.
+  await more.click()
+  await expect(rows).toHaveCount(65)
+  await expect(rows.last()).toContainText("Cap session 0")
+  await expect(more).toBeHidden()
 })
 
 test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {

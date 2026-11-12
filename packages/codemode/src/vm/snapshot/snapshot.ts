@@ -1,9 +1,20 @@
 import type { Interpreter } from "../runtime/interpreter.js"
 import type { ToolCall } from "../../tool-runtime.js"
-import { fromBytes, SnapshotError, toBytes } from "../../suspend-error.js"
-import type { Encoded, Record } from "./codec.js"
+import { type Encoded, type Record, SnapshotError } from "./codec.js"
 
-export { fromBytes, SnapshotError, toBytes }
+export { SnapshotError }
+
+/** A snapshot as bytes: UTF-8 JSON. */
+export const toBytes = (snapshot: Snapshot): Uint8Array => new TextEncoder().encode(JSON.stringify(snapshot))
+
+/** Reads bytes `toBytes` wrote; `restore` checks what they hold. */
+export const fromBytes = (bytes: Uint8Array): unknown => {
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+  } catch (error) {
+    throw new SnapshotError(`Invalid snapshot: the bytes are not UTF-8 JSON (${String(error)}).`)
+  }
+}
 
 /** The snapshot format this build writes and reads: the bytecode VM's (see `src/vm/snapshot.ts`). */
 export const FORMAT = 2

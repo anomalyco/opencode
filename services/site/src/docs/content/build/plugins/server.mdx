@@ -1381,6 +1381,14 @@ so later hooks see changes made by earlier hooks.
 
 Session hooks intercept prompt admission, model calls, native HTTP, and retries.
 
+#### Forks
+
+The `fork` hook runs after OpenCode copies the history and before the fork call returns. `sessionID` identifies the new session.
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
+
 #### Prompt admission
 
 Intercept incoming user prompts before attachment and skill resolution and durable inbox admission:

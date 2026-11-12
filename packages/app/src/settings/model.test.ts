@@ -92,7 +92,7 @@ describe("settings schema", () => {
     expect(decode({})).toEqual({
       general: {
         timelineDetail: timelinePresets[2].value,
-        showCustomAgents: false,
+        showCustomAgents: true,
         showTurnDiffs: false,
         backgroundActivity: "left",
         timelineWidth: "comfortable",

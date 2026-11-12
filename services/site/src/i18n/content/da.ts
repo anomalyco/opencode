@@ -18,11 +18,6 @@ export const content = {
       action: "Installer",
     },
     sdk: { body: "Styr OpenCode fra dine egne scripts, CI-jobs og værktøjer.", action: "Læs docs" },
-    ide: {
-      name: "IDE-udvidelser",
-      body: "Åbn OpenCode i VS Code, Cursor og Windsurf, eller i Zed og JetBrains-IDE'er via ACP.",
-      action: "Installer",
-    },
     mini: {
       body: "En minimal terminalbrugerflade. Svarene skrives ind i din scrollback med én prompt nedenunder.",
       action: "Installer",
@@ -184,26 +179,6 @@ export const content = {
           title: "I din proces",
           body: "Kører OpenCode i din proces med din konfiguration og dine modeller.",
         },
-      },
-    },
-    ide: {
-      title: "OpenCode | Editorintegrationer til VS Code, Cursor og Zed",
-      description:
-        "Brug OpenCode i din editor med udvidelsen til VS Code, Cursor, Windsurf og VSCodium, og med opencode acp til Zed, JetBrains-IDE'er og andre ACP-editorer.",
-      intro:
-        "Brug OpenCode i din editor. I VS Code, Cursor, Windsurf og VSCodium kører du opencode i den indbyggede terminal, og udvidelsen installerer sig selv. Zed, JetBrains-IDE'er og andre editorer, der understøtter Agent Client Protocol, kører OpenCode med opencode acp.",
-      features: {
-        "quick-launch": { title: "Hurtig start", body: "Cmd+Esc eller Ctrl+Esc åbner OpenCode i en delt terminal." },
-        "new-session": { title: "Ny session", body: "Cmd+Shift+Esc eller Ctrl+Shift+Esc starter en ny session." },
-        context: { title: "Kontekst", body: "Deler din aktuelle markering eller fane med OpenCode." },
-        "file-references": { title: "Filreferencer", body: "Cmd+Option+K eller Alt+Ctrl+K indsætter @File#L37-42." },
-        "installs-itself": {
-          title: "Installerer sig selv",
-          body: "Kør opencode i den indbyggede terminal for at tilføje den.",
-        },
-        "acp-editors": { title: "ACP-editorer", body: "Zed, JetBrains-IDE'er, Avante.nvim og CodeCompanion.nvim." },
-        "open-vsx": { title: "Open VSX", body: "Også på Open VSX til Cursor, Windsurf og VSCodium." },
-        "same-agent": { title: "Samme agent", body: "Det OpenCode, du kører i terminalen, ved siden af din kode." },
       },
     },
     mini: {
@@ -690,14 +665,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "Script" } } },
     sdk: { more: { label: "Læs SDK-dokumentationen" } },
-    ide: {
-      lead: "Kør opencode i din editors indbyggede terminal, så installerer udvidelsen sig selv. Du kan også installere den selv.",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      more: { label: "Opsæt Zed, JetBrains-IDE'er og andre ACP-editorer" },
-    },
     mini: {
       commands: { curl: { name: "Script" } },
       lead: "Mini følger med OpenCode CLI. Installer den på en af disse måder, og kør så opencode mini.",

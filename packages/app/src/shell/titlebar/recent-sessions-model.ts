@@ -101,6 +101,30 @@ export function sortRecentSessions(items: readonly RecentSession[]) {
   return [...items].sort(compareRecentSessions)
 }
 
+export const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Rows Recent shows at first, and how many more each Show more reveals. */
+export const RECENT_VISIBLE_LIMIT = 30
+
+/**
+ * Recent shows the sessions active in the last 7 days, at most 30. Each Show more reveals `RECENT_VISIBLE_LIMIT`
+ * more regardless of age. `serversHaveMore` says whether any server still has pages that were not fetched.
+ */
+export function windowRecentSessions(input: {
+  items: readonly RecentSession[]
+  now: number
+  revealed: number
+  serversHaveMore: boolean
+}) {
+  const cutoff = input.now - RECENT_WINDOW_MS
+  const older = input.items.findIndex((item) => sessionTime(item.session) < cutoff)
+  const inWindow = older === -1 ? input.items.length : older
+  const limit = Math.min(inWindow, RECENT_VISIBLE_LIMIT) + input.revealed
+  const visible = input.items.slice(0, limit)
+
+  return { visible, limit, hasMore: input.items.length > visible.length || input.serversHaveMore }
+}
+
 type RecentPageBase = {
   readonly sessions: readonly SessionInfo[]
   readonly cursor: string | undefined
@@ -329,6 +353,7 @@ export function mergeRecentSessions(
  * one that is not loaded yet resolves through `resolvePin`.
  */
 export function partitionRecentSessions(input: {
+  hidden?: (server: string, id: string) => boolean
   items: readonly RecentSession[]
   pins: readonly string[]
   endpoints: ReadonlyMap<string, string>
@@ -349,6 +374,8 @@ export function partitionRecentSessions(input: {
 
     if (!item || item.session.time.archived !== undefined) return []
 
+    if (input.hidden?.(item.server, item.session.id)) return []
+
     const id = identity(item)
 
     if (pinnedSessions.has(id)) return []
@@ -362,6 +389,7 @@ export function partitionRecentSessions(input: {
 
   // Opening a row should reuse an existing tab. Otherwise prefer a stable route regardless of fetch order.
   for (const item of input.items) {
+    if (input.hidden?.(item.server, item.session.id)) continue
     const id = identity(item)
 
     if (pinnedKeys.has(item.key) || pinnedSessions.has(id)) continue
@@ -380,4 +408,8 @@ export function partitionRecentSessions(input: {
   }
 
   return { pinned, recent: sortRecentSessions([...recent.values()]) }
+}
+
+export function recentRowUnread(unread: boolean, loading: boolean, muted: boolean) {
+  return unread && !loading && !muted
 }

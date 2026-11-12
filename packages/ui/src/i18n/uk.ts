@@ -207,6 +207,7 @@ export const dict = {
   "ui.common.dismiss": "Відхилити",
   "ui.common.close": "Закрити",
   "ui.common.next": "Далі",
+  "ui.common.continue": "Продовжити",
   "ui.common.submit": "Надіслати",
   "ui.common.showMore": "Показати більше",
 

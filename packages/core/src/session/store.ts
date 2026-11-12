@@ -56,6 +56,15 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
+  /**
+   * The newest completed, error-free assistant message above the sequence
+   * bound. Reads newest-first in pages so a long run of incomplete steps does
+   * not decode the whole history.
+   */
+  readonly lastAssistantAfter: (input: {
+    readonly sessionID: Session.ID
+    readonly afterSeq?: number
+  }) => Effect.Effect<SessionMessage.Assistant | undefined, MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
@@ -192,6 +201,32 @@ const layer = Layer.effect(
         return yield* SessionHistory.decodeMessageRowsWithRefs(db, yield* messageRows(input))
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
+      lastAssistantAfter: Effect.fn("SessionStore.lastAssistantAfter")(function* (input) {
+        let cursorSeq: number | undefined
+        while (true) {
+          const rows = yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.session_id, input.sessionID),
+                eq(SessionMessageTable.type, "assistant"),
+                input.afterSeq === undefined ? undefined : gt(SessionMessageTable.seq, input.afterSeq),
+                cursorSeq === undefined ? undefined : lt(SessionMessageTable.seq, cursorSeq),
+              ),
+            )
+            .orderBy(desc(SessionMessageTable.seq))
+            .limit(20)
+            .all()
+            .pipe(Effect.orDie)
+          for (const message of yield* SessionHistory.decodeMessageRows(db, rows)) {
+            if (message.type === "assistant" && message.time.completed !== undefined && message.error === undefined)
+              return message
+          }
+          if (rows.length < 20) return undefined
+          cursorSeq = rows[rows.length - 1]!.seq
+        }
+      }),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* messageRow(messageID)
         if (!row) return undefined
