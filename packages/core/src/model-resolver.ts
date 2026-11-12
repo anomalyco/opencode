@@ -331,7 +331,7 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
   const socketPath = Provider.socketPath(configured)
-  if (!socketPath) return adapted
+  if (socketPath === undefined) return adapted
   if (adapted instanceof DecisionModel)
     return new DecisionModel({ ...adapted, http: { ...adapted.http, socketPath } }) as Runtime
   if (adapted instanceof ImageModel) return new ImageModel({ ...adapted, http: { ...adapted.http, socketPath } }) as Runtime
@@ -510,7 +510,8 @@ export const layer = Layer.effect(
         compaction: runtimeInfo.settings?.compaction,
         cache: runtimeInfo.settings?.cache,
         // A WebSocket transport would dial the base URL's host over TCP, so a socket keeps the model on HTTP.
-        transport: Provider.socketPath(runtimeInfo.settings ?? {}) ? "http" : provider?.settings?.transport,
+        transport:
+          Provider.socketPath(runtimeInfo.settings ?? {}) === undefined ? provider?.settings?.transport : "http",
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
       }
     })
