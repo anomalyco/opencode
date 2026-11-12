@@ -416,8 +416,9 @@
     position: absolute;
     inset-inline: 0;
     top: 100%;
-    height: 20px;
-    margin-top: 8px;
+    height: 28px;
+    margin-top: 0;
+    padding-top: 8px;
   }
 }
 
@@ -488,7 +489,14 @@
     margin-top: 0;
   }
 
-  /* The agent's last words in a turn keep their actions in the large gap below them, as the user's message does. */
+  /* A reply's footer sits below the line box, as in the current timeline, so its last line keeps the bottom half-leading. */
+  [data-component="text-part"]:has(> [data-slot="text-part-footer"], > [data-slot="text-part-copy-wrapper"])
+    [data-component="markdown"] {
+    text-box: trim-start text;
+  }
+
+  /* The agent's last words in a turn keep their actions in the large gap below them, as the user's message does. The
+     gap above the actions is their own padding, so the pointer stays over the message while it crosses to them. */
   [data-component="text-part"]:has(> [data-slot="text-part-copy-wrapper"]) {
     position: relative;
 
@@ -496,6 +504,9 @@
       position: absolute;
       inset-inline: 0;
       top: 100%;
+      height: 28px;
+      margin-top: 0;
+      padding-top: 8px;
     }
   }
 
