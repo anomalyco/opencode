@@ -119,6 +119,8 @@ test("nests a method under client.experimental exactly when its route is experim
         deprecated.push([...path, name].join("."))
         continue
       }
+      // Drops the shared event stream; a transport control, not a route.
+      if (path.join(".") === "event" && name === "reset") continue
       url = undefined
       const result: unknown = value(input)
       if (typeof result === "object" && result !== null && Symbol.asyncIterator in result) {

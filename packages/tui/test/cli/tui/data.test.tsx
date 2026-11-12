@@ -3496,8 +3496,8 @@ test("keeps the row when the response lands before the echo", async () => {
   }
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/prompt`) return json({ data: admission })
-    // The server's listings still miss the admission (projection lag).
-    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+    // The server admits the prompt before it answers, but has not delivered it yet.
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [admission] })
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
   }, events)
   let sync!: ReturnType<typeof useData>

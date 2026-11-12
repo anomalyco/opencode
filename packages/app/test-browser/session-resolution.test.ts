@@ -19,14 +19,12 @@ function createFixture(initial: Record<string, Session> = {}) {
   const deferred = new Map<string, PromiseWithResolvers<void>>()
   const resolves: string[] = []
   const messageSyncs: string[] = []
-  const pendingSyncs: string[] = []
-  const messages = { syncs: messageSyncs, ...Promise.withResolvers<void>() }
-  const pending = { syncs: pendingSyncs }
+  const signals: AbortSignal[] = []
+  const messages = { syncs: messageSyncs, signals, ...Promise.withResolvers<void>() }
 
   return {
     resolves,
     messages,
-    pending,
     sessions: {
       get: (id: string) => cache()[id],
       sync: (id: string) => {
@@ -36,19 +34,12 @@ function createFixture(initial: Record<string, Session> = {}) {
 
         return entry.promise
       },
-      message: {
-        sync: (id: string) => {
-          messages.syncs.push(id)
+      hydrate: (id: string, options?: { signal?: AbortSignal }) => {
+        messages.syncs.push(id)
 
-          return messages.promise
-        },
-      },
-      pending: {
-        sync: (id: string) => {
-          pending.syncs.push(id)
+        if (options?.signal) messages.signals.push(options.signal)
 
-          return Promise.resolve()
-        },
+        return messages.promise
       },
     },
     settle(id: string, directory = `/dir/${id}`) {
@@ -103,7 +94,8 @@ test("refreshes the current session on reconnect while keeping cached content vi
     expect(fixture.resolves).toEqual(["ses_a", "ses_a"])
     expect(resolved(current())).toEqual(sessionOf("ses_a"))
     expect(fixture.messages.syncs).toEqual(["ses_a", "ses_a"])
-    expect(fixture.pending.syncs).toEqual(["ses_a", "ses_a"])
+    // Each reconnect's load replaces the previous one, which may still be retrying.
+    expect(fixture.messages.signals.map((signal) => signal.aborted)).toEqual([true, false])
     fixture.settle("ses_a", "/worktrees/moved")
     await flush()
     expect(resolved(current())?.directory).toBe("/worktrees/moved")
@@ -178,6 +170,7 @@ test("re-resolves when navigating to an uncached session without a remount", asy
     expect(current().status).toBe("resolving")
     expect(fixture.resolves).toEqual(["ses_b"])
     expect(fixture.messages.syncs).toEqual(["ses_a", "ses_b"])
+    expect(fixture.messages.signals.map((signal) => signal.aborted)).toEqual([true, false])
 
     fixture.settle("ses_b")
     await flush()

@@ -124,9 +124,10 @@ export function createSessionRows(
     on([sessionID, () => client.connection.status()], ([id, status]) => {
       if (status !== "connected") return
       rebuild()
-      void data.session.pending.sync(id).catch(() => undefined)
-      void data.session.message
-        .sync(id)
+      const hydration = new AbortController()
+      onCleanup(() => hydration.abort())
+      void data.session
+        .hydrate(id, { signal: hydration.signal })
         .then(async () => {
           if (sessionID() !== id) return
           rebuild()

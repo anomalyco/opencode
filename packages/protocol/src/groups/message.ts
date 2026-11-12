@@ -1,6 +1,8 @@
+import { Event } from "@opencode/schema/event"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Location } from "@opencode/schema/location"
+import { optional } from "@opencode/schema/schema"
 import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors.js"
@@ -88,10 +90,20 @@ const MessagesCursor = Schema.Struct({
   next: Schema.String.pipe(Schema.optional),
 })
 
+const MessagesExperimental = optional(
+  Schema.Struct({
+    seq: optional(Event.Seq).annotate({
+      description:
+        "Durable sequence of the Session this page was read at, in the same transaction. The page reflects every durable Session event up to and including it and none after, so a client can apply live events above it on top of the page and drop the rest. Absent while the Session has no durable events.",
+    }),
+  }),
+).annotate({ description: "Experimental: may change without compatibility guarantees." })
+
 /** Experimental: the `session.messages` response for clients that opt into `experimental-media-uri`. */
 export const SessionMediaMessagesResponse = Schema.Struct({
   data: Schema.Array(PublicMediaSessionMessage),
   cursor: MessagesCursor,
+  experimental: MessagesExperimental,
 })
 
 /** Experimental: the `session.message` response for clients that opt into `experimental-media-uri`. */
@@ -105,6 +117,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       success: Schema.Struct({
         data: Schema.Array(PublicSessionMessage),
         cursor: MessagesCursor,
+        experimental: MessagesExperimental,
       }).annotate({ identifier: "SessionMessagesResponse" }),
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
