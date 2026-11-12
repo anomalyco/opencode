@@ -35,6 +35,7 @@
     "./providers/amazon-bedrock/mantle/responses": "./src/providers/amazon-bedrock/mantle/responses.ts",
     "./providers/anthropic": "./src/providers/anthropic.ts",
     "./providers/anthropic-compatible": "./src/providers/anthropic-compatible.ts",
+    "./providers/ark": "./src/providers/ark.ts",
     "./providers/assemblyai": "./src/providers/assemblyai.ts",
     "./providers/azure": "./src/providers/azure.ts",
     "./providers/azure/chat": "./src/providers/azure/chat.ts",
