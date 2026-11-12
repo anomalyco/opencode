@@ -113,6 +113,8 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Kimi K2.7 Code                  | kimi-k2.7-code                  | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Kimi K3                         | kimi-k3                         | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Mistral Large 4                 | mistral-large-4                 | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
+| GPT 6 Luna Decision             | gpt-6-luna-decision             | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
+| Gemini Decision 1               | gemini-decision-1               | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
 | Jev 1.13                        | jev-1.13                        | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
 | Jev 1.13 Free                   | jev-1.13-free                   | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
@@ -201,6 +203,26 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 Use `jev-1.13-free` instead of `jev-1.13` to use the limited-time free model. See the [TypeSafe AI documentation](https://docs.typesafe.ai/) for details about question types and response fields.
 
+### GPT 6 Luna Decision and Gemini Decision 1
+
+`gpt-6-luna-decision` and `gemini-decision-1` take the same System One request as Jev, on the same endpoint. Pass images, audio, video, and PDFs in `state` as chat-style parts (`image_url`, `input_audio`, `video_url`, `file`). GPT 6 Luna Decision accepts text and images; Gemini Decision 1 also accepts audio, video, and PDFs.
+
+```bash
+curl https://opencode.ai/inference/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-decision-1",
+    "state": "I was charged twice for my order.",
+    "questions": {
+      "refund": {
+        "type": "noul",
+        "instructions": "Is this a refund request?"
+      }
+    }
+  }'
+```
+
 ## Pricing
 
 Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
@@ -224,6 +246,9 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | Nemotron 3.5 Super VL Free        | Free            | Free            | Free            | -            |
 | Jev 1.13 Free                     | Free            | Free            | -               | -            |
 | Jev 1.13                          | $0.042          | Free            | -               | -            |
+| Gemini Decision 1                 | $0.10           | Free            | -               | -            |
+| GPT 6 Luna Decision (≤ 272K tokens) | $0.10           | Free            | $0.01           | $0.125       |
+| GPT 6 Luna Decision (> 272K tokens) | $0.20           | Free            | $0.02           | $0.25        |
 | MiniMax M3                        | $0.30           | $1.20           | $0.06           | -            |
 | MiniMax M2.7                      | $0.30           | $1.20           | $0.06           | -            |
 | MiniMax M2.5                      | $0.30           | $1.20           | $0.06           | -            |
