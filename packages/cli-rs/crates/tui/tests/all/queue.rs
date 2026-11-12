@@ -97,12 +97,17 @@ impl Kit {
     }
 
     fn with(inbox: Vec<Value>, fail: bool) -> Self {
+        // The inbox is its own read: a key that needs the queue does nothing before the dock shows it.
+        let queued = inbox.iter().filter(|item| item["delivery"] == "queue").count();
         let fake = fake(turns(), inbox, fail);
         let seen = fake.log();
         let deps = Deps { config: support::config(support::still()), ..support::deps(Arc::new(fake)) };
         let kit = Self { harness: support::mount(100, 30, deps), seen };
         kit.wait_for("Fixed it.");
         kit.wait_for("Model M");
+        if queued > 0 {
+            kit.wait_for(&format!("{queued} queued"));
+        }
         kit
     }
 

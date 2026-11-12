@@ -131,16 +131,17 @@ fn compactions_show_their_status_summary_and_queue() {
         "payload": {}, "delivery": "queue",
     })];
     let h = open(40, session(json!({})), messages, inbox, Info::default());
-    let screen = h.wait_for("Compaction queued");
-    // A rule on each side of the status; the summary as Markdown under it.
-    assert!(screen.contains("─ Compaction · 1.3K in · 300 out ─"), "{screen}");
-    assert!(screen.contains("   The user asked about parsing."), "{screen}");
-    assert!(screen.contains("─ ✗ Compaction ─"), "{screen}");
-    assert!(screen.contains("   context too large"), "{screen}");
-    assert!(screen.contains("─ Compaction · cancelled ─"), "{screen}");
-    // With animations off a running compaction's spinner is `⋯`.
-    assert!(screen.contains("─ ⋯ Compaction ─"), "{screen}");
-    assert!(screen.contains("─ ◇ Compaction queued ─"), "{screen}");
+    // The inbox and the messages are separate reads. A rule on each side of the status; the summary as Markdown under
+    // it. With animations off a running compaction's spinner is `⋯`.
+    let screen = h.wait_for_all(&[
+        "─ Compaction · 1.3K in · 300 out ─",
+        "   The user asked about parsing.",
+        "─ ✗ Compaction ─",
+        "   context too large",
+        "─ Compaction · cancelled ─",
+        "─ ⋯ Compaction ─",
+        "─ ◇ Compaction queued ─",
+    ]);
     // The running compaction waits for the turn, after the rest; the queued one comes last.
     in_order(&screen, &["1.3K in", "Second question", "✗ Compaction", "cancelled", "⋯ Compaction", "◇"]);
     assert!(support::lines(&h.log).contains(&format!("GET /api/session/{ID}/inbox")));

@@ -7,8 +7,27 @@
 // popped text or null, or {remove: index}. The provider loads <state>/prompt-stash.jsonl first, which
 // rewrites the file as TypeScript serializes it. Prints one JSON array of results.
 
+import { mock } from "bun:test"
+import fs from "node:fs/promises"
+
 const [root, state] = process.argv.slice(2)
 if (!root || !state) throw new Error("usage: E.4-stash.ts <ts-root> <state>")
+
+// The provider's writes (`writeFile`, `appendFile`) are not awaited, and one that starts while another runs can
+// lose the other's lines. So the writes are counted where they run, before the TUI modules load, as E.2 does.
+const writes = { started: 0, pending: 0 }
+const counted =
+  <A extends unknown[]>(write: (...args: A) => Promise<void>) =>
+  (...args: A) => {
+    writes.started++
+    writes.pending++
+    return write(...args).finally(() => writes.pending--)
+  }
+mock.module("node:fs/promises", () => ({
+  ...fs,
+  writeFile: counted(fs.writeFile),
+  appendFile: counted(fs.appendFile),
+}))
 
 const load = (spec: string) => import(Bun.resolveSync(spec, `${root}/packages/tui/src`))
 const tui = `${root}/packages/tui`
@@ -39,20 +58,34 @@ const app = await testRender(() =>
   }),
 )
 await app.renderOnce()
-// The provider reads the file on mount; wait until an existing file's entries are in.
+// Waits for a condition, up to 30 s: a loaded machine can take seconds to read or write the file.
+const until = async (what: string, done: () => boolean) => {
+  const deadline = Date.now() + 30_000
+  while (!done()) {
+    if (Date.now() >= deadline) return console.error(`timed out waiting for ${what}`)
+    await Bun.sleep(5)
+  }
+}
+// Waits until a write started after `started` writes, and none is pending.
+const written = (what: string, started: number) =>
+  until(what, () => writes.started > started && writes.pending === 0)
+// The provider reads the file on mount, and rewrites a file with entries: wait until that write has ended.
 const file = Bun.file(`${state}/prompt-stash.jsonl`)
 if ((await file.exists()) && (await file.text()).trim()) {
-  for (let i = 0; i < 200 && stash!.list().length === 0; i++) await Bun.sleep(5)
+  await until("the load", () => stash!.list().length > 0)
+  await written("the load's rewrite", 0)
 }
 
 const output: unknown[] = []
 for (const op of ops) {
+  const started = writes.started
+  const entries = stash!.list().length
   if (op.list) output.push(stash!.list().map((entry) => entry.prompt.text))
   if (op.push) stash!.push({ prompt: op.push })
   if (op.pop) output.push(stash!.pop()?.prompt.text ?? null)
   if (op.remove !== undefined) stash!.remove(op.remove)
-  // Writes are asynchronous; let each land before the next rewrites the file.
-  await Bun.sleep(20)
+  // A push, and a pop or remove that took an entry, write: let it end before the next op writes again.
+  if (op.push || stash!.list().length < entries) await written("the write", started)
 }
 app.renderer.destroy()
 console.log(JSON.stringify(output))

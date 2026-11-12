@@ -96,8 +96,8 @@ fn the_prompt_line_and_agents_fill_in_from_updated_events() {
     h.app.render();
     assert!(!h.app.text().contains("Model M"), "{}", h.app.text());
     server.warm();
-    let screen = h.wait_for("Model M");
-    assert!(screen.contains("Build"), "{screen}");
+    // The model and agent lists reload on separate events.
+    h.wait_for_all(&["Model M", "Build"]);
     h.dispatch("agent.cycle");
     h.wait_for("Plan");
 }

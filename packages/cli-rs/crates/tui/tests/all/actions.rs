@@ -194,8 +194,8 @@ fn rename_opens_the_dialog_by_key_and_renames_or_generates_by_slash() {
     let kit = Kit::new(session("ses_a", json!({})), turns(), vec![]);
     kit.ready();
     kit.app.press("ctrl+r");
-    kit.wait_for("Rename session");
-    assert!(kit.app.text().contains("Fix the parser"), "{}", kit.app.text());
+    // The title comes with the session read, which `ready` does not wait for.
+    kit.wait_for_all(&["Rename session", "Fix the parser"]);
     kit.app.press("escape");
     assert!(!kit.tui.dialogs.is_open());
 
@@ -261,7 +261,7 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     kit.app.press("return");
     assert_eq!(kit.wait_writes(1), ["POST /api/session/ses_a/fork {}"]);
     kit.wait_for("Forked session");
-    assert_eq!(kit.tui.route(), Route::Session { id: SessionID("ses_fork".into()) });
+    kit.wait("the fork to open", || kit.tui.route() == Route::Session { id: SessionID("ses_fork".into()) });
 
     let kit = Kit::new(session("ses_a", json!({})), turns(), vec![]);
     kit.ready();
