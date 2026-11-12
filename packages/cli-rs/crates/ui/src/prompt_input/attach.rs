@@ -113,8 +113,10 @@ pub fn files_for_server(entry: &Value, local: bool) -> Value {
                     .as_object_mut()
                     .and_then(|file| file.remove("path"))
                     .and_then(|path| path.as_str().map(str::to_owned));
+                // `pathToFileURL` resolves first, so on Windows a rooted path without a drive takes the working
+                // directory's.
                 if let Some(path) = path.filter(|_| local)
-                    && let Ok(url) = url::Url::from_file_path(&path)
+                    && let Ok(url) = std::path::absolute(&path).map_err(drop).and_then(url::Url::from_file_path)
                 {
                     file["source"] = json!({ "type": "uri", "uri": url.as_str() });
                 }
@@ -414,6 +416,11 @@ mod tests {
             parse_pasted_filepaths("# comment\nfile:///a.png\r\nfile:///b%20c.png", false),
             ["/a.png", "/b c.png"]
         );
+        // Windows: `\` separates, it does not escape.
+        assert_eq!(
+            parse_pasted_filepaths("'C:\\a\\b c.png' C:\\d\\e.png \"C:\\f\\\"", true),
+            ["C:\\a\\b c.png", "C:\\d\\e.png", "C:\\f\\"]
+        );
         assert!(parse_pasted_filepaths("'/open.png", false).is_empty());
         let many = (0..33).map(|i| format!("/{i}.png")).collect::<Vec<_>>().join(" ");
         assert!(parse_pasted_filepaths(&many, false).is_empty());
@@ -437,9 +444,11 @@ mod tests {
         std::fs::write(&png, b"\x89PNG").unwrap();
         let svg = dir.path().join("logo.svg");
         std::fs::write(&svg, "<svg/>").unwrap();
+        // Windows pastes keep `\`, which elsewhere escapes the next character.
+        let windows = cfg!(windows);
         let quoted = format!("'{}'", png.display());
         assert_eq!(
-            resolve(&quoted, false),
+            resolve(&quoted, windows),
             Some(vec![Resolved::File {
                 uri: "data:image/png;base64,iVBORw==".into(),
                 filename: "a b.png".into(),
@@ -448,11 +457,11 @@ mod tests {
         );
         let both = format!("{} {}", quoted, svg.display());
         assert_eq!(
-            resolve(&both, false).unwrap()[1],
+            resolve(&both, windows).unwrap()[1],
             Resolved::Text { content: "<svg/>".into(), filename: "logo.svg".into() }
         );
         // One missing file drops the whole list.
-        assert_eq!(resolve(&format!("{quoted} /missing.png"), false), None);
+        assert_eq!(resolve(&format!("{quoted} /missing.png"), windows), None);
     }
 
     #[test]
@@ -476,12 +485,23 @@ mod tests {
 
     #[test]
     fn server_files_drop_the_path_and_a_local_server_gets_its_url() {
-        let entry = json!({ "files": [{ "uri": "data:image/png;base64,AA", "path": "/tmp/a b.png" }] });
+        let (path, url) = if cfg!(windows) {
+            ("C:\\tmp\\a b.png", "file:///C:/tmp/a%20b.png")
+        } else {
+            ("/tmp/a b.png", "file:///tmp/a%20b.png")
+        };
+        let entry = json!({ "files": [{ "uri": "data:image/png;base64,AA", "path": path }] });
         assert_eq!(
             files_for_server(&entry, true),
-            json!([{ "uri": "data:image/png;base64,AA", "source": { "type": "uri", "uri": "file:///tmp/a%20b.png" } }])
+            json!([{ "uri": "data:image/png;base64,AA", "source": { "type": "uri", "uri": url } }])
         );
         assert_eq!(files_for_server(&entry, false), json!([{ "uri": "data:image/png;base64,AA" }]));
+        // `pathToFileURL("/tmp/a b.png")` on Windows: the working directory's drive.
+        if cfg!(windows) {
+            let entry = json!({ "files": [{ "uri": "data:image/png;base64,AA", "path": "/tmp/a b.png" }] });
+            let uri = files_for_server(&entry, true)[0]["source"]["uri"].as_str().unwrap().to_owned();
+            assert!(uri.starts_with("file:///") && uri.ends_with(":/tmp/a%20b.png"), "{uri}");
+        }
     }
 
     #[test]
