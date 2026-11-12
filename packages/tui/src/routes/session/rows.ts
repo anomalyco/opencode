@@ -125,11 +125,14 @@ export function createSessionRows(
       if (status !== "connected") return
       rebuild()
       void data.session.pending.sync(id).catch(() => undefined)
+      let cached = false
       void data.session.message
-        .sync(id)
+        .sync(id, () => {
+          cached = true
+        })
         .then(async () => {
           if (sessionID() !== id) return
-          rebuild()
+          if (!cached) rebuild()
           // Restoration waits for complete boundary groups so saved group IDs resolve.
           await completeGroupBoundary({
             rows,
