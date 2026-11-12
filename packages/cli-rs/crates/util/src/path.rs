@@ -1,6 +1,6 @@
 //! Node's `path.posix` and `path.win32` on strings. TypeScript code uses `path`, which is `path.win32` when
 //! `process.platform` is `win32`; [`Flavor::NATIVE`] picks the same one. The functions are pure, so either flavour
-//! runs on any host.
+//! runs on any host, except that [`Flavor::resolve`] on Windows reads the working directory's drive.
 
 use std::borrow::Cow;
 
@@ -71,10 +71,14 @@ impl Flavor {
     }
 
     /// `path.resolve` over an absolute base: the last rooted path wins, `.` and `..` fold. Without a rooted path
-    /// the result stays relative (`.` when empty), where Node would start from the working directory.
+    /// the result stays relative (`.` when empty), where Node would start from the working directory. On Windows a
+    /// rooted result without a drive takes the working directory's, as Node does.
     pub fn resolve(self, paths: &[&str]) -> String {
         if self == Self::Windows {
-            return resolve_windows(paths);
+            // Only on a Windows host: elsewhere the working directory has no drive to give.
+            let cwd = if Self::NATIVE == Self::Windows { std::env::current_dir().ok() } else { None };
+            let cwd = cwd.map(|cwd| strip_verbatim(&cwd.to_string_lossy()).into_owned()).unwrap_or_default();
+            return resolve_windows(&cwd, paths);
         }
         let mut root = String::new();
         let mut segments: Vec<String> = Vec::new();
@@ -177,9 +181,9 @@ impl Flavor {
 
 /// `path.win32.resolve`: from the last path back, collect segments until a rooted path with a device (a drive or a
 /// UNC share). A path on another device than the one found first is skipped, and a rooted path without a device takes
-/// the device of an earlier path. `..` stops at the root of an absolute result. Only a result without a device stays
-/// relative, where Node would start from the working directory.
-fn resolve_windows(paths: &[&str]) -> String {
+/// the device of an earlier path, else the device of `cwd` (Node's `process.cwd()`). `..` stops at the root of an
+/// absolute result. Only a relative result stays relative, where Node would start from the working directory.
+fn resolve_windows(cwd: &str, paths: &[&str]) -> String {
     let mut device = String::new();
     let mut absolute = false;
     let mut rests = Vec::new();
@@ -199,6 +203,9 @@ fn resolve_windows(paths: &[&str]) -> String {
         if absolute && !device.is_empty() {
             break;
         }
+    }
+    if absolute && device.is_empty() {
+        device = windows_root(cwd).0;
     }
     // A drive no path is rooted on: Node takes its directory from `=C:`, which only `cmd` sets, else its root.
     absolute |= !device.is_empty();
@@ -326,6 +333,26 @@ mod tests {
         assert_eq!(w.basename("C:/a/b"), "b");
         assert_eq!(w.basename("C:\\"), "");
         assert_eq!(w.basename("C:x"), "x");
+    }
+
+    #[test]
+    fn a_rooted_windows_path_without_a_drive_takes_the_working_directorys() {
+        // From `path.win32.resolve` with `process.cwd()` the `cwd` column.
+        for (cwd, paths, expected) in [
+            ("D:\\work", &["\\x"][..], "D:\\x"),
+            ("D:\\work", &["/project", "packages/"], "D:\\project\\packages"),
+            ("D:\\work", &["\\", "/workspace", "sub"], "D:\\workspace\\sub"),
+            ("D:\\work", &["C:\\p", "/x"], "C:\\x"),
+            ("D:\\work", &["\\\\srv\\share\\p", "/x"], "\\\\srv\\share\\x"),
+            ("\\\\srv\\share\\w", &["/x/../y"], "\\\\srv\\share\\y"),
+            ("D:\\work", &["C:x"], "C:\\x"),
+            // A relative result stays relative, and without a drive to give a rooted one stays as it is.
+            ("D:\\work", &["a\\b", ".."], "a"),
+            ("", &["/x"], "\\x"),
+            ("/home/u", &["/x"], "\\x"),
+        ] {
+            assert_eq!(resolve_windows(cwd, paths), expected, "{cwd} {paths:?}");
+        }
     }
 
     #[test]

@@ -183,9 +183,15 @@ fn slashes(flavor: Flavor, path: &str) -> String {
     path.replace(flavor.sep(), "/")
 }
 
-/// `pathToFileURL(path).href`: the URL path percent-encode set, plus `%` and `\`, as Node encodes it. On Windows
-/// `\` separates segments, a drive path starts `file:///C:/`, and a UNC path names its server as the host.
+/// `pathToFileURL(path).href`: the path resolved, keeping a trailing separator, then the URL path percent-encode
+/// set, plus `%` and `\`, as Node encodes it. On Windows `\` separates segments, a drive path starts `file:///C:/`,
+/// and a UNC path names its server as the host.
 pub fn file_url(flavor: Flavor, path: &str) -> String {
+    let mut resolved = flavor.resolve(&[path]);
+    if path.ends_with(|c| flavor.is_sep(c)) && !resolved.ends_with(|c| flavor.is_sep(c)) {
+        resolved.push(flavor.sep());
+    }
+    let path = resolved.as_str();
     let (mut url, path) = match flavor {
         Flavor::Posix => (String::from("file://"), path.to_owned()),
         Flavor::Windows => {
@@ -310,6 +316,9 @@ mod tests {
         assert_eq!(basename(w, "C:\\p\\src\\"), "src");
         assert_eq!(file_url(w, "C:\\p\\a b#1.ts"), "file:///C:/p/a%20b%231.ts");
         assert_eq!(file_url(w, "\\\\srv\\share\\a.ts"), "file://srv/share/a.ts");
+        // `pathToFileURL` resolves first and keeps a trailing separator.
+        assert_eq!(file_url(p, "/p/./x/../a/"), "file:///p/a/");
+        assert_eq!(file_url(w, "C:/p/x/../a/"), "file:///C:/p/a/");
         assert_eq!(index_at("日本x", 2), 3);
         assert_eq!(index_at("日本x", 3), 3);
     }

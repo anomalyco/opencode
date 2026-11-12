@@ -286,6 +286,7 @@ mod tests {
         };
         assert_eq!(value, "src/a.ts#3-9");
         assert_eq!(display, "@a.ts#3-9");
-        assert_eq!(file.url, "file:///w/src/a.ts?start=3&end=9");
+        // `pathToFileURL`: `file:///D:/w/src/a.ts` on Windows, with the working directory's drive.
+        assert_eq!(file.url, format!("{}?start=3&end=9", parse::file_url(Flavor::NATIVE, "/w/src/a.ts")));
     }
 }
