@@ -198,10 +198,7 @@ pub fn mount(tui: &Rc<Tui>, parent: &View) {
 }
 
 fn install_escape(tui: &Rc<Tui>, bar: &Rc<Bar>) {
-    let open = {
-        let weak = Rc::downgrade(bar);
-        Condition::when(move || weak.upgrade().is_some_and(|bar| bar.panel.get().is_some()))
-    };
+    let open = Condition::when(bind!(bar, |bar| bar.panel.get().is_some()));
     let close = |key: &str| {
         TuiCommand::inline(
             key,
@@ -305,16 +302,11 @@ impl Bar {
         }
     }
 
-    fn weak(self: &Rc<Self>) -> Weak<Self> {
-        Rc::downgrade(self)
-    }
-
     fn fetch_server(self: &Rc<Self>, tui: &Tui) {
         let client = tui.data.client().clone();
-        let weak = self.weak();
         tui.app.spawn(
             async move { client.server_info().await },
-            bind!(weak, |bar, _, result| {
+            bind!(self, |bar, _, result| {
                 let Some(tui) = bar.tui.upgrade() else { return };
                 *bar.server.borrow_mut() = Some(result.map_err(|error| error.to_string()));
                 bar.render(&tui);
@@ -475,9 +467,7 @@ impl Bar {
                 }
             });
         }
-        let weak = Rc::downgrade(self);
-        item.mouse_pointer(MousePointer::POINTER).on_mouse(move |cx, event| {
-            let Some(bar) = weak.upgrade() else { return };
+        item.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(self, |bar, cx, event| {
             if !bar.release(event, &held) {
                 return;
             }
@@ -493,7 +483,7 @@ impl Bar {
                     crate::dialogs::experiments::show(tui);
                 }
             });
-        });
+        }));
         self.root.add(&item);
         item
     }
@@ -638,10 +628,8 @@ impl Bar {
                 }
             });
         }
-        let weak = Rc::downgrade(self);
         let run = Rc::new(run);
-        view.mouse_pointer(opencode_ui::click_pointer(!disabled)).on_mouse(move |cx, event| {
-            let Some(bar) = weak.upgrade() else { return };
+        view.mouse_pointer(opencode_ui::click_pointer(!disabled)).on_mouse(bind!(self, |bar, cx, event| {
             if !bar.release(event, &target) {
                 return;
             }
@@ -652,7 +640,7 @@ impl Bar {
             let Some(tui) = bar.tui.upgrade() else { return };
             let run = run.clone();
             defer(&tui, move |tui| run(&bar, tui));
-        });
+        }));
         view
     }
 
@@ -696,7 +684,6 @@ impl Bar {
             json!({ "name": state.selected(), "mode": mode_name(state.mode()) })
         };
         let client = tui.data.client().clone();
-        let weak = self.weak();
         tui.app.spawn(
             async move {
                 let events = match &session {
@@ -716,7 +703,7 @@ impl Bar {
                     .map_err(|error| error.to_string())
                     .and_then(|result| result)
             },
-            bind!(weak, |bar, _, result| {
+            bind!(self, |bar, _, result| {
                 let Some(tui) = bar.tui.upgrade() else { return };
                 bar.dumping.set(false);
                 *bar.dump.borrow_mut() = Some(result);

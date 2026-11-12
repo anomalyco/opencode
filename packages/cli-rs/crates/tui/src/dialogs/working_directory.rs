@@ -6,12 +6,12 @@ use crate::prelude::*;
 /// Registers `workspace.directory`, a hidden command (no palette entry, slash or key) that opens the menu of the
 /// directory its input names, for a plugin's click (the sidebar footer's location).
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    let command = TuiCommand::new("workspace.directory", move |input: Option<&str>, _| {
-        if let (Some(tui), Some(directory)) = (weak.upgrade(), input) {
+    let command = TuiCommand::new(
+        "workspace.directory",
+        bind!(tui, |tui, input: Option<&str>, _| if let Some(directory) = input {
             show(&tui, directory);
-        }
-    })
+        }),
+    )
     .bind(Bind::Off);
     tui.keymap.install("working-directory", [KeymapLayer::global(vec![command])]);
 }

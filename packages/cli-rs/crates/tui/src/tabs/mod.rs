@@ -267,8 +267,7 @@ fn load(storage: &Storage) -> Persisted {
 fn install_commands(tui: &Rc<Tui>) {
     let weak = tui.weak();
     let command = |id: &str, title: &str, palette: bool, run: Rc<dyn Fn(&Tui)>| {
-        let target = weak.clone();
-        let command = TuiCommand::new(id, bind!(target, |tui, _, _| run(&tui)))
+        let command = TuiCommand::new(id, bind!(weak, |tui, _, _| run(&tui)))
             .bind(Bind::Off)
             .title(title)
             .group("Session")
@@ -288,7 +287,11 @@ fn install_commands(tui: &Rc<Tui>) {
             &format!("session.tab.select.{}", index + 1),
             &format!("Switch to tab {}", index + 1),
             false,
-            Rc::new(move |tui| select_index(tui, index)),
+            Rc::new(move |tui| {
+                if let Some(tab) = tui.tabs.tabs(tui).get(index) {
+                    tui.navigate(Route::Session { id: SessionID(tab.session_id.clone()) });
+                }
+            }),
         )
     }));
     let names: Vec<String> = commands.iter().filter_map(|command| command.id.clone()).collect();
@@ -303,8 +306,7 @@ fn install_commands(tui: &Rc<Tui>) {
 }
 
 fn enabled(weak: &std::rc::Weak<Tui>) -> Condition {
-    let weak = weak.clone();
-    Condition::when(move || weak.upgrade().is_some_and(|tui| Tabs::enabled(&tui)))
+    Condition::when(bind!(weak, |tui| Tabs::enabled(&tui)))
 }
 
 /// After a route change: admit the routed session as a tab and record it in the history.
@@ -659,12 +661,6 @@ fn cycle(tui: &Tui, forward: bool, unread: bool) {
     .map(|tab| tab.session_id.clone());
     if let Some(session) = target {
         tui.navigate(Route::Session { id: SessionID(session) });
-    }
-}
-
-fn select_index(tui: &Tui, index: usize) {
-    if let Some(tab) = tui.tabs.tabs(tui).get(index) {
-        tui.navigate(Route::Session { id: SessionID(tab.session_id.clone()) });
     }
 }
 

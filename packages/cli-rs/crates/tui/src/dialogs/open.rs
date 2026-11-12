@@ -231,7 +231,12 @@ impl Open {
                 *open.select.borrow_mut() = Some(select);
                 open.render_footer();
                 if let Some(tui) = open.tui() {
-                    cx.on_close(tui.follow(&open, |open, tui, changes| open.sync(tui, changes)));
+                    // Repaints after each store flush that touched the projects or the active location.
+                    cx.on_close(tui.follow(&open, |open, tui, changes| {
+                        if changes.projects() || changes.location(&crate::features::location::active(tui)) {
+                            open.refresh();
+                        }
+                    }));
                 }
                 let owner = open.clone();
                 cx.on_close(opentui::keymap::Disposer::new(move || {
@@ -299,13 +304,6 @@ impl Open {
                 open.refresh();
             }),
         );
-    }
-
-    /// Repaints after each store flush that touched the projects or the active location.
-    fn sync(&self, tui: &Tui, changes: &Changes) {
-        if changes.projects() || changes.location(&crate::features::location::active(tui)) {
-            self.refresh();
-        }
     }
 
     /// Reads the requests of running sessions and the root sessions that wait on one, so their rows show and sort

@@ -54,7 +54,10 @@ impl List {
     fn open(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
         let list = self.clone();
-        let rows = options(&tui);
+        // The theme names in `localeCompare` base order.
+        let mut names = tui.theme.borrow().names();
+        names.sort_by_key(|name| name.to_lowercase());
+        let rows: Vec<_> = names.into_iter().map(|name| SelectOption::new(name.clone(), name)).collect();
         tui.dialogs.replace(
             move |cx| {
                 let mut props = SelectProps::new("Themes", rows.clone());
@@ -142,11 +145,4 @@ impl List {
         tui.theme.borrow_mut().config_name(&self.initial);
         tui.theme_changed();
     }
-}
-
-/// The theme names in `localeCompare` base order.
-fn options(tui: &Tui) -> Vec<SelectOption<String>> {
-    let mut names = tui.theme.borrow().names();
-    names.sort_by_key(|name| name.to_lowercase());
-    names.into_iter().map(|name| SelectOption::new(name.clone(), name)).collect()
 }

@@ -498,8 +498,7 @@ impl Viewer {
         let on_source = Rc::new(bind!(weak, |viewer| crate::plugins::diffs::sources::open(&viewer)));
         let weak = self.this.clone();
         let on_menu: tree::OnMenu = Rc::new(bind!(weak, |viewer, file, x, y| viewer.open_menu(file, x, y)));
-        let weak = self.this.clone();
-        let on_help = Rc::new(bind!(weak, |viewer| crate::plugins::diffs::help::open(&viewer)));
+        let on_help = Rc::new(bind!(self.this, |viewer| crate::plugins::diffs::help::open(&viewer)));
         let rows = tree::flatten(&tree, Some(&expanded));
         let mark = (rows.iter().position(|row| row.file.is_some() && row.file == selected), rows.len());
         let (pane, scroll) = tree::pane(

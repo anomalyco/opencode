@@ -371,14 +371,12 @@ impl Reads {
         if self.telling.replace(true) {
             return;
         }
-        let weak = tui.weak();
-        tui.app.defer(move |_| {
-            let Some(tui) = weak.upgrade() else { return };
+        tui.app.defer(bind!(tui, |tui, _| {
             tui.reads.telling.set(false);
             let pushes: Vec<_> = tui.reads.watchers.borrow().iter().filter_map(Weak::upgrade).collect();
             let local = abi::Changed { local: true, ..abi::Changed::default() };
             pushes.iter().for_each(|push| push(&local));
-        });
+        }));
     }
 
     fn need(&self, tui: &Tui, catalog: Catalog, location: Location) {
@@ -391,14 +389,12 @@ impl Reads {
             return;
         }
         // Outside every plugin callback and store read: a load writes to the store.
-        let weak = tui.weak();
-        tui.app.defer(move |_| {
-            let Some(tui) = weak.upgrade() else { return };
+        tui.app.defer(bind!(tui, |tui, _| {
             let needs = std::mem::take(&mut *tui.reads.needs.borrow_mut());
             for (catalog, location) in needs {
                 drop(tui.data.catalog_sync(catalog, Some(&location)));
             }
-        });
+        }));
     }
 }
 
@@ -713,9 +709,7 @@ pub fn external(tui: &Rc<Tui>, external: External) {
     });
     // TS reconciles again when `config.data.plugins` changes: new entries, options and directives apply.
     let plugins = RefCell::new(tui.config().info.plugins.clone());
-    let weak = tui.weak();
-    tui.settings.on_change(move |_| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.settings.on_change(bind!(tui, |tui, _| {
         let current = tui.config().info.plugins.clone();
         if *plugins.borrow() == current {
             return;
@@ -726,7 +720,7 @@ pub fn external(tui: &Rc<Tui>, external: External) {
         loader.set_configured(configured(&tui, targets));
         loader.reconcile(&host, &tui.plugins);
         watch(&tui, &loader, &watches);
-    });
+    }));
 }
 
 /// The entries that name no plugin, with their `options` as JSON text.

@@ -147,8 +147,7 @@ impl Component for Handle {
             MouseEventKind::Up(MouseButton::Left) => self.resize.finish(&tui, event.x, now),
             _ => return false,
         }
-        let weak = self.tui.clone();
-        cx.defer(bind!(weak, |tui, _| super::refresh(&tui)));
+        cx.defer(bind!(self.tui, |tui, _| super::refresh(&tui)));
         true
     }
 }

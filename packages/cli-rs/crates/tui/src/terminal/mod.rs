@@ -418,10 +418,7 @@ fn apply_layer(tui: &Tui) {
     let weak = tui.weak();
     let command =
         |id: &str, run: fn(&Tui)| TuiCommand::new(id, bind!(weak, |tui, _, _| run(&tui))).group("Session").palette();
-    let in_session = {
-        let weak = weak.clone();
-        Condition::when(move || weak.upgrade().is_some_and(|tui| session(&tui).is_some()))
-    };
+    let in_session = Condition::when(bind!(weak, |tui| session(&tui).is_some()));
     let commands = vec![
         command("terminal.toggle", toggle).title(if shown { "Hide terminal pane" } else { "Show terminal pane" }),
         command("terminal.select", pick).title("Select terminal"),

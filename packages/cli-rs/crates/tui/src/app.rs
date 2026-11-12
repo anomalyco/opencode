@@ -599,13 +599,13 @@ fn install_keys(tui: &Rc<Tui>) {
             .title("Switch session")
             .group("Session")
             .palette()
-            .suggested(any_session(&tui.weak()))
+            .suggested(Condition::when(bind!(tui, |tui| tui.data.read(|state| !state.sessions().is_empty()))))
             .slash(slash("sessions", &["resume", "continue"])),
         command("session.new", |tui| crate::features::clear::clear(tui, false))
             .title("New session")
             .group("Session")
             .palette()
-            .suggested(route_is_session(&tui.weak()))
+            .suggested(Condition::when(bind!(tui, |tui| matches!(*tui.route.borrow(), Route::Session { .. }))))
             .slash(slash("new", &[])),
         command("open.menu", crate::dialogs::open::show)
             .title("Open session or project")
@@ -804,20 +804,6 @@ fn textarea_focused(app: &App, textarea: &Rc<RefCell<Option<Textarea>>>) -> Cond
 
 fn is_focused(app: &App, textarea: &Textarea) -> bool {
     app.focused().is_some_and(|widget| widget.id() == textarea.id())
-}
-
-fn route_is_session(tui: &Weak<Tui>) -> Condition {
-    let weak = tui.clone();
-    Condition::When(Rc::new(move || {
-        weak.upgrade().is_some_and(|tui| matches!(*tui.route.borrow(), Route::Session { .. }))
-    }))
-}
-
-fn any_session(tui: &Weak<Tui>) -> Condition {
-    let weak = tui.clone();
-    Condition::When(Rc::new(move || {
-        weak.upgrade().is_some_and(|tui| tui.data.read(|state| !state.sessions().is_empty()))
-    }))
 }
 
 fn slash(name: &str, aliases: &[&str]) -> Slash {

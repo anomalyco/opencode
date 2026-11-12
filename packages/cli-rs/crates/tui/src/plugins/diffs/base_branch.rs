@@ -60,13 +60,8 @@ pub fn open(viewer: &Viewer) {
         move |cx| {
             let picker = built.clone();
             let weak = Rc::downgrade(&picker);
-            let mut props = SelectProps::dynamic(
-                "Base branch",
-                Rc::new({
-                    let weak = weak.clone();
-                    move |_: &str| weak.upgrade().map(|picker| picker.options()).unwrap_or_default()
-                }),
-            );
+            let mut props =
+                SelectProps::dynamic("Base branch", Rc::new(bind!(weak, |picker, _: &str| picker.options())));
             props.placeholder = Some("Search local and remote branches".to_owned());
             props.skip_filter = true;
             props.current = current.clone();

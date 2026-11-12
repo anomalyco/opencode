@@ -116,15 +116,14 @@ impl Session {
         load(tui, synced.1.clone());
         prewarm(tui, &id, synced.1.clone());
         // `restoreScrollPosition` waits for the first sync (`synced`, `rowsSynced`).
-        let weak = Rc::downgrade(&scroll.0);
         tui.app.spawn(
             async move { futures_util::future::join(synced.0, synced.1).await },
-            move |_, (session, messages)| {
-                let (Some(inner), Ok(()), Ok(())) = (weak.upgrade(), session, messages) else { return };
+            bind!(scroll.0, |inner, _, (session, messages)| {
+                let (Ok(()), Ok(())) = (session, messages) else { return };
                 if let Some(tui) = inner.tui.upgrade() {
                     scroll::Controls(inner).restore(&tui);
                 }
-            },
+            }),
         );
         Self {
             id,

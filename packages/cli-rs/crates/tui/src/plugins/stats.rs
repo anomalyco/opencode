@@ -304,12 +304,8 @@ pub fn number(value: f64) -> String {
     if round(value / UNITS[index].0).abs() >= 1000.0 && index + 1 < UNITS.len() {
         index += 1;
     }
-    format!("{}{}", trim(round(value / UNITS[index].0)), UNITS[index].1)
-}
-
-fn trim(value: f64) -> String {
-    let text = format!("{value:.1}");
-    text.strip_suffix(".0").map_or(text.clone(), str::to_owned)
+    let text = format!("{:.1}", round(value / UNITS[index].0));
+    format!("{}{}", text.strip_suffix(".0").unwrap_or(&text), UNITS[index].1)
 }
 
 /// `formatRange` of `{ month: "short", year: "numeric" }`: `Jan – Nov 2026`, `Nov 2026`, or

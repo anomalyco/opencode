@@ -178,14 +178,15 @@ impl Drop for Move {
 
 /// The `session.move` command of a prompt (`/worktrees`).
 pub fn command(prompt: Weak<Inner>) -> TuiCommand {
-    TuiCommand::new(COMMAND, move |_: Option<&str>, _: Option<&KeyEvent>| {
-        if let Some(prompt) = prompt.upgrade()
-            && let Some(tui) = prompt.tui.upgrade()
-        {
+    TuiCommand::new(
+        COMMAND,
+        bind!(prompt, |prompt, _: Option<&str>, _: Option<&KeyEvent>| {
+        if let Some(tui) = prompt.tui.upgrade() {
             open(&tui, &prompt);
         }
         true
-    })
+    }, else true),
+    )
     .bind(Bind::Off)
     .title("Manage workspaces")
     .group("Session")
@@ -217,10 +218,9 @@ fn open(tui: &Tui, prompt: &Rc<Inner>) {
     }
     // `resolveSession`: the session is read once if the store does not have it yet.
     let task = tui.data.session_sync(&id, false);
-    let weak = prompt.this.clone();
     tui.app.spawn(
         task,
-        bind!(weak, |prompt, _, _| {
+        bind!(prompt.this, |prompt, _, _| {
             let Some(tui) = prompt.tui.upgrade() else { return };
             let session = prompt.session_info(&tui);
             show(&tui, &prompt, session.as_ref().map(|s| s.project_id.clone()), session);
@@ -231,16 +231,18 @@ fn open(tui: &Tui, prompt: &Rc<Inner>) {
 /// `resolveProjectID` on home: the stored location's project, else a location read.
 fn resolve_home(tui: &Tui, prompt: &Rc<Inner>) {
     let home = home_location(tui, prompt);
-    if let Some(project) = stored_project(tui, &home) {
+    let stored = tui.data.read(|state| {
+        state.location(Some(&home)).and_then(|data| data.info.as_ref()).map(|info| info.project.id.clone())
+    });
+    if let Some(project) = stored {
         show(tui, prompt, Some(project), None);
         return;
     }
     let client = tui.data.client().clone();
     let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(home.directory) }) };
-    let weak = prompt.this.clone();
     tui.app.spawn(
         async move { client.location_get(&input).await.ok().map(|info| info.project.id) },
-        bind!(weak, |prompt, _, project| {
+        bind!(prompt.this, |prompt, _, project| {
             let Some(tui) = prompt.tui.upgrade() else { return };
             show(&tui, &prompt, project, None);
         }),
@@ -322,7 +324,6 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
     let lost = prompt.session.is_some() && session.is_none();
     let location = session.map_or_else(|| home_location(tui, prompt), |session| Location::from(&session.location));
     let data = tui.data.clone();
-    let weak = prompt.this.clone();
     tui.app.spawn(
         async move {
             if lost {
@@ -347,7 +348,7 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
                 .map_err(|error| error.tui_message())?;
             Ok(directory)
         },
-        bind!(weak, |prompt, _, result| {
+        bind!(prompt.this, |prompt, _, result| {
             let Some(tui) = prompt.tui.upgrade() else { return };
             match result {
                 Ok(directory) => {
@@ -370,10 +371,4 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
 /// `homeLocation`: where the home prompt creates its session.
 fn home_location(tui: &Tui, prompt: &Inner) -> Location {
     Location::new(prompt.location(tui).directory)
-}
-
-fn stored_project(tui: &Tui, location: &Location) -> Option<ProjectID> {
-    tui.data.read(|state| {
-        state.location(Some(location)).and_then(|data| data.info.as_ref()).map(|info| info.project.id.clone())
-    })
 }

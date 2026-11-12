@@ -214,12 +214,12 @@ impl Workspaces {
         let Some(tui) = self.tui() else { return };
         let client = tui.data.client().clone();
         let input = WorktreeRefreshInput { project_id: self.props.project_id.clone() };
-        let weak = tui.weak();
-        tui.app.spawn(async move { client.worktree_refresh(&input).await }, move |_, result| {
-            if let (Err(error), Some(tui), true) = (result, weak.upgrade(), toast) {
+        tui.app.spawn(
+            async move { client.worktree_refresh(&input).await },
+            bind!(tui, |tui, _, result| if let (Err(error), true) = (result, toast) {
                 tui.toasts.error(error.tui_message());
-            }
-        });
+            }),
+        );
     }
 
     fn show_error(&self) -> bool {
@@ -428,13 +428,7 @@ impl Workspaces {
                     let app = &cx.app;
                     let theme = &cx.theme;
                     let weak = Rc::downgrade(&built);
-                    let mut props = SelectProps::dynamic(
-                        "Worktrees",
-                        Rc::new({
-                            let weak = weak.clone();
-                            move |_: &str| weak.upgrade().map(|w| w.options()).unwrap_or_default()
-                        }),
-                    );
+                    let mut props = SelectProps::dynamic("Worktrees", Rc::new(bind!(weak, |w, _: &str| w.options())));
                     let title =
                         View::new(app).row().gap(1).child(&Text::new(app, "Worktrees").fg(theme.text.base).bold());
                     if spinning {
@@ -572,7 +566,10 @@ impl Workspaces {
                 state.removing = None;
                 state.working = false;
             }
-            if !force_required(&error) {
+            // The server marks a delete that would lose file changes (`WorktreeError` with `data.forceRequired`).
+            let force_required =
+                error.declared().and_then(|declared| declared.body.get("data")?.get("forceRequired")?.as_bool());
+            if force_required != Some(true) {
                 workspaces.failed(&error);
                 workspaces.rebuild();
                 return;
@@ -697,17 +694,13 @@ impl Workspaces {
     fn create(self: &Rc<Self>) {
         let Some(tui) = self.tui() else { return };
         let workspaces = self.clone();
-        let weak = tui.weak();
-        tui.app.defer(bind!(weak, |tui, _| {
+        tui.app.defer(bind!(tui, |tui, _| {
             let run = workspaces.props.on_select.clone();
-            let weak = tui.weak();
             super::worktree_name::show(
                 &tui,
-                Rc::new(move |name| {
-                    if let (Some(name), Some(tui)) = (name, weak.upgrade()) {
-                        run(&tui, Selection::New { name });
-                    }
-                }),
+                Rc::new(bind!(tui, |tui, name| if let Some(name) = name {
+                    run(&tui, Selection::New { name });
+                })),
             );
         }));
     }
@@ -757,11 +750,6 @@ fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection
     });
     actions.push(dialog("dialog.move_session.refresh", "refresh", |workspaces| workspaces.refresh_worktrees(true)));
     actions
-}
-
-/// The server marks a delete that would lose file changes (`WorktreeError` with `data.forceRequired`).
-fn force_required(error: &opencode_api::error::Error) -> bool {
-    error.declared().and_then(|declared| declared.body.get("data")?.get("forceRequired")?.as_bool()) == Some(true)
 }
 
 /// `contains`: `directory` is `root` or below it.

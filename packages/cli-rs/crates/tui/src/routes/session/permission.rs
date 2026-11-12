@@ -118,14 +118,11 @@ impl Permission {
                 tui.app.defer(bind!(tui.weak(), |tui, _| tui.sync_view()));
             }
         }));
-        let weak = Rc::downgrade(&inner);
-        inner.resize.set(Some(tui.app.on_resize(move |_, _, _| {
-            if let Some(inner) = weak.upgrade()
-                && matches!(*inner.prompt.borrow(), Prompt::Asking { .. })
-            {
+        inner.resize.set(Some(tui.app.on_resize(bind!(inner, |inner, _, _, _| {
+            if matches!(*inner.prompt.borrow(), Prompt::Asking { .. }) {
                 inner.render();
             }
-        })));
+        }))));
         Self(inner)
     }
 

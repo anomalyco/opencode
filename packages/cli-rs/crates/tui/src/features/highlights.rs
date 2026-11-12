@@ -42,14 +42,11 @@ pub fn install_with(tui: &Rc<Tui>, release: Release, continue_: bool) {
         tui.keymap.install("highlights", [KeymapLayer::global(vec![command])]);
     }
     let Some(mut watch) = tui.connection_watch() else { return };
-    let weak = tui.weak();
     tui.app.spawn(
         async move { watch.wait_for(|state| state.status == opencode_api::events::Status::Connected).await.is_ok() },
-        move |_, connected| {
-            if let (true, Some(tui)) = (connected, weak.upgrade()) {
-                startup(&tui, &release, continue_);
-            }
-        },
+        bind!(tui, |tui, _, connected| if connected {
+            startup(&tui, &release, continue_);
+        }),
     );
 }
 

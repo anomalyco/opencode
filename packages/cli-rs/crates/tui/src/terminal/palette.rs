@@ -42,7 +42,8 @@ fn terminal_hue(theme: &Theme, target: f64) -> &Color {
         .iter()
         .map(|(_, scale)| {
             let color = &scale.0[1];
-            let (chroma, angle) = oklch(*color);
+            let unit = |channel: u8| f64::from(channel) / 255.0;
+            let (chroma, angle) = oklch_of(unit(color.r), unit(color.g), unit(color.b));
             (color, chroma, distance(angle, target))
         })
         .filter(|(color, chroma, _)| color.a > 0 && *chroma >= 0.03)
@@ -65,11 +66,6 @@ fn hex(color: Color) -> String {
 
 fn hue(red: f64, green: f64, blue: f64) -> f64 {
     oklch_of(red, green, blue).1
-}
-
-fn oklch(color: Color) -> (f64, f64) {
-    let unit = |channel: u8| f64::from(channel) / 255.0;
-    oklch_of(unit(color.r), unit(color.g), unit(color.b))
 }
 
 /// Chroma and hue of an sRGB color, as `rgbToOklch` computes them. `opencode-ui` keeps its copy crate-private.

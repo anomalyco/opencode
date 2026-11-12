@@ -17,12 +17,14 @@ impl Viewer {
         let Some(tui) = self.tui.upgrade() else { return };
         let client = tui.data.client().clone();
         let input = VcsBaseInput { location: self.location() };
-        let weak = self.this.clone();
-        tui.app.spawn(async move { client.vcs_base(&input).await }, move |_, result| {
-            let (Some(viewer), Ok(output)) = (weak.upgrade(), result) else { return };
-            let base = output.data.map(|base| Base { name: base.name, reference: base.r#ref });
-            viewer.state.borrow_mut().reported.insert(key, base);
-        });
+        tui.app.spawn(
+            async move { client.vcs_base(&input).await },
+            bind!(self.this, |viewer, _, result| {
+                let Ok(output) = result else { return };
+                let base = output.data.map(|base| Base { name: base.name, reference: base.r#ref });
+                viewer.state.borrow_mut().reported.insert(key, base);
+            }),
+        );
     }
 
     pub(super) fn load(&self) {
@@ -39,7 +41,6 @@ impl Viewer {
         let session = self.session().cloned().filter(|_| mode == Mode::Turn);
         let chosen = self.shared.memory.borrow().bases.get(&key).cloned();
         let known = self.state.borrow().reported.get(&key).cloned();
-        let weak = self.this.clone();
         tui.app.spawn(
             async move {
                 if let Some(session) = session {
@@ -80,7 +81,7 @@ impl Viewer {
                 let files = client.vcs_diff(&input).await?.data;
                 Ok::<_, opencode_api::error::Error>((reported, base, files))
             },
-            bind!(weak, |viewer, _, result| {
+            bind!(self.this, |viewer, _, result| {
                 {
                     let mut state = viewer.state.borrow_mut();
                     if state.generation != generation {

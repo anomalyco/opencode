@@ -228,11 +228,8 @@ impl FormPrompt {
             review_lines: Cell::new(0),
             render_queued: Cell::new(false),
         });
-        let dialogs = tui.weak();
-        *inner.mode.borrow_mut() = Some(tui.keymap.push_mode(
-            FORM_MODE,
-            Condition::when(move || dialogs.upgrade().is_some_and(|tui| !tui.dialogs.is_open())),
-        ));
+        *inner.mode.borrow_mut() =
+            Some(tui.keymap.push_mode(FORM_MODE, Condition::when(bind!(tui, |tui| !tui.dialogs.is_open()))));
         inner.install(tui);
         inner.render();
         Self(inner)
@@ -471,13 +468,13 @@ impl Inner {
             form_id: self.form.info.id.clone(),
             answer,
         };
-        let weak = Rc::downgrade(self);
-        tui.app.spawn(async move { data.form_reply(input, location.as_ref()).await }, move |_, result| {
-            if let (Err(error), Some(inner)) = (result, weak.upgrade()) {
+        tui.app.spawn(
+            async move { data.form_reply(input, location.as_ref()).await },
+            bind!(self, |inner, _, result| if let Err(error) = result {
                 inner.set_error(error.to_string());
                 inner.render();
-            }
-        });
+            }),
+        );
     }
 
     fn cancel(self: &Rc<Self>) {
@@ -489,13 +486,13 @@ impl Inner {
             form_id: self.form.info.id.clone(),
             message: None,
         };
-        let weak = Rc::downgrade(self);
-        tui.app.spawn(async move { data.form_cancel(input, location.as_ref()).await }, move |_, result| {
-            if let (Err(error), Some(inner)) = (result, weak.upgrade()) {
+        tui.app.spawn(
+            async move { data.form_cancel(input, location.as_ref()).await },
+            bind!(self, |inner, _, result| if let Err(error) = result {
                 inner.set_error(error.to_string());
                 inner.render();
-            }
-        });
+            }),
+        );
     }
 
     fn pick(self: &Rc<Self>, value: FormValue) {
@@ -749,9 +746,8 @@ impl Inner {
 
     fn paste_clipboard(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
-        let weak = Rc::downgrade(self);
-        tui.app.read_clipboard(move |_, content| {
-            let (Some(inner), Some(content)) = (weak.upgrade(), content) else { return };
+        tui.app.read_clipboard(bind!(self, |inner, _, content| {
+            let Some(content) = content else { return };
             let value = content.replace("\r\n", "\n").replace('\r', "\n");
             if inner.draft.borrow().editing || inner.is_textual() {
                 if let Some((_, textarea)) = inner.editor.borrow().as_ref() {
@@ -762,7 +758,7 @@ impl Inner {
             if inner.paste_custom(&value) {
                 inner.changed();
             }
-        });
+        }));
     }
 
     // Keys, mode, paste.

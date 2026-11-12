@@ -376,8 +376,7 @@ impl Viewer {
     fn install(self: &Rc<Self>, tui: &Tui) {
         let (target, enabled) = match &self.place {
             Place::Panel { host, .. } => {
-                let weak = self.this.clone();
-                host.on_focus(bind!(weak, |viewer, _, _| viewer.refresh()));
+                host.on_focus(bind!(self.this, |viewer, _, _| viewer.refresh()));
                 (Some(host.id()), Condition::Always)
             }
             Place::Route { .. } => {
@@ -393,8 +392,7 @@ impl Viewer {
             Ok(disposer) => *self.layer.borrow_mut() = Some(disposer),
             Err(error) => log::error!("{ID} keymap layer: {error}"),
         }
-        let weak = self.this.clone();
-        self.root.on_resize(bind!(weak, |viewer, _, rect| {
+        self.root.on_resize(bind!(self.this, |viewer, _, rect| {
             let width = rect.width as i64;
             if viewer.state.borrow().width != width {
                 viewer.state.borrow_mut().width = width;
@@ -877,8 +875,7 @@ impl Viewer {
         if running {
             return;
         }
-        let weak = self.this.clone();
-        tui.app.animate(bind!(weak, |viewer, _, _| {
+        tui.app.animate(bind!(self.this, |viewer, _, _| {
             viewer.pass();
             let left = viewer.passes.get().saturating_sub(1);
             viewer.passes.set(left);
