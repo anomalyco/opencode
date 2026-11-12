@@ -458,31 +458,6 @@ impl Data {
         })
     }
 
-    /// Invalidates location info and every catalog except usage limits (`location.invalidate`).
-    pub fn location_invalidate(&self, location: Option<&Location>) {
-        let location = self.resolve(location);
-        self.write(|state| {
-            state.syncs.invalidate(&format!("location:{}", location.key()));
-            for catalog in [
-                Catalog::Vcs,
-                Catalog::Agent,
-                Catalog::Command,
-                Catalog::Config,
-                Catalog::Integration,
-                Catalog::McpServer,
-                Catalog::McpResource,
-                Catalog::Model,
-                Catalog::Provider,
-                Catalog::Reference,
-                Catalog::Skill,
-                Catalog::Shell,
-            ] {
-                state.syncs.invalidate(&catalog.key(&location));
-            }
-            state.syncs.invalidate(&crate::forms::sync_key(crate::forms::GLOBAL, &location));
-        });
-    }
-
     /// Reads web search providers on every call; there is no cached read.
     pub fn websearch_refresh(&self, location: Option<&Location>) -> Task<()> {
         let location = self.resolve(location);

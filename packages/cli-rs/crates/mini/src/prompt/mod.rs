@@ -318,11 +318,6 @@ impl Prompt {
         self.paint();
     }
 
-    /// The session's earlier prompts, for history (`history` event).
-    pub fn set_history(&self, history: Vec<RunPrompt>) {
-        self.0.state.borrow_mut().history = History::new(&history);
-    }
-
     /// The session's agent, which colors the rail.
     pub fn set_agent(&self, agent: &str) {
         self.0.state.borrow_mut().agent = agent.to_owned();

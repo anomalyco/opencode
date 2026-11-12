@@ -155,10 +155,6 @@ impl ThemeState {
         self.current.modes.contains(&mode)
     }
 
-    pub fn locked(&self) -> bool {
-        self.lock.is_some()
-    }
-
     /// Theme names in list order.
     pub fn names(&self) -> Vec<String> {
         self.catalog.names()
@@ -188,16 +184,6 @@ impl ThemeState {
         }
         self.pin(mode, persist);
         true
-    }
-
-    /// Locks the current mode and persists it.
-    pub fn lock(&mut self) {
-        self.pin(self.current.mode, true);
-    }
-
-    /// Follows the terminal again and persists `system`.
-    pub fn unlock(&mut self) {
-        self.free(true);
     }
 
     /// The terminal reported a mode change; ignored while the mode is locked.
@@ -334,6 +320,22 @@ impl ThemeState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl ThemeState {
+        fn locked(&self) -> bool {
+            self.lock.is_some()
+        }
+
+        /// Locks the current mode and persists it.
+        fn lock(&mut self) {
+            self.pin(self.current.mode, true);
+        }
+
+        /// Follows the terminal again and persists `system`.
+        fn unlock(&mut self) {
+            self.free(true);
+        }
+    }
 
     fn options() -> ThemeStateOptions {
         ThemeStateOptions { name: None, mode: None, terminal: None, fallback: ThemeMode::Dark, palette: None }
