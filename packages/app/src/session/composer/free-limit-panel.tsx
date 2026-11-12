@@ -8,11 +8,11 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import type { ModelSelection } from "@/providers/models/selection"
-import { useSettings } from "@/settings/model"
+import { limitResetAt } from "../usage-exceeded-dialogs"
 
 const GO_URL = "https://opencode.ai/go"
 
-// OpenCode Zen always says when free usage resets; this only covers a refusal that doesn't.
+// OpenCode Zen always says when free usage resets; this covers a refusal that doesn't, or a delay out of range.
 const FALLBACK_RESET_MS = 3_600_000
 
 const FreeLimitState = Persistence.struct({ resetAt: Schema.NullOr(Schema.Finite) })
@@ -20,7 +20,6 @@ const FreeLimitState = Persistence.struct({ resetAt: Schema.NullOr(Schema.Finite
 // Free usage is counted per network, not per session, so one refusal anywhere holds until it resets. Connecting a paid
 // provider ends it early.
 export function useFreeLimit(paid: () => boolean) {
-  const settings = useSettings()
   const location = useWorkspaceLocation()
   const [state, setState] = persisted(Persist.global("free-limit"), FreeLimitState, { resetAt: null })
   const [now, setNow] = createSignal(Date.now())
@@ -28,7 +27,10 @@ export function useFreeLimit(paid: () => boolean) {
   onCleanup(
     location().event.on("session.step.failed", (event) => {
       if (event.data.error.type !== "provider.free-limit") return
-      setState("resetAt", event.created + (event.data.error.retryAfterMs ?? FALLBACK_RESET_MS))
+      setState(
+        "resetAt",
+        limitResetAt(event.created, event.data.error.retryAfterMs) ?? event.created + FALLBACK_RESET_MS,
+      )
     }),
   )
 
@@ -43,7 +45,7 @@ export function useFreeLimit(paid: () => boolean) {
     active: () => {
       const at = resetAt()
 
-      return settings.general.freeLimitPanel() && !paid() && at !== null && at > now()
+      return !paid() && at !== null && at > now()
     },
   }
 }

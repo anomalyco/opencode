@@ -127,13 +127,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
-    label: "settings.experimental.row.freeLimitPanel.title",
-    target: "settings-free-limit-panel",
-    description: "settings.experimental.row.freeLimitPanel.description",
-    keywords: "free limit usage go subscribe connect provider composer",
-  },
-  {
-    tab: "experimental",
     label: "settings.experimental.row.newQuestionUI.title",
     target: "settings-new-question-ui",
     description: "settings.experimental.row.newQuestionUI.description",

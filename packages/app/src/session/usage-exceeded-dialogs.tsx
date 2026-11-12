@@ -9,7 +9,6 @@ import { useDialog, useI18n } from "@opencode/ui/context"
 import { DialogUsageExceeded } from "@/providers/connect/usage-exceeded"
 import { GoUpsellHero } from "@/providers/connect/go-upsell-hero"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
-import { useSettings } from "@/settings/model"
 
 const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
 
@@ -23,7 +22,8 @@ const MAX_RETRY_AFTER_MS = 45 * 86_400_000
 
 const CHATGPT_USAGE_LIMIT_WINDOW = 86_400_000 // 24 hrs
 
-export function formatLimitReset(locale: string, created: number, retryAfterMs: number | undefined) {
+// When a usage limit resets, or undefined when the refusal's delay is missing or out of range.
+export function limitResetAt(created: number, retryAfterMs: number | undefined) {
   if (
     retryAfterMs === undefined ||
     !Number.isFinite(retryAfterMs) ||
@@ -36,6 +36,14 @@ export function formatLimitReset(locale: string, created: number, retryAfterMs: 
   const at = created + retryAfterMs
 
   if (Number.isNaN(new Date(at).getTime())) return undefined
+
+  return at
+}
+
+export function formatLimitReset(locale: string, created: number, retryAfterMs: number | undefined) {
+  const at = limitResetAt(created, retryAfterMs)
+
+  if (at === undefined) return undefined
 
   const now = Date.now()
   const sameDay = new Date(at).toDateString() === new Date(now).toDateString() && at - now < GO_UPSELL_WINDOW
@@ -59,7 +67,6 @@ export function useUsageExceededDialogs(input?: {
   const dialog = useDialog()
   const local = useLocal()
   const { params } = useSessionLayout()
-  const settings = useSettings()
   const { t, locale } = useI18n()
 
   const [goUpsellState, setGoUpsellState, goUpsellInit, goUpsellReady] = persisted(
@@ -78,9 +85,6 @@ export function useUsageExceededDialogs(input?: {
   )
 
   const showFreeLimitDialog = (evt: SessionStepFailed) => {
-    // The free-limit panel takes the composer's place instead.
-    if (settings.general.freeLimitPanel()) return
-
     if (evt.data.sessionID !== params.id || dialog.active) return
     const seen = goUpsellState[GO_UPSELL_FREE_TIER_LAST_SEEN_AT]
 
