@@ -182,6 +182,7 @@ export const dict = {
   "ui.common.dismiss": "إهمال",
   "ui.common.close": "إغلاق",
   "ui.common.next": "التالي",
+  "ui.common.continue": "متابعة",
   "ui.common.submit": "إرسال",
   "ui.common.showMore": "عرض المزيد",
 

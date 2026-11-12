@@ -97,6 +97,7 @@ test.each([
         config: {
           get: async () => ({
             animations: false,
+            session: { verbosity: "medium" },
             tabs: { enabled: true, scope: "global" },
             keybinds: { "session.messages_last_user": "ctrl+shift+u", "session.message.next": "ctrl+shift+n" },
           }),

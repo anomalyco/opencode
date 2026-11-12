@@ -982,6 +982,7 @@ export function createData(config: CreateDataInput) {
             existing.rawFinish = undefined
             existing.native = undefined
             existing.time.created = event.data.started
+            existing.time.firstToken = undefined
             existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
@@ -1007,6 +1008,11 @@ export function createData(config: CreateDataInput) {
       case "session.step.streamed":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.time.streamed = event.created
+        })
+        return
+      case "session.step.first-token":
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.firstToken = event.created
         })
         return
       case "session.step.ended": {

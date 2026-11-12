@@ -3,17 +3,20 @@ export * as SessionGenerate from "./generate.js"
 import type { FileSystem } from "../filesystem.js"
 import { LLMClient, Message, type AIError } from "@opencode/ai/effect"
 import { Effect } from "effect"
+import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
 import { Plugin } from "../plugin/service.js"
 import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
+import { SessionEvent } from "./event.js"
 import type { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelRequest } from "./model-request.js"
 import { ModelRetry } from "../model-retry.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import type { SessionSchema } from "./schema.js"
+import { SessionUsage } from "./usage.js"
 
 export type Error =
   | AgentNotFoundError
@@ -22,7 +25,12 @@ export type Error =
   | AIError
   | FileSystem.DirectoryNotFoundError
 
-/** Generates text from current Session context without mutating the Session. */
+export type Result = SessionUsage.Recorded & { readonly text: string }
+
+/**
+ * Generates text from current Session context without mutating history.
+ * Usage is reported like a step's and added to the Session's totals.
+ */
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {
   session: SessionSchema.Info
   prompt: string
@@ -30,12 +38,13 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
   const instances = yield* Instance.Service
   const database = yield* Database.Service
   const llm = yield* LLMClient.Service
+  const bus = yield* Bus.Service
 
   return yield* Effect.gen(function* () {
     yield* Plugin.awaitActivation
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
-    const model = yield* context.resolveModel(selection.session)
+    const model = yield* context.resolveModel(selection.session, { kind: "generate", agent: selection.agent.id })
     const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions, model.ref)
     const transcript = SessionModelRequest.baseTranscript({
       agent: selection.agent.info,
@@ -62,7 +71,8 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       modelID: model.ref.id,
     })
     const response = yield* llm.generate(prepared.request, prepared.options).pipe(ModelRetry.retry)
-    yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
-    return response.text
+    const usage = SessionUsage.record(response.usage, model.cost)
+    yield* bus.publish(SessionEvent.UsageRecorded, { sessionID: selection.session.id, source: "generate", ...usage })
+    return { text: response.text, ...usage }
   }).pipe(instances.provide(input.session))
 })

@@ -94,6 +94,14 @@ export const goModels: GoModel[] = [
     featured: true,
     limitedTime: true,
   },
+  {
+    id: "longcat-2.5-free",
+    name: "LongCat 2.5 Free",
+    requests: Infinity,
+    allowance: Infinity,
+    featured: true,
+    limitedTime: true,
+  },
 ].sort((a, b) => a.requests - b.requests)
 
 // Go Plus and Go Teams limits are published per model in the Console (packages/shared/src/domain/go-published-limits.ts).
@@ -129,6 +137,7 @@ const plusLimits: Record<string, [number, number]> = {
   "muse-spark-1.2-contributor": [90600, 120],
   "beam-free": [Infinity, Infinity],
   "iceman-contributor-free": [Infinity, Infinity],
+  "longcat-2.5-free": [Infinity, Infinity],
 }
 
 const teamsLimits: Record<string, [number, number]> = {
@@ -163,6 +172,7 @@ const teamsLimits: Record<string, [number, number]> = {
   "muse-spark-1.2-contributor": [49075, 65],
   "beam-free": [Infinity, Infinity],
   "iceman-contributor-free": [Infinity, Infinity],
+  "longcat-2.5-free": [Infinity, Infinity],
 }
 
 // A bonus multiplies a model's usual allowance, which is shown crossed out beside the current limits.

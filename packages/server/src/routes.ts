@@ -20,6 +20,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { Shell } from "@opencode/core/shell"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -54,11 +55,17 @@ import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
+  App.node,
   Global.node,
   FSUtil.node,
   Database.node,
   KV.node,
   Bus.node,
+  // Before the jobs and sessions, so they are released after them: a shutdown's interrupted shell calls and jobs
+  // still reach the daemon to stop their commands, and a command being created never falls back to spawning.
+  PersistentPty.node,
+  // Daemon-run shell commands belong to the server, so a Location closing never takes them down.
+  Shell.daemonNode,
   EventLogger.node,
   httpClient,
   Job.node,
@@ -73,7 +80,6 @@ const applicationServiceNodes = [
   PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
-  PersistentPty.node,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,

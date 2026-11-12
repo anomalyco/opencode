@@ -361,6 +361,7 @@ export function createPromptState(input: PromptInput): PromptState {
     history = createPromptHistory(input.history?.())
   })
   let draft: RunPrompt = { text: "", parts: [] }
+  let draftCursor = 0
   let stash: RunPrompt = { text: "", parts: [] }
   let area: TextareaRenderable | undefined
   const measure = (text: string) => measureEditText(text, { widthMethod: renderer.widthMethod })
@@ -704,6 +705,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const restore = (value: RunPrompt, cursor = Infinity) => {
     revision += 1
     draft = promptCopy(value)
+    draftCursor = cursor
     setShell(value.mode === "shell")
     if (!area || area.isDestroyed) {
       return
@@ -726,6 +728,7 @@ export function createPromptState(input: PromptInput): PromptState {
     clearParts()
     hide()
     draft = emptyPrompt(shell())
+    draftCursor = 0
     if (!area || area.isDestroyed) {
       return
     }
@@ -792,6 +795,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (area && !area.isDestroyed) {
+      draftCursor = area.cursorOffset
       area.off("line-info-change", scheduleRows)
     }
 
@@ -809,7 +813,7 @@ export function createPromptState(input: PromptInput): PromptState {
         return
       }
 
-      restore(draft)
+      restore(draft, draftCursor)
       refresh()
     })
   }
@@ -1353,6 +1357,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const submitPrompt = (next: RunPrompt, delivery: RunDelivery = "steer") => {
     if (!area || area.isDestroyed) {
       draft = promptCopy(next)
+      draftCursor = Infinity
     }
 
     if (visible()) {
@@ -1506,13 +1511,6 @@ export function createPromptState(input: PromptInput): PromptState {
 
     hide()
     prev = kind
-    if (kind !== "prompt") {
-      return
-    }
-
-    queueMicrotask(() => {
-      restore(draft)
-    })
   })
 
   return {

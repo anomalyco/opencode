@@ -247,6 +247,7 @@ describe("SessionRunnerLLM recorded", () => {
         "session.instructions.updated.2",
         "session.inbox.delivered.1",
         "session.step.started.1",
+        "session.step.first-token.1",
         "session.text.started.1",
         "session.text.ended.1",
         "session.step.streamed.1",
@@ -263,13 +264,23 @@ describe("SessionRunnerLLM recorded", () => {
       )
       const attempt = turn.find((span) => span.name === "SessionStep.attempt")
       expect(Object.fromEntries(attempt?.attributes ?? [])).toMatchObject({
+        "gen_ai.agent.name": "build",
         "gen_ai.provider.name": "openai",
         "gen_ai.request.model": "gpt-4o-mini",
         "gen_ai.response.finish_reasons": ["stop"],
         "gen_ai.usage.input_tokens": 465,
         "gen_ai.usage.output_tokens": 2,
+        "opencode.usage.cost_usd": 0,
       })
       expect(attempt?.attributes.get("opencode.llm.first_output_ms")).toBeNumber()
+      // The provider stream has its own span under the attempt, so model time splits from tool time.
+      const stream = turn.find((span) => span.name === "LLM.stream")
+      expect(Option.getOrUndefined(stream!.parent)?.spanId).toBe(attempt!.spanId)
+      expect(Object.fromEntries(stream!.attributes)).toMatchObject({
+        "gen_ai.provider.name": "openai",
+        "gen_ai.request.model": "gpt-4o-mini",
+      })
+      expect(stream!.status._tag).toBe("Ended")
     }).pipe(Effect.withSpan("fixture.request")),
   )
 })

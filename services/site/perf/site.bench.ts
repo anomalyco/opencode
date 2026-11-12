@@ -1,4 +1,4 @@
-// Main-thread work on the site's pages and interactions, for strobe (https://github.com/Hona/strobe).
+// Main-thread work on the site's pages and interactions, for strobe (https://github.com/anomalyco/strobe).
 // Each variant is the production build (script/build.ts) served in workerd by perf/serve.ts.
 //
 //   strobe bench services/site/perf/site.bench.ts --base origin/dev --head . --headless
@@ -22,10 +22,9 @@ const load = (path: string): RunCase<unknown> => ({
 })
 
 // Each target's input: a desktop has a mouse, a phone a touch screen, and the site takes different
-// paths for each (preloading links as they scroll into view, autoplaying card videos), so setup
-// refuses a page with the wrong input. strobe 0.16 refuses pointer input (scrolls, taps) on an
-// emulated phone until its touch input lands, and a mouse wheel or click on a touch page isn't what a
-// phone visitor does, so for now the phone times its load only and the pointer cases run on a desktop.
+// paths for each (preloading links as they scroll into view, autoplaying card videos). strobe refuses
+// a page that doesn't see its target's input (DeviceMismatch). On the phone a scroll is a finger's
+// swipes and a click a tap; a phone has no hover, so card-hover and search (⌘K) stay on the desktop.
 const reload = async (ctx: Context<unknown>) => {
   await ctx.page.goto(new URL("/", ctx.url).href)
   await ctx.page.idle()
@@ -38,12 +37,7 @@ export default bench({
     // The live site, for reference only: `--target production --blocks 5 --head .` (nothing to build).
     production: url("https://opencode.ai/", { viewport: desktop }),
   },
-  async setup({ page, target }) {
-    const mouse = await page.eval(() => matchMedia("(hover: hover) and (pointer: fine)").matches)
-    if (mouse !== (target !== "phone"))
-      throw new Error(`the ${target} page ${mouse ? "has" : "lacks"} a mouse; see the input note in site.bench.ts`)
-    await page.idle()
-  },
+  setup: ({ page }) => page.idle(),
   cases: {
     "load-home": load("/"),
     "load-product": { ...load("/product"), targets: ["desktop", "production"] },
@@ -51,7 +45,7 @@ export default bench({
     "load-docs": { ...load("/docs/"), targets: ["desktop", "production"] },
     "scroll-home": {
       primary: "main.work",
-      targets: ["desktop", "production"],
+      targets: ["desktop", "phone", "production"],
       run: ({ page }) => page.scroll("main", { by: 12000, speed: 6000 }),
       reset: reload,
     },
@@ -78,7 +72,7 @@ export default bench({
     },
     "card-open": {
       primary: "main.work",
-      targets: ["desktop", "production"],
+      targets: ["desktop", "phone", "production"],
       run: async ({ page }) => {
         await page.click(card, { until: '[data-component="product-hero"]' })
         await page.idle()

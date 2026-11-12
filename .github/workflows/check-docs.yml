@@ -39,4 +39,4 @@ jobs:
         run: bun run generate
 
       - name: Build docs
-        run: bun src/docs/script/build.ts --mode dev --out "$RUNNER_TEMP/docs"
+        run: bun src/docs/script/build.ts --out "$RUNNER_TEMP/docs"

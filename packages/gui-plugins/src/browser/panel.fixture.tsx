@@ -654,6 +654,8 @@ type StripTabs = {
   setActive(tab: string | undefined): void
   close(tab: string): void
   remap(rewrite: (tab: string) => string): void
+  /** Where the next new tab lands; the fixture keeps every tab in the side pane, in open order. */
+  target(pane: "side" | "split" | "bottom", plugin?: string, index?: number): void
 }
 
 type PaneClient = IpcClient<(typeof BrowserPane)["spec"]>
@@ -1093,6 +1095,7 @@ export function mountBrowserRegion(input: RegionHost) {
 
             if (next.length !== all.length || next.some((key, index) => key !== all[index])) setAll(view().key, next)
           },
+          target() {},
         }),
         side: () => ({ opened: () => store.opened, toggle: () => setStore("opened", (opened) => !opened) }),
       })

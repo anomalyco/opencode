@@ -1,14 +1,12 @@
-import type { Eval } from "../interpreter/runner.js"
-import { constructor, methods, receiver } from "../interpreter/native.js"
-import { type AstNode, AsyncIteratorSymbol, invalidData, IteratorSymbol, typeError } from "../interpreter/model.js"
+import { constructor, methods, receiver } from "../runtime/native.js"
+import { type AstNode, AsyncIteratorSymbol, invalidData, IteratorSymbol, typeError } from "../runtime/model.js"
 import {
-  define,
+  changed,
   entries,
   enumerableKeys,
   getOwn,
   hasOwn,
   hasPrototype,
-  hidden,
   keys,
   own,
   ownKeys,
@@ -19,13 +17,12 @@ import {
   set,
   coerceToString,
   type Value,
-} from "../interpreter/objects.js"
-import { primitivePrototype } from "../interpreter/intrinsics.js"
-import { containsOpaqueReference, describeValue, rejectCircularInsertion } from "../interpreter/references.js"
-import { invoke, preserveConsumerError } from "../interpreter/callback.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
+} from "../runtime/objects.js"
+import { primitivePrototype } from "../runtime/intrinsics.js"
+import { describeValue, rejectCircularInsertion } from "../runtime/references.js"
+import { invokeMethod } from "../runtime/callback.js"
+import type { Interpreter } from "../runtime/interpreter.js"
 import { ToolReference } from "../tool-runtime.js"
-import { groupBy } from "./collections.js"
 
 // ToObject for enumeration.
 export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: Value, node?: AstNode): Obj => {
@@ -66,27 +63,6 @@ export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value 
   return target
 }
 
-function* objectFromEntries<R>(ctx: Interpreter<R>, source: Value): Eval<Obj> {
-  const out = new Obj(ctx.builtins.Object)
-  const cursor = yield* ctx.iterate(source)
-  if (cursor === undefined) {
-    throw typeError("Object.fromEntries expects a synchronous iterable of entries.")
-  }
-  while (true) {
-    const step = yield* cursor.next()
-    if (step.done) return out
-    yield* preserveConsumerError(cursor.close, defineEntry(out, step.value))
-  }
-}
-
-// A step, so a rejected entry closes the source iterator.
-function* defineEntry(out: Obj, entry: Value): Eval<void> {
-  if (!(entry instanceof Obj) || containsOpaqueReference(entry)) {
-    throw typeError("Object.fromEntries expects [key, value] entry objects.")
-  }
-  define(out, coerceToString(getOwn(entry, 0)), getOwn(entry, 1))
-}
-
 const classTag = (value: Value): string => {
   if (value === null) return "Null"
   if (value === undefined) return "Undefined"
@@ -104,6 +80,7 @@ const propertyKey = (value: Value): PropertyKey =>
 // already making it non-extensible.
 const restrict = (level: "freeze" | "seal" | "preventExtensions", value: Value): Value => {
   if (!(value instanceof Obj)) return value
+  changed(value)
   value.extensible = false
   if (level === "preventExtensions") return value
   if (value instanceof Bytes && value.bytes.length > 0) {
@@ -177,7 +154,6 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
     ["hasOwn", 2, (_, args) => hasOwn(enumerableSource(ctx, "Object.hasOwn(...)", args[0]), propertyKey(args[1]))],
     ["is", 2, (_, args) => Object.is(args[0], args[1])],
     ["assign", 2, (_, args) => objectAssign(ctx, args)],
-    ["fromEntries", 1, (_, args) => objectFromEntries(ctx, args[0])],
     ["freeze", 1, (_, args) => restrict("freeze", args[0])],
     ["seal", 1, (_, args) => restrict("seal", args[0])],
     ["preventExtensions", 1, (_, args) => restrict("preventExtensions", args[0])],
@@ -212,7 +188,6 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
   ])
-  define(object, "groupBy", groupBy(ctx, "Object"), hidden)
   methods(builtins, builtins.Object, [
     [
       "hasOwnProperty",
@@ -232,7 +207,11 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
         true,
     ],
     ["toString", 0, (thisValue) => `[object ${classTag(thisValue)}]`],
-    ["toLocaleString", 0, (thisValue) => invoke(ctx, thisValue, "toString", "Object.prototype.toLocaleString")],
+    [
+      "toLocaleString",
+      0,
+      (thisValue) => invokeMethod(ctx.builtins, thisValue, "toString", "Object.prototype.toLocaleString"),
+    ],
     [
       "valueOf",
       0,

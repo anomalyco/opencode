@@ -11,6 +11,9 @@ export default bench({
   // 100 and 10,000 by default; `--params all` adds the rest of the curve.
   params: { files: { run: [100, 10_000], more: [1, 10, 1_000] } },
 
+  // Whether setup opens the pane: cases that start with it open share a launch.
+  setupKey: (ctx) => (ctx.case === "open review" ? "closed" : "open"),
+
   targets: {
     web: web({
       expect: { title: "OpenCode" },
@@ -29,10 +32,10 @@ export default bench({
     }),
   },
 
-  async setup({ case: name, page }) {
+  async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
 
-    if (name !== "open review") await openReview(page)
+    if (setupKey === "open") await openReview(page)
     await page.idle()
     // A reload keeps the review open (the app saves its layout on pagehide), so every run starts from this storage.
     await saveStartStorage(page)

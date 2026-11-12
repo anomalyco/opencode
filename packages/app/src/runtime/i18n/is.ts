@@ -348,7 +348,6 @@ export const dict = {
   "session.new.project.search": "Leita að verkefnum",
   "session.new.project.add": "Bæta við verkefni",
   "session.new.workspace.runIn": "Keyra setu í",
-  "session.new.workspace.triggerLocal": "Staðbundið",
   "session.new.workspace.local": "Staðbundin geymsla",
   "session.new.git.none": "Engin Git",
   "session.header.open.finder": "Finder",

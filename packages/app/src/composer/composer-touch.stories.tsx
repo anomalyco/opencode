@@ -123,6 +123,8 @@ function TouchComposer(props: { state: State }) {
     confirmEdit: (delivery: "steer" | "queue") => record(`Edited queued prompt, ${delivery}`),
     cancelEdit: () => record("Cancelled the edit"),
     editFirst: () => false,
+    first() {},
+    steerFirst() {},
   }
 
   const editor = createComposerEditor({

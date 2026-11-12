@@ -348,7 +348,6 @@ export const dict = {
   "session.new.project.search": "ޕްރޮޖެކްޓްތައް ހޯދުން",
   "session.new.project.add": "ޕްރޮޖެކްޓް އިތުރުކުރުން",
   "session.new.workspace.runIn": "ރަން ސެޝަން އިން",
-  "session.new.workspace.triggerLocal": "ލޯކަލް",
   "session.new.workspace.local": "ލޯކަލް ރިޕޮޒިޓަރީ",
   "session.new.git.none": "އެއްވެސް Git އެއް ނެތެވެ",
   "session.header.open.finder": "Finder އެވެ",
