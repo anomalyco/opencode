@@ -83,6 +83,7 @@ fn content_block_to_parts(block: &Value) -> Vec<PromptPart> {
                     .map(|rest| rest.chars().take_while(char::is_ascii_digit).collect::<String>())
                     .filter(|digits| !digits.is_empty());
                 let suffix = line.map(|line| format!(":{line}")).unwrap_or_default();
+                let filepath = if cfg!(windows) { filepath.replace('\\', "/") } else { filepath };
                 return vec![PromptPart::text(format!("[{filepath}{suffix}]\n{body}"))];
             }
             let Some(mime) = field("mimeType").filter(|mime| !mime.is_empty()) else { return Vec::new() };
@@ -276,8 +277,26 @@ mod tests {
         }
     }
 
+    /// An absolute path on this platform and its file URL.
+    fn absolute(path: &str) -> (String, String) {
+        if cfg!(windows) {
+            (format!("C:{path}"), format!("file:///C:{path}"))
+        } else {
+            (path.to_owned(), format!("file://{path}"))
+        }
+    }
+
+    #[test]
+    fn a_windows_file_resource_shows_forward_slashes() {
+        // `fileURLToPath` gives `C:\src\a.ts` on Windows, which `content.ts` turns to `/`; POSIX keeps the URL path.
+        let block = json!({ "type": "resource", "resource": { "uri": "file:///C:/src/a.ts#L12", "text": "body" } });
+        let label = if cfg!(windows) { "[C:/src/a.ts:12]\nbody" } else { "[/C:/src/a.ts:12]\nbody" };
+        assert_eq!(prompt_content_to_parts(&[block]), vec![text(label)]);
+    }
+
     #[test]
     fn blocks_to_parts() {
+        let main = absolute("/src/main.rs");
         let rows = [
             (
                 json!({ "type": "resource", "resource": { "uri": "file:///src/a.ts#L12", "text": "body" } }),
@@ -305,9 +324,9 @@ mod tests {
             ),
             (json!({ "type": "resource", "resource": { "uri": "file:///a.bin", "blob": "AAE=" } }), vec![]),
             (
-                json!({ "type": "resource_link", "uri": "zed://file?path=/src/main.rs", "name": "" }),
+                json!({ "type": "resource_link", "uri": format!("zed://file?path={}", main.0), "name": "" }),
                 vec![PromptPart::File {
-                    url: "file:///src/main.rs".to_owned(),
+                    url: main.1.clone(),
                     filename: Some("main.rs".to_owned()),
                     mime: "text/plain".to_owned(),
                 }],
@@ -337,6 +356,7 @@ mod tests {
 
     #[test]
     fn replayed_parts_to_chunks() {
+        let notes = absolute("/notes.txt");
         let chunks = parts_to_content_chunks(&[
             ReplayPart::Prompt(PromptPart::Text { text: "hidden".to_owned(), synthetic: true, ignored: false }),
             ReplayPart::Reasoning(String::new()),
@@ -347,7 +367,7 @@ mod tests {
             }),
             ReplayPart::Prompt(PromptPart::File {
                 url: "data:text/plain;base64,aGk=".to_owned(),
-                filename: Some("/notes.txt".to_owned()),
+                filename: Some(notes.0),
                 mime: "text/plain".to_owned(),
             }),
             ReplayPart::Prompt(PromptPart::File {
@@ -361,7 +381,7 @@ mod tests {
             json!([
                 { "content": { "type": "text", "text": "hidden", "annotations": { "audience": ["assistant"] } } },
                 { "content": { "type": "resource_link", "uri": "file:///a.ts", "name": "file", "mimeType": "text/plain" } },
-                { "content": { "type": "resource", "resource": { "uri": "file:///notes.txt", "mimeType": "text/plain", "text": "hi" } } },
+                { "content": { "type": "resource", "resource": { "uri": notes.1, "mimeType": "text/plain", "text": "hi" } } },
             ])
         );
     }
