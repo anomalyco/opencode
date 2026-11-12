@@ -3,7 +3,8 @@
 //! Ports `packages/tui/src/util/watch.ts` and the 50 ms debounce of its callers: one watch on one
 //! directory, not recursive, and one thread that calls back after a burst of events settles. Linux reads
 //! inotify directly; other platforms use `notify` for now. A watch that cannot start returns `None`; live
-//! reload is lost and nothing else.
+//! reload is lost and nothing else. Unlike TypeScript's `fs.watch`, a watch survives its directory being
+//! removed and made again.
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -19,7 +20,7 @@ pub struct Watch {
     #[cfg(target_os = "linux")]
     _stop: std::io::PipeWriter,
     #[cfg(not(target_os = "linux"))]
-    _watcher: notify::RecommendedWatcher,
+    _stop: mpsc::Sender<()>,
 }
 
 /// Whether `OPENCODE_FILEWATCHER_DISABLE`, else `OPENCODE_DISABLE_FILEWATCHER`, is `1` or `true`.
@@ -33,7 +34,7 @@ pub fn disabled(var: impl Fn(&str) -> Option<String>) -> bool {
 /// `debounce`. A lost event queue, and the directory going away or coming back, count as changes.
 pub fn watch(
     dir: &Path,
-    filter: impl Fn(&OsStr) -> bool + Send + 'static,
+    filter: impl Fn(&OsStr) -> bool + Send + Sync + 'static,
     debounce: Duration,
     mut on_change: impl FnMut() + Send + 'static,
 ) -> Option<Watch> {
@@ -60,17 +61,46 @@ pub fn watch(
     Some(watch)
 }
 
+// `notify` stops a watch whose directory is removed without an event (Windows), so a thread looks for the
+// directory every `REARM`: its removal is a change, and once it is back it is watched again.
 #[cfg(not(target_os = "linux"))]
-fn start(dir: &Path, filter: impl Fn(&OsStr) -> bool + Send + 'static, tx: mpsc::Sender<()>) -> notify::Result<Watch> {
+fn start(
+    dir: &Path,
+    filter: impl Fn(&OsStr) -> bool + Send + Sync + 'static,
+    tx: mpsc::Sender<()>,
+) -> notify::Result<Watch> {
+    let filter = std::sync::Arc::new(filter);
+    let mut watcher = Some(arm(dir, &filter, &tx)?);
+    let (stop_tx, stop) = mpsc::channel::<()>();
+    let dir = dir.to_path_buf();
+    thread::spawn(move || {
+        while let Err(mpsc::RecvTimeoutError::Timeout) = stop.recv_timeout(Duration::from_millis(250)) {
+            if watcher.is_some() == dir.is_dir() {
+                continue;
+            }
+            watcher = if watcher.is_some() { None } else { arm(&dir, &filter, &tx).ok() };
+            let _ = tx.send(());
+        }
+    });
+    Ok(Watch { _stop: stop_tx })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn arm(
+    dir: &Path,
+    filter: &std::sync::Arc<impl Fn(&OsStr) -> bool + Send + Sync + 'static>,
+    tx: &mpsc::Sender<()>,
+) -> notify::Result<notify::RecommendedWatcher> {
     use notify::{RecursiveMode, Watcher};
+    let (filter, tx) = (filter.clone(), tx.clone());
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         let Ok(event) = event else { return };
-        if event.paths.iter().any(|path| path.file_name().is_some_and(&filter)) {
+        if event.paths.iter().any(|path| path.file_name().is_some_and(&*filter)) {
             let _ = tx.send(());
         }
     })?;
     watcher.watch(dir, RecursiveMode::NonRecursive)?;
-    Ok(Watch { _watcher: watcher })
+    Ok(watcher)
 }
 
 #[cfg(target_os = "linux")]
