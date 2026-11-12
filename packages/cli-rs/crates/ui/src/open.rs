@@ -24,7 +24,15 @@ fn opener(os: &str, target: &str, system_root: Option<&str>) -> (String, Vec<Str
         "windows" => {
             // `powerShellPath` and `executePowerShell` of `powershell-utils`.
             let root = system_root.unwrap_or(r"C:\Windows");
-            let script = format!("$ProgressPreference = 'SilentlyContinue'; Start '{}'", target.replace('\'', "''"));
+            // `escapeArgument`: PowerShell ends a single-quoted string at any of these quotes, so double each.
+            let quoted: String = target
+                .chars()
+                .flat_map(|ch| match ch {
+                    '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}' => vec![ch, ch],
+                    _ => vec![ch],
+                })
+                .collect();
+            let script = format!("$ProgressPreference = 'SilentlyContinue'; Start '{quoted}'");
             let utf16: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
             let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
             let args = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand"];
@@ -73,6 +81,9 @@ mod tests {
             (r"C:\a^b\%TEMP%\c", r"'C:\a^b\%TEMP%\c'"),
             (r#"it's "here""#, r#"'it''s "here"'"#),
             ("$(calc)", "'$(calc)'"),
+            // `escapeArgument` of `powershell-utils`: PowerShell also ends a string at a typographic single quote.
+            ("C:\\Ada\u{2019}s notes", "'C:\\Ada\u{2019}\u{2019}s notes'"),
+            ("\u{2018}a\u{201A}b\u{201B}", "'\u{2018}\u{2018}a\u{201A}\u{201A}b\u{201B}\u{201B}'"),
         ];
         for (target, quoted) in cases {
             let args = opener("windows", target, None).1;
