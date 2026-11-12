@@ -29,28 +29,48 @@ pub const ICON_WIDTH: u16 = 2;
 pub struct Tool {
     root: View,
     body: View,
-    view: RefCell<Option<(&'static str, Body)>>,
+    view: RefCell<Option<(&'static str, Box<dyn ToolView>)>>,
     /// `ToolImages`: the call's image results under its row.
     images: Images,
 }
 
-enum Body {
-    Shell(shell::Shell),
-    Glob(glob::Glob),
-    Read(read::Read),
-    Grep(grep::Grep),
-    Write(write::Write),
-    Edit(edit::Edit),
-    WebFetch(webfetch::WebFetch),
-    WebSearch(websearch::WebSearch),
-    Subagent(subagent::Subagent),
-    Execute(execute::Execute),
-    Patch(patch::Patch),
-    Todo(todo::Todo),
-    Question(question::Question),
-    Skill(skill::Skill),
-    Generic(generic::Generic),
+/// A tool view: what [`Tool`] mounts and updates for the call's display name.
+trait ToolView {
+    fn root(&self) -> &View;
+    fn update(&self, cx: &Context<'_>, props: &Props<'_>);
 }
+
+macro_rules! tool_views {
+    ($($view:ty),*) => {$(
+        impl ToolView for $view {
+            fn root(&self) -> &View {
+                <$view>::root(self)
+            }
+
+            fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
+                <$view>::update(self, cx, props)
+            }
+        }
+    )*};
+}
+
+tool_views!(
+    shell::Shell,
+    glob::Glob,
+    read::Read,
+    grep::Grep,
+    write::Write,
+    edit::Edit,
+    webfetch::WebFetch,
+    websearch::WebSearch,
+    subagent::Subagent,
+    execute::Execute,
+    patch::Patch,
+    todo::Todo,
+    question::Question,
+    skill::Skill,
+    generic::Generic
+);
 
 impl Tool {
     pub fn new(cx: &Context<'_>) -> Self {
@@ -69,60 +89,27 @@ impl Tool {
         let mut view = self.view.borrow_mut();
         if view.as_ref().is_none_or(|(current, _)| *current != display) {
             self.body.clear();
-            let body = match display {
-                "shell" => Body::Shell(shell::Shell::new(cx)),
-                "glob" => Body::Glob(glob::Glob::new(cx)),
-                "read" => Body::Read(read::Read::new(cx)),
-                "grep" => Body::Grep(grep::Grep::new(cx)),
-                "write" => Body::Write(write::Write::new(cx)),
-                "edit" => Body::Edit(edit::Edit::new(cx)),
-                "webfetch" => Body::WebFetch(webfetch::WebFetch::new(cx)),
-                "websearch" => Body::WebSearch(websearch::WebSearch::new(cx)),
-                "subagent" => Body::Subagent(subagent::Subagent::new(cx)),
-                "execute" => Body::Execute(execute::Execute::new(cx)),
-                "patch" => Body::Patch(patch::Patch::new(cx)),
-                "todowrite" => Body::Todo(todo::Todo::new(cx)),
-                "question" => Body::Question(question::Question::new(cx)),
-                "skill" => Body::Skill(skill::Skill::new(cx)),
-                _ => Body::Generic(generic::Generic::new(cx)),
+            let body: Box<dyn ToolView> = match display {
+                "shell" => Box::new(shell::Shell::new(cx)),
+                "glob" => Box::new(glob::Glob::new(cx)),
+                "read" => Box::new(read::Read::new(cx)),
+                "grep" => Box::new(grep::Grep::new(cx)),
+                "write" => Box::new(write::Write::new(cx)),
+                "edit" => Box::new(edit::Edit::new(cx)),
+                "webfetch" => Box::new(webfetch::WebFetch::new(cx)),
+                "websearch" => Box::new(websearch::WebSearch::new(cx)),
+                "subagent" => Box::new(subagent::Subagent::new(cx)),
+                "execute" => Box::new(execute::Execute::new(cx)),
+                "patch" => Box::new(patch::Patch::new(cx)),
+                "todowrite" => Box::new(todo::Todo::new(cx)),
+                "question" => Box::new(question::Question::new(cx)),
+                "skill" => Box::new(skill::Skill::new(cx)),
+                _ => Box::new(generic::Generic::new(cx)),
             };
-            self.body.add(match &body {
-                Body::Shell(view) => view.root(),
-                Body::Glob(view) => view.root(),
-                Body::Read(view) => view.root(),
-                Body::Grep(view) => view.root(),
-                Body::Write(view) => view.root(),
-                Body::Edit(view) => view.root(),
-                Body::WebFetch(view) => view.root(),
-                Body::WebSearch(view) => view.root(),
-                Body::Subagent(view) => view.root(),
-                Body::Execute(view) => view.root(),
-                Body::Patch(view) => view.root(),
-                Body::Todo(view) => view.root(),
-                Body::Question(view) => view.root(),
-                Body::Skill(view) => view.root(),
-                Body::Generic(view) => view.root(),
-            });
+            self.body.add(body.root());
             *view = Some((display, body));
         }
-        let props = Props::new(cx, part);
-        match &view.as_ref().expect("tool view").1 {
-            Body::Shell(view) => view.update(cx, &props),
-            Body::Glob(view) => view.update(cx, &props),
-            Body::Read(view) => view.update(cx, &props),
-            Body::Grep(view) => view.update(cx, &props),
-            Body::Write(view) => view.update(cx, &props),
-            Body::Edit(view) => view.update(cx, &props),
-            Body::WebFetch(view) => view.update(cx, &props),
-            Body::WebSearch(view) => view.update(cx, &props),
-            Body::Subagent(view) => view.update(cx, &props),
-            Body::Execute(view) => view.update(cx, &props),
-            Body::Patch(view) => view.update(cx, &props),
-            Body::Todo(view) => view.update(cx, &props),
-            Body::Question(view) => view.update(cx, &props),
-            Body::Skill(view) => view.update(cx, &props),
-            Body::Generic(view) => view.update(cx, &props),
-        }
+        view.as_ref().expect("tool view").1.update(cx, &Props::new(cx, part));
         self.images.update(cx, tool_images(part));
     }
 }
