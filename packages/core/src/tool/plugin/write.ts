@@ -45,7 +45,9 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             fileWrite.write(input, context).pipe(
-              Effect.map((written) => ({ output: `${written.existed ? "Wrote" : "Created"} ${written.resource}` })),
+              Effect.map((written) => ({
+                output: `${written.existed ? "Wrote" : "Created"} file successfully: ${written.resource}`,
+              })),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
             ),
         }),

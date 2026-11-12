@@ -122,8 +122,8 @@ describe("WriteTool", () => {
           const settled = yield* executeTool(registry, call({ path: "src/new.txt", content: "created" }))
           expect(settled).toEqual({
             status: "completed",
-            output: "Created src/new.txt",
-            content: [{ type: "text", text: "Created src/new.txt" }],
+            output: "Created file successfully: src/new.txt",
+            content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
           })
           expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "src", "new.txt"), "utf8"))).toBe(
             "created",
@@ -183,8 +183,8 @@ describe("WriteTool", () => {
           Effect.gen(function* () {
             expect(settled).toEqual({
               status: "completed",
-              output: "Wrote existing.txt",
-              content: [{ type: "text", text: "Wrote existing.txt" }],
+              output: "Wrote file successfully: existing.txt",
+              content: [{ type: "text", text: "Wrote file successfully: existing.txt" }],
             })
             expect(fixture.assertions[0]?.metadata).toMatchObject({
               files: [
@@ -247,7 +247,7 @@ describe("WriteTool", () => {
           Effect.gen(function* () {
             expect(result).toMatchObject({
               status: "completed",
-              content: [{ type: "text", text: "Created absolute.txt" }],
+              content: [{ type: "text", text: "Created file successfully: absolute.txt" }],
             })
             expect(fixture.assertions.map((input) => input.action)).toEqual(["edit"])
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("inside")
@@ -314,7 +314,7 @@ describe("WriteTool", () => {
               })
               expect(settled).toMatchObject({
                 status: "completed",
-                output: `Created ${absoluteTarget.replaceAll("\\", "/")}`,
+                output: `Created file successfully: ${absoluteTarget.replaceAll("\\", "/")}`,
               })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("external")
               expect(fixture.writes).toEqual([absoluteTarget])
