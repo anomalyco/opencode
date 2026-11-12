@@ -333,8 +333,9 @@ test("with rich media off, the old image previews stay, and restored videos stil
   // Undo, revert, and fork restore a sent video as its bytes, as the newer entry has it.
   const restored = { text: "Look [Video 1]", files: [{ uri: videoURI, mention: video(5) }] }
   const stash = [{ text: "Keep [Video 1]", files: [{ uri: pathToFileURL(kept).href, path: kept, mention: video(5) }] }]
+  // At the default low verbosity the tool's previews sit in its collapsed group; medium shows the tool.
   await using app = await openSession(
-    { session: { image_preview: true }, prompt: { image_preview: true } },
+    { session: { image_preview: true, verbosity: "medium" }, prompt: { image_preview: true } },
     { state: temporary.path, localServer: true, stash: [...stash, restored] },
   )
 
