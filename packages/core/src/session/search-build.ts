@@ -1,13 +1,8 @@
 export * as SessionSearchBuild from "./search-build.js"
 
-import path from "node:path"
-import { parse } from "jsonc-parser"
-import { Cause, Clock, Context, Effect, Exit, Layer, Option, RcMap, Schema } from "effect"
+import { Cause, Clock, Context, Effect, Exit, Layer, Option, RcMap } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
 import { Config } from "../config.js"
-import { ConfigDiscovery } from "../config/discovery.js"
 import { Database } from "../database/database.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { SessionSearchIndex } from "./search-index.js"
@@ -45,25 +40,15 @@ const BUSY = "1 second"
 /** Rows in a row that fail on their own before the failure is taken to be the database's, not the rows'. */
 const MAX_FAILURES = 3
 
-const Enabled = Schema.Struct({ experimental: Schema.Struct({ sqlite_fts: Schema.Literal(true) }) })
-const isEnabled = Schema.is(Enabled)
-
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const locations = yield* LocationServiceMap.Service
-    const fs = yield* FSUtil.Service
-    const global = yield* Global.Service
     const runtime = { building: false, unsupported: undefined as string | undefined }
 
-    // Config is per location but the index covers the whole database, so any loaded location enabling it counts. The
-    // global config files count too, so a server with no location loaded yet still starts.
+    // Config is per location but the index covers the whole database, so any loaded location enabling it counts.
     const enabled = Effect.gen(function* () {
-      const files = yield* Effect.forEach(ConfigDiscovery.names, (name) =>
-        fs.readFileStringSafe(path.join(global.config, name)).pipe(Effect.orElseSucceed(() => undefined)),
-      )
-      if (files.some((text) => text !== undefined && isEnabled(parse(text)))) return true
       const flags = yield* Effect.forEach(Array.from(yield* RcMap.keys(locations.rcMap)), (ref) =>
         Effect.gen(function* () {
           const context = yield* locations.contextEffectOption(ref)
@@ -199,5 +184,5 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Database.node, LocationServiceMap.node, FSUtil.node, Global.node],
+  deps: [Database.node, LocationServiceMap.node],
 })

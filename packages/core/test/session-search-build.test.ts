@@ -1,8 +1,5 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
-import { mkdir, rm, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import path from "node:path"
 import { sql } from "drizzle-orm"
 import { Duration, Effect, Fiber, Layer, LayerMap } from "effect"
 import { TestClock } from "effect/testing"
@@ -23,13 +20,10 @@ import { SessionTable } from "@opencode/core/session/sql"
 import { Workspace } from "@opencode/core/workspace"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Global } from "@opencode/util/global"
 import { testEffect } from "./lib/effect"
 
 // experimental.sqlite_fts per workspace, read by each location's Config when it loads.
 const flags = new Map<string, boolean>()
-const globalConfig = path.join(tmpdir(), `session-search-build-${process.pid}`)
 
 const locations = Layer.effect(
   LocationServiceMap.Service,
@@ -69,15 +63,11 @@ const locations = Layer.effect(
 )
 
 const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([Database.node, FSUtil.node, Global.node, LocationServiceMap.node, SessionSearchBuild.node]),
-    [
-      Global.node.replace(Global.layerWith({ config: globalConfig })),
-      LocationServiceMap.node.replace(
-        makeGlobalNode({ service: LocationServiceMap.Service, layer: locations, deps: [] }),
-      ),
-    ],
-  ),
+  AppNodeBuilder.build(LayerNode.group([Database.node, LocationServiceMap.node, SessionSearchBuild.node]), [
+    LocationServiceMap.node.replace(
+      makeGlobalNode({ service: LocationServiceMap.Service, layer: locations, deps: [] }),
+    ),
+  ]),
 )
 
 const directory = AbsolutePath.make("/project")
@@ -167,20 +157,6 @@ describe("SessionSearchBuild", () => {
       yield* load("mixed_on", false)
       yield* insert("ses_d", "Fresh narwhal plans")
       expect(yield* titles(db, "narwhal")).toEqual(["ses_d"])
-    }),
-  )
-
-  it.effect("starts from global config before any location loads", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(async () => {
-        await mkdir(globalConfig, { recursive: true })
-        await writeFile(path.join(globalConfig, "opencode.jsonc"), `{ // on\n "experimental": { "sqlite_fts": true } }`)
-      })
-      const { db, build, fiber } = yield* setup
-      yield* settled(build, "completed")
-      yield* Effect.promise(() => rm(path.join(globalConfig, "opencode.jsonc")))
-      expect(yield* titles(db, "walrus")).toEqual(["ses_a", "ses_b", "ses_c"])
-      yield* Fiber.join(fiber)
     }),
   )
 
