@@ -23,10 +23,10 @@ import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { ProviderShared } from "../protocols/shared.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { ProviderID, type LLMRequest, type ModelID, type RequestOptions } from "../schema/index.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("ark")
@@ -39,7 +39,7 @@ export type ChatOptionsInput = {
   readonly reasoningEffort?: string
 }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     /** Overrides the selected API's base URL, including its version prefix. */
     readonly baseURL?: string
@@ -94,9 +94,8 @@ export const configure = (input: Config = {}) => {
         compatibility: {
           reasoningField: "reasoning_content",
           maxTokensField: "max_tokens",
-          supportsStrictMode: false,
-          supportsPromptCacheKey: true,
         },
+        capabilities: { tools: { strict: false }, promptCacheKey: true },
       }),
     chat: (modelID: string | ModelID) => configured.model<ChatOptionsInput>({ id: modelID }),
     configure,

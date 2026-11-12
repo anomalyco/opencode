@@ -15,8 +15,8 @@ describe("Ark provider", () => {
       compatibility: {
         reasoningField: "reasoning_content",
         maxTokensField: "max_tokens",
-        supportsStrictMode: false,
       },
+      capabilities: { tools: { strict: false }, promptCacheKey: true },
       route: { id: "ark-chat", protocol: "ark-chat" },
     })
     expect(model.route.providerMetadataKey).toBe("ark")
@@ -72,7 +72,7 @@ describe("Ark provider", () => {
         ai.request({
           model,
           prompt: "Hello",
-          generation: { maxTokens: 128 },
+          maxTokens: 128,
           providerOptions: { thinking: { type: "disabled" } },
         }),
       )
