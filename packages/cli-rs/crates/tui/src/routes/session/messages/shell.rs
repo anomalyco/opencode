@@ -273,8 +273,8 @@ impl Inner {
         if read.timer.is_some() {
             return;
         }
-        let weak = self.this.clone();
-        read.timer = Some(self.app.set_interval(Duration::from_secs(1), bind!(weak, |inner, _| inner.load(false))));
+        read.timer =
+            Some(self.app.set_interval(Duration::from_secs(1), bind!(self.this, |inner, _| inner.load(false))));
         drop(read);
         self.load(false);
     }
@@ -286,10 +286,9 @@ impl Inner {
         }
         let pages = self.read.borrow_mut().output.start(self.data.client(), props.shell, props.location, drain);
         let Some(pages) = pages else { return };
-        let weak = self.this.clone();
         self.app.spawn(
             pages,
-            bind!(weak, |inner, _, pages| {
+            bind!(self.this, |inner, _, pages| {
                 let again = inner.read.borrow_mut().output.finish(pages);
                 inner.render();
                 if again {

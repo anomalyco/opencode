@@ -10,10 +10,7 @@ use crate::prelude::*;
 
 /// The shell-mode layers, each targeting the prompt's textarea.
 pub fn layers(inner: &Rc<Inner>, target: FocusId) -> Vec<KeymapLayer<FocusId>> {
-    let when = |check: fn(&Inner) -> bool| {
-        let weak = Rc::downgrade(inner);
-        Condition::when(move || weak.upgrade().is_some_and(|prompt| check(&prompt)))
-    };
+    let when = |check: fn(&Inner) -> bool| Condition::when(bind!(inner, |prompt| check(&prompt)));
     let set = |mode: Mode| {
         bind!(inner, |prompt, _: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| {
             if mode == Mode::Shell {

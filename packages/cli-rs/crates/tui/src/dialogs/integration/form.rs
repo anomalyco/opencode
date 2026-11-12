@@ -501,15 +501,12 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
             textarea,
             resolve: resolve_build.clone(),
         });
-        let weak = Rc::downgrade(&state);
-        let kept = cx.keep(move || {
-            weak.upgrade().map(|state| {
-                let editing = state.editing.get();
-                let text = if editing { state.textarea.text() } else { state.text.borrow().clone() };
-                let error = state.error.borrow().clone();
-                (state.selected.get(), editing.then(|| state.textarea.cursor_offset()), text, error)
-            })
-        });
+        let kept = cx.keep(bind!(state, |state| {
+            let editing = state.editing.get();
+            let text = if editing { state.textarea.text() } else { state.text.borrow().clone() };
+            let error = state.error.borrow().clone();
+            Some((state.selected.get(), editing.then(|| state.textarea.cursor_offset()), text, error))
+        }));
         if let Some((selected, editing, text, error)) = kept.flatten() {
             state.selected.set(selected);
             *state.text.borrow_mut() = text;
@@ -522,12 +519,11 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
             }
         }
         state.layers();
-        let back = Rc::downgrade(&state);
         let head = header(
             cx,
             HeaderProps {
                 title: title.clone(),
-                on_close: Some(Rc::new(bind!(back, |state| {
+                on_close: Some(Rc::new(bind!(state, |state| {
                     if state.editing.get() {
                         state.back();
                         return;
@@ -554,14 +550,8 @@ impl Choice {
         let command = |id: &str, title: &str, run: fn(&Rc<Choice>)| {
             TuiCommand::new(id, bind!(self, |state, _, _| run(&state))).title(title).group("Form")
         };
-        let not_editing = {
-            let weak = Rc::downgrade(self);
-            Condition::when(move || weak.upgrade().is_some_and(|state| !state.editing.get()))
-        };
-        let editing = {
-            let weak = Rc::downgrade(self);
-            Condition::when(move || weak.upgrade().is_some_and(|state| state.editing.get()))
-        };
+        let not_editing = Condition::when(bind!(self, |state| !state.editing.get()));
+        let editing = Condition::when(bind!(self, |state| state.editing.get()));
         self.cx.layer(
             KeymapLayer::new(vec![
                 command("dialog.select.prev", "Previous answer", |state| state.move_by(state.count - 1)),
@@ -667,14 +657,11 @@ impl Choice {
             rows.push(View::new(app).child(&Text::new(app, format!("{}. Skip", own + 2)).fg(fg(own + 1))));
         }
         for (index, row) in rows.iter().enumerate() {
-            let weak = Rc::downgrade(self);
-            row.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
-                if matches!(event.kind, MouseEventKind::Up(_))
-                    && let Some(state) = weak.upgrade()
-                {
+            row.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(self, |state, _, event| {
+                if matches!(event.kind, MouseEventKind::Up(_)) {
                     state.select(index);
                 }
-            });
+            }));
             content.add(row);
         }
         self.scroll_to_selected();

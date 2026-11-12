@@ -41,13 +41,12 @@ pub type OnConnected = Rc<dyn Fn(&Rc<Local>, Option<String>)>;
 /// Registers `provider.connect` (`/connect`, `app.tsx:1019-1032`).
 pub fn install(tui: &Rc<Tui>) {
     let local = tui.local.clone();
-    let suggested = Rc::downgrade(&local);
     let command = TuiCommand::new("provider.connect", bind!(local, |local, _, _| show(&local, Some(show_models()))))
         .bind(Bind::Off)
         .title("Connect an integration")
         .group("Integration")
         .palette()
-        .suggested(Condition::when(move || suggested.upgrade().is_some_and(|local| !local.connected())))
+        .suggested(Condition::when(bind!(local, |local| !local.connected())))
         .slash("connect");
     tui.keymap.install(
         "integration",
@@ -192,11 +191,6 @@ fn signed_out(connection: &ConnectionInfo) -> bool {
     }
 }
 
-fn from_mcp(integration: &IntegrationInfo) -> bool {
-    integration.metadata.as_ref().and_then(|metadata| metadata.get("source")).and_then(|source| source.as_str())
-        == Some("mcp")
-}
-
 /// The integrations the list shows: one for an auto-connect, else all but the MCP servers', which the MCP dialog
 /// signs in.
 fn listed(local: &Local, only: Option<&IntegrationID>) -> Vec<IntegrationInfo> {
@@ -204,7 +198,14 @@ fn listed(local: &Local, only: Option<&IntegrationID>) -> Vec<IntegrationInfo> {
         .into_iter()
         .filter(|integration| match only {
             Some(id) => integration.id == *id,
-            None => !from_mcp(integration),
+            None => {
+                integration
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| metadata.get("source"))
+                    .and_then(|source| source.as_str())
+                    != Some("mcp")
+            }
         })
         .collect()
 }
@@ -225,9 +226,8 @@ fn open_list(flow: Flow, only: Option<IntegrationID>) {
 fn build_list(cx: &Rc<DialogCx>, flow: Flow, only: Option<IntegrationID>) -> View {
     let theme = cx.theme.clone();
     let options: select::Options<IntegrationID> = {
-        let local = Rc::downgrade(&flow.local);
         let only = only.clone();
-        Rc::new(move |_| local.upgrade().map_or_else(Vec::new, |local| list_options(&local, only.as_ref(), &theme)))
+        Rc::new(bind!(flow.local, |local, _| list_options(&local, only.as_ref(), &theme)))
     };
     let mut props = SelectProps::dynamic("Connect an integration", options.clone());
     let message = |text: &'static str| -> Rc<dyn Fn() -> AnyWidget> {
@@ -391,13 +391,10 @@ fn build_manage(
         reopened: Cell::new(false),
         theme: cx.theme.clone(),
     });
-    let weak = Rc::downgrade(&state);
-    *state.deleting.borrow_mut() =
-        cx.keep(move || weak.upgrade().and_then(|state| state.deleting.borrow().clone())).flatten();
+    *state.deleting.borrow_mut() = cx.keep(bind!(state, |state| state.deleting.borrow().clone())).flatten();
     let options: select::Options<Account> = {
-        let state = Rc::downgrade(&state);
         let theme = cx.theme.clone();
-        Rc::new(move |_| state.upgrade().map_or_else(Vec::new, |state| state.options(&theme)))
+        Rc::new(bind!(state, |state, _| state.options(&theme)))
     };
     let mut props = SelectProps::dynamic(state.integration.name.clone(), options);
     props.current = active.map(Account::Credential);
@@ -405,23 +402,17 @@ fn build_manage(
     props.focus_current = focus.is_some();
     props.focus_target = focus;
     props.preserve_selection = true;
-    props.on_move = Some({
-        let state = Rc::downgrade(&state);
-        Rc::new(bind!(state, |state, option: &SelectOption<Account>| {
-            let had = state.deleting.borrow_mut().take().is_some();
-            if (option.value == Account::Add) != state.built.0 {
-                state.reopen(Some(option.value.clone()));
-                return;
-            }
-            if had {
-                state.refresh();
-            }
-        }))
-    });
-    props.on_select = Some({
-        let state = Rc::downgrade(&state);
-        Rc::new(bind!(state, |state, option: &SelectOption<Account>| state.choose(&option.value)))
-    });
+    props.on_move = Some(Rc::new(bind!(state, |state, option: &SelectOption<Account>| {
+        let had = state.deleting.borrow_mut().take().is_some();
+        if (option.value == Account::Add) != state.built.0 {
+            state.reopen(Some(option.value.clone()));
+            return;
+        }
+        if had {
+            state.refresh();
+        }
+    })));
+    props.on_select = Some(Rc::new(bind!(state, |state, option: &SelectOption<Account>| state.choose(&option.value))));
     let account_only: select::ActionDisabled<Account> =
         Rc::new(|option| option.is_none_or(|option| option.value == Account::Add));
     let hidden = state.built.0;
@@ -429,26 +420,24 @@ fn build_manage(
         SelectAction {
             hidden,
             disabled: Some(account_only.clone()),
-            ..SelectAction::new("dialog.integration.rename", "rename", {
-                let state = Rc::downgrade(&state);
-                move |option| {
-                    if let (Some(state), Account::Credential(id)) = (state.upgrade(), &option.value) {
-                        state.rename(id);
-                    }
-                }
-            })
+            ..SelectAction::new(
+                "dialog.integration.rename",
+                "rename",
+                bind!(state, |state, option| if let Account::Credential(id) = &option.value {
+                    state.rename(id);
+                }),
+            )
         },
         SelectAction {
             hidden,
             disabled: Some(account_only),
-            ..SelectAction::new("dialog.integration.delete", "remove account", {
-                let state = Rc::downgrade(&state);
-                move |option| {
-                    if let (Some(state), Account::Credential(id)) = (state.upgrade(), &option.value) {
-                        state.remove(id);
-                    }
-                }
-            })
+            ..SelectAction::new(
+                "dialog.integration.delete",
+                "remove account",
+                bind!(state, |state, option| if let Account::Credential(id) = &option.value {
+                    state.remove(id);
+                }),
+            )
         },
     ];
     let (view, handle) = select::select(cx, props);
@@ -556,10 +545,9 @@ impl Manage {
         }
         let client = self.flow.local.client.clone();
         let input = CredentialActivateInput { credential_id: id.clone() };
-        let local = Rc::downgrade(&self.flow.local);
         self.flow.spawn(
             async move { client.credential_activate(&input).await },
-            bind!(local, |local, result| {
+            bind!(self.flow.local, |local, result| {
                 match result {
                     // The active account comes first; the marker follows the reloaded list.
                     Ok(()) => local.load_integrations(),
@@ -918,9 +906,8 @@ impl Oauth {
         let me = self.clone();
         self.flow.local.dialogs.replace(
             move |cx| {
-                let (open, copy) = (Rc::downgrade(&me), Rc::downgrade(&me));
-                let open: Rc<dyn Fn()> = Rc::new(bind!(open, |me| me.open()));
-                let copy: Rc<dyn Fn()> = Rc::new(bind!(copy, |me| me.copy()));
+                let open: Rc<dyn Fn()> = Rc::new(bind!(me, |me| me.open()));
+                let copy: Rc<dyn Fn()> = Rc::new(bind!(me, |me| me.copy()));
                 cx.layer(KeymapLayer::new(vec![
                     TuiCommand::inline("return", {
                         let open = open.clone();
@@ -1003,8 +990,7 @@ impl Oauth {
                 let closing = me.clone();
                 cx.on_dismiss(move || closing.close());
                 let app = &cx.app;
-                let open = Rc::downgrade(&me);
-                let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(open, |me| me.open()))));
+                let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(me, |me| me.open()))));
                 let waiting = Text::new(
                     app,
                     "Waiting for authorization… Press enter to open the link. If the browser can't reach this \
@@ -1040,7 +1026,6 @@ impl Oauth {
                         }
                     });
                 }));
-                let copy = Rc::downgrade(&me);
                 prompt(
                     cx,
                     PromptProps {
@@ -1052,11 +1037,7 @@ impl Oauth {
                             title: "copy link".into(),
                             command: "dialog.integration.copy".into(),
                             command_title: Some("Copy authorization link".into()),
-                            run: Rc::new(move |_| {
-                                if let Some(me) = copy.upgrade() {
-                                    me.copy();
-                                }
-                            }),
+                            run: Rc::new(bind!(me, |me, _| me.copy())),
                         }],
                         ..PromptProps::default()
                     },
@@ -1076,8 +1057,7 @@ impl Oauth {
                 let closing = me.clone();
                 cx.on_dismiss(move || closing.close());
                 let (errors, set_error) = error_slot(cx, false);
-                let open = Rc::downgrade(&me);
-                let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(open, |me| me.open()))));
+                let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(me, |me| me.open()))));
                 let instructions = Text::new(&cx.app, me.attempt.instructions.clone()).fg(cx.theme.text.muted);
                 let description = View::new(&cx.app).gap(1).child(&instructions).child(&link).child(&errors);
                 let on_confirm = Rc::new(bind!(me, |me, code: &str| {

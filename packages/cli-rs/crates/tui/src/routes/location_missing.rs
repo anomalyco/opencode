@@ -206,14 +206,14 @@ fn create(tui: &Tui, session: SessionID, project: ProjectID, name: String) {
 fn move_session(tui: &Tui, session: SessionID, directory: String) {
     let client = tui.data.client().clone();
     let input = SessionMoveInput { session_id: session, directory: AbsolutePath(directory), delivery: None };
-    let weak = tui.weak();
-    tui.app.spawn(async move { client.session_move(&input).await }, move |_, result| {
-        if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
+    tui.app.spawn(
+        async move { client.session_move(&input).await },
+        bind!(tui, |tui, _, result| if let Err(error) = result {
             tui.toasts.show(
                 ToastOptions::new(Variant::Error, error.to_string())
                     .title("Failed to move session")
                     .duration(Duration::from_millis(5000)),
             );
-        }
-    });
+        }),
+    );
 }

@@ -69,10 +69,9 @@ impl Hint {
             if remaining <= 0.0 {
                 self.0.shown.set(true);
             } else {
-                let weak = self.0.this.clone();
                 let timer = self.0.app.set_timeout(
                     Duration::from_millis(remaining as u64),
-                    bind!(weak, |inner, _| {
+                    bind!(self.0.this, |inner, _| {
                         inner.timer.set(None);
                         inner.shown.set(true);
                         inner.paint();

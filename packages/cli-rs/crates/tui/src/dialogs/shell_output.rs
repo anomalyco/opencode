@@ -123,13 +123,10 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         foot: View::new(app),
     });
     // Built again in a new theme, the dialog keeps what it read and goes on reading from there.
-    let weak = Rc::downgrade(&poll);
-    let kept = cx.keep(move || {
-        weak.upgrade().map(|poll| {
-            let read = (poll.info.borrow().clone(), poll.output.borrow().clone(), poll.omitted.get());
-            (read, poll.error.borrow().clone(), poll.cursor.get(), poll.copied.get(), poll.scroll.scroll_position())
-        })
-    });
+    let kept = cx.keep(bind!(poll, |poll| {
+        let read = (poll.info.borrow().clone(), poll.output.borrow().clone(), poll.omitted.get());
+        Some((read, poll.error.borrow().clone(), poll.cursor.get(), poll.copied.get(), poll.scroll.scroll_position()))
+    }));
     if let Some(((info, output, omitted), error, cursor, copied, (x, y))) = kept.flatten() {
         *poll.info.borrow_mut() = info;
         *poll.output.borrow_mut() = output;
@@ -146,8 +143,7 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         TuiCommand::inline(key, move |_, _| run(&scroll, page)).title(title).group("Shell")
     };
     let copy_command = |key: &str, title: &str, kind: Copied| {
-        let weak = Rc::downgrade(&poll);
-        TuiCommand::inline(key, bind!(weak, |poll, _, _| poll.copy(kind))).title(title).group("Shell")
+        TuiCommand::inline(key, bind!(poll, |poll, _, _| poll.copy(kind))).title(title).group("Shell")
     };
     cx.layer(KeymapLayer::new(vec![
         copy_command("c", "Copy command", Copied::Command),
@@ -293,8 +289,7 @@ impl Poll {
         }
         self.copied.set(Some(kind));
         // A footer action runs inside the footer it replaces, so the redraw waits.
-        let weak = Rc::downgrade(self);
-        tui.app.defer(bind!(weak, |poll, _| poll.draw_footer()));
+        tui.app.defer(bind!(self, |poll, _| poll.draw_footer()));
     }
 
     /// The new-designs footer: follow, then a copy action for the command and the output that reads `✓ copied`
@@ -315,8 +310,7 @@ impl Poll {
                 } else {
                     FooterAction::new(title).key(key)
                 };
-                let weak = Rc::downgrade(self);
-                action.on_trigger = Some(Rc::new(bind!(weak, |poll| poll.copy(kind))));
+                action.on_trigger = Some(Rc::new(bind!(self, |poll| poll.copy(kind))));
                 action
             });
         self.foot.clear();
