@@ -145,15 +145,14 @@ pub fn directory_matches(directory: &str, query: &str) -> bool {
     value.to_lowercase().starts_with(&query.to_lowercase())
 }
 
-/// `directoryRecentValue`: `~`-relative inside the home directory, else absolute.
+/// `directoryRecentValue`: `~`-relative inside the home directory, else the directory as stored.
 pub fn directory_recent_value(flavor: Flavor, directory: &str, home: &str) -> String {
-    let directory = resolve(flavor, directory, "");
-    let relative = flavor.relative(home, &directory);
+    let relative = flavor.relative(home, directory);
     if relative.is_empty() {
         return "~".to_owned();
     }
     if flavor.outside(&relative) {
-        return directory;
+        return directory.to_owned();
     }
     format!("~/{}", slashes(flavor, &relative))
 }
@@ -289,6 +288,9 @@ mod tests {
         assert_eq!(recent("c:\\users\\U"), "~");
         assert_eq!(recent("C:\\Users\\u\\src/x"), "~/src/x");
         assert_eq!(recent("D:\\x"), "D:\\x");
+        // Outside home the stored spelling shows unchanged, as TS returns `directory` itself.
+        assert_eq!(recent("/new-dir"), "/new-dir");
+        assert_eq!(recent("D:/x/../y"), "D:/x/../y");
     }
 
     #[test]
