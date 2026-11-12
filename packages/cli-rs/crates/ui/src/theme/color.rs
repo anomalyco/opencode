@@ -94,6 +94,16 @@ pub(crate) fn luminance(color: Color) -> f64 {
     0.299 * unit(color.r) + 0.587 * unit(color.g) + 0.114 * unit(color.b)
 }
 
+/// WCAG contrast ratio.
+pub(crate) fn contrast(first: Color, second: Color) -> f64 {
+    let luminance = |color: Color| {
+        let channel = |value: u8| srgb_to_linear(unit(value));
+        0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+    };
+    let (first, second) = (luminance(first), luminance(second));
+    (first.max(second) + 0.05) / (first.min(second) + 0.05)
+}
+
 pub(crate) fn to_oklch(color: Color) -> Oklch {
     rgb_to_oklch(unit(color.r), unit(color.g), unit(color.b))
 }

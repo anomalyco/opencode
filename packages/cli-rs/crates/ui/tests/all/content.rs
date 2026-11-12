@@ -2,8 +2,9 @@
 //! (`parity/oracle/U.4a-syntax.ts`). P-COMP: the Markdown, code, and diff wrappers against the TypeScript renders of
 //! the same corpus (`parity/component/U.4a-*.tsx`). Regenerate both with `bun run fixtures`.
 
+use indexmap::IndexMap;
 use opencode_parity::{Fixture, compare, fixtures_dir};
-use opencode_ui::theme::{Catalog, Theme, ThemeMode};
+use opencode_ui::theme::{Catalog, TerminalColors, Theme, ThemeMode, from_hex, generate_system};
 use opencode_ui::{code, diff, markdown};
 use opentui::native::Capture;
 use opentui::prelude::*;
@@ -45,6 +46,42 @@ fn syntax_theme_matches_generate_syntax() {
             ]);
             assert_eq!(&actual, expected, "{name} {mode:?} {scope}");
         }
+    }
+}
+
+/// The paste chip keeps the page color on its warning background under a transparent page too
+/// (`parity/deviations/O89-paste-chip-contrast.md`): the terminal's background when the system theme read one, else the
+/// neutral end that reads better on the chip. TypeScript draws the light foreground on the dark-mode system theme.
+#[test]
+fn paste_chip_text_is_the_page_color_on_a_transparent_page() {
+    let tokyo = "#1a1b26 #f7768e #9ece6a #e0af68 #7aa2f7 #ad8ee6 #449dab #a9b1d6 #414868 #ff7a93 #b9f27c #ff9e64 #7da6ff #bb9af7 #0db9d7 #c0caf5";
+    let day = "#e9e9ed #f52a65 #587539 #8c6c3e #2e7de9 #9854f1 #007197 #6172b0 #a1a6c5 #f52a65 #587539 #8c6c3e #2e7de9 #9854f1 #007197 #3760bf";
+    let system = |palette: &str, background: &str, foreground: &str, mode| {
+        let colors = TerminalColors {
+            palette: palette.split(' ').map(|color| Some(color.to_owned())).collect(),
+            default_foreground: Some(foreground.to_owned()),
+            default_background: Some(background.to_owned()),
+            ..TerminalColors::default()
+        };
+        let mut catalog = Catalog::default();
+        catalog.set_system(Some(generate_system(&colors, mode)));
+        catalog.load("system", mode).unwrap().theme
+    };
+    let mut unknown: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../../tui/src/theme/assets/tokyonight.json")).unwrap();
+    unknown["theme"]["background"] = "none".into();
+    let mut catalog = Catalog::default();
+    catalog.set_custom(IndexMap::from([("unknown".to_owned(), unknown)]));
+    let cases = [
+        ("system dark", system(tokyo, "#1a1b26", "#a9b1d6", ThemeMode::Dark), "#1a1b26", "#e0af68"),
+        ("system light", system(day, "#e1e2e7", "#3760bf", ThemeMode::Light), "#e1e2e7", "#8c6c3e"),
+        ("tokyonight dark", theme("tokyonight", ThemeMode::Dark), "#1a1b26", "#ff966c"),
+        ("tokyonight light", theme("tokyonight", ThemeMode::Light), "#e1e2e7", "#b15c00"),
+        ("no background", catalog.load("unknown", ThemeMode::Dark).unwrap().theme, "#171828", "#ff966c"),
+    ];
+    for (name, theme, fg, bg) in cases {
+        let style = code::syntax_theme(&theme).get("extmark.paste").unwrap();
+        assert_eq!((style.fg, style.bg), (Some(from_hex(fg)), Some(from_hex(bg))), "{name}");
     }
 }
 
