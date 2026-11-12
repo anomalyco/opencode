@@ -19,10 +19,10 @@ use windows_sys::Win32::Foundation::{
     ERROR_ACCESS_DENIED, FILETIME, FreeLibrary, STILL_ACTIVE, WAIT_FAILED, WAIT_OBJECT_0,
 };
 use windows_sys::Win32::System::Console::{
-    CTRL_BREAK_EVENT, CTRL_C_EVENT, ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT, ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT,
-    ENABLE_PROCESSED_OUTPUT, ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING, ENABLE_WINDOW_INPUT,
-    GetConsoleMode, GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler, SetConsoleMode,
-    SetStdHandle,
+    CONSOLE_SCREEN_BUFFER_INFO, CTRL_BREAK_EVENT, CTRL_C_EVENT, ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT,
+    ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_PROCESSED_OUTPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
+    ENABLE_VIRTUAL_TERMINAL_PROCESSING, ENABLE_WINDOW_INPUT, GetConsoleMode, GetConsoleScreenBufferInfo, GetStdHandle,
+    STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler, SetConsoleMode, SetStdHandle,
 };
 use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows_sys::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
@@ -250,6 +250,21 @@ pub fn console_mode(handle: impl AsHandle) -> Option<u32> {
     (unsafe { GetConsoleMode(handle.as_handle().as_raw_handle(), &mut mode) } != 0).then_some(mode)
 }
 
+/// The visible columns and rows of the console `handle` draws on, or `None` when it is not a console. OpenTUI's
+/// `term::size` asks stdout only.
+pub fn console_size(handle: impl AsHandle) -> Option<(u16, u16)> {
+    // SAFETY: an all-zero `CONSOLE_SCREEN_BUFFER_INFO` is valid plain data.
+    let mut info: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
+    // SAFETY: plain call; an invalid or non-console handle makes it fail.
+    if unsafe { GetConsoleScreenBufferInfo(handle.as_handle().as_raw_handle(), &mut info) } == 0 {
+        return None;
+    }
+    let window = info.srWindow;
+    let width = u16::try_from(i32::from(window.Right) - i32::from(window.Left) + 1).unwrap_or(0);
+    let height = u16::try_from(i32::from(window.Bottom) - i32::from(window.Top) + 1).unwrap_or(0);
+    Some((if width == 0 { 80 } else { width }, if height == 0 { 24 } else { height }))
+}
+
 pub fn set_console_mode(handle: impl AsHandle, mode: u32) -> io::Result<()> {
     // SAFETY: plain call; an invalid or non-console handle makes it fail.
     if unsafe { SetConsoleMode(handle.as_handle().as_raw_handle(), mode) } == 0 {
@@ -366,6 +381,16 @@ mod tests {
         let release = os_release().unwrap();
         let parts: Vec<u32> = release.split('.').map(|part| part.parse().unwrap()).collect();
         assert!(parts.len() == 3 && parts[0] >= 10, "{release}");
+    }
+
+    #[test]
+    fn a_console_size_is_asked_of_the_handle_given() {
+        // A redirected stdout does not hide the size of a stderr console.
+        let (read, _write) = pipe().unwrap();
+        assert_eq!(console_size(read.as_handle()), None);
+        if console_mode(std::io::stderr()).is_some() {
+            assert!(console_size(std::io::stderr()).is_some_and(|(columns, rows)| columns > 0 && rows > 0));
+        }
     }
 
     #[test]
