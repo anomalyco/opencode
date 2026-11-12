@@ -1,13 +1,16 @@
 //! `additional-directories.test.ts`.
 
+use opencode_acp::paths::resolve_lexical;
 use serde_json::{Value, json};
 
 use crate::wire::{Wire, WireOptions, assert_matches, make_session, start_wire};
 
 const KEY: &str = "opencode.acp.additionalDirectories";
 
+/// `path.join(directory, "*")` of a resolved directory.
 fn grant(directory: &str) -> Value {
-    json!({ "action": "external_directory", "resource": format!("{directory}/*"), "effect": "allow" })
+    let resource = format!("{directory}{}*", std::path::MAIN_SEPARATOR);
+    json!({ "action": "external_directory", "resource": resource, "effect": "allow" })
 }
 
 fn user_grant() -> Value {
@@ -56,10 +59,13 @@ async fn rejects_invalid_directories_before_creating_a_session() {
 
 #[tokio::test]
 async fn load_and_resume_replace_acp_grants_and_keep_other_session_rules_and_metadata() {
+    // `path.resolve`: on Windows the directories take the working directory's drive.
+    let (shared_lib, product_docs, old) =
+        (resolve_lexical("/shared/lib"), resolve_lexical("/product-docs"), resolve_lexical("/old"));
     let acp = start_wire(WireOptions::default()).await;
     let mut saved = make_session("ses_saved", "/workspace");
-    saved["metadata"] = json!({ "host": "tui", (KEY): ["/old"] });
-    saved["permissions"] = rules(vec![grant("/old"), user_grant()]);
+    saved["metadata"] = json!({ "host": "tui", (KEY): [&old] });
+    saved["permissions"] = rules(vec![grant(&old), user_grant()]);
     acp.server.state().sessions.insert("ses_saved".to_owned(), saved);
     acp.initialize(json!({})).await;
 
@@ -75,8 +81,8 @@ async fn load_and_resume_replace_acp_grants_and_keep_other_session_rules_and_met
     assert_matches(
         &acp.server.state().sessions["ses_saved"],
         &json!({
-            "metadata": { "host": "tui", (KEY): ["/shared/lib", "/product-docs"] },
-            "permissions": rules(vec![grant("/shared/lib"), grant("/product-docs"), user_grant()]),
+            "metadata": { "host": "tui", (KEY): [&shared_lib, &product_docs] },
+            "permissions": rules(vec![grant(&shared_lib), grant(&product_docs), user_grant()]),
         }),
     );
 
@@ -98,10 +104,11 @@ async fn load_and_resume_replace_acp_grants_and_keep_other_session_rules_and_met
 
 #[tokio::test]
 async fn forks_replace_inherited_grants_with_the_requested_list() {
+    let (shared_lib, old) = (resolve_lexical("/shared/lib"), resolve_lexical("/old"));
     let acp = start_wire(WireOptions::default()).await;
     let mut source = make_session("ses_source", "/workspace");
-    source["metadata"] = json!({ (KEY): ["/old"] });
-    source["permissions"] = rules(vec![grant("/old")]);
+    source["metadata"] = json!({ (KEY): [&old] });
+    source["permissions"] = rules(vec![grant(&old)]);
     acp.server.state().sessions.insert("ses_source".to_owned(), source);
     acp.initialize(json!({})).await;
 
@@ -118,7 +125,7 @@ async fn forks_replace_inherited_grants_with_the_requested_list() {
     assert_matches(&sessions[plain["sessionId"].as_str().unwrap()], &json!({ "metadata": {}, "permissions": other() }));
     assert_matches(
         &sessions[granted["sessionId"].as_str().unwrap()],
-        &json!({ "metadata": { (KEY): ["/shared/lib"] }, "permissions": rules(vec![grant("/shared/lib")]) }),
+        &json!({ "metadata": { (KEY): [&shared_lib] }, "permissions": rules(vec![grant(&shared_lib)]) }),
     );
-    assert_eq!(sessions["ses_source"]["permissions"], rules(vec![grant("/old")]));
+    assert_eq!(sessions["ses_source"]["permissions"], rules(vec![grant(&old)]));
 }
