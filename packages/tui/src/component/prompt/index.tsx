@@ -211,7 +211,6 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
-  const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = Keymap.use()
   const renderer = useRenderer()
@@ -369,6 +368,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPart: new Map(),
     interrupt: 0,
   })
+  const history = usePromptHistory(() => ({ ...unwrap(store.prompt), mode: store.mode }))
   let disposed = false
   let pasteQueue = Promise.resolve()
 
@@ -691,6 +691,7 @@ export function Prompt(props: PromptProps) {
       setStore("mode", mode)
     },
     set(prompt) {
+      history.reset()
       input.setText(prompt.text)
       setStore("prompt", prompt)
       restoreExtmarksFromPrompt(prompt)
@@ -705,6 +706,7 @@ export function Prompt(props: PromptProps) {
   }
 
   function resetComposer() {
+    history.reset()
     input.extmarks.clear()
     setStore("prompt", emptyPrompt())
     setStore("extmarkToPart", new Map())
@@ -900,12 +902,7 @@ export function Prompt(props: PromptProps) {
         enabled: stash.list().length > 0,
         run: () => {
           const entry = stash.pop()
-          if (entry) {
-            input.setText(entry.prompt.text)
-            setStore("prompt", entry.prompt)
-            restoreExtmarksFromPrompt(entry.prompt)
-            input.gotoBufferEnd()
-          }
+          if (entry) ref.set(entry.prompt)
           dialog.clear()
         },
       },
@@ -915,16 +912,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         enabled: stash.list().length > 0,
         run: () => {
-          dialog.replace(() => (
-            <DialogStash
-              onSelect={(entry) => {
-                input.setText(entry.prompt.text)
-                setStore("prompt", entry.prompt)
-                restoreExtmarksFromPrompt(entry.prompt)
-                input.gotoBufferEnd()
-              }}
-            />
-          ))
+          dialog.replace(() => <DialogStash onSelect={(entry) => ref.set(entry.prompt)} />)
         },
       },
     ].map(
