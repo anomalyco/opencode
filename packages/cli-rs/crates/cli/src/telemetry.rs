@@ -712,7 +712,11 @@ mod tests {
         // A fresh lock stays; only a stale one is removed.
         assert!(lock.exists());
         let old = SystemTime::now() - Duration::from_secs(6 * 60);
+        #[cfg(unix)]
         File::open(&lock).unwrap().set_modified(old).unwrap();
+        // A directory opens only with backup semantics, and its time is set only with write access.
+        #[cfg(windows)]
+        opencode_util::win::set_modified(&lock, old).unwrap();
         trim(&path, 1, 1).unwrap();
         assert!(!lock.exists());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "a\nb\nc\n");
