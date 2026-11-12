@@ -174,3 +174,17 @@ function elements(node: LegalElement) {
 function isList(node: LegalNode): node is LegalElement {
   return typeof node !== "string" && (node[0] === "ul" || node[0] === "ol")
 }
+
+/**
+ * The document's sections for "Contents": each h2 with an id. The Privacy Policy's own inline
+ * table of contents is left out.
+ */
+export function legalSections(body: LegalNode[]) {
+  // Review notes (data-review) are hidden from readers, so their headings stay out of Contents.
+  return body
+    .filter(published)
+    .filter((node) => typeof node !== "string" && node[0] === "h2" && node[1].id)
+    .map((node) => node as Exclude<LegalNode, string>)
+    .filter((node) => !node[1].id.endsWith("table-of-contents"))
+    .map((node) => ({ id: node[1].id, title: legalText(node) }))
+}

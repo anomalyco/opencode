@@ -2,6 +2,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createSelector,
   createSignal,
   createUniqueId,
   For,
@@ -16,6 +17,7 @@ import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
+import { Key } from "@solid-primitives/keyed"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -28,6 +30,7 @@ import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
+import { useMarkdown } from "@opencode/session-ui/context/markdown"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
 import { CommentCard, commentCardTarget, quoteTooltip } from "@opencode/session-ui/comment-card"
@@ -92,12 +95,15 @@ export type ComposerEditorProps = {
   attachKeybind?: string[]
   attachShortcut?: string
   alternateKeybind?: string[]
+  queueFirstKeybind?: string[]
+  queueFirstLabel?: string
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
   const i18n = useI18n()
+  const markdown = useMarkdown()
   const state = props.controller.state
   const view = props.controller.view
   const suggestionsID = createUniqueId()
@@ -324,6 +330,16 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 "unicode-bidi": mode() === "normal" ? "plaintext" : undefined,
                 "text-align": "start",
               }}
+              onContextMenu={(event) => {
+                const target = event.target instanceof Element ? event.target : undefined
+                const mention = target?.closest<HTMLElement>('[data-mention="session"]')
+                const part = mention ? mentionParts.get(mention) : undefined
+                const menu = markdown?.sessionMenu
+
+                if (part?.type !== "session" || !menu) return
+                event.preventDefault()
+                menu({ sessionID: part.id, x: event.clientX, y: event.clientY })
+              }}
               onInput={(event) => {
                 const prompt = parseComposerEditor(event.currentTarget)
                 const cursor = getCursorPosition(event.currentTarget) ?? promptLength(prompt)
@@ -369,7 +385,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
                   if (event.repeat) return
                   // On touch, Cmd+Return is the touch bar's primary action, since plain Return cannot send.
-                  props.controller.submit(mod && !touch() ? { alternate: true } : undefined)
+                  props.controller.submit(
+                    !touch() && event.altKey && !mod
+                      ? { first: true }
+                      : mod && !touch()
+                        ? { alternate: true }
+                        : undefined,
+                  )
                 }
               }}
               // The editor holds one flat run of text, mentions and <br>s. A touch keyboard's Return arrives as a
@@ -494,6 +516,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 <ComposerEditorAlternateDelivery
                   controller={props.controller}
                   keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+                  firstKeybind={props.queueFirstKeybind ?? ["Alt", "Enter"]}
+                  firstLabel={props.queueFirstLabel}
                 />
               </Show>
               <Show when={mode() === "shell"}>
@@ -1232,6 +1256,7 @@ function ComposerEditorPopover(props: {
 }) {
   const i18n = useI18n()
   const listID = props.id ?? createUniqueId()
+  const active = createSelector(() => props.activeID)
   let container: HTMLDivElement | undefined
   const [store, setStore] = createStore({ maxHeight: COMPOSER_SUGGESTION_MAX_HEIGHT })
 
@@ -1375,34 +1400,34 @@ function ComposerEditorPopover(props: {
           when={props.items.length > 0}
           fallback={<div class="px-2 py-1 text-v2-text-text-muted">{props.emptyLabel}</div>}
         >
-          <For each={props.items}>
+          <Key each={props.items} by="id">
             {(item) => (
               <button
                 type="button"
-                data-suggestion-id={item.id}
-                data-active={props.activeID === item.id ? "" : undefined}
+                data-suggestion-id={item().id}
+                data-active={active(item().id) ? "" : undefined}
                 class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start"
-                classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
+                classList={{ "bg-v2-overlay-simple-overlay-hover": active(item().id) }}
                 onPointerMove={(event) => {
-                  if (event.movementX || event.movementY) props.onActiveChange(item)
+                  if (event.movementX || event.movementY) props.onActiveChange(item())
                 }}
-                onClick={() => props.onSelect(item)}
+                onClick={() => props.onSelect(item())}
               >
                 <div class="flex min-w-0 flex-1 items-center gap-2">
-                  <ComposerSuggestionIcon item={item} />
+                  <ComposerSuggestionIcon item={item()} />
                   <bdi dir="auto" class="shrink-0 text-v2-text-text-base">
-                    {item.label}
+                    {item().label}
                   </bdi>
-                  <Show when={item.description}>
-                    <span class="min-w-0 truncate text-v2-text-text-muted">{item.description}</span>
+                  <Show when={item().description}>
+                    <span class="min-w-0 truncate text-v2-text-text-muted">{item().description}</span>
                   </Show>
                 </div>
-                <Show when={item.keybind?.length}>
-                  <span class="shrink-0 text-v2-text-text-muted">{item.keybind?.join("+")}</span>
+                <Show when={item().keybind?.length}>
+                  <span class="shrink-0 text-v2-text-text-muted">{item().keybind?.join("+")}</span>
                 </Show>
               </button>
             )}
-          </For>
+          </Key>
         </Show>
       </Show>
     </div>
@@ -1426,7 +1451,12 @@ function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean, hi
 // delivery opposite to what plain Enter does. Visible only while the queue
 // exposes an alternate (turn running and composer holding a value), so it
 // disappears on its own when the current turn ends.
-function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorModel; keybind: string[] }) {
+function ComposerEditorAlternateDelivery(props: {
+  controller: ComposerEditorModel
+  keybind: string[]
+  firstKeybind: string[]
+  firstLabel?: string
+}) {
   const i18n = useI18n()
   const view = props.controller.view
 
@@ -1444,7 +1474,27 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
   return (
     <Show when={action()} keyed>
       {(delivery) => (
-        <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
+        <Tooltip
+          placement="top"
+          inactive={delivery !== "steer" && !view.submit.queue?.count()}
+          value={
+            <Show
+              when={view.submit.queue?.count() && !view.submit.queue?.editing() && props.firstLabel}
+              fallback={i18n.t("ui.promptInput.steerHint")}
+            >
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center justify-between gap-4">
+                  <span>{delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}</span>
+                  <Keybind keys={props.keybind} variant="neutral" />
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span>{props.firstLabel}</span>
+                  <Keybind keys={props.firstKeybind} variant="neutral" />
+                </div>
+              </div>
+            </Show>
+          }
+        >
           <Button
             data-action="composer-alternate-delivery"
             type="button"

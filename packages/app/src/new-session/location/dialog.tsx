@@ -15,15 +15,36 @@ import { TextInput } from "@opencode/ui/text-input"
 import { createTypeahead } from "@opencode/ui/typeahead"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { getFilename } from "@opencode/util/path"
-import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js"
 import type { PromptProject, PromptProjectController, PromptServer } from "@/new-session/project/selector"
 import type { NewSessionWorkspaceController } from "@/new-session/workspace/controller"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
+import { useData } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useCommand } from "@/shell/commands/command"
 import { workspaceSelectionDirectories } from "@/workspaces/paths"
+import {
+  BRANCH_PRELOAD_TIMEOUT_MS,
+  INITIAL_BRANCH_PICKER_STATE,
+  selectBranchBusy,
+  selectBranchInitial,
+  transitionBranchPicker,
+  type BranchPickerEffect,
+  type BranchPickerEvent,
+} from "@/new-session/workspace/branch-machine"
 import "@/shell/commands/dialog.css"
 import "@/shell/palette-menu.css"
 import "./dialog.css"
@@ -48,13 +69,20 @@ export function useNewSessionLocationDialog(input: {
   const dialog = useDialog()
 
   /** Pass `project` to open straight on that project's worktree step; stepping back still reaches the projects. */
-  return (options?: { project?: PromptProject; onWorkspace?: (value: string) => void }) => {
+  return (options?: {
+    project?: PromptProject
+    step?: "worktrees" | "branches"
+    base?: string
+    onWorkspace?: (value: string) => void
+  }) => {
     void dialog.show(
       () => (
         <NewSessionLocationDialog
           project={input.project}
           workspace={input.workspace}
           drilled={options?.project}
+          step={options?.step}
+          base={options?.base}
           onWorkspace={options?.onWorkspace}
         />
       ),
@@ -67,6 +95,8 @@ function NewSessionLocationDialog(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   drilled?: PromptProject
+  step?: "worktrees" | "branches"
+  base?: string
   onWorkspace?: (value: string) => void
 }) {
   const dialog = useDialog()
@@ -75,8 +105,15 @@ function NewSessionLocationDialog(props: {
   const global = useGlobal()
   const servers = useServers()
   const serverSDK = useServerSDK()
+  const data = useData()
 
-  const [step, setStep] = createSignal(createLocationDialogState(props.drilled))
+  const [step, setStep] = createSignal(
+    createLocationDialogState(props.drilled, {
+      step: props.step === "branches" ? "branches" : undefined,
+      base: props.base,
+    }),
+  )
+
   const view = createMemo(() => locationDialogView(step()))
   const drilled = createMemo(() => view().drilled)
 
@@ -120,6 +157,117 @@ function NewSessionLocationDialog(props: {
     return !query || values.some((value) => value?.toLowerCase().includes(query))
   }
 
+  // Only the current server's checkouts have a synced branch.
+  const checkout = (project: PromptProject) =>
+    tagged(project.server) ? undefined : data.location.vcs.info({ directory: project.worktree })?.branch.current
+
+  const projectBranch = (project: PromptProject) =>
+    context(project)?.data.location.vcs.info({ directory: project.worktree })?.branch.current
+
+  const baseBranch = (project: PromptProject) => {
+    const state = step()
+
+    return (state.type === "worktrees" ? state.base : undefined) ?? projectBranch(project)
+  }
+
+  // Load the drilled project's branch for its base-branch row; the worktree step can show it before a list loads.
+  createEffect(() => {
+    const project = drilled()
+    const target = project && context(project)
+
+    if (!project?.id || !target) return
+    void target.data.location.vcs.sync({ directory: project.worktree }).catch(() => undefined)
+  })
+
+  const [picker, setPicker] = createSignal(INITIAL_BRANCH_PICKER_STATE)
+
+  const requests = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+
+  const dispatchPicker = (event: BranchPickerEvent) =>
+    untrack(() => {
+      const next = transitionBranchPicker(picker(), event)
+      setPicker(next.state)
+      next.effects.forEach(runPicker)
+    })
+
+  const runPicker = (effect: BranchPickerEffect) => {
+    if (effect.type === "focus.composer" || effect.type === "branch.choose") return
+
+    if (effect.type === "branches.abort") {
+      const request = requests.get(effect.attempt)
+      requests.delete(effect.attempt)
+      clearTimeout(request?.timer)
+      request?.controller.abort()
+
+      return
+    }
+
+    const state = step()
+    const target = state.type === "branches" ? context(state.project) : undefined
+    const directory = state.type === "branches" ? state.project.worktree : undefined
+
+    if (!target || !directory) return
+
+    const attempt = effect.attempt
+    const controller = new AbortController()
+    const timer = setTimeout(() => dispatchPicker({ type: "branches.timed-out", attempt }), BRANCH_PRELOAD_TIMEOUT_MS)
+    requests.set(attempt, { controller, timer })
+    target.sdk.api.vcs.branch
+      .list({ location: { directory }, search: "", limit: 50 }, { signal: controller.signal })
+      .then(
+        (response) => settlePicker(attempt, controller, { type: "branches.loaded", attempt, items: response.data }),
+        () => settlePicker(attempt, controller, { type: "branches.failed", attempt }),
+      )
+  }
+
+  const settlePicker = (attempt: number, controller: AbortController, event: BranchPickerEvent) => {
+    if (controller.signal.aborted) return
+    clearTimeout(requests.get(attempt)?.timer)
+    requests.delete(attempt)
+    dispatchPicker(event)
+  }
+
+  // The branch step is always open; entering it preloads the list and leaving drops any request.
+  createEffect(() => {
+    const state = step()
+    dispatchPicker({
+      type: "target.changed",
+      directory: state.type === "branches" ? state.project.worktree : undefined,
+    })
+  })
+
+  createEffect(() => {
+    if (step().type !== "branches") return
+    dispatchPicker({ type: "open.change", open: true })
+  })
+
+  // A query searches the drilled project on the server; the previous search aborts as soon as it changes.
+  createEffect(() => {
+    const state = step()
+
+    if (state.type !== "branches") return
+    const target = context(state.project)
+
+    if (!target) return
+
+    const controller = new AbortController()
+    onCleanup(() => controller.abort())
+    target.sdk.api.vcs.branch
+      .list(
+        { location: { directory: state.project.worktree }, search: state.query, limit: 50 },
+        { signal: controller.signal },
+      )
+      .then(
+        (response) => {
+          if (controller.signal.aborted) return
+          dispatchPicker({ type: "branches.synced", directory: state.project.worktree, items: response.data })
+        },
+        () => undefined,
+      )
+  })
+
+  onCleanup(() => dispatchPicker({ type: "disposed" }))
+
   const otherCount = createMemo(() => props.project.projects().filter((project) => !project.used).length)
 
   const projectEntries = createMemo<LocationEntry[]>(() => {
@@ -159,23 +307,46 @@ function NewSessionLocationDialog(props: {
     if (!project) return []
     const directories = workspaceSelectionDirectories(project, listedItems(project))
 
-    return [
-      { id: "main", type: "workspace" as const, project, value: "main", directory: project.worktree },
-      { id: "create", type: "workspace" as const, project, value: "create", directory: project.worktree },
-      ...directories.map((directory) => ({
-        id: `worktree:${directory}`,
-        type: "workspace" as const,
-        project,
-        value: directory,
-        directory,
-      })),
-    ].filter((entry) => matches(workspaceTitle(project, entry.value), entry.directory))
+    return (
+      [
+        { id: "main", type: "workspace" as const, project, value: "main", directory: project.worktree },
+        { id: "create", type: "workspace" as const, project, value: "create", directory: project.worktree },
+        ...(project.vcs === "git" ? [{ id: "base", type: "base" as const, project, directory: project.worktree }] : []),
+        ...directories.map((directory) => ({
+          id: `worktree:${directory}`,
+          type: "workspace" as const,
+          project,
+          value: directory,
+          directory,
+        })),
+      ] satisfies LocationEntry[]
+    ).filter((entry) =>
+      entry.type === "base"
+        ? matches(baseBranch(project) ?? language.t("session.location.noBranch"), entry.directory)
+        : matches(
+            workspaceTitle(project, entry.value),
+            entry.directory,
+            entry.value === "main" ? checkout(project) : undefined,
+          ),
+    )
+  })
+
+  const branchEntries = createMemo<LocationEntry[]>(() => {
+    const initial = selectBranchInitial(picker())
+
+    if (!initial) return []
+
+    return initial.items
+      .filter((branch) => matches(branch))
+      .map((branch) => ({ id: `branch:${branch}`, type: "branch" as const, branch }))
   })
 
   const entries = () => {
     const type = step().type
 
     if (type === "worktrees") return workspaceEntries()
+
+    if (type === "branches") return branchEntries()
 
     if (type === "servers") return serverEntries()
 
@@ -268,6 +439,8 @@ function NewSessionLocationDialog(props: {
         if (props.project.isSelected(effect.project)) props.workspace.selection.set(effect.value)
 
         if (!props.project.isSelected(effect.project)) props.project.select(effect.project, effect.value)
+
+        if (effect.branch) props.workspace.selection.branch(effect.branch)
         props.onWorkspace?.(effect.value)
       }
 
@@ -324,6 +497,7 @@ function NewSessionLocationDialog(props: {
             leadingIcon={<Icon name="magnifying-glass" />}
             role="combobox"
             aria-expanded="true"
+            aria-busy={step().type === "branches" && selectBranchBusy(picker()) ? "true" : undefined}
             data-owns-escape={view().ownsEscape ? "" : undefined}
             aria-controls={typeahead.listID}
             aria-activedescendant={typeahead.activeID()}
@@ -355,7 +529,13 @@ function NewSessionLocationDialog(props: {
                 when={entries().length > 0}
                 fallback={
                   // The worktree list may still be loading; hold the row's height without flashing a label.
-                  <div class="command-palette-state" classList={{ invisible: !!drilled() && listed.loading }}>
+                  <div
+                    class="command-palette-state"
+                    classList={{
+                      invisible:
+                        (!!drilled() && listed.loading) || (step().type === "branches" && selectBranchBusy(picker())),
+                    }}
+                  >
                     {language.t("palette.empty")}
                   </div>
                 }
@@ -375,7 +555,7 @@ function NewSessionLocationDialog(props: {
                             (entry.type === "workspace" &&
                               entry.value !== "main" &&
                               entry.value !== "create" &&
-                              ["main", "create"].includes(entries()[index() - 1]!.id)))
+                              ["main", "create", "base"].includes(entries()[index() - 1]!.id)))
                         }
                       >
                         <div class="new-session-location-action-divider" role="separator" />
@@ -457,6 +637,42 @@ function NewSessionLocationDialog(props: {
                               </div>
                             )}
                           </Match>
+                          <Match when={entry.type === "base" && entry}>
+                            {(item) => (
+                              <div class="command-palette-row-main">
+                                <Icon name="branch" class="command-palette-row-icon" />
+                                <div class="command-palette-row-text">
+                                  <span class="command-palette-title palette-menu-title">
+                                    {language.t("session.new.workspace.fromBranch", {
+                                      branch: baseBranch(item().project) ?? language.t("session.location.noBranch"),
+                                    })}
+                                  </span>
+                                  <span class="command-palette-description">
+                                    {language.t("command.session.branch.choose")}
+                                  </span>
+                                </div>
+                                <Show when={command.keybindParts("session.branch.choose").length}>
+                                  <Keybind
+                                    keys={command.keybindParts("session.branch.choose")}
+                                    variant="neutral"
+                                    class="shrink-0"
+                                  />
+                                </Show>
+                              </div>
+                            )}
+                          </Match>
+                          <Match when={entry.type === "branch" && entry}>
+                            {(item) => (
+                              <div class="command-palette-row-main">
+                                <Icon name="branch-out" class="command-palette-row-icon" />
+                                <div class="command-palette-row-text">
+                                  <span class="command-palette-title palette-menu-title" dir="auto">
+                                    {item().branch}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </Match>
                           <Match when={entry.type === "workspace" && entry}>
                             {(item) => (
                               <Show
@@ -475,6 +691,7 @@ function NewSessionLocationDialog(props: {
                               >
                                 <ProjectRow
                                   project={item().project}
+                                  branch={checkout(item().project)}
                                   path={item().directory}
                                   drillLabel={language.t("session.new.location.worktrees")}
                                 />
@@ -495,7 +712,13 @@ function NewSessionLocationDialog(props: {
   )
 }
 
-function ProjectRow(props: { project: PromptProject; path: string; onDrill?: () => void; drillLabel: string }) {
+function ProjectRow(props: {
+  project: PromptProject
+  branch?: string
+  path: string
+  onDrill?: () => void
+  drillLabel: string
+}) {
   return (
     <>
       <div class="command-palette-row-main">
@@ -510,6 +733,14 @@ function ProjectRow(props: { project: PromptProject; path: string; onDrill?: () 
           <span class="new-session-location-name">
             <span class="command-palette-title palette-menu-title">{displayName(props.project)}</span>
             <ServerTag server={props.project.server} />
+            <Show when={props.branch}>
+              {(branch) => (
+                <span class="new-session-location-branch">
+                  <Icon name="branch" size="small" />
+                  <span dir="auto">{branch()}</span>
+                </span>
+              )}
+            </Show>
           </span>
           <span class="command-palette-description" dir="ltr">
             {props.path}

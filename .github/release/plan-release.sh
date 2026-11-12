@@ -7,7 +7,7 @@
 #   push or dispatch on beta          -> beta     0.0.0-beta-<run>    desktop only
 #   pull_request                      -> pr       0.0.0-pr-<run>      everything, dry run
 #
-# Releasers are actors with the admin or maintain role on the repository (the releasers team has maintain).
+# Stable releases are limited to the GitHub logins listed below (case-insensitive).
 . "$(dirname "$0")/lib.sh"
 
 versioned=false
@@ -27,11 +27,9 @@ fi
 if [ "$channel" = latest ]; then
   actor=${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}
   [ -n "$actor" ] || die "Stable releases can only be started by releasers; the triggering actor is unknown"
-  role=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$actor/permission" --jq .role_name) || role=""
-  case "$role" in
-    admin | maintain) ;;
-    *) die "Stable releases can only be started by releasers (admin or maintain on the repo); $actor has ${role:-no readable role}" ;;
-  esac
+  if ! (shopt -s nocasematch; [[ "$actor" = thdxr || "$actor" = Hona || "$actor" = rekram1-node ]]); then
+    die "$actor is not allowed to start stable releases"
+  fi
 fi
 
 if [ "$channel" = latest ] && [ -n "${INPUT_VERSION:-}" ]; then

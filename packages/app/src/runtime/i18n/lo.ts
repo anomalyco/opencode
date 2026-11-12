@@ -345,7 +345,6 @@ export const dict = {
   "session.new.project.search": "ໂຄງການຄົ້ນຫາ",
   "session.new.project.add": "ເພີ່ມໂຄງການ",
   "session.new.workspace.runIn": "ແລ່ນເຊສຊັນໃນ",
-  "session.new.workspace.triggerLocal": "ທ້ອງຖິ່ນ",
   "session.new.workspace.local": "ພື້ນທີ່ເກັບຂໍ້ມູນທ້ອງຖິ່ນ",
   "session.new.workspace.local.tooltip": "ໃຊ້ checkout ປັດຈຸບັນ",
   "session.new.workspace.new.tooltip": "ສ້າງ checkout ແຍກຕ່າງຫາກ",

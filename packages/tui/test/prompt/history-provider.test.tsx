@@ -50,6 +50,33 @@ test("keeps legacy unscoped history on the home composer", async () => {
   }
 })
 
+test("reset clears browsing position and live draft, and move returns a deep copy", async () => {
+  await using tmp = await tmpdir()
+  const setup = await renderHistory(tmp.path)
+  try {
+    setup.history.append({
+      text: "[Pasted ~3 lines] ",
+      files: [],
+      agents: [],
+      pasted: [{ text: "a\nb\nc", source: { start: 0, end: 17, text: "[Pasted ~3 lines]" } }],
+    })
+
+    const recalled = setup.history.move(-1, "unsent draft")
+    expect(recalled?.text).toBe("[Pasted ~3 lines] ")
+    recalled!.pasted[0]!.source.start = 99
+    recalled!.pasted.push({ text: "extra", source: { start: 0, end: 5, text: "extra" } })
+
+    setup.history.reset()
+    expect(setup.history.move(1, "")).toBeUndefined()
+
+    const again = setup.history.move(-1, "fresh draft")
+    expect(again?.pasted).toEqual([{ text: "a\nb\nc", source: { start: 0, end: 17, text: "[Pasted ~3 lines]" } }])
+    expect(setup.history.move(1, "[Pasted ~3 lines] ")?.text).toBe("fresh draft")
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
 async function renderHistory(root: string, persisted?: string) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })

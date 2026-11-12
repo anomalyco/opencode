@@ -5,6 +5,7 @@ import { ai, DecisionClient, DecisionUsage, Media } from "../src/effect.js"
 import {
   Baseten,
   CloudflareWorkersAI,
+  Google,
   OpenAI,
   OpenCode,
   OpenRouter,
@@ -291,6 +292,67 @@ describe("Decision", () => {
       ),
   )
 
+  it.effect("sends PDFs as file parts and audio by its OpenRouter format name in the OpenRouter state", () =>
+    ai.decision
+      .generate({
+        model: OpenRouter.configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
+          "google/gemini-decision-1",
+        ),
+        input: [
+          { type: "media", media: Media.base64("JVBE", "application/pdf"), filename: "invoice.pdf" },
+          { type: "media", media: Media.base64("AAAA", "audio/x-wav") },
+        ],
+        questions: [{ name: "refund", type: "predicate", instructions: "Is this a refund request?" }],
+      })
+      .pipe(
+        Effect.provide(
+          client((input) => {
+            expect(JSON.parse(input.text).state).toEqual([
+              { type: "file", file: { file_data: "data:application/pdf;base64,JVBE", filename: "invoice.pdf" } },
+              { type: "input_audio", input_audio: { data: "AAAA", format: "wav" } },
+            ])
+            return Effect.succeed(
+              json(input, { model: "google/gemini-decision-1", answers: { refund: { type: "noul", noul: 0.9 } } }),
+            )
+          }),
+        ),
+      ),
+  )
+
+  it.effect("returns a System One host's refusals as per-question errors", () =>
+    ai.decision
+      .generate({
+        model: OpenRouter.configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
+          "openai/gpt-6-luna-decisions",
+        ),
+        input: [{ type: "text", text: "hello" }],
+        questions: [
+          { name: "greeting", type: "predicate", instructions: "Is this a greeting?" },
+          { name: "unsafe", type: "predicate", instructions: "Something the model declines" },
+        ],
+      })
+      .pipe(
+        Effect.tap((response) =>
+          Effect.sync(() =>
+            expect(response.answers).toEqual([
+              { name: "greeting", type: "predicate", probability: 0.99 },
+              { name: "unsafe", type: "error", reason: "refusal" },
+            ]),
+          ),
+        ),
+        Effect.provide(
+          client((input) =>
+            Effect.succeed(
+              json(input, {
+                model: "openai/gpt-6-luna-decisions",
+                answers: { greeting: { type: "noul", noul: 0.99 }, unsafe: { type: "refusal" } },
+              }),
+            ),
+          ),
+        ),
+      ),
+  )
+
   it.effect("puts media in a user message inside the Baseten state", () =>
     ai.decision
       .generate({
@@ -484,6 +546,179 @@ describe("Decision", () => {
         .pipe(Effect.flip)
       expect(error.reason._tag).toBe("UnsupportedOperation")
       expect(error.message).toContain("audio")
+    }).pipe(Effect.provide(offline)),
+  )
+
+  it.effect("decides through Google Decisions with every media kind", () =>
+    ai.decision
+      .generate({
+        model: Google.configure({
+          apiKey: "google-key",
+          baseURL: "https://google.test/v1beta",
+          http: { query: { trace: "1" } },
+        }).decision("gemini-decision-1"),
+        input: [
+          { type: "text", text: "Ticket:" },
+          { type: "json", value: { ticket: "Please refund the duplicate charge." } },
+          { type: "media", media: png },
+          { type: "media", media: Media.base64("AAAA", "audio/wav") },
+          { type: "media", media: Media.url("https://assets.test/clip.mp4", { mediaType: "video/mp4" }) },
+          { type: "media", media: Media.base64("JVBERi0=", "application/pdf") },
+          { type: "media", media: Media.ref("google", "https://google.test/v1beta/files/abc", "image/png") },
+        ],
+        questions: [
+          ...questions.slice(0, 2),
+          { ...questions[2], criteria: { true: "They want money back.", false: "Anything else." } },
+        ],
+        providerOptions: { mediaResolution: "low", labels: { team: "support" } },
+      })
+      .pipe(
+        Effect.tap((response) =>
+          Effect.sync(() => {
+            expect(response.answers).toEqual(expectedAnswers)
+            expect(response.usage).toEqual(new DecisionUsage({ inputTokens: 147, outputTokens: 0, totalTokens: 147 }))
+            expect(response.providerMetadata?.google?.usage).toEqual({
+              total_input_tokens: 147,
+              input_tokens_by_modality: [{ modality: "text", tokens: 147 }],
+              total_output_tokens: 0,
+              total_tokens: 147,
+            })
+          }),
+        ),
+        Effect.provide(
+          client((input) => {
+            expect(input.request.url).toBe("https://google.test/v1beta/decisions?trace=1")
+            expect(input.request.headers["x-goog-api-key"]).toBe("google-key")
+            expect(JSON.parse(input.text)).toEqual({
+              labels: { team: "support" },
+              model: "gemini-decision-1",
+              input: [
+                { type: "text", text: "Ticket:" },
+                { type: "text", text: '\n{"ticket":"Please refund the duplicate charge."}' },
+                { type: "image", mime_type: "image/png", resolution: "low", data: "AQID" },
+                { type: "audio", mime_type: "audio/wav", data: "AAAA" },
+                { type: "video", mime_type: "video/mp4", resolution: "low", uri: "https://assets.test/clip.mp4" },
+                { type: "document", mime_type: "application/pdf", data: "JVBERi0=" },
+                {
+                  type: "image",
+                  mime_type: "image/png",
+                  resolution: "low",
+                  uri: "https://google.test/v1beta/files/abc",
+                },
+              ],
+              questions: {
+                department: {
+                  type: "choice",
+                  instructions: "Which team should handle this?",
+                  criteria: { billing: "Payments and refunds", technical: null },
+                },
+                urgency: {
+                  type: "score",
+                  instructions: "How urgent is this?",
+                  criteria: ["Can wait", "Needs attention: Same day", "Blocking"],
+                },
+                refund: {
+                  type: "noul",
+                  instructions: "Is the customer asking for a refund?",
+                  criteria: { true_description: "They want money back.", false_description: "Anything else." },
+                },
+              },
+            })
+            return Effect.succeed(
+              json(input, {
+                answers: { ...systemOneAnswers, refund: { type: "noul", noul: 0.97, confidence: 0.97 } },
+                usage: {
+                  total_input_tokens: 147,
+                  input_tokens_by_modality: [{ modality: "text", tokens: 147 }],
+                  total_output_tokens: 0,
+                  total_tokens: 147,
+                },
+              }),
+            )
+          }),
+        ),
+      ),
+  )
+
+  it.effect("sends an ultra_high resolution to Google Decisions images but not video", () =>
+    ai.decision
+      .generate({
+        model: Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1"),
+        input: [
+          { type: "media", media: png },
+          { type: "media", media: Media.url("https://assets.test/clip.mp4", { mediaType: "video/mp4" }) },
+        ],
+        questions: [{ name: "match", type: "predicate", instructions: "Does the clip match the image?" }],
+        providerOptions: { mediaResolution: "ultra_high" },
+      })
+      .pipe(
+        Effect.provide(
+          client((input) => {
+            expect(JSON.parse(input.text).input).toEqual([
+              { type: "image", mime_type: "image/png", resolution: "ultra_high", data: "AQID" },
+              { type: "video", mime_type: "video/mp4", uri: "https://assets.test/clip.mp4" },
+            ])
+            return Effect.succeed(json(input, { answers: { match: { type: "noul", noul: 0.5, confidence: 0.5 } } }))
+          }),
+        ),
+      ),
+  )
+
+  it.effect("reports Google Decisions safety blocks as content policy errors", () =>
+    Effect.gen(function* () {
+      const error = yield* ai.decision
+        .generate({
+          model: Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1"),
+          input: [{ type: "text", text: "blocked" }],
+          questions: [{ name: "safe", type: "predicate", instructions: "Is this safe?" }],
+        })
+        .pipe(Effect.flip)
+      expect(error.reason._tag).toBe("ContentPolicy")
+    }).pipe(
+      Effect.provide(
+        client((input) =>
+          Effect.succeed(
+            json(
+              input,
+              {
+                error: {
+                  code: "safety",
+                  message:
+                    "Request blocked due to safety violations (harmful content). Please modify your input and retry.",
+                },
+              },
+              { status: 400 },
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects media Google Decisions can't read before network I/O", () =>
+    Effect.gen(function* () {
+      const model = Google.configure({ apiKey: "google-key" }).decision("gemini-decision-1")
+      const question = [{ name: "readable", type: "predicate", instructions: "Is it readable?" }] as const
+      const csv = yield* ai.decision
+        .generate({ model, input: [{ type: "media", media: Media.base64("YSxi", "text/csv") }], questions: question })
+        .pipe(Effect.flip)
+      expect(csv.reason._tag).toBe("UnsupportedOperation")
+      const files = yield* ai.decision
+        .generate({
+          model,
+          input: [{ type: "media", media: Media.ref("openai", "file-abc", "image/png") }],
+          questions: question,
+        })
+        .pipe(Effect.flip)
+      expect(files.reason._tag).toBe("InvalidRequest")
+      const http = yield* ai.decision
+        .generate({
+          model,
+          input: [{ type: "media", media: Media.url("http://assets.test/a.png", { mediaType: "image/png" }) }],
+          questions: question,
+        })
+        .pipe(Effect.flip)
+      expect(http.reason._tag).toBe("InvalidRequest")
     }).pipe(Effect.provide(offline)),
   )
 

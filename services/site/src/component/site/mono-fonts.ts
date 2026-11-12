@@ -35,7 +35,8 @@ export const monoFontPreloads: Partial<Record<string, string>> = import.meta.env
  * The overrides are divided by size-adjust, which scales them too. DejaVu Sans Mono (Linux) shares
  * Menlo's metrics. local() matches a face's full or PostScript name, not its family ("Menlo
  * Regular", not "Menlo"). The stand-ins have no unicode-range, so characters OpenTUI Mono lacks
- * (Cyrillic, Greek) set in the scaled system font, at the same advance.
+ * (Cyrillic, Greek) set in the scaled system font, at the same advance. Pages get them from
+ * src/style/fonts.css, which writes them out (test/fonts.test.ts keeps the two the same).
  */
 export const monoFontFaces = [
   ...[

@@ -22,7 +22,8 @@ const MAX_RETRY_AFTER_MS = 45 * 86_400_000
 
 const CHATGPT_USAGE_LIMIT_WINDOW = 86_400_000 // 24 hrs
 
-export function formatLimitReset(locale: string, created: number, retryAfterMs: number | undefined) {
+// When a usage limit resets, or undefined when the refusal's delay is missing or out of range.
+export function limitResetAt(created: number, retryAfterMs: number | undefined) {
   if (
     retryAfterMs === undefined ||
     !Number.isFinite(retryAfterMs) ||
@@ -35,6 +36,14 @@ export function formatLimitReset(locale: string, created: number, retryAfterMs: 
   const at = created + retryAfterMs
 
   if (Number.isNaN(new Date(at).getTime())) return undefined
+
+  return at
+}
+
+export function formatLimitReset(locale: string, created: number, retryAfterMs: number | undefined) {
+  const at = limitResetAt(created, retryAfterMs)
+
+  if (at === undefined) return undefined
 
   const now = Date.now()
   const sameDay = new Date(at).toDateString() === new Date(now).toDateString() && at - now < GO_UPSELL_WINDOW
