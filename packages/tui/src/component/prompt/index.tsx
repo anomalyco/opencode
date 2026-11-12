@@ -821,7 +821,11 @@ export function Prompt(props: PromptProps) {
 
         for (const extmark of allExtmarks) {
           // Undo restores the extmark after its entry in the live prompt has been removed.
-          if (typeof extmark.data?.pasted === "string") {
+          if (typeof extmark.data?.pasted === "string" && typeof extmark.data?.label === "string") {
+            if (input.getTextRange(extmark.start, extmark.end) !== extmark.data.label) {
+              input.extmarks.delete(extmark.id)
+              continue
+            }
             newMap.set(extmark.id, { type: "pasted", index: pasted.length })
             pasted.push({
               text: extmark.data.pasted,
@@ -1441,7 +1445,6 @@ export function Prompt(props: PromptProps) {
     const part = store.prompt.pasted[ref.index]
     if (!part) return false
 
-    input.extmarks.delete(extmarkId)
     input.setSelection(extmark.start, extmark.end)
     input.insertText(part.text)
     return true
