@@ -4,6 +4,7 @@ import type { Plugin } from "@opencode/plugin/tui"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
+import { useConfig } from "../config"
 
 export { locationKey } from "@opencode/client/solid"
 export type { FormWithLocation } from "@opencode/client/solid"
@@ -12,12 +13,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: { directory: string }) => {
     const client = useClient()
+    const config = useConfig()
     const data = createData({
       // Only the transcript store reads stored media as `media:<hash>` refs; plugins and other callers keep inline bytes.
       api: () => withMediaRefs(client.api),
       event: client.event,
       connection: client.connection,
       directory: props.directory,
+      // Live tool events carry screenshots as inline base64, which open tabs would otherwise hold for the whole run.
+      omitToolFileData: !config.data.session?.image_preview,
     })
     data satisfies Plugin.Context["data"]
     const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})
