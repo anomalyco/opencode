@@ -317,6 +317,7 @@ export function createActiveSessionRegion(input: {
       move: state.background.move,
     },
     navigateMessageByOffset: input.timeline.actions.navigateMessage,
+    jumpToMessage: input.timeline.actions.jumpToMessage,
     revert,
     focusInput: focus,
     model: () => {
