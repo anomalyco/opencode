@@ -69,7 +69,7 @@ fn compare(key: &str, modes: &[ThemeMode], theme: &Theme, expected: &Value, path
     // Shifts take references into the theme, as TypeScript matches colors by identity.
     let token = |path: &String| theme.get(path).unwrap_or(&Color::TRANSPARENT);
     check("decrease", paths.to_vec(), paths.iter().map(|path| theme.decrease(token(path), 1)).collect());
-    check("increase", paths.to_vec(), paths.iter().map(|path| theme.increase(token(path), 2)).collect());
+    check("increase", paths.to_vec(), paths.iter().map(|path| theme.decrease(token(path), -2)).collect());
     failures
 }
 
@@ -116,7 +116,7 @@ fn copied_tokens_shift_like_the_typescript_tokens() {
             let wanted = unpack(expected[what].as_str().unwrap());
             for (path, wanted) in paths.iter().zip(wanted) {
                 let Some(copy) = theme.get(path).copied() else { continue };
-                let shifted = if what == "decrease" { theme.decrease(&copy, 1) } else { theme.increase(&copy, 2) };
+                let shifted = if what == "decrease" { theme.decrease(&copy, 1) } else { theme.decrease(&copy, -2) };
                 let ambiguous = shifted == copy && path != "background.raised.base";
                 if pack(shifted) != wanted && !ambiguous {
                     failures.push(format!("{key}: {what} of a copy of {path} is {}, expected {wanted}", pack(shifted)));

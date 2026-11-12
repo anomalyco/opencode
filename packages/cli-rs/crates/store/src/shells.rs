@@ -123,10 +123,6 @@ impl Data {
         self.catalog_sync(Catalog::Shell, location)
     }
 
-    pub fn shell_invalidate(&self, location: Option<&Location>) {
-        self.catalog_invalidate(Catalog::Shell, location)
-    }
-
     /// The `Catalog::Shell` read. A shell created or exited while it is in flight overrides the list it returns
     /// (deviation O92-shell-list), so the list never loses a new shell or brings back an exited one.
     pub(crate) fn shell_read(&self, location: Location) -> Task<()> {

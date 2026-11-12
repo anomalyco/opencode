@@ -1,4 +1,4 @@
-//! Projects and their saved permissions (F.8), and the adoption of sessions into a project when
+//! Projects (F.8), and the adoption of sessions into a project when
 //! its repository is resolved (`worktree.resolved`).
 use opencode_api::generated::*;
 
@@ -19,11 +19,6 @@ impl State {
 
     pub fn project(&self, id: &ProjectID) -> Option<&Project> {
         self.projects.get(id)
-    }
-
-    /// Saved permissions of a project; none until read.
-    pub fn project_permissions(&self, id: &ProjectID) -> Option<&[PermissionSavedInfo]> {
-        self.project_permissions.get(id).map(Vec::as_slice)
     }
 
     /// `project.updated` replaces the project: a field the event leaves out is cleared.
@@ -129,31 +124,6 @@ impl Data {
             });
             Ok(())
         })
-    }
-
-    pub fn project_invalidate(&self) {
-        self.write(|state| state.syncs.invalidate("project"));
-    }
-
-    /// Reads a project's saved permissions once per invalidation.
-    pub fn project_permission_sync(&self, id: &ProjectID) -> Task<()> {
-        let id = id.clone();
-        self.sync_run(format!("project.permission:{}", id.0), move |data| async move {
-            let saved = data
-                .client()
-                .permission_saved_list(&PermissionSavedListInput { project_id: Some(id.clone()) })
-                .await
-                .map_err(Error::new)?;
-            data.write(|state| {
-                state.project_permissions.insert(id, saved);
-                state.log.projects();
-            });
-            Ok(())
-        })
-    }
-
-    pub fn project_permission_invalidate(&self, id: &ProjectID) {
-        self.write(|state| state.syncs.invalidate(&format!("project.permission:{}", id.0)));
     }
 }
 

@@ -97,10 +97,6 @@ impl Data {
         )
     }
 
-    pub fn permission_invalidate(&self, session: &SessionID) {
-        self.write(|state| state.syncs.invalidate(&format!("session.permission:{}", session.0)));
-    }
-
     /// Replies and drops the request; an already settled request counts as replied.
     pub async fn permission_reply(&self, input: PermissionReplyInput) -> Result<(), Error> {
         if let Err(error) = self.client().permission_reply(&input).await {

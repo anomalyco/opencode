@@ -15,7 +15,7 @@ use futures_util::future::{BoxFuture, Shared};
 use indexmap::IndexMap;
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    PermissionRequest, PermissionSavedInfo, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo,
+    PermissionRequest, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo,
     SessionInfo, SessionMessageID,
 };
 use opencode_util::lock;
@@ -79,7 +79,6 @@ pub struct State {
     /// Pending forms by owner: a session ID or [`crate::forms::GLOBAL`].
     pub(crate) forms: HashMap<String, Vec<Form>>,
     pub(crate) projects: HashMap<ProjectID, Project>,
-    pub(crate) project_permissions: HashMap<ProjectID, Vec<PermissionSavedInfo>>,
     pub(crate) locations: HashMap<Location, LocationData>,
     pub(crate) default_location: Location,
     pub(crate) omit_file_data: bool,

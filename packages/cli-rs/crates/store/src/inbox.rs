@@ -415,10 +415,6 @@ impl Data {
         })
     }
 
-    pub fn pending_invalidate(&self, session: &SessionID) {
-        self.write(|state| state.syncs.invalidate(&format!("session.pending:{}", session.0)));
-    }
-
     /// Optimistic prompt admission: renders the prompt at once under a client-minted ID, then
     /// sends it; the durable `session.inbox.enqueued` echo upserts the same ID. A failure rolls
     /// back only rows this call admitted and the server has not acknowledged.
