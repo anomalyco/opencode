@@ -74,6 +74,47 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       agent.permissions.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const })))
     })
   })
+  // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call to
+  // allow. The rules from config, the agent's definition and the session itself decide instead: a deny refuses the
+  // call, and an ask makes the permission check prompt as it would without the grant. No matching rule leaves it
+  // allowed.
+  yield* ctx.permission.hook("evaluate", (event) =>
+    event.action !== "browser" || event.effect === "deny"
+      ? Effect.void
+      : ctx.session.get({ sessionID: event.sessionID }).pipe(
+          Effect.map((session) => {
+            const rules = [
+              ...(configured.get(event.agent ?? session.agent ?? "") ?? []),
+              ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
+            ]
+            const decided = event.resources.map((operation) => ({
+              operation,
+              rule: BrowserMachine.selectBrowserRule(rules, operation),
+            }))
+            const denied = decided.find((item) => item.rule?.effect === "deny")
+            if (denied) {
+              event.effect = "deny"
+              event.message =
+                denied.rule?.resource === "*"
+                  ? "[browser.denied] Browser tools are denied for this agent by configuration; no action ran. Do not retry browser tools."
+                  : `[browser.denied] browser.${denied.operation} is denied for this agent by configuration; no action ran. Do not retry it.`
+              return
+            }
+            if (decided.some((item) => item.rule?.effect === "ask")) event.effect = "ask"
+          }),
+          // Without the rules, the grant must not decide alone.
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Browser permission evaluation failed", cause).pipe(
+              Effect.andThen(
+                Effect.sync(() => {
+                  event.effect = "deny"
+                  event.message = "Browser permissions could not be read; no action ran."
+                }),
+              ),
+            ),
+          ),
+        ),
+  )
   // Permission syncs run here. Registered first, so it closes last: after disposal has drained the revokes.
   const work = yield* Scope.make()
   yield* Effect.addFinalizer((exit) => Scope.close(work, exit))
@@ -333,23 +374,10 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
 
   return {
     /**
-     * The attachment's grant is a session rule, evaluated after every agent rule, so it would override a `browser` deny
-     * from config or the agent's definition. Such a deny, or one in the session's own rules, refuses the call. The
-     * permission check then runs `permission.evaluate` hooks such as `tool.use` policies.
+     * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
+     * this plugin's (configured denies and asks win over the grant) and others such as `tool.use` policies.
      */
     authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, operation: Browser.Method) {
-      const session = yield* ctx.session
-        .get({ sessionID: tool.sessionID })
-        .pipe(Effect.mapError((error) => new Tool.Error({ message: `Session not found: ${tool.sessionID}`, error })))
-      const rules = [
-        ...(configured.get(tool.agent) ?? []),
-        ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
-      ]
-      if (BrowserMachine.deniesBrowser(rules))
-        return yield* new Tool.Error({
-          message:
-            "[browser.denied] Browser tools are denied for this agent by configuration; no action ran. Do not retry browser tools.",
-        })
       yield* ctx.permission.assert({
         sessionID: tool.sessionID,
         agent: tool.agent,

@@ -1,7 +1,7 @@
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
 import { hostname } from "os"
 import path from "path"
-import { Context, Deferred, Effect, Stream } from "effect"
+import { Context, Deferred, Effect, Fiber, Schedule, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -13,13 +13,16 @@ import { Database } from "@opencode/core/database/database"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
+import { Wildcard } from "@opencode/core/util/wildcard"
 import { BrowserConnection } from "../../plugin-browser/src/connection"
+import { BrowserMachine } from "../../plugin-browser/src/machine"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -36,6 +39,16 @@ const grant = [
   { action: "browser", resource: "*", effect: "allow" },
   { action: "skill", resource: "browser", effect: "allow" },
 ] as const
+
+const tab = {
+  id: Browser.TabID.make(`tab_${crypto.randomUUID()}`),
+  url: "https://example.com/",
+  title: "Example",
+  loading: false,
+  canGoBack: false,
+  canGoForward: false,
+  generation: 1,
+}
 
 // A location with `config` as its opencode.json and one session, plus a stand-in desktop that attaches to that
 // session and answers every browser command with an empty tab list.
@@ -74,31 +87,36 @@ const setup = (config: object) =>
       attachments.set(connectionID, { sessionID, attached })
       yield* rpc.attach({ sessionID, connectionID, version: 4 }).pipe(Effect.forkScoped)
       yield* Deferred.await(attached).pipe(Effect.timeout("10 seconds"))
+      // One open tab, so operations that target a tab get past tab selection to the permission check.
+      yield* rpc.state({ sessionID, connectionID, state: { tabs: [tab], focusedTabID: tab.id } })
     })
     yield* attach(session.id)
-    const list = (yield* Context.get(context, Tool.Service).list()).find(
-      (tool) => tool.name === "list" && tool.options?.namespace === "browser.tabs",
-    )
-    if (!list) return yield* Effect.die(new Error("browser.tabs.list is not registered"))
+    const tools = yield* Context.get(context, Tool.Service).list()
+    // Runs browser.<operation> as `agent` would, through the plugin's executor and the real permission service.
+    const run = (operation: string, input: object, agent = "build", sessionID = session.id) => {
+      const separator = operation.lastIndexOf(".")
+      const namespace = separator < 0 ? "browser" : `browser.${operation.slice(0, separator)}`
+      const tool = tools.find(
+        (tool) => tool.name === operation.slice(separator + 1) && tool.options?.namespace === namespace,
+      )
+      if (!tool) return Effect.die(new Error(`browser.${operation} is not registered`))
+      return tool.execute(input, {
+        sessionID,
+        agent: Agent.ID.make(agent),
+        messageID: SessionMessage.ID.create(),
+        id: Tool.CallID.make(`call_${crypto.randomUUID()}`),
+        progress: () => Effect.void,
+      })
+    }
     return {
       context,
       ref,
       session,
       commands,
       attach,
+      run,
       permissions: (sessionID = session.id) => Effect.map(sessions.get(sessionID), (info) => info.permissions ?? []),
-      // Runs browser.tabs.list as `agent` would, through the plugin's executor and the real permission service.
-      call: (agent = "build", sessionID = session.id) =>
-        list.execute(
-          {},
-          {
-            sessionID,
-            agent: Agent.ID.make(agent),
-            messageID: SessionMessage.ID.create(),
-            id: Tool.CallID.make(`call_${crypto.randomUUID()}`),
-            progress: () => Effect.void,
-          },
-        ),
+      call: (agent = "build", sessionID = session.id) => run("tabs.list", {}, agent, sessionID),
     }
   })
 
@@ -232,3 +250,87 @@ it.live("another server's startup leaves a live attachment's grant in place", ()
     expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
   }),
 )
+
+const rule = (resource: string, effect: "allow" | "deny" | "ask", action = "browser") => ({ action, resource, effect })
+
+it.live("a deny on one browser operation refuses that operation and still allows the others", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("tabs.open", "deny")] })
+    expect((yield* browser.run("tabs.open", {}).pipe(Effect.flip)).message).toStartWith(
+      "[browser.denied] browser.tabs.open",
+    )
+    expect(browser.commands.count).toBe(0)
+    expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
+  }),
+)
+
+it.live("a wildcard resource pattern in a browser deny is honoured", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("files.*", "deny")] })
+    expect((yield* browser.run("files.list", { tabID: tab.id }).pipe(Effect.flip)).message).toStartWith(
+      "[browser.denied] browser.files.list",
+    )
+    expect(browser.commands.count).toBe(0)
+    expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
+  }),
+)
+
+it.live("an allow for one operation after a whole-browser deny wins, as the last matching rule", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("*", "deny"), rule("tabs.list", "allow")] })
+    expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
+    expect((yield* browser.run("tabs.open", {}).pipe(Effect.flip)).message).toStartWith("[browser.denied]")
+    expect(browser.commands.count).toBe(1)
+  }),
+)
+
+it.live("a configured browser ask prompts for the call instead of being answered by the grant", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("tabs.list", "ask")] })
+    const permissions = Context.get(browser.context, Permission.Service)
+    const call = yield* browser.call().pipe(Effect.forkScoped)
+    const request = yield* permissions.list().pipe(
+      Effect.flatMap((requests) => (requests[0] ? Effect.succeed(requests[0]) : Effect.fail("not asked yet"))),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("5 seconds"),
+    )
+    expect(request).toMatchObject({ sessionID: browser.session.id, action: "browser", resources: ["tabs.list"] })
+    expect(browser.commands.count).toBe(0)
+
+    yield* permissions.reply({ requestID: request.id, reply: "once" })
+    expect((yield* Fiber.join(call)).output).toEqual({ tabs: [], focusedTabID: null })
+    expect(browser.commands.count).toBe(1)
+  }),
+)
+
+test("the plugin picks the same browser rule as core's permission evaluation", () => {
+  const patterns = [
+    "*",
+    "browser",
+    "brow*",
+    "b?owser",
+    "browser.*",
+    "Browser",
+    "files.*",
+    "tabs.list",
+    "b.owser",
+    "browser *",
+    "*.list",
+    "a\\b",
+  ]
+  const inputs = ["browser", "tabs.list", "files.upload", "evaluate", "browser.x", "a/b"]
+  for (const input of inputs)
+    for (const pattern of patterns) expect(BrowserMachine.match(input, pattern)).toBe(Wildcard.match(input, pattern))
+  // Each pattern once as an action (any resource) and once as a resource of `browser`, with varying effects.
+  const rules = patterns.flatMap((pattern, index) => [
+    rule("*", index % 3 === 0 ? "deny" : index % 3 === 1 ? "allow" : "ask", pattern),
+    rule(pattern, index % 2 === 0 ? "ask" : "deny"),
+  ])
+  for (const operation of inputs)
+    for (const end of rules.keys()) {
+      const slice = rules.slice(0, end + 1)
+      // Core returns the rule it picked, or a fresh default `ask` rule when none matches.
+      const picked = Permission.evaluate("browser", operation, slice)
+      expect(BrowserMachine.selectBrowserRule(slice, operation)).toBe(slice.includes(picked) ? picked : undefined)
+    }
+})

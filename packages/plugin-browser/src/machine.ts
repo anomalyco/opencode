@@ -570,21 +570,23 @@ export function isGrant(rule: Permission.Rule) {
   )
 }
 
-/** Whether the rules deny every browser tool, decided as core's tool filter does: the last rule for `browser` wins. */
-export function deniesBrowser(rules: readonly Permission.Rule[]) {
-  const rule = rules.findLast((rule) => matchesBrowser(rule.action))
-  return rule?.resource === "*" && rule.effect === "deny"
+/**
+ * The rule that decides `browser` on `operation`, picked as core's `Permission.evaluate` picks it: the last rule whose
+ * action and resource patterns both match. Undefined when none matches.
+ */
+export function selectBrowserRule(rules: readonly Permission.Rule[], operation: string) {
+  return rules.findLast((rule) => match("browser", rule.action) && match(operation, rule.resource))
 }
 
-// Core's `Wildcard.match("browser", pattern)`, which plugins cannot import.
-function matchesBrowser(pattern: string) {
+/** Core's `Wildcard.match`, which plugins cannot import. A core test checks the two agree. */
+export function match(input: string, pattern: string) {
   const escaped = pattern
     .replaceAll("\\", "/")
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
     .replace(/\*/g, ".*")
     .replace(/\?/g, ".")
   const source = escaped.endsWith(" .*") ? escaped.slice(0, -3) + "( .*)?" : escaped
-  return new RegExp("^" + source + "$", process.platform === "win32" ? "si" : "s").test("browser")
+  return new RegExp("^" + source + "$", process.platform === "win32" ? "si" : "s").test(input.replaceAll("\\", "/"))
 }
 
 export function isConnectionDisposed(state: ConnectionState) {

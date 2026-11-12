@@ -276,24 +276,29 @@ describe("reconcileBrowserPermissions", () => {
   })
 })
 
-describe("deniesBrowser", () => {
+describe("selectBrowserRule", () => {
   const rule = (action: string, effect: "allow" | "deny" | "ask", resource = "*") => ({ action, resource, effect })
+  const effect = (rules: ReturnType<typeof rule>[], operation: string) =>
+    BrowserMachine.selectBrowserRule(rules, operation)?.effect
 
-  test("the last rule whose action matches browser decides, as core's tool filter does", () => {
-    expect(BrowserMachine.deniesBrowser([rule("browser", "deny")])).toBe(true)
-    expect(BrowserMachine.deniesBrowser([rule("*", "deny"), rule("read", "allow")])).toBe(true)
-    expect(BrowserMachine.deniesBrowser([rule("brow*", "deny")])).toBe(true)
-    expect(BrowserMachine.deniesBrowser([rule("browser", "deny"), rule("*", "ask")])).toBe(false)
-    expect(BrowserMachine.deniesBrowser([rule("*", "deny"), rule("browser", "allow")])).toBe(false)
-    expect(BrowserMachine.deniesBrowser([])).toBe(false)
+  test("the last rule whose action and resource match decides", () => {
+    expect(effect([rule("browser", "deny")], "tabs.list")).toBe("deny")
+    expect(effect([rule("*", "deny"), rule("read", "allow")], "tabs.list")).toBe("deny")
+    expect(effect([rule("brow*", "deny")], "tabs.list")).toBe("deny")
+    expect(effect([rule("browser", "deny"), rule("*", "ask")], "tabs.list")).toBe("ask")
+    expect(effect([rule("browser", "deny"), rule("browser", "allow", "tabs.list")], "tabs.list")).toBe("allow")
+    expect(effect([rule("browser", "deny"), rule("browser", "allow", "tabs.list")], "evaluate")).toBe("deny")
+    expect(effect([], "tabs.list")).toBeUndefined()
   })
 
-  test("a deny limited to some resources does not deny the browser", () => {
-    expect(BrowserMachine.deniesBrowser([rule("browser", "deny", "https://bank.example/*")])).toBe(false)
+  test("resource patterns name operations", () => {
+    expect(effect([rule("browser", "deny", "files.*")], "files.upload")).toBe("deny")
+    expect(effect([rule("browser", "deny", "files.*")], "tabs.list")).toBeUndefined()
+    expect(effect([rule("browser", "deny", "https://bank.example/*")], "tabs.list")).toBeUndefined()
   })
 
   test("other actions and literal regex characters do not match", () => {
-    expect(BrowserMachine.deniesBrowser([rule("browsers", "deny"), rule("b.owser", "deny")])).toBe(false)
+    expect(effect([rule("browsers", "deny"), rule("b.owser", "deny")], "tabs.list")).toBeUndefined()
   })
 })
 
