@@ -4,7 +4,7 @@
 //   bun run parity/scenarios/H.4/drive.ts
 //
 // One TS server runs in simulation mode (`OPENCODE_SIMULATE=1`) in a fresh sandbox home, never the user's service.
-// Each client runs headless against it with its own drive manifest. Captures go to `parity/fixtures/H.4/`.
+// Each client runs headless against it with its own drive manifest. Captures go to `parity/out/H.4/` (ignored by git).
 // Build the Rust binary first (`cargo build -p opencode-cli --bin opencode-rs`) or set OPENCODE_RS_BIN.
 
 import { mkdir, writeFile } from "node:fs/promises"
@@ -84,7 +84,7 @@ try {
   await waitForServer(server)
   const results = {} as Record<Side, Awaited<ReturnType<typeof drive>>>
   for (const [index, side] of (["ts", "rs"] as const).entries()) results[side] = await drive(side, ports[index + 1])
-  const out = path.join(parityRoot, "fixtures", "H.4")
+  const out = path.join(parityRoot, "out", "H.4")
   await mkdir(out, { recursive: true })
   for (const side of ["ts", "rs"] as const)
     for (const [name, frame] of Object.entries(results[side].captures))
