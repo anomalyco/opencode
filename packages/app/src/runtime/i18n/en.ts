@@ -636,6 +636,11 @@ export const dict = {
   "session.background.moveRunning": "Move to background",
   "session.background.moveInline": "Press {{keybind}} to move running work to the background",
   "command.session.background": "Move to background",
+  "session.freeLimit.title": "Free limit reached",
+  "session.freeLimit.reset": "Free usage resets at {{time}}. Connect a provider or subscribe to Go to continue.",
+  "session.freeLimit.noReset": "Connect a provider or subscribe to Go to continue.",
+  "session.freeLimit.connect": "Connect provider",
+  "session.freeLimit.subscribe": "Subscribe to Go · $10/mo",
   "session.goLimit.title": "Go usage limit reached.",
   "session.goLimit.titleNamed": "Go {{name}} usage limit reached.",
   "session.goLimit.reset": "It resets at {{time}}.",
@@ -866,6 +871,9 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "New timeline",
   "settings.experimental.row.newTimeline.description":
     "A redesigned session timeline that groups what the agent did, with one status line below the turn",
+  "settings.experimental.row.freeLimitPanel.title": "Free limit panel",
+  "settings.experimental.row.freeLimitPanel.description":
+    "When free usage runs out, show how to keep going in place of the composer instead of a popup",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",

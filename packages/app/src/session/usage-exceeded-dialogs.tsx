@@ -9,6 +9,7 @@ import { useDialog, useI18n } from "@opencode/ui/context"
 import { DialogUsageExceeded } from "@/providers/connect/usage-exceeded"
 import { GoUpsellHero } from "@/providers/connect/go-upsell-hero"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
+import { useSettings } from "@/settings/model"
 
 const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
 
@@ -58,6 +59,7 @@ export function useUsageExceededDialogs(input?: {
   const dialog = useDialog()
   const local = useLocal()
   const { params } = useSessionLayout()
+  const settings = useSettings()
   const { t, locale } = useI18n()
 
   const [goUpsellState, setGoUpsellState, goUpsellInit, goUpsellReady] = persisted(
@@ -76,6 +78,8 @@ export function useUsageExceededDialogs(input?: {
   )
 
   const showFreeLimitDialog = (evt: SessionStepFailed) => {
+    // The free-limit panel takes the composer's place instead.
+    if (settings.general.freeLimitPanel()) return
     if (evt.data.sessionID !== params.id || dialog.active) return
     const seen = goUpsellState[GO_UPSELL_FREE_TIER_LAST_SEEN_AT]
 

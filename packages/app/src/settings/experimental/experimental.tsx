@@ -80,6 +80,20 @@ export const SettingsExperimental: Component = () => {
               </div>
             </SettingsRow>
             <SettingsRow
+              title={language.t("settings.experimental.row.freeLimitPanel.title")}
+              description={language.t("settings.experimental.row.freeLimitPanel.description")}
+            >
+              <div data-action="settings-free-limit-panel">
+                <Switch
+                  checked={settings.general.freeLimitPanel()}
+                  onChange={(checked) => settings.general.setFreeLimitPanel(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.freeLimitPanel.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.experimental.row.newQuestionUI.title")}
               description={language.t("settings.experimental.row.newQuestionUI.description")}
             >
