@@ -83,7 +83,8 @@ describe("native OpenAI-compatible providers", () => {
 
     expect(together).toMatchObject({
       provider: "togetherai",
-      compatibility: { maxTokensField: "max_tokens", supportsStrictMode: false },
+      compatibility: { maxTokensField: "max_tokens" },
+      capabilities: { tools: { strict: false } },
       route: { id: "togetherai-chat", protocol: "openai-chat" },
     })
     expect(together.route.endpoint.baseURL).toBe("https://api.together.xyz/v1")
@@ -212,9 +213,9 @@ describe("native OpenAI-compatible providers", () => {
       })
 
       expect(selected.route.endpoint.baseURL).toBe("https://gateway.example/v1")
-      expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
-      expect(selected.route.defaults.http?.body).toEqual({ service_tier: "priority" })
-      expect(selected.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
+      expect(selected.options?.headers).toEqual({ "x-application": "opencode" })
+      expect(selected.options?.http?.body).toEqual({ service_tier: "priority" })
+      expect(selected.options?.providerOptions).toEqual({ reasoningEffort: "high" })
     }
   })
 

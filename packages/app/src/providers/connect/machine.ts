@@ -1,11 +1,18 @@
 import type {
   FormAnswer,
-  FormField,
   IntegrationCommandConnectOutput,
   IntegrationInfo,
   IntegrationMethod,
   IntegrationOauthConnectOutput,
 } from "@opencode/client/promise"
+import {
+  createProviderFormState,
+  selectProviderFormView,
+  transitionProviderForm,
+  type ProviderActiveForm,
+  type ProviderFormEvent,
+  type ProviderFormInput,
+} from "./form-machine"
 
 export type ProviderConnectMethod = Exclude<IntegrationMethod, { type: "env" }>
 
@@ -26,6 +33,8 @@ export type ProviderSignIn =
       readonly method: Extract<ProviderConnectMethod, { type: "oauth" }>
       readonly authorization: ProviderAuthorization
       readonly browserFailed: boolean
+      /** Set when the attempt also takes the redirect URL pasted from a browser that cannot reach the server. */
+      readonly paste?: ProviderPaste
     }
   | {
       readonly kind: "code"
@@ -48,6 +57,13 @@ export type ProviderPolledSignIn = Extract<ProviderSignIn, { kind: "browser" | "
 
 export type ProviderEntryError = { readonly type: "required" } | { readonly type: "rejected"; readonly message: string }
 
+/** The pasted redirect URL of a browser sign-in. The browser's own callback still completes the sign-in meanwhile. */
+export type ProviderPaste =
+  | { readonly status: "editing"; readonly value: string; readonly error?: ProviderEntryError }
+  | { readonly status: "submitting"; readonly value: string }
+  /** The server took the URL and finishes the sign-in; polling reports how it ends. */
+  | { readonly status: "accepted"; readonly value: string }
+
 export type ProviderRetry =
   | { readonly type: "start" }
   | { readonly type: "poll"; readonly signIn: Extract<ProviderSignIn, { kind: "browser" }> }
@@ -64,7 +80,7 @@ type Selection = {
 export type ProviderConnectState =
   | { readonly status: "loading"; readonly attempt: number }
   | { readonly status: "choosing"; readonly attempt: number; readonly catalog: ProviderCatalog }
-  | (Selection & { readonly status: "form" })
+  | (Selection & { readonly status: "form"; readonly form: ProviderActiveForm })
   | (Selection & { readonly status: "starting" })
   | (Selection & {
       readonly status: "entering"
@@ -94,8 +110,20 @@ export type ProviderConnectEvent =
       readonly manual: boolean
     }
   | { readonly type: "method.selected"; readonly index: number }
-  | { readonly type: "form.submitted"; readonly answer: FormAnswer }
+  | { readonly type: "form"; readonly event: ProviderFormInput }
+  /** `browser` is the form's attempt for this open; `opened` is false when it failed or did not answer in time. */
+  | {
+      readonly type: "form.browser.opened"
+      readonly attempt: number
+      readonly browser: number
+      readonly opened: boolean
+    }
   | { readonly type: "entry.submitted"; readonly value: string }
+  | { readonly type: "paste.changed"; readonly value: string }
+  | { readonly type: "paste.submitted" }
+  /** The server took the pasted URL; the sign-in still settles through polling. */
+  | { readonly type: "paste.accepted"; readonly attempt: number }
+  | { readonly type: "paste.rejected"; readonly attempt: number; readonly error: string }
   | { readonly type: "oauth.started"; readonly attempt: number; readonly authorization: ProviderAuthorization }
   | { readonly type: "command.started"; readonly attempt: number; readonly command: ProviderCommandAttempt }
   | { readonly type: "external.saved"; readonly attempt: number }
@@ -121,6 +149,13 @@ export type ProviderConnectEffect =
       readonly answer?: FormAnswer
     }
   | { readonly type: "open.browser"; readonly attemptID: string; readonly url: string }
+  | {
+      readonly type: "form.open.browser"
+      readonly attempt: number
+      readonly browser: number
+      readonly url: string
+      readonly timeoutMs: number
+    }
   | { readonly type: "poll"; readonly attempt: number; readonly signIn: ProviderPolledSignIn; readonly delay: boolean }
   | { readonly type: "poll.stop" }
   | { readonly type: "cancel"; readonly target: "oauth" | "command"; readonly attemptID: string }
@@ -130,6 +165,12 @@ export type ProviderConnectEffect =
       readonly signIn: ProviderTypedSignIn
       readonly value: string
       readonly answer?: FormAnswer
+    }
+  | {
+      readonly type: "paste"
+      readonly attempt: number
+      readonly signIn: Extract<ProviderSignIn, { kind: "browser" }>
+      readonly value: string
     }
   | { readonly type: "refresh"; readonly attempt: number; readonly method: ProviderConnectMethod }
   /** Reloads the catalogs without reporting back, for a credential saved after the dialog moved on. */
@@ -146,26 +187,6 @@ export function connectMethods(integration: IntegrationInfo) {
   return integration.methods
     .filter((method): method is ProviderConnectMethod => method.type !== "env")
     .toSorted((a, b) => Number(a.type === "key") - Number(b.type === "key"))
-}
-
-export function providerFormDefaults(fields: ReadonlyArray<FormField> | undefined) {
-  return (fields ?? []).reduce<FormAnswer>((answer, field) => {
-    if (field.type === "external" || !field.hidden || field.default === undefined) return answer
-
-    const active = (field.when ?? []).every((condition) => {
-      const actual = answer[condition.key]
-
-      if (actual === undefined) return false
-
-      const equal = Array.isArray(actual) ? actual.some((item) => item === condition.value) : actual === condition.value
-
-      return condition.op === "eq" ? equal : !equal
-    })
-
-    if (!active) return answer
-
-    return Object.assign(answer, { [field.key]: field.default })
-  }, {})
 }
 
 export function startProviderConnect(): ProviderConnectTransition {
@@ -237,9 +258,11 @@ export function transitionProviderConnect(
   }
 
   if (state.status === "form") {
-    if (event.type !== "form.submitted") return unchanged(state)
+    if (event.type === "form") return form(state, event.event)
 
-    return select(state.catalog, state.methodIndex, state.attempt + 1, event.answer)
+    if (event.type !== "form.browser.opened") return unchanged(state)
+
+    return form(state, { type: "external.opened", attempt: event.browser, opened: event.opened })
   }
 
   if (state.status === "starting") return started(state, event)
@@ -328,7 +351,9 @@ export function selectProviderConnectView(state: ProviderConnectState) {
     authorization,
     browserFailed: signIn?.kind === "browser" && signIn.browserFailed,
     commandOutput: signIn?.kind === "command" ? signIn.output : "",
+    form: state.status === "form" ? selectProviderFormView(state.form) : undefined,
     entryError: state.status === "entering" ? state.error : undefined,
+    paste: state.status === "waiting" && signIn?.kind === "browser" && signIn.paste ? pasteView(signIn.paste) : undefined,
     // A typed secret is sent and the catalogs are refreshing: the form takes no second submit.
     submitting: state.status === "submitting" || state.status === "refreshing",
     error: state.status === "failed" ? state.error : undefined,
@@ -364,17 +389,40 @@ function select(
   answer?: FormAnswer,
 ): ProviderConnectTransition {
   const method = catalog.methods[methodIndex]
-  const form = method.type === "command" ? undefined : method.form
+  // An answered form already holds the defaults of its hidden fields; one with nothing to ask answers itself.
+  const form = answer ? undefined : createProviderFormState(method.type === "command" ? undefined : method.form)
 
-  if (!answer && (form ?? []).some((field) => field.type === "external" || !field.hidden))
-    return unchanged({ status: "form", attempt, catalog, methodIndex })
+  if (form?.status === "active") return unchanged({ status: "form", attempt, catalog, methodIndex, form })
 
-  const merged = { ...providerFormDefaults(form), ...answer }
-  const base = { attempt, catalog, methodIndex, answer: Object.keys(merged).length ? merged : undefined }
+  const resolved = answer ?? form?.answer ?? {}
+  const base = { attempt, catalog, methodIndex, answer: Object.keys(resolved).length ? resolved : undefined }
 
   if (method.type === "key") return unchanged({ ...base, status: "entering", signIn: { kind: "key", method } })
 
   return { state: { ...base, status: "starting" }, effects: [{ type: "start", attempt, method, answer: base.answer }] }
+}
+
+// Moves the form one step on; an answered form starts the method with the answer.
+function form(state: Extract<ProviderConnectState, { status: "form" }>, event: ProviderFormEvent) {
+  const next = transitionProviderForm(state.form, event)
+
+  if (next.state === state.form) return unchanged(state)
+
+  if (next.state.status === "completed")
+    return select(state.catalog, state.methodIndex, state.attempt + 1, next.state.answer)
+
+  return {
+    state: { ...state, form: next.state },
+    effects: next.effects.map(
+      (effect): ProviderConnectEffect => ({
+        type: "form.open.browser",
+        attempt: state.attempt,
+        browser: effect.attempt,
+        url: effect.url,
+        timeoutMs: effect.timeoutMs,
+      }),
+    ),
+  }
 }
 
 function started(
@@ -425,6 +473,14 @@ function polled(
   state: Extract<ProviderConnectState, { status: "waiting" }>,
   event: ProviderConnectEvent,
 ): ProviderConnectTransition {
+  if (
+    event.type === "paste.changed" ||
+    event.type === "paste.submitted" ||
+    event.type === "paste.accepted" ||
+    event.type === "paste.rejected"
+  )
+    return pasted(state, event)
+
   if (event.type !== "polled") return unchanged(state)
   const outcome = event.outcome
 
@@ -446,15 +502,69 @@ function polled(
   return unchanged({ ...selection(state, state.attempt), status: "failed", error: outcome.error, retry })
 }
 
+// A paste only hands the server the URL: polling keeps running and reports how the sign-in ends.
+function pasted(
+  state: Extract<ProviderConnectState, { status: "waiting" }>,
+  event: Extract<
+    ProviderConnectEvent,
+    { type: "paste.changed" | "paste.submitted" | "paste.accepted" | "paste.rejected" }
+  >,
+): ProviderConnectTransition {
+  const signIn = state.signIn
+
+  if (signIn.kind !== "browser" || !signIn.paste) return unchanged(state)
+  const paste = signIn.paste
+  const set = (next: ProviderPaste) => ({ ...state, signIn: { ...signIn, paste: next } })
+
+  if (event.type === "paste.changed") {
+    if (paste.status !== "editing" || (event.value === paste.value && !paste.error)) return unchanged(state)
+
+    return unchanged(set({ status: "editing", value: event.value }))
+  }
+
+  if (event.type === "paste.submitted") {
+    if (paste.status !== "editing") return unchanged(state)
+    const value = paste.value.trim()
+
+    if (!value) return unchanged(set({ status: "editing", value: paste.value, error: { type: "required" } }))
+
+    return {
+      state: set({ status: "submitting", value: paste.value }),
+      effects: [{ type: "paste", attempt: state.attempt, signIn, value }],
+    }
+  }
+
+  if (paste.status !== "submitting") return unchanged(state)
+
+  if (event.type === "paste.accepted") return unchanged(set({ status: "accepted", value: paste.value }))
+
+  return unchanged(set({ status: "editing", value: paste.value, error: { type: "rejected", message: event.error } }))
+}
+
+function pasteView(paste: ProviderPaste) {
+  return {
+    value: paste.value,
+    error: paste.status === "editing" ? paste.error : undefined,
+    locked: paste.status !== "editing",
+    submitting: paste.status === "submitting",
+  }
+}
+
 function poll(
   state: Extract<ProviderConnectState, { status: "starting" | "failed" }>,
   signIn: ProviderPolledSignIn,
 ): ProviderConnectTransition {
   const attempt = state.status === "starting" ? state.attempt : state.attempt + 1
 
+  // A paste in flight when polling failed reports to the old attempt, so a resumed sign-in starts editable too.
+  const next: ProviderPolledSignIn =
+    signIn.kind === "browser" && signIn.authorization.paste
+      ? { ...signIn, paste: { status: "editing", value: signIn.paste?.value ?? "" } }
+      : signIn
+
   return {
-    state: { ...selection(state, attempt), status: "waiting", signIn },
-    effects: [{ type: "poll", attempt, signIn, delay: false }],
+    state: { ...selection(state, attempt), status: "waiting", signIn: next },
+    effects: [{ type: "poll", attempt, signIn: next, delay: false }],
   }
 }
 

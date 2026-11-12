@@ -214,6 +214,8 @@ function ActiveTooltip(props: TooltipProps) {
           />
           <Portal>
             <Content
+              // A modal dialog hides what's outside it from assistive tech, and this tip is portaled outside it.
+              data-kb-top-layer=""
               ref={(el) => {
                 const theme = ref?.closest("[data-theme]")?.getAttribute("data-theme")
 

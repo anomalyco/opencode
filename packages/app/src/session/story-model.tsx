@@ -118,9 +118,9 @@ export function SessionPreview(props: SessionPreviewProps) {
             <SessionSurfaceState
               {...props}
               request={
-                props.request?.type === "question"
+                props.request?.type === "question" || props.request?.type === "elicitation"
                   ? {
-                      type: "question",
+                      type: props.request.type,
                       value: { ...props.request.value, id: `${props.request.value.id}:${revision}` },
                     }
                   : props.request

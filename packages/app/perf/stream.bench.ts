@@ -45,34 +45,44 @@ const stream: Case<{}> = {
   },
 }
 
+/** What a case's launch sets up beyond the 120-turn session: cases with the same one share a launch. */
+const setups = new Map<string, "tool-heavy" | "review" | "find" | "wait">([
+  ["stream into a tool-heavy history", "tool-heavy"],
+  ["stream with review open", "review"],
+  [withFind, "find"],
+  ["wait on a running session", "wait"],
+])
+
 export default bench({
+  setupKey: (ctx) => setups.get(ctx.case) ?? "plain",
+
   targets: {
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      prepare: ({ case: name, playwright, mock, url }) =>
-        mockTimelineSession(cached(playwright.page, mock), {
-          server: new URL(url).origin,
-          historyTurns: name === "stream into a tool-heavy history" ? 320 : 120,
-          toolHeavy: name === "stream into a tool-heavy history",
+      prepare: (ctx) =>
+        mockTimelineSession(cached(ctx), {
+          server: new URL(ctx.url).origin,
+          historyTurns: ctx.setupKey === "tool-heavy" ? 320 : 120,
+          toolHeavy: ctx.setupKey === "tool-heavy",
           busy: true,
           stream: true,
-          vcsDiff: name === "stream with review open" ? reviewDiffs() : undefined,
+          vcsDiff: ctx.setupKey === "review" ? reviewDiffs() : undefined,
         }),
       url: ({ prepared }) => prepared.path,
     }),
   },
 
-  async setup({ case: name, page }) {
+  async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
 
-    if (name === "stream with review open") await openReview(page)
+    if (setupKey === "review") await openReview(page)
 
-    if (name === withFind) await openFind(page)
+    if (setupKey === "find") await openFind(page)
 
     // Its animations never stop, and with the attribution probes on a slow machine their frames can run long enough
     // that the page never counts as idle.
-    if (name === "wait on a running session") return page.wait(2000)
+    if (setupKey === "wait") return page.wait(2000)
     await page.idle()
   },
 

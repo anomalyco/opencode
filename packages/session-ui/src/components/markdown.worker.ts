@@ -9,7 +9,6 @@ import {
   type MarkdownWorkerRequest,
   type MarkdownWorkerResponse,
 } from "./markdown-worker-protocol"
-import { createLatestWorkerQueue } from "./markdown-worker-queue"
 import { project, type Projection } from "./markdown-stream"
 
 type Stream = {
@@ -24,22 +23,13 @@ const projections = new Map<string, Projection>()
 
 const parser = createMarkdownParser()
 
-const highlightQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "highlight" }>>({
-  run: highlight,
-  supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
-  dispose: closeStream,
-})
-
-const projectQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "project" }>>({
-  run: runProject,
-  supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
-  dispose: (key) => void projections.delete(key),
-})
-
+// Requests run in arrival order. The main thread's lanes already keep at most one request per key in flight and drop
+// superseded snapshots before posting, so the worker needs no queue of its own.
 self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
   if (event.data.type === "dispose") {
-    highlightQueue.dispose(event.data.key)
-    projectQueue.dispose(event.data.key)
+    if (event.data.target === "project") projections.delete(event.data.key)
+
+    if (event.data.target === "highlight") closeStream(event.data.key)
 
     return
   }
@@ -51,12 +41,12 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
   }
 
   if (event.data.type === "project") {
-    projectQueue.highlight(event.data)
+    runProject(event.data)
 
     return
   }
 
-  highlightQueue.highlight(event.data)
+  highlight(event.data)
 }
 
 async function parse(request: Extract<MarkdownWorkerRequest, { type: "parse" }>) {
@@ -67,7 +57,7 @@ async function parse(request: Extract<MarkdownWorkerRequest, { type: "parse" }>)
   }
 }
 
-async function runProject(request: Extract<MarkdownWorkerRequest, { type: "project" }>) {
+function runProject(request: Extract<MarkdownWorkerRequest, { type: "project" }>) {
   try {
     const previous = projections.get(request.key)
     const projection = project(previous, request.text, request.live)
@@ -90,7 +80,7 @@ async function runProject(request: Extract<MarkdownWorkerRequest, { type: "proje
   }
 }
 
-async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {
+function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {
   try {
     // Report the requested language so the viewer can label the block and spot Mermaid; lex unknown ones as text.
     const language = request.language

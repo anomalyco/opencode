@@ -249,7 +249,10 @@ export function createProviderDialogController(options: {
         variant: "success",
         icon: "circle-check",
         title: language.t("provider.connect.toast.connected.title", { provider: name }),
-        description: language.t("provider.connect.toast.connected.description", { provider: name }),
+        description:
+          connectionModels().length > 0
+            ? language.t("provider.connect.toast.connected.description", { provider: name })
+            : undefined,
       })
 
       return
@@ -317,6 +320,27 @@ export function createProviderDialogController(options: {
       return
     }
 
+    // Desktop opens the browser over IPC, which can hang; a launch that does not answer in time counts as failed, so
+    // the form shows the link to open by hand.
+    if (effect.type === "form.open.browser") {
+      const timeout = Promise.withResolvers<boolean>()
+      const timer = setTimeout(() => timeout.resolve(false), effect.timeoutMs)
+      void Promise.race([
+        Promise.try(() => {
+          if (platform.openBrowser) return platform.openBrowser(effect.url)
+          platform.openExternal(effect.url)
+
+          return true
+        }).catch(() => false),
+        timeout.promise,
+      ]).then((opened) => {
+        clearTimeout(timer)
+        result({ type: "form.browser.opened", attempt: effect.attempt, browser: effect.browser, opened })
+      })
+
+      return
+    }
+
     if (effect.type === "poll") {
       clearTimeout(pollTimer)
       pollTimer = undefined
@@ -369,6 +393,18 @@ export function createProviderDialogController(options: {
             error: formatServerError(error, language.t, fallback),
           }),
       )
+
+      return
+    }
+
+    if (effect.type === "paste") {
+      void serverSDK.api.integration.oauth
+        .complete({ integrationID, attemptID: effect.signIn.authorization.attemptID, location, code: effect.value })
+        .then(
+          () => result({ type: "paste.accepted", attempt: effect.attempt }),
+          (error) =>
+            result({ type: "paste.rejected", attempt: effect.attempt, error: formatServerError(error, language.t) }),
+        )
 
       return
     }

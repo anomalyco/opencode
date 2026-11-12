@@ -51,6 +51,8 @@ export const UnifiedDark = {
 
 const commentFile = "src/review.ts"
 
+const mentionPaths = [commentFile, "src/review.test.ts", "src/server.ts", "README.md"]
+
 const commentDiffs = [
   {
     file: commentFile,
@@ -89,6 +91,7 @@ function InteractiveCommentsStory() {
             deleteLabel: "Delete",
             saveLabel: "Save",
           }}
+          lineCommentMention={{ items: (query) => mentionPaths.filter((path) => path.includes(query)) }}
         />
       </div>
     </CurrentSessionProviders>

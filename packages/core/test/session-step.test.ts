@@ -17,11 +17,13 @@ import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStep } from "@opencode/core/session/runner/step"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { Snapshot } from "@opencode/core/snapshot"
+import { Tool } from "@opencode/core/tool"
+import { Permission } from "@opencode/core/permission"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Money } from "@opencode/schema/money"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { asc, eq } from "drizzle-orm"
-import { Effect, Exit, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -225,5 +227,210 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       .get()
     expect(message?.data).toMatchObject({ finish: "stop", cost: 0 })
     expect(yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()).toMatchObject({ cost: 0 })
+  }),
+)
+
+// Interrupts an attempt running a tool that stops on `cancel` and one that never does, and returns how the step and
+// its calls were recorded.
+const stopTwoTools = (how: {
+  reason: "user" | "shutdown" | undefined
+  locationClosed: boolean
+  handoffPrepared?: boolean
+  // What the cooperative tool does once asked to stop; by default it fails with its partial output.
+  stopped?: Effect.Effect<never, Permission.DeclinedError>
+}) =>
+  Effect.gen(function* () {
+    const db = (yield* Database.Service).db
+    const llm = yield* TestLLM.Test
+    const sessionID = Session.ID.create()
+    const assistantMessageID = SessionMessage.ID.create()
+    const steps = yield* SessionStep.make.pipe(
+      Effect.provide(
+        Layer.mock(Snapshot.Service)({
+          capture: () => Effect.succeed(undefined),
+          files: () => Effect.succeed([]),
+        }),
+      ),
+    )
+    yield* db
+      .insert(ProjectTable)
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .onConflictDoNothing()
+      .run()
+    yield* db
+      .insert(SessionTable)
+      .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: "/project", version: "test" })
+      .run()
+    const model = SessionRunnerModel.resolved(
+      LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+      {
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        limit: { context: 100_000, output: 1_000 },
+        cost: [],
+      },
+    )
+    yield* llm.push(
+      TestLLM.complete(
+        { reason: { normalized: "tool-calls" }, usage: { inputTokens: 1, outputTokens: 1 } },
+        LLMEvent.toolCall({ id: "call-cooperative", name: "test", input: {} }),
+        LLMEvent.toolCall({ id: "call-stuck", name: "test", input: {} }),
+      ),
+    )
+    const stopped: Effect.Effect<never, Permission.DeclinedError | Tool.Error> =
+      how.stopped ?? Effect.fail(new Tool.Error({ message: "partial output", metadata: { interrupted: true } }))
+    const listening = yield* Deferred.make<void>()
+    const stuck = yield* Deferred.make<void>()
+    let interrupted = false
+    const attempt = yield* steps
+      .attempt({
+        isLocationClosed: () => how.locationClosed,
+        interruption: () => how.reason,
+        handoffPrepared: () => how.handoffPrepared === true,
+        sessionID,
+        assistantMessageID,
+        agent: Agent.defaultID,
+        model,
+        prepared: {
+          retry: () => Effect.void,
+          request: ai.request({ model: model.model, prompt: "Run two tools" }),
+          options: {},
+          executeTool: (input) =>
+            input.call.id === "call-cooperative"
+              ? // Like the shell tool: stops on `cancel` and fails with what it has.
+                Deferred.succeed(listening, undefined).pipe(
+                  Effect.andThen(input.cancel ?? Effect.never),
+                  Effect.andThen(stopped),
+                )
+              : Deferred.succeed(stuck, undefined).pipe(
+                  Effect.andThen(Effect.never),
+                  Effect.onInterrupt(() =>
+                    Effect.sync(() => {
+                      interrupted = true
+                    }),
+                  ),
+                ),
+        },
+        retry: () => Effect.succeed({ retry: false }),
+        recoverContinuation: true,
+        recoverOverflow: Effect.succeed(false),
+      })
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(listening)
+    yield* Deferred.await(stuck)
+    yield* Fiber.interrupt(attempt)
+    const exit = yield* Fiber.await(attempt)
+    const message = yield* db
+      .select()
+      .from(SessionMessageTable)
+      .where(eq(SessionMessageTable.id, assistantMessageID))
+      .get()
+    return { exit, data: message?.data, requests: (yield* llm.requests()).length, interrupted }
+  })
+
+for (const locationClosed of [false, true])
+  it.live(
+    `lets a tool the user stopped fail with its own error and interrupts the others at once${locationClosed ? ", after a Location reload" : ""}`,
+    () =>
+      Effect.gen(function* () {
+        const started = Date.now()
+        const { exit, data, requests, interrupted } = yield* stopTwoTools({ reason: "user", locationClosed })
+        expect(Exit.hasInterrupts(exit)).toBe(true)
+        expect(requests).toBe(1)
+        expect(interrupted).toBe(true)
+        expect(Date.now() - started).toBeLessThan(2_000)
+        expect(data).toMatchObject({
+          error: { type: "aborted", message: "Step interrupted" },
+          content: [
+            {
+              type: "tool",
+              id: "call-cooperative",
+              state: {
+                status: "error",
+                error: { type: "tool.execution", message: "partial output" },
+                metadata: { interrupted: true },
+              },
+            },
+            {
+              type: "tool",
+              id: "call-stuck",
+              state: { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } },
+            },
+          ],
+        })
+      }),
+  )
+
+// The provider stream has completed when the step is stopped, so the stop arrives while the step waits for its tools.
+it.live("classifies what a tool raises while the user's stop settles it: a decline", () =>
+  Effect.gen(function* () {
+    const { exit, data } = yield* stopTwoTools({
+      reason: "user",
+      locationClosed: false,
+      stopped: Effect.fail(new Permission.DeclinedError()),
+    })
+    expect(Exit.hasInterrupts(exit)).toBe(true)
+    expect(data).toMatchObject({
+      error: { type: "aborted", message: "Step interrupted" },
+      content: [
+        {
+          type: "tool",
+          id: "call-cooperative",
+          state: { status: "error", error: { type: "aborted", message: "The user declined this tool call" } },
+        },
+        {
+          type: "tool",
+          id: "call-stuck",
+          state: { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } },
+        },
+      ],
+    })
+  }),
+)
+
+it.live("classifies what a tool raises while the user's stop settles it: a defect", () =>
+  Effect.gen(function* () {
+    const { exit } = yield* stopTwoTools({ reason: "user", locationClosed: false, stopped: Effect.die("tool broke") })
+    expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true)
+  }),
+)
+
+// Without a handoff nothing will take the calls over, so they settle here however the step was interrupted.
+for (const reason of ["shutdown", undefined] as const)
+  it.live(
+    `settles every call as interrupted on ${reason === "shutdown" ? "a server shutdown" : "an unexplained interrupt"} without a handoff`,
+    () =>
+      Effect.gen(function* () {
+        const { exit, data, requests, interrupted } = yield* stopTwoTools({ reason, locationClosed: false })
+        expect(Exit.hasInterrupts(exit)).toBe(true)
+        expect(requests).toBe(1)
+        expect(interrupted).toBe(true)
+        const generic = { status: "error", error: { type: "aborted", message: "Tool execution interrupted" } }
+        expect(data).toMatchObject({
+          error: { type: "aborted", message: "Step interrupted" },
+          content: [
+            { type: "tool", id: "call-cooperative", state: generic },
+            { type: "tool", id: "call-stuck", state: generic },
+          ],
+        })
+      }),
+  )
+
+it.live("leaves an interrupted step as a crash would while the server hands its daemon over", () =>
+  Effect.gen(function* () {
+    const { exit, data, requests } = yield* stopTwoTools({
+      reason: "shutdown",
+      locationClosed: false,
+      handoffPrepared: true,
+    })
+    expect(Exit.hasInterrupts(exit)).toBe(true)
+    expect(requests).toBe(1)
+    // No step end and no settled call: the next server finds the calls unsettled.
+    expect(data).not.toHaveProperty("error")
+    expect(data).toMatchObject({
+      content: [
+        { type: "tool", id: "call-cooperative", state: { status: "running" } },
+        { type: "tool", id: "call-stuck", state: { status: "running" } },
+      ],
+    })
   }),
 )

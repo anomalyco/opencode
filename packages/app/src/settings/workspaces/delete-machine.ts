@@ -6,6 +6,9 @@ export const WORKSPACE_COLLAPSE_MS = 150
 /** How long one worktree's check and removal may run before the list moves on. */
 export const WORKSPACE_DELETE_TIMEOUT_MS = 60_000
 
+/** How long the single-worktree confirmation checks git status and sessions before it offers Retry. */
+export const WORKSPACE_INSPECT_TIMEOUT_MS = 15_000
+
 export type WorkspaceTarget = {
   readonly key: string
   readonly directory: string
@@ -21,6 +24,12 @@ export type WorkspaceSkipReason =
   | { readonly kind: "failed"; readonly message: string | undefined }
   | { readonly kind: "timed-out" }
 
+/** The single-worktree confirmation's check of git status and linked sessions, which must pass before Delete. */
+export type WorkspaceConfirmPreflight =
+  | { readonly status: "checking"; readonly checkAttempt: number }
+  | { readonly status: "ready"; readonly inspection: WorkspaceDeleteInspection }
+  | { readonly status: "failed" }
+
 type Run = {
   readonly issued: number
   readonly attempt: number
@@ -29,14 +38,16 @@ type Run = {
   readonly active: string | undefined
   readonly current: WorkspaceTarget
   readonly queue: readonly WorkspaceTarget[]
+  /** The accepted single-worktree check, so its dialog keeps its warnings while it animates closed. */
+  readonly confirmed?: { readonly attempt: number; readonly inspection: WorkspaceDeleteInspection }
   readonly removed: Readonly<Record<string, true>>
 }
 
 /**
  * Deleting worktrees from Settings › Worktrees. One confirmation or one sequential batch at a time. `removed` holds
  * rows that finished collapsing until the inventory drops them, so they never reappear in between. Attempts come from
- * `issued`: a confirmation and each worktree's removal take one, and a result whose attempt the state no longer holds
- * is stale.
+ * `issued`: a confirmation, each check and each worktree's removal take one, and a result whose attempt the state no
+ * longer holds is stale.
  */
 export type WorkspaceDeleteState =
   | { readonly status: "idle"; readonly issued: number; readonly removed: Readonly<Record<string, true>> }
@@ -44,9 +55,19 @@ export type WorkspaceDeleteState =
       readonly status: "confirming"
       readonly issued: number
       readonly attempt: number
-      readonly scope: WorkspaceDeleteScope
+      readonly scope: "all" | "unused"
       readonly active: string | undefined
       readonly targets: readonly WorkspaceTarget[]
+      readonly removed: Readonly<Record<string, true>>
+    }
+  | {
+      readonly status: "confirming"
+      readonly issued: number
+      readonly attempt: number
+      readonly scope: "one"
+      readonly active: string | undefined
+      readonly target: WorkspaceTarget
+      readonly preflight: WorkspaceConfirmPreflight
       readonly removed: Readonly<Record<string, true>>
     }
   | ({ readonly status: "deleting" } & Run)
@@ -60,6 +81,11 @@ export type WorkspaceDeleteEvent =
       readonly active: string | undefined
       readonly targets: readonly WorkspaceTarget[]
     }
+  | { readonly type: "inspect.succeeded"; readonly attempt: number; readonly inspection: WorkspaceDeleteInspection }
+  | { readonly type: "inspect.failed"; readonly attempt: number }
+  | { readonly type: "inspect.timed-out"; readonly attempt: number }
+  /** Retry in the single-worktree confirmation; `attempt` is the confirmation's. */
+  | { readonly type: "inspect.retried"; readonly attempt: number }
   /** The confirmation closed. Its dialog reports this after its exit animation, possibly after another one opened. */
   | { readonly type: "confirm.cancelled"; readonly attempt: number }
   | { readonly type: "confirm.accepted"; readonly attempt: number }
@@ -79,6 +105,15 @@ export type WorkspaceDeleteEffect =
       readonly active: string | undefined
       readonly targets: readonly WorkspaceTarget[]
     }
+  /** Starts the check's timeout and reads git status and sessions with a signal that `inspect.stop` aborts. */
+  | {
+      readonly type: "inspect.run"
+      readonly attempt: number
+      readonly directory: string
+      readonly active: string | undefined
+      readonly timeoutMs: number
+    }
+  | { readonly type: "inspect.stop"; readonly attempt: number }
   /** Starts the attempt's timeout, then checks (unless forced) and removes the worktree. */
   | {
       readonly type: "delete.run"
@@ -128,7 +163,7 @@ export function transitionWorkspaceDelete(
         effects: [{ type: "collapse.cancel" }, { type: "finalize.removed", target: state.current }],
       }
 
-    return { state: { status: "disposed" }, effects: NONE }
+    return { state: { status: "disposed" }, effects: state.status === "confirming" ? stopCheck(state) : NONE }
   }
 
   if (event.type === "inventory.synced") {
@@ -148,43 +183,50 @@ export function transitionWorkspaceDelete(
   }
 
   if (state.status === "idle") {
-    if (event.type !== "confirm.opened" || event.targets.length === 0) return { state, effects: NONE }
+    const [target] = event.type === "confirm.opened" ? event.targets : []
+
+    if (event.type !== "confirm.opened" || !target) return { state, effects: NONE }
     const attempt = state.issued + 1
+
+    const open: WorkspaceDeleteEffect = {
+      type: "open.confirm",
+      attempt,
+      scope: event.scope,
+      active: event.active,
+      targets: event.targets,
+    }
+
+    if (event.scope !== "one")
+      return {
+        state: {
+          status: "confirming",
+          issued: attempt,
+          attempt,
+          scope: event.scope,
+          active: event.active,
+          targets: event.targets,
+          removed: state.removed,
+        },
+        effects: [open],
+      }
+    const check = attempt + 1
 
     return {
       state: {
         status: "confirming",
-        issued: attempt,
+        issued: check,
         attempt,
-        scope: event.scope,
+        scope: "one",
         active: event.active,
-        targets: event.targets,
+        target,
+        preflight: { status: "checking", checkAttempt: check },
         removed: state.removed,
       },
-      effects: [{ type: "open.confirm", attempt, scope: event.scope, active: event.active, targets: event.targets }],
+      effects: [open, inspectRun(check, target, event.active)],
     }
   }
 
-  if (state.status === "confirming") {
-    if ((event.type !== "confirm.cancelled" && event.type !== "confirm.accepted") || event.attempt !== state.attempt)
-      return { state, effects: NONE }
-
-    if (event.type === "confirm.cancelled")
-      return { state: { status: "idle", issued: state.issued, removed: state.removed }, effects: NONE }
-
-    const [current, ...queue] = state.targets
-
-    if (!current) return { state: { status: "idle", issued: state.issued, removed: state.removed }, effects: NONE }
-
-    return start({
-      issued: state.issued,
-      force: state.scope === "one",
-      active: state.active,
-      current,
-      queue,
-      removed: state.removed,
-    })
-  }
+  if (state.status === "confirming") return confirming(state, event)
 
   if (!("attempt" in event) || event.attempt !== state.attempt) return { state, effects: NONE }
 
@@ -231,6 +273,88 @@ export function workspaceRowView(state: WorkspaceDeleteState, key: string) {
   return { deleting: false, collapsing: false }
 }
 
+/** What the single-worktree dialog for confirmation `attempt` shows. */
+export function workspaceConfirmView(state: WorkspaceDeleteState, attempt: number) {
+  if (state.status === "confirming" && state.scope === "one" && state.attempt === attempt)
+    return {
+      checking: state.preflight.status === "checking",
+      failed: state.preflight.status === "failed",
+      canDelete: state.preflight.status === "ready",
+      inspection: state.preflight.status === "ready" ? state.preflight.inspection : undefined,
+    }
+
+  if ((state.status === "deleting" || state.status === "collapsing") && state.confirmed?.attempt === attempt)
+    return { checking: false, failed: false, canDelete: false, inspection: state.confirmed.inspection }
+
+  return { checking: false, failed: false, canDelete: false, inspection: undefined }
+}
+
+type Confirming = Extract<WorkspaceDeleteState, { status: "confirming" }>
+
+function confirming(state: Confirming, event: WorkspaceDeleteEvent): WorkspaceDeleteTransition {
+  if (state.scope === "one" && state.preflight.status === "checking" && "attempt" in event) {
+    const check = state.preflight.checkAttempt
+
+    if (event.type === "inspect.succeeded" && event.attempt === check)
+      return {
+        state: { ...state, preflight: { status: "ready", inspection: event.inspection } },
+        effects: [{ type: "inspect.stop", attempt: check }],
+      }
+
+    if ((event.type === "inspect.failed" || event.type === "inspect.timed-out") && event.attempt === check)
+      return {
+        state: { ...state, preflight: { status: "failed" } },
+        effects: [{ type: "inspect.stop", attempt: check }],
+      }
+  }
+
+  if (!("attempt" in event) || event.attempt !== state.attempt) return { state, effects: NONE }
+
+  if (event.type === "confirm.cancelled")
+    return { state: { status: "idle", issued: state.issued, removed: state.removed }, effects: stopCheck(state) }
+
+  if (state.scope !== "one") {
+    if (event.type !== "confirm.accepted") return { state, effects: NONE }
+    const [current, ...queue] = state.targets
+
+    if (!current) return { state: { status: "idle", issued: state.issued, removed: state.removed }, effects: NONE }
+
+    return start({ issued: state.issued, force: false, active: state.active, current, queue, removed: state.removed })
+  }
+
+  if (event.type === "inspect.retried" && state.preflight.status === "failed") {
+    const check = state.issued + 1
+
+    return {
+      state: { ...state, issued: check, preflight: { status: "checking", checkAttempt: check } },
+      effects: [inspectRun(check, state.target, state.active)],
+    }
+  }
+
+  // The dialog disables Delete until the check passes; the machine holds the same rule for any other caller.
+  if (event.type !== "confirm.accepted" || state.preflight.status !== "ready") return { state, effects: NONE }
+
+  return start({
+    issued: state.issued,
+    force: true,
+    active: state.active,
+    current: state.target,
+    queue: [],
+    confirmed: { attempt: state.attempt, inspection: state.preflight.inspection },
+    removed: state.removed,
+  })
+}
+
+function stopCheck(state: Confirming): readonly WorkspaceDeleteEffect[] {
+  if (state.scope !== "one" || state.preflight.status !== "checking") return NONE
+
+  return [{ type: "inspect.stop", attempt: state.preflight.checkAttempt }]
+}
+
+function inspectRun(attempt: number, target: WorkspaceTarget, active: string | undefined): WorkspaceDeleteEffect {
+  return { type: "inspect.run", attempt, directory: target.directory, active, timeoutMs: WORKSPACE_INSPECT_TIMEOUT_MS }
+}
+
 function start(run: Omit<Run, "attempt">): WorkspaceDeleteTransition {
   const attempt = run.issued + 1
 
@@ -243,6 +367,7 @@ function start(run: Omit<Run, "attempt">): WorkspaceDeleteTransition {
       active: run.active,
       current: run.current,
       queue: run.queue,
+      confirmed: run.confirmed,
       removed: run.removed,
     },
     effects: [

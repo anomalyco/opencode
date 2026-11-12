@@ -25,6 +25,10 @@
   background: var(--v2-state-fg-warning);
 }
 
+[data-titlebar-tab] :is([data-mark="failed"], [data-status="failed"] [data-slot="tab-avatar-unread-dot"]) {
+  background: var(--v2-state-fg-danger);
+}
+
 [data-titlebar-tab] [data-slot="tab-avatar-unread-dot"] {
   position: absolute;
   display: none;
@@ -52,8 +56,14 @@
 
 [data-titlebar-tab][data-status="busy"] [data-mark="busy"],
 [data-titlebar-tab][data-status="attention"] [data-mark="attention"],
-[data-titlebar-tab][data-status="unread"] [data-mark="unread"] {
+[data-titlebar-tab][data-status="unread"] [data-mark="unread"],
+[data-titlebar-tab][data-status="failed"] [data-mark="failed"] {
   display: block;
+}
+
+/* The muted spinner's dim dots vanish against the dark tab, leaving only the head visible. */
+[data-color-scheme="dark"] [data-titlebar-tab] [data-mark="busy"] {
+  color: var(--v2-icon-icon-base);
 }
 
 [data-titlebar-tab] [data-slot="tab-close"] > button {
@@ -67,7 +77,7 @@
 
 @media (hover: hover) {
   [data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(:hover, :has(:focus-visible))
-    [data-slot="tab-status"] {
+    [data-slot="tab-close"]:has(> button) [data-slot="tab-status"] {
     opacity: 0;
   }
 }
@@ -383,13 +393,17 @@
     height: 6px;
   }
 
-  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"]):not([data-orientation="vertical"])
+  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"], [data-status="failed"]):not(
+      [data-orientation="vertical"]
+    )
     [data-slot="project-avatar-surface"] {
     -webkit-mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
     mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
   }
 
-  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"]):not([data-orientation="vertical"]):dir(rtl)
+  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"], [data-status="failed"]):not(
+      [data-orientation="vertical"]
+    ):dir(rtl)
     [data-slot="project-avatar-surface"] {
     -webkit-mask-image: radial-gradient(circle 4.5px at 0 0, transparent 4px, black 5px);
     mask-image: radial-gradient(circle 4.5px at 0 0, transparent 4px, black 5px);
@@ -448,6 +462,67 @@
   }
 }
 
+/* Under a project header the avatar is left out, but shortcut numbers still show in its slot. */
+[data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: hidden;
+}
+
+[data-shortcut-hints] [data-titlebar-tab][data-avatar="hidden"] [data-slot="project-avatar-slot"] {
+  visibility: visible;
+}
+
+/* Holding the mod key slides each tab's initial out as its shortcut number rises in. */
+[data-titlebar-tab]
+  :is(
+    [data-slot="project-avatar-initial"],
+    [data-slot="project-avatar-label"],
+    [data-slot="tab-icon-face"],
+    [data-slot="tab-shortcut-face"]
+  ) {
+  transition:
+    opacity 160ms ease-out,
+    transform 160ms ease-out,
+    filter 160ms ease-out,
+    visibility 160ms;
+}
+
+[data-titlebar-tab] [data-slot="project-avatar-initial"] {
+  display: block;
+}
+
+[data-titlebar-tab] [data-slot="project-avatar-label"] {
+  opacity: 0;
+  transform: translateY(6px);
+  filter: blur(1px);
+}
+
+[data-shortcut-hints] [data-titlebar-tab] [data-slot="project-avatar-label"] {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+[data-shortcut-hints] [data-titlebar-tab] [data-slot="project-avatar-initial"]:has(~ [data-slot="project-avatar-label"]),
+[data-shortcut-hints] [data-titlebar-tab] [data-slot="tab-icon-face"]:has(~ [data-slot="tab-shortcut-face"]) {
+  opacity: 0;
+  transform: translateY(-6px);
+  filter: blur(1px);
+}
+
+/* A draft has no avatar, so its neutral tile fades in under the rising number. */
+[data-titlebar-tab] [data-slot="tab-shortcut-face"] {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-shortcut-hints] [data-titlebar-tab] [data-slot="tab-shortcut-face"] {
+  opacity: 1;
+}
+
 /* A prompt that arrives in a background tab rings it once, like the TUI's prompt pulse. */
 [data-titlebar-tab] [data-slot="tab-prompt-pulse"] {
   position: absolute;
@@ -472,5 +547,15 @@
 :root[data-motion="reduce"] {
   [data-titlebar-tab] [data-slot="tab-prompt-pulse"] {
     animation: none;
+  }
+
+  [data-titlebar-tab]
+    :is(
+      [data-slot="project-avatar-initial"],
+      [data-slot="project-avatar-label"],
+      [data-slot="tab-icon-face"],
+      [data-slot="tab-shortcut-face"]
+    ) {
+    transition: none;
   }
 }

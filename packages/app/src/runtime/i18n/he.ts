@@ -345,7 +345,6 @@ export const dict = {
   "session.new.project.search": "חיפוש פרויקטים",
   "session.new.project.add": "הוסף פרויקט",
   "session.new.workspace.runIn": "הפעל את ההפעלה ב:",
-  "session.new.workspace.triggerLocal": "מקומי",
   "session.new.workspace.local": "מאגר מקומי",
   "session.new.git.none": "אין Git",
   "session.header.open.finder": "Finder",
