@@ -478,6 +478,7 @@ pub struct Live {
 }
 
 /// A write or reload that finished on the serial worker.
+#[derive(Clone)]
 enum Loaded {
     Written(Result<Info, String>),
     Reloaded(Info),
@@ -571,8 +572,18 @@ pub(super) fn write(tui: &Tui, change: impl FnOnce(&mut Value) + Send + 'static,
     let proxy = tui.app.proxy();
     serial.run(move || {
         let result = config.update_value(change).map_err(|error| error.to_string());
-        let _ = proxy.send(Loaded::Written(result));
+        deliver(&proxy, Loaded::Written(result));
     });
+}
+
+/// Sends `loaded` to the UI from the serial worker, waiting while its queue is full (a suspended terminal), so each
+/// write's `done` runs, in order. Gives up once the app has ended.
+fn deliver(proxy: &opentui::app::AppProxy, loaded: Loaded) {
+    let mut wait = std::time::Duration::from_millis(1);
+    while let Err(opentui::app::ProxyError::Full) = proxy.send(loaded.clone()) {
+        std::thread::sleep(wait);
+        wait = (wait * 2).min(std::time::Duration::from_millis(50));
+    }
 }
 
 /// Sets `path` to `value`, creating the objects on the way (`dialog-config.tsx:463-468`).
@@ -856,7 +867,7 @@ fn install_reload(tui: &Rc<Tui>) {
         // A failed read keeps the config as it is (`.catch(() => {})`).
         serial.run(move || {
             if let Ok(info) = config.get() {
-                let _ = proxy.send(Loaded::Reloaded(info));
+                deliver(&proxy, Loaded::Reloaded(info));
             }
         });
     });
