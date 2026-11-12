@@ -199,8 +199,8 @@ fn import(context: &Context, args: &SessionImportArgs) -> error::Result<()> {
     let Value::Object(mut body) = serde_json::from_str::<Value>(&text)? else {
         bail!("Expected an object, got {}", text.trim());
     };
+    // Against the working directory even when absolute: on Windows `\x` takes its drive, as `path.resolve` does.
     let directory = match &args.directory {
-        Some(directory) if Flavor::NATIVE.is_absolute(directory) => Flavor::NATIVE.resolve(&[directory]),
         Some(directory) => Flavor::NATIVE.resolve(&[&cwd()?, directory]),
         None => cwd()?,
     };
