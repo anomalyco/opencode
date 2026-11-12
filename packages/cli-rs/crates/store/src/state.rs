@@ -594,6 +594,64 @@ impl Data {
         state.syncs.entries.insert(key, Entry::Pending { token, task: task.clone(), invalidated: false, started });
         task
     }
+
+    /// A list read under an [`Overlay`] (model M1, deviation O89-list-snapshots), registered in `reads` under
+    /// `read`. `fetch` reads the list and `publish` stores it with the overlay applied, unless a newer read
+    /// replaced this one or `session` was deleted after it began. An overflowed overlay publishes nothing: `key`
+    /// is invalidated and `again` reads again.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn overlay_sync<K, V, T, F>(
+        &self,
+        key: String,
+        session: SessionID,
+        reads: fn(&mut State) -> &mut HashMap<K, Overlay<V>>,
+        read: K,
+        id: fn(&V) -> &str,
+        fetch: impl FnOnce(Data) -> F + Send + 'static,
+        publish: impl FnOnce(&mut State, &K, Vec<V>, T) + Send + 'static,
+        again: impl FnOnce(Data) -> Task<()> + Send + 'static,
+    ) -> Task<()>
+    where
+        K: Hash + Eq + Clone + Send + 'static,
+        V: Send + 'static,
+        T: Send + 'static,
+        F: Future<Output = Result<(Vec<V>, T), Error>> + Send + 'static,
+    {
+        let begin = read.clone();
+        self.sync_start(
+            key.clone(),
+            move |state| {
+                let ticket = state.token();
+                reads(state).insert(begin, Overlay::new(ticket));
+                (state.deletion_epoch, ticket)
+            },
+            move |data, (started, ticket)| async move {
+                let (list, extra) = match fetch(data.clone()).await {
+                    Ok(fetched) => fetched,
+                    Err(error) => {
+                        data.write(|state| Overlay::take(reads(state), &read, ticket));
+                        return Err(error);
+                    }
+                };
+                let reread = data.write(|state| {
+                    let Some(overlay) = Overlay::take(reads(state), &read, ticket) else { return false };
+                    if state.deleted_since(&session, started) {
+                        return false;
+                    }
+                    let Some(list) = overlay.apply(list, id) else {
+                        state.syncs.invalidate(&key);
+                        return true;
+                    };
+                    publish(state, &read, list, extra);
+                    false
+                });
+                if reread {
+                    data.refresh(again);
+                }
+                Ok(())
+            },
+        )
+    }
 }
 
 /// How a keyed load starts: begun under the caller's lock, or after the load it replaces.
