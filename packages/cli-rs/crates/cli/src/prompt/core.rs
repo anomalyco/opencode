@@ -137,7 +137,11 @@ pub fn run_until(
     while !base.closed {
         match keys.next() {
             Some(press) => keypress(prompt, &mut base, press),
-            None => end_of_input(prompt, &mut base),
+            // Clack waits forever when its input ends; here the prompt is cancelled instead.
+            None => {
+                base.state = State::Cancel;
+                finish(prompt, &mut base);
+            }
         }
     }
     keys.set_stop(None);
@@ -196,15 +200,13 @@ fn keypress(prompt: &mut dyn Prompt, base: &mut Base, press: Press) {
             base.state = State::Submit;
         }
     }
-    if [char, key.name.as_deref(), Some(key.sequence.as_str())].into_iter().flatten().any(is_cancel) {
+    if [char, key.name.as_deref(), Some(key.sequence.as_str())]
+        .into_iter()
+        .flatten()
+        .any(|value| alias(value) == Some("cancel"))
+    {
         base.state = State::Cancel;
     }
-    finish(prompt, base);
-}
-
-/// Clack waits forever when its input ends; here the prompt is cancelled instead.
-fn end_of_input(prompt: &mut dyn Prompt, base: &mut Base) {
-    base.state = State::Cancel;
     finish(prompt, base);
 }
 
@@ -231,10 +233,6 @@ fn alias(name: &str) -> Option<&'static str> {
         "\x03" | "escape" => Some("cancel"),
         _ => None,
     }
-}
-
-fn is_cancel(value: &str) -> bool {
-    alias(value) == Some("cancel")
 }
 
 fn render(prompt: &dyn Prompt, base: &mut Base) {

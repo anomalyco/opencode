@@ -812,7 +812,9 @@ impl Renderer {
             shown["state"] = json_object! { "status": "completed", "input"?: state.get("input"), "metadata"?: state.get("metadata"), "content"?: state.get("content") };
             self.render_tool(&shown);
         }
-        self.render_tool_error(item);
+        if let Some(info) = inline(item, &self.directory) {
+            ui::println(&[&format!("{}✗", ui::TEXT_NORMAL), &format!("{}{} failed", ui::TEXT_NORMAL, info.title)]);
+        }
         ui::error(text(&state["error"]["message"]));
     }
 
@@ -972,7 +974,7 @@ impl Renderer {
             let created = &message["time"]["created"];
             let timestamp = or(&message["time"]["completed"], created);
             let seen = self.steps.borrow().get(message_id).copied();
-            let id = |part: &str| projected_part_id(message_id, part);
+            let id = |part: &str| format!("prt_{}_{part}", message_id.strip_prefix("msg_").unwrap_or(message_id));
             if seen.is_none() {
                 let rest = json_object! { "snapshot"?: message["snapshot"].get("start") };
                 self.step("step-start", created, id("step-start"), message_id, rest);
@@ -1036,11 +1038,6 @@ impl Renderer {
             &format!("{}{}", ui::TEXT_NORMAL, info.title),
             &description,
         ]);
-    }
-
-    fn render_tool_error(&self, part: &Value) {
-        let Some(info) = inline(part, &self.directory) else { return };
-        ui::println(&[&format!("{}✗", ui::TEXT_NORMAL), &format!("{}{} failed", ui::TEXT_NORMAL, info.title)]);
     }
 }
 
@@ -1131,10 +1128,6 @@ fn key(parts: &[&str]) -> String {
 
 fn part_id(event_id: &str) -> String {
     format!("prt_{}", event_id.strip_prefix("evt_").unwrap_or(event_id))
-}
-
-fn projected_part_id(message_id: &str, part: &str) -> String {
-    format!("prt_{}_{part}", message_id.strip_prefix("msg_").unwrap_or(message_id))
 }
 
 #[cfg(test)]
