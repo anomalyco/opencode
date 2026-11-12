@@ -10,7 +10,7 @@
 //! [`Spinner`]: super::Spinner
 
 use super::spinner::SpinnerColor;
-use super::{channels, rgba};
+use super::{channels, int_pow, rgba};
 use opentui::style::Color;
 use std::rc::Rc;
 
@@ -101,7 +101,7 @@ fn trail_colors(color: Color, steps: usize) -> Vec<Color> {
             let (alpha, brightness) = match step {
                 0 => (1.0, 1.0),
                 1 => (0.9, 1.15),
-                _ => (0.65f64.powi(step as i32 - 1), 1.0),
+                _ => (int_pow(0.65, step as u32 - 1), 1.0),
             };
             let scale = |channel: f64| (channel * brightness).min(1.0);
             rgba(scale(r), scale(g), scale(b), alpha)

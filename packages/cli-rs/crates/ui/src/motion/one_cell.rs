@@ -1,6 +1,7 @@
 //! One-cell spinners: `packages/tui/src/ui/one-cell-motion.ts` and the octant glyphs of `ui/subcell.ts`. Mini's
 //! footer and the storybook use them; the work spinner is chosen by the `work_spinner` setting.
 
+use super::int_pow;
 use std::f64::consts::PI;
 
 /// A clip of frames at a fixed interval, with an optional brightness per frame.
@@ -56,8 +57,7 @@ pub fn one_cell_frame(motion: &OneCellMotion, elapsed: f64) -> OneCellFrame {
     let intro_duration = motion.intro.as_ref().map_or(0.0, |intro| intro.frames.len() as f64 * intro.interval);
     let intro = elapsed < intro_duration;
     let clip = if intro { motion.intro.as_ref().unwrap_or(&motion.clip) } else { &motion.clip };
-    // Integrate the changing rate so slowing down does not jump or restart the motion. JavaScript computes an
-    // integer power by repeated squaring, as `powi` does; `powf` rounds differently.
+    // Integrate the changing rate so slowing down does not jump or restart the motion.
     let time = match (intro, motion.pace) {
         (true, _) => elapsed,
         (false, None) => elapsed - intro_duration,
@@ -65,7 +65,7 @@ pub fn one_cell_frame(motion: &OneCellMotion, elapsed: f64) -> OneCellFrame {
             let progress = ((elapsed - pace.after) / pace.duration).clamp(0.0, 1.0);
             (elapsed - intro_duration) * pace.initial
                 + (pace.r#final - pace.initial)
-                    * (pace.duration * (progress.powi(3) - progress.powi(4) / 2.0)
+                    * (pace.duration * (int_pow(progress, 3) - int_pow(progress, 4) / 2.0)
                         + 0.0f64.max(elapsed - pace.after - pace.duration))
         }
     };
@@ -220,7 +220,7 @@ fn seed_work() -> OneCellMotion {
             } else if phase < 0.375 {
                 1.0
             } else {
-                ((1.0 - phase) / 0.625).powi(3)
+                int_pow((1.0 - phase) / 0.625, 3)
             };
             0.3 + 0.7 * shape
         })
