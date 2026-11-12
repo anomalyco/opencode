@@ -25,6 +25,20 @@ type PlatformName = "web" | "desktop"
 
 type DesktopOS = "macos" | "windows" | "linux"
 
+export type ShareAccount = {
+  relayUrl: string
+  username: string
+  password: string
+}
+
+export type ShareStatus = {
+  enabled: boolean
+  state: "disabled" | "connecting" | "online" | "error"
+  environmentId?: string
+  environmentName?: string
+  error?: string
+}
+
 export type FatalRendererErrorLog = {
   error: string
   url: string
@@ -113,6 +127,17 @@ type PlatformBase = {
 
   /** Turn the native spellchecker on or off (desktop only) */
   setSpellcheckEnabled?(enabled: boolean): Promise<void>
+
+  /** Share this device so other clients can reach it through a relay (desktop only) */
+  getShareStatus?(): Promise<ShareStatus>
+
+  getShareAccount?(): Promise<ShareAccount | null>
+
+  saveShareAccount?(account: ShareAccount): Promise<ShareStatus>
+
+  enableShare?(): Promise<ShareStatus>
+
+  disableShare?(): Promise<ShareStatus>
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void

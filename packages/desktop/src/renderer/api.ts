@@ -88,4 +88,9 @@ export const api: ElectronAPI = {
   setSpellcheckEnabled: (enabled) => invoke("AppSetSpellcheckEnabled", { enabled }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
+  getShareStatus: () => invoke("ShareGetStatus"),
+  getShareAccount: () => invoke("ShareGetAccount"),
+  saveShareAccount: (account) => invoke("ShareSaveAccount", { account }),
+  enableShare: () => invoke("ShareEnable"),
+  disableShare: () => invoke("ShareDisable"),
 }

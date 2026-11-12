@@ -15,3 +15,11 @@ export const BACKGROUND_COLOR_KEY = "backgroundColor"
 export const WINDOW_IDS_KEY = "windowIds"
 
 export const BUNDLED_CLI_VERSION_KEY = "bundledCliVersion"
+
+export const SHARE_ACCOUNT_KEY = "shareAccount"
+
+export const SHARE_ENABLED_KEY = "shareEnabled"
+
+export const SHARE_ENVIRONMENT_KEY = "shareEnvironment"
+
+export const SHARE_DEVICE_ID_KEY = "shareDeviceId"

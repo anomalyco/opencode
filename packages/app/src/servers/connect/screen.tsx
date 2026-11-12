@@ -5,6 +5,7 @@ import { Wordmark } from "@opencode/ui/wordmark"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createServerConnectController } from "./controller"
 import { ConnectMethodSwitch } from "./method"
+import { RelayDiscovery } from "./relay-discovery"
 import "./screen.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
@@ -25,7 +26,11 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
           <h1 id="server-connect-title">{language.t("server.connect.title")}</h1>
           <p>
             {language.t(
-              view().draft.method === "link" ? "server.connect.description.pairing" : "server.connect.description",
+              view().draft.method === "link"
+                ? "server.connect.description.pairing"
+                : view().draft.method === "relay"
+                  ? "server.connect.relay.description"
+                  : "server.connect.description",
             )}
           </p>
         </header>
@@ -41,89 +46,99 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
             </Suspense>
           }
         >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              form.dispatch({ type: "submitted" })
-            }}
+          <Show
+            when={view().relay}
+            fallback={
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  form.dispatch({ type: "submitted" })
+                }}
+              >
+                <Show
+                  when={view().draft.method === "password"}
+                  fallback={
+                    <div class="server-connect-field">
+                      <label for="server-connect-link">{language.t("server.connect.link")}</label>
+                      <TextInput
+                        id="server-connect-link"
+                        name="link"
+                        dir="ltr"
+                        type="text"
+                        inputMode="url"
+                        autocapitalize="off"
+                        spellcheck={false}
+                        required
+                        appearance="large"
+                        placeholder={language.t("server.connect.link.placeholder")}
+                        value={view().draft.link}
+                        disabled={view().disabled}
+                        aria-describedby={view().error ? "server-connect-error" : undefined}
+                        onInput={(event) =>
+                          form.dispatch({ type: "field.changed", field: "link", value: event.currentTarget.value })
+                        }
+                      />
+                    </div>
+                  }
+                >
+                  <div class="server-connect-field">
+                    <label for="server-connect-url">{language.t("dialog.server.add.url")}</label>
+                    <TextInput
+                      id="server-connect-url"
+                      name="server"
+                      dir="ltr"
+                      type="text"
+                      inputMode="url"
+                      autocomplete="url"
+                      autocapitalize="off"
+                      spellcheck={false}
+                      required
+                      appearance="large"
+                      placeholder={language.t("dialog.server.add.placeholder")}
+                      value={view().draft.url}
+                      disabled={view().disabled}
+                      aria-describedby={view().error ? "server-connect-error" : undefined}
+                      onInput={(event) =>
+                        form.dispatch({ type: "field.changed", field: "url", value: event.currentTarget.value })
+                      }
+                    />
+                  </div>
+                  <div class="server-connect-field">
+                    <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>
+                    <TextInput
+                      id="server-connect-password"
+                      name="password"
+                      type="password"
+                      autocomplete="current-password"
+                      appearance="large"
+                      value={view().draft.password}
+                      disabled={view().disabled}
+                      aria-describedby="server-connect-password-hint"
+                      onInput={(event) =>
+                        form.dispatch({ type: "field.changed", field: "password", value: event.currentTarget.value })
+                      }
+                    />
+                    <p id="server-connect-password-hint" class="server-connect-hint">
+                      {language.t("server.connect.password.hint")}
+                    </p>
+                  </div>
+                </Show>
+                <Show when={view().error}>
+                  <p id="server-connect-error" class="server-connect-error" role="alert">
+                    {view().error}
+                  </p>
+                </Show>
+                <Button type="submit" variant="contrast" size="large" disabled={!view().canSubmit}>
+                  {language.t(view().busy ? "dialog.server.add.checking" : "server.connect.button")}
+                </Button>
+              </form>
+            }
           >
-            <Show
-              when={view().draft.method === "password"}
-              fallback={
-                <div class="server-connect-field">
-                  <label for="server-connect-link">{language.t("server.connect.link")}</label>
-                  <TextInput
-                    id="server-connect-link"
-                    name="link"
-                    dir="ltr"
-                    type="text"
-                    inputMode="url"
-                    autocapitalize="off"
-                    spellcheck={false}
-                    required
-                    appearance="large"
-                    placeholder={language.t("server.connect.link.placeholder")}
-                    value={view().draft.link}
-                    disabled={view().disabled}
-                    aria-describedby={view().error ? "server-connect-error" : undefined}
-                    onInput={(event) =>
-                      form.dispatch({ type: "field.changed", field: "link", value: event.currentTarget.value })
-                    }
-                  />
-                </div>
-              }
-            >
-              <div class="server-connect-field">
-                <label for="server-connect-url">{language.t("dialog.server.add.url")}</label>
-                <TextInput
-                  id="server-connect-url"
-                  name="server"
-                  dir="ltr"
-                  type="text"
-                  inputMode="url"
-                  autocomplete="url"
-                  autocapitalize="off"
-                  spellcheck={false}
-                  required
-                  appearance="large"
-                  placeholder={language.t("dialog.server.add.placeholder")}
-                  value={view().draft.url}
-                  disabled={view().disabled}
-                  aria-describedby={view().error ? "server-connect-error" : undefined}
-                  onInput={(event) =>
-                    form.dispatch({ type: "field.changed", field: "url", value: event.currentTarget.value })
-                  }
-                />
-              </div>
-              <div class="server-connect-field">
-                <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>
-                <TextInput
-                  id="server-connect-password"
-                  name="password"
-                  type="password"
-                  autocomplete="current-password"
-                  appearance="large"
-                  value={view().draft.password}
-                  disabled={view().disabled}
-                  aria-describedby="server-connect-password-hint"
-                  onInput={(event) =>
-                    form.dispatch({ type: "field.changed", field: "password", value: event.currentTarget.value })
-                  }
-                />
-                <p id="server-connect-password-hint" class="server-connect-hint">
-                  {language.t("server.connect.password.hint")}
-                </p>
-              </div>
-            </Show>
-            <Show when={view().error}>
-              <p id="server-connect-error" class="server-connect-error" role="alert">
-                {view().error}
-              </p>
-            </Show>
-            <Button type="submit" variant="contrast" size="large" disabled={!view().canSubmit}>
-              {language.t(view().busy ? "dialog.server.add.checking" : "server.connect.button")}
-            </Button>
-          </form>
+            <RelayDiscovery
+              onConnected={(http) => form.dispatch({ type: "relay.connected", http })}
+              onBack={() => form.dispatch({ type: "method.changed", method: "link" })}
+            />
+          </Show>
           <Show when={view().showScan}>
             <Button
               variant="neutral"

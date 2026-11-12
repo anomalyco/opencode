@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron"
 import { parseDesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
 import { checkAppExists, resolveAppPath } from "../files/apps"
 import { setForceFocus } from "../native/debug"
@@ -11,6 +11,7 @@ import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
+import { ShareService } from "../service/share-service"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getWindowID, setBackgroundColor } from "../windows"
 import { sender } from "./context"
@@ -20,6 +21,7 @@ export const appHandlers = AppRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
     const lifecycle = yield* ApplicationLifecycle.Service
     const background = yield* BackgroundService.Service
+    const share = yield* ShareService.Service
     const logging = yield* DesktopLogging.Service
 
     return AppRpcs.of({
@@ -65,6 +67,11 @@ export const appHandlers = AppRpcs.toLayer(
           setNativeTranslations(bundle)
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
+      ShareGetStatus: () => share.status,
+      ShareGetAccount: () => share.account.pipe(Effect.map(Option.getOrNull)),
+      ShareSaveAccount: ({ account }) => share.saveAccount(account),
+      ShareEnable: () => share.enable,
+      ShareDisable: () => share.disable,
     })
   }),
 )

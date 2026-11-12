@@ -1,10 +1,12 @@
-import { Component, Show, createMemo } from "solid-js"
+import { Component, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
+import { Button } from "@opencode/ui/button"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import type { ShareStatus } from "@/runtime/platform/platform"
 import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
@@ -228,6 +230,145 @@ const LanguageSetting = () => {
   )
 }
 
+const SHARE_STATE_KEYS = {
+  disabled: "settings.general.row.deviceSharing.state.disabled",
+  connecting: "settings.general.row.deviceSharing.state.connecting",
+  online: "settings.general.row.deviceSharing.state.online",
+  error: "settings.general.row.deviceSharing.state.error",
+} as const
+
+const DeviceSharingSetting: Component = () => {
+  const language = useLanguage()
+  const platform = usePlatform()
+
+  const [status, { mutate: setStatus }] = createResource(
+    () => "getShareStatus" in platform,
+    () => platform.getShareStatus?.().catch(() => ({ enabled: false, state: "error" } satisfies ShareStatus)),
+    { initialValue: { enabled: false, state: "disabled" } satisfies ShareStatus },
+  )
+
+  const [account] = createResource(
+    () => "getShareAccount" in platform,
+    () => platform.getShareAccount?.().catch(() => null) ?? null,
+    { initialValue: null },
+  )
+
+  const [busy, setBusy] = createSignal(false)
+  const [error, setError] = createSignal("")
+
+  const current = (): ShareStatus => status.latest ?? ({ enabled: false, state: "disabled" } as ShareStatus)
+  const hasAccount = () => account.latest !== null && account.latest !== undefined
+
+  // The main process reports failures with a marker for known cases so the
+  // message can be localized instead of showing a raw backend string.
+  const shareErrorText = (value?: string) => {
+    if (!value) return ""
+    if (value === "invalid_credentials") {
+      return language.t("settings.general.row.deviceSharing.error.invalidCredentials")
+    }
+    return value
+  }
+
+  // The main process establishes the tunnel asynchronously. Poll while the
+  // state is transitional so the UI reflects "online" or "error" as soon as it
+  // settles instead of staying stuck on "connecting".
+  createEffect(() => {
+    if (status.latest?.state !== "connecting") return
+
+    const timer = setInterval(() => {
+      void platform.getShareStatus?.().then((value) => {
+        if (!value) return
+        setStatus(value)
+        if (value.state !== "connecting") clearInterval(timer)
+      })
+    }, 1500)
+
+    onCleanup(() => clearInterval(timer))
+  })
+
+  // The relay reports the failure reason on the status, not as a rejection.
+  createEffect(() => {
+    const message = shareErrorText(current().error)
+    if (message) setError(message)
+  })
+
+  const applyToggle = (checked: boolean) => {
+    setBusy(true)
+    setError("")
+    const update = checked ? platform.enableShare?.() : platform.disableShare?.()
+
+    if (!update) {
+      setBusy(false)
+      return
+    }
+
+    void update.then(setStatus).catch((err) => {
+      setError(String((err as Error).message ?? err))
+    }).finally(() => setBusy(false))
+  }
+
+  const stateLabel = () => language.t(SHARE_STATE_KEYS[current().state])
+
+  return (
+    <div class="flex flex-col gap-3">
+      <SettingsRow
+        title={language.t("settings.general.row.deviceSharing.title")}
+        description={language.t("settings.general.row.deviceSharing.description")}
+      >
+        <div data-action="settings-device-sharing">
+          <Switch
+            checked={current().enabled}
+            disabled={!hasAccount() || busy()}
+            onChange={(checked) => applyToggle(checked)}
+          />
+        </div>
+      </SettingsRow>
+
+      <Show when={hasAccount()}>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2 text-xs text-v2-text-text-muted">
+            <span
+              classList={{
+                "size-1.5 shrink-0 rounded-full": true,
+                "bg-icon-success-base": current().state === "online",
+                "bg-icon-critical-base": current().state === "error",
+                "bg-icon-warning-base": current().state === "connecting",
+              }}
+            />
+            <span>{stateLabel()}</span>
+            <Show when={current().environmentName}>
+              <span class="text-v2-text-text-faint">· {current().environmentName}</span>
+            </Show>
+          </div>
+
+          <Show when={current().state === "error"}>
+            <Button
+              variant="ghost-muted"
+              size="small"
+              disabled={busy()}
+              onClick={() => applyToggle(false)}
+            >
+              {language.t("settings.general.row.deviceSharing.stop")}
+            </Button>
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={!hasAccount()}>
+        <p class="text-[13px] leading-5 text-v2-text-text-muted">
+          {language.t("settings.general.row.deviceSharing.loginHint")}
+        </p>
+      </Show>
+
+      <Show when={error()}>
+        <p class="text-sm text-v2-status-error" role="alert">
+          {error()}
+        </p>
+      </Show>
+    </div>
+  )
+}
+
 export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
@@ -292,6 +433,7 @@ export const SettingsGeneral: Component = () => {
               <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
             </div>
           </SettingsRow>
+          <DeviceSharingSetting />
         </Show>
 
         <PluginSettingsSections page="general" section="general" />

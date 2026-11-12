@@ -13,6 +13,7 @@ import { isServerUnauthorized } from "@/runtime/server/health-machine"
 import { createServerConnectController } from "./controller"
 import type { ServerConnectField, ServerOriginal } from "./machine"
 import { ConnectMethodSwitch } from "./method"
+import { RelayDiscovery } from "./relay-discovery"
 import "@/settings/settings.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
@@ -106,121 +107,131 @@ export const DialogServer: Component<{
             </Suspense>
           }
         >
-          <div class="flex w-full min-w-0 flex-col gap-6">
-            <Show when={view().signedOut}>
-              <p class="settings-server-dialog-notice" role="status">
-                <Icon name="lock" size="small" />
-                <span>{language.t("dialog.server.signedOut")}</span>
-              </p>
-            </Show>
-            <Show
-              when={view().draft.method === "password"}
-              fallback={
+          <Show
+            when={view().relay}
+            fallback={
+              <div class="flex w-full min-w-0 flex-col gap-6">
+                <Show when={view().signedOut}>
+                  <p class="settings-server-dialog-notice" role="status">
+                    <Icon name="lock" size="small" />
+                    <span>{language.t("dialog.server.signedOut")}</span>
+                  </p>
+                </Show>
+                <Show
+                  when={view().draft.method === "password"}
+                  fallback={
+                    <div class="flex w-full min-w-0 flex-col gap-2">
+                      <label for="dialog-server-link" class="settings-server-dialog-label">
+                        {language.t("server.connect.link")}
+                      </label>
+                      <TextInput
+                        id="dialog-server-link"
+                        type="text"
+                        appearance="large"
+                        class="!w-full self-stretch"
+                        dir="ltr"
+                        spellcheck={false}
+                        autocapitalize="off"
+                        value={view().draft.link}
+                        placeholder={language.t("server.connect.link.placeholder")}
+                        invalid={!!view().error}
+                        disabled={view().disabled}
+                        autofocus
+                        aria-describedby={view().error ? "dialog-server-error" : undefined}
+                        onInput={(event) => change("link", event.currentTarget.value)}
+                        onKeyDown={keyDown}
+                      />
+                      {error()}
+                    </div>
+                  }
+                >
+                  <div class="flex w-full min-w-0 flex-col gap-2">
+                    <label for="dialog-server-url" class="settings-server-dialog-label">
+                      {language.t("dialog.server.add.url")}
+                    </label>
+                    <TextInput
+                      id="dialog-server-url"
+                      type="text"
+                      appearance="large"
+                      class="!w-full self-stretch"
+                      value={view().draft.url}
+                      placeholder={language.t("dialog.server.add.placeholder")}
+                      invalid={!!view().error}
+                      disabled={view().disabled}
+                      autofocus
+                      aria-describedby={view().error ? "dialog-server-error" : undefined}
+                      onInput={(event) => change("url", event.currentTarget.value)}
+                      onKeyDown={keyDown}
+                    />
+                    {error()}
+                  </div>
+                </Show>
                 <div class="flex w-full min-w-0 flex-col gap-2">
-                  <label for="dialog-server-link" class="settings-server-dialog-label">
-                    {language.t("server.connect.link")}
+                  <label for="dialog-server-name" class="settings-server-dialog-label">
+                    {language.t("dialog.server.add.name")}
                   </label>
                   <TextInput
-                    id="dialog-server-link"
+                    id="dialog-server-name"
                     type="text"
                     appearance="large"
                     class="!w-full self-stretch"
-                    dir="ltr"
-                    spellcheck={false}
-                    autocapitalize="off"
-                    value={view().draft.link}
-                    placeholder={language.t("server.connect.link.placeholder")}
-                    invalid={!!view().error}
+                    value={view().draft.name}
+                    placeholder={language.t("dialog.server.add.namePlaceholder")}
                     disabled={view().disabled}
-                    autofocus
-                    aria-describedby={view().error ? "dialog-server-error" : undefined}
-                    onInput={(event) => change("link", event.currentTarget.value)}
+                    onInput={(event) => change("name", event.currentTarget.value)}
                     onKeyDown={keyDown}
                   />
-                  {error()}
                 </div>
-              }
-            >
-              <div class="flex w-full min-w-0 flex-col gap-2">
-                <label for="dialog-server-url" class="settings-server-dialog-label">
-                  {language.t("dialog.server.add.url")}
-                </label>
-                <TextInput
-                  id="dialog-server-url"
-                  type="text"
-                  appearance="large"
-                  class="!w-full self-stretch"
-                  value={view().draft.url}
-                  placeholder={language.t("dialog.server.add.placeholder")}
-                  invalid={!!view().error}
+                <Show when={view().draft.method === "password"}>
+                  <div class="flex w-full min-w-0 flex-col gap-2">
+                    <label for="dialog-server-password" class="settings-server-dialog-label">
+                      {language.t("dialog.server.add.password")}
+                    </label>
+                    <TextInput
+                      id="dialog-server-password"
+                      type="password"
+                      appearance="large"
+                      class="!w-full self-stretch"
+                      value={view().draft.password}
+                      placeholder={language.t("dialog.server.add.passwordPlaceholder")}
+                      disabled={view().disabled}
+                      aria-describedby="dialog-server-password-hint"
+                      onInput={(event) => change("password", event.currentTarget.value)}
+                      onKeyDown={keyDown}
+                    />
+                    <span id="dialog-server-password-hint" class="settings-server-dialog-hint">
+                      {language.t("server.connect.password.hint")}
+                    </span>
+                  </div>
+                </Show>
+                <Show when={view().showScan}>
+                  <Button
+                    variant="neutral"
+                    size="large"
+                    class="!w-full self-stretch"
+                    disabled={!view().canScan}
+                    onClick={() => form.dispatch({ type: "scan.started" })}
+                  >
+                    {language.t("server.connect.scan")}
+                  </Button>
+                </Show>
+                <Show when={view().cameraHint}>{(hint) => <span class="settings-server-dialog-hint">{hint()}</span>}</Show>
+                <ConnectMethodSwitch
+                  method={view().draft.method}
                   disabled={view().disabled}
-                  autofocus
-                  aria-describedby={view().error ? "dialog-server-error" : undefined}
-                  onInput={(event) => change("url", event.currentTarget.value)}
-                  onKeyDown={keyDown}
+                  onChange={(method) => form.dispatch({ type: "method.changed", method })}
                 />
-                {error()}
               </div>
-            </Show>
-            <div class="flex w-full min-w-0 flex-col gap-2">
-              <label for="dialog-server-name" class="settings-server-dialog-label">
-                {language.t("dialog.server.add.name")}
-              </label>
-              <TextInput
-                id="dialog-server-name"
-                type="text"
-                appearance="large"
-                class="!w-full self-stretch"
-                value={view().draft.name}
-                placeholder={language.t("dialog.server.add.namePlaceholder")}
-                disabled={view().disabled}
-                onInput={(event) => change("name", event.currentTarget.value)}
-                onKeyDown={keyDown}
-              />
-            </div>
-            <Show when={view().draft.method === "password"}>
-              <div class="flex w-full min-w-0 flex-col gap-2">
-                <label for="dialog-server-password" class="settings-server-dialog-label">
-                  {language.t("dialog.server.add.password")}
-                </label>
-                <TextInput
-                  id="dialog-server-password"
-                  type="password"
-                  appearance="large"
-                  class="!w-full self-stretch"
-                  value={view().draft.password}
-                  placeholder={language.t("dialog.server.add.passwordPlaceholder")}
-                  disabled={view().disabled}
-                  aria-describedby="dialog-server-password-hint"
-                  onInput={(event) => change("password", event.currentTarget.value)}
-                  onKeyDown={keyDown}
-                />
-                <span id="dialog-server-password-hint" class="settings-server-dialog-hint">
-                  {language.t("server.connect.password.hint")}
-                </span>
-              </div>
-            </Show>
-            <Show when={view().showScan}>
-              <Button
-                variant="neutral"
-                size="large"
-                class="!w-full self-stretch"
-                disabled={!view().canScan}
-                onClick={() => form.dispatch({ type: "scan.started" })}
-              >
-                {language.t("server.connect.scan")}
-              </Button>
-            </Show>
-            <Show when={view().cameraHint}>{(hint) => <span class="settings-server-dialog-hint">{hint()}</span>}</Show>
-            <ConnectMethodSwitch
-              method={view().draft.method}
-              disabled={view().disabled}
-              onChange={(method) => form.dispatch({ type: "method.changed", method })}
+            }
+          >
+            <RelayDiscovery
+              onConnected={(http) => form.dispatch({ type: "relay.connected", http })}
+              onBack={() => form.dispatch({ type: "method.changed", method: "link" })}
             />
-          </div>
+          </Show>
         </Show>
       </DialogBody>
-      <Show when={!view().scanning}>
+      <Show when={!view().scanning && !view().relay}>
         <DialogFooter>
           <Button variant="neutral" disabled={view().disabled} onClick={() => dialog.close()}>
             {language.t("common.cancel")}

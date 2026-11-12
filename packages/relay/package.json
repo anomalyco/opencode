@@ -1,0 +1,17 @@
+{
+  "name": "oc-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenCode relay control plane + WebSocket reverse tunnel",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

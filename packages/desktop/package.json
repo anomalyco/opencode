@@ -25,7 +25,8 @@
     "electron-context-menu": "5.0.0",
     "electron-log": "^5",
     "electron-updater": "6.8.9",
-    "lighthouse": "13.4.1"
+    "lighthouse": "13.4.1",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@brendonovich/vite-plugin-opencode": "0.1.3",
@@ -42,6 +43,7 @@
     "@solidjs/router": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/ws": "8.18.1",
     "@typescript/native": "catalog:",
     "app-builder-lib": "26.15.7",
     "drizzle-kit": "catalog:",

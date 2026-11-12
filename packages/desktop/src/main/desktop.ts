@@ -9,6 +9,7 @@ import { ApplicationLifecycle } from "./lifecycle"
 import { DesktopLogging } from "./native/logging"
 import { BackgroundService } from "./service/background-service"
 import { DesktopCli } from "./service/desktop-cli"
+import { ShareService } from "./service/share-service"
 import { marks } from "./lifecycle/marks"
 
 // Everything above has been loaded and evaluated by now; the layers start below.
@@ -17,8 +18,10 @@ marks.bundle = Date.now()
 const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   const lifecycle = yield* ApplicationLifecycle.Service
   const plugins = yield* Plugins.Service
+  const share = yield* ShareService.Service
   marks.layers = Date.now()
   yield* Effect.logInfo("layers ready", { marks })
+  yield* share.restore
   const ipc = yield* Ipc.registerIpcHandlers
   // Main GUI plugins start with the window: servers they restore feed the first paint's server
   // list, and menu items they contribute are present at startup. Their heavy modules load lazily on
@@ -44,6 +47,7 @@ runIpc().pipe(
   Effect.provide(Ipc.layer),
   Effect.provide(BackgroundService.layer),
   Effect.provide(DesktopCli.layer),
+  Effect.provide(ShareService.layer),
   Effect.provide(DesktopInitialization.layer),
   Effect.provide(ApplicationLifecycle.layer),
   Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),

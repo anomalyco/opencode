@@ -95,6 +95,8 @@ export type ServerConnectEvent =
   | { readonly type: "submit.succeeded"; readonly attempt: number; readonly http: ServerConnection.HttpBase }
   | { readonly type: "submit.failed"; readonly attempt: number; readonly error: ServerConnectError }
   | { readonly type: "submit.timed-out"; readonly attempt: number }
+  /** A server found through relay discovery; it is checked and saved like any other address. */
+  | { readonly type: "relay.connected"; readonly http: ServerConnection.HttpBase }
   /** The edited server as the registry lists it now; undefined once it is removed. */
   | { readonly type: "original.synced"; readonly original: ServerOriginal | undefined }
   | { readonly type: "disposed" }
@@ -212,6 +214,17 @@ export function transitionServerConnect(state: ServerConnectState, event: Server
 
   if (event.type === "submitted") return submit(state, state.draft)
 
+  // A server found through relay discovery is checked and saved like a typed address.
+  if (event.type === "relay.connected") {
+    const attempt = state.attempt + 1
+    const timer = { type: "timer.start", attempt, timeoutMs: SERVER_CONNECT_TIMEOUT_MS } as const
+
+    return {
+      state: { ...form(state), status: "submitting", attempt, fallbackUrl: event.http.url },
+      effects: [{ type: "connect.http", attempt, http: event.http }, timer],
+    }
+  }
+
   return same
 }
 
@@ -252,6 +265,7 @@ export function formatServerConnectError(error: ServerConnectError, context: Ser
 
 export function selectServerConnectView(state: ServerConnectState, context: ServerConnectErrorContext) {
   const link = state.draft.method === "link"
+  const relay = state.draft.method === "relay"
   const primary = link ? state.draft.link : state.draft.url
   const camera = state.camera.status
 
@@ -263,10 +277,13 @@ export function selectServerConnectView(state: ServerConnectState, context: Serv
     scanning: state.status === "scanning",
     busy: state.status === "submitting",
     disabled: state.status !== "editing",
-    canSubmit: state.status === "editing" && primary.trim().length > 0,
+    // The relay panel brings its own submit action, so the form does not offer one.
+    canSubmit: state.status === "editing" && !relay && primary.trim().length > 0,
     signedOut: state.target.kind === "edit" && state.target.original.unauthorized,
     draft: state.draft,
     error: state.status === "editing" && state.error ? formatServerConnectError(state.error, context) : undefined,
+    /** The relay panel replaces the form while it is showing. */
+    relay,
   }
 }
 
@@ -331,6 +348,9 @@ function editing(state: Form, draft: ServerConnectDraft, error?: ServerConnectEr
 
 // Where the form points: a pasted or scanned pairing link wins, in either field; else the address and password.
 function submit(state: Form, draft: ServerConnectDraft): ServerConnectTransition {
+  // The relay panel submits a discovered server itself, so the form never does.
+  if (draft.method === "relay") return { state: editing(state, draft), effects: [] }
+
   const value = draft.method === "link" ? draft.link : draft.url
   const link = pairingLink(value)
   const attempt = state.attempt + 1

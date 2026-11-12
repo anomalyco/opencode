@@ -1,0 +1,35 @@
+[Unit]
+Description=OpenCode Relay control plane (accounts, environment registry)
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/oc-relay
+ExecStart=/usr/bin/node /opt/oc-relay/server.js
+Restart=always
+RestartSec=5
+
+# nginx owns the public 9999 port for TLS termination; relay listens on loopback only.
+Environment=RELAY_PORT=9998
+Environment=RELAY_HOST=127.0.0.1
+Environment=RELAY_DATA_DIR=/opt/oc-relay/data
+Environment=RELAY_TRUST_PROXY=1
+Environment=RELAY_PUBLIC_BASE=https://<your-domain>:9999
+
+# Minimal privileges: no root needed, but writing to system directories is forbidden
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/oc-relay/data
+ProtectSystem=full
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oc-relay
+
+[Install]
+WantedBy=multi-user.target

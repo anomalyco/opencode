@@ -1,28 +1,45 @@
 import { Button } from "@opencode/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
 
-export type ConnectMethod = "link" | "password"
+export type ConnectMethod = "link" | "password" | "relay"
 
-// Deliberately quiet, like the Console's API key switch: a pairing link is the way in, the password is the fallback.
+// Three side-by-side methods. The relay path is a first-class option now so self-hosted
+// multi-device setups can discover servers without manually assembling proxy URLs.
 export function ConnectMethodSwitch(props: {
   method: ConnectMethod
   disabled?: boolean
   onChange: (method: ConnectMethod) => void
 }) {
   const language = useLanguage()
-  const next = () => (props.method === "link" ? "password" : "link")
 
   return (
     <div
       data-component="server-connect-method"
-      class="flex min-h-7 flex-wrap items-center justify-center gap-1 text-[13px]"
+      class="flex w-full flex-col gap-2"
     >
-      <span class="text-v2-text-text-faint">
-        {language.t(props.method === "link" ? "server.connect.password.prompt" : "server.connect.link.prompt")}
-      </span>
-      <Button variant="ghost-muted" disabled={props.disabled} onClick={() => props.onChange(next())}>
-        {language.t(props.method === "link" ? "server.connect.password.use" : "server.connect.link.use")}
-      </Button>
+      <div class="grid w-full grid-cols-3 gap-2">
+        <Button
+          variant={props.method === "link" ? "contrast" : "outline"}
+          disabled={props.disabled}
+          onClick={() => props.onChange("link")}
+        >
+          {language.t("server.connect.method.link")}
+        </Button>
+        <Button
+          variant={props.method === "password" ? "contrast" : "outline"}
+          disabled={props.disabled}
+          onClick={() => props.onChange("password")}
+        >
+          {language.t("server.connect.method.password")}
+        </Button>
+        <Button
+          variant={props.method === "relay" ? "contrast" : "outline"}
+          disabled={props.disabled}
+          onClick={() => props.onChange("relay")}
+        >
+          {language.t("server.connect.method.relay")}
+        </Button>
+      </div>
     </div>
   )
 }

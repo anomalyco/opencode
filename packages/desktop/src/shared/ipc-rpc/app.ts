@@ -69,6 +69,33 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
 
 export const AppRelaunch = Rpc.make("AppRelaunch")
 
+const ShareAccount = Schema.Struct({
+  relayUrl: Schema.String,
+  username: Schema.String,
+  password: Schema.String,
+})
+
+const ShareStatus = Schema.Struct({
+  enabled: Schema.Boolean,
+  state: Schema.Literals(["disabled", "connecting", "online", "error"]),
+  environmentId: Schema.optional(Schema.String),
+  environmentName: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+})
+
+export const ShareGetStatus = Rpc.make("ShareGetStatus", { success: ShareStatus })
+
+export const ShareGetAccount = Rpc.make("ShareGetAccount", { success: Schema.NullOr(ShareAccount) })
+
+export const ShareSaveAccount = Rpc.make("ShareSaveAccount", {
+  payload: { account: ShareAccount },
+  success: ShareStatus,
+})
+
+export const ShareEnable = Rpc.make("ShareEnable", { success: ShareStatus })
+
+export const ShareDisable = Rpc.make("ShareDisable", { success: ShareStatus })
+
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
@@ -86,4 +113,9 @@ export const AppRpcs = RpcGroup.make(
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,
+  ShareGetStatus,
+  ShareGetAccount,
+  ShareSaveAccount,
+  ShareEnable,
+  ShareDisable,
 )

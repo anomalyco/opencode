@@ -13,6 +13,20 @@ import type {
   TitlebarTheme,
 } from "../shared/ipc-contract"
 
+export type ShareAccount = {
+  relayUrl: string
+  username: string
+  password: string
+}
+
+export type ShareStatus = {
+  enabled: boolean
+  state: "disabled" | "connecting" | "online" | "error"
+  environmentId?: string
+  environmentName?: string
+  error?: string
+}
+
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(signal?: AbortSignal): Promise<ServerReadyData>
@@ -80,4 +94,9 @@ export type ElectronAPI = {
   setSpellcheckEnabled(enabled: boolean): Promise<void>
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
+  getShareStatus(): Promise<ShareStatus>
+  getShareAccount(): Promise<ShareAccount | null>
+  saveShareAccount(account: ShareAccount): Promise<ShareStatus>
+  enableShare(): Promise<ShareStatus>
+  disableShare(): Promise<ShareStatus>
 }
