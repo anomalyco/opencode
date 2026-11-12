@@ -679,39 +679,46 @@ mod tests {
         assert_eq!(stash_texts(&file), ["c"]);
     }
 
+    // The working directory `/w`, absolute on this platform: Windows paths have a drive and backslashes,
+    // as `path.resolve` gives them to the TypeScript TUI there.
+    fn w() -> PathBuf {
+        PathBuf::from(if cfg!(windows) { r"C:\w" } else { "/w" })
+    }
+
+    // A frecency line for `name` resolved against [`w`].
+    fn visit_line(name: &str, frequency: f64, last_open: f64) -> String {
+        line(&resolve(&w(), name), &Visit { frequency, last_open }) + "\n"
+    }
+
     #[test]
     fn a_frecency_update_at_the_limit_keeps_another_clients_writes() {
         let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("frecency.jsonl");
-        let full: String = (0..MAX_FRECENCY_ENTRIES)
-            .map(|n| format!("{{\"path\":\"/w/f{n}.rs\",\"frequency\":1,\"lastOpen\":{}}}\n", 1000 - n))
-            .collect();
+        let full: String =
+            (0..MAX_FRECENCY_ENTRIES).map(|n| visit_line(&format!("f{n}.rs"), 1.0, (1000 - n) as f64)).collect();
         fs::write(&file, full).unwrap();
-        let mut frecency = Frecency::load(state.path(), Path::new("/w"));
+        let mut frecency = Frecency::load(state.path(), &w());
         // The TypeScript TUI opens a new file and reopens `f0.rs`, appending without the lock.
-        append_text(
-            &file,
-            "{\"path\":\"/w/from_ts.rs\",\"frequency\":1,\"lastOpen\":5000}\n{\"path\":\"/w/f0.rs\",\"frequency\":20,\"lastOpen\":5001}\n",
-        )
-        .unwrap();
+        append_text(&file, &(visit_line("from_ts.rs", 1.0, 5000.0) + &visit_line("f0.rs", 20.0, 5001.0))).unwrap();
         frecency.update("new.rs", 6000);
-        let latest = |path: &str| {
+        let latest = |name: &str| {
+            let path = resolve(&w(), name);
             parse_frecency(&fs::read_to_string(&file).unwrap()).into_iter().find(|entry| entry["path"] == path)
         };
-        assert!(latest("/w/from_ts.rs").is_some(), "from_ts.rs was lost");
-        assert_eq!(latest("/w/f0.rs").unwrap()["frequency"], 20);
+        assert!(latest("from_ts.rs").is_some(), "from_ts.rs was lost");
+        assert_eq!(latest("f0.rs").unwrap()["frequency"], 20);
         // The next update counts from the file, not from the load.
         frecency.update("f0.rs", 7000);
-        assert_eq!(latest("/w/f0.rs").unwrap()["frequency"], 21);
-        assert_eq!(frecency.score("/w/f0.rs", 7000), 21.0);
+        assert_eq!(latest("f0.rs").unwrap()["frequency"], 21);
+        assert_eq!(frecency.score("f0.rs", 7000), 21.0);
         assert_eq!(frecency.data().len(), MAX_FRECENCY_ENTRIES);
         // Updates only append; the next load trims to the newest 1000.
         assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 1004);
-        let loaded = Frecency::load(state.path(), Path::new("/w"));
+        let loaded = Frecency::load(state.path(), &w());
         assert_eq!(fs::read_to_string(&file).unwrap().lines().count(), 1000);
-        assert_eq!(loaded.score("/w/from_ts.rs", 5000), 1.0);
+        assert_eq!(loaded.score("from_ts.rs", 5000), 1.0);
         let before = fs::metadata(&file).unwrap().modified().unwrap();
-        Frecency::load(state.path(), Path::new("/w"));
+        Frecency::load(state.path(), &w());
         assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
     }
 
@@ -719,21 +726,14 @@ mod tests {
     fn frecency_keeps_the_latest_line_per_path() {
         let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("frecency.jsonl");
-        fs::write(
-            &file,
-            "{\"path\":\"/a\",\"frequency\":1,\"lastOpen\":10}\n{\"path\":\"/b\",\"frequency\":1,\"lastOpen\":20}\n{\"path\":\"/a\",\"frequency\":2,\"lastOpen\":30}\n",
-        )
-        .unwrap();
-        let mut frecency = Frecency::load(state.path(), Path::new("/w"));
-        assert_eq!(
-            fs::read_to_string(&file).unwrap(),
-            "{\"path\":\"/a\",\"frequency\":2,\"lastOpen\":30}\n{\"path\":\"/b\",\"frequency\":1,\"lastOpen\":20}\n"
-        );
+        let [a1, b, a2] = [("../a", 1.0, 10.0), ("../b", 1.0, 20.0), ("../a", 2.0, 30.0)]
+            .map(|(name, frequency, last_open)| visit_line(name, frequency, last_open));
+        fs::write(&file, format!("{a1}{b}{a2}")).unwrap();
+        let mut frecency = Frecency::load(state.path(), &w());
+        assert_eq!(fs::read_to_string(&file).unwrap(), format!("{a2}{b}"));
         frecency.update("../a", 86_400_030);
-        assert_eq!(frecency.score("/a", 86_400_030), 3.0);
-        assert_eq!(frecency.score("/w/../a", 172_800_030), 1.5);
-        assert!(
-            fs::read_to_string(&file).unwrap().ends_with("{\"path\":\"/a\",\"frequency\":3,\"lastOpen\":86400030}\n")
-        );
+        assert_eq!(frecency.score("../a", 86_400_030), 3.0);
+        assert_eq!(frecency.score("x/../../a", 172_800_030), 1.5);
+        assert!(fs::read_to_string(&file).unwrap().ends_with(&visit_line("../a", 3.0, 86_400_030.0)));
     }
 }
