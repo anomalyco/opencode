@@ -114,6 +114,23 @@ function bearer(req) {
   return null
 }
 
+// Node exposes a repeated header as an array; the tunnel protocol carries one
+// string per header name, so join the values the way HTTP does.
+function headerValue(value) {
+  return Array.isArray(value) ? value.join(', ') : String(value ?? '')
+}
+
+// Copy the headers that may be forwarded, dropping the ones that must not be.
+function forwardHeaders(source, blocked) {
+  const headers = {}
+  for (const [key, value] of Object.entries(source)) {
+    if (blocked.includes(key.toLowerCase())) continue
+    if (value === undefined) continue
+    headers[key] = headerValue(value)
+  }
+  return headers
+}
+
 // ── Rate limiter ─────────────────────────────────────────────────────────
 // Simple in-memory sliding-window rate limiter per IP address.
 // Suitable for a relay with a small number of users; resets on restart.
@@ -538,26 +555,19 @@ function attachTunnelServer(server) {
     if (url.search) pathWithQuery += url.search
 
     // Forward headers: strip hop-by-hop and handshake headers, replace with target environment credentials.
-    const headers = {}
-    for (const [key, value] of Object.entries(request.headers)) {
-      if (
-        [
-          'host',
-          'authorization',
-          'connection',
-          'content-length',
-          'accept-encoding',
-          'sec-websocket-key',
-          'sec-websocket-version',
-          'sec-websocket-extensions',
-          'sec-websocket-protocol',
-          'upgrade',
-          'origin',
-        ].includes(key.toLowerCase())
-      )
-        continue
-      headers[key] = value
-    }
+    const headers = forwardHeaders(request.headers, [
+      'host',
+      'authorization',
+      'connection',
+      'content-length',
+      'accept-encoding',
+      'sec-websocket-key',
+      'sec-websocket-version',
+      'sec-websocket-extensions',
+      'sec-websocket-protocol',
+      'upgrade',
+      'origin',
+    ])
     headers.authorization = 'Basic ' + Buffer.from(`${env.username}:${env.password}`).toString('base64')
 
     tunnel.ws.send(JSON.stringify({ type: 'ws-req', id: reqId, path: pathWithQuery, headers }), (err) => {
@@ -1072,11 +1082,7 @@ async function proxy(req, res, envId, rest, opts = {}) {
   if (req.url.includes('?')) pathWithQuery += req.url.slice(req.url.indexOf('?'))
 
   // Replace with the environment's opencode credentials
-  const headers = {}
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (['host', 'authorization', 'connection', 'content-length', 'accept-encoding'].includes(key)) continue
-    headers[key] = value
-  }
+  const headers = forwardHeaders(req.headers, ['host', 'authorization', 'connection', 'content-length', 'accept-encoding'])
   headers.authorization = 'Basic ' + Buffer.from(`${env.username}:${env.password}`).toString('base64')
   headers['accept-encoding'] = 'identity'
 

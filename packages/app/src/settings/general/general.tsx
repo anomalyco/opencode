@@ -256,16 +256,18 @@ const DeviceSharingSetting: Component = () => {
   const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal("")
 
-  const current = (): ShareStatus => status.latest ?? ({ enabled: false, state: "disabled" } as ShareStatus)
+  const current = (): ShareStatus => status.latest ?? { enabled: false, state: "disabled" }
   const hasAccount = () => account.latest !== null && account.latest !== undefined
 
   // The main process reports failures with a marker for known cases so the
   // message can be localized instead of showing a raw backend string.
   const shareErrorText = (value?: string) => {
     if (!value) return ""
+
     if (value === "invalid_credentials") {
       return language.t("settings.general.row.deviceSharing.error.invalidCredentials")
     }
+
     return value
   }
 
@@ -279,6 +281,7 @@ const DeviceSharingSetting: Component = () => {
       void platform.getShareStatus?.().then((value) => {
         if (!value) return
         setStatus(value)
+
         if (value.state !== "connecting") clearInterval(timer)
       })
     }, 1500)
@@ -289,6 +292,7 @@ const DeviceSharingSetting: Component = () => {
   // The relay reports the failure reason on the status, not as a rejection.
   createEffect(() => {
     const message = shareErrorText(current().error)
+
     if (message) setError(message)
   })
 
@@ -299,11 +303,12 @@ const DeviceSharingSetting: Component = () => {
 
     if (!update) {
       setBusy(false)
+
       return
     }
 
     void update.then(setStatus).catch((err) => {
-      setError(String((err as Error).message ?? err))
+      setError(err instanceof Error ? err.message : String(err))
     }).finally(() => setBusy(false))
   }
 

@@ -3,7 +3,7 @@ export * as ShareService from "./share-service"
 import { hostname, platform, arch } from "node:os"
 import { randomUUID } from "node:crypto"
 import { WebSocket } from "ws"
-import { Effect, Layer, Context, Option } from "effect"
+import { Effect, Layer, Context, Option, Schema } from "effect"
 import { getStore } from "../storage/store"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { SHARE_ACCOUNT_KEY, SHARE_DEVICE_ID_KEY, SHARE_ENABLED_KEY, SHARE_ENVIRONMENT_KEY } from "../storage/keys"
@@ -57,24 +57,128 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/ShareService") {}
 
 const HEARTBEAT_MS = 60_000
+
 const REQUEST_TIMEOUT_MS = 30 * 60_000
+
 const PING_INTERVAL_MS = 25_000
+
 const MAX_RECONNECT_DELAY_MS = 30_000
+
 const V2_PROTOCOL = "oc-tunnel-v2"
+
 const BACKPRESSURE_LIMIT = 2 * 1024 * 1024 // 2MB
 
-// V2 二进制帧打包/解包
+// The account the relay authenticates the desktop with.
+const AccountSchema = Schema.Struct({
+  relayUrl: Schema.String,
+  username: Schema.String,
+  password: Schema.String,
+})
+
+// The environment this device registered on the relay.
+const EnvironmentSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+})
+
+// The stable device id this installation reports to the relay.
+const DeviceIdSchema = Schema.String
+
+const decodeDeviceId = Schema.decodeUnknownOption(DeviceIdSchema)
+
+// The relay's login response.
+const SessionSchema = Schema.Struct({
+  token: Schema.String,
+})
+
+// The relay's environment registration response.
+const RegistrationSchema = Schema.Struct({
+  environment: EnvironmentSchema,
+})
+
+// The relay's error response.
+const RelayErrorSchema = Schema.Struct({
+  error: Schema.optional(Schema.String),
+})
+
+// The header map the relay forwards with each request. The relay joins
+// repeated headers, so every value is a single string.
+const HeadersSchema = Schema.Record(Schema.String, Schema.String)
+
+// A tunnel frame the relay sends to the desktop.
+//
+// V2 frames carry a `t` tag and stream the request body as binary frames.
+// V1 frames carry a `type` tag and base64-encode the request body.
+const V2FrameSchema = Schema.Union([
+  Schema.Struct({
+    t: Schema.Literal(1),
+    id: Schema.String,
+    method: Schema.String,
+    path: Schema.String,
+    headers: HeadersSchema,
+  }),
+  Schema.Struct({ t: Schema.Literal(2), id: Schema.String }),
+])
+
+const V1FrameSchema = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("req"),
+    id: Schema.String,
+    method: Schema.String,
+    path: Schema.String,
+    headers: HeadersSchema,
+    body: Schema.optionalKey(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("ws-req"),
+    id: Schema.String,
+    path: Schema.String,
+    headers: HeadersSchema,
+  }),
+  Schema.Struct({ type: Schema.Literal("ws-data"), id: Schema.String, data: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("ws-close"), id: Schema.String }),
+])
+
+const decodeV2Frame = Schema.decodeUnknownOption(Schema.fromJsonString(V2FrameSchema))
+
+const decodeV1Frame = Schema.decodeUnknownOption(Schema.fromJsonString(V1FrameSchema))
+
+// The relay's login error detail.
+const decodeRelayError = Schema.decodeUnknownOption(RelayErrorSchema)
+
+const decodeSession = Schema.decodeUnknownOption(SessionSchema)
+
+const decodeRegistration = Schema.decodeUnknownOption(RegistrationSchema)
+
+const decodeAccount = Schema.decodeUnknownOption(AccountSchema)
+
+const decodeEnvironment = Schema.decodeUnknownOption(EnvironmentSchema)
+
+// ── Binary frames ──────────────────────────────────────────────────────
+//
+// V2 binary frame packing/unpacking. The frame carries the request id in a
+// 2-byte big-endian length prefix, so the receiver can route the payload
+// without a separate text frame.
+
+/** A decoded V2 binary frame: the request id and its raw payload. */
+type BinaryFrame = {
+  id: string
+  data: Buffer
+}
+
 function packBinaryFrame(reqId: string, data: Buffer): Buffer {
   const idBuf = Buffer.from(reqId, "utf8")
   const header = Buffer.alloc(2)
   header.writeUInt16BE(idBuf.length, 0)
+
   return Buffer.concat([header, idBuf, data])
 }
 
-function unpackBinaryFrame(raw: Buffer): { id: string; data: Buffer } {
+function unpackBinaryFrame(raw: Buffer): BinaryFrame {
   const idLen = raw.readUInt16BE(0)
   const id = raw.subarray(2, 2 + idLen).toString("utf8")
   const data = raw.subarray(2 + idLen)
+
   return { id, data }
 }
 
@@ -82,6 +186,7 @@ function unpackBinaryFrame(raw: Buffer): { id: string; data: Buffer } {
 // on macOS, which reads as noise in a server list.
 function machineName() {
   const host = hostname()
+
   return host.endsWith(".local") ? host.slice(0, -".local".length) : host
 }
 
@@ -111,54 +216,52 @@ export const layer = Layer.effect(
     // Terminal sessions the relay forwarded, keyed by the tunnel request id.
     const sockets = new Map<string, { socket: WebSocket; relay: WebSocket }>()
 
-    const read = <T,>(key: string): T | undefined => {
-      const raw = store.get(key)
-      if (raw === undefined) return undefined
-      if (typeof raw !== "string") return undefined
+    const read = (key: string) => store.get(key)
 
-      try {
-        return JSON.parse(raw) as T
-      } catch {
-        return undefined
-      }
-    }
-
-    const write = (key: string, value: unknown) => {
-      store.set(key, JSON.stringify(value))
+    const write = (key: string, value: Schema.Json) => {
+      store.set(key, value)
     }
 
     const remove = (key: string) => {
       store.delete(key)
     }
 
-    const current = (): Status => ({
-      enabled: state !== "disabled",
-      state,
-      ...(environmentId ? { environmentId } : {}),
-      ...(environmentName ? { environmentName } : {}),
-      ...(lastError ? { error: lastError } : {}),
-    })
+    const current = (): Status => {
+      const status: Status = { enabled: state !== "disabled", state }
 
-    const savedAccount = () => Option.fromUndefinedOr(read<Account>(SHARE_ACCOUNT_KEY))
-    const savedEnvironment = () => read<{ id: string; name: string }>(SHARE_ENVIRONMENT_KEY)
+      if (environmentId) status.environmentId = environmentId
+
+      if (environmentName) status.environmentName = environmentName
+
+      if (lastError) status.error = lastError
+
+      return status
+    }
+
+    const savedAccount = () => Option.fromUndefinedOr(Option.getOrUndefined(decodeAccount(read(SHARE_ACCOUNT_KEY))))
+    const savedEnvironment = () => Option.getOrUndefined(decodeEnvironment(read(SHARE_ENVIRONMENT_KEY)))
 
     // A stable identity for this installation. The relay uses it to recognise
     // re-registrations of the same machine instead of piling up duplicates.
     const deviceId = () => {
-      const saved = read<string>(SHARE_DEVICE_ID_KEY)
+      const saved = Option.getOrUndefined(decodeDeviceId(read(SHARE_DEVICE_ID_KEY)))
+
       if (saved) return saved
       const generated = randomUUID()
       write(SHARE_DEVICE_ID_KEY, generated)
+
       return generated
     }
 
     const api = async (
       account: Account,
       pathname: string,
-      init: { method?: string; body?: unknown; token?: string } = {},
+      init: { method?: string; body?: Schema.Json; token?: string } = {},
     ) => {
       const headers: Record<string, string> = {}
+
       if (init.token) headers.authorization = `Bearer ${init.token}`
+
       if (init.body !== undefined) headers["content-type"] = "application/json"
 
       const response = await fetch(new URL(pathname, account.relayUrl), {
@@ -166,8 +269,10 @@ export const layer = Layer.effect(
         headers,
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
       })
+
       const text = await response.text()
       let parsed: unknown = undefined
+
       try {
         parsed = text ? JSON.parse(text) : undefined
       } catch {
@@ -176,11 +281,12 @@ export const layer = Layer.effect(
 
       if (!response.ok) {
         const detail =
-          (parsed as { error?: string } | undefined)?.error ?? response.statusText ?? `HTTP ${response.status}`
+          Option.getOrUndefined(decodeRelayError(parsed))?.error ?? response.statusText ?? `HTTP ${response.status}`
+
         throw new Error(detail)
       }
 
-      return parsed as Record<string, unknown>
+      return parsed
     }
 
     const login = async (account: Account) => {
@@ -188,7 +294,9 @@ export const layer = Layer.effect(
         method: "POST",
         body: { username: account.username, password: account.password, deviceLabel: "opencode-desktop" },
       })
-      const token = (result as { token?: string }).token
+
+      const token = Option.getOrUndefined(decodeSession(result))?.token
+
       if (!token) throw new Error("Relay did not return a session token")
 
       return token
@@ -196,9 +304,11 @@ export const layer = Layer.effect(
 
     // The relay reports bad credentials as "invalid credentials". The renderer
     // translates this marker, so the UI can show a localized message.
-    function describeError(error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
+    function describeError(cause: unknown) {
+      const message = cause instanceof Error ? cause.message : String(cause)
+
       if (message.toLowerCase().includes("invalid credentials")) return "invalid_credentials"
+
       return message
     }
 
@@ -223,41 +333,59 @@ export const layer = Layer.effect(
       }
 
       const created = await api(account, "/api/environments", { method: "POST", token, body: payload })
-      return (created as { environment: { id: string; name: string } }).environment
+      const registration = Option.getOrUndefined(decodeRegistration(created))
+
+      if (!registration) throw new Error("Relay did not return an environment")
+
+      return registration.environment
     }
 
-    const send = (message: unknown) => {
+    // A frame the desktop sends to the relay. The relay decodes the same shapes.
+    type OutboundFrame =
+      | { t: 3; id: string; status: number; headers: Record<string, string> }
+      | { t: 4; id: string }
+      | { type: "ws-open"; id: string }
+      | { type: "ws-data"; id: string; data: string }
+      | { type: "ws-close"; id: string }
+
+    const send = (message: OutboundFrame) => {
       if (!socket || socket.readyState !== WebSocket.OPEN) return false
       socket.send(JSON.stringify(message))
+
       return true
     }
 
-    // V2: 发送二进制帧（响应体原始字节，无 base64）
+    // Sends a raw response body over the V2 binary channel.
     const sendBinary = (id: string, data: Buffer): boolean => {
       if (!socket || socket.readyState !== WebSocket.OPEN) return false
+
       if (socket.bufferedAmount > BACKPRESSURE_LIMIT) return false
       socket.send(packBinaryFrame(id, data), { binary: true })
+
       return true
     }
 
-    // V2: 等待 WebSocket 排空（背压控制）
+    // Waits for the socket to drain once its backlog exceeds the limit.
     const waitForDrain = (): Promise<void> =>
       new Promise((resolve) => {
         if (!socket || socket.bufferedAmount <= BACKPRESSURE_LIMIT) {
           resolve()
+
           return
         }
+
         const onDrain = () => {
           socket?.off("drain", onDrain)
           resolve()
         }
+
         socket?.on("drain", onDrain)
       })
 
     // Forwards one relayed HTTP request to the local opencode server and
     // streams the response back over the tunnel.
-    // V2 协议：响应用二进制帧发送（无 base64），元数据用文本帧。
-    // V1 兼容：响应用 JSON+base64 文本帧。
+    // V2 sends the response body as raw binary frames; V1 sends it base64-encoded
+    // inside a JSON text frame.
     const handleRequest = async (message: {
       id: string
       method: string
@@ -266,34 +394,43 @@ export const layer = Layer.effect(
       bodyBuffer?: Buffer
     }) => {
       const local = localEndpoint()
+
       if (!local) {
         send({ t: 3, id: message.id, status: 503, headers: { "content-type": "application/json" } })
         send({ t: 4, id: message.id })
+
         return
       }
 
       const headers = new Headers()
+
       for (const [key, value] of Object.entries(message.headers ?? {})) {
         if (["host", "connection", "content-length", "accept-encoding"].includes(key.toLowerCase())) continue
+
         if (key.toLowerCase() === "authorization") continue
+
         try {
           headers.set(key, value)
         } catch {
           // Ignore header names the fetch API rejects.
         }
       }
+
       headers.set("accept-encoding", "identity")
+
       if (local.authorization) headers.set("authorization", local.authorization)
 
       const body = message.bodyBuffer
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      const hasBody = body !== undefined && message.method !== "GET" && message.method !== "HEAD"
 
       try {
         const response = await fetch(new URL(message.path, local.url), {
           method: message.method,
           headers,
-          body: body && message.method !== "GET" && message.method !== "HEAD" ? (body as BodyInit) : undefined,
+          // SAFETY: `body` is a Buffer, which the fetch API accepts as a binary body.
+          body: hasBody ? (body as BodyInit) : undefined,
           signal: controller.signal,
           redirect: "manual",
         })
@@ -301,30 +438,36 @@ export const layer = Layer.effect(
         const out: Record<string, string> = {}
         response.headers.forEach((value, key) => {
           const lower = key.toLowerCase()
+
           if (["content-encoding", "content-length", "transfer-encoding", "connection"].includes(lower)) return
           out[key] = value
         })
 
-        // V2: 响应头用文本帧（t:3），响应体用二进制帧
+        // The response headers travel in a text frame; the body follows as binary frames.
         send({ t: 3, id: message.id, status: response.status, headers: out })
 
         if (!response.body) {
           send({ t: 4, id: message.id })
+
           return
         }
 
         // Stream the body so server-sent events reach the client in real time.
-        // V2: 用二进制帧发送原始字节（无 base64 编码），带背压控制
         const reader = response.body.getReader()
+
         for (;;) {
           const { done, value } = await reader.read()
+
           if (done) break
-          // 背压控制：积压超限时等待 drain
+
+          // Backpressure: wait for the socket to drain once its backlog is over the limit.
           if (socket && socket.bufferedAmount > BACKPRESSURE_LIMIT) {
             await waitForDrain()
           }
+
           sendBinary(message.id, Buffer.from(value))
         }
+
         send({ t: 4, id: message.id })
       } catch (error) {
         if (!send({ t: 3, id: message.id, status: 502, headers: { "content-type": "application/json" } })) return
@@ -338,13 +481,16 @@ export const layer = Layer.effect(
     // opens its own WebSocket to the local server and pipes both directions.
     const handleWebSocketRequest = (message: { id: string; path: string; headers: Record<string, string> }) => {
       const local = localEndpoint()
+
       if (!local) {
         send({ type: "ws-close", id: message.id })
+
         return
       }
 
       const target = new URL(message.path, local.url)
       target.protocol = target.protocol === "https:" ? "wss:" : "ws:"
+
       const upstream = new WebSocket(target, {
         headers: {
           ...message.headers,
@@ -371,88 +517,95 @@ export const layer = Layer.effect(
 
     // The relay asks the desktop to forward a request; this is the only
     // inbound direction, so the handler owns the whole message dispatch.
-    // V2: 二进制帧 = 请求体原始字节；文本帧 = JSON 元数据（V1 type 或 V2 t 字段）
+    // A binary frame carries raw request-body bytes; a text frame carries the
+    // JSON metadata of either the V2 (`t`) or the V1 (`type`) protocol.
     const v2PendingRequests = new Map<string, { method: string; path: string; headers: Record<string, string>; bodyChunks: Buffer[] }>()
 
     const handleMessage = (raw: Buffer, isBinary: boolean) => {
       if (isBinary) {
-        // V2 二进制帧：请求体原始字节，累积到对应的 pending 请求
+        // A binary frame carries the raw request body; append it to its request.
         const { id, data } = unpackBinaryFrame(raw)
         const entry = v2PendingRequests.get(id)
+
         if (entry) entry.bodyChunks.push(data)
+
         return
       }
 
-      let message: Record<string, unknown>
-      try {
-        message = JSON.parse(raw.toString())
-      } catch {
-        return
-      }
+      const text = raw.toString()
+      const v2 = Option.getOrUndefined(decodeV2Frame(text))
 
-      const id = typeof message.id === "string" ? message.id : undefined
-      if (!id) return
+      if (v2) {
+        // V2 request start: open the request body buffer.
+        if (v2.t === 1) {
+          v2PendingRequests.set(v2.id, {
+            method: v2.method,
+            path: v2.path,
+            headers: v2.headers,
+            bodyChunks: [],
+          })
 
-      // V2: 请求开始（t:1）— 初始化请求体缓冲
-      if (message.t === 1) {
-        v2PendingRequests.set(id, {
-          method: String(message.method ?? "GET"),
-          path: String(message.path ?? "/"),
-          headers: (message.headers as Record<string, string>) ?? {},
-          bodyChunks: [],
-        })
-        return
-      }
+          return
+        }
 
-      // V2: 请求体结束（t:2）— 合并分块，执行请求
-      if (message.t === 2) {
-        const entry = v2PendingRequests.get(id)
+        // V2 request end: concatenate the chunks and run the request.
+        const entry = v2PendingRequests.get(v2.id)
+
         if (!entry) return
-        v2PendingRequests.delete(id)
+        v2PendingRequests.delete(v2.id)
         void handleRequest({
-          id,
+          id: v2.id,
           method: entry.method,
           path: entry.path,
           headers: entry.headers,
           bodyBuffer: entry.bodyChunks.length > 0 ? Buffer.concat(entry.bodyChunks) : undefined,
         })
+
         return
       }
 
-      // V1 兼容：旧协议消息（type 字段）
-      switch (message.type) {
-        case "req":
-          void handleRequest({
-            id,
-            method: String(message.method ?? "GET"),
-            path: String(message.path ?? "/"),
-            headers: (message.headers as Record<string, string>) ?? {},
-            bodyBuffer: typeof message.body === "string" ? Buffer.from(message.body, "base64") : undefined,
-          })
-          return
-        case "ws-req":
-          handleWebSocketRequest({
-            id,
-            path: String(message.path ?? "/"),
-            headers: (message.headers as Record<string, string>) ?? {},
-          })
-          return
-        case "ws-data": {
-          const entry = sockets.get(id)
-          if (!entry) return
-          const data = Buffer.from(String(message.data ?? ""), "base64")
-          entry.socket.send(data)
-          return
-        }
-        case "ws-close": {
-          const entry = sockets.get(id)
-          if (!entry) return
-          sockets.delete(id)
-          entry.socket.close()
-          return
-        }
-        default:
-          return
+      const v1 = Option.getOrUndefined(decodeV1Frame(text))
+
+      if (!v1) return
+
+      // V1: the older protocol, with the request body base64-encoded.
+      if (v1.type === "req") {
+        void handleRequest({
+          id: v1.id,
+          method: v1.method,
+          path: v1.path,
+          headers: v1.headers,
+          bodyBuffer: v1.body ? Buffer.from(v1.body, "base64") : undefined,
+        })
+
+        return
+      }
+
+      if (v1.type === "ws-req") {
+        handleWebSocketRequest({
+          id: v1.id,
+          path: v1.path,
+          headers: v1.headers,
+        })
+
+        return
+      }
+
+      if (v1.type === "ws-data") {
+        const entry = sockets.get(v1.id)
+
+        if (!entry) return
+        entry.socket.send(Buffer.from(v1.data, "base64"))
+
+        return
+      }
+
+      if (v1.type === "ws-close") {
+        const entry = sockets.get(v1.id)
+
+        if (!entry) return
+        sockets.delete(v1.id)
+        entry.socket.close()
       }
     }
 
@@ -460,9 +613,11 @@ export const layer = Layer.effect(
     // forwards to it, so the relay never needs to know a public address.
     const localEndpoint = () => {
       const sidecar = SidecarCredentials.get()
+
       if (!sidecar) return undefined
 
       const url = new URL(sidecar.url)
+
       if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
 
       return {
@@ -481,9 +636,11 @@ export const layer = Layer.effect(
       tunnelUrl.protocol = tunnelUrl.protocol === "https:" ? "wss:" : "ws:"
 
       const currentGeneration = ++generation
+
       const next = new WebSocket(tunnelUrl, V2_PROTOCOL, {
         headers: { authorization: `Bearer ${token}` },
       })
+
       socket = next
 
       // Liveness probe: detect zombie connections that survive network
@@ -491,15 +648,20 @@ export const layer = Layer.effect(
       // TCP layer reports ESTABLISHED forever, the 'close' event never fires,
       // and the relay marks us offline while the local state stays "online".
       let pongReceived = true
+
       const pingTimer = setInterval(() => {
         if (currentGeneration !== generation) {
           clearInterval(pingTimer)
+
           return
         }
+
         if (!pongReceived) {
           next.terminate()
+
           return
         }
+
         pongReceived = false
         next.ping()
       }, PING_INTERVAL_MS)
@@ -533,6 +695,7 @@ export const layer = Layer.effect(
 
     const scheduleReconnect = (account: Account, name: string) => {
       stopReconnect()
+
       if (state === "disabled") return
       const delay = Math.min(1000 * 2 ** reconnectAttempts, MAX_RECONNECT_DELAY_MS)
       reconnectAttempts += 1
@@ -585,9 +748,11 @@ export const layer = Layer.effect(
 
     const enable = Effect.sync(() => {
       const account = savedAccount()
+
       if (Option.isNone(account)) {
         state = "error"
         lastError = "No relay account saved"
+
         return current()
       }
 
@@ -650,12 +815,14 @@ export const layer = Layer.effect(
         } catch (error) {
           state = "error"
           lastError = describeError(error)
+
           return current()
         }
 
         write(SHARE_ACCOUNT_KEY, next)
         state = "disabled"
         lastError = undefined
+
         return current()
       })
 
@@ -663,6 +830,7 @@ export const layer = Layer.effect(
     const restore = Effect.sync(() => {
       if (store.get(SHARE_ENABLED_KEY) !== "true") return
       const saved = savedAccount()
+
       if (Option.isNone(saved)) return
       state = "connecting"
       void connect(saved.value, machineName()).catch((error) => {

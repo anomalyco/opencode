@@ -1,4 +1,5 @@
 import { lazy, Show, Suspense } from "solid-js"
+import { Match } from "effect"
 import { Button } from "@opencode/ui/button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Wordmark } from "@opencode/ui/wordmark"
@@ -26,11 +27,11 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
           <h1 id="server-connect-title">{language.t("server.connect.title")}</h1>
           <p>
             {language.t(
-              view().draft.method === "link"
-                ? "server.connect.description.pairing"
-                : view().draft.method === "relay"
-                  ? "server.connect.relay.description"
-                  : "server.connect.description",
+              Match.value(view().draft.method).pipe(
+                Match.when("link", () => "server.connect.description.pairing"),
+                Match.when("relay", () => "server.connect.relay.description"),
+                Match.orElse(() => "server.connect.description"),
+              ),
             )}
           </p>
         </header>
