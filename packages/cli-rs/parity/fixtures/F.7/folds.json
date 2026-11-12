@@ -97,6 +97,7 @@
     "vcs.branch.updated",
     "mcp.status.changed",
     "mcp.resources.changed",
+    "experimental.mcp.event",
     "rpc.x",
     "server.connected"
   ],
@@ -35202,11 +35203,366 @@
       }
     },
     {
-      "name": "rpc.x",
+      "name": "experimental.mcp.event",
       "state": "empty",
       "event": {
         "id": "evt_9098",
         "created": 1098,
+        "type": "experimental.mcp.event",
+        "data": {
+          "id": "x",
+          "server": "x",
+          "name": "x",
+          "eventId": "x",
+          "timestamp": "x",
+          "data": {},
+          "cursor": "x"
+        },
+        "location": {
+          "directory": "/project"
+        }
+      },
+      "expected": {
+        "sessions": {},
+        "missing": [],
+        "family": {
+          "ses_a": [],
+          "ses_b": []
+        },
+        "status": {
+          "ses_a": "idle",
+          "ses_b": "idle"
+        },
+        "messages": {
+          "ses_a": [],
+          "ses_b": []
+        },
+        "more": {
+          "ses_a": false,
+          "ses_b": false
+        },
+        "pending": {
+          "ses_a": [],
+          "ses_b": []
+        },
+        "permissions": {},
+        "forms": {},
+        "projects": {},
+        "location": {
+          "shell": []
+        },
+        "requests": []
+      }
+    },
+    {
+      "name": "experimental.mcp.event",
+      "state": "loaded",
+      "event": {
+        "id": "evt_9098",
+        "created": 1098,
+        "type": "experimental.mcp.event",
+        "data": {
+          "id": "x",
+          "server": "x",
+          "name": "x",
+          "eventId": "x",
+          "timestamp": "x",
+          "data": {},
+          "cursor": "x"
+        },
+        "location": {
+          "directory": "/project"
+        }
+      },
+      "expected": {
+        "sessions": {
+          "ses_a": {
+            "id": "ses_a",
+            "projectID": "project",
+            "agent": "build",
+            "model": {
+              "providerID": "p",
+              "id": "m"
+            },
+            "title": "Title ses_a",
+            "cost": 0.5,
+            "tokens": {
+              "input": 1,
+              "output": 1,
+              "reasoning": 0,
+              "cache": {
+                "read": 0,
+                "write": 0
+              }
+            },
+            "time": {
+              "created": 1,
+              "updated": 2
+            },
+            "location": {
+              "directory": "/project"
+            }
+          }
+        },
+        "missing": [],
+        "family": {
+          "ses_a": [
+            "ses_a"
+          ],
+          "ses_b": []
+        },
+        "status": {
+          "ses_a": "idle",
+          "ses_b": "idle"
+        },
+        "messages": {
+          "ses_a": [
+            {
+              "id": "msg_0001",
+              "type": "user",
+              "text": "hello",
+              "time": {
+                "created": 10
+              }
+            },
+            {
+              "id": "msg_0002",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "p",
+                "id": "m"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "done"
+                }
+              ],
+              "time": {
+                "created": 11,
+                "completed": 12
+              }
+            },
+            {
+              "id": "msg_0003",
+              "type": "shell",
+              "shellID": "sh_1",
+              "command": "ls",
+              "status": "running",
+              "time": {
+                "created": 13
+              }
+            },
+            {
+              "id": "msg_0004",
+              "type": "compaction",
+              "status": "running",
+              "reason": "auto",
+              "summary": "sum",
+              "time": {
+                "created": 14
+              }
+            },
+            {
+              "id": "msg_0005",
+              "type": "assistant",
+              "agent": "build",
+              "model": {
+                "providerID": "p",
+                "id": "m"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hel"
+                },
+                {
+                  "type": "reasoning",
+                  "text": "th",
+                  "time": {
+                    "created": 15
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_1",
+                  "name": "bash",
+                  "state": {
+                    "status": "streaming",
+                    "input": "{"
+                  },
+                  "time": {
+                    "created": 16
+                  }
+                },
+                {
+                  "type": "tool",
+                  "id": "call_2",
+                  "name": "read",
+                  "state": {
+                    "status": "running",
+                    "input": {
+                      "path": "a"
+                    },
+                    "metadata": {}
+                  },
+                  "time": {
+                    "created": 17,
+                    "ran": 17
+                  }
+                }
+              ],
+              "time": {
+                "created": 15
+              }
+            },
+            {
+              "id": "msg_0006",
+              "type": "user",
+              "text": "next",
+              "time": {
+                "created": 18
+              }
+            }
+          ],
+          "ses_b": []
+        },
+        "more": {
+          "ses_a": true,
+          "ses_b": false
+        },
+        "pending": {
+          "ses_a": [
+            {
+              "id": "msg_0006",
+              "sessionID": "ses_a",
+              "time": {
+                "created": 18
+              },
+              "type": "user",
+              "delivery": "steer",
+              "payload": {
+                "text": "next"
+              }
+            }
+          ],
+          "ses_b": []
+        },
+        "permissions": {
+          "ses_a": [
+            {
+              "id": "per_1",
+              "sessionID": "ses_a",
+              "action": "bash",
+              "resources": []
+            }
+          ]
+        },
+        "forms": {
+          "ses_a": [
+            {
+              "id": "frm_1",
+              "sessionID": "ses_a",
+              "title": "Ask",
+              "fields": [
+                {
+                  "key": "x",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "global": []
+        },
+        "projects": {
+          "project": {
+            "id": "project",
+            "canonical": "/project",
+            "time": {
+              "created": 1,
+              "updated": 1,
+              "active": 1
+            },
+            "sandboxes": []
+          }
+        },
+        "location": {
+          "info": {
+            "directory": "/project",
+            "project": {
+              "id": "project",
+              "directory": "/project",
+              "canonical": "/project"
+            }
+          },
+          "vcs": {
+            "branch": {
+              "current": "main",
+              "default": "main"
+            }
+          },
+          "agent": [],
+          "command": [],
+          "config": [],
+          "integration": [
+            {
+              "id": "openai",
+              "name": "OpenAI",
+              "methods": [],
+              "connections": [
+                {
+                  "type": "credential",
+                  "id": "crd_1",
+                  "label": "crd_1",
+                  "method": "key"
+                },
+                {
+                  "type": "credential",
+                  "id": "crd_2",
+                  "label": "crd_2",
+                  "method": "key"
+                }
+              ]
+            }
+          ],
+          "mcpServer": [],
+          "mcpResource": [],
+          "model": [],
+          "provider": [],
+          "reference": [],
+          "skill": [],
+          "websearch": [],
+          "usageLimits": null,
+          "shell": [
+            {
+              "id": "sh_1",
+              "status": "running",
+              "command": "ls",
+              "cwd": "/project",
+              "shell": "bash",
+              "file": "/tmp/sh_1",
+              "metadata": {
+                "sessionID": "ses_a"
+              },
+              "time": {
+                "started": 13
+              },
+              "location": {
+                "directory": "/project"
+              }
+            }
+          ]
+        },
+        "requests": []
+      }
+    },
+    {
+      "name": "rpc.x",
+      "state": "empty",
+      "event": {
+        "id": "evt_9099",
+        "created": 1099,
         "type": "rpc.x",
         "location": {
           "directory": "/project"
@@ -35249,8 +35605,8 @@
       "name": "rpc.x",
       "state": "loaded",
       "event": {
-        "id": "evt_9098",
-        "created": 1098,
+        "id": "evt_9099",
+        "created": 1099,
         "type": "rpc.x",
         "location": {
           "directory": "/project"
@@ -35544,10 +35900,10 @@
       "name": "server.connected",
       "state": "empty",
       "event": {
-        "id": "evt_9099",
+        "id": "evt_9100",
         "type": "server.connected",
         "data": {},
-        "created": 1099,
+        "created": 1100,
         "location": {
           "directory": "/project"
         }
@@ -35618,10 +35974,10 @@
       "name": "server.connected",
       "state": "loaded",
       "event": {
-        "id": "evt_9099",
+        "id": "evt_9100",
         "type": "server.connected",
         "data": {},
-        "created": 1099,
+        "created": 1100,
         "location": {
           "directory": "/project"
         }
@@ -35916,8 +36272,8 @@
       "name": "session.execution.interrupted#shutdown",
       "state": "empty",
       "event": {
-        "id": "evt_9100",
-        "created": 1100,
+        "id": "evt_9101",
+        "created": 1101,
         "type": "session.execution.interrupted",
         "durable": {
           "aggregateID": "x",
@@ -35968,8 +36324,8 @@
       "name": "session.execution.interrupted#shutdown",
       "state": "loaded",
       "event": {
-        "id": "evt_9100",
-        "created": 1100,
+        "id": "evt_9101",
+        "created": 1101,
         "type": "session.execution.interrupted",
         "durable": {
           "aggregateID": "x",
@@ -36271,8 +36627,8 @@
       "name": "session.step.failed#budget",
       "state": "empty",
       "event": {
-        "id": "evt_9101",
-        "created": 1101,
+        "id": "evt_9102",
+        "created": 1102,
         "type": "session.step.failed",
         "durable": {
           "aggregateID": "x",
@@ -36327,8 +36683,8 @@
       "name": "session.step.failed#budget",
       "state": "loaded",
       "event": {
-        "id": "evt_9101",
-        "created": 1101,
+        "id": "evt_9102",
+        "created": 1102,
         "type": "session.step.failed",
         "durable": {
           "aggregateID": "x",
@@ -36488,7 +36844,7 @@
               ],
               "time": {
                 "created": 15,
-                "completed": 1101
+                "completed": 1102
               },
               "finish": "error",
               "error": {
@@ -36642,8 +36998,8 @@
       "name": "session.step.started#existing",
       "state": "empty",
       "event": {
-        "id": "evt_9102",
-        "created": 1102,
+        "id": "evt_9103",
+        "created": 1103,
         "type": "session.step.started",
         "durable": {
           "aggregateID": "x",
@@ -36714,8 +37070,8 @@
       "name": "session.step.started#existing",
       "state": "loaded",
       "event": {
-        "id": "evt_9102",
-        "created": 1102,
+        "id": "evt_9103",
+        "created": 1103,
         "type": "session.step.started",
         "durable": {
           "aggregateID": "x",
@@ -37023,8 +37379,8 @@
       "name": "session.instructions.updated#baseline",
       "state": "empty",
       "event": {
-        "id": "evt_9103",
-        "created": 1103,
+        "id": "evt_9104",
+        "created": 1104,
         "type": "session.instructions.updated",
         "durable": {
           "aggregateID": "x",
@@ -37075,8 +37431,8 @@
       "name": "session.instructions.updated#baseline",
       "state": "loaded",
       "event": {
-        "id": "evt_9103",
-        "created": 1103,
+        "id": "evt_9104",
+        "created": 1104,
         "type": "session.instructions.updated",
         "durable": {
           "aggregateID": "x",
@@ -37378,8 +37734,8 @@
       "name": "session.model.selected#no-previous",
       "state": "empty",
       "event": {
-        "id": "evt_9104",
-        "created": 1104,
+        "id": "evt_9105",
+        "created": 1105,
         "type": "session.model.selected",
         "durable": {
           "aggregateID": "x",
@@ -37433,8 +37789,8 @@
       "name": "session.model.selected#no-previous",
       "state": "loaded",
       "event": {
-        "id": "evt_9104",
-        "created": 1104,
+        "id": "evt_9105",
+        "created": 1105,
         "type": "session.model.selected",
         "durable": {
           "aggregateID": "x",
@@ -37604,7 +37960,7 @@
               }
             },
             {
-              "id": "msg_9104",
+              "id": "msg_9105",
               "type": "model-switched",
               "model": {
                 "id": "n",
@@ -37615,7 +37971,7 @@
                 "id": "n"
               },
               "time": {
-                "created": 1104
+                "created": 1105
               }
             }
           ],
@@ -37748,7 +38104,7 @@
           ]
         },
         "requests": [
-          "GET /api/session/ses_a/message/msg_9104"
+          "GET /api/session/ses_a/message/msg_9105"
         ]
       }
     },
@@ -37756,8 +38112,8 @@
       "name": "session.inbox.enqueued#compaction",
       "state": "empty",
       "event": {
-        "id": "evt_9105",
-        "created": 1105,
+        "id": "evt_9106",
+        "created": 1106,
         "type": "session.inbox.enqueued",
         "durable": {
           "aggregateID": "x",
@@ -37802,7 +38158,7 @@
               "id": "msg_0010",
               "sessionID": "ses_a",
               "time": {
-                "created": 1105
+                "created": 1106
               },
               "type": "compaction",
               "delivery": "steer",
@@ -37824,8 +38180,8 @@
       "name": "session.inbox.enqueued#compaction",
       "state": "loaded",
       "event": {
-        "id": "evt_9105",
-        "created": 1105,
+        "id": "evt_9106",
+        "created": 1106,
         "type": "session.inbox.enqueued",
         "durable": {
           "aggregateID": "x",
@@ -38021,7 +38377,7 @@
               "id": "msg_0010",
               "sessionID": "ses_a",
               "time": {
-                "created": 1105
+                "created": 1106
               },
               "type": "compaction",
               "delivery": "steer",
@@ -38142,8 +38498,8 @@
       "name": "form.created#global",
       "state": "empty",
       "event": {
-        "id": "evt_9106",
-        "created": 1106,
+        "id": "evt_9107",
+        "created": 1107,
         "type": "form.created",
         "data": {
           "form": {
@@ -38215,8 +38571,8 @@
       "name": "form.created#global",
       "state": "loaded",
       "event": {
-        "id": "evt_9106",
-        "created": 1106,
+        "id": "evt_9107",
+        "created": 1107,
         "type": "form.created",
         "data": {
           "form": {
