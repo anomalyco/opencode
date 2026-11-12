@@ -162,6 +162,34 @@ serviceTest(
 )
 
 serviceTest(
+  "a start leaves an OpenCode service that already owns the port alone",
+  async () => {
+    await using owner = await serviceHome()
+    await using contender = await serviceHome({ port: owner.port })
+    const server = Bun.spawn([process.execPath, owner.entry, "serve", "--service"], {
+      env: owner.env,
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+    const before = await settled(owner)
+
+    // The contender cannot see the owner's registration, so it must not start a second service.
+    await expect(cli(contender, "service", "start")).rejects.toThrow(
+      new RegExp(
+        `OPENCODE_SERVICE_PORT_OWNER=opencode\\nOPENCODE_SERVICE_PORT_OWNER_PID=${before.pid}[\\s\\S]*already in use`,
+      ),
+    )
+    expect(await servers(owner)).toEqual([before.pid])
+    await until(async () => ((await servers(contender)).length === 0 ? true : undefined))
+    expect(await servers(contender)).toEqual([])
+
+    await stopped(owner)
+    await server.exited
+  },
+  120_000,
+)
+
+serviceTest(
   "a damaged registration and then a crash each end with one replacement server",
   async () => {
     await using home = await serviceHome()
@@ -203,10 +231,10 @@ serviceTest(
 type Home = Awaited<ReturnType<typeof serviceHome>>
 type Snapshot = Awaited<ReturnType<typeof snapshot>>
 
-async function serviceHome(options: { readonly failBoot?: boolean } = {}) {
+async function serviceHome(options: { readonly failBoot?: boolean; readonly port?: number } = {}) {
   // Bun resolves symlinks in the entry path, so process command lines carry the real directory.
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-lifecycle-")))
-  const port = await availablePort()
+  const port = options.port ?? (await availablePort())
   await fs.mkdir(path.join(root, "config"), { recursive: true })
   await fs.writeFile(path.join(root, "config", "service-local.json"), JSON.stringify({ port }))
   // A directory where the database file belongs makes boot fail after the server registers.
