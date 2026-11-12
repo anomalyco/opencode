@@ -120,7 +120,9 @@ pub fn realign_mentions(content: &str, mentions: &[Option<Mention>]) -> Vec<Opti
         let available: Vec<Candidate> = candidates
             .iter()
             .copied()
-            .filter(|candidate| !protected.iter().any(|range| candidate.start < range.end && candidate.end > range.start))
+            .filter(|candidate| {
+                !protected.iter().any(|range| candidate.start < range.end && candidate.end > range.start)
+            })
             .collect();
         for (index, candidate) in assign(items, &available) {
             aligned[index] =
