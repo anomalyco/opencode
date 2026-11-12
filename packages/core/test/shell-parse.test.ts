@@ -248,4 +248,10 @@ describe("ShellParse", () => {
     )
     expect(powershell.directories).toEqual(["/workspace/src", "/usr/local/bin"])
   })
+  test("extracts PowerShell directory parameters", async () => {
+    const result = await Effect.runPromise(
+      ShellParse.scan("Set-Location -LiteralPath '..\\outside'; sl '..\\other'; Get-ChildItem", "pwsh", "C:\\workspace"),
+    )
+    expect(result.directories).toEqual(["..\\outside", "..\\other"])
+  })
 })

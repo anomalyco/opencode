@@ -10,6 +10,7 @@ import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string; raw: string; unquotedTilde?: boolean }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const POWERSHELL_CWD = new Set([...CWD, "sl"])
 const POWERSHELL_LITERAL_FLAG_RE = /^-(?:lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 
@@ -250,7 +251,7 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
 
 function unwrapDirectoryCommand(rawWords: string[], parts: Part[], powershell: boolean) {
   const head = powershell ? rawWords[0]?.toLowerCase() : rawWords[0]
-  if (CWD.has(head ?? "")) return parts
+  if ((powershell ? POWERSHELL_CWD : CWD).has(head ?? "")) return parts
   if (powershell) return
   let index = 0
   while (rawWords[index] === "builtin" || rawWords[index] === "command") {
