@@ -41,6 +41,7 @@ import { Reference } from "./reference.js"
 import { Rpc } from "./rpc.js"
 import { WebSearch } from "./websearch.js"
 import { ReferenceInstructions } from "./reference/instructions.js"
+import { SessionAttention } from "./session/attention.js"
 import { SessionRunnerLLM } from "./session/runner/llm.js"
 import { SessionRunnerModel } from "./session/runner/model.js"
 import { SessionCompaction } from "./session/compaction.js"
@@ -104,6 +105,7 @@ const nodes = [
   SkillInstructions.node,
   ReferenceInstructions.node,
   Form.node,
+  SessionAttention.node,
   Generate.node,
   Voice.node,
   UsageLimits.node,

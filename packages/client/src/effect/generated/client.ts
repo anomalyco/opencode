@@ -313,6 +313,8 @@ import type {
   WebsearchQueryOutput,
   ExperimentalUsageLimitsInput,
   ExperimentalUsageLimitsOutput,
+  ExperimentalAttentionListInput,
+  ExperimentalAttentionListOutput,
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
@@ -1939,6 +1941,16 @@ const adaptGroupExperimentalUsage = (raw: RawClient["server.usage"]) => ({
   limits: EndpointExperimentalUsageLimits(raw),
 })
 
+const EndpointExperimentalAttentionList =
+  (raw: RawClient["server.attention"]) => (input?: ExperimentalAttentionListInput) =>
+    preserveEffect<ExperimentalAttentionListOutput>()(
+      raw["attention.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const adaptGroupExperimentalAttention = (raw: RawClient["server.attention"]) => ({
+  list: EndpointExperimentalAttentionList(raw),
+})
+
 const EndpointConfigGet = (raw: RawClient["server.config"]) => (input?: ConfigGetInput) =>
   preserveEffect<ConfigGetOutput>()(
     raw["config.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1978,6 +1990,7 @@ const adaptClient = (raw: RawClient) => {
       file: adaptGroupExperimentalFile(raw["server.fs"]),
       migration: adaptGroupExperimentalMigration(raw["server.migration"]),
       usage: adaptGroupExperimentalUsage(raw["server.usage"]),
+      attention: adaptGroupExperimentalAttention(raw["server.attention"]),
       config: adaptGroupExperimentalConfig(raw["server.config"]),
     },
     message: adaptGroupMessage(raw["server.message"]),
@@ -2091,6 +2104,11 @@ const adaptClient = (raw: RawClient) => {
     usage: {
       /** @deprecated Use `client.experimental.usage.limits`. Removed in the next minor. */
       limits: client.experimental.usage.limits,
+    },
+    /** @deprecated Use `client.experimental.attention`. Removed in the next minor. */
+    attention: {
+      /** @deprecated Use `client.experimental.attention.list`. Removed in the next minor. */
+      list: client.experimental.attention.list,
     },
     config: {
       ...client.config,

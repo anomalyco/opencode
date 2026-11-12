@@ -37,6 +37,7 @@ test("exposes every standard HTTP API group", () => {
     "voice",
     "migration",
     "usage",
+    "attention",
   ])
   expect(Object.keys(client.debug)).toEqual(["heapDump", "location"])
   expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
@@ -66,6 +67,7 @@ test("exposes every standard HTTP API group", () => {
     "job",
     "migration",
     "usage",
+    "attention",
     "config",
   ])
   expect(Object.keys(client.experimental.job)).toEqual(["list"])
@@ -80,6 +82,7 @@ test("exposes every standard HTTP API group", () => {
   ])
   expect(Object.keys(client.experimental.voice)).toEqual(["models", "session"])
   expect(Object.keys(client.experimental.usage)).toEqual(["limits"])
+  expect(Object.keys(client.experimental.attention)).toEqual(["list"])
   expect(Object.keys(client.experimental.mcp)).toEqual(["add", "remove", "connect", "disconnect", "client"])
   expect(Object.keys(client.experimental.integration.wellknown)).toEqual(["add"])
   expect(Object.keys(client.experimental.file)).toEqual(["write", "watch", "unwatch"])
@@ -142,6 +145,7 @@ test("nests a method under client.experimental exactly when its route is experim
   ).toEqual([])
   // Pre-experimental paths kept as deprecated aliases until the next minor.
   expect(deprecated.toSorted()).toEqual([
+    "attention.list",
     "config.update",
     "file.unwatch",
     "file.watch",
