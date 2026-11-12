@@ -121,6 +121,41 @@ impl Flavor {
         parts.join(&self.sep().to_string())
     }
 
+    /// `path.normalize`: `.` and `..` fold, separators collapse (to `\` on Windows), a trailing separator stays, and
+    /// an empty relative path is `.`. `..` above a root is dropped; in a relative path it stays.
+    pub fn normalize(self, path: &str) -> String {
+        if path.is_empty() {
+            return ".".to_owned();
+        }
+        let (root, parts) = self.split(path);
+        let absolute = root.ends_with(['/', '\\']);
+        let mut segments: Vec<String> = Vec::new();
+        for part in parts {
+            match part.as_str() {
+                "." => {}
+                ".." if segments.last().is_some_and(|last| last != "..") => {
+                    segments.pop();
+                }
+                ".." if absolute => {}
+                _ => segments.push(part),
+            }
+        }
+        let mut tail = segments.join(&self.sep().to_string());
+        if tail.is_empty() && !absolute {
+            tail.push('.');
+        }
+        if !tail.is_empty() && path.ends_with(|c| self.is_sep(c)) {
+            tail.push(self.sep());
+        }
+        format!("{root}{tail}")
+    }
+
+    /// `path.join`: the non-empty parts joined with the separator, then [normalized](Self::normalize).
+    pub fn join(self, parts: &[&str]) -> String {
+        let parts: Vec<&str> = parts.iter().copied().filter(|part| !part.is_empty()).collect();
+        self.normalize(&parts.join(&self.sep().to_string()))
+    }
+
     /// Whether a [`relative`](Self::relative) result leaves its base: `..`, `../…`, or absolute.
     pub fn outside(self, relative: &str) -> bool {
         relative == ".." || relative.starts_with(&format!("..{}", self.sep())) || self.is_absolute(relative)
@@ -291,6 +326,39 @@ mod tests {
         assert_eq!(w.basename("C:/a/b"), "b");
         assert_eq!(w.basename("C:\\"), "");
         assert_eq!(w.basename("C:x"), "x");
+    }
+
+    #[test]
+    fn join_and_normalize_follow_node() {
+        let (w, p) = (Flavor::Windows, Flavor::Posix);
+        // `path.win32.join` and `path.posix.join`.
+        for (flavor, parts, expected) in [
+            (w, &["/old", "*"][..], "\\old\\*"),
+            (w, &["D:\\shared\\lib", "*"], "D:\\shared\\lib\\*"),
+            (w, &["C:/a//b/../c/", "*"], "C:\\a\\c\\*"),
+            (w, &["\\\\srv\\share", "*"], "\\\\srv\\share\\*"),
+            (w, &["C:", "*"], "C:\\*"),
+            (w, &["", ""], "."),
+            (p, &["/old", "*"], "/old/*"),
+            (p, &["/a//b/./../c/", "*"], "/a/c/*"),
+            (p, &["a", "../../b"], "../b"),
+            (p, &["C:\\x", "*"], "C:\\x/*"),
+        ] {
+            assert_eq!(flavor.join(parts), expected, "{flavor:?} {parts:?}");
+        }
+        // `path.win32.normalize` and `path.posix.normalize`.
+        for (flavor, path, expected) in [
+            (w, "C:", "C:."),
+            (w, "C:\\..\\a\\", "C:\\a\\"),
+            (w, "/x/./y", "\\x\\y"),
+            (w, "a\\..\\", ".\\"),
+            (w, "\\\\srv\\share", "\\\\srv\\share\\"),
+            (p, "/..", "/"),
+            (p, "./", "./"),
+            (p, "", "."),
+        ] {
+            assert_eq!(flavor.normalize(path), expected, "{flavor:?} {path}");
+        }
     }
 
     #[test]
