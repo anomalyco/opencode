@@ -30,20 +30,17 @@ pub fn show(tui: &Tui) {
     let weak = tui.weak();
     tui.dialogs.replace(
         bind!(weak, |tui, cx| {
-            // The store changes on other threads: take the revision before drawing, so a change in between redraws.
-            let seen = tui.data.read(|state| state.revision());
             let body = View::new(&cx.app);
             draw(&body, cx, &servers(&tui));
-            let status = Rc::new(Status {
-                tui: tui.weak(),
-                cx: Rc::downgrade(cx),
-                body: body.clone(),
-                seen: Cell::new(seen),
-                open: Cell::new(true),
-            });
-            let closed = status.clone();
-            cx.on_close(Disposer::new(move || closed.open.set(false)));
-            status.load(&tui);
+            load(&tui);
+            // A flush after the draw above reaches `Tui::sync`, which redraws.
+            let drawn = body.clone();
+            cx.on_close(tui.follow(cx, move |cx, tui, changes| {
+                let location = tui.data.read(|state| state.default_location().clone());
+                if changes.location(&location) {
+                    draw(&drawn, cx, &servers(tui));
+                }
+            }));
             layout(cx, &header(cx, HeaderProps::new("Status")), &body, None)
         }, else View::new(&cx.app)),
         None,
@@ -51,50 +48,15 @@ pub fn show(tui: &Tui) {
     );
 }
 
-struct Status {
-    tui: Weak<Tui>,
-    cx: Weak<DialogCx>,
-    body: View,
-    seen: Cell<u64>,
-    open: Cell<bool>,
-}
-
-impl Status {
-    /// Reads the list when the store has none (TS loads it with the location at startup), then follows the store.
-    fn load(self: &Rc<Self>, tui: &Tui) {
-        let location = tui.data.read(|state| state.default_location().clone());
-        let loaded =
-            tui.data.read(|state| state.location(Some(&location)).is_some_and(|data| data.mcp_server.is_some()));
-        if !loaded {
-            tui.app.spawn(tui.data.catalog_sync(Catalog::McpServer, Some(&location)), |_, result| {
-                if let Err(error) = result {
-                    log::warn!("mcp list: {error}");
-                }
-            });
-        }
-        // A new receiver counts the current revision as seen; one written since `seen` must still redraw.
-        let mut revisions = tui.data.subscribe();
-        revisions.mark_changed();
-        self.watch(revisions);
-    }
-
-    fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-        let Some(tui) = self.tui.upgrade() else { return };
-        let status = self.clone();
-        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-            let (Some(tui), Some(cx), Some(revisions)) = (status.tui.upgrade(), status.cx.upgrade(), revisions) else {
-                return;
-            };
-            if !status.open.get() {
-                return;
+/// Reads the list when the store has none (TS loads it with the location at startup).
+fn load(tui: &Tui) {
+    let location = tui.data.read(|state| state.default_location().clone());
+    let loaded = tui.data.read(|state| state.location(Some(&location)).is_some_and(|data| data.mcp_server.is_some()));
+    if !loaded {
+        tui.app.spawn(tui.data.catalog_sync(Catalog::McpServer, Some(&location)), |_, result| {
+            if let Err(error) = result {
+                log::warn!("mcp list: {error}");
             }
-            let location = tui.data.read(|state| state.default_location().clone());
-            let (revision, changes) = tui.data.changes_since(status.seen.get());
-            status.seen.set(revision);
-            if changes.location(&location) {
-                draw(&status.body, &cx, &servers(&tui));
-            }
-            status.watch(revisions);
         });
     }
 }

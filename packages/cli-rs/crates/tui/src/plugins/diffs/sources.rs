@@ -64,23 +64,12 @@ pub fn open(viewer: &Viewer) {
 }
 
 /// Each completed turn replaces the last one: in `turn` mode, the viewer loads again when its session goes from
-/// running to idle (the `createEffect` on `session.status`). The watch ends with the viewer.
-pub fn watch(viewer: &Rc<Viewer>) {
-    let Some(tui) = viewer.tui() else { return };
-    if viewer.session().is_none() {
-        return;
-    }
+/// running to idle (the `createEffect` on `session.status`). The viewer keeps the disposer, so the watch ends with it.
+pub fn watch(viewer: &Rc<Viewer>) -> Option<Disposer> {
+    let tui = viewer.tui()?;
+    viewer.session()?;
     observe(viewer);
-    next(viewer.weak(), tui.data.subscribe());
-}
-
-fn next(viewer: Weak<Viewer>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else { return };
-    tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-        let (Some(live), Some(revisions)) = (viewer.upgrade(), revisions) else { return };
-        observe(&live);
-        next(viewer, revisions);
-    });
+    Some(tui.follow(viewer, |viewer, _, _| observe(viewer)))
 }
 
 /// Reads the session's status in `turn` mode and loads again on running to idle; other modes forget it.

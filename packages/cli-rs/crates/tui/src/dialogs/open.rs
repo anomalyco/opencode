@@ -90,7 +90,6 @@ pub fn show(tui: &Tui) {
         select: RefCell::new(None),
         prompt: RefCell::new(None),
         footer: View::new(&tui.app),
-        seen: Cell::new(tui.data.revision()),
     });
     OPEN.with(|slot| *slot.borrow_mut() = Rc::downgrade(&open));
     open.build(Selection { view: OpenView::Projects, filter: String::new(), selected: None });
@@ -105,8 +104,6 @@ struct Open {
     prompt: RefCell<Option<Prompt>>,
     /// The loading and error line under the list.
     footer: View,
-    /// The store revision the dialog last looked at.
-    seen: Cell<u64>,
 }
 
 struct State {
@@ -233,6 +230,9 @@ impl Open {
 
                 *open.select.borrow_mut() = Some(select);
                 open.render_footer();
+                if let Some(tui) = open.tui() {
+                    cx.on_close(tui.follow(&open, |open, tui, changes| open.sync(tui, changes)));
+                }
                 let owner = open.clone();
                 cx.on_close(opentui::keymap::Disposer::new(move || {
                     owner.select.borrow_mut().take();
@@ -299,26 +299,13 @@ impl Open {
                 open.refresh();
             }),
         );
-        self.watch(tui.data.subscribe());
     }
 
     /// Repaints after each store flush that touched the projects or the active location.
-    fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-        let Some(tui) = self.tui() else { return };
-        let weak = Rc::downgrade(self);
-        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-            let (Some(open), Some(revisions)) = (weak.upgrade(), revisions) else { return };
-            let Some(tui) = open.tui() else { return };
-            if tui.dialogs.key().as_deref() != Some(KEY) {
-                return;
-            }
-            let (revision, changes) = tui.data.changes_since(open.seen.get());
-            open.seen.set(revision);
-            if changes.projects() || changes.location(&crate::features::location::active(&tui)) {
-                open.refresh();
-            }
-            open.watch(revisions);
-        });
+    fn sync(&self, tui: &Tui, changes: &Changes) {
+        if changes.projects() || changes.location(&crate::features::location::active(tui)) {
+            self.refresh();
+        }
     }
 
     /// Reads the requests of running sessions and the root sessions that wait on one, so their rows show and sort
