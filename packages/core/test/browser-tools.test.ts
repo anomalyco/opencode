@@ -39,9 +39,12 @@ const tab = {
   generation: 1,
 }
 
-type Respond = (action: Browser.Action) => Browser.Outcome
+type Respond = (action: Browser.Action) => typeof Browser.Outcome.Encoded
 
-const success = (value: typeof Schema.Json.Type): Browser.Outcome => ({ type: "success", result: { value, files: [] } })
+const success = (value: typeof Schema.Json.Type): typeof Browser.Outcome.Encoded => ({
+  type: "success",
+  result: { value, files: [] },
+})
 
 /**
  * The browser plugin as the server runs it, driven through Code Mode with input repair and validation. `respond` plays
@@ -108,9 +111,7 @@ it.live("an unknown browser parameter fails with the valid parameters and sends 
       "query: Not a parameter of browser.evaluate. Valid parameters: tabID, frameID, ref, script, expression, code.",
     )
     expect(
-      yield* browser.run(
-        `return await tools.browser.tabs.list({ tabID: "${tabID}" }).catch((error) => error.message)`,
-      ),
+      yield* browser.run(`return await tools.browser.tabs.list({ tabID: "${tabID}" }).catch((error) => error.message)`),
     ).toContain("tabID: Not a parameter of browser.tabs.list. Valid parameters: none.")
     expect(browser.commands).toEqual([])
     expect(yield* browser.run(`return (await tools.browser.evaluate({ tabID: "${tabID}", script: "1" })).value`)).toBe(
@@ -134,7 +135,11 @@ it.live("evaluate takes expression or code and runs a top-level return or await"
   }),
 )
 
-const failure = (message: string): Browser.Outcome => ({ type: "failure", code: "operation_failed", message })
+const failure = (message: string): typeof Browser.Outcome.Encoded => ({
+  type: "failure",
+  code: "operation_failed",
+  message,
+})
 const waited = (code: string) => `return await tools.browser.wait({ tabID: "${tabID}", ${code} })`
 
 it.live("wait infers its condition and reports an unmet one as met: false", () =>
@@ -196,9 +201,10 @@ it.live("wait pauses, and polls for an element or an address", () =>
     expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", timeout: 5000`)))).toMatchObject({ met: true })
     expect(browser.commands).toHaveLength(2)
     expect(browser.commands[0]).toMatchObject({ type: "evaluate", tabID })
-    expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", state: "hidden", timeout: 150`)))).toMatchObject(
-      { met: false, observed: '1 element(s) matched "#ready", 1 visible, after 150 ms.' },
-    )
+    expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", state: "hidden", timeout: 150`)))).toMatchObject({
+      met: false,
+      observed: '1 element(s) matched "#ready", 1 visible, after 150 ms.',
+    })
 
     expect(JSON.parse(yield* browser.run(waited(`url: "example.test"`)))).toMatchObject({ met: true })
     expect(JSON.parse(yield* browser.run(waited(`url: "**/done", timeout: 150`)))).toMatchObject({
