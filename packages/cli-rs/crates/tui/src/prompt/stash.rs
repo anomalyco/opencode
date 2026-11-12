@@ -157,9 +157,10 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
     ])
 }
 
-/// Puts a stashed prompt in the composer with its parts, the cursor at the end; the mode stays
-/// (`input.setText`, `setStore("prompt")`, `restoreExtmarksFromPrompt`, `gotoBufferEnd`).
+/// Puts a stashed prompt in the composer with its parts, the cursor at the end; the mode stays (`ref.set`:
+/// `history.reset`, `input.setText`, `setStore("prompt")`, `restoreExtmarksFromPrompt`, `gotoBufferEnd`).
 fn show(prompt: &Inner, entry: Value) {
+    prompt.history.reset();
     let text = entry["text"].as_str().unwrap_or_default().to_owned();
     prompt.textarea.set_text(&text);
     *prompt.prompt.borrow_mut() = entry;

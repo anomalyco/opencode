@@ -15,7 +15,7 @@ use opencode_api::memory::Memory;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::model_pref::Model;
 use opencode_tui::dialogs::session_list::pins;
-use opencode_tui::prompt::history::History;
+use opencode_tui::prompt::history::{Cursor, History};
 use opencode_tui::{Deps, Route};
 use opencode_ui::path::Flavor;
 use opentui::testing::TestApp;
@@ -323,8 +323,10 @@ fn a_prompt_appended_before_the_history_loads_is_kept() {
             .is_ok_and(|text| text == "{\"text\":\"old\",\"pasted\":[]}\n{\"text\":\"early\",\"pasted\":[]}\n")
     });
     assert!(saved, "{:?}", std::fs::read_to_string(&file).unwrap().get(..200));
-    assert_eq!(history.step(-1, ""), Some(entry));
-    assert_eq!(history.step(-1, "early").unwrap()["text"], "old");
+    let cursor = Cursor::default();
+    let step = |direction, input| history.step(&cursor, direction, input, opencode_local::jsonl::empty_prompt);
+    assert_eq!(step(-1, "").unwrap()["text"], entry["text"]);
+    assert_eq!(step(-1, "early").unwrap()["text"], "old");
 }
 
 /// carbon-7: a save past the limit keeps a line the TS TUI appended after this one loaded; the next
@@ -335,8 +337,8 @@ fn a_save_past_the_limit_keeps_lines_another_client_appended() {
     let setup = Setup::new(&[("prompt-history.jsonl", &full)]);
     setup.wait("the catalog", || setup.tui.local.catalog_ready());
     // Wait for the load: Up shows the newest entry.
-    setup.wait("the history", || setup.tui.prompt.history.step(-1, "").is_some());
-    setup.tui.prompt.history.step(1, "49");
+    let up = || setup.tui.prompt.history.step(&Cursor::default(), -1, "", opencode_local::jsonl::empty_prompt);
+    setup.wait("the history", || up().is_some());
     let file = setup.state().join("prompt-history.jsonl");
     let mut append = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
     std::io::Write::write_all(&mut append, b"{\"text\":\"from ts\",\"pasted\":[]}\n").unwrap();

@@ -193,6 +193,8 @@ pub struct Inner {
     layers: RefCell<Vec<Disposer>>,
     /// The mentions' extmarks and the parts they stand for (E.3).
     pub(crate) parts: parts::Parts,
+    /// This prompt's place in the history and the draft it left (E.2).
+    pub(crate) history: super::history::Cursor,
     pub(crate) autocomplete: OnceCell<Autocomplete>,
     /// Pastes waiting for files or the clipboard (E.4).
     pub(crate) paste: super::paste::Queue,
@@ -394,6 +396,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         catalog: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
         parts: parts::Parts::default(),
+        history: Default::default(),
         autocomplete: OnceCell::new(),
         paste: super::paste::Queue::default(),
         previews,
@@ -499,6 +502,7 @@ impl Inner {
 
     /// `resetComposer`.
     pub(crate) fn reset(&self) {
+        self.history.reset();
         *self.prompt.borrow_mut() = empty_prompt();
         self.parts.clear();
         self.textarea.set_text("");
