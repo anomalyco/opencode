@@ -30,6 +30,15 @@ let reply: (
 let captured: { readonly set: (next: Advisor.State) => Effect.Effect<Advisor.State, unknown> } | undefined
 
 const zeroUsage = SessionUsage.record(undefined, [])
+let contextHook:
+  | ((event: { tools: Record<string, unknown>; system: Array<{ text: string }> }) => Effect.Effect<void>)
+  | undefined
+const systemFor = (tools: Record<string, unknown>) =>
+  Effect.gen(function* () {
+    const event = { tools, system: [] as Array<{ text: string }> }
+    if (contextHook) yield* contextHook(event)
+    return event.system.map((part) => part.text)
+  })
 
 const rpcMock = Object.assign(
   () => {
@@ -74,6 +83,13 @@ const setup = (experimental: ConfigExperimental.Info | undefined, initial: Advis
         scan: () => Effect.succeed({ entries: [] }),
       },
       rpc: rpcMock as unknown as Context["rpc"],
+      session: {
+        hook: (name: string, handler: unknown) =>
+          Effect.sync(() => {
+            if (name === "context") contextHook = handler as typeof contextHook
+            return { dispose: Effect.void }
+          }),
+      } as unknown as Context["session"],
     }).pipe(
       Effect.provide(Flag.testLayer([document(experimental)])),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
@@ -121,8 +137,9 @@ describe("AdvisorPlugin", () => {
       reply = () => Effect.succeed({ text: "Solid advice.", ...zeroUsage })
       const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
       const definition = yield* find(registry)
-      expect(definition?.inputSchema.required).toBeUndefined()
-      const result = yield* run(registry, {})
+      expect(definition?.inputSchema).toHaveProperty("required", ["question"])
+      expect(definition?.description).toContain("p/m")
+      const result = yield* run(registry, { question: "Which approach?" })
       expect(calls).toHaveLength(1)
       expect(calls[0]?.toolChoice).toBe("none")
       expect(calls[0]?.transcript).toBe(true)
@@ -131,7 +148,6 @@ describe("AdvisorPlugin", () => {
       expect(String(ref?.id)).toBe("m")
       expect(calls[0]?.prompt).toContain("The conversation above")
       expect(calls[0]?.prompt).not.toContain("${situation}")
-      expect(calls[0]?.prompt).not.toContain("The agent's question for you")
       expect(result.status).toBe("completed")
       expect(result.content).toEqual([{ type: "text", text: "Solid advice." }])
       expect(result.metadata).toEqual({ model: "p/m", mode: "full", status: "reviewed" })
@@ -145,8 +161,8 @@ describe("AdvisorPlugin", () => {
       const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
       yield* run(registry, { question: "Is <x> safe?" })
       expect(calls).toHaveLength(1)
-      expect(calls[0]?.prompt).toContain("Is &lt;x&gt; safe?")
-      expect(calls[0]?.prompt).toContain("The agent's question for you")
+      expect(calls[0]?.prompt).toContain("<question>\nIs &lt;x&gt; safe?\n</question>")
+      expect(calls[0]?.prompt).not.toContain("<context>")
     }),
   )
 
@@ -170,7 +186,7 @@ describe("AdvisorPlugin", () => {
       calls.length = 0
       reply = () => Effect.succeed({ text: "DECLINE", ...zeroUsage })
       const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
-      const result = yield* run(registry, {})
+      const result = yield* run(registry, { question: "Q" })
       expect(result.metadata).toEqual({ model: "p/m", mode: "full", status: "declined" })
       expect(result.content).toEqual([{ type: "text", text: "The advisor had nothing to add." }])
     }),
@@ -187,7 +203,7 @@ describe("AdvisorPlugin", () => {
           }),
         )
       const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
-      const result = yield* run(registry, {})
+      const result = yield* run(registry, { question: "Q" })
       expect(result.status).toBe("error")
       expect(result.error?.message).toBe("Advisor unavailable: Model unavailable: p/m. Continue without advice.")
     }),
@@ -216,6 +232,21 @@ describe("AdvisorPlugin", () => {
       yield* Effect.orDie(handler.set({ mode: "off" }))
       expect(yield* names(registry)).not.toContain(AdvisorPlugin.name)
       expect(map.get("state")).toEqual({ mode: "off" })
+    }),
+  )
+  it.effect("tells the model about the advisor only while the tool is in the request", () =>
+    Effect.gen(function* () {
+      yield* setup(new ConfigExperimental.Info({ advisor: true }), secure)
+      const system = yield* systemFor({ [AdvisorPlugin.name]: {} })
+      expect(system).toHaveLength(1)
+      expect(system[0]).toContain("# Advisor")
+      expect(system[0]).toContain("(p/m)")
+      expect(system[0]).toContain("never sees this conversation")
+      expect(yield* systemFor({})).toEqual([])
+      const handler = captured
+      if (!handler) return yield* Effect.die("rpc.set was not captured")
+      yield* Effect.orDie(handler.set({ mode: "off" }))
+      expect(yield* systemFor({ [AdvisorPlugin.name]: {} })).toEqual([])
     }),
   )
 })

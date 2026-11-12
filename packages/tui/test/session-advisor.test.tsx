@@ -66,6 +66,8 @@ test("advisor tool rows show running, reviewed, declined and unavailable states"
     if (url.pathname === `/api/session/${session.id}/message`) return json({ data: messages.toReversed(), cursor: {} })
     if (url.pathname === `/api/session/${session.id}/inbox` || url.pathname === `/api/session/${session.id}/permission`)
       return json({ data: [] })
+    if (url.pathname === "/api/rpc/opencode.advisor/get")
+      return json({ output: { mode: "secure", model: { providerID: "fixture", id: "advisor" } } })
   }, createEventStream())
   const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
   const { run } = await import("../src/app")
@@ -87,10 +89,13 @@ test("advisor tool rows show running, reviewed, declined and unavailable states"
     await setup.waitForFrame((frame) => frame.includes("Work is done"))
     await setup.waitForVisualIdle({ quietFrames: 3 })
     const frame = setup.captureCharFrame()
-    expect(frame).toContain("Advising")
-    expect(frame).toContain("Advisor reviewed · ")
-    expect(frame).toContain("Advisor declined · ")
+    expect(frame).toContain("Asking the advisor…")
+    expect(frame).toContain("Advisor reviewed")
+    expect(frame).toContain("Advisor declined")
     expect(frame).toContain("Advisor unavailable")
+    // The session footer names the mode only; the model stays out of the way.
+    expect(frame).toContain("⊙ advisor (secure)")
+    expect(frame).not.toContain("fixture/advisor")
 
     // Each row opens a dropdown of the exchange: what the advisor was shown and what came back.
     const click = async (text: string) => {
@@ -102,11 +107,11 @@ test("advisor tool rows show running, reviewed, declined and unavailable states"
       await setup.mockMouse.click(8, row)
       await setup.waitForVisualIdle({ quietFrames: 3 })
     }
-    await click("Advisor reviewed · ")
+    await click("Advisor reviewed")
     expect(setup.captureCharFrame()).toContain("Shared the whole conversation.")
     expect(setup.captureCharFrame()).toContain("Recursion or iteration?")
     expect(setup.captureCharFrame()).toContain("Use the existing helper")
-    await click("Advisor declined · ")
+    await click("Advisor declined")
     expect(setup.captureCharFrame()).toContain("Shared only this brief, not the conversation:")
     expect(setup.captureCharFrame()).toContain("The advisor had nothing to add.")
     await click("Advisor unavailable")

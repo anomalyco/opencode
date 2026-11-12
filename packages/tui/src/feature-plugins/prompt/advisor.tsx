@@ -14,31 +14,28 @@ export default Plugin.define({
     const load = () => void rpc.get({}, locationOption()).then(setState, () => undefined)
     load()
 
-    const name = (model: { providerID: string; id: string }) => {
-      const found = context.data.location.model
-        .list(context.location)
-        ?.find((item) => item.providerID === model.providerID && item.id === model.id)
-      return found?.name ?? `${model.providerID}/${model.id}`
-    }
-
+    // Only inside a session, and as short as the goal indicator: the home screen stays clean.
     context.ui.slot({
       append: "prompt.footer.status",
-      render: () => {
+      render: (input) => {
         const theme = useTheme()
+        const [hovered, setHovered] = createSignal(false)
         const label = createMemo(() => {
           const current = state()
-          return current.mode === "off"
-            ? undefined
-            : `${current.mode === "secure" ? "Advisor (secure)" : "Advisor"}: ${name(current.model)}`
+          if (!input.sessionID || current.mode === "off") return undefined
+          return current.mode === "secure" ? "advisor (secure)" : "advisor"
         })
         return (
           <Show when={label()}>
             {(value) => (
-              <box flexShrink={0} onMouseUp={() => context.keymap.dispatch("advisor.pick")}>
-                <text wrapMode="none">
-                  <span style={{ fg: theme.text.feedback.info.base }}>⊙ </span>
-                  <span style={{ fg: theme.text.muted }}>{value()} · </span>
-                  <span style={{ fg: theme.text.muted }}>/advisor</span>
+              <box
+                flexShrink={0}
+                onMouseOver={() => setHovered(true)}
+                onMouseOut={() => setHovered(false)}
+                onMouseUp={() => context.keymap.dispatch("advisor.pick")}
+              >
+                <text fg={hovered() ? theme.text.base : theme.text.muted} wrapMode="none">
+                  ⊙ {value()}
                 </text>
               </box>
             )}
@@ -66,21 +63,20 @@ export default Plugin.define({
               description: "Choose a second model the session model can consult, and what it may see",
               group: "Agent",
               palette: true,
-              slash: { name: "advisor", arguments: true },
-              async run(input) {
-                const set = (next: Advisor.State) =>
+              slash: { name: "advisor" },
+              async run() {
+                // `label` names the picked model for the confirmation toast; without one the advisor was turned off.
+                const set = (next: Advisor.State, label?: string) =>
                   rpc.set(next, locationOption()).then(
-                    (saved) =>
+                    () =>
                       toast.show({
-                        message:
-                          saved.mode === "off"
-                            ? "Advisor off"
-                            : `${saved.mode === "secure" ? "Advisor (secure)" : "Advisor"}: ${name(saved.model)}`,
+                        message: label
+                          ? `${next.mode === "secure" ? "Advisor (secure)" : "Advisor"}: ${label}`
+                          : "Advisor off",
                         variant: "info",
                       }),
                     (error: unknown) => toast.error(error),
                   )
-                if (input?.trim().toLowerCase() === "off") return set({ mode: "off" })
                 const mode = await context.ui.dialog.select({
                   title: "Advisor",
                   current: state().mode,
@@ -125,7 +121,11 @@ export default Plugin.define({
                   })),
                 })
                 if (!model) return
-                return set({ mode, model })
+                return set(
+                  { mode, model },
+                  models.find((item) => item.providerID === model.providerID && item.id === model.id)?.name ??
+                    `${model.providerID}/${model.id}`,
+                )
               },
             },
           ],

@@ -3365,14 +3365,10 @@ export function subagentModelLabel(
 function AdvisorTool(props: ToolProps) {
   const ctx = use()
   const theme = useTheme()
-  const data = useData()
   const { currentSyntax: syntax } = useThemes()
   const plugins = usePlugin()
   const [expanded, setExpanded] = createSignal(false)
   const running = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
-  const model = createMemo(
-    () => subagentModelLabel(stringValue(props.metadata.model), data.location.model.list()) ?? "advisor",
-  )
   const question = createMemo(() => stringValue(props.input.question))
   const context = createMemo(() => stringValue(props.input.context))
   const secure = createMemo(() => props.metadata.mode === "secure" || Boolean(context()))
@@ -3383,10 +3379,10 @@ function AdvisorTool(props: ToolProps) {
   )
   const error = createMemo(() => (props.part.state.status === "error" ? stripAnsi(props.part.state.error.message) : ""))
   const label = createMemo(() => {
-    if (running()) return `Advising ${model()}…`
+    if (running()) return "Asking the advisor…"
     if (props.part.state.status === "error") return "Advisor unavailable"
-    if (props.metadata.status === "declined") return `Advisor declined · ${model()}`
-    return `Advisor reviewed · ${model()}`
+    if (props.metadata.status === "declined") return "Advisor declined"
+    return "Advisor reviewed"
   })
   return (
     <>
