@@ -17,7 +17,7 @@ import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
 import { aliasNote, definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
-import { prepare, type Target } from "./tool/prepare.js"
+import { prepare, Selection, type Target } from "./tool/prepare.js"
 import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
@@ -121,15 +121,22 @@ const layer = Layer.effect(
       ]
     })
 
-    const beforeExecute = (name: string, input: unknown, context: Tool.Context) =>
-      hooks.trigger("tool", "execute.before", {
-        tool: name,
-        sessionID: context.sessionID,
-        agent: context.agent,
-        messageID: context.messageID,
-        id: context.id,
-        input,
-      })
+    const beforeExecute = Effect.fnUntraced(function* (name: string, input: unknown, context: Tool.Context) {
+      const selection = yield* Selection
+      return yield* hooks.trigger(
+        "tool",
+        "execute.before",
+        {
+          tool: name,
+          sessionID: context.sessionID,
+          agent: context.agent,
+          messageID: context.messageID,
+          id: context.id,
+          input,
+        },
+        selection?.redirected,
+      )
+    })
 
     const executeTool = Effect.fn("Tool.execute")(function* (
       tool: Tool.Info,

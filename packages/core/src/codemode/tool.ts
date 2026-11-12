@@ -11,6 +11,7 @@ import type {
   Result,
 } from "@opencode/schema/tool"
 import { Error } from "@opencode/schema/tool"
+import { isRecord } from "@opencode/util/record"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
 import { isDeepStrictEqual } from "node:util"
 import { toSessionError } from "../session/to-session-error.js"
@@ -213,14 +214,13 @@ function progressRows(record: (update: (items: Array<ExecuteCall>) => Array<Exec
   const rows = new WeakMap<object, number>()
   return (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation, status: ExecuteCall["status"]) => {
     if ("extension" in call && call.name !== "fetch") return Effect.void
-    const input = "extension" in call ? CodeModeFetch.display(call.args) : displayInput(call.input)
+    const input = displayInput(call)
     const entry = { tool: call.name, status, ...(input ? { input } : {}) }
     return record((items) => {
       const index = rows.get(call)
       if (index !== undefined) return isDeepStrictEqual(items[index], entry) ? items : items.with(index, entry)
       rows.set(call, items.length)
-      // A before hook can edit the argument object in place. Keep the admitted row as it was published.
-      return [...items, structuredClone(entry)]
+      return [...items, entry]
     })
   }
 }
@@ -446,12 +446,36 @@ export function qualifiedName(registration: Info) {
   return `${registration.options.namespace}.${normalized}`
 }
 
-// Tool inputs arrive as parsed JSON, so the JSON value cast is a boundary fact.
-function displayInput(input: unknown): Record<string, typeof Schema.Json.Type> | undefined {
-  if (input === null || input === undefined) return
-  if (typeof input !== "object" || Array.isArray(input)) return { input: input as typeof Schema.Json.Type }
-  if (Object.keys(input).length === 0) return
-  return input as Record<string, typeof Schema.Json.Type>
+function displayInput(call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation): ExecuteCall["input"] {
+  try {
+    if ("extension" in call) return CodeModeFetch.display(call.args)
+    const value = snapshot(call.input, new Set())
+    if (value === undefined || value === null) return
+    if (!isRecord(value)) return { input: value }
+    return Object.keys(value).length ? value : undefined
+  } catch {
+    // An opaque plugin value can reject inspection. The status row is still useful without its input.
+    return undefined
+  }
+}
+
+// Copy only data properties: displaying a plugin object must not invoke its getters or toJSON method.
+function snapshot(value: unknown, parents: Set<object>): Schema.Json | undefined {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (typeof value !== "object" || parents.has(value)) return
+  parents.add(value)
+  const property = (key: string | number) => snapshot(Object.getOwnPropertyDescriptor(value, key)?.value, parents)
+  const result = Array.isArray(value)
+    ? Array.from({ length: value.length }, (_, i) => property(i) ?? null)
+    : Object.fromEntries(
+        Object.keys(value).flatMap((key) => {
+          const item = property(key)
+          return item === undefined ? [] : [[key, item]]
+        }),
+      )
+  parents.delete(value)
+  return result
 }
 
 function formatResult(result: CodeMode.Result) {

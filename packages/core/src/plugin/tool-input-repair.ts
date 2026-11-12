@@ -33,7 +33,7 @@ export const Plugin = define({
           if (selection) {
             const alias = aliases.get(event.tool)
             if (alias && !selection.has(event.tool) && selection.has(alias)) event.tool = alias
-            selection.defer(repairInput)
+            selection.repair(event, repairInput)
             return
           }
           // Standalone hook callers have no selection phase.
