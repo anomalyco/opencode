@@ -31,7 +31,7 @@ for tarball in "$@"; do
   arch=${arch#opencode-desktop-mac-}
   [ "$arch" = arm64 ] || [ "$arch" = x64 ] || die "Unexpected app tarball: $tarball"
   mkdir -p "$apps/$arch"
-  tar -xf "$tarball" -C "$apps/$arch"
+  python3 "$release_dir/extract-app.py" "$tarball" "$apps/$arch"
   if [ "$(find "$apps/$arch" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" != 1 ] || [ -z "$(bundle "$arch")" ]; then
     die "Expected exactly one .app bundle in $tarball"
   fi
