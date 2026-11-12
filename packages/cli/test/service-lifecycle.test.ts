@@ -134,6 +134,32 @@ serviceTest(
 )
 
 serviceTest(
+  "an occupied configured port can be bypassed for one start",
+  async () => {
+    await using home = await serviceHome()
+    using listener = Bun.serve({ hostname: "127.0.0.1", port: home.port, fetch: () => new Response("unrelated") })
+
+    await expect(cli(home, "service", "start")).rejects.toThrow("already in use")
+
+    const url = await cli(home, "service", "start", "--port", "0")
+    const info = await Bun.file(home.registration).json()
+    expect(url).toBe(info.url)
+    expect(info.url).not.toBe(`http://127.0.0.1:${home.port}`)
+    const answer = await fetch(new URL("/api/info", info.url), {
+      headers: Service.headers({
+        url: info.url,
+        auth: { type: "basic", username: "opencode", password: info.password },
+      }),
+    })
+    expect(answer.ok).toBe(true)
+
+    await listener.stop(true)
+    await stopped(home)
+  },
+  120_000,
+)
+
+serviceTest(
   "a damaged registration and then a crash each end with one replacement server",
   async () => {
     await using home = await serviceHome()

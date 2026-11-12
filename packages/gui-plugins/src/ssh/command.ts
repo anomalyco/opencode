@@ -181,6 +181,8 @@ export const runSsh = Effect.fn("Ssh.run")(function* (input: {
   env?: NodeJS.ProcessEnv
   stdin?: string | Uint8Array
   timeout?: number
+  /** The code reported when the remote command fails; OpenSSH's own failures stay `connection`. */
+  remoteFailure?: SshFailure["code"]
 }) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 
@@ -226,11 +228,18 @@ export const runSsh = Effect.fn("Ssh.run")(function* (input: {
     )
 
     if (output.code !== 0)
-      return yield* Effect.fail(new SshFailure("connection", commandFailureDetail(output.code, output)))
+      return yield* Effect.fail(
+        new SshFailure(sshFailureCode(output.code, input.remoteFailure), commandFailureDetail(output.code, output)),
+      )
 
     return output.stdout
   }).pipe(Effect.scoped, Effect.timeout(input.timeout ?? 600_000), Effect.mapError(SshFailure.from))
 })
+
+/** OpenSSH reserves 255 for its own failures; every other status came from the remote command. */
+export function sshFailureCode(code: number | null, remoteFailure: SshFailure["code"] = "connection") {
+  return code === 255 ? "connection" : remoteFailure
+}
 
 export function commandFailureDetail(code: number | null, output: { stdout: string; stderr: string }) {
   // The CLI may report failures on stdout. Never include its private bootstrap

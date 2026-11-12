@@ -16,15 +16,35 @@ for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/opencode/service*.json; do
 done
 `
 
-export const discoverScript = `set -eu
+export function discoverScript(version: string) {
+  const own = binaryPath(version)
+
+  return `set -eu
 ${RemoteCli.discoverScript({ fromPath: true, cache: { directory: ".opencode/desktop-ssh", prefix: "0.0.0-beta-" } })}
+if [ -z "$cli" ] && [ -x "${own}" ]; then cli="${own}"; fi
 if [ -z "$cli" ]; then exit 0; fi
 ${registrationScript}`
+}
 
 export function startScript(version: string, replace = false) {
+  const command = replace ? "restart" : "start"
+
+  // A foreign process can hold the managed port: its default lives inside the
+  // Linux ephemeral range. The registration carries the real address, so a
+  // reconnect falls back to a free port instead of failing on the stale one.
   return `set -eu
 cli="${binaryPath(version)}"
-"$cli" service ${replace ? "restart" : "start"}
+if ! output=$("$cli" service ${command} 2>&1); then
+  case "$output" in
+    *"already in use"*)
+      if ! "$cli" service ${command} --port 0; then
+        printf '%s\\n' "$output" >&2
+        exit 1
+      fi
+      ;;
+    *) printf '%s\\n' "$output" >&2; exit 1 ;;
+  esac
+fi
 ${registrationScript}`
 }
 
@@ -80,14 +100,16 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   env: NodeJS.ProcessEnv
   replace?: boolean
 }) {
-  const run = (script: string) =>
+  const run = (script: string, remoteFailure?: SshFailure["code"]) =>
     runSsh({
       args: [...sshArgs(input.target), input.target.host, "sh -l -s"],
       env: input.env,
       stdin: script,
+      remoteFailure,
     })
 
-  const registered = parseRegistration(yield* run(discoverScript))
+  const discover = yield* Effect.try({ try: () => discoverScript(input.version), catch: SshFailure.from })
+  const registered = parseRegistration(yield* run(discover))
 
   if (registered && (input.development || registered.version === input.version))
     return yield* Effect.try({
@@ -108,7 +130,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   const setup = { version, directory: `.opencode/desktop-ssh/${version}` }
 
   if (!staged) {
-    const output = yield* run(RemoteCli.probeScript).pipe(Effect.mapError(() => new SshFailure("platform")))
+    const output = yield* run(RemoteCli.probeScript, "platform")
 
     const target = output
       .split(/\r?\n/)
@@ -146,7 +168,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
     )
   }
 
-  const registration = parseRegistration(yield* run(startScript(version, input.replace)))
+  const registration = parseRegistration(yield* run(startScript(version, input.replace), "service"))
 
   if (!registration) return yield* Effect.fail(new SshFailure("service"))
 

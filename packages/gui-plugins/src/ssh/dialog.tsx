@@ -53,6 +53,8 @@ export function DialogSsh(props: {
   )
 
   const view = createMemo(() => viewSshDialog(dialogState(), snapshot()))
+  // The remote command's captured stderr, so an actionable cause is not hidden behind the error code.
+  const detail = createMemo(() => snapshot().item?.detail ?? "")
   // One key per prompt, so typing a response never remounts and refocuses its field.
   const prompt = createMemo(() => view().prompt, undefined, { equals: (previous, next) => previous?.id === next?.id })
 
@@ -102,9 +104,18 @@ export function DialogSsh(props: {
   const ConnectionError = () => (
     <Show when={view().error}>
       {(error) => (
-        <span id="ssh-error" class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
-          {plugin.t(error())}
-        </span>
+        <div class="flex w-full min-w-0 flex-col gap-2">
+          <span id="ssh-error" class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
+            {plugin.t(error())}
+          </span>
+          <Show when={detail()}>
+            {(text) => (
+              <pre class="ssh-error-detail" dir="auto">
+                {text()}
+              </pre>
+            )}
+          </Show>
+        </div>
       )}
     </Show>
   )

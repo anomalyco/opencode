@@ -87,6 +87,13 @@ story("updating an incompatible connection continues authentication in the same 
   await expect(component.getByText("Session connected")).toBeVisible()
 })
 
+story("a failed connection shows the remote command's own output", async ({ mount, page }) => {
+  await mount("app-dialog-ssh--failure")
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("alert")).toContainText("Could not establish the SSH connection")
+  await expect(dialog.getByText("ssh: connect to host dev.example.com port 22: Connection refused")).toBeVisible()
+})
+
 story("key-based reconnect completes without opening an authentication dialog", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--key-reconnect")
   await component.getByRole("button", { name: "Reconnect", exact: true }).click()
