@@ -72,6 +72,7 @@ const withTool = <A, E, R>(
   directory: string,
   fixture: ReturnType<typeof makeWriteFixture>,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
+  formatting: LayerNode.Replacements = [Formatter.node.replace(fixture.formatter)],
 ) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -82,21 +83,24 @@ const withTool = <A, E, R>(
     return yield* body(registry)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, writeToolNode]), [
-        Environment.node.replace(
-          transformEnvironmentFiles((files) => ({
-            read: (target, options) =>
-              Effect.sync(() => fixture.reads.push({ target, length: options?.length })).pipe(
-                Effect.andThen(files.read(target, options)),
-              ),
-            write: (target, content) =>
-              Effect.sync(() => fixture.writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
-          })),
-        ),
-        Location.node.replace(activeLocation),
-        Formatter.node.replace(fixture.formatter),
-        Permission.node.replace(fixture.permission),
-      ]),
+      AppNodeBuilder.build(
+        LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, Formatter.node, writeToolNode]),
+        [
+          Environment.node.replace(
+            transformEnvironmentFiles((files) => ({
+              read: (target, options) =>
+                Effect.sync(() => fixture.reads.push({ target, length: options?.length })).pipe(
+                  Effect.andThen(files.read(target, options)),
+                ),
+              write: (target, content) =>
+                Effect.sync(() => fixture.writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
+            })),
+          ),
+          Location.node.replace(activeLocation),
+          ...formatting,
+          Permission.node.replace(fixture.permission),
+        ],
+      ),
     ),
   )
 }
@@ -170,6 +174,38 @@ describe("WriteTool", () => {
         }),
       )
     }),
+  )
+
+  it.live("restores BOM when a formatter writes corrections then exits unsuccessfully", () =>
+    withTempDir((tmp) =>
+      withTool(
+        tmp.path,
+        makeWriteFixture(),
+        (registry) =>
+          Effect.gen(function* () {
+            const target = path.join(tmp.path, "partial.txt")
+            yield* Effect.promise(() => fs.writeFile(target, "\uFEFFbefore"))
+            const formatter = yield* Formatter.Service
+            yield* formatter.transform((editor) =>
+              editor.set({
+                name: "partial-correction",
+                extensions: [".txt"],
+                enabled: Effect.succeed([
+                  process.execPath,
+                  "-e",
+                  "require('fs').writeFileSync(process.argv.at(-1), 'FORMATTED'); process.exit(1)",
+                  "$FILE",
+                ]),
+              }),
+            )
+            expect(yield* executeTool(registry, call({ path: "partial.txt", content: "created" }))).toMatchObject({
+              status: "completed",
+            })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("\uFEFFFORMATTED")
+          }),
+        [],
+      ),
+    ),
   )
 
   it.live("overwrites a relative existing file and reports that it wrote the file", () =>
@@ -407,7 +443,7 @@ describe("WriteTool", () => {
     ),
   )
 
-  it.live("creates a new unformatted file without span failures or post-write reads", () => {
+  it.live("creates a new file without span failures and reads its final content", () => {
     const spans: Tracer.NativeSpan[] = []
     const tracer = Tracer.make({
       span(options) {
@@ -423,10 +459,11 @@ describe("WriteTool", () => {
           const target = path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "fresh.txt")
           const settled = yield* executeTool(registry, call({ path: "src/fresh.txt", content: "hello" }))
           expect(settled.status).toBe("completed")
-          // Only the pre-write diff probe and the 3-byte BOM header check run; the written file is not re-read.
+          // Re-read after formatting even when no formatter reports success.
           expect(fixture.reads).toEqual([
             { target, length: undefined },
             { target, length: 3 },
+            { target, length: undefined },
           ])
           const mutationSpans = spans.filter((span) => span.name.startsWith("FileMutation."))
           expect(mutationSpans.some((span) => span.name === "FileMutation.readOptionalText")).toBe(true)
