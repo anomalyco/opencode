@@ -780,10 +780,9 @@ fn identity(dir: &std::path::Path) -> Option<u64> {
     std::fs::metadata(dir).ok().map(|metadata| metadata.ino())
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
 fn identity(dir: &std::path::Path) -> Option<u64> {
-    let created = std::fs::metadata(dir).ok()?.created().ok()?;
-    created.duration_since(std::time::UNIX_EPOCH).ok().map(|since| since.as_nanos() as u64)
+    opencode_util::win::file_index(dir).ok()
 }
 
 /// Adds and activates one more plugin, then remounts the route so its claims show.
