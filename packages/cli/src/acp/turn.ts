@@ -21,7 +21,7 @@ import { findModel, type ACPCatalog } from "./catalog"
 import { ACPChild } from "./child"
 import { ACPClient } from "./client"
 import { currentModel } from "./config-option"
-import type { ACPConnection } from "./connection"
+import { ACPConnection } from "./connection"
 import { ACPElicitation } from "./elicitation"
 import { ACPError } from "./error"
 import { ACPPermission } from "./permission"
@@ -60,7 +60,11 @@ type Turn = {
   readonly state: Ref.Ref<ACPTranslate.TurnState>
   readonly subscription: Subscription
   readonly cancelled: Deferred.Deferred<void>
-  readonly background: boolean
+}
+
+type Background = {
+  readonly state: Ref.Ref<ACPTranslate.TurnState>
+  readonly fiber?: Fiber.Fiber<unknown, unknown>
 }
 
 export const make = Effect.fnUntraced(function* (input: {
@@ -73,8 +77,24 @@ export const make = Effect.fnUntraced(function* (input: {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
   const turns = yield* FiberMap.make<string, PromptResponse, ACPError.Failure>()
+  const backgrounds = new WeakMap<Attached, Background>()
 
-  const open = Effect.fnUntraced(function* (ctx: ACPTranslate.TurnContext, state: Ref.Ref<ACPTranslate.TurnState>) {
+  const open = Effect.fnUntraced(function* (
+    attached: Attached,
+    ctx: ACPTranslate.TurnContext,
+    state: Ref.Ref<ACPTranslate.TurnState>,
+  ) {
+    const previous = backgrounds.get(attached)
+    if (previous) {
+      backgrounds.delete(attached)
+      if (previous.fiber) yield* Fiber.interrupt(previous.fiber)
+      const inherited = yield* Ref.get(previous.state)
+      yield* Ref.set(state, {
+        ...ACPTranslate.initial,
+        children: inherited.children,
+        openChildren: inherited.openChildren,
+      })
+    }
     // Parented to the service scope; the session scope may already be closed.
     const subscriptionScope = yield* Scope.fork(scope)
     const subscription: Subscription = {
@@ -93,7 +113,7 @@ export const make = Effect.fnUntraced(function* (input: {
       Effect.forever,
       Effect.forkIn(subscriptionScope),
     )
-    return { ctx, state, subscription, cancelled: yield* Deferred.make<void>(), background: false } satisfies Turn
+    return { ctx, state, subscription, cancelled: yield* Deferred.make<void>() } satisfies Turn
   })
 
   const take = (subscription: Subscription) =>
@@ -141,7 +161,6 @@ export const make = Effect.fnUntraced(function* (input: {
   const interpret = (turn: Turn, output: ACPTranslate.Output) => {
     switch (output._tag) {
       case "SessionUpdate":
-        if (turn.background) return Effect.void
         return ACPPermission.withCompletedDiffs(output.update, output.diff, turn.ctx.cwd).pipe(
           Effect.flatMap((update) => input.connection.sessionUpdate({ sessionId: turn.ctx.sessionID, update })),
         )
@@ -185,7 +204,7 @@ export const make = Effect.fnUntraced(function* (input: {
             requestedSchema,
             clientSessionID: turn.ctx.sessionID,
             child: output.child,
-            toolCallSent: !turn.background && (!output.child || !turn.ctx.childUpdates),
+            toolCallSent: !output.child || ACPTranslate.projectChild(turn.ctx, output.child),
           }
           yield* queueAsk(turn, output.form.id, ACPElicitation.ask(elicitation), "cancel", (outcome) =>
             ACPElicitation.respond(elicitation, outcome),
@@ -203,10 +222,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const advance = Effect.fnUntraced(function* (turn: Turn) {
     const event = yield* take(turn.subscription)
     const folded = yield* Ref.modify(turn.state, (current) => {
-      const next =
-        turn.background && !ACPTranslate.fromTrackedChild(current, event)
-          ? { state: current, outputs: [] }
-          : ACPTranslate.fold(current, event, turn.ctx)
+      const next = ACPTranslate.fold(current, event, turn.ctx)
       return [next, next.state]
     })
     yield* Effect.forEach(folded.outputs, (output) => interpret(turn, output), { discard: true })
@@ -226,7 +242,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const followChildren = Effect.fnUntraced(function* (turn: Turn) {
     while (true) {
       const folded = yield* advance(turn)
-      if (folded.state.openChildren.size === 0) return yield* asksSettled(turn.subscription)
+      if (folded.terminal && folded.state.openChildren.size === 0) return yield* asksSettled(turn.subscription)
     }
   })
 
@@ -312,13 +328,22 @@ export const make = Effect.fnUntraced(function* (input: {
     const close = Scope.close(turn.subscription.scope, Exit.void)
     if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* close
     const state = yield* Ref.get(turn.state)
-    if (state.openChildren.size === 0) return yield* close
-    // Children outlive a cancelled turn, so their asks still reach the client.
-    const background = followChildren({
-      ...turn,
-      state: yield* Ref.make(state),
-      cancelled: yield* Deferred.make<void>(),
-      background: true,
+    if (state.openChildren.size === 0) {
+      if (state.children.size > 0) backgrounds.set(attached, { state: turn.state })
+      return yield* close
+    }
+    const responded = yield* ACPConnection.Responded
+    const nextState = yield* Ref.make({ ...state, started: false })
+    const cancelled = yield* Deferred.make<void>()
+    // Children outlive a cancelled turn, so their asks and report-triggered turns still reach the client.
+    const background = Effect.withFiber((fiber) => {
+      backgrounds.set(attached, { state: nextState, fiber })
+      return Effect.exit(responded).pipe(
+        Effect.andThen(
+          followChildren({ ...turn, ctx: { ...turn.ctx, start: undefined }, state: nextState, cancelled }),
+        ),
+        Effect.interruptible,
+      )
     }).pipe(Effect.ignore, Effect.ensuring(close), Effect.withSpan("cli.acp.turn.background"))
     yield* input.sessions.fork(attached, background).pipe(Effect.catchTag("ACPSessionNotFoundError", () => close))
   })
@@ -368,6 +393,7 @@ export const make = Effect.fnUntraced(function* (input: {
     const state = yield* Ref.make(ACPTranslate.initial)
     const exit = yield* Effect.acquireUseRelease(
       open(
+        attached,
         {
           sessionID: attached.id,
           cwd: attached.cwd,

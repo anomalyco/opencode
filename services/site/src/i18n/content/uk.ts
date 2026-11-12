@@ -18,11 +18,6 @@ export const content = {
       action: "Встановити",
     },
     sdk: { body: "Керуйте OpenCode зі своїх скриптів, CI-завдань та інструментів.", action: "Документація" },
-    ide: {
-      name: "Розширення для IDE",
-      body: "Відкривайте OpenCode у VS Code, Cursor і Windsurf або в Zed і JetBrains IDE через ACP.",
-      action: "Встановити",
-    },
     mini: {
       body: "Мінімальний термінальний інтерфейс. Відповіді виводяться в історію прокрутки, а внизу один рядок введення.",
       action: "Встановити",
@@ -187,29 +182,6 @@ export const content = {
           title: "У вашому процесі",
           body: "Запускає OpenCode у вашому процесі, з вашою конфігурацією й моделями.",
         },
-      },
-    },
-    ide: {
-      title: "OpenCode | Інтеграції з редакторами VS Code, Cursor і Zed",
-      description:
-        "Використовуйте OpenCode у своєму редакторі. Розширення для VS Code, Cursor, Windsurf і VSCodium, а opencode acp для Zed, JetBrains IDE та інших ACP-редакторів.",
-      intro:
-        "Використовуйте OpenCode у своєму редакторі. У VS Code, Cursor, Windsurf і VSCodium запустіть opencode у вбудованому терміналі, і розширення встановиться саме. Zed, JetBrains IDE та інші редактори з підтримкою Agent Client Protocol запускають OpenCode через opencode acp.",
-      features: {
-        "quick-launch": {
-          title: "Швидкий запуск",
-          body: "Cmd+Esc або Ctrl+Esc відкриває OpenCode в розділеному терміналі.",
-        },
-        "new-session": { title: "Нова сесія", body: "Cmd+Shift+Esc або Ctrl+Shift+Esc починає ще одну сесію." },
-        context: { title: "Контекст", body: "Передає в OpenCode поточне виділення або вкладку." },
-        "file-references": { title: "Посилання на файли", body: "Cmd+Option+K або Alt+Ctrl+K вставляє @File#L37-42." },
-        "installs-itself": {
-          title: "Ставиться саме",
-          body: "Запустіть opencode у вбудованому терміналі, щоб додати його.",
-        },
-        "acp-editors": { title: "ACP-редактори", body: "Zed, JetBrains IDE, Avante.nvim і CodeCompanion.nvim." },
-        "open-vsx": { title: "Open VSX", body: "Також в Open VSX для Cursor, Windsurf і VSCodium." },
-        "same-agent": { title: "Той самий агент", body: "Той самий OpenCode, що й у терміналі, поруч із вашим кодом." },
       },
     },
     mini: {
@@ -699,14 +671,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "Скрипт" } } },
     sdk: { more: { label: "Документація SDK" } },
-    ide: {
-      lead: "Запустіть opencode у вбудованому терміналі редактора, і розширення встановиться саме, або встановіть його вручну.",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      more: { label: "Налаштування Zed, JetBrains IDE та інших ACP-редакторів" },
-    },
     mini: {
       lead: "Mini входить до OpenCode CLI. Встановіть його будь-яким із цих способів, потім запустіть opencode mini.",
       commands: { curl: { name: "Скрипт" } },

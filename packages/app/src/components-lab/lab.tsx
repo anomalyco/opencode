@@ -724,11 +724,7 @@ function Tile(props: { entry: LabEntry }) {
 }
 
 function isDialogEntry(entry: LabEntry) {
-  return (
-    entry.title.startsWith("App/Dialogs/") ||
-    entry.file.endsWith("/beta-dialog.stories.tsx") ||
-    entry.file.endsWith("/overlays/dialog/dialog.stories.tsx")
-  )
+  return entry.title.startsWith("App/Dialogs/") || entry.file.endsWith("/overlays/dialog/dialog.stories.tsx")
 }
 
 function tileSize(entry: LabEntry) {

@@ -392,6 +392,53 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("reads the end of a file many chunks long", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string | Uint8Array, page: ReadToolFileSystem.PageInput) =>
+        (typeof content === "string"
+          ? files.writeFileString(path.join(directory, name), content)
+          : files.writeFile(path.join(directory, name), content)
+        ).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      // 60,000 lines of 51 bytes span 12 chunks.
+      const lines = Array.from({ length: 60_000 }, (_, index) => `${index + 1}`.padEnd(50, "x"))
+      const content = lines.join("\n") + "\n"
+      const expected = (from: number, to: number) =>
+        lines.slice(from - 1, to).map((line, index) => `${from + index}: ${line}`)
+
+      expect(yield* read("negative.txt", content, { offset: -5 })).toEqual([
+        "Read file negative.txt, lines 59996-60000",
+        ...expected(59_996, 60_000),
+      ])
+      expect(yield* read("past.txt", content, { offset: 70_000, limit: 3 })).toEqual([
+        "Read file past.txt, lines 59998-60000 (offset 70000 is past the end; the file has 60000 lines)",
+        ...expected(59_998, 60_000),
+      ])
+      expect(yield* read("deep.txt", content, { offset: 45_000, limit: 2 })).toEqual([
+        "Read file deep.txt, lines 45000-45001",
+        ...expected(45_000, 45_001),
+        "[Output truncated. Continue reading with offset: 45002]",
+      ])
+      // Far from the end, a negative offset still reads from the line it counts back to.
+      expect(yield* read("far.txt", content, { offset: -10_000, limit: 3 })).toEqual([
+        "Read file far.txt, lines 50001-50003",
+        ...expected(50_001, 50_003),
+        "[Output truncated. Continue reading with offset: 50004]",
+      ])
+
+      // A null byte in an earlier scanned chunk still marks the file as binary.
+      const early = new TextEncoder().encode(content)
+      early[10] = 0
+      const negative = yield* read("early-nul.txt", early, { offset: -5 }).pipe(Effect.flip)
+      expect(negative).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+      const past = yield* read("early-nul-past.txt", early, { offset: 70_000 }).pipe(Effect.flip)
+      expect(past).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+
   it.effect("rejects a negative offset for a directory", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
@@ -493,6 +540,33 @@ describe("ReadToolFileSystem", () => {
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "nul.txt", { limit: 1 })
 
       expect(result).toMatchObject({ type: "text-page", content: "one", truncated: true, next: 2 })
+    }),
+  )
+
+  it.live("ignores a NUL after a chunked page but rejects it for a past-end offset", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "nul.txt"))
+      yield* files.writeFileString(file, `${"x".repeat(256 * 1024)}\nselected\n\0\ntail`)
+      const read = (offset: number) => ReadToolFileSystem.read(environment, file, "nul.txt", { offset, limit: 1 })
+
+      for (const offset of [2, -3]) {
+        expect(yield* read(offset)).toMatchObject({ content: "selected", offset: 2, truncated: true, next: 3 })
+      }
+      expect(yield* read(5).pipe(Effect.flip)).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+
+  it.live("keeps a split byte order mark in a past-end tail and strips it at a negative offset", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "marked.txt"))
+      // The first byte of the three-byte UTF-8 mark is the last byte of the first chunk.
+      yield* files.writeFileString(file, `${"x".repeat(256 * 1024 - 2)}\n\uFEFFselected`)
+      const read = (offset: number) => ReadToolFileSystem.read(environment, file, "marked.txt", { offset, limit: 1 })
+
+      expect(yield* read(3)).toMatchObject({ content: "\uFEFFselected", offset: 2, truncated: false })
+      expect(yield* read(-1)).toMatchObject({ content: "selected", offset: 2, truncated: false })
     }),
   )
 

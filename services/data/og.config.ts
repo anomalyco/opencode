@@ -1,5 +1,5 @@
 import { defineConfig } from "cf/config"
-import { stage } from "./stage"
+import { stage, stageAccount } from "./stage"
 
 export const ogWorkerName = (mode: string | undefined) => `opencode-data-og-${stage(mode)}`
 
@@ -8,7 +8,7 @@ export const ogWorkerName = (mode: string | undefined) => `opencode-data-og-${st
 // Worker doesn't load the Wasm engines and fonts it ships as modules (script/build.ts).
 export default defineConfig(({ mode }) => ({
   // Anomaly
-  accountId: "15d29c8639fd3733b1b5486a2acfd968",
+  accountId: stageAccount(stage(mode)),
   worker: {
     name: ogWorkerName(mode),
     compatibilityDate: "2026-07-01",

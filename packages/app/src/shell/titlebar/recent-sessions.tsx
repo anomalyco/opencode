@@ -37,6 +37,7 @@ import {
   recentPageFailed,
   recentPageHasMore,
   recentPageLoaded,
+  recentRowUnread,
   recentSessionEndpoints,
   recentSessionKey,
   removePin,
@@ -178,6 +179,7 @@ export function RecentSessions() {
           batch(() => {
             item.ctx.data.session.forget(sessionID)
             forget(item.server, sessionID)
+            global.sessionPreferences.forget(item.server, sessionID)
             setHydration(produce((cache) => void delete cache[key]))
             removePinKey(key)
           })
@@ -485,6 +487,7 @@ export function RecentSessions() {
       open: openSessions(),
       resolvePin: (key) => hydratedItems().get(key),
       archived,
+      hidden: global.sessionPreferences.hidden,
     }),
   )
 
@@ -638,6 +641,7 @@ export function RecentSessions() {
 
       removePinKey(item.key)
       forget(item.server, current.id)
+      global.sessionPreferences.forget(item.server, current.id)
     })
     void startTransition(() => {
       tabs.select(tabs.addSessionTab({ server: ServerConnection.Key.make(item.server), sessionId: current.id }))
@@ -723,6 +727,7 @@ export function RecentSessions() {
       .then(() => {
         forget(item.server, item.session.id)
         removePinKey(item.key)
+        ids.forEach((id) => global.sessionPreferences.forget(item.server, id))
         notifySessionTabsRemoved({
           server: ServerConnection.Key.make(item.server),
           directory: item.session.location.directory,
@@ -931,7 +936,8 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
   )
 
   // A busy session shows its progress indicator instead of the unread dot.
-  const unread = createMemo(() => status.unread() && !status.loading())
+  const muted = () => global.sessionPreferences.muted(server(), item().session.id)
+  const unread = createMemo(() => recentRowUnread(status.unread(), status.loading(), muted()))
 
   createEffect(() => props.onUnreadChange(unread()))
 
@@ -962,6 +968,12 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
           {language.t("sidebar.recent.moveDown")}
         </Menu.Item>
       </Show>
+      <Menu.Item onSelect={() => global.sessionPreferences.update("muted", server(), item().session.id, !muted())}>
+        {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
+      </Menu.Item>
+      <Menu.Item onSelect={() => global.sessionPreferences.update("hidden", server(), item().session.id, true)}>
+        {language.t("sidebar.recent.hide")}
+      </Menu.Item>
       <Menu.Separator />
       <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>
@@ -977,6 +989,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
       server={server()}
       session={item().session}
       preparing={false}
+      label={muted() ? language.t("sidebar.recent.muted") : undefined}
       unread={unread()}
       attention={status.attention()}
       loading={status.loading()}

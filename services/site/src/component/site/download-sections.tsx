@@ -346,9 +346,6 @@ export function ProductDownload(props: { slug: PageSlug }) {
             <MobileList />
             <PairPanel />
           </Match>
-          <Match when={props.slug === "ide"}>
-            <LinkList items={details().links} action={content().actions.install} />
-          </Match>
         </Switch>
         <Show when={details().commandsLead}>{(lead) => <p data-slot="lead">{lead()}</p>}</Show>
         <Show when={details().commands.length > 0}>
