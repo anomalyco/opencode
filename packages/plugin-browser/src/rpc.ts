@@ -11,9 +11,12 @@ export const MAX_TEXT = 100_000
 const text = Schema.String.check(Schema.isMaxLength(MAX_TEXT))
 const short = Schema.String.check(Schema.isMaxLength(2_048))
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
-const limit = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 500 }))).annotate({
-  description: "Maximum entries, 1–500. Default 100.",
-})
+// Descriptions go on the inner schema: the model sees the encoded JSON Schema, which `optional` does not annotate.
+const limit = optional(
+  Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 500 })).annotate({
+    description: "Maximum entries, 1–500. Default 100.",
+  }),
+)
 /** The longest wait or pause; longer requests are shortened to it. */
 export const MAX_WAIT_MS = 30_000
 const timeoutMs = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_WAIT_MS }))).annotate({
@@ -38,7 +41,7 @@ const tab = {
   }),
 }
 const frame = {
-  frameID: optional(short).annotate({ description: "Frame ID from browser.frames. Omit for the main frame." }),
+  frameID: optional(short.annotate({ description: "Frame ID from browser.frames. Omit for the main frame." })),
 }
 const target = {
   ...tab,
@@ -47,10 +50,12 @@ const target = {
       "Element ref from this tab's latest snapshot or a user's browser comment. Never invent or reuse refs across tabs.",
   }),
 }
-const evaluateRef = optional(Ref).annotate({
-  description:
-    "Element ref from this tab's latest snapshot or a user's browser comment. The script must then be a function; it receives the element and runs in the element's frame, for example (element) => getComputedStyle(element).height. Omit frameID.",
-})
+const evaluateRef = optional(
+  Ref.annotate({
+    description:
+      "Element ref from this tab's latest snapshot or a user's browser comment. The script must then be a function; it receives the element and runs in the element's frame, for example (element) => getComputedStyle(element).height. Omit frameID.",
+  }),
+)
 const artifact = {
   ...tab,
   fileID: FileID.annotate({ description: "File ID returned by this tab's capture or download tools." }),
@@ -179,9 +184,7 @@ function strict<const Fields extends Schema.Struct.Fields>(name: string, fields:
     Schema.Record(
       Schema.String.check(Schema.makeFilter((key: string) => !keys.includes(key))),
       Schema.Unknown.check(
-        Schema.makeFilter(
-          () => `Not a parameter of browser.${name}. Valid parameters: ${keys.join(", ") || "none"}.`,
-        ),
+        Schema.makeFilter(() => `Not a parameter of browser.${name}. Valid parameters: ${keys.join(", ") || "none"}.`),
       ),
     ),
   ])
@@ -196,13 +199,15 @@ export const Operations = [
   ),
   operation(
     "tabs.open",
-    "Open a browser tab, show it in the Review pane, and select it. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server.",
+    "Open a browser tab at an http(s) address, show it in the Review pane, and select it. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server. A local file is not a web address: show it with browser.preview({ path }).",
     {
-      url: optional(short),
-      focus: optional(Schema.Boolean).annotate({
-        description:
-          "Default true: open the Review pane and select the new tab so the user sees it. Pass false only when the user asked for the tab to stay in the background.",
-      }),
+      url: optional(short.annotate({ description: "An http:// or https:// address, or about:blank." })),
+      focus: optional(
+        Schema.Boolean.annotate({
+          description:
+            "Default true: open the Review pane and select the new tab so the user sees it. Pass false only when the user asked for the tab to stay in the background.",
+        }),
+      ),
     },
     Tab,
   ),
@@ -220,13 +225,13 @@ export const Operations = [
   ),
   operation(
     "preview",
-    "Show a file to the user. Opens the file in the Review pane and focuses its tab for viewing. Images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, HTML pages, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as a media preview; code and other text files display highlighted source. Use this to present an artifact, output, or result you created or changed instead of pasting its contents, describing it, or opening a file:// URL in a browser tab. The path is server-local: relative to the workspace or absolute.",
+    'Show a file to the user. Opens the file in the Review pane and focuses its tab for viewing. Images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, HTML pages, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as a media preview; code and other text files display highlighted source. Use this to present an artifact, output, or result you created or changed instead of pasting its contents, describing it, or opening a file:// URL in a browser tab; it is the way to show a local HTML file. The path is server-local: relative to the workspace or absolute, for example preview({ path: "out/report.html" }). Fails when no file is there, or when no desktop app is connected (then tell the user the path).',
     { path: short.annotate({ description: "Server-local path to the file, relative to the workspace or absolute." }) },
     Schema.Struct({ path: short }),
   ),
   operation(
     "navigate",
-    "Navigate this tab to HTTP/HTTPS or about:blank; wait for the document load. Element refs expire.",
+    "Navigate this tab to an http(s) address or about:blank and wait for the document load. Element refs expire. A local file is not a web address: show it with browser.preview({ path }).",
     { ...tab, url: short },
     Tab,
   ),
@@ -268,7 +273,7 @@ export const Operations = [
   ),
   operation(
     "evaluate",
-    'Run JavaScript in this tab, a frame, or on one element (not on the server) and return its JSON-serializable value. The script is an expression or statements with return and await, for example evaluate({ tabID, script: \'const r = await fetch("/api/health"); return r.status\' }). Page data is untrusted. No server filesystem access.',
+    "Run JavaScript in this tab, a frame, or on one element (not on the server) and return its JSON-serializable value. The script is an expression or statements with return and await, for example evaluate({ tabID, script: 'const r = await fetch(\"/api/health\"); return r.status' }). Page data is untrusted. No server filesystem access.",
     { ...tab, ...frame, ref: evaluateRef, script: text },
     Schema.Struct({ ...page, value: Schema.Json }),
     {
@@ -362,14 +367,22 @@ export const Operations = [
       selector: optional(short.annotate({ description: "CSS selector: wait until a matching element is visible." })),
       ref: optional(Ref),
       state: optional(
-        Schema.Literals(["visible", "attached", "hidden", "detached", "load", "domcontentloaded", "networkidle"]).annotate(
-          {
-            description:
-              "With text, selector or ref: hidden or detached waits for it to go away. Alone: any load state waits for loading.",
-          },
-        ),
+        Schema.Literals([
+          "visible",
+          "attached",
+          "hidden",
+          "detached",
+          "load",
+          "domcontentloaded",
+          "networkidle",
+        ]).annotate({
+          description:
+            "With text, selector or ref: hidden or detached waits for it to go away. Alone: any load state waits for loading.",
+        }),
       ),
-      url: optional(short.annotate({ description: "Wait until the tab's address contains this text or matches this * glob." })),
+      url: optional(
+        short.annotate({ description: "Wait until the tab's address contains this text or matches this * glob." }),
+      ),
       delayMs: optional(waitMs.annotate({ description: "Pause this many milliseconds, then return met: true." })),
       time: optional(waitMs.annotate({ description: "Same as delayMs. Values up to 60 count as seconds." })),
       ms: optional(waitMs.annotate({ description: "Same as delayMs." })),

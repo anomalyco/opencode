@@ -47,6 +47,20 @@ test("an unknown parameter fails with the operation's valid parameters", () => {
     )
 })
 
+test("optional parameters keep their descriptions in the model's JSON Schema", () => {
+  const properties = (name: string) =>
+    (
+      Schema.toJsonSchemaDocument(Browser.Operations.find((operation) => operation.name === name)!.input, {
+        onExcessProperty: "error",
+      }).schema as { readonly properties: Record<string, { readonly description?: string }> }
+    ).properties
+  expect(properties("tabs.open").focus?.description).toStartWith("Default true")
+  expect(properties("console").limit?.description).toBe("Maximum entries, 1–500. Default 100.")
+  expect(properties("evaluate").expression?.description).toBe("Same as script.")
+  expect(properties("evaluate").frameID?.description).toBe("Frame ID from browser.frames. Omit for the main frame.")
+  expect(properties("wait").timeout?.description).toBe("Same as timeoutMs.")
+})
+
 test("browser files are bounded bytes, not remote filesystem paths", () => {
   const id = `file_${crypto.randomUUID()}`
   const decode = Schema.decodeUnknownSync(Browser.File)
