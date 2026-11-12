@@ -53,7 +53,7 @@ export interface AskResult {
   readonly id: ID
   readonly effect: Permission.Effect
   /** Structured rule attribution: the winning rule matched per resource during evaluation. */
-  readonly matchedRules?: ReadonlyArray<{ readonly resource: string; readonly rule: Permission.Rule }>
+  readonly matchedRules: ReadonlyArray<{ readonly resource: string; readonly rule: Permission.Rule }>
 }
 
 export { Event } from "@opencode/schema/permission"
