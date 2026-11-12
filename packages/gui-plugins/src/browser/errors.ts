@@ -36,7 +36,7 @@ export function browserFailure(action: Browser.Action, error: unknown): Extract<
             : network
               ? "The site failed to load through the connected server. Check its URL/network and the OC2 connection before retrying; inspect the current tab first."
               : action.type === "screenshot" && /UnknownVizError|capture.*(?:failed|unavailable)/i.test(detail)
-                ? "Chromium could not capture a rendered frame. Call browser.tabs.focus({tabID}) and keep the desktop window visible. If it is already visible, report the capture failure instead of repeating it unchanged."
+                ? "Chromium had no rendered frame of this tab for 2 seconds; the page may be stuck in a long task or crashed. Check it with browser.evaluate({tabID}) or browser.reload({tabID}), then capture again. If it keeps failing, report the capture failure instead of repeating it unchanged."
                 : undefined
 
   return {

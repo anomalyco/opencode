@@ -14,6 +14,7 @@ import {
   documentIcon,
   documentTab,
   isDocumentClosed,
+  isNavigationPending,
   transitionDocument,
   type DocumentEvent,
 } from "./page-machine"
@@ -405,6 +406,10 @@ export function createBrowserPage(
   contents.on("did-navigate", (_event, url, status, statusText) =>
     dispatch({ type: "navigation.committed", url, status, statusText, title: contents.getTitle() }),
   )
+  // The backgroundThrottling preference does not wake a renderer that starts hidden: one in a tab the pane never
+  // showed, or the new one a cross-site navigation starts in a hidden tab. It then renders no frames, so screenshots
+  // and clicks have nothing to capture or hit-test. Setting it again shows that renderer, even while the view is hidden.
+  contents.on("did-navigate", () => contents.setBackgroundThrottling(false))
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
     dispatch({ type: "navigation.failed", code, description, url, isMainFrame }),
   )
@@ -962,52 +967,14 @@ export function createBrowserPage(
           throw new Error(
             "Choose either ref for an element screenshot or fullPage:true for the whole page. Remove the other argument before retrying.",
           )
-        await waitFor(() => view.getVisible() && win.isVisible() && !win.isMinimized(), signal, 3_000).catch(
-          (error) => {
-            if (signal.aborted) throw error
-            throw new Error(
-              "Screenshot needs a visible tab. Call browser.tabs.focus and keep its desktop window visible.",
-            )
-          },
-        )
-        const element = action.ref ? await rect(target(action.ref), true) : undefined
-        const metrics = await cdp.send("Page.getLayoutMetrics")
+        // Capture the document a navigation in flight lands on, not the one it leaves. One that is still going after
+        // the wait leaves the current document in place, which is then what the tab shows.
+        await waitFor(() => !isNavigationPending(documentState), signal, 10_000).catch(() => abortError(signal))
+        // A frame rendered after the last navigation or action.
+        await painted()
+        const capture = await screenshot(action, signal)
 
-        const bounds = element
-          ? {
-              ...element,
-              x: element.x + metrics.cssVisualViewport.pageX,
-              y: element.y + metrics.cssVisualViewport.pageY,
-            }
-          : action.fullPage
-            ? metrics.cssContentSize
-            : {
-                x: metrics.cssVisualViewport.pageX,
-                y: metrics.cssVisualViewport.pageY,
-                width: metrics.cssVisualViewport.clientWidth,
-                height: metrics.cssVisualViewport.clientHeight,
-              }
-
-        const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-        const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
-
-        if (bounds.width <= 0 || bounds.height <= 0)
-          throw new Error(
-            "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
-          )
-
-        if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
-          throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
-        const format = action.format ?? "jpeg"
-
-        const capture = await cdp.send("Page.captureScreenshot", {
-          format,
-          quality: format === "png" ? undefined : (action.quality ?? 80),
-          captureBeyondViewport: true,
-          clip: { ...bounds, scale },
-        })
-
-        const id = await files.save(`screenshot.${format}`, `image/${format}`, Buffer.from(capture.data, "base64"), [
+        const id = await files.save(`screenshot.${capture.format}`, `image/${capture.format}`, capture.data, [
           ...captureSources,
           ...sourceURLs(),
         ])
@@ -1277,9 +1244,8 @@ export function createBrowserPage(
   async function rect(element: Element, scroll = false) {
     if (scroll) {
       await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
-      // Force a compositor update after scrolling. requestAnimationFrame can
-      // stall in a hidden WebContentsView, even with background throttling off.
-      await contents.capturePage(undefined, { stayHidden: false, stayAwake: true })
+      // Input is routed by the last rendered frame, so let one render at the new scroll position.
+      await painted(element.sessionID)
     }
 
     const bounds = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })
@@ -1327,6 +1293,107 @@ export function createBrowserPage(
     while (id && !sessions.has(id)) id = tree.find((frame) => frame.id === id)?.parentID
 
     return id ? sessions.get(id) : undefined
+  }
+
+  async function screenshot(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
+    const element = action.ref ? await rect(target(action.ref), true) : undefined
+    const metrics = await cdp.send("Page.getLayoutMetrics")
+    const viewport = metrics.cssVisualViewport
+    // Chromium renders beyond the viewport only for a tab it presents on screen.
+    const onscreen = view.getVisible() && win.isVisible() && !win.isMinimized()
+
+    if (action.fullPage && !onscreen)
+      throw new Error(
+        "A full-page screenshot needs this tab on screen in the Review pane, and it is not shown now. Omit fullPage to capture the viewport, which works while the tab is hidden, and scroll to capture the rest.",
+      )
+
+    if (action.fullPage) return beyondViewport(action, metrics.cssContentSize)
+
+    if (
+      element &&
+      onscreen &&
+      (element.x < 0 ||
+        element.y < 0 ||
+        element.x + element.width > viewport.clientWidth ||
+        element.y + element.height > viewport.clientHeight)
+    )
+      return beyondViewport(action, { ...element, x: element.x + viewport.pageX, y: element.y + viewport.pageY })
+
+    // Otherwise the viewport, or the element's part of it, copied from the tab's last frame; hidden tabs keep rendering.
+    const clip = element && {
+      x: Math.max(0, element.x),
+      y: Math.max(0, element.y),
+      width: Math.min(viewport.clientWidth, element.x + element.width) - Math.max(0, element.x),
+      height: Math.min(viewport.clientHeight, element.y + element.height) - Math.max(0, element.y),
+    }
+
+    if (clip && (clip.width <= 0 || clip.height <= 0))
+      throw new Error(
+        "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
+      )
+    const zoom = contents.getZoomFactor()
+
+    const image = await surface(
+      clip && {
+        x: Math.round(clip.x * zoom),
+        y: Math.round(clip.y * zoom),
+        width: Math.max(1, Math.round(clip.width * zoom)),
+        height: Math.max(1, Math.round(clip.height * zoom)),
+      },
+      signal,
+    )
+
+    const maxWidth = action.maxWidth ?? 2000
+    const scaled = image.getSize().width > maxWidth ? image.resize({ width: maxWidth, quality: "good" }) : image
+
+    // A rendered frame encodes only as PNG or JPEG, so WebP comes back as JPEG.
+    return action.format === "png"
+      ? { format: "png", data: scaled.toPNG() }
+      : { format: "jpeg", data: scaled.toJPEG(action.quality ?? 80) }
+  }
+
+  async function beyondViewport(
+    action: Extract<Browser.Action, { type: "screenshot" }>,
+    bounds: { x: number; y: number; width: number; height: number },
+  ) {
+    const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+    const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
+
+    if (bounds.width <= 0 || bounds.height <= 0)
+      throw new Error(
+        "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
+      )
+
+    if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
+      throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
+    const format = action.format ?? "jpeg"
+
+    const capture = await cdp.send("Page.captureScreenshot", {
+      format,
+      quality: format === "png" ? undefined : (action.quality ?? 80),
+      captureBeyondViewport: true,
+      clip: { ...bounds, scale },
+    })
+
+    return { format, data: Buffer.from(capture.data, "base64") }
+  }
+
+  // Right after a document commits, Chromium has no frame of it for a few frames and rejects the copy, so it retries.
+  async function surface(
+    area: Electron.Rectangle | undefined,
+    signal: AbortSignal,
+    attempt = 1,
+  ): Promise<Electron.NativeImage> {
+    const image = await contents.capturePage(area, { stayHidden: true }).catch((error: Error) => error)
+
+    if (!(image instanceof Error) && !image.isEmpty()) return image
+    abortError(signal)
+
+    if (attempt >= 20)
+      throw new Error(`Capture failed: ${image instanceof Error ? image.message : "Chromium returned an empty frame"}`)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    return surface(area, signal, attempt + 1)
   }
 
   async function point(element: Element) {
