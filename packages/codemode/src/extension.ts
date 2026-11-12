@@ -13,7 +13,7 @@ import type { Effect } from "effect"
  * promise of an asynchronous global and by throwing from a synchronous one. Functions inside a global object are
  * called the same way, named by their path (`fs.readFile`).
  *
- * Programs can also `import` or `require` a global by its Node module name; see `interpreter/modules.ts`.
+ * Programs can also `import` or `require` a global by its Node module name; see `runtime/modules.ts`.
  */
 export type Extension<Globals extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> = {
   readonly name: string
