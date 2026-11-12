@@ -8,6 +8,7 @@ use crate::support::{self, DIRECTORY, Harness, Log, Reply, Seen, deref_harness};
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use opencode_api::memory::Memory;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
@@ -43,6 +44,9 @@ fn build(name: &str) -> Vec<u8> {
 
 type Handler = Arc<dyn Fn(&Seen) -> Option<Reply> + Send + Sync>;
 
+/// Holds the next `/interrupt` request before the server sees it, until its sender sends or drops.
+type Hold = Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>;
+
 /// A fake server: `/api/event` from `events`, everything else from `handler`, else [`support::base`]; it logs each
 /// request but the event stream.
 #[derive(Clone)]
@@ -50,12 +54,22 @@ struct Server {
     events: Memory,
     log: Log,
     handler: Handler,
+    hold: Hold,
 }
 
 impl Transport for Server {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
         if request.url.path() == "/api/event" {
             return self.events.send(request);
+        }
+        if request.url.path().ends_with("/interrupt")
+            && let Some(held) = self.hold.lock().unwrap().take()
+        {
+            let server = self.clone();
+            return Box::pin(async move {
+                let _ = held.await;
+                server.send(request).await
+            });
         }
         let seen = Seen {
             method: request.method.to_owned(),
@@ -77,6 +91,7 @@ struct Port {
     harness: Harness,
     events: Memory,
     log: Log,
+    hold: Hold,
     _root: opencode_util::temp::TempDir,
 }
 
@@ -99,7 +114,12 @@ fn open_in(
     let plugin = config.join("plugins").join(name);
     std::fs::create_dir_all(&plugin).unwrap();
     std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
-    let server = Server { events: Memory::new(Vec::new()), log: Log::default(), handler: Arc::new(handler) };
+    let server = Server {
+        events: Memory::new(Vec::new()),
+        log: Log::default(),
+        handler: Arc::new(handler),
+        hold: Hold::default(),
+    };
     let deps = Deps {
         config: support::config(support::still()),
         route: support::session_route("ses_p"),
@@ -109,10 +129,23 @@ fn open_in(
     };
     let harness = support::mount(width, 40, deps);
     external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf() });
-    Port { harness, events: server.events, log: server.log, _root: root }
+    Port { harness, events: server.events, log: server.log, hold: server.hold, _root: root }
 }
 
 impl Port {
+    /// The interrupts and prompts the server saw, in order.
+    fn wire(&self) -> Vec<String> {
+        self.log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|seen| {
+                seen.method == "POST" && (seen.path.ends_with("/interrupt") || seen.path.ends_with("/prompt"))
+            })
+            .map(|seen| format!("{} {}", seen.method, seen.path))
+            .collect()
+    }
+
     /// The rows of the sidebar, right of column `from`, trimmed, without blank rows.
     fn sidebar(&self, from: usize) -> Vec<String> {
         self.app
@@ -316,15 +349,7 @@ fn force_input_interrupts_then_submits_and_hints_the_keys() {
     h.app.type_text("hello");
     h.app.press("ctrl+return");
     h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
-    let wire: Vec<String> = h
-        .log
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|seen| seen.method == "POST" && (seen.path.ends_with("/interrupt") || seen.path.ends_with("/prompt")))
-        .map(|seen| format!("{} {}", seen.method, seen.path))
-        .collect();
-    assert_eq!(wire, ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
+    assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
     let prompts: Vec<Value> = h
         .log
         .lock()
@@ -342,6 +367,48 @@ fn force_input_interrupts_then_submits_and_hints_the_keys() {
     h.wait_for("⏎ steer");
     h.tui.navigate(support::session_route("ses_q"));
     h.wait_for("⏎ send");
+}
+
+// Expected (bigboi-fixes-1): a prompt reaches the server after every interrupt sent before it, so a late interrupt
+// cannot cancel its reply: ctrl+enter while armed sends two interrupts, and the prompt waits for the first too.
+#[test]
+fn a_prompt_waits_for_every_earlier_interrupt_of_its_session() {
+    let h = open("force-input", 120, running);
+    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+    let (release, held) = tokio::sync::oneshot::channel();
+    *h.hold.lock().unwrap() = Some(held);
+    h.app.press("escape");
+    h.app.type_text("hello");
+    h.app.press("ctrl+return");
+    let early = h.app.wait_until(Duration::from_millis(300), || !h.sent("/api/session/ses_p/prompt").is_empty());
+    assert!(!early, "{:?}", h.wire());
+    release.send(()).unwrap();
+    h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
+    let interrupt = "POST /api/session/ses_p/interrupt";
+    assert_eq!(h.wire(), [interrupt, interrupt, "POST /api/session/ses_p/prompt"]);
+}
+
+// Expected (bigboi-fixes-1): an interrupt still waits for its answer when its composer is gone; the next composer of
+// the same session sends its prompt after it.
+#[test]
+fn a_prompt_waits_for_an_interrupt_sent_from_an_earlier_composer() {
+    let h = open("force-input", 120, running);
+    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+    let (release, held) = tokio::sync::oneshot::channel();
+    *h.hold.lock().unwrap() = Some(held);
+    h.app.press("escape");
+    h.app.press("escape");
+    h.tui.navigate(support::session_route("ses_q"));
+    h.wait_for("⏎ send");
+    h.tui.navigate(support::session_route("ses_p"));
+    h.wait_for("⏎ steer");
+    h.app.type_text("hello");
+    h.app.press("return");
+    let early = h.app.wait_until(Duration::from_millis(300), || !h.sent("/api/session/ses_p/prompt").is_empty());
+    assert!(!early, "{:?}", h.wire());
+    release.send(()).unwrap();
+    h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
+    assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
 }
 
 // --- opencode-session-usage
