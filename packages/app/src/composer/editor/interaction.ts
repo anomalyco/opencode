@@ -287,9 +287,12 @@ export function createComposerEditor(input: {
   })
   onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
 
+  const contextOpen = createMemo(() => state.popover.type === "context")
+  const fileRows = createMemo(() => selectMentionFiles(mentionSearch()))
+
   const contextList = useFilteredList<ComposerSuggestion>({
     items: (query) => {
-      if (state.popover.type !== "context") return []
+      if (!contextOpen()) return []
 
       const sessions = input.searchSessions?.(query) ?? []
 
@@ -301,12 +304,7 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      return [
-        ...fixed,
-        ...sessions,
-        ...recent,
-        ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id)),
-      ]
+      return [...fixed, ...sessions, ...recent, ...fileRows().filter((item) => !seen.has(item.id))]
     },
     key: (item) => item.id,
     filterKeys: ["label"],
