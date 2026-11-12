@@ -69,12 +69,20 @@ export function server(script: Script = {}): Options {
     ...(script.wait === undefined
       ? []
       : [{ method: "POST", path: "/api/experimental/session/ses_mini/wait", status: 204, delay: script.wait }]),
-    // Admitted prompts echo their delivery, so a queued prompt reads back as queued.
+    // Admitted prompts echo their delivery, so a queued prompt reads back as queued. As the server does, the
+    // stream announces the admission before the events that follow it: the answer and the stream race, and a
+    // client that reads the delivery first knows the prompt only from this event.
     {
       method: "POST",
       path: "/api/session/ses_mini/prompt",
       json: (entry: Logged) => ({ data: inboxItem(entry) }),
-      then: (entry: Logged, requests: Logged[]) => script.events?.((entry.body as { id: string }).id, requests) ?? [],
+      then: (entry: Logged, requests: Logged[]) => {
+        const item = inboxItem(entry)
+        const events = script.events?.(item.id, requests) ?? []
+        if (!events.length) return []
+        const admitted = { type: "user", payload: item.payload, delivery: item.delivery }
+        return [event("session.inbox.enqueued", { inboxID: item.id, item: admitted }), ...events]
+      },
     },
   ]
   return { ...options, routes: [...routes, ...(options.routes ?? [])] }
