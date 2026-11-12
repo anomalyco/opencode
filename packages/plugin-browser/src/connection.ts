@@ -74,6 +74,10 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       agent.permissions.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const })))
     })
   })
+  const rulesFor = (session: Pick<Session.Info, "agent" | "permissions">, agent: string | undefined) => [
+    ...(configured.get(agent ?? session.agent ?? "") ?? []),
+    ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
+  ]
   // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call to
   // allow. The rules from config, the agent's definition and the session itself decide instead: a deny refuses the
   // call, and an ask makes the permission check prompt as it would without the grant. No matching rule leaves it
@@ -83,24 +87,17 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       ? Effect.void
       : ctx.session.get({ sessionID: event.sessionID }).pipe(
           Effect.map((session) => {
-            const rules = [
-              ...(configured.get(event.agent ?? session.agent ?? "") ?? []),
-              ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
-            ]
-            const decided = event.resources.map((operation) => ({
-              operation,
-              rule: BrowserMachine.selectBrowserRule(rules, operation),
-            }))
-            const denied = decided.find((item) => item.rule?.effect === "deny")
+            const rules = rulesFor(session, event.agent)
+            const denied = denial(rules, event.resources)
             if (denied) {
               event.effect = "deny"
-              event.message =
-                denied.rule?.resource === "*"
-                  ? "[browser.denied] Browser tools are denied for this agent by configuration; no action ran. Do not retry browser tools."
-                  : `[browser.denied] browser.${denied.operation} is denied for this agent by configuration; no action ran. Do not retry it.`
+              event.message = denied
               return
             }
-            if (decided.some((item) => item.rule?.effect === "ask")) event.effect = "ask"
+            if (
+              event.resources.some((operation) => BrowserMachine.selectBrowserRule(rules, operation)?.effect === "ask")
+            )
+              event.effect = "ask"
           }),
           // Without the rules, the grant must not decide alone.
           Effect.catchCause((cause) =>
@@ -374,6 +371,19 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
 
   return {
     /**
+     * Refuses a call that config, the agent's definition or the session's own rules deny. It reads rules only and never
+     * prompts, so it runs before the tool reads a file, looks up a tab or says whether a desktop is attached: a denied
+     * call reveals nothing but the denial. Without a desktop the session has no grant, and core would deny the call
+     * with its own message before any hook ran.
+     */
+    refuse: Effect.fn("BrowserConnection.refuse")(function* (tool: Tool.Context, operation: Browser.Method) {
+      const session = yield* ctx.session
+        .get({ sessionID: tool.sessionID })
+        .pipe(Effect.mapError((error) => new Tool.Error({ message: `Session not found: ${tool.sessionID}`, error })))
+      const denied = denial(rulesFor(session, tool.agent), [operation])
+      if (denied) return yield* new Tool.Error({ message: denied })
+    }),
+    /**
      * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
      * this plugin's (configured denies and asks win over the grant) and others such as `tool.use` policies.
      */
@@ -414,6 +424,17 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     }),
   }
 })
+
+/** The refusal for the first operation the rules deny, or undefined when they deny none. */
+function denial(rules: readonly Permission.Rule[], operations: readonly string[]) {
+  const denied = operations
+    .map((operation) => ({ operation, rule: BrowserMachine.selectBrowserRule(rules, operation) }))
+    .find((item) => item.rule?.effect === "deny")
+  if (!denied) return undefined
+  return denied.rule?.resource === "*"
+    ? "[browser.denied] Browser tools are denied for this agent by configuration; no action ran. Do not retry browser tools."
+    : `[browser.denied] browser.${denied.operation} is denied for this agent by configuration; no action ran. Do not retry it.`
+}
 
 function writePermissions(
   ctx: { readonly session: Pick<Context["session"], "get" | "update"> },

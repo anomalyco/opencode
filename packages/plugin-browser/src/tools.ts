@@ -144,7 +144,11 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     input: Browser.Input,
     tool: Tool.Context,
   ) {
+    // Before any file, tab or connection check, so a denied call reveals nothing else.
+    yield* connection.refuse(tool, input.type)
     if (input.type === "wait") {
+      // A session without a desktop has no grant, so it hears that it is disconnected rather than core's denial.
+      yield* connection.target(tool.sessionID, { type: "tabs.focus", tabID: input.tabID })
       yield* connection.authorize(tool, "wait")
       return yield* wait(input, tool)
     }
