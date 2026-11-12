@@ -105,7 +105,7 @@ impl Fixture {
                 if row.iter().all(|symbol| symbol.chars().count() == 1) { json(&row.concat()) } else { json(&row) };
             let mut runs: Vec<(usize, u32)> = Vec::new();
             for cell in cells {
-                let key = format_style(cell);
+                let key = format!("{} {} {}", format_color(cell.fg), format_color(cell.bg), cell.attributes.bits());
                 let style = *index.entry(key.clone()).or_insert_with(|| {
                     styles.push(key);
                     styles.len() - 1
@@ -132,10 +132,6 @@ impl Fixture {
 
 fn json(value: &(impl serde::Serialize + ?Sized)) -> String {
     serde_json::to_string(value).expect("fixture values serialize")
-}
-
-fn format_style(cell: &Cell) -> String {
-    format!("{} {} {}", format_color(cell.fg), format_color(cell.bg), cell.attributes.bits())
 }
 
 pub(crate) fn format_color(color: Color) -> String {
