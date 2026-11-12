@@ -1,4 +1,4 @@
-//! Small modules that several crates share, on `libc` alone, and `ring` behind its feature.
+//! Small modules that several crates share, on `libc` alone, `ring` behind its feature, and `windows-sys` on Windows.
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
@@ -8,6 +8,8 @@ pub mod error;
 pub mod hash;
 pub mod temp;
 pub mod time;
+#[cfg(windows)]
+pub mod win;
 
 /// Locks `mutex`, and takes the guard of a poisoned one: a panic on another thread leaves the data usable.
 pub fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {

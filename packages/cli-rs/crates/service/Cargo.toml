@@ -24,6 +24,9 @@ url.workspace = true
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+opencode-util.workspace = true
+
 [dev-dependencies]
 bytes.workspace = true
 opencode-util.workspace = true

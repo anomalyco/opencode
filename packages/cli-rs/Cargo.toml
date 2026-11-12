@@ -65,6 +65,8 @@ tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 tokio-util = "0.7"
 unicode-width = "0.2"
 url = "2"
+# Win32 calls, for opencode-util's `win` module only (DW1); each use adds its features there.
+windows-sys = "0.61"
 
 # Tree-sitter grammars for opencode-ui's `grammars` and `grammars-all` features (crates/ui/src/grammars), pinned to
 # the WASM releases packages/tui/src/parsers-config.ts loads where crates.io has them. The five opentui bundles take

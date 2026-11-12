@@ -1,6 +1,6 @@
 [package]
 name = "opencode-util"
-description = "Small shared modules on libc alone: errors with context, civil time and local offsets, shared libraries, digests."
+description = "Small shared modules on libc alone: errors with context, civil time and local offsets, shared libraries, digests, Win32 process calls."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,6 +16,9 @@ ring = ["dep:ring"]
 [dependencies]
 libc.workspace = true
 ring = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Console"] }
 
 [dev-dependencies]
 serde_json.workspace = true
