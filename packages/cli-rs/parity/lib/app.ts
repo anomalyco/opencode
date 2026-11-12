@@ -4,6 +4,7 @@
 import type { Fixture } from "./cells"
 import type { Route } from "./fake-server"
 import type { PtyScript, PtyStep } from "./pty-socket"
+import { records } from "./records"
 
 export type { Route }
 
@@ -163,4 +164,21 @@ export function applyMasks(fixture: Fixture, masks: Mask[]): Fixture {
     ),
     styles: [...palette.keys()],
   }
+}
+
+// The text of a `<name>.app.json` recording: one config key, route, step, socket message, write and read per line.
+export function recordingText(recording: unknown) {
+  return records(recording, [
+    "config.*",
+    "args.*",
+    "env.*",
+    "routes[]",
+    "ide[]",
+    "zed.*",
+    "steps[]",
+    "sockets[].sent[]",
+    "sockets[].received[]",
+    "requests.writes[]",
+    "requests.reads[]",
+  ])
 }
