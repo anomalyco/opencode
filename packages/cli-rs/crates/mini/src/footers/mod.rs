@@ -1884,19 +1884,7 @@ fn form_client(target: &Target, form: &FormInfo) -> Client {
 
 /// `openUrl`.
 fn open_url(url: &str) -> bool {
-    let program = if cfg!(target_os = "macos") {
-        "open"
-    } else if cfg!(windows) {
-        "explorer"
-    } else {
-        "xdg-open"
-    };
-    let mut command = std::process::Command::new(program);
-    // `open` detaches `xdg-open`, so a browser it starts does not stop with this client's group on Ctrl+Z.
-    #[cfg(all(unix, not(target_os = "macos")))]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    command
-        .arg(url)
+    opencode_ui::open::command(url)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
