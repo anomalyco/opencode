@@ -270,7 +270,7 @@ fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
 fn the_loader_reloads_a_rebuilt_library() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    let dir = config.join("plugins/sample");
+    let dir = config.join("plugins").join("sample");
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join(entry_file()), build("")).unwrap();
     let host = host();
@@ -293,7 +293,7 @@ fn the_loader_reloads_a_rebuilt_library() {
 fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    let dir = config.join("plugins/sample");
+    let dir = config.join("plugins").join("sample");
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join(entry_file()), build("")).unwrap();
     let host = host();
@@ -324,7 +324,7 @@ fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
 fn a_failed_rebuild_of_a_panicked_plugin_shows_its_own_error() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    let dir = config.join("plugins/sample");
+    let dir = config.join("plugins").join("sample");
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join(entry_file()), build("")).unwrap();
     let host = host();
@@ -1366,7 +1366,7 @@ fn the_quick_start_plugin_loads_from_a_plugins_directory_and_runs() {
     let name = format!("{}opencode_hello{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
     let temp = opencode_util::temp::tempdir().unwrap();
     let config = temp.path().join("config");
-    let dir = config.join("plugins/hello");
+    let dir = config.join("plugins").join("hello");
     fs::create_dir_all(&dir).unwrap();
     fs::copy(target.join("debug").join(name), dir.join(entry_file())).unwrap();
 
