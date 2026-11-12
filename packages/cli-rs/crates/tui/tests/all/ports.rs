@@ -411,6 +411,37 @@ fn a_prompt_waits_for_an_interrupt_sent_from_an_earlier_composer() {
     assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
 }
 
+// Expected (deviation O89-slash-after-interrupt): a slash command submitted after an interrupt runs once the server
+// has the interrupt, as a prompt is sent.
+#[test]
+fn a_slash_command_waits_for_a_pending_interrupt() {
+    let h = open("force-input", 120, running);
+    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+    let (release, held) = tokio::sync::oneshot::channel();
+    *h.hold.lock().unwrap() = Some(held);
+    h.app.press("escape");
+    h.app.press("escape");
+    h.app.type_text("/btw why");
+    h.wait_for("/btw why");
+    h.app.press("return");
+    h.wait("the composer clears", || h.text().is_empty());
+    let early = h.app.wait_until(Duration::from_millis(300), || !h.sent("/api/session/ses_p/generate").is_empty());
+    assert!(!early, "{:?}", h.wire());
+    release.send(()).unwrap();
+    h.wait("both are sent", || {
+        h.sent("/api/session/ses_p/interrupt").len() + h.sent("/api/session/ses_p/generate").len() == 2
+    });
+    let order: Vec<String> = h
+        .log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|seen| seen.path.ends_with("/interrupt") || seen.path.ends_with("/generate"))
+        .map(|seen| seen.path.clone())
+        .collect();
+    assert_eq!(order, ["/api/session/ses_p/interrupt", "/api/session/ses_p/generate"]);
+}
+
 // --- opencode-session-usage
 
 /// `count` assistant messages of `cost` each, `tokens` input tokens each, on model `p/m`.

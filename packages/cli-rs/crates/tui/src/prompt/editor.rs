@@ -86,13 +86,18 @@ impl Shared {
     /// requests wait for it, so the server sees them in the order they were made, as TS's fetches start in call
     /// order (`ctrl+⏎ interrupt & send`).
     pub(crate) fn interrupted(&self, session: &SessionID) -> BoxFuture<'static, ()> {
-        let pending = self.interrupts.borrow().get(session).cloned();
+        let pending = self.pending_interrupt(session);
         async move {
             if let Some(pending) = pending {
                 pending.await;
             }
         }
         .boxed()
+    }
+
+    /// The request that answers once every interrupt of `session` has its answer, while one is pending.
+    pub(crate) fn pending_interrupt(&self, session: &SessionID) -> Option<Interrupt> {
+        self.interrupts.borrow().get(session).cloned()
     }
 
     /// Sends `session.interrupt` for `session` after its pending ones.
