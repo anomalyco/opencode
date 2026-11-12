@@ -1,11 +1,14 @@
-# W2: `TZ` on Windows is read in POSIX syntax
+# W2: `TZ` on a Windows without ICU is read in POSIX syntax
 
-**TypeScript.** Node on Windows takes local times from ICU. Without `TZ` it uses the Windows time zone; a `TZ`
-that is set is read as an IANA name, such as `TZ=America/New_York`.
+**TypeScript.** Bun and Node on Windows take local times from ICU. Without `TZ` they use the Windows time zone with
+its whole rule history; a `TZ` that is set is read as an IANA name, such as `TZ=America/New_York` (an empty one is
+UTC).
 
-**Rust.** `crates/util/src/time.rs` takes the local offset from the C runtime's `localtime_s`. Without `TZ` it also
-uses the Windows time zone. A `TZ` that is set is read in the C runtime's POSIX syntax (`EST5EDT`), so an IANA
-name is misread, usually as UTC. Not yet observed on Windows; the runner (W3) checks it.
+**Rust.** `crates/util/src/time.rs` takes the local offset from the ICU that Windows ships (`icu.dll` since Windows
+10 1903, `icuin.dll` since 1703), loaded at first use through `win::IcuZone`, so it reads `TZ` and the Windows zone
+as TypeScript does. Only where neither library loads does it fall back to the C runtime's `localtime_s`, which reads
+`TZ` in POSIX syntax (`EST5EDT`), so an IANA name is misread, usually as UTC, and applies this year's rules of the
+Windows zone to every year.
 
-**Reason.** Reading IANA names needs the zone database, which Windows does not ship to the C runtime, or a new
-dependency. Setting `TZ` on Windows is rare; without it Rust and TypeScript agree.
+**Reason.** Windows before 10 1703 has no system ICU, and reading IANA names without it needs the zone database or a
+new dependency. Every supported Windows has `icu.dll`.
