@@ -80,6 +80,7 @@ export function useUsageExceededDialogs(input?: {
   const showFreeLimitDialog = (evt: SessionStepFailed) => {
     // The free-limit panel takes the composer's place instead.
     if (settings.general.freeLimitPanel()) return
+
     if (evt.data.sessionID !== params.id || dialog.active) return
     const seen = goUpsellState[GO_UPSELL_FREE_TIER_LAST_SEEN_AT]
 

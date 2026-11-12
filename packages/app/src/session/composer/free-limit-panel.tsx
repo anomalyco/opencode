@@ -70,6 +70,7 @@ export function SessionFreeLimitPanel(props: { resetAt: number | null; selection
   const connect = (provider?: string) => {
     void import("@/providers/connect/dialog").then((x) => {
       const controller = x.useProviderConnectController()
+
       if (provider) controller.select(provider)
       void dialog.show(() => (
         <x.DialogConnectProvider
