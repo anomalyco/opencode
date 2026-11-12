@@ -74,11 +74,13 @@ const ripgrepLayer = Layer.effect(
           Effect.sync(() => {
             next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
             const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, offset) => {
-              const directory = parts.slice(0, offset + 1).join("/") + path.sep
+            let prefix = ""
+            for (let offset = 0; offset < parts.length - 1; offset++) {
+              prefix = offset === 0 ? parts[offset] : prefix + "/" + parts[offset]
+              const directory = prefix + path.sep
               if (!next.directories.has(directory))
                 next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
-            })
+            }
           }),
       })
       index = next
