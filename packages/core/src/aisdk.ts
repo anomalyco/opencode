@@ -497,14 +497,14 @@ function callOptions(
     presencePenalty: request.presencePenalty,
     frequencyPenalty: request.frequencyPenalty,
     seed: request.seed,
-    tools: flattened.tools.map((input) => ({ ...tool(input), ...cacheOptions(anthropic && input.cache) })),
+    tools: flattened.tools.map(anthropic ? (input) => ({ ...tool(input), ...cacheOptions(input.cache) }) : tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
   }
 }
 
-function cacheOptions(cache: CacheHint | false | undefined, options?: SharedV3ProviderOptions) {
+function cacheOptions(cache?: CacheHint, options?: SharedV3ProviderOptions) {
   if (!cache) return {}
   return {
     providerOptions: {
@@ -518,7 +518,7 @@ function prompt(request: LLMRequest, anthropic: boolean): LanguageModelV3Prompt 
   const pending: UserContent = []
   const messages = request.messages.flatMap((input, index) => {
     if (input.role !== "tool") return message(input, anthropic)
-    const lowered = toolMessage(input, anthropic)
+    const lowered = toolMessage(input, anthropic ? cachedToolResult : toolResultPart)
     pending.push(...lowered.media)
     if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
     const media = [...pending]
@@ -558,23 +558,23 @@ function message(
             {
               type: "text",
               text: ProviderShared.wrapSystemUpdate(parts),
-              ...cacheOptions(anthropic && parts.findLast((part) => part.cache)?.cache),
+              ...cacheOptions(anthropic ? parts.findLast((part) => part.cache)?.cache : undefined),
             },
           ],
         },
       ]
     }
     case "user":
-      return [{ role: "user", content: input.content.flatMap((part) => userPart(part, anthropic)) }]
+      return [{ role: "user", content: input.content.flatMap(anthropic ? cachedUserPart : userPart) }]
     case "assistant":
-      return [{ role: "assistant", content: input.content.flatMap((part) => assistantPart(part, anthropic)) }]
+      return [{ role: "assistant", content: input.content.flatMap(anthropic ? cachedAssistantPart : assistantPart) }]
   }
 }
 
-function toolMessage(input: ToolMessage, anthropic: boolean) {
+function toolMessage(input: ToolMessage, convert: typeof toolResultPart) {
   const media: UserContent = []
   const content = input.content.flatMap((part) => {
-    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part, anthropic)
+    if (part.type !== "tool-result" || part.result.type !== "content") return convert(part)
     const value = part.result.value.filter((item) => {
       if (item.type !== "file") return true
       if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
@@ -586,16 +586,13 @@ function toolMessage(input: ToolMessage, anthropic: boolean) {
       })
       return false
     })
-    return toolResultPart(
-      {
-        ...part,
-        result:
-          value.length === 0
-            ? { type: "text", value: "Media attached in the following user message." }
-            : { ...part.result, value },
-      },
-      anthropic,
-    )
+    return convert({
+      ...part,
+      result:
+        value.length === 0
+          ? { type: "text", value: "Media attached in the following user message." }
+          : { ...part.result, value },
+    })
   })
   return {
     messages: content.length ? ([{ role: "tool", content }] satisfies LanguageModelV3Message[]) : [],
@@ -603,13 +600,26 @@ function toolMessage(input: ToolMessage, anthropic: boolean) {
   }
 }
 
-function userPart(part: ContentPart, anthropic: boolean): UserContent {
-  if (part.type === "text") return [{ type: "text", text: part.text, ...cacheOptions(anthropic && part.cache) }]
-  if (part.type === "media") return [filePart(part, anthropic)]
+function cached<T extends UserContent[number] | AssistantContent[number]>(convert: (part: ContentPart) => T[]) {
+  return (part: ContentPart) => {
+    const blocks = convert(part)
+    // Anthropic does not accept cache controls on thinking blocks.
+    if (part.type === "reasoning" || !("cache" in part) || !part.cache) return blocks
+    return blocks.map((block) => ({ ...block, ...cacheOptions(part.cache, block.providerOptions) }))
+  }
+}
+
+const cachedUserPart = cached(userPart)
+const cachedAssistantPart = cached(assistantPart)
+const cachedToolResult = cached(toolResultPart)
+
+function userPart(part: ContentPart): UserContent {
+  if (part.type === "text") return [{ type: "text", text: part.text }]
+  if (part.type === "media") return [filePart(part)]
   return []
 }
 
-function assistantPart(part: ContentPart, anthropic: boolean): AssistantContent {
+function assistantPart(part: ContentPart): AssistantContent {
   switch (part.type) {
     case "compaction":
       throw ProviderShared.unsupportedOperation({
@@ -618,15 +628,9 @@ function assistantPart(part: ContentPart, anthropic: boolean): AssistantContent 
         message: "AI SDK routes cannot replay native provider compaction state",
       })
     case "text":
-      return [
-        {
-          type: "text",
-          text: part.text,
-          providerOptions: metadataProviderOptions(part.providerMetadata, anthropic && part.cache),
-        },
-      ]
+      return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":
-      return [filePart(part, anthropic)]
+      return [filePart(part)]
     case "reasoning":
       return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "tool-call":
@@ -637,11 +641,11 @@ function assistantPart(part: ContentPart, anthropic: boolean): AssistantContent 
           toolName: part.name,
           input: part.input,
           providerExecuted: part.providerExecuted,
-          providerOptions: metadataProviderOptions(part.providerMetadata, anthropic && part.cache),
+          providerOptions: metadataProviderOptions(part.providerMetadata),
         },
       ]
     case "tool-result":
-      return toolResultPart(part, anthropic)
+      return toolResultPart(part)
     case "effort":
       throw ProviderShared.unsupportedContent("AI SDK", "assistant", [
         "text",
@@ -653,13 +657,12 @@ function assistantPart(part: ContentPart, anthropic: boolean): AssistantContent 
   }
 }
 
-function filePart(part: Extract<ContentPart, { type: "media" }>, anthropic: boolean) {
+function filePart(part: Extract<ContentPart, { type: "media" }>) {
   return {
     type: "file" as const,
     mediaType: part.media.mediaType,
     data: fileData(part.media),
     filename: part.filename,
-    ...cacheOptions(anthropic && part.cache),
   }
 }
 
@@ -674,7 +677,7 @@ function fileData(media: Media.Asset) {
   })
 }
 
-function toolResultPart(part: ContentPart, anthropic: boolean): ToolResultContent[] {
+function toolResultPart(part: ContentPart): ToolResultContent[] {
   if (part.type !== "tool-result") return []
   return [
     {
@@ -682,7 +685,7 @@ function toolResultPart(part: ContentPart, anthropic: boolean): ToolResultConten
       toolCallId: part.id,
       toolName: part.name,
       output: toolOutput(part.result),
-      providerOptions: metadataProviderOptions(part.providerMetadata, anthropic && part.cache),
+      providerOptions: metadataProviderOptions(part.providerMetadata),
     },
   ]
 }
@@ -739,12 +742,9 @@ function requestProviderOptions(
   return { [optionKey]: options }
 }
 
-function metadataProviderOptions(
-  input: ProviderMetadata | undefined,
-  cache?: CacheHint | false,
-): SharedV3ProviderOptions | undefined {
-  const options = input && Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
-  return cacheOptions(cache, options).providerOptions ?? options
+function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3ProviderOptions | undefined {
+  if (!input) return undefined
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
 
 function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
