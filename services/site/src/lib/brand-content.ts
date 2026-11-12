@@ -35,7 +35,6 @@ const wordmarkSolidDarkSvg = "/brand/files/opencode-wordmark-solid-dark.svg"
 const avatarDark1024Png = "/brand/files/opencode-avatar-dark-1024.png"
 const avatarLight1024Png = "/brand/files/opencode-avatar-light-1024.png"
 
-
 /** The brand page copy, shared by the page and its Markdown version. */
 export function brandContent(t: Translate) {
   return {
@@ -140,9 +139,10 @@ export function brandContent(t: Translate) {
     },
     colors: {
       title: "Colors",
-      body: "The logo and the wordmark use one ink at three opacities, with a lighter ink for dark backgrounds. The values below are that ink over white or #0B0B0B, as the standard files show it. Click a value to copy it.",
-      // The logo greys from the brand SVGs: the ink at full, 70% and 20% opacity (72% and 28% in dark),
-      // composited over white or #0B0B0B (brand-colours.json from the logo files).
+      body: "The logo and the wordmark use one ink at three opacities, with a lighter ink for dark backgrounds. The values below are the colors in the standard files. Use them for the logo and the wordmark only, not for other text or backgrounds. Click a value to copy it.",
+      // The fills of the standard (not transparent) logo files: the ink at full, 70% and 20% opacity (72% and 28% in dark).
+      // Light 20% and dark 28% and 72% are also steps of the interface grey scale (site.css), which
+      // agents get from brandAgentStyle; the logo greys stay for the logo only.
       palettes: [
         {
           name: "Light",
@@ -532,5 +532,60 @@ export function brandMarkdown(context: MarkdownContext) {
     content.integrations.naming.rule,
     `## ${content.trademarks.title}`,
     `${content.trademarks.body} ${content.trademarks.contact.before}${link(content.trademarks.contact.email, `mailto:${content.trademarks.contact.email}`)}${content.trademarks.contact.after}`,
+    brandAgentStyle,
   )
 }
+
+// For agents only: the "Rules for agent" copy and /brand.md end with it, and the page doesn't show it.
+// The values are the shared interface scale in site.css (--grey-1 to --grey-11), kept in step by
+// script/check-greys.ts, and the type tokens there (--fs-*). Change them together.
+const brandAgentStyle = `## Making it look like OpenCode
+
+For agents that make a page, a slide, a document or an interface that should look like OpenCode. Partners who only use the logo can skip it.
+
+### Color
+
+Use one grey scale. Each step has one job, the same in light and dark. Use no other greys, and no warm or tinted greys.
+
+| Step | Job | Light | Dark |
+| --- | --- | --- | --- |
+| 1 | Page background | \`#FBFBFB\` | \`#0C0C0C\` |
+| 2 | Cards, code blocks, panels, popovers | \`#FFFFFF\` | \`#161616\` |
+| 3 | Subtle fill: inline code, search fields, bands | \`#F5F5F5\` | \`#1A1A1A\` |
+| 4 | Hover fill, chips, selected tab | \`#EEEEEE\` | \`#242424\` |
+| 5 | Borders and dividers | \`#E0E0E0\` | \`#2E2E2E\` |
+| 6 | Strong borders and decoration | \`#D2D2D2\` | \`#4B4B4B\` |
+| 7 | Icons and marks that carry meaning, disabled text | \`#888888\` | \`#6A6A6A\` |
+| 8 | Muted text: captions, labels, meta | \`#6B6B6B\` | \`#8F8F8F\` |
+| 9 | Body text | \`#5C5C5C\` | \`#AEAEAE\` |
+| 10 | Emphasis text | \`#3A3A3A\` | \`#DBDBDB\` |
+| 11 | Headings, strong text, the primary button | \`#161616\` | \`#FAFAFA\` |
+
+- The dark background is \`#0C0C0C\` and the light background is \`#FBFBFB\`. Do not use pure black or pure white for a page.
+- Cards and panels are lighter than the page in both themes.
+- Text is at least 4.5:1 against its background, and icons and controls at least 3:1. Each step meets this when you use it for its job. On a hover fill (step 4), use step 8 or darker for text.
+- Use steps 5 and 6 only for lines and decoration, never for text.
+- The only accent is the link blue, \`#3B5CF6\` in light and \`#6B8FFF\` in dark. Use it for links, focus rings and selected or open states, not for decoration or large fills.
+- The primary button is ink: step 11 with step 1 text. Text on the link blue is white.
+- The logo colors above are for the logo and the wordmark only.
+- No gradients, glows or drop shadows on text, and only soft, close shadows on raised surfaces.
+
+### Type
+
+- Use OpenTUI Mono for headings, titles, navigation, labels and code, and Inter for body and reading text. Use no other fonts.
+- Set headings in OpenTUI Mono at regular weight (400). Do not use bold for headings.
+- Write labels and eyebrows in OpenTUI Mono, uppercase, at 12 to 14px, with a little letter spacing.
+- Set body text in Inter at regular weight, 15 to 17px, with a line height of about 1.5. Keep lines to about 70 characters.
+- Nothing is smaller than 12px. On phones, text that carries meaning is at least 14px.
+
+### Shape
+
+- Use square corners. Round only avatars and dots (fully round), pills and app icons.
+- Use one stroke weight for icons: 1.5px at 16px.
+- Keep layouts on a grid, with plenty of space and hairline dividers (step 5) instead of boxes where you can.
+
+### Writing
+
+- Write OpenCode as one word with a capital O and C. Call it an "open source coding agent".
+- Write statements, not rhetorical questions, and use no colons in headings, buttons or captions.
+- Write short, plain sentences.`

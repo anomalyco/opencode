@@ -75,8 +75,7 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.MediaInfo } | undefined>
   /**
-   * Top-level Sessions holding an execution claim. Recoverable background
-   * children are resumed separately through their durable Job records.
+   * Sessions holding an execution claim, including directly driven children.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
   /**
@@ -89,10 +88,9 @@ export interface Interface {
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
-   * Clears orphaned child claims except children owned by recoverable
-   * background subagent jobs.
+   * Release abandoned claims when the child's parent was deleted.
    */
-  readonly releaseChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<void>
+  readonly releaseOrphanedChildClaims: () => Effect.Effect<void>
   /**
    * Durably counts one more resume of an orphaned claim, returning the new
    * total — or undefined when the Session no longer exists.
@@ -243,7 +241,7 @@ const layer = Layer.effect(
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
+          .where(isNotNull(SessionTable.time_suspended))
           .all()
           .pipe(
             Effect.orDie,
@@ -270,15 +268,14 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
+      releaseOrphanedChildClaims: Effect.fn("SessionStore.releaseOrphanedChildClaims")(() =>
         db
           .update(SessionTable)
           .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
           .where(
             and(
               isNotNull(SessionTable.time_suspended),
-              isNotNull(SessionTable.parent_id),
-              recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
+              notInArray(SessionTable.parent_id, db.select({ id: SessionTable.id }).from(SessionTable)),
             ),
           )
           .run()

@@ -2,9 +2,9 @@
 // prelude frame was on the stack.
 import { Effect } from "effect"
 import { CodeMode } from "../../src/index.js"
-import { CodeFlags } from "../../src/vm/opcodes.js"
-import { setRoundTrip } from "../../src/vm/runtime/execute.js"
-import { Vm } from "../../src/vm/vm.js"
+import { CodeFlags } from "../../src/opcodes.js"
+import { setRoundTrip } from "../../src/runtime/execute.js"
+import { Vm } from "../../src/vm.js"
 
 setRoundTrip(true)
 
