@@ -264,6 +264,16 @@ it.live("a deny on one browser operation refuses that operation and still allows
   }),
 )
 
+it.live("a deny on wait refuses it before it probes the page", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("wait", "deny")] })
+    expect((yield* browser.run("wait", { tabID: tab.id, selector: "#done", timeoutMs: 200 }).pipe(Effect.flip)).message).toStartWith(
+      "[browser.denied] browser.wait",
+    )
+    expect(browser.commands.count).toBe(0)
+  }),
+)
+
 it.live("a wildcard resource pattern in a browser deny is honoured", () =>
   Effect.gen(function* () {
     const browser = yield* setup({ permissions: [rule("files.*", "deny")] })
