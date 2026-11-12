@@ -75,6 +75,11 @@ const Response = Schema.Struct({
         role: Schema.Literal("assistant"),
         content: Schema.Array(Text).check(Schema.isMinLength(1)),
       }),
+      Schema.Struct({
+        ...MessageFields,
+        role: Schema.Literals(["developer", "system"]),
+        content: Schema.Array(Text).check(Schema.isMinLength(1)),
+      }),
     ]),
   ),
   usage: Schema.optional(Schema.StructWithRest(OpenResponses.OpenResponsesUsage, [JsonObject])),
@@ -171,6 +176,9 @@ function toMessage(item: (typeof Response.Type.output)[number], model: LLMReques
       })),
     )
   }
+
+  if (item.role === "developer" || item.role === "system")
+    return Message.system(item.content.map((part) => ({ type: "text", text: part.text })))
 
   return Message.make({
     role: item.role,

@@ -324,6 +324,12 @@ for (const item of [
     content: [{ type: "input_image", image_url: "https://example.com/image.png" }],
   },
   { type: "message", role: "user", content: [{ type: "input_file", filename: "missing.pdf" }] },
+  { type: "message", role: "developer", content: [] },
+  {
+    type: "message",
+    role: "developer",
+    content: [{ type: "input_image", image_url: "https://example.com/image.png" }],
+  },
   {
     type: "message",
     role: "user",
@@ -386,6 +392,45 @@ for (const model of [
     Effect.gen(function* () {
       const request = ai.request({ model, prompt: "hello" })
       const compacted = yield* ai.compact(request)
+      const codec = Schema.fromJsonString(Schema.Array(Message))
+      const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
+      yield* LLMClient.generate({ ...request, messages })
+    }),
+  )
+}
+
+for (const model of [
+  OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+  Azure.configure({ apiKey: "test", resourceName: "test" }).responses("fixture"),
+  XAI.configure({ apiKey: "test" }).responses("fixture"),
+]) {
+  const instructions = ["developer", "system"].map((role) => ({
+    type: "message",
+    id: `msg_${role}`,
+    status: "completed",
+    role,
+    content: [{ type: "input_text", text: `${role} update` }],
+  }))
+  testEffect(
+    dynamicResponse(({ request, text, respond }) =>
+      Effect.sync(() => {
+        if (new URL(request.url).pathname.endsWith("/compact"))
+          return respond(
+            JSON.stringify({ object: "response.compaction", output: [...instructions, retained, checkpoint] }),
+          )
+        expect(JSON.parse(text).input.slice(0, 2)).toEqual([
+          { type: "message", role: "developer", content: "developer update" },
+          { type: "message", role: "developer", content: "system update" },
+        ])
+        return respond(sseEvents({ type: "response.completed", response: { id: "resp_1" } }))
+      }),
+    ),
+  ).effect(`${model.provider} retains developer and system messages through serialization and replay`, () =>
+    Effect.gen(function* () {
+      const request = ai.request({ model, prompt: "hello" })
+      const compacted = yield* ai.compact(request)
+      expect(compacted.replacement.map((message) => message.role)).toEqual(["system", "system", "user", "assistant"])
+      expect(compacted.replacement[0]?.content).toEqual([{ type: "text", text: "developer update" }])
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
       yield* LLMClient.generate({ ...request, messages })
