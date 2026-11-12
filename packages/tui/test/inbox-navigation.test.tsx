@@ -99,3 +99,50 @@ test("section headers fold without stealing prompt arrows outside the section", 
   app.mockInput.pressArrow("right")
   await app.waitForFrame((frame) => frame.includes("abc") && frame.includes("▸ Needs attention 2"))
 })
+
+test("Focus Inbox traverses headers and sessions with the keyboard and releases focus", async () => {
+  const sessions = [
+    { ...session("ses_work"), title: "Running task" },
+    { ...session("ses_notes"), title: "Project notes" },
+  ]
+  await using app = await createAppFixture({
+    width: 100,
+    height: 26,
+    config: { animations: false, session: { inbox: true } },
+    fetch: (url) => {
+      if (url.pathname === "/api/session") return json({ data: sessions, cursor: {} })
+      if (url.pathname === "/api/session/active") return json({ data: { ses_work: { type: "running" } } })
+      const item = sessions.find((s) => url.pathname === `/api/session/${s.id}`)
+      if (item) return json({ data: item })
+      if (/^\/api\/session\/[^/]+\/(message|inbox)$/.test(url.pathname)) return json({ data: [], cursor: {} })
+    },
+  })
+  async function focus() {
+    app.mockInput.pressKey("p", { ctrl: true })
+    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+    await app.mockInput.typeText("Focus Inbox")
+    app.mockInput.pressEnter()
+    await app.waitFor(() => app.renderer.currentFocusedRenderable?.id === "inbox-sidebar")
+  }
+  await app.ready
+  await app.waitForFrame((frame) => frame.includes("▾ Working 1") && frame.includes("▾ Recent 1"))
+  await focus()
+  app.mockInput.pressArrow("left")
+  await app.waitForFrame((frame) => frame.includes("▸ Working 1") && !frame.includes("Running task"))
+  app.mockInput.pressArrow("down")
+  app.mockInput.pressArrow("left")
+  await app.waitForFrame((frame) => frame.includes("▸ Recent 1") && !frame.includes("Project notes"))
+  app.mockInput.pressArrow("up")
+  app.mockInput.pressArrow("right")
+  await app.waitForFrame((frame) => frame.includes("Running task") && frame.includes("▸ Recent 1"))
+  app.mockInput.pressEscape()
+  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+  await app.mockInput.typeText("ac")
+  app.mockInput.pressArrow("left")
+  await app.mockInput.typeText("b")
+  await app.waitForFrame((frame) => frame.includes("abc") && frame.includes("▾ Working 1"))
+  await focus()
+  app.mockInput.pressArrow("down")
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("▸ Running task"))
+})
