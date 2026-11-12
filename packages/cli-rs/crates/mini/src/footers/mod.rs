@@ -1882,9 +1882,10 @@ fn form_client(target: &Target, form: &FormInfo) -> Client {
     target.client.with_header("x-opencode-directory", directory)
 }
 
-/// `openUrl`.
+/// `openUrl`: a form's URL is not trusted to name a web link, so anything else fails before a process starts.
 fn open_url(url: &str) -> bool {
-    opencode_ui::open::command(url)
+    let Ok(url) = opencode_ui::open::web_url(url) else { return false };
+    opencode_ui::open::command(&url)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -2350,6 +2351,14 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn a_form_url_that_is_not_a_web_link_never_starts_the_opener() {
+        // The Windows opener's `Start` would run a program; the failure tells the user to open it themselves.
+        for url in [r"C:\Windows\System32\calc.exe", "calc", "file:///etc/passwd"] {
+            assert!(!open_url(url), "{url}");
+        }
+    }
 
     fn event(kind: &str, data: Value) -> V2Event {
         let event = json!({ "id": "evt_1", "created": 1, "type": kind,
