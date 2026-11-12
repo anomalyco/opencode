@@ -246,13 +246,11 @@ jobs:
           path: packages/process-daemon/dist/*.tar.gz
           if-no-files-found: error
 
-  release:
+  package:
     needs: [checks, build, build-windows]
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
     env:
       PROTOCOL_VERSION: ${{ needs.checks.outputs.protocol }}
     steps:
@@ -261,8 +259,6 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
-      - name: Install npm with trusted publishing support
-        run: npm install --global npm@^11.5.1
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: packages/process-daemon/dist
@@ -297,35 +293,68 @@ jobs:
           npm pack --pack-destination "$temporary" dist/npm/opencode-pty-linux-x64-gnu dist/npm/opencode-pty >/dev/null
           npm install --prefix "$temporary" --ignore-scripts --no-package-lock --no-audit --no-fund "$temporary"/*.tgz
           test "$("$temporary/node_modules/.bin/opencode-pty" --version)" = "opencode-pty $(node -p 'require("./npm/package.json").version') (protocol $PROTOCOL_VERSION)"
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        if: startsWith(github.ref, 'refs/tags/process-daemon-v')
+      - name: Stage release files
+        run: |
+          mkdir -p "$RUNNER_TEMP/bundle/github" "$RUNNER_TEMP/bundle/npm"
+          cp dist/*.tar.gz dist/release-manifest.json dist/SHA256SUMS "$RUNNER_TEMP/bundle/github/"
+          for package in dist/npm/*; do
+            npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/bundle/npm" "$(realpath "$package")"
+          done
+          # The upload action owns the outer SHA256SUMS; include the release checksums in it.
+          mv "$RUNNER_TEMP/bundle/github/SHA256SUMS" "$RUNNER_TEMP/bundle/github/checksums.txt"
+      - id: upload
+        uses: ./.github/release/upload
         with:
-          subject-checksums: packages/process-daemon/dist/SHA256SUMS
+          name: process-daemon-bundle
+          path: ${{ runner.temp }}/bundle
+
+  release:
+    needs: [checks, package]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/process-daemon-v')
+    runs-on: ubuntu-24.04
+    environment: process-daemon-release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    defaults:
+      run:
+        working-directory: .
+    env:
+      PROTOCOL_VERSION: ${{ needs.checks.outputs.protocol }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0; caching opt-in
+        with:
+          node-version: '24.11.0'
+      - uses: ./.github/release/download
+        with:
+          pattern: process-daemon-bundle
+          digests: process-daemon-bundle=${{ needs.package.outputs.digest }}
+          require-digests: 'true'
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/in/process-daemon-bundle/github/*.tar.gz
+            ${{ runner.temp }}/in/process-daemon-bundle/github/release-manifest.json
       # The monorepo's Latest release drives OpenCode's own update paths, so this release must never become
       # Latest. It is drafted first because immutable releases lock assets once published.
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/process-daemon-v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cd "$RUNNER_TEMP/in/process-daemon-bundle/github"
+          mv checksums.txt SHA256SUMS
           version="${GITHUB_REF_NAME#process-daemon-v}"
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --latest=false \
               --title "process-daemon v$version" \
               --notes "opencode-pty $version (protocol $PROTOCOL_VERSION) from packages/process-daemon, published to npm as @opencode/pty@$version."
-          gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS dist/release-manifest.json --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$GITHUB_REF_NAME" ./*.tar.gz SHA256SUMS release-manifest.json --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false --repo "$GITHUB_REPOSITORY"
       - name: Publish npm packages
-        if: startsWith(github.ref, 'refs/tags/process-daemon-v')
-        run: |
-          version="${GITHUB_REF_NAME#process-daemon-v}"
-          for package in dist/npm/opencode-pty-*; do
-            name="$(node -p 'require(process.argv[1]).name' "$(realpath "$package/package.json")")"
-            if ! npm view "$name@$version" version >/dev/null 2>&1; then
-              npm publish "$package" --access public --provenance
-            fi
-          done
-          name="@opencode/pty"
-          if ! npm view "$name@$version" version >/dev/null 2>&1; then
-            npm publish dist/npm/opencode-pty --access public --provenance
-          fi
+        run: bash .github/release/publish-process-daemon.sh "$RUNNER_TEMP/in/process-daemon-bundle/npm"
