@@ -192,12 +192,12 @@ function ExtensionRow(props: {
           fallback="extensions"
           name={props.extension.name}
           detail={props.extension.version}
-          status={<CompatibilityNote compatibility={props.extension.compatibility} />}
           message={props.extension.error ? { text: props.extension.error, error: true } : undefined}
         />
       }
     >
       <div class="flex items-center gap-2">
+        <CompatibilityNote compatibility={props.extension.compatibility} />
         <ui.Tooltip value={ctx.t("settings.extensions.remove", { name: props.extension.name })}>
           <ui.IconButton
             icon="outline-trash"
@@ -259,9 +259,10 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
 
     if (last?.outcome.type !== "installed" || last.outcome.result.type !== "unsupported") return undefined
     const job = last.job
+    const result = last.outcome.result
 
     return job.type === "install-store" || job.type === "install-folder" || job.type === "install-browser"
-      ? job
+      ? { job, result }
       : undefined
   }
 
@@ -328,32 +329,38 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
               role={message().error ? "alert" : "status"}
               class="flex flex-col gap-2 text-[13px] leading-[var(--line-height-base)]"
             >
-              <p
-                classList={{
-                  "text-v2-state-fg-warning": !!confirming(),
-                  "text-v2-state-fg-danger": message().error && !confirming(),
-                  "text-v2-text-text-muted": !message().error,
-                }}
+              <Show
+                when={confirming()}
+                fallback={
+                  <p
+                    classList={{
+                      "text-v2-state-fg-danger": message().error,
+                      "text-v2-text-text-muted": !message().error,
+                    }}
+                  >
+                    {message().text}
+                  </p>
+                }
               >
-                {message().text}
-              </p>
+                {(confirm) => (
+                  <ChoiceRow image={confirm().result.icon} name={confirm().result.name}>
+                    <CompatibilityNote compatibility={confirm().result.compatibility} />
+                    <ui.Button
+                      size="small"
+                      class={ACTION_COLUMN}
+                      disabled={blocked()}
+                      onClick={() => jobs.start({ ...confirm().job, force: true })}
+                    >
+                      {ctx.t("settings.extensions.anyway")}
+                    </ui.Button>
+                  </ChoiceRow>
+                )}
+              </Show>
               <Show when={message().compatibility}>
                 {(compatibility) => (
                   <span class="text-v2-text-text-muted">
                     <CompatibilityDetails compatibility={compatibility()} />
                   </span>
-                )}
-              </Show>
-              <Show when={confirming()}>
-                {(job) => (
-                  <div class="flex items-center gap-2">
-                    <ui.Button size="small" disabled={blocked()} onClick={() => jobs.start({ ...job(), force: true })}>
-                      {ctx.t("settings.extensions.anyway")}
-                    </ui.Button>
-                    <ui.Button size="small" variant="ghost" onClick={() => jobs.dismiss()}>
-                      {ctx.t("common.cancel")}
-                    </ui.Button>
-                  </div>
                 )}
               </Show>
             </div>
@@ -384,16 +391,11 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                 }
               >
                 {(item) => (
-                  <div class="flex h-9 items-center gap-3">
-                    <Glyph image={item.icon} fallback="extensions" />
-                    <span class="flex min-w-0 flex-1 items-center gap-2">
-                      <span class="min-w-0 shrink truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                        {item.name}
-                      </span>
-                      <CompatibilityNote compatibility={item.compatibility} />
-                    </span>
+                  <ChoiceRow image={item.icon} name={item.name}>
+                    <CompatibilityNote compatibility={item.compatibility} />
                     <ui.Button
                       size="small"
+                      class={ACTION_COLUMN}
                       variant={item.installed ? "ghost-muted" : "neutral"}
                       disabled={blocked() || item.installed}
                       busy={installing(item.id)}
@@ -414,7 +416,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                           ? ctx.t("settings.extensions.anyway")
                           : ctx.t("settings.extensions.add")}
                     </ui.Button>
-                  </div>
+                  </ChoiceRow>
                 )}
               </For>
             </div>
@@ -426,30 +428,34 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
 }
 
 /**
- * A row's subject: its icon, its name, and under it a detail and a status, or what the last action on it did.
+ * Buttons beside a verdict share one width whatever they say, so the verdicts' right edges line up in a column.
  */
-function Identity(props: {
-  image?: string
-  fallback: IconName
-  name: string
-  detail?: string
-  status?: JSX.Element
-  message?: JobMessage
-}) {
+const ACTION_COLUMN = "min-w-24 justify-center"
+
+/**
+ * An extension the user may add: its icon, its name in the room left, then its verdict and the action, which stay
+ * whole while the name truncates.
+ */
+function ChoiceRow(props: { image?: string; name: string; children: JSX.Element }) {
+  return (
+    <div class="flex h-9 items-center gap-3">
+      <Glyph image={props.image} fallback="extensions" />
+      <span class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">
+        {props.name}
+      </span>
+      {props.children}
+    </div>
+  )
+}
+
+/** A row's subject: its icon, its name, and under it a detail or what the last action on it did. */
+function Identity(props: { image?: string; fallback: IconName; name: string; detail?: string; message?: JobMessage }) {
   return (
     <span class="flex min-w-0 items-center gap-3">
       <Glyph image={props.image} fallback={props.fallback} />
       <span class="flex min-w-0 flex-col gap-1">
         <span class="truncate">{props.name}</span>
-        <Show
-          when={props.message}
-          fallback={
-            <span class="flex min-w-0 items-center gap-2 empty:hidden">
-              <Show when={props.detail}>{(detail) => <Muted>{detail()}</Muted>}</Show>
-              {props.status}
-            </span>
-          }
-        >
+        <Show when={props.message} fallback={<Show when={props.detail}>{(detail) => <Muted>{detail()}</Muted>}</Show>}>
           {(message) => (
             <span
               role={message().error ? "alert" : "status"}
@@ -477,19 +483,21 @@ function CompatibilityNote(props: { compatibility: ExtensionCompatibility }) {
   return (
     <Show when={level() !== "supported" ? level() : undefined}>
       {(shown) => (
-        <ui.Tooltip value={<CompatibilityDetails compatibility={props.compatibility} />}>
-          <span
-            tabIndex={0}
-            data-compatibility={shown()}
-            class="min-w-0 truncate text-[13px] font-[440] leading-[var(--line-height-base)]"
-            classList={{
-              "text-v2-state-fg-warning": shown() === "unsupported",
-              "text-v2-text-text-muted": shown() === "partial",
-            }}
-          >
-            {ctx.t(`extensions.compat.${shown()}`)}
-          </span>
-        </ui.Tooltip>
+        // The tooltip wraps its trigger in an element of its own, so this one keeps the note whole in a row.
+        <span class="flex shrink-0 justify-end">
+          <ui.Tooltip value={<CompatibilityDetails compatibility={props.compatibility} />}>
+            <span
+              data-compatibility={shown()}
+              class="whitespace-nowrap text-end text-[13px] font-[440] leading-[var(--line-height-base)]"
+              classList={{
+                "text-v2-state-fg-warning": shown() === "unsupported",
+                "text-v2-text-text-muted": shown() === "partial",
+              }}
+            >
+              {ctx.t(`extensions.compat.${shown()}`)}
+            </span>
+          </ui.Tooltip>
+        </span>
       )}
     </Show>
   )

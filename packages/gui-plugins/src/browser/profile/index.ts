@@ -122,10 +122,11 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
 
     if (compatibility.level === "unsupported" && !force && !known) {
       const name = await displayName(folder, manifest)
+      const icon = await extensionIcon(folder, manifest)
 
       if (source !== "folder") await rm(folder, { recursive: true, force: true }).catch(() => undefined)
 
-      return { type: "unsupported", name, compatibility }
+      return { type: "unsupported", name, icon, compatibility }
     }
 
     const extension = await session.extensions.loadExtension(folder, { allowFileAccess: false }).then(

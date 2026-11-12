@@ -130,6 +130,7 @@ export const InstallResult = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("unsupported"),
     name: Schema.String,
+    icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
     compatibility: ExtensionCompatibility,
   }),
   Schema.Struct({
