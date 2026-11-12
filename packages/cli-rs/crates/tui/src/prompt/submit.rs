@@ -66,7 +66,21 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     }
     if let Some((id, input)) = slash {
         prompt.clear(tui);
-        tui.keymap.dispatch(&id, Some(&input));
+        // After an interrupt the command runs once the server has it, as a prompt is sent; TS runs it at once
+        // (deviation O89-slash-after-interrupt).
+        match prompt.session.as_ref().and_then(|session| tui.prompt.pending_interrupt(session)) {
+            Some(pending) => {
+                tui.app.spawn(
+                    pending,
+                    bind!(tui, |tui, _, ()| {
+                        tui.keymap.dispatch(&id, Some(&input));
+                    }),
+                );
+            }
+            None => {
+                tui.keymap.dispatch(&id, Some(&input));
+            }
+        }
         return true;
     }
     // The editor context goes once, before the prompt it came with (E.5).
