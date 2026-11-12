@@ -77,6 +77,102 @@ describe("dotted tool names", () => {
   })
 })
 
+describe("host resolution", () => {
+  test.each([false, true])(
+    "settles each admitted lookup, validation and veto failure (resolver: %s)",
+    async (resolve) => {
+      const settled: Array<[string, unknown, string]> = []
+      const runtime = CodeMode.make({
+        tools: {
+          "issues.list": Tool.make({
+            description: "List issues",
+            input: Schema.Struct({ page: Schema.NumberFromString }),
+            execute: () => Effect.die("denied call reached the tool"),
+          }),
+        },
+        hooks: {
+          ...(resolve && { "tool.resolve": (call: CodeMode.ToolInvocation) => Effect.succeed(call) }),
+          "tool.before": () => Effect.fail(new Error("policy denied this call")),
+          "tool.after": (call, result) => Effect.sync(() => void settled.push([call.name, call.input, result.status])),
+        },
+      })
+      const cases = [
+        ["issues.get_list", "{}", "UnknownTool", "Did you mean tools.issues.list?"],
+        ["issues.list", "{ page: 1 }", "InvalidToolInput", "Expected string"],
+        ["issues.list", "{ page: '2' }", "ToolFailure", "policy denied this call"],
+      ] as const
+      for (const [name, args, kind, message] of cases) {
+        const result = await Effect.runPromise(runtime.execute(`await tools.${name}(${args})`))
+        expect(result).toMatchObject({
+          ok: false,
+          toolCalls: [{ name }],
+          error: { kind, message: expect.stringContaining(message) },
+        })
+      }
+      expect(settled).toEqual([
+        ["issues.get_list", {}, "failure"],
+        ["issues.list", { page: 1 }, "failure"],
+        ["issues.list", { page: 2 }, "failure"],
+      ])
+    },
+  )
+
+  test("a resolver veto rejects the script promise as a tool failure", async () => {
+    const runtime = CodeMode.make({ hooks: { "tool.resolve": () => Effect.fail(new Error("unavailable here")) } })
+    expect(await value(runtime, `return tools.missing().catch(e => e.message)`)).toBe("unavailable here")
+    expect(await failure(runtime, `await tools.missing()`)).toMatchObject({
+      kind: "ToolFailure",
+      message: "unavailable here",
+    })
+  })
+
+  test("rejects a redirect that would change how the call suspends", async () => {
+    const runtime = CodeMode.make({
+      tools: {
+        read: Tool.make({ description: "Read", input: Schema.Struct({}), execute: Tool.idempotent(() => Effect.void) }),
+      },
+      hooks: { "tool.resolve": () => Effect.succeed({ name: "read", input: {} }) },
+    })
+    expect(await failure(runtime, `await tools.missing()`)).toMatchObject({
+      kind: "InvalidToolInput",
+      message: "Cannot redirect 'missing' to 'read' across execution modes.",
+    })
+  })
+
+  test("reserves the last slot before an async rewrite and counts the attempted call once", async () => {
+    const attempts: string[] = []
+    const calls = new Set<CodeMode.ToolInvocation>()
+    const settled: string[] = []
+    const runtime = CodeMode.make({
+      tools: { available: echo("Available", "ok") },
+      limits: { maxToolCalls: 1 },
+      hooks: {
+        "tool.resolve": (call) =>
+          Effect.gen(function* () {
+            attempts.push(call.name)
+            calls.add(call)
+            yield* Effect.yieldNow
+            return { name: "available", input: call.input }
+          }),
+        "tool.before": (call) => Effect.sync(() => void calls.add(call)),
+        "tool.after": (call, result) =>
+          Effect.sync(() => {
+            calls.add(call)
+            settled.push(`${call.name}:${result.status}`)
+          }),
+      },
+    })
+    const result = await Effect.runPromise(
+      runtime.execute(`return await Promise.allSettled([tools.first(), tools.second()])`),
+    )
+    expect(attempts).toEqual(["first"])
+    expect(calls.size).toBe(1)
+    expect(settled).toEqual(["available:success"])
+    expect(result.toolCalls).toEqual([{ name: "first" }])
+    expect(result.ok && result.value).toMatchObject([{ status: "fulfilled", value: "ok" }, { status: "rejected" }])
+  })
+})
+
 describe("callable namespaces", () => {
   const runtime = CodeMode.make({
     tools: { issues: echo("All issues", "all"), "issues.list": echo("List issues", "list") },

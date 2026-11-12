@@ -501,6 +501,98 @@ const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<
 
 const row = (tool: string, status: string) => ({ tool, status })
 
+it.effect("execute returns a caught argument error with JSON-safe progress and output", () =>
+  Effect.gen(function* () {
+    const progress: Array<Tool.Metadata> = []
+    const result = yield* execute(
+      createCodeMode(new Map()),
+      { code: 'try { await tools.echo(undefined, "extra") } catch (e) { return e.message }' },
+      { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
+    )
+    const toolCalls = [{ tool: "echo", status: "error", input: { input: [null, "extra"] } }]
+    expect(progress).toStrictEqual([{ toolCalls }])
+    expect(result.metadata).toStrictEqual({ toolCalls })
+    expect(result.output).toEqual({
+      output: expect.stringContaining("expects at most one input object"),
+      toolCalls,
+      files: [],
+    })
+  }),
+)
+
+it.effect("execute snapshots plugin inputs while passing optional and noncloneable values to the tool", () =>
+  Effect.gen(function* () {
+    const input = { optional: undefined, record: { keep: "before", skip: undefined }, callback: () => "ok" }
+    const tool: Info = {
+      name: "inspect",
+      description: "Inspect plugin input",
+      input: Schema.Unknown,
+      execute: (received) => {
+        expect(received).toBe(input)
+        return Effect.succeed({ content: input.callback() })
+      },
+    }
+    const mode = CodeModeTool.create(
+      { tools: new Map([[tool.name, tool]]) },
+      (_, registration, input, context) => execute(registration, input, context),
+      allowAll,
+      (tool) => Effect.succeed({ tool, input }),
+    )
+    const result = yield* execute(mode, { code: "return await tools.inspect({})" }, context)
+    input.record.keep = "after"
+    expect(result.metadata).toStrictEqual({
+      toolCalls: [{ tool: "inspect", status: "completed", input: { record: { keep: "before" } } }],
+    })
+    expect(result.content).toEqual([{ type: "text", text: "ok" }])
+  }),
+)
+
+it.effect("publishes one running row for an unchanged call while the tool waits", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const progress: Array<Tool.Metadata> = []
+    const fiber = yield* progressCodeMode(started, Effect.never)
+      .execute(
+        { code: "await tools.wait({})" },
+        {
+          ...context,
+          progress: (update) => Effect.sync(() => progress.push(update)),
+        },
+      )
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(started)
+    yield* TestClock.adjust("100 millis")
+    expect(progress).toEqual([{ toolCalls: [row("wait", "running")] }])
+    yield* Fiber.interrupt(fiber)
+  }),
+)
+
+it.effect("interrupting execute during asynchronous repair settles the admitted row", () =>
+  Effect.gen(function* () {
+    const repairing = yield* Deferred.make<void>()
+    const progress: Array<Tool.Metadata> = []
+    const codeMode = CodeModeTool.create(
+      { tools: new Map() },
+      () => Effect.die("unexpected handler"),
+      allowAll,
+      () => Deferred.succeed(repairing, undefined).pipe(Effect.andThen(Effect.never)),
+    )
+    const fiber = yield* codeMode
+      .execute(
+        { code: "await tools.unknown()" },
+        {
+          ...context,
+          progress: (update) => Effect.sync(() => progress.push(update)),
+        },
+      )
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(repairing)
+    expect(progress).toEqual([{ toolCalls: [row("unknown", "running")] }])
+    yield* Fiber.interrupt(fiber)
+    expect(progress.at(-1)).toEqual({ toolCalls: [row("unknown", "error")] })
+  }),
+)
+
 it.effect("execute sends at most one progress update per 100 ms with the latest rows", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>()

@@ -1,19 +1,22 @@
 export * as CodeModeTool from "./tool.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
-import { CodeMode, Namespace, Tool } from "@opencode/codemode"
+import { CodeMode, Namespace, Tool, toolExpression } from "@opencode/codemode"
 import type {
   Content,
   Context as ToolContext,
-  Error,
   Info,
   Metadata,
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
+import { Error } from "@opencode/schema/tool"
+import { isRecord } from "@opencode/util/record"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { isDeepStrictEqual } from "node:util"
 import { toSessionError } from "../session/to-session-error.js"
-import { definition, normalizedName } from "../tool/runtime.js"
+import { aliasNote, definition, normalizedName } from "../tool/runtime.js"
+import { prepare, type Target } from "../tool/prepare.js"
 import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
@@ -57,12 +60,19 @@ type Tools = {
   [name: string]: Tool.Tool<Run> | Namespace.Namespace<Run> | Tools
 }
 
+type Before<C> = (name: string, input: unknown, context: C) => Effect.Effect<{ tool: string; input: unknown }, Error>
+
 // Per-execution parts of a runtime shared by every execution against the same inventory.
 class Run extends Context.Service<
   Run,
   {
-    readonly executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>
-    readonly hooks: CodeMode.Hooks
+    readonly executeTool: (name: string, tool: Info, input: unknown, key: string) => Effect.Effect<unknown, unknown>
+    readonly before?: Before<string>
+    readonly alias?: (key: string, note: string) => void
+    readonly progress?: (
+      call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation,
+      status: ExecuteCall["status"],
+    ) => Effect.Effect<void>
   }
 >()("@opencode/CodeModeTool/Run") {}
 
@@ -86,6 +96,7 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  before?: Before<ToolContext>,
 ) => {
   return {
     name: "execute",
@@ -98,6 +109,8 @@ export const create = (
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        const pendingNotes = new Map<string, string>()
+        const notes = new Set<string>()
         const lock = Semaphore.makeUnsafe(1)
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
@@ -112,7 +125,10 @@ export const create = (
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
             Effect.gen(function* () {
-              yield* Ref.update(calls, update)
+              const previous = yield* Ref.get(calls)
+              const next = update(previous)
+              if (previous === next) return
+              yield* Ref.set(calls, next)
               if (yield* Ref.get(trailing)) return
               const wait = (yield* Ref.get(publishedAt)) + 100 - (yield* Clock.currentTimeMillis)
               if (wait <= 0) return yield* publish
@@ -124,8 +140,16 @@ export const create = (
           .execute(code)
           .pipe(
             Effect.provideService(Run, {
-              executeTool: (name, tool, input) =>
+              before: before && ((name, input) => before(name, input, context)),
+              alias: (key, note) => pendingNotes.set(key, note),
+              executeTool: (name, tool, input, key) =>
                 Effect.gen(function* () {
+                  // Resolution or validation can still reject a repair before the target runs.
+                  const note = pendingNotes.get(key)
+                  if (note !== undefined) {
+                    pendingNotes.delete(key)
+                    notes.add(note)
+                  }
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
                   // The program sees the same failure text the model gets for a direct call.
                   const executed = yield* executeTool(name, tool, input, {
@@ -143,7 +167,7 @@ export const create = (
                     yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
                   return resultValue(executed)
                 }),
-              hooks: progressHooks(record),
+              progress: progressRows(record),
             }),
             // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
             Effect.onError(() =>
@@ -157,15 +181,15 @@ export const create = (
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
-        const output = formatResult(result)
         const value: typeof ExecuteOutput.Type = {
-          output,
+          output: formatResult(result),
           toolCalls,
           files: collected,
           ...(result.ok ? {} : { error: true }),
         }
         const content: Array<Content> = [
           { type: "text", text: value.output },
+          ...Array.from(notes, (text) => ({ type: "text" as const, text })),
           ...value.files.map((file) => ({
             type: "file" as const,
             uri: `data:${file.mime};base64,${file.data}`,
@@ -186,40 +210,20 @@ export const create = (
   } satisfies Info
 }
 
-// Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
+// The runtime carries one call object from admission to settlement, including across a repair.
+function progressRows(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<void>) {
   const rows = new WeakMap<object, number>()
-  const start = (call: object, entry: ExecuteCall) =>
-    record((items) => {
+  return (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation, status: ExecuteCall["status"]) => {
+    if ("extension" in call && call.name !== "fetch") return Effect.void
+    const input = displayInput(call)
+    const entry = { tool: call.name, status, ...(input ? { input } : {}) }
+    return record((items) => {
+      const index = rows.get(call)
+      if (index !== undefined) return isDeepStrictEqual(items[index], entry) ? items : items.with(index, entry)
       rows.set(call, items.length)
       return [...items, entry]
     })
-  const settle = (call: object, result: CodeMode.CallResult) => {
-    const index = rows.get(call)
-    if (index === undefined) return Effect.void
-    return record((items) => {
-      const next = [...items]
-      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
-      return next
-    })
   }
-  return {
-    "tool.before": (call) => {
-      const shown = displayInput(call.input)
-      return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) })
-    },
-    "tool.after": settle,
-    // Only listed extension functions get a row; anything else stays out of the TUI.
-    "extension.before": (call) => {
-      switch (call.name) {
-        case "fetch":
-          return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
-        default:
-          return Effect.void
-      }
-    },
-    "extension.after": settle,
-  } satisfies CodeMode.Hooks
 }
 
 export const catalog = (inventory: Inventory) => {
@@ -275,11 +279,10 @@ const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
-  const tools = inventoryTools(inventory)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
-    tools,
+  const entries = inventoryTools(inventory)
+  const created = CodeMode.make<typeof entries.tools, [typeof CodeModeFetch.extension]>({
+    ...entries,
     extensions: [CodeModeFetch.extension],
-    hooks: runHooks,
   })
   runtimes.set(inventory, created)
   return created
@@ -293,36 +296,42 @@ export const check = (
   code: string,
   bindings: Readonly<Record<string, CodeMode.DataValue>>,
   limits: CodeMode.ExecutionLimits,
-  executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
+  executeTool: (name: string, tool: Info, input: unknown, key: string) => Effect.Effect<Result, Error>,
+  before?: Before<string>,
 ) =>
   CodeMode.make({
-    tools: inventoryTools(inventory),
-    hooks: runHooks,
+    ...inventoryTools(inventory),
     limits,
   })
     .execute(code, bindings)
     .pipe(
       Effect.provideService(Run, {
-        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
-        hooks: {},
+        before,
+        executeTool: (name, tool, input, key) => executeTool(name, tool, input, key).pipe(Effect.map(resultValue)),
       }),
     )
 
 function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
+  const paths = new Map<string, Target>()
+  const ids = new Map<string, Target>()
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
     const child = definition(registration)
-    getNode(root, qualifiedName(registration)).tool = Tool.make({
+    const path = qualifiedName(registration)
+    const target = { tool: registration, definition: child }
+    paths.set(path, target)
+    ids.set(name, target)
+    getNode(root, path).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
       freeform: registration.freeform !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
-      execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
+      execute: (input, { key }) => Run.use((run) => run.executeTool(name, registration, input, key)),
     })
   }
-  return renderTools(root)
+  return { tools: renderTools(root), hooks: runHooks(paths, ids) }
 }
 
 function resultContent(executed: Result) {
@@ -339,12 +348,44 @@ function resultValue(executed: Result) {
   return text === "" ? null : text
 }
 
-const runHooks = {
-  "tool.before": (call) => Run.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
-  "tool.after": (call, result) => Run.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
-  "extension.before": (call) => Run.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
-  "extension.after": (call, result) => Run.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
-} satisfies CodeMode.Hooks<Run>
+function runHooks(paths: ReadonlyMap<string, Target>, ids: ReadonlyMap<string, Target>): CodeMode.Hooks<Run> {
+  const running = (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation) =>
+    Run.use((run) => run.progress?.(call, "running") ?? Effect.void)
+  const settled = (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation, result: CodeMode.CallResult) =>
+    Run.use((run) => run.progress?.(call, result.status === "success" ? "completed" : "error") ?? Effect.void)
+  return {
+    "tool.resolve": (call) =>
+      Run.use((run) =>
+        Effect.gen(function* () {
+          if (run.progress) yield* run.progress(call, "running")
+          const before = run.before
+          if (!before) return call
+          const original = paths.get(call.name)
+          const requested = original?.definition.name ?? call.name
+          const selected = yield* prepare(
+            requested,
+            call.input,
+            (name) => {
+              // The script must use a catalog path. Only a plugin redirect can select by registration ID.
+              return name === requested ? original : (ids.get(name) ?? paths.get(name))
+            },
+            (name, input) => before(name, input, call.key),
+          )
+          if (!selected.target) {
+            if (selected.name === requested) return { name: call.name, input: selected.input }
+            return yield* new Error({ message: `Tool is not available for this request: ${selected.name}` })
+          }
+          const name = qualifiedName(selected.target.tool)
+          if (original === undefined) run.alias?.(call.key, aliasNote(toolExpression(call.name), toolExpression(name)))
+          return { name, input: selected.input }
+        }),
+      ),
+    "tool.before": running,
+    "tool.after": settled,
+    "extension.before": running,
+    "extension.after": settled,
+  }
+}
 
 function getNode<T>(root: Node<T>, path: string) {
   return path.split(".").reduce((parent, name) => {
@@ -406,12 +447,36 @@ export function qualifiedName(registration: Info) {
   return `${registration.options.namespace}.${normalized}`
 }
 
-// Tool inputs arrive as parsed JSON, so the JSON value cast is a boundary fact.
-function displayInput(input: unknown): Record<string, typeof Schema.Json.Type> | undefined {
-  if (input === null || input === undefined) return
-  if (typeof input !== "object" || Array.isArray(input)) return { input: input as typeof Schema.Json.Type }
-  if (Object.keys(input).length === 0) return
-  return input as Record<string, typeof Schema.Json.Type>
+function displayInput(call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation): ExecuteCall["input"] {
+  try {
+    if ("extension" in call) return CodeModeFetch.display(call.args)
+    const value = snapshot(call.input, new Set())
+    if (value === undefined || value === null) return
+    if (!isRecord(value)) return { input: value }
+    return Object.keys(value).length ? value : undefined
+  } catch {
+    // An opaque plugin value can reject inspection. The status row is still useful without its input.
+    return undefined
+  }
+}
+
+// Copy only data properties: displaying a plugin object must not invoke its getters or toJSON method.
+function snapshot(value: unknown, parents: Set<object>): Schema.Json | undefined {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (typeof value !== "object" || parents.has(value)) return
+  parents.add(value)
+  const property = (key: string | number) => snapshot(Object.getOwnPropertyDescriptor(value, key)?.value, parents)
+  const result = Array.isArray(value)
+    ? Array.from({ length: value.length }, (_, i) => property(i) ?? null)
+    : Object.fromEntries(
+        Object.keys(value).flatMap((key) => {
+          const item = property(key)
+          return item === undefined ? [] : [[key, item]]
+        }),
+      )
+  parents.delete(value)
+  return result
 }
 
 function formatResult(result: CodeMode.Result) {
