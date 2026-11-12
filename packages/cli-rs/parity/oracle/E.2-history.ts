@@ -8,10 +8,25 @@
 // The provider loads <state>/prompt-history.jsonl first, which rewrites the file as TypeScript
 // serializes it. Prints one JSON array of results.
 
-import { existsSync, statSync } from "node:fs"
+import { mock } from "bun:test"
+import { existsSync, readFileSync } from "node:fs"
+import fs from "node:fs/promises"
 
 const [root, state] = process.argv.slice(2)
 if (!root || !state) throw new Error("usage: E.2-history.ts <ts-root> <state>")
+
+// The load's rewrite (`writeText`, a `writeFile`) is not awaited, and an append that lands before it ends is
+// lost. Neither the file's time nor its text tells when it ended: a rewrite of the same entries writes the same
+// bytes and then truncates. So the writes are counted where they run, before the TUI modules load.
+const writes = { started: 0, pending: 0 }
+mock.module("node:fs/promises", () => ({
+  ...fs,
+  writeFile: (...args: Parameters<typeof fs.writeFile>) => {
+    writes.started++
+    writes.pending++
+    return fs.writeFile(...args).finally(() => writes.pending--)
+  },
+}))
 
 const load = (spec: string) => import(Bun.resolveSync(spec, `${root}/packages/tui/src`))
 const tui = `${root}/packages/tui`
@@ -22,8 +37,8 @@ const { PromptHistoryProvider, usePromptHistory } = await load("./prompt/history
 const ops = await Bun.stdin.json()
 
 let history: { move(direction: 1 | -1, input: string): { text: string } | undefined; append(item: unknown): void }
-// File times come from a coarse clock that can trail `Date.now()`, so the rewrite is told by a changed time.
-const written = existsSync(`${state}/prompt-history.jsonl`) ? statSync(`${state}/prompt-history.jsonl`).mtimeMs : 0
+// What the provider reads on mount, read before its rewrite can change the file.
+const before = existsSync(`${state}/prompt-history.jsonl`) ? readFileSync(`${state}/prompt-history.jsonl`, "utf8") : ""
 const app = await testRender(() =>
   createComponent(TuiPathsProvider, {
     value: { cwd: state, home: state, state, worktree: state },
@@ -48,7 +63,7 @@ const until = async (what: string, done: () => Promise<boolean> | boolean) => {
 }
 // The provider reads the file on mount; wait until an existing file's entries are in.
 const file = Bun.file(`${state}/prompt-history.jsonl`)
-if ((await file.exists()) && (await file.text()).trim()) {
+if (before.trim()) {
   let newest = history!.move(-1, "")
   await until("the load", () => {
     newest ??= history!.move(-1, "")
@@ -56,8 +71,8 @@ if ((await file.exists()) && (await file.text()).trim()) {
   })
   // Back to the end, where the ops start.
   if (newest) history!.move(1, newest.text)
-  // The load's rewrite is not awaited, and an append that lands before it is lost: wait for it.
-  await until("the load's rewrite", () => statSync(file.name!).mtimeMs !== written)
+  // A file with entries is rewritten on load: wait until that write has ended.
+  await until("the load's rewrite", () => writes.started > 0 && writes.pending === 0)
 }
 
 const output: unknown[] = []
