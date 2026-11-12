@@ -1,9 +1,11 @@
 export * as BrowserConnection from "./connection.js"
 
+import { hostname } from "node:os"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
+import { Location } from "@opencode/schema/location"
 import type { Permission } from "@opencode/schema/permission"
-import type { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { BrowserMachine } from "./machine.js"
@@ -17,8 +19,50 @@ type Attachment = {
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
 
+/** The server process that wrote a session's grant, stored as `grant:<sessionID>` until its revoke succeeds. */
+const GrantOwner = Schema.Struct({ host: Schema.String, pid: Schema.Number, location: Location.Ref })
+
+const GRANT_PREFIX = "grant:"
+
+/**
+ * A crash or SIGKILL skips the revokes, so a session keeps its grant with no attachment behind it. Revokes the grants
+ * this location's servers recorded, except those of a process that still runs: several servers can share one
+ * database, and another one's attachment may be live. Runs before the RPC registers, so no attach here can race it.
+ */
+export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleGrants")(function* (ctx: {
+  readonly session: Pick<Context["session"], "get" | "update">
+  readonly storage: Pick<Context["storage"], "scan" | "remove">
+  readonly location: Pick<Context["location"], "directory" | "workspaceID">
+}) {
+  const revoke = (entry: { readonly key: string; readonly value: Schema.Json }) => {
+    const owner = Schema.decodeUnknownOption(GrantOwner)(entry.value)
+    if (
+      Option.isNone(owner) ||
+      owner.value.location.directory !== ctx.location.directory ||
+      owner.value.location.workspaceID !== ctx.location.workspaceID ||
+      running(owner.value)
+    )
+      return Effect.void
+    return writePermissions(ctx, Session.ID.make(entry.key.slice(GRANT_PREFIX.length)), false).pipe(
+      Effect.ignore,
+      Effect.andThen(ctx.storage.remove(entry.key)),
+    )
+  }
+  const page = (after?: string): Effect.Effect<void> =>
+    ctx.storage
+      .scan({ prefix: GRANT_PREFIX, after })
+      .pipe(
+        Effect.flatMap((result) =>
+          Effect.forEach(result.entries, revoke, { discard: true }).pipe(
+            Effect.andThen(result.next === undefined ? Effect.void : page(result.next)),
+          ),
+        ),
+      )
+  yield* page()
+})
+
 export const make = Effect.fn("BrowserConnection.make")(function* (
-  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event" | "permission">,
+  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event" | "permission" | "storage">,
 ) {
   // Each agent's rules from config and its definition, which an attachment's grant must not override.
   const configured = new Map<string, readonly Permission.Rule[]>()
@@ -86,15 +130,24 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     if (effect.type === "warn") return Effect.logWarning(effect.message, effect.error)
     return Deferred.done(drained, Exit.void).pipe(Effect.asVoid)
   }
-  const writePermissions = (sessionID: Session.ID, allow: boolean) =>
-    ctx.session.get({ sessionID }).pipe(
-      Effect.flatMap((session) => {
-        const permissions = BrowserMachine.reconcileBrowserPermissions(session.permissions, allow)
-        return permissions ? ctx.session.update({ sessionID, permissions }) : Effect.void
-      }),
-    )
+  const owner: typeof GrantOwner.Encoded = {
+    host: hostname(),
+    pid: process.pid,
+    location: {
+      directory: ctx.location.directory,
+      ...(ctx.location.workspaceID === undefined ? {} : { workspaceID: ctx.location.workspaceID }),
+    },
+  }
   const syncPermissions = (effect: Extract<BrowserMachine.ConnectionEffect, { readonly type: "sync-permissions" }>) =>
-    writePermissions(effect.sessionID, effect.allow).pipe(
+    // The owner is recorded before the grant and forgotten after the revoke, so a stored grant always has one.
+    (effect.allow
+      ? ctx.storage
+          .set(GRANT_PREFIX + effect.sessionID, owner)
+          .pipe(Effect.andThen(writePermissions(ctx, effect.sessionID, true)))
+      : writePermissions(ctx, effect.sessionID, false).pipe(
+          Effect.andThen(ctx.storage.remove(GRANT_PREFIX + effect.sessionID)),
+        )
+    ).pipe(
       Effect.timeoutOption(Duration.millis(BrowserMachine.PERMISSION_SYNC_TIMEOUT_MS)),
       Effect.matchCauseEffect({
         onSuccess: (done) =>
@@ -122,6 +175,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       ? Effect.succeed(attachment.tunnels)
       : Effect.fail(new Error("Browser attachment is unavailable; its network connections were closed."))
   }
+  yield* reconcileStaleGrants(ctx)
   const rpc: RpcRegistration<typeof Browser.Definition> = yield* ctx.rpc
     .register(Browser.Definition, {
       attach: (input, call) =>
@@ -226,7 +280,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
               Effect.suspend(() =>
                 BrowserMachine.hasSession(machine.state, session.id)
                   ? Effect.void
-                  : writePermissions(session.id, false),
+                  : writePermissions(ctx, session.id, false),
               ),
             ),
       ),
@@ -330,3 +384,28 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     }),
   }
 })
+
+function writePermissions(
+  ctx: { readonly session: Pick<Context["session"], "get" | "update"> },
+  sessionID: Session.ID,
+  allow: boolean,
+) {
+  return ctx.session.get({ sessionID }).pipe(
+    Effect.flatMap((session) => {
+      const permissions = BrowserMachine.reconcileBrowserPermissions(session.permissions, allow)
+      return permissions ? ctx.session.update({ sessionID, permissions }) : Effect.void
+    }),
+  )
+}
+
+// A process on another host, such as another container on a shared volume, cannot be checked; its grants count as live.
+// A reused process ID also counts as live, which only leaves a stale grant in place.
+function running(owner: typeof GrantOwner.Type) {
+  if (owner.host !== hostname()) return true
+  try {
+    process.kill(owner.pid, 0)
+    return true
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM"
+  }
+}

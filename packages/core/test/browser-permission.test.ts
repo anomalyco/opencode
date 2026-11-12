@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { hostname } from "os"
 import path from "path"
 import { Context, Deferred, Effect, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
@@ -9,20 +10,23 @@ import { Global } from "@opencode/util/global"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
+import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
+import { BrowserConnection } from "../../plugin-browser/src/connection"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Session.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, KV.node, Session.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
   ]),
@@ -77,6 +81,8 @@ const setup = (config: object) =>
     )
     if (!list) return yield* Effect.die(new Error("browser.tabs.list is not registered"))
     return {
+      context,
+      ref,
       session,
       commands,
       attach,
@@ -172,5 +178,57 @@ it.live("a subagent whose agent denies the browser stays denied, even with a bro
     expect(yield* browser.permissions(child.id)).toEqual([...grant])
     expect((yield* browser.call("reviewer", child.id).pipe(Effect.flip)).message).toStartWith("[browser.denied]")
     expect(browser.commands.count).toBe(0)
+  }),
+)
+
+// No process has this ID: it is odd, so not a Windows process ID, and above Linux's and macOS's limits.
+const exited = 4_194_305
+const owner = (directory: string, pid: number, host = hostname()) => ({ host, pid, location: { directory } })
+
+it.live("startup revokes a grant whose server no longer runs", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+    const storage = PluginHost.storage(yield* KV.Service, "opencode.browser")
+    const sessionID = Session.ID.create()
+    // What a server killed while attached leaves behind: the grant and the record of the process that wrote it.
+    yield* storage.set(`grant:${sessionID}`, owner(ref.directory, exited))
+    const sessions = yield* Session.Service
+    yield* sessions.create({ id: sessionID, location: ref, permissions: [...grant] })
+    const locations = yield* LocationServiceMap.Service
+    yield* Plugin.awaitActivation.pipe(Effect.provideContext(yield* locations.contextEffect(ref).pipe(Effect.scoped)))
+
+    expect((yield* sessions.get(sessionID)).permissions).toEqual([])
+    expect(yield* storage.get(`grant:${sessionID}`)).toBeUndefined()
+  }),
+)
+
+it.live("another server's startup leaves a live attachment's grant in place", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({})
+    const sessions = yield* Session.Service
+    const storage = PluginHost.storage(yield* KV.Service, "opencode.browser")
+    const stale = yield* sessions.create({ location: browser.ref, permissions: [...grant] })
+    yield* storage.set(`grant:${stale.id}`, owner(browser.ref.directory, exited))
+    const remote = yield* sessions.create({ location: browser.ref, permissions: [...grant] })
+    yield* storage.set(`grant:${remote.id}`, owner(browser.ref.directory, exited, "other-host"))
+
+    // A second server for this location, sharing the database, starts and sweeps.
+    yield* BrowserConnection.reconcileStaleGrants({
+      session: {
+        get: (input) => sessions.get(input.sessionID),
+        update: (input) =>
+          sessions.setPermissions({ sessionID: input.sessionID, permissions: input.permissions ?? [] }),
+      },
+      storage,
+      location: browser.ref,
+    })
+
+    // The live grant is recorded with this process, which still runs.
+    expect(yield* storage.get(`grant:${browser.session.id}`)).toEqual(owner(browser.ref.directory, process.pid))
+    expect(yield* browser.permissions()).toEqual([...grant])
+    expect(yield* browser.permissions(stale.id)).toEqual([])
+    expect(yield* browser.permissions(remote.id)).toEqual([...grant])
+    expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
   }),
 )
