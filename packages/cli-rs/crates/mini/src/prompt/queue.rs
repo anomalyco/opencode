@@ -56,11 +56,6 @@ impl Queue {
         self.active.is_some()
     }
 
-    /// The running turn, if it is a shell command.
-    pub fn shell_running(&self) -> bool {
-        matches!(&self.active, Some(Some(prompt)) if prompt.shell)
-    }
-
     /// `submit`.
     pub fn submit(&mut self, prompt: RunPrompt) -> Submitted {
         if self.closed || (prompt.text.trim().is_empty() && (prompt.shell || !prompt.has_file())) {
@@ -156,6 +151,13 @@ mod tests {
 
     fn text(text: &str) -> RunPrompt {
         RunPrompt::text(text)
+    }
+
+    impl Queue {
+        /// The running turn, if it is a shell command.
+        fn shell_running(&self) -> bool {
+            matches!(&self.active, Some(Some(prompt)) if prompt.shell)
+        }
     }
 
     #[test]

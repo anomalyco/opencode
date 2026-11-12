@@ -165,26 +165,6 @@ impl Tabs {
         tui.data.read(|state| status(state, &SessionID(session.to_owned()), pulse))
     }
 
-    /// Recently closed tabs that are not open again, newest first, with their current titles.
-    pub fn recently_closed(&self, tui: &Tui) -> Vec<Tab> {
-        let open = self.tabs(tui);
-        let closed = self.closed.borrow().clone();
-        tui.data.read(|state| {
-            closed
-                .into_iter()
-                .rev()
-                .filter(|entry| !open.iter().any(|tab| tab.session_id == entry.tab.session_id))
-                .map(|entry| Tab {
-                    title: state
-                        .session(&SessionID(entry.tab.session_id.clone()))
-                        .and_then(|session| session.title.clone())
-                        .or(entry.tab.title),
-                    session_id: entry.tab.session_id,
-                })
-                .collect()
-        })
-    }
-
     /// The groups of `session` the reader opened or closed, by group ID (E.8, `sessionTabs.groupExpanded`). They
     /// outlive the session's view.
     pub fn expanded_groups(&self, session: &str) -> HashMap<String, bool> {

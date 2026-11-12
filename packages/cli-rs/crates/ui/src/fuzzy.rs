@@ -74,19 +74,6 @@ pub fn go_cached<T, const N: usize>(
     scan(search, targets, keys, |keys, _, _| score(keys), threshold, usize::MAX, Some(cache))
 }
 
-/// fuzzysort's default score over several keys: the best key, with a bonus for matching more than one.
-pub fn best_key<const N: usize>(scores: &[f64; N]) -> f64 {
-    let mut best = NEG;
-    for &score in scores {
-        let raw = denormalize(score);
-        if raw > -1000.0 && best > NEG {
-            best = best.max((best + raw) / 4.0);
-        }
-        best = best.max(raw);
-    }
-    normalize(best)
-}
-
 /// [`go`] whose `score` also gets fuzzysort's own normalized score for the target, the `objResults.score` a
 /// TS `scoreFn` reads (the best key, with a bonus for matching several), and the target's index. At most
 /// `limit` results are kept, as fuzzysort's `limit` keeps them, ties included.
