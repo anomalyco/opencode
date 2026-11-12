@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use opencode_tui::Deps;
+use opencode_ui::path::Flavor;
 use serde_json::{Value, json};
 
 fn fake() -> Fake {
@@ -51,8 +52,9 @@ fn fake() -> Fake {
             200,
             list(DIRECTORY, json!([{ "path": "src/main.rs", "type": "file" }, { "path": "src", "type": "directory" }])),
         ),
+        // On Windows a listed subdirectory is `path.resolve`d with `\`.
         ("GET", "/api/fs/list") => {
-            let entries = match seen.param("path").as_str() {
+            let entries = match seen.param("path").replace('\\', "/").as_str() {
                 "/project" => json!([
                     { "path": "packages", "type": "directory" }, { "path": ".git", "type": "directory" },
                     { "path": "README.md", "type": "file" },
@@ -316,9 +318,11 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
     assert!(searched, "{:?}", setup.requests("GET", "/api/fs/find"));
     setup.app.press("return");
     assert_eq!(setup.text(), "@src/main.rs ");
-    let frecency = setup.wait_file("frecency.jsonl", "/project/src/main.rs");
+    // `path.resolve(cwd, path)`: `\project\src\main.rs` on Windows.
+    let main = Flavor::NATIVE.resolve(&[DIRECTORY, "src/main.rs"]);
+    let frecency = setup.wait_file("frecency.jsonl", &serde_json::to_string(&main).unwrap());
     let line: Value = serde_json::from_str(frecency.lines().next().unwrap()).unwrap();
-    assert_eq!(line["path"], "/project/src/main.rs");
+    assert_eq!(line["path"], main);
     assert_eq!(line["frequency"], 1);
 
     // A line range goes into the name and the URI.
@@ -396,9 +400,10 @@ fn cd_completes_directories_moves_the_session_and_keeps_recents() {
     setup.app.press("return");
     let moves = setup.wait_request("POST", "/api/session/ses_a/move", 1);
     assert_eq!(moves[0].1["directory"], "packages/tui/");
-    let recents = setup.wait_file("latest/tui/directory-recents.json", "/project/packages/tui");
+    let tui = Flavor::NATIVE.resolve(&[DIRECTORY, "packages/tui/"]);
+    let recents = setup.wait_file("latest/tui/directory-recents.json", &serde_json::to_string(&tui).unwrap());
     let recents: Value = serde_json::from_str(&recents).unwrap();
-    assert_eq!(recents["projects"]["project"][0]["directory"], "/project/packages/tui");
+    assert_eq!(recents["projects"]["project"][0]["directory"], tui);
 
     // An empty argument lists recents first; Ctrl+D twice forgets one.
     setup.app.type_text("/cd ");
