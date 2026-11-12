@@ -4,9 +4,13 @@
 // title, image or template gives it a new URL and link previews refresh. Cards are English at
 // every locale.
 //
-// OG Studio (a local design tool) can replace any card. It writes finished files and a manifest to
-// src/asset/og-studio/: for each page an English PNG, an optional MP4 for og:video and an optional
-// PNG for each locale. Pages in that manifest use its files; every other page renders here.
+// OG Studio (a local design tool) can replace any card. For each page it makes an English PNG, an
+// optional MP4 for og:video and an optional PNG for each locale, and writes a manifest to
+// src/asset/og-studio/manifest.json. Pages in that manifest use its files; every other page renders
+// here. A version 2 manifest has a `base` (/files/site/og): OG Studio uploads the files to the
+// files bucket there (MEDIA.md) and only the manifest is in git, so pages link `${base}/<file>`
+// and nothing is copied. A manifest without `base` (version 1) keeps its files beside it, and they
+// are copied into public/og/.
 //
 // This file is the cards' source of truth. The layout is David's template frame in Paper (the
 // "OG images" file, frame "/ — dark"): a grid of #2e2e2e lines at x 72, 900 and 1128 and y 72,
@@ -202,19 +206,25 @@ const fonts = [
 await mkdir(out, { recursive: true })
 const manifest: Record<string, OgEntry> = {}
 const studio = await readStudio()
+const studioBase = studio?.base?.replace(/\/+$/, "") ?? "/og"
 for (const [page, entry] of Object.entries(studio?.cards ?? {})) {
-  const files = [entry.image, entry.video, ...Object.values(entry.locales ?? {}).map((l) => l.image)].filter(
-    (file): file is string => Boolean(file),
-  )
-  await Promise.all(files.map((file) => Bun.write(path.join(out, file), Bun.file(path.join(root, STUDIO, file)))))
+  if (!studio?.base) {
+    const files = [entry.image, entry.video, ...Object.values(entry.locales ?? {}).map((l) => l.image)].filter(
+      (file): file is string => Boolean(file),
+    )
+    await Promise.all(files.map((file) => Bun.write(path.join(out, file), Bun.file(path.join(root, STUDIO, file)))))
+  }
   manifest[page] = {
-    src: `/og/${entry.image}`,
+    src: `${studioBase}/${entry.image}`,
     alt: entry.alt,
-    ...(entry.video ? { video: `/og/${entry.video}` } : {}),
+    ...(entry.video ? { video: `${studioBase}/${entry.video}` } : {}),
     ...(entry.locales
       ? {
           locales: Object.fromEntries(
-            Object.entries(entry.locales).map(([locale, l]) => [locale, { src: `/og/${l.image}`, alt: l.alt }]),
+            Object.entries(entry.locales).map(([locale, l]) => [
+              locale,
+              { src: `${studioBase}/${l.image}`, alt: l.alt },
+            ]),
           ),
         }
       : {}),
@@ -244,11 +254,15 @@ await Promise.all(
   (await readdir(out)).filter((file) => !keep.has(file)).map((file) => rm(path.join(out, file), { force: true })),
 )
 await Bun.write(path.join(root, "src/lib/og-images.json"), JSON.stringify(manifest, null, 2) + "\n")
-console.log(`og: ${Object.keys(manifest).length} cards in public/og (${Object.keys(studio?.cards ?? {}).length} from OG Studio)`)
+console.log(
+  `og: ${Object.keys(manifest).length} cards (${Object.keys(studio?.cards ?? {}).length} from OG Studio${studio?.base ? ` at ${studioBase}` : ""})`,
+)
 
 type OgEntry = { src: string; alt: string; video?: string; locales?: Record<string, { src: string; alt: string }> }
 
 type Studio = {
+  /** Version 2: where the files are served (the files bucket's /files/site/og). */
+  base?: string
   cards: Record<string, { image: string; alt: string; video?: string; locales?: Record<string, { image: string; alt: string }> }>
 }
 

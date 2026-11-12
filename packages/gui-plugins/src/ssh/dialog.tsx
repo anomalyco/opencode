@@ -99,6 +99,16 @@ export function DialogSsh(props: {
     submit()
   }
 
+  const ConnectionError = () => (
+    <Show when={view().error}>
+      {(error) => (
+        <span id="ssh-error" class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
+          {plugin.t(error())}
+        </span>
+      )}
+    </Show>
+  )
+
   return (
     <Dialog fit class="settings-server-dialog">
       <DialogHeader hideClose={true}>
@@ -127,9 +137,11 @@ export function DialogSsh(props: {
                 autocomplete="off"
                 disabled={view().inputsDisabled}
                 invalid={!!view().error}
+                aria-describedby={view().error ? "ssh-error" : undefined}
                 onInput={(event) => dispatch({ type: "target.changed", value: event.currentTarget.value })}
                 onKeyDown={keyDown}
               />
+              <ConnectionError />
             </div>
             <div class="flex w-full min-w-0 flex-col gap-2">
               <label class="settings-server-dialog-label" for="ssh-name">
@@ -158,9 +170,13 @@ export function DialogSsh(props: {
           <Show when={prompt()} keyed>
             {(prompt) => (
               <div class="flex w-full min-w-0 flex-col gap-2">
-                <pre id="ssh-prompt" class="ssh-prompt" dir="auto">
+                <p
+                  id="ssh-prompt"
+                  class="settings-server-dialog-label max-h-[200px] overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] select-text"
+                  dir="auto"
+                >
                   {prompt.text}
-                </pre>
+                </p>
                 <Show when={!prompt.confirm}>
                   <TextInput
                     id="ssh-response"
@@ -192,12 +208,8 @@ export function DialogSsh(props: {
               </div>
             )}
           </Show>
-          <Show when={view().error}>
-            {(error) => (
-              <span class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
-                {plugin.t(error())}
-              </span>
-            )}
+          <Show when={!view().showForm}>
+            <ConnectionError />
           </Show>
         </div>
       </DialogBody>

@@ -814,6 +814,74 @@ test("Recent shows the last 7 days, and Show more reveals 30 more rows, fetching
   await expect(more).toBeHidden()
 })
 
+test("Recent keeps the server's order from its last reload, which a run end or window focus triggers", async ({
+  page,
+}) => {
+  const t = Date.now() - 60_000
+
+  const workspace = await mockWorkspace(page, {
+    name: "RecentOrder",
+    sessions: [
+      { ...a, time: { created: t, updated: t, idle: t } },
+      { ...b, time: { created: t + 1, updated: t + 1, idle: t + 1 } },
+    ],
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: sessionHref(a.id, "sidecar") })}`,
+  )
+
+  const recent = page.locator('[data-slot="sidebar-recent"]').getByRole("group", { name: "Recent", exact: true })
+  const rows = recent.locator("[data-titlebar-tab-slot]")
+
+  // The mock serves these records, so changing one changes what the next list reload returns.
+  const advance = (id: string, time: { updated: number; idle?: number }, title?: string) => {
+    const session = workspace.sessions.find((item) => item.id === id)
+
+    if (!session) throw new Error(`Unknown session ${id}`)
+
+    Object.assign(session, { title: title ?? session.title, time: { ...session.time, ...time } })
+  }
+
+  await expect(rows).toHaveText([/Tab B session/, /Tab A session/])
+
+  // Renaming advances the server's time, but the row stays where the last reload put it.
+  advance(a.id, { updated: t + 2 }, "Renamed A session")
+  await workspace.push([
+    {
+      id: "evt_recent_order_rename",
+      created: t + 2,
+      type: "session.renamed",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: a.id, seq: 1, version: 1 },
+      data: { sessionID: a.id, title: "Renamed A session" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.renamed" }>,
+  ])
+  await expect(rows.first()).toContainText("Tab B session")
+  await expect(rows.last()).toContainText("Renamed A session")
+
+  // The window coming back reloads the list, as the iOS app does when it returns to the foreground.
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+  await expect(rows).toHaveText([/Renamed A session/, /Tab B session/])
+
+  advance(b.id, { updated: t + 3, idle: t + 3 })
+  await workspace.push([
+    {
+      id: "evt_recent_order_run_end",
+      created: t + 3,
+      type: "session.execution.succeeded",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: b.id, seq: 1, version: 1 },
+      data: { sessionID: b.id },
+    } satisfies Extract<OpenCodeEvent, { type: "session.execution.succeeded" }>,
+  ])
+  await expect(rows).toHaveText([/Tab B session/, /Renamed A session/])
+})
+
 test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {
   // Playwright emulates focus for each page, so model a background window explicitly.
   await page.addInitScript(() => {

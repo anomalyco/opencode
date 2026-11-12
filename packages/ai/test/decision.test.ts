@@ -292,6 +292,67 @@ describe("Decision", () => {
       ),
   )
 
+  it.effect("sends PDFs as file parts and audio by its OpenRouter format name in the OpenRouter state", () =>
+    ai.decision
+      .generate({
+        model: OpenRouter.configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
+          "google/gemini-decision-1",
+        ),
+        input: [
+          { type: "media", media: Media.base64("JVBE", "application/pdf"), filename: "invoice.pdf" },
+          { type: "media", media: Media.base64("AAAA", "audio/x-wav") },
+        ],
+        questions: [{ name: "refund", type: "predicate", instructions: "Is this a refund request?" }],
+      })
+      .pipe(
+        Effect.provide(
+          client((input) => {
+            expect(JSON.parse(input.text).state).toEqual([
+              { type: "file", file: { file_data: "data:application/pdf;base64,JVBE", filename: "invoice.pdf" } },
+              { type: "input_audio", input_audio: { data: "AAAA", format: "wav" } },
+            ])
+            return Effect.succeed(
+              json(input, { model: "google/gemini-decision-1", answers: { refund: { type: "noul", noul: 0.9 } } }),
+            )
+          }),
+        ),
+      ),
+  )
+
+  it.effect("returns a System One host's refusals as per-question errors", () =>
+    ai.decision
+      .generate({
+        model: OpenRouter.configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
+          "openai/gpt-6-luna-decisions",
+        ),
+        input: [{ type: "text", text: "hello" }],
+        questions: [
+          { name: "greeting", type: "predicate", instructions: "Is this a greeting?" },
+          { name: "unsafe", type: "predicate", instructions: "Something the model declines" },
+        ],
+      })
+      .pipe(
+        Effect.tap((response) =>
+          Effect.sync(() =>
+            expect(response.answers).toEqual([
+              { name: "greeting", type: "predicate", probability: 0.99 },
+              { name: "unsafe", type: "error", reason: "refusal" },
+            ]),
+          ),
+        ),
+        Effect.provide(
+          client((input) =>
+            Effect.succeed(
+              json(input, {
+                model: "openai/gpt-6-luna-decisions",
+                answers: { greeting: { type: "noul", noul: 0.99 }, unsafe: { type: "refusal" } },
+              }),
+            ),
+          ),
+        ),
+      ),
+  )
+
   it.effect("puts media in a user message inside the Baseten state", () =>
     ai.decision
       .generate({

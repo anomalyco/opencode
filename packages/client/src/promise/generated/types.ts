@@ -2121,6 +2121,24 @@ export type McpResourcesChanged = {
   data: { server: string }
 }
 
+export type ExperimentalMcpEvent = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "experimental.mcp.event"
+  location?: LocationRef
+  data: {
+    id: string
+    server: string
+    name: string
+    eventId: string
+    timestamp: string
+    data: JsonValue
+    cursor: string | null
+    truncated?: boolean | undefined
+  }
+}
+
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2963,6 +2981,7 @@ export type V2Event =
   | VcsBranchUpdated
   | McpStatusChanged
   | McpResourcesChanged
+  | ExperimentalMcpEvent
   | V2EventRpc
   | V2EventServerConnected
 
@@ -4461,6 +4480,7 @@ export type EventSubscribeInput = {
         | "vcs.branch.updated"
         | "mcp.status.changed"
         | "mcp.resources.changed"
+        | "experimental.mcp.event"
         | `${"rpc."}${string}`
       >
     | undefined
