@@ -96,8 +96,20 @@ impl Shared {
     }
 
     /// The request that answers once every interrupt of `session` has its answer, while one is pending.
-    pub(crate) fn pending_interrupt(&self, session: &SessionID) -> Option<Interrupt> {
+    fn pending_interrupt(&self, session: &SessionID) -> Option<Interrupt> {
         self.interrupts.borrow().get(session).cloned()
+    }
+
+    /// Runs `run` at once, or once every pending interrupt of `session` has its answer, so what a slash command
+    /// sends reaches the server after them, as a prompt does; TS runs it at once (deviation
+    /// O89-slash-after-interrupt).
+    pub(crate) fn after_interrupts(&self, tui: &Tui, session: Option<&SessionID>, run: impl FnOnce(&Tui) + 'static) {
+        match session.and_then(|session| self.pending_interrupt(session)) {
+            Some(pending) => {
+                tui.app.spawn(pending, bind!(tui, |tui, _, ()| run(&tui)));
+            }
+            None => run(tui),
+        }
     }
 
     /// Sends `session.interrupt` for `session` after its pending ones.

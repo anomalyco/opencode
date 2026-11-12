@@ -614,7 +614,20 @@ fn install_keys(tui: &Rc<Tui>) {
             .palette()
             .slash(slash("open", &["projects", "project"])),
         command(COMMAND_PALETTE_COMMAND, |tui| {
-            palette::show(&tui.dialogs, crate::dialogs::settings::palette_options(tui))
+            // A slash command waits for the session's pending interrupts, as a typed one does.
+            let run: palette::Run = Rc::new(bind!(tui, |tui, id: &str| {
+                let slash =
+                    tui.keymap.commands().into_iter().any(|command| command.id == id && command.slash.is_some());
+                let session = match tui.route() {
+                    Route::Session { id } if slash => Some(id),
+                    _ => None,
+                };
+                let id = id.to_owned();
+                tui.prompt.after_interrupts(&tui, session.as_ref(), move |tui| {
+                    tui.keymap.dispatch(&id, None);
+                });
+            }));
+            palette::show(&tui.dialogs, crate::dialogs::settings::palette_options(tui), Some(run))
         }),
     ]);
     // `app.exit`'s keys work unless the focused prompt has text (`app.tsx:1329-1335`).
