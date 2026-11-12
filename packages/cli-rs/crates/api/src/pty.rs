@@ -5,21 +5,14 @@
 //! big-endian `u16`, then the input bytes. [`connect`] asks for a ticket over HTTP and opens the socket through a
 //! [`Connector`], so tests can serve a fake socket.
 
-use std::future::Future;
-use std::pin::Pin;
-
-use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
-use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
 use crate::client::Client;
 use crate::error::Error;
 use crate::generated::{ExperimentalPersistentPtyConnectTokenInput, PtyID};
 use crate::ws;
-
-/// Messages a socket queue holds in each direction.
-pub const QUEUE: usize = 256;
+pub use crate::ws::{BoxFuture, Incoming, QUEUE, Tungstenite, pair};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Size {
@@ -131,35 +124,10 @@ pub fn frame(size: Size, data: Option<&[u8]>) -> Vec<u8> {
     frame
 }
 
-/// What a socket delivers. `Closed` and `Failed` end it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Incoming {
-    Text(String),
-    Binary(Vec<u8>),
-    Closed,
-    Failed(String),
-}
+/// An open socket of binary frames.
+pub type Socket = ws::Socket<Vec<u8>>;
 
-/// An open socket as two bounded queues. Dropping `outgoing` closes it.
-pub struct Socket {
-    pub outgoing: mpsc::Sender<Vec<u8>>,
-    pub incoming: mpsc::Receiver<Incoming>,
-}
-
-/// The far end of [`pair`], for fake servers in tests.
-pub struct Remote {
-    pub sent: mpsc::Receiver<Vec<u8>>,
-    pub deliver: mpsc::Sender<Incoming>,
-}
-
-/// A connected socket and its far end, joined by queues.
-pub fn pair() -> (Socket, Remote) {
-    let (outgoing, sent) = mpsc::channel(QUEUE);
-    let (deliver, incoming) = mpsc::channel(QUEUE);
-    (Socket { outgoing, incoming }, Remote { sent, deliver })
-}
-
-pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+pub type Remote = ws::Remote<Vec<u8>>;
 
 /// Opens sockets: [`Tungstenite`] on the network, a closure in tests.
 pub trait Connector: Send + Sync {
@@ -176,47 +144,9 @@ where
     }
 }
 
-/// Opens the socket with tokio-tungstenite; two tasks move messages between it and the queues.
-pub struct Tungstenite;
-
 impl Connector for Tungstenite {
     fn open(&self, url: Url) -> BoxFuture<Result<Socket, String>> {
-        Box::pin(async move {
-            let socket = ws::connect(&url, &[]).await.map_err(|error| error.to_string())?;
-            let (mut sink, mut stream) = socket.split();
-            let (socket, remote) = pair();
-            let (mut sent, deliver) = (remote.sent, remote.deliver);
-            let (written, writer) = oneshot::channel::<()>();
-            let reader = async move {
-                while let Some(message) = stream.next().await {
-                    let incoming = match message {
-                        Ok(ws::Message::Text(text)) => Incoming::Text(text.as_str().to_owned()),
-                        Ok(ws::Message::Binary(data)) => Incoming::Binary(data.to_vec()),
-                        Ok(ws::Message::Close(_)) => break,
-                        Ok(_) => continue,
-                        Err(error) => {
-                            let _ = deliver.send(Incoming::Failed(error.to_string())).await;
-                            return;
-                        }
-                    };
-                    if deliver.send(incoming).await.is_err() {
-                        return;
-                    }
-                }
-                let _ = deliver.send(Incoming::Closed).await;
-            };
-            tokio::spawn(ws::read_until_closed(reader, writer));
-            tokio::spawn(async move {
-                let _written = written;
-                while let Some(frame) = sent.recv().await {
-                    if sink.send(ws::Message::binary(frame)).await.is_err() {
-                        return;
-                    }
-                }
-                let _ = tokio::time::timeout(ws::CLOSE_GRACE, sink.close()).await;
-            });
-            Ok(socket)
-        })
+        Box::pin(ws::open(url, Vec::new()))
     }
 }
 
@@ -263,6 +193,7 @@ pub fn url(base: &Url, input: &ConnectInput, ticket: &str) -> Result<Url, Error>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::{SinkExt, StreamExt};
     use serde_json::json;
 
     fn info() -> Value {

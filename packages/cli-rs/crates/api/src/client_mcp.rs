@@ -7,14 +7,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::StreamExt;
 use futures_util::stream::FuturesUnordered;
-use futures_util::{SinkExt, StreamExt};
 use serde_json::{Map, Value, json};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 use url::Url;
 
-use crate::pty::{BoxFuture, Incoming, QUEUE};
-use crate::ws;
+use crate::ws::{self, BoxFuture, Incoming};
+pub use crate::ws::{Tungstenite, pair};
 
 const SESSION_ID_META_KEY: &str = "ai.opencode/sessionID";
 pub const PROTOCOL_VERSION: &str = "2025-11-25";
@@ -93,24 +93,10 @@ impl ToolResult {
     }
 }
 
-/// An open socket as two bounded queues of text frames. Dropping `outgoing` closes it with code 1000.
-pub struct Socket {
-    pub outgoing: mpsc::Sender<String>,
-    pub incoming: mpsc::Receiver<Incoming>,
-}
+/// An open socket of text frames. Dropping `outgoing` closes it with code 1000.
+pub type Socket = ws::Socket<String>;
 
-/// The far end of [`pair`], for fake servers in tests.
-pub struct Remote {
-    pub sent: mpsc::Receiver<String>,
-    pub deliver: mpsc::Sender<Incoming>,
-}
-
-/// A connected socket and its far end, joined by queues.
-pub fn pair() -> (Socket, Remote) {
-    let (outgoing, sent) = mpsc::channel(QUEUE);
-    let (deliver, incoming) = mpsc::channel(QUEUE);
-    (Socket { outgoing, incoming }, Remote { sent, deliver })
-}
+pub type Remote = ws::Remote<String>;
 
 /// Opens sockets with handshake headers: [`Tungstenite`] on the network, a closure in tests.
 pub trait Connector: Send + Sync {
@@ -127,55 +113,9 @@ where
     }
 }
 
-/// Opens the socket with tokio-tungstenite; two tasks move frames between it and the queues.
-pub struct Tungstenite;
-
 impl Connector for Tungstenite {
     fn open(&self, url: Url, headers: Vec<(String, String)>) -> BoxFuture<Result<Socket, String>> {
-        Box::pin(async move {
-            let socket = ws::connect(&url, &headers).await.map_err(|error| error.to_string())?;
-            let (mut sink, mut stream) = socket.split();
-            let (socket, remote) = pair();
-            let (mut sent, deliver) = (remote.sent, remote.deliver);
-            let (written, writer) = oneshot::channel::<()>();
-            let reader = async move {
-                while let Some(message) = stream.next().await {
-                    let incoming = match message {
-                        Ok(ws::Message::Text(text)) => Incoming::Text(text.as_str().to_owned()),
-                        Ok(ws::Message::Binary(data)) => Incoming::Binary(data.to_vec()),
-                        Ok(ws::Message::Close(_)) => break,
-                        Ok(_) => continue,
-                        Err(error) => {
-                            let _ = deliver.send(Incoming::Failed(error.to_string())).await;
-                            return;
-                        }
-                    };
-                    if deliver.send(incoming).await.is_err() {
-                        return;
-                    }
-                }
-                let _ = deliver.send(Incoming::Closed).await;
-            };
-            tokio::spawn(ws::read_until_closed(reader, writer));
-            tokio::spawn(async move {
-                let _written = written;
-                while let Some(text) = sent.recv().await {
-                    if sink.send(ws::Message::text(text)).await.is_err() {
-                        return;
-                    }
-                }
-                let close = tokio_tungstenite::tungstenite::protocol::CloseFrame {
-                    code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
-                    reason: "".into(),
-                };
-                let closing = async {
-                    let _ = sink.send(ws::Message::Close(Some(close))).await;
-                    let _ = sink.close().await;
-                };
-                let _ = tokio::time::timeout(ws::CLOSE_GRACE, closing).await;
-            });
-            Ok(socket)
-        })
+        Box::pin(ws::open(url, headers))
     }
 }
 
@@ -348,9 +288,11 @@ fn parse(text: &str) -> Option<Map<String, Value>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::SinkExt;
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::net::TcpListener;
+    use tokio::sync::mpsc;
     use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
 
     fn tool(

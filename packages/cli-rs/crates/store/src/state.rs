@@ -15,8 +15,8 @@ use futures_util::future::{BoxFuture, Shared};
 use indexmap::IndexMap;
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    PermissionRequest, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo,
-    SessionInfo, SessionMessageID,
+    PermissionRequest, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo, SessionInfo,
+    SessionMessageID,
 };
 use opencode_util::lock;
 use tokio::runtime::Handle;
