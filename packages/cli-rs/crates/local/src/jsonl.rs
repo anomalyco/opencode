@@ -12,9 +12,10 @@
 
 use std::fs;
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
+use opencode_util::path::Flavor;
 use serde_json::{Map, Value, json};
 
 use crate::jsonc;
@@ -425,7 +426,7 @@ impl Frecency {
     /// `getFrecency(path)` at the time `now`.
     pub fn score(&self, path: &str, now: i64) -> f64 {
         self.data
-            .get(&resolve(&self.cwd, path))
+            .get(&resolve(Flavor::NATIVE, &self.cwd, path))
             .map_or(0.0, |visit| visit.frequency / (1.0 + (now as f64 - visit.last_open) / 86_400_000.0))
     }
 
@@ -453,7 +454,7 @@ impl Frecency {
 /// line. It never trims; [`Frecency::load`] does. Returns the absolute path and its visit.
 pub fn save_frecency(state: &Path, cwd: &Path, path: &str, now: i64) -> Result<(String, Visit), lock::Error> {
     let file = frecency_file(state);
-    let path = resolve(cwd, path);
+    let path = resolve(Flavor::NATIVE, cwd, path);
     let visit = with_lock(state, &file, || {
         let frequency = last_line(&file, TAIL_CHUNK, |entry| {
             (entry.get("path").and_then(Value::as_str) == Some(&path)).then_some(entry)
@@ -485,20 +486,10 @@ fn line(path: &str, visit: &Visit) -> String {
     jsonc::stringify(&Value::Object(map))
 }
 
-// `path.resolve(cwd, path)`: absolute and lexically normalized.
-fn resolve(cwd: &Path, path: &str) -> String {
-    let mut out = PathBuf::new();
-    for component in cwd.join(path).components() {
-        match component {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::CurDir => {}
-            other => out.push(other),
-        }
-    }
-    let text = out.to_string_lossy().into_owned();
-    if text.is_empty() { "/".into() } else { text }
+// `path.resolve(cwd, path)` by the rules of `flavor`: on Windows `\` separates and a rooted cwd without a drive takes
+// the working directory's, as TypeScript records the path.
+fn resolve(flavor: Flavor, cwd: &Path, path: &str) -> String {
+    flavor.resolve(&[&cwd.to_string_lossy(), path])
 }
 
 #[cfg(test)]
@@ -685,9 +676,29 @@ mod tests {
         PathBuf::from(if cfg!(windows) { r"C:\w" } else { "/w" })
     }
 
+    #[test]
+    fn frecency_paths_resolve_like_path_resolve() {
+        let (p, w) = (Flavor::Posix, Flavor::Windows);
+        // `path.posix.resolve(cwd, path)` and `path.win32.resolve(cwd, path)`.
+        for (flavor, cwd, path, expected) in [
+            (p, "/project", "src/main.rs", "/project/src/main.rs"),
+            (p, "/project", "../x/./y.rs", "/x/y.rs"),
+            (p, "/project", "/abs/z.rs", "/abs/z.rs"),
+            (p, "/", "../..", "/"),
+            (w, "C:\\project", "src/main.rs", "C:\\project\\src\\main.rs"),
+            (w, "C:\\project", "..\\x/./y.rs", "C:\\x\\y.rs"),
+            (w, "C:\\project", "D:/abs/z.rs", "D:\\abs\\z.rs"),
+            (w, "C:\\project", "\\abs\\z.rs", "C:\\abs\\z.rs"),
+            (w, "\\\\srv\\share\\p", "..\\..\\q.rs", "\\\\srv\\share\\q.rs"),
+            (w, "c:/Project/", "src\\main.rs", "c:\\Project\\src\\main.rs"),
+        ] {
+            assert_eq!(resolve(flavor, Path::new(cwd), path), expected, "{flavor:?} {cwd} {path}");
+        }
+    }
+
     // A frecency line for `name` resolved against [`w`].
     fn visit_line(name: &str, frequency: f64, last_open: f64) -> String {
-        line(&resolve(&w(), name), &Visit { frequency, last_open }) + "\n"
+        line(&resolve(Flavor::NATIVE, &w(), name), &Visit { frequency, last_open }) + "\n"
     }
 
     #[test]
@@ -702,7 +713,7 @@ mod tests {
         append_text(&file, &(visit_line("from_ts.rs", 1.0, 5000.0) + &visit_line("f0.rs", 20.0, 5001.0))).unwrap();
         frecency.update("new.rs", 6000);
         let latest = |name: &str| {
-            let path = resolve(&w(), name);
+            let path = resolve(Flavor::NATIVE, &w(), name);
             parse_frecency(&fs::read_to_string(&file).unwrap()).into_iter().find(|entry| entry["path"] == path)
         };
         assert!(latest("from_ts.rs").is_some(), "from_ts.rs was lost");
