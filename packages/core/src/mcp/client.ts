@@ -71,9 +71,6 @@ const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 // Servers send a heartbeat at least every 30 seconds; twice that in silence means the stream is dead.
 const EVENT_STREAM_IDLE = Duration.seconds(60)
 const EVENT_LIST_PAGES = 100
-// Messages a stream buffers for a slow reader. Past that it fails instead of dropping one, so the reader can reopen
-// it from its cursor.
-const EVENT_STREAM_BUFFER = 1024
 
 /** Experimental: MCP Events is a draft extension; may change without compatibility guarantees. */
 const EventType = Schema.Struct({
@@ -406,36 +403,35 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     if (options.events) {
       const subscribed = (params: { readonly _meta: { readonly [SUBSCRIPTION_ID]: string | number } }) =>
         streams.get(String(params._meta[SUBSCRIPTION_ID]))
-      const offer = (queue: Queue.Queue<EventMessage, Error | Cause.Done> | undefined, message: EventMessage) => {
-        if (queue && !Queue.offerUnsafe(queue, message))
-          Queue.failCauseUnsafe(
-            queue,
-            Cause.fail(new Error(`MCP server ${server} sent events faster than they were read`)),
-          )
-      }
-      client.setNotificationHandler("notifications/events/active", { params: ActiveNotification }, (params) =>
-        offer(subscribed(params), {
-          type: "active",
-          cursor: params.cursor ?? null,
-          truncated: params.truncated === true,
-        }),
-      )
-      client.setNotificationHandler("notifications/events/event", { params: EventNotification }, (params) =>
-        offer(subscribed(params), {
-          type: "event",
-          eventId: params.eventId,
-          name: params.name,
-          timestamp: params.timestamp,
-          data: params.data,
-          cursor: params.cursor ?? null,
-        }),
-      )
-      client.setNotificationHandler("notifications/events/heartbeat", { params: HeartbeatNotification }, (params) =>
-        offer(subscribed(params), { type: "heartbeat", cursor: params.cursor ?? null }),
-      )
-      client.setNotificationHandler("notifications/events/error", { params: ErrorNotification }, (params) =>
-        offer(subscribed(params), { type: "error", error: params.error }),
-      )
+      client.setNotificationHandler("notifications/events/active", { params: ActiveNotification }, (params) => {
+        const queue = subscribed(params)
+        if (queue)
+          Queue.offerUnsafe(queue, {
+            type: "active",
+            cursor: params.cursor ?? null,
+            truncated: params.truncated === true,
+          })
+      })
+      client.setNotificationHandler("notifications/events/event", { params: EventNotification }, (params) => {
+        const queue = subscribed(params)
+        if (queue)
+          Queue.offerUnsafe(queue, {
+            type: "event",
+            eventId: params.eventId,
+            name: params.name,
+            timestamp: params.timestamp,
+            data: params.data,
+            cursor: params.cursor ?? null,
+          })
+      })
+      client.setNotificationHandler("notifications/events/heartbeat", { params: HeartbeatNotification }, (params) => {
+        const queue = subscribed(params)
+        if (queue) Queue.offerUnsafe(queue, { type: "heartbeat", cursor: params.cursor ?? null })
+      })
+      client.setNotificationHandler("notifications/events/error", { params: ErrorNotification }, (params) => {
+        const queue = subscribed(params)
+        if (queue) Queue.offerUnsafe(queue, { type: "error", error: params.error })
+      })
       client.setNotificationHandler("notifications/events/terminated", { params: ErrorNotification }, (params) => {
         const queue = subscribed(params)
         if (queue) Queue.failCauseUnsafe(queue, Cause.fail(new EventStreamTerminatedError({ server, ...params.error })))
@@ -607,40 +603,38 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                 return events
               }),
               stream: (input) =>
-                Stream.callback<EventMessage, Error>(
-                  (queue) =>
-                    Effect.gen(function* () {
-                      yield* Effect.addFinalizer(() =>
-                        Effect.sync(() => {
-                          for (const [id, open] of streams) if (open === queue) streams.delete(id)
+                Stream.callback<EventMessage, Error>((queue) =>
+                  Effect.gen(function* () {
+                    yield* Effect.addFinalizer(() =>
+                      Effect.sync(() => {
+                        for (const [id, open] of streams) if (open === queue) streams.delete(id)
+                      }),
+                    )
+                    // Interrupting the request cancels the stream; the server closing it resolves the request.
+                    yield* Effect.tryPromise({
+                      try: (signal) =>
+                        client.request({ method: "events/stream", params: input }, StreamResult, {
+                          signal,
+                          // Heartbeats, not a request timeout, tell a quiet stream from a dead one; see below.
+                          timeout: Infinity,
+                          // Routes the stream's notifications, which can arrive before the request settles.
+                          onRequestId: (id) => streams.set(String(id), queue),
                         }),
-                      )
-                      // Interrupting the request cancels the stream; the server closing it resolves the request.
-                      yield* Effect.tryPromise({
-                        try: (signal) =>
-                          client.request({ method: "events/stream", params: input }, StreamResult, {
-                            signal,
-                            // Heartbeats, not a request timeout, tell a quiet stream from a dead one; see below.
-                            timeout: Infinity,
-                            // Routes the stream's notifications, which can arrive before the request settles.
-                            onRequestId: (id) => streams.set(String(id), queue),
-                          }),
-                        catch: (error) =>
-                          error instanceof ProtocolError && EVENT_STREAM_REJECTED.has(error.code)
-                            ? new EventStreamRejectedError({ server, code: error.code, message: error.message })
-                            : failure(error),
-                      }).pipe(
-                        Effect.tapError((error) =>
-                          Effect.logWarning("failed to stream MCP events", { server, error: error.message }),
-                        ),
-                        Effect.matchEffect({
-                          onFailure: (error) => Queue.fail(queue, error),
-                          onSuccess: () => Queue.end(queue),
-                        }),
-                        Effect.forkScoped,
-                      )
-                    }),
-                  { bufferSize: EVENT_STREAM_BUFFER },
+                      catch: (error) =>
+                        error instanceof ProtocolError && EVENT_STREAM_REJECTED.has(error.code)
+                          ? new EventStreamRejectedError({ server, code: error.code, message: error.message })
+                          : failure(error),
+                    }).pipe(
+                      Effect.tapError((error) =>
+                        Effect.logWarning("failed to stream MCP events", { server, error: error.message }),
+                      ),
+                      Effect.matchEffect({
+                        onFailure: (error) => Queue.fail(queue, error),
+                        onSuccess: () => Queue.end(queue),
+                      }),
+                      Effect.forkScoped,
+                    )
+                  }),
                 ).pipe(
                   Stream.timeoutOrElse({
                     duration: EVENT_STREAM_IDLE,

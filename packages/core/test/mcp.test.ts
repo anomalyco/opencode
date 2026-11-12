@@ -4149,7 +4149,15 @@ describe("MCP events", () => {
     }),
   )
 
-  testEffect(Layer.empty).live("reopens a closed stream from its last cursor", () =>
+  const finishedEvent = (eventId: string, cursor: string) => ({
+    eventId,
+    cursor,
+    name: "job.finished",
+    timestamp: "2026-11-11T00:00:00Z",
+    data: {},
+  })
+
+  testEffect(Layer.empty).live("reopens from its last cursor and forwards a reported replay gap once", () =>
     Effect.gen(function* () {
       const server = yield* streamServer()
       const bus = yield* workingBus
@@ -4173,6 +4181,13 @@ describe("MCP events", () => {
           (count) => count === 2,
         )
         expect(server.streams[1].params).toMatchObject({ name: "job.finished", cursor: "c5" })
+        server.streams[1].send("notifications/events/active", { cursor: "c8", truncated: true })
+        server.streams[1].send("notifications/events/event", finishedEvent("e9", "c9"))
+        server.streams[1].send("notifications/events/event", finishedEvent("e10", "c10"))
+        yield* until(only(mcp), (sub) => sub?.cursor === "c10")
+        const delivered = bus.published.filter((event) => event.type === "experimental.mcp.event")
+        expect(delivered).toMatchObject([{ data: { eventId: "e9", truncated: true } }, { data: { eventId: "e10" } }])
+        expect(delivered[1].data).not.toHaveProperty("truncated")
       }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
     }),
   )
@@ -4211,7 +4226,7 @@ describe("MCP events", () => {
     }),
   )
 
-  testEffect(Layer.empty).live("resumes after the server reconnects, and ends when it is disabled", () =>
+  testEffect(Layer.empty).live("reopens without a replay gap when cursorless, and ends when disabled", () =>
     Effect.gen(function* () {
       const server = yield* streamServer()
       const bus = yield* workingBus
@@ -4223,7 +4238,7 @@ describe("MCP events", () => {
           Effect.sync(() => server.streams.length),
           (count) => count === 1,
         )
-        server.streams[0].send("notifications/events/active", { cursor: "c1", truncated: false })
+        server.streams[0].send("notifications/events/active", { cursor: null })
         yield* until(only(mcp), (sub) => sub?.status.status === "active")
 
         yield* mcp.connect("resources")
@@ -4232,7 +4247,14 @@ describe("MCP events", () => {
           (count) => count === 2,
         )
         expect(server.streams[0].aborted).toBe(true)
-        expect(server.streams[1].params).toMatchObject({ cursor: "c1" })
+        expect(server.streams[1].params).toMatchObject({ cursor: null })
+        // The null cursor means replay is unsupported; reconnecting is not evidence of a gap.
+        server.streams[1].send("notifications/events/active", { cursor: null, truncated: false })
+        server.streams[1].send("notifications/events/event", finishedEvent("e2", "c2"))
+        yield* until(only(mcp), (sub) => sub?.cursor === "c2")
+        const delivered = bus.published.filter((event) => event.type === "experimental.mcp.event")
+        expect(delivered).toMatchObject([{ data: { eventId: "e2" } }])
+        expect(delivered[0].data).not.toHaveProperty("truncated")
 
         yield* mcp.disconnect("resources")
         expect(yield* until(only(mcp), (sub) => sub?.status.status === "ended")).toMatchObject({

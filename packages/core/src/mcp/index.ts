@@ -302,7 +302,7 @@ export const layer = (options?: Options) =>
 
       // Experimental MCP Events subscriptions, by server. Each streams while its server is connected; the streams
       // run here, in this Location, not in a pooled connection's scope.
-      type Followed = { -readonly [K in keyof Subscription]: Subscription[K] } & { opened: boolean; gap: boolean }
+      type Followed = { -readonly [K in keyof Subscription]: Subscription[K] } & { gap: boolean }
       const followed = new Map<ServerName, Map<string, Followed>>()
       const streams = yield* FiberMap.make<string>()
       const runStream = yield* FiberMap.runtime(streams)<never>()
@@ -336,8 +336,7 @@ export const layer = (options?: Options) =>
         if (message.type === "active")
           return Effect.sync(() => {
             sub.cursor = message.cursor
-            sub.opened = true
-            sub.gap ||= message.truncated
+            sub.gap ||= message.cursor !== null && message.truncated
           }).pipe(Effect.andThen(setStatus(sub, { status: "active" })))
         // The cursor moves past the event only once it is published.
         return bus
@@ -364,8 +363,6 @@ export const layer = (options?: Options) =>
       // Streams until the server terminates or rejects the subscription. A clean close reopens like a broken stream.
       const follow = (sub: Followed, events: McpClient.Events) =>
         Effect.suspend(() => {
-          // Without a cursor the server cannot replay what happened while the stream was down.
-          if (sub.opened && sub.cursor === null) sub.gap = true
           return events
             .stream({ name: sub.name, arguments: sub.arguments, cursor: sub.cursor })
             .pipe(Stream.runForEach((message) => receive(sub, message)))
@@ -1092,7 +1089,6 @@ export const layer = (options?: Options) =>
             arguments: input.arguments,
             status: { status: "pending" },
             cursor: input.cursor ?? existing?.cursor ?? null,
-            opened: false,
             gap: false,
           }
           subs.set(id, sub)
