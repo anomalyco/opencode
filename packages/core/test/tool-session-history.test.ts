@@ -36,7 +36,7 @@ it.live("finds a location-scoped hit and reads its adjacent transcript pages", (
         path.join(dir.path, "opencode.json"),
         JSON.stringify({
           experimental: { session_search: true },
-          permissions: ["sessions_search", "sessions_inspect"].map((action) => ({
+          permissions: ["opencode_session_search", "opencode_session_read"].map((action) => ({
             action,
             resource: "*",
             effect: "allow",
@@ -76,7 +76,10 @@ it.live("finds a location-scoped hit and reads its adjacent transcript pages", (
       yield* plugins.awaitActivation
       const registry = yield* Tool.Service
       const tools = yield* registry.snapshot()
-      const call = Effect.fnUntraced(function* (name: "search" | "inspect", input: Record<string, unknown>) {
+      const call = Effect.fnUntraced(function* (
+        name: "session_search" | "session_read",
+        input: Record<string, unknown>,
+      ) {
         const result = yield* tools.execute({
           ...toolIdentity,
           sessionID: caller.id,
@@ -85,7 +88,7 @@ it.live("finds a location-scoped hit and reads its adjacent transcript pages", (
             id: `call-${name}`,
             name: "execute",
             input: {
-              code: `return await tools.sessions.${name}(${JSON.stringify(input)})`,
+              code: `return await tools.opencode.${name}(${JSON.stringify(input)})`,
             },
           },
         })
@@ -97,19 +100,19 @@ it.live("finds a location-scoped hit and reads its adjacent transcript pages", (
       const groups = []
       let cursor: string | undefined
       do {
-        const result = yield* call("search", cursor ? { cursor } : { query })
+        const result = yield* call("session_search", cursor ? { cursor } : { query })
         groups.push(...result.sessions)
         cursor = result.nextCursor
       } while (cursor)
       expect(groups).toMatchObject([{ sessionID: target.id, hits: [{ messageID: hit }] }])
       expect(typeof groups[0].hits[0].cursor).toBe("string")
-      const inspect = (cursor: string) => call("inspect", { sessionID: target.id, cursor, limit: 1 })
-      const page = yield* inspect(groups[0].hits[0].cursor)
+      const read = (cursor: string) => call("session_read", { sessionID: target.id, cursor, limit: 1 })
+      const page = yield* read(groups[0].hits[0].cursor)
       expect(page).toMatchObject({
         messages: [{ id: hit, text: `Checkpoint: ${query}` }],
       })
-      expect((yield* inspect(page.nextCursor)).messages).toMatchObject([{ text: "After the checkpoint" }])
-      expect((yield* inspect(page.previousCursor)).messages).toMatchObject([{ text: "Before the checkpoint" }])
+      expect((yield* read(page.nextCursor)).messages).toMatchObject([{ text: "After the checkpoint" }])
+      expect((yield* read(page.previousCursor)).messages).toMatchObject([{ text: "Before the checkpoint" }])
     }).pipe(Effect.provide(locations.get(location)))
   }),
 )

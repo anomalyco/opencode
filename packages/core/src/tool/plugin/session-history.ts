@@ -148,10 +148,9 @@ export const Plugin = {
     yield* ctx.tool
       .transform((editor) => {
         if (!flags.resolve(loaded.entries).session_search.enabled) return
-        editor.namespace({ name: "sessions", description: "Search and inspect sessions in this location." })
         editor.add({
-          name: "search",
-          options: { namespace: "sessions" },
+          name: "session_search",
+          options: { namespace: "opencode" },
           description:
             "List sessions, or search titles and transcript text literally (case-insensitive). Continue with nextCursor even after an empty page. includeMessages adds excerpts; includeToolOutput includes tool and shell output in those excerpts.",
           input: Search,
@@ -171,7 +170,7 @@ export const Plugin = {
                 includeMessages: input.includeMessages ?? pos?.includeMessages,
                 includeToolOutput: input.includeToolOutput ?? pos?.includeToolOutput,
               }
-              yield* assert(call, "sessions_search", filters.sessionID ?? ctx.location.directory)
+              yield* assert(call, "opencode_session_search", filters.sessionID ?? ctx.location.directory)
               const limit = input.limit ?? 20
               const q = filters.query?.toLowerCase()
               const target = filters.sessionID ?? pos?.position?.sessionID
@@ -227,8 +226,8 @@ export const Plugin = {
             }),
         })
         editor.add({
-          name: "inspect",
-          options: { namespace: "sessions" },
+          name: "session_read",
+          options: { namespace: "opencode" },
           description:
             "Read a chronological transcript page. Start at a hit with its sessionID and cursor (omit the cursor for the first message). Use previousCursor or nextCursor to navigate.",
           input: Schema.Struct({ ...Page, sessionID: Session.ID }),
@@ -240,7 +239,7 @@ export const Plugin = {
           }),
           execute: (input, call) =>
             Effect.gen(function* () {
-              yield* assert(call, "sessions_inspect", input.sessionID)
+              yield* assert(call, "opencode_session_read", input.sessionID)
               const pos =
                 input.cursor === undefined
                   ? undefined
