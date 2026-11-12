@@ -833,6 +833,7 @@ export const dict = {
   "sidebar.recent.moveUp": "Move up",
   "sidebar.recent.moveDown": "Move down",
   "sidebar.project.recentSessions": "Recent sessions",
+  "sidebar.worktree.local": "Local",
   "sidebar.project.clearNotifications": "Clear notifications",
 
   "settings.section.server": "Server",

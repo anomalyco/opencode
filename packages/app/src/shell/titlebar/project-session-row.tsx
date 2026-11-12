@@ -162,11 +162,11 @@ export function ProjectSessionRow(props: {
           {(worktree) => (
             <span
               title={worktree().label}
-              class="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 text-[10px] leading-[15px] font-medium text-v2-text-text-muted"
+              class="inline-flex max-w-[40%] shrink-0 items-center gap-1 rounded-full px-1.5 text-[10px] leading-[15px] font-medium text-v2-text-text-muted"
               style={{ "background-color": `color-mix(in srgb, ${worktree().color} 16%, transparent)` }}
             >
-              <span class="size-1.5 rounded-full" style={{ "background-color": worktree().color }} />
-              {worktree().label}
+              <span class="size-1.5 shrink-0 rounded-full" style={{ "background-color": worktree().color }} />
+              <span class="truncate">{worktree().label}</span>
             </span>
           )}
         </Show>
