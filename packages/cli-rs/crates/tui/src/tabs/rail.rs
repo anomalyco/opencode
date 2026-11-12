@@ -345,7 +345,7 @@ impl Component for Rail {
                 pulses
                     .entry((session.to_owned(), slot))
                     .and_modify(|pulse| pulse.set(input))
-                    .or_insert_with(|| Pulse::new(animations, input))
+                    .or_insert_with(|| Pulse::mount(animations, input))
                     .clone()
             };
             let colors = |color: Color, glow: Color, flash: Color, completion: Color, glow_tail: usize, bg: Color| {

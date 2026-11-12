@@ -239,6 +239,16 @@ impl Pulse {
         }
     }
 
+    /// A pulse as `<tab_pulse>` mounts it: OpenTUI's Solid reconciler constructs the renderable with defaults
+    /// and applies `enabled` and the inputs through their setters, so a tab that is already busy flashes and
+    /// a glow ignites. Without this, the flash of a new session's tab waits for the turn to end.
+    pub fn mount(enabled: bool, input: Input) -> Self {
+        let mut pulse = Self::new(true, Input::default());
+        pulse.set_enabled(enabled);
+        pulse.set(input);
+        pulse
+    }
+
     /// Whether the pulse moves and needs ticks.
     pub fn live(&self) -> bool {
         self.enabled
@@ -510,6 +520,22 @@ mod tests {
         assert!(pulse.live());
         pulse.advance(Duration::from_millis(RUN_ATTACK as u64));
         assert_ne!(paint(&pulse, &colors(), None, 10), paint(&still, &colors(), None, 10), "no sweep after turning on");
+    }
+
+    #[test]
+    fn a_tab_mounted_busy_flashes_at_once_as_its_setters_run() {
+        let busy = Input { active: true, ..Input::default() };
+        let mut mounted = Pulse::mount(true, busy);
+        assert_eq!(mounted.flash.clock, Some(0.0), "the flash starts at mount, not when the turn ends");
+        mounted.advance(Duration::from_millis(250));
+        mounted.set(Input { complete: true, ..Input::default() });
+        assert_eq!(mounted.flash.clock, Some(250.0), "a short turn's end rides the flash that is still running");
+        let still = Pulse::mount(false, Input { glow: true, ..busy });
+        assert_eq!(
+            paint(&still, &colors(), None, 10),
+            paint(&Pulse::new(false, Input { glow: true, ..busy }), &colors(), None, 10)
+        );
+        assert!(Pulse::mount(true, Input { glow: true, ..Input::default() }).glow.animating(), "a glow ignites");
     }
 
     #[test]
