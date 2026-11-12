@@ -1,0 +1,51 @@
+name: build v1 desktop
+on:
+  workflow_call:
+    inputs:
+      target: { type: string, required: true }
+      host: { type: string, required: true }
+      version: { type: string, required: true }
+      signed_digest: { type: string, required: false }
+    outputs:
+      digest: { value: '${{ jobs.pack.outputs.digest }}' }
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ${{ inputs.host }}
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rpm
+      - if: inputs.signed_digest != ''
+        uses: ./.github/release/download
+        with:
+          pattern: sign-desktop-${{ inputs.target }}
+          digests: sign-desktop-${{ inputs.target }}=${{ inputs.signed_digest }}
+          require-digests: true
+      - run: bun script/pack-release-desktop.ts
+        env:
+          RELEASE_TARGET: ${{ inputs.target }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+          SIGNED_APP: ${{ inputs.signed_digest && format('{0}/in/sign-desktop-{1}/app', runner.temp, inputs.target) || '' }}
+          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: production
+          VITE_SENTRY_RELEASE: desktop@${{ inputs.version }}
+      - id: upload
+        uses: ./.github/release/upload
+        with:
+          name: build-desktop-${{ inputs.signed_digest && 'installer-' || '' }}${{ inputs.target }}
+          path: dist/release/desktop
