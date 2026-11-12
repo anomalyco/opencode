@@ -141,12 +141,12 @@ impl Owner {
     }
 }
 
-/// The executable process `pid` runs, canonical as `resolve` makes it (`\\?\C:\…`); the image path when it
-/// cannot be canonicalized. `None` when the process cannot be opened.
+/// The executable process `pid` runs, real as `resolve` makes it; the image path when it cannot be
+/// canonicalized. `None` when the process cannot be opened.
 #[cfg(windows)]
 pub fn process_executable(pid: u32) -> Option<PathBuf> {
     let image = opencode_util::win::process_image(pid).ok()?;
-    Some(std::fs::canonicalize(&image).unwrap_or(image))
+    Some(realpath(&image).unwrap_or(image))
 }
 
 /// The executable process `pid` runs, with symlinks resolved. A binary replaced since it started
@@ -165,12 +165,25 @@ pub fn process_executable(pid: u32) -> Option<PathBuf> {
 fn resolve(program: &std::ffi::OsStr) -> Option<PathBuf> {
     let program = Path::new(program);
     if program.components().count() > 1 {
-        return std::fs::canonicalize(program).ok();
+        return realpath(program);
     }
     std::env::split_paths(&std::env::var_os("PATH")?)
         .map(|dir| dir.join(program))
         .find(|candidate| candidate.is_file())
-        .and_then(|candidate| std::fs::canonicalize(candidate).ok())
+        .and_then(|candidate| realpath(&candidate))
+}
+
+// `fs.realpathSync`: `canonicalize` without the verbatim prefix Windows adds.
+fn realpath(path: &Path) -> Option<PathBuf> {
+    std::fs::canonicalize(path).ok().map(strip_verbatim)
+}
+
+// `\\?\C:\x` → `C:\x` and `\\?\UNC\server\share` → `\\server\share`, as `opencode_util::path::strip_verbatim` does.
+fn strip_verbatim(path: PathBuf) -> PathBuf {
+    match path.to_str() {
+        Some(text) => PathBuf::from(opencode_util::path::strip_verbatim(text).as_ref()),
+        None => path,
+    }
 }
 
 impl Missing {
@@ -288,11 +301,27 @@ mod tests {
         (format!("http://127.0.0.1:{port}/api/info"), Reply::json(200, body))
     }
 
+    #[test]
+    fn verbatim_prefixes_strip_as_realpath() {
+        let cases = [
+            (r"\\?\C:\Program Files\opencode.exe", r"C:\Program Files\opencode.exe"),
+            (r"\\?\UNC\srv\share\opencode.exe", r"\\srv\share\opencode.exe"),
+            (r"\\?\Volume{1}\opencode.exe", r"\\?\Volume{1}\opencode.exe"),
+            (r"C:\opencode.exe", r"C:\opencode.exe"),
+            ("/usr/bin/opencode", "/usr/bin/opencode"),
+        ];
+        for (canonical, expected) in cases {
+            assert_eq!(strip_verbatim(PathBuf::from(canonical)), PathBuf::from(expected));
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn process_executable_matches_resolve() {
         let exe = std::env::current_exe().unwrap();
-        assert_eq!(process_executable(std::process::id()), resolve(exe.as_os_str()));
+        let found = process_executable(std::process::id()).unwrap();
+        assert_eq!(Some(&found), resolve(exe.as_os_str()).as_ref());
+        assert!(!found.to_string_lossy().starts_with(r"\\?\"), "{}", found.display());
         assert_eq!(process_executable(u32::MAX - 2), None);
     }
 
