@@ -1,5 +1,5 @@
 //! The terminal side of a prompt: raw mode as Node's `setRawMode` sets it, terminal sizes, and key
-//! decoding as Node's `readline.emitKeypressEvents` does it. The terminal itself is Unix-only for now; elsewhere
+//! decoding as Node's `readline.emitKeypressEvents` does it. The terminal itself is Unix and Windows only; elsewhere
 //! [`interactive`] is `false`, so prompts fail as they do without a terminal.
 
 use std::collections::VecDeque;
@@ -10,25 +10,31 @@ use std::time::{Duration, Instant};
 
 use super::Output;
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 mod stub;
 #[cfg(unix)]
 mod unix;
+#[cfg(windows)]
+mod windows;
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 use stub::read;
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub use stub::{Raw, columns, interactive, restore, rows, stdout_rows};
 #[cfg(unix)]
 use unix::read;
 #[cfg(unix)]
 pub use unix::{Raw, columns, interactive, restore, rows, stdout_rows};
+#[cfg(windows)]
+use windows::read;
+#[cfg(windows)]
+pub use windows::{Raw, columns, interactive, restore, rows, stdout_rows};
 
 /// How long a lone ESC waits for the rest of a sequence (Clack's `escapeCodeTimeout`).
 const ESCAPE_TIMEOUT: Duration = Duration::from_millis(50);
 
 /// What one wait for input and read from stdin gave.
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(not(any(unix, windows)), allow(dead_code))]
 enum Read {
     /// This many bytes.
     Data(usize),
@@ -40,6 +46,8 @@ enum Read {
 
 impl Output {
     pub(super) fn write(self, text: &str) {
+        #[cfg(windows)]
+        windows::vt_output(self);
         // A closed terminal or pipe has nobody left to show the prompt to, so errors are dropped.
         let _ = match self {
             Output::Stdout => {
@@ -428,6 +436,36 @@ mod tests {
         ];
         for (input, expected) in cases {
             assert_eq!(presses(input), expected, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn console_sequences_decode_as_libuv_translations() {
+        // On Windows the console turns keys into escape sequences (virtual terminal input), where Node's libuv
+        // translates key records itself (`get_vt100_fn_key` in `src/win/tty.c`). Both must give the same keys.
+        let cases = [
+            // (key, console, libuv)
+            ("up", "\x1b[A", "\x1b[A"),
+            ("ctrl+left", "\x1b[1;5D", "\x1b[1;5D"),
+            ("shift+down", "\x1b[1;2B", "\x1b[1;2B"),
+            ("home", "\x1b[H", "\x1b[1~"),
+            ("end", "\x1b[F", "\x1b[4~"),
+            ("delete", "\x1b[3~", "\x1b[3~"),
+            ("pageup", "\x1b[5~", "\x1b[5~"),
+            ("f1", "\x1bOP", "\x1b[[A"),
+            ("f5", "\x1b[15~", "\x1b[[E"),
+            ("backspace", "\x7f", "\x08"),
+            ("alt+backspace", "\x1b\x7f", "\x1b\x08"),
+            ("return", "\r", "\r"),
+            ("escape", "\x1b", "\x1b"),
+            ("ctrl+c", "\x03", "\x03"),
+            ("alt+b", "\x1bb", "\x1bb"),
+        ];
+        let keys = |input: &str| {
+            presses(input).into_iter().map(|press| (press.key.name, press.key.ctrl, press.key.meta, press.key.shift))
+        };
+        for (name, console, libuv) in cases {
+            assert_eq!(keys(console).collect::<Vec<_>>(), keys(libuv).collect::<Vec<_>>(), "{name}");
         }
     }
 }
