@@ -2,13 +2,18 @@ import { CliRenderEvents, MouseButton, TextAttributes, type ScrollBoxRenderable 
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import path from "node:path"
-import { batch, createEffect, createMemo, createSignal, Index, onCleanup, Show } from "solid-js"
+import type { SessionInfo } from "@opencode/client"
+import { displayLabel } from "@opencode/util/session-title-fallback"
+import { batch, createEffect, createMemo, createResource, createSignal, Index, onCleanup, Show } from "solid-js"
 import { useConfig, useCursorStyle } from "../config"
+import { useClient } from "../context/client"
+import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { useRoute } from "../context/route"
 import { useSessionTabs } from "../context/session-tabs"
 import { useTheme } from "../context/theme"
 import { DIALOG_INSET, DialogFooter, DialogHeader, drawerWidth, useDialog } from "../ui/dialog"
+import { useToast } from "../ui/toast"
 import { moveSelection } from "../ui/select-controller"
 import { getScrollAcceleration } from "../util/scroll"
 import { type InboxRow, useInbox } from "./inbox-data"
@@ -21,6 +26,9 @@ type Entry = { key: string; section: string; count: number; row?: InboxRow }
 
 export function DialogInbox() {
   const inbox = useInbox()
+  const client = useClient()
+  const sessions = useData().session
+  const toast = useToast()
   const theme = useTheme().surface("dialog")
   const tabs = useSessionTabs()
   const route = useRoute()
@@ -35,10 +43,28 @@ export function DialogInbox() {
   const [searchFolds, setSearchFolds] = createSignal(new Set<string>())
   const collapsed = () => (query() ? searchFolds() : folds())
   const [key, setKey] = createSignal(tabs.current())
+  const [archived, setArchived] = createSignal(false)
+  const [archivedPage] = createResource(archived, () =>
+    client.api.session.list({ parentID: null, archived: true, order: "desc", limit: 50 }).then((page) => page.data),
+  )
   let scroll: ScrollBoxRenderable | undefined
 
+  const archivedSections = createMemo(() => {
+    const rows = (archivedPage.latest ?? [])
+      .map((session) => sessions.get(session.id) ?? session)
+      .filter((session): session is SessionInfo => session.time.archived !== undefined)
+      .map(
+        (session): InboxRow => ({
+          id: session.id,
+          title: displayLabel(session),
+          directory: session.location.directory,
+          detail: "",
+        }),
+      )
+    return [{ title: "Archived", rows }]
+  })
   const entries = createMemo(() =>
-    inbox.sections().flatMap((section): Entry[] => {
+    (archived() ? archivedSections() : inbox.sections()).flatMap((section): Entry[] => {
       const rows = query()
         ? fuzzysort
             .go(query(), section.rows, {
@@ -95,6 +121,17 @@ export function DialogInbox() {
     if (tabs.enabled()) return tabs.select(entry.row.id)
     route.navigate({ type: "session", sessionID: entry.row.id })
   }
+  function toggleArchived() {
+    batch(() => {
+      setArchived((value) => !value)
+      setKey(undefined)
+    })
+  }
+  function archive(entry = selected()) {
+    const row = entry?.row
+    if (!row) return
+    void client.api.session.update({ sessionID: row.id, archived: !archived() }).catch(toast.error)
+  }
   function move(delta: number) {
     const index = entries().findIndex((item) => item.key === selected()?.key)
     setKey(entries()[moveSelection(index, { count: entries().length, delta, policy: "wrap" })]?.key)
@@ -140,6 +177,8 @@ export function DialogInbox() {
         },
       },
       { id: "dialog.select.submit", run: () => open() },
+      { id: "inbox.session.archive", run: () => archive() },
+      { id: "inbox.view.archived", run: toggleArchived },
       { bind: "alt+up", run: () => section(-1) },
       { bind: "alt+down", run: () => section(1) },
       {
@@ -161,7 +200,7 @@ export function DialogInbox() {
 
   return (
     <box paddingX={1} paddingBottom={1} flexGrow={1} minHeight={0} gap={1}>
-      <DialogHeader title="Inbox" />
+      <DialogHeader title={archived() ? "Archived" : "Inbox"} />
       <input
         focused
         cursorStyle={cursor()}
@@ -169,7 +208,7 @@ export function DialogInbox() {
         focusedTextColor={theme.text.base}
         focusedBackgroundColor={theme.background.formfield.focused}
         placeholderColor={theme.text.muted}
-        placeholder="Search inbox sessions…"
+        placeholder={archived() ? "Search archived sessions…" : "Search inbox sessions…"}
         onInput={(value) =>
           batch(() => {
             setQuery(value.trim())
@@ -189,7 +228,13 @@ export function DialogInbox() {
           when={entries().length}
           fallback={
             <text fg={theme.text.muted}>
-              {inbox.loading() ? "Loading sessions…" : query() ? "No matching sessions" : "No inbox sessions"}
+              {(archived() ? archivedPage.loading : inbox.loading())
+                ? "Loading sessions…"
+                : query()
+                  ? "No matching sessions"
+                  : archived()
+                    ? "No archived sessions"
+                    : "No inbox sessions"}
             </text>
           }
         >
@@ -286,23 +331,37 @@ export function DialogInbox() {
           <box paddingX={DIALOG_INSET - 1}>
             <DialogFooter
               actions={{
-                secondary: collapsed().has(entry().section)
+                secondary: [
+                  {
+                    title: archived() ? "inbox" : "archived",
+                    command: "inbox.view.archived",
+                    onTrigger: toggleArchived,
+                  },
+                  ...(collapsed().has(entry().section)
+                    ? [
+                        {
+                          title: "expand",
+                          command: "inbox.section.expand",
+                          onTrigger: () => fold(entry().section, false),
+                        },
+                      ]
+                    : [
+                        {
+                          title: "collapse",
+                          command: "inbox.section.collapse",
+                          onTrigger: () => fold(entry().section, true),
+                        },
+                      ]),
+                ],
+                primary: entry().row
                   ? [
                       {
-                        title: "expand",
-                        command: "inbox.section.expand",
-                        onTrigger: () => fold(entry().section, false),
+                        title: archived() ? "restore" : "archive",
+                        command: "inbox.session.archive",
+                        onTrigger: () => archive(entry()),
                       },
+                      { title: "open", command: "dialog.select.submit", onTrigger: () => open() },
                     ]
-                  : [
-                      {
-                        title: "collapse",
-                        command: "inbox.section.collapse",
-                        onTrigger: () => fold(entry().section, true),
-                      },
-                    ],
-                primary: entry().row
-                  ? [{ title: "open", command: "dialog.select.submit", onTrigger: () => open() }]
                   : [],
               }}
             />

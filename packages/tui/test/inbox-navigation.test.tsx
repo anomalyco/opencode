@@ -53,6 +53,55 @@ test("open inbox sessions in different locations by mouse and by keyboard", asyn
   )
 })
 
+test("archive a session from Inbox and restore it from Archived", async () => {
+  const item = { ...session("ses_archive"), title: "Archive me" }
+  const updates: unknown[] = []
+  await using app = await createAppFixture({
+    width: 100,
+    height: 24,
+    config: { animations: false, session: { inbox: true } },
+    fetch: async (url, request) => {
+      if (url.pathname === "/api/session")
+        return json({
+          data: url.searchParams.get("archived") === "true" ? (item.time.archived ? [item] : []) : [item],
+          cursor: {},
+        })
+      if (url.pathname !== `/api/session/${item.id}`) return
+      if (request.method !== "PATCH") return json({ data: item })
+      updates.push(await request.json())
+      return json({ data: item })
+    },
+  })
+  const emit = (archived: boolean) => {
+    item.time = { ...item.time, archived: archived ? 2 : undefined }
+    app.events.emit({
+      id: `evt_${archived ? "archived" : "unarchived"}`,
+      created: 2,
+      type: archived ? "session.archived" : "session.unarchived",
+      durable: { aggregateID: item.id, seq: archived ? 2 : 3, version: 1 },
+      data: { sessionID: item.id },
+    })
+  }
+  await app.ready
+  await app.waitForFrame((frame) => frame.includes("Archive me") && /archive alt\+a/.test(frame))
+  app.mockInput.pressKey("a", { meta: true })
+  await app.waitFor(() => updates.length === 1)
+  expect(updates[0]).toEqual({ archived: true })
+  emit(true)
+  await app.waitForFrame((frame) => !frame.includes("Archive me"))
+  app.mockInput.pressTab()
+  await app.waitForFrame(
+    (frame) => frame.includes("Archived") && frame.includes("Archive me") && /restore alt\+a/.test(frame),
+  )
+  app.mockInput.pressKey("a", { meta: true })
+  await app.waitFor(() => updates.length === 2)
+  expect(updates[1]).toEqual({ archived: false })
+  emit(false)
+  await app.waitForFrame((frame) => !frame.includes("Archive me"))
+  app.mockInput.pressTab()
+  await app.waitForFrame((frame) => frame.includes("Archive me") && /archive alt\+a/.test(frame))
+})
+
 test("scroll through a long inbox without leaving the overlay", async () => {
   const sessions = Array.from({ length: 10 }, (_, index) => ({
     ...session(`ses_wheel_${index}`),
