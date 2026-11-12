@@ -260,6 +260,7 @@ impl Tui {
         self.local.sync(&changes);
         crate::tabs::sync(self, &changes);
         crate::frame::refresh(self);
+        crate::frame::observe_markers(self);
         crate::features::attention::program_status::sync(self);
     }
 

@@ -1,6 +1,8 @@
 //! The horizontal tab strip (W01, `HorizontalSessionTabs` in `component/session-tabs.tsx:1275-1790`). One
 //! [`Custom`] widget paints every cell from the TS formulas; it reads the tabs and the store when it paints.
 
+use std::time::{Duration, Instant};
+
 use opencode_ui::theme::tint;
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -32,6 +34,7 @@ pub struct Strip {
     slots: RefCell<Vec<(usize, usize, String)>>,
     plus: Cell<Option<usize>>,
     pulses: RefCell<HashMap<String, Pulse>>,
+    fades: RefCell<HashMap<String, MarkerFade>>,
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
@@ -50,6 +53,7 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
             slots: RefCell::default(),
             plus: Cell::new(None),
             pulses: RefCell::default(),
+            fades: RefCell::default(),
         },
     )
     .height(1)
@@ -82,12 +86,36 @@ pub fn animating(strip: &Custom<Strip>) -> bool {
 
 /// Drops the pulses while the strip is hidden, as its tabs unmount.
 pub fn forget(strip: &Custom<Strip>) {
-    strip.with(|strip| strip.pulses.borrow_mut().clear());
+    strip.with(|strip| {
+        strip.pulses.borrow_mut().clear();
+        strip.fades.borrow_mut().clear();
+    });
 }
 
 /// Turns the pulses' motion on or off (`TabPulse`'s `enabled`).
 pub fn set_animations(strip: &Custom<Strip>, enabled: bool) {
     strip.with(|strip| strip.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.set_enabled(enabled)));
+}
+
+/// Feeds each painted tab's status to its unread marker at a store flush.
+pub fn observe(strip: &Custom<Strip>, tui: &Tui) {
+    strip.with(|strip| observe_markers(&strip.fades, tui));
+}
+
+/// `TabIndicator`'s `createComputed` runs on every status change, not on paint: a marker that a `session.view`
+/// clears before the next paint still fades out.
+pub(super) fn observe_markers(markers: &RefCell<HashMap<String, MarkerFade>>, tui: &Tui) {
+    let theme = tui.page();
+    let animations = opencode_ui::motion::enabled(tui.config().info.animations);
+    let now = tui.app.now();
+    let mut markers = markers.borrow_mut();
+    for (session, marker) in markers.iter_mut().filter(|(session, _)| *session != NEW_TAB) {
+        let status = tui.tabs.status(tui, session);
+        marker.set(&status, feedback(&status, &theme).unwrap_or(theme.accent().step(200)), animations, now);
+    }
+    if markers.values().any(|marker| marker.moving(now)) {
+        crate::frame::wake_markers(tui);
+    }
 }
 
 pub fn tick(strip: &Custom<Strip>, delta: std::time::Duration) {
@@ -108,13 +136,92 @@ pub(super) fn feedback(status: &Status, theme: &Theme) -> Option<Color> {
     (status.unread == Some(Unread::Error)).then_some(theme.text.feedback.error.base)
 }
 
-/// The indicator's glyph (`TabIndicator`'s label) and whether it shows the unread color.
+/// `TabIndicator`'s unread fade, `createAnimatable({ opacity }, tween({ duration: 0.18 }))`: once the session is
+/// viewed, its unread marker stays and dissolves into the tab background instead of vanishing.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct MarkerFade {
+    from: f64,
+    target: f64,
+    started: Option<Instant>,
+    /// The unread color the marker last showed (`unreadColor`'s latch).
+    color: Color,
+}
+
+const MARKER_FADE: Duration = Duration::from_millis(180);
+
+impl MarkerFade {
+    pub(super) fn new(status: &Status, color: Color) -> Self {
+        let opacity = f64::from(u8::from(Self::unread(status)));
+        Self { from: opacity, target: opacity, started: None, color }
+    }
+
+    fn unread(status: &Status) -> bool {
+        status.unread.is_some() && !status.busy && status.attention.is_none()
+    }
+
+    /// The indicator's `createComputed`: unread jumps to full, pending to none, and anything else eases out from
+    /// where it is. Without animations the tween jumps to its target, as `createAnimatable` does.
+    pub(super) fn set(&mut self, status: &Status, color: Color, animations: bool, now: Instant) {
+        if Self::unread(status) {
+            self.color = color;
+            return self.jump(1.0);
+        }
+        if status.busy || status.attention.is_some() || !animations {
+            return self.jump(0.0);
+        }
+        if self.target == 0.0 {
+            return;
+        }
+        let from = self.opacity(now);
+        self.target = 0.0;
+        if from == 0.0 {
+            return self.jump(0.0);
+        }
+        self.from = from;
+        self.started = Some(now);
+    }
+
+    fn jump(&mut self, opacity: f64) {
+        *self = Self { from: opacity, target: opacity, started: None, color: self.color };
+    }
+
+    fn progress(&self, now: Instant) -> Option<f64> {
+        self.started
+            .map(|started| (now.saturating_duration_since(started).as_secs_f64() / MARKER_FADE.as_secs_f64()).min(1.0))
+    }
+
+    fn opacity(&self, now: Instant) -> f64 {
+        // `tween`'s default ease is smoothstep.
+        self.progress(now).map_or(self.from, |p| self.from + (self.target - self.from) * p * p * (3.0 - 2.0 * p))
+    }
+
+    /// Whether the marker still moves and needs frames.
+    pub(super) fn moving(&self, now: Instant) -> bool {
+        self.progress(now).is_some_and(|progress| progress < 1.0)
+    }
+
+    /// The marker's color while it fades out, or `None` when it does not: it brightens toward `flash` over the
+    /// first fifth, then dissolves into `background`.
+    pub(super) fn color(&self, status: &Status, background: Color, flash: Color, now: Instant) -> Option<Color> {
+        let opacity = self.opacity(now);
+        if status.unread.is_some() || opacity <= 0.0 {
+            return None;
+        }
+        let lift = (1.0 - (opacity - 0.8).abs() / 0.2).max(0.0);
+        Some(tint(background, tint(self.color, flash, lift * 0.3), (opacity / 0.8).min(1.0)))
+    }
+}
+
+/// The indicator's glyph (`TabIndicator`'s label) and whether it shows the unread color. A `fading` marker keeps
+/// its glyph.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn indicator(
     status: &Status,
     label: &str,
     idle: &str,
     numbers: bool,
     animations: bool,
+    fading: bool,
     now: std::time::Instant,
     epoch: std::time::Instant,
 ) -> (String, bool) {
@@ -132,7 +239,7 @@ pub(super) fn indicator(
         frames[frame].to_owned()
     } else if label == "+" {
         "+".to_owned()
-    } else if status.unread.is_some() {
+    } else if status.unread.is_some() || fading {
         UNREAD_MARKER.to_owned()
     } else {
         idle.to_owned()
@@ -276,6 +383,7 @@ impl Component for Strip {
         let number_width = items.len().to_string().len().max(2);
         let mut slots = Vec::new();
         let mut pulses = self.pulses.borrow_mut();
+        let mut markers = self.fades.borrow_mut();
         let now = tui.app.now();
         for (offset, tab) in items[layout.visible()].iter().enumerate() {
             let index = layout.start + offset;
@@ -337,8 +445,18 @@ impl Component for Strip {
             };
             let bold = selected || dragged;
             let label = if session == NEW_TAB { "+".to_owned() } else { (index + 1).to_string() };
-            let (glyph, unread) = indicator(&status, &label, "", numbers, animations, now, tui.tabs.epoch());
-            let indicator_color = if numbers || selected {
+            let unread_color = feedback.unwrap_or(palette.unread);
+            let marker = markers.entry(session.to_owned()).or_insert_with(|| MarkerFade::new(&status, unread_color));
+            marker.set(&status, unread_color, animations, now);
+            let faded = marker.color(&status, background, theme.text.base, now);
+            let (glyph, unread) =
+                indicator(&status, &label, "", numbers, animations, faded.is_some(), now, tui.tabs.epoch());
+            // The strip's `TabIndicator` takes no `selected`, so a selected tab's marker fades too.
+            let indicator_color = if numbers {
+                number
+            } else if let Some(color) = faded {
+                color
+            } else if selected {
                 number
             } else if unread {
                 feedback.unwrap_or(palette.unread)
@@ -386,6 +504,11 @@ impl Component for Strip {
             crate::frame::wake(&tui);
         }
         drop(pulses);
+        markers.retain(|session, _| slots.iter().any(|(_, _, painted)| painted == session));
+        if markers.values().any(|marker| marker.moving(now)) {
+            crate::frame::wake_markers(&tui);
+        }
+        drop(markers);
         if layout.after > 0 {
             painter.text(x as i32, 0, &format!(" {}›", layout.after), Style::new().fg(theme.text.muted));
             x += model::overflow_width(layout.after);
@@ -490,5 +613,60 @@ impl Component for Strip {
             }
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use opentui::prelude::Color;
+
+    use super::{MarkerFade, Status, Unread, indicator};
+
+    const BG: Color = Color::rgb(30, 30, 30);
+    const FLASH: Color = Color::rgb(238, 238, 238);
+    const UNREAD: Color = Color::rgb(157, 124, 216);
+
+    fn unread() -> Status {
+        Status { unread: Some(Unread::Activity), ..Status::default() }
+    }
+
+    #[test]
+    fn a_viewed_marker_eases_out_over_180_ms_with_smoothstep() {
+        let start = Instant::now();
+        let at = |ms: u64| start + Duration::from_millis(ms);
+        let mut marker = MarkerFade::new(&unread(), UNREAD);
+        marker.set(&unread(), UNREAD, true, start);
+        assert_eq!(marker.color(&unread(), BG, FLASH, start), None, "an unread marker shows the unread color");
+        marker.set(&Status::default(), UNREAD, true, start);
+        // Opacity 1 at the start: the full unread color, then a lift toward the flash color near 0.8.
+        assert_eq!(marker.color(&Status::default(), BG, FLASH, start), Some(UNREAD));
+        assert!(marker.moving(at(100)));
+        // smoothstep(0.5) = 0.5: half way at 90 ms, so the marker is a blend of background and unread color.
+        let half = marker.color(&Status::default(), BG, FLASH, at(90)).unwrap();
+        assert_eq!(half, opencode_ui::theme::tint(BG, UNREAD, 0.5 / 0.8));
+        let (glyph, _) = indicator(&Status::default(), "1", "", false, true, true, at(90), start);
+        assert_eq!(glyph, "•", "a fading marker keeps its glyph");
+        assert!(!marker.moving(at(180)));
+        assert_eq!(marker.color(&Status::default(), BG, FLASH, at(180)), None, "gone after 180 ms");
+        // Setting the same target again does not restart the tween.
+        marker.set(&Status::default(), UNREAD, true, at(200));
+        assert!(!marker.moving(at(201)));
+    }
+
+    #[test]
+    fn busy_or_animations_off_drop_the_marker_at_once() {
+        let start = Instant::now();
+        let mut marker = MarkerFade::new(&unread(), UNREAD);
+        marker.set(&Status::default(), UNREAD, false, start);
+        assert_eq!(marker.color(&Status::default(), BG, FLASH, start), None);
+        let mut marker = MarkerFade::new(&unread(), UNREAD);
+        marker.set(&Status { busy: true, ..unread() }, UNREAD, true, start);
+        assert_eq!(marker.color(&Status::default(), BG, FLASH, start), None);
+        // A tab that was never unread has nothing to fade.
+        let mut marker = MarkerFade::new(&Status::default(), UNREAD);
+        marker.set(&Status::default(), UNREAD, true, start);
+        assert!(!marker.moving(start) && marker.color(&Status::default(), BG, FLASH, start).is_none());
     }
 }
