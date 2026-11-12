@@ -182,8 +182,14 @@ function omitFileData(content: [ToolContent, ...ToolContent[]]): [ToolContent, .
   return [omit(content[0]), ...content.slice(1).map(omit)]
 }
 
+const hasFileData = (part: Extract<SessionMessageInfo, { type: "assistant" }>["content"][number]) =>
+  part.type === "tool" &&
+  "content" in part.state &&
+  !!part.state.content?.some((item) => item.type === "file" && item.uri.startsWith("data:"))
+
+// Returns the same message when there is nothing to drop, so the store keeps its objects.
 function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
-  if (message.type !== "assistant") return message
+  if (message.type !== "assistant" || !message.content.some(hasFileData)) return message
   return {
     ...message,
     content: message.content.map((part) =>
