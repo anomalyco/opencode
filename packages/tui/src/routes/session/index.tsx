@@ -3443,10 +3443,8 @@ function AdvisorTool(props: ToolProps) {
           </Show>
           <Show when={advice()}>
             {(value) => (
-              <box flexDirection="row">
-                <text flexShrink={0} fg={theme.text.muted}>
-                  advice:{" "}
-                </text>
+              <>
+                <text fg={theme.text.muted}>advice:</text>
                 <markdown
                   ref={useSessionLinks()}
                   syntaxStyle={syntax()}
@@ -3459,7 +3457,7 @@ function AdvisorTool(props: ToolProps) {
                   fg={theme.markdown.text}
                   bg={theme.background.base}
                 />
-              </box>
+              </>
             )}
           </Show>
         </box>

@@ -94,7 +94,10 @@ test("advisor tool rows show running, reviewed, declined and unavailable states"
 
     // Each row opens a dropdown of the exchange: what the advisor was shown and what came back.
     const click = async (text: string) => {
-      const row = setup.captureCharFrame().split("\n").findIndex((line) => line.includes(text))
+      const row = setup
+        .captureCharFrame()
+        .split("\n")
+        .findIndex((line) => line.includes(text))
       expect(row).toBeGreaterThan(0)
       await setup.mockMouse.click(8, row)
       await setup.waitForVisualIdle({ quietFrames: 3 })
