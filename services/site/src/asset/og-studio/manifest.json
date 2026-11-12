@@ -1,8 +1,9 @@
 {
-  "version": 1,
+  "version": 2,
   "generator": "og-studio",
   "width": 1200,
   "height": 630,
+  "base": "/files/site/og",
   "cards": {
     "/": {
       "image": "home-98637499f6.png",
