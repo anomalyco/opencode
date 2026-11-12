@@ -1096,10 +1096,24 @@ pub(super) fn answer_form(fields: Option<&[FormField]>, input: &[String]) -> err
     let Some(fields) = fields else { return Ok(None) };
     let mut answer = FormAnswer::new();
     for field in fields {
-        if matches!(field, FormField::Unknown(_)) {
+        let key = form::key(field);
+        if let FormField::Unknown(raw) = field {
+            // TS has no unknown variant: an unfamiliar type is decoded like any non-string answer and checked by
+            // `formValidateValue`'s last (multiselect) branch. That branch throws on a field without `options`
+            // when a selection must be among them; this reports what it means to check.
+            let Some(provided) = supplied.get(key) else { continue };
+            let value = supplied_answer(field, provided)?;
+            let FormValue::Array(items) = &value else { bail!("{key}: Expected selections") };
+            let flag = |name: &str| raw.get(name) == Some(&Value::Bool(true));
+            if items.is_empty() && flag("required") {
+                bail!("{key}: Answer required");
+            }
+            if !items.is_empty() && !flag("custom") {
+                bail!("{key}: Select only available options");
+            }
+            answer.insert(key.to_owned(), value);
             continue;
         }
-        let key = form::key(field);
         if !active(field, &answer) {
             if supplied.contains_key(key) {
                 bail!("Form field is not active: {key}");
@@ -1545,6 +1559,23 @@ mod tests {
                 format!("{url}: a host name must be ASCII; write an international name in its punycode (xn--) form")
             );
         }
+    }
+
+    #[test]
+    fn answers_for_unfamiliar_field_types_are_validated_and_sent() {
+        let fields: Vec<FormField> = serde_json::from_str(
+            r#"[{"type":"future-choice","key":"region"},{"type":"future-choice","key":"tags","custom":true}]"#,
+        )
+        .unwrap();
+        let answer = |input: &str| answer_form(Some(&fields), &[input.to_owned()]).map_err(|error| error.to_string());
+        assert_eq!(answer("region=west").unwrap_err(), "Expected a JSON value for form field: region");
+        assert_eq!(answer(r#"region="west""#).unwrap_err(), "region: Expected selections");
+        assert_eq!(answer(r#"region=["west"]"#).unwrap_err(), "region: Select only available options");
+        let sent = answer("region=[]").unwrap().unwrap();
+        assert_eq!(sent.get("region"), Some(&FormValue::Array(Vec::new())));
+        let sent = answer(r#"tags=["a"]"#).unwrap().unwrap();
+        assert_eq!(sent.get("tags"), Some(&FormValue::Array(vec!["a".to_owned()])));
+        assert_eq!(answer_form(Some(&fields), &[]).unwrap(), Some(FormAnswer::new()));
     }
 
     #[test]
