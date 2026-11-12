@@ -18,31 +18,20 @@ pub fn show(local: &Rc<Local>) {
             let favorites: Vec<String> = local.favorite().iter().map(Model::key).collect();
             let recent: Vec<String> = local.recent().iter().map(Model::key).collect();
             let marker = cx.theme.text.formfield.selected;
-            let options: select::Options<Model> = {
-                let weak = Rc::downgrade(&local);
-                Rc::new(move |query: &str| {
-                    weak.upgrade().map_or_else(Vec::new, |local| options(&local, query, &favorites, &recent, marker))
-                })
-            };
+            let options: select::Options<Model> =
+                Rc::new(bind!(local, |local, query: &str| options(&local, query, &favorites, &recent, marker)));
             let mut props = SelectProps::dynamic("Free models", options.clone());
             props.description = Some("Connect a provider for access to more models".to_owned());
             props.flat = true;
             props.skip_filter = true;
             props.current = local.current();
-            let weak = Rc::downgrade(&local);
-            props.on_select = Some(Rc::new(bind!(weak, |local, option: &SelectOption<Model>| model::choose(&local, &option.value))));
-            let connect = {
-                Rc::new(bind!(local, |local| model::connect(&local)))
-            };
-            let favorite_title = {
-                let weak = Rc::downgrade(&local);
-                move |option: Option<&SelectOption<Model>>| -> String {
-                    let favorite = weak
-                        .upgrade()
-                        .is_some_and(|local| option.is_some_and(|option| local.favorite().contains(&option.value)));
-                    if favorite { "unfavorite" } else { "favorite" }.into()
-                }
-            };
+            props.on_select =
+                Some(Rc::new(bind!(local, |local, option: &SelectOption<Model>| model::choose(&local, &option.value))));
+            let connect = Rc::new(bind!(local, |local| model::connect(&local)));
+            let favorite_title = bind!(local, |local, option: Option<&SelectOption<Model>>| {
+                let favorite = option.is_some_and(|option| local.favorite().contains(&option.value));
+                String::from(if favorite { "unfavorite" } else { "favorite" })
+            }, else String::from("favorite"));
             props.actions = vec![
                 SelectAction {
                     run: ActionRun::Dialog(connect),

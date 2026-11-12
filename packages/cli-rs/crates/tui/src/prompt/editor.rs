@@ -222,7 +222,8 @@ impl Drop for Prompt {
 pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     let app = &tui.app;
     let theme = tui.page();
-    let background = prompt_background(&theme);
+    // `theme.decrease(theme.background.raised.base)`.
+    let background = theme.decrease(&theme.background.raised.base, 1);
     let (width, height) = app.size();
     let padding = if width < 44 { 1 } else { 2 };
     let cursor = crate::features::system_commands::cursor(&tui.config());
@@ -337,10 +338,8 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     });
     // `prompt/index.tsx:1838-1844`: a left press focuses the prompt unless it is disabled. With the right pane
     // active, the session frame takes the release instead.
-    let weak = Rc::downgrade(&inner);
-    inner.textarea.on_mouse(move |cx, event| {
+    inner.textarea.on_mouse(bind!(inner, |prompt, cx, event| {
         let MouseEventKind::Down(button) = event.kind else { return };
-        let Some(prompt) = weak.upgrade() else { return };
         let Some(tui) = prompt.tui.upgrade() else { return };
         if prompt.disabled.get() || !crate::frame::session_interactive(&tui) {
             cx.prevent_default();
@@ -349,7 +348,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         if button == MouseButton::Left {
             cx.focus(&prompt.textarea);
         }
-    });
+    }));
     connect(&inner);
     connect_location(&inner);
     install_layers(tui, &inner);
@@ -372,33 +371,19 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     }
     load_catalog(tui, &inner);
     // A model, agent, or variant choice (E.16) changes the metadata row.
-    let weak = Rc::downgrade(&inner);
-    let local = tui.local.subscribe(move || {
-        if let Some(inner) = weak.upgrade()
-            && let Some(tui) = inner.tui.upgrade()
-        {
-            inner.refresh(&tui);
-            inner.submit_startup(&tui);
-        }
-    });
+    let local = tui.local.subscribe(bind!(inner, |inner| if let Some(tui) = inner.tui.upgrade() {
+        inner.refresh(&tui);
+        inner.submit_startup(&tui);
+    }));
     inner.layers.borrow_mut().push(local);
-    let weak = Rc::downgrade(&inner);
-    let editor = tui.prompt.editor.subscribe(move || {
-        if let Some(inner) = weak.upgrade()
-            && let Some(tui) = inner.tui.upgrade()
-        {
-            inner.refresh(&tui);
-        }
-    });
+    let editor = tui.prompt.editor.subscribe(bind!(inner, |inner| if let Some(tui) = inner.tui.upgrade() {
+        inner.refresh(&tui);
+    }));
     inner.layers.borrow_mut().push(editor);
-    let weak = Rc::downgrade(&inner);
-    let mentions = tui.prompt.editor.on_mention(move |mention| {
-        if let Some(inner) = weak.upgrade()
-            && let Some(tui) = inner.tui.upgrade()
-        {
+    let mentions =
+        tui.prompt.editor.on_mention(bind!(inner, |inner, mention| if let Some(tui) = inner.tui.upgrade() {
             editor_context::insert_mention(&inner, &tui, mention);
-        }
-    });
+        }));
     inner.layers.borrow_mut().push(mentions);
     // `useCursorStyle` and the animations follow the config, as the metadata row's auto-accept mark does; the
     // footer's shortcuts follow the keybinds.
@@ -410,14 +395,9 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     }));
     inner.layers.borrow_mut().push(settings);
     // The metadata row and the footer follow the terminal size (`useTerminalDimensions`).
-    let weak = Rc::downgrade(&inner);
-    let resize = tui.app.on_resize(move |_, _, _| {
-        if let Some(inner) = weak.upgrade()
-            && let Some(tui) = inner.tui.upgrade()
-        {
-            inner.relayout(&tui);
-        }
-    });
+    let resize = tui.app.on_resize(bind!(inner, |inner, _, _, _| if let Some(tui) = inner.tui.upgrade() {
+        inner.relayout(&tui);
+    }));
     let app = tui.app.clone();
     inner.layers.borrow_mut().push(Disposer::new(move || {
         app.remove_handler(resize);
@@ -589,8 +569,7 @@ impl Inner {
             return;
         }
         // After the change that made it ready: a submit can navigate, which drops this prompt.
-        let weak = self.this.clone();
-        tui.app.defer(bind!(weak, |prompt, _| {
+        tui.app.defer(bind!(self.this, |prompt, _| {
             super::submit::submit(&prompt, delivery);
         }));
     }
@@ -783,13 +762,13 @@ impl Inner {
         if let Some(timer) = self.interrupt_timer.take() {
             self.app.cancel_timer(timer);
         }
-        let weak = self.this.clone();
-        self.interrupt_timer.set(Some(self.app.set_timeout(INTERRUPT_WINDOW, move |_| {
-            if let (Some(prompt), Some(tui)) = (weak.upgrade(), weak.upgrade().and_then(|p| p.tui.upgrade())) {
+        self.interrupt_timer.set(Some(self.app.set_timeout(
+            INTERRUPT_WINDOW,
+            bind!(self.this, |prompt, _| if let Some(tui) = prompt.tui.upgrade() {
                 prompt.interrupt.set(0);
                 prompt.refresh(&tui);
-            }
-        })));
+            }),
+        )));
         if self.interrupt.get() >= 2 {
             let client = tui.data.client().clone();
             tui.app.runtime().spawn(async move {
@@ -818,11 +797,6 @@ impl Inner {
     }
 }
 
-/// The prompt's background (`theme.decrease(theme.background.raised.base)`).
-fn prompt_background(theme: &Theme) -> Color {
-    theme.decrease(&theme.background.raised.base, 1)
-}
-
 /// Eleven border glyphs (`BorderStyle::chars` order) with the given vertical, bottom-left corner,
 /// and horizontal.
 fn border_chars(vertical: char, bottom_left: char, horizontal: char) -> [char; 11] {
@@ -849,8 +823,7 @@ fn connect(inner: &Rc<Inner>) {
 /// `useWorkingDirectoryActions`). While a reply runs the footer shows the interrupt hint instead.
 fn connect_location(inner: &Rc<Inner>) {
     // `onSizeChange` of the status box: the label shortens to the room the footer plugins leave.
-    let weak = Rc::downgrade(inner);
-    inner.location_box.on_resize(bind!(weak, |prompt, _, rect| {
+    inner.location_box.on_resize(bind!(inner, |prompt, _, rect| {
         let width = rect.width.max(0.0) as u16;
         if prompt.location_width.replace(width) != width
             && let Some(tui) = prompt.tui.upgrade()
@@ -858,25 +831,22 @@ fn connect_location(inner: &Rc<Inner>) {
             prompt.refresh(&tui);
         }
     }));
-    let weak = Rc::downgrade(inner);
-    inner.footer.on_hover(bind!(weak, |prompt, _, hovered| {
+    inner.footer.on_hover(bind!(inner, |prompt, _, hovered| {
         prompt.hovered.set(hovered);
         if let Some(tui) = prompt.tui.upgrade() {
             prompt.footer.mouse_pointer(opencode_ui::click_pointer(!prompt.running(&tui)));
             prompt.refresh(&tui);
         }
     }));
-    let weak = Rc::downgrade(inner);
-    inner.footer.on_mouse(move |_, event| {
+    inner.footer.on_mouse(bind!(inner, |prompt, _, event| {
         if event.kind != MouseEventKind::Up(MouseButton::Left) {
             return;
         }
-        let Some(prompt) = weak.upgrade() else { return };
         let Some(tui) = prompt.tui.upgrade() else { return };
         if !prompt.running(&tui) {
             crate::dialogs::working_directory::show(&tui, &prompt.location(&tui).directory);
         }
-    });
+    }));
 }
 
 /// Reads the location's catalogs through the store; the prompt repaints as each arrives.
@@ -905,16 +875,12 @@ fn insert_skill(prompt: Weak<Inner>) -> crate::dialogs::skill::OnSelect {
 fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     let target = inner.textarea.id();
     let when = |check: fn(&Inner, &Tui) -> bool| {
-        let weak = Rc::downgrade(inner);
-        Condition::when(move || {
-            weak.upgrade().is_some_and(|prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui)))
-        })
+        Condition::when(bind!(inner, |prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui))))
     };
     let run = |action: fn(&Inner, &Tui) -> bool| {
-        let weak = Rc::downgrade(inner);
-        move |_: Option<&str>, _: Option<&KeyEvent>| {
-            weak.upgrade().is_some_and(|prompt| prompt.tui.upgrade().is_some_and(|tui| action(&prompt, &tui)))
-        }
+        bind!(inner, |prompt, _: Option<&str>, _: Option<&KeyEvent>| {
+            prompt.tui.upgrade().is_some_and(|tui| action(&prompt, &tui))
+        })
     };
     let command = |id: &str, title: &str, group: &str, action: fn(&Inner, &Tui) -> bool| {
         TuiCommand::new(id, run(action)).title(title).group(group).bind(Bind::Off)

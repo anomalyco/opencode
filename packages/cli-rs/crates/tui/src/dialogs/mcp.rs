@@ -20,12 +20,10 @@ use crate::prelude::*;
 /// Registers `mcp.list` (`/mcps`) and its binding as `app.tsx:158,967-975` do. With a server's name as its input
 /// (the sidebar's MCP section), it opens on that server, and on its error when it failed.
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    let command = TuiCommand::new("mcp.list", move |input: Option<&str>, _| {
-        if let Some(tui) = weak.upgrade() {
-            show_server(&tui, input.map(str::to_owned), input.is_some());
-        }
-    })
+    let command = TuiCommand::new(
+        "mcp.list",
+        bind!(tui, |tui, input: Option<&str>, _| show_server(&tui, input.map(str::to_owned), input.is_some())),
+    )
     .bind(Bind::Off)
     .title("MCP servers")
     .group("Agent")
@@ -75,13 +73,9 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
             props.on_select =
                 Some(Rc::new(bind!(weak, |mcp, option: &SelectOption<String>| mcp.select(&option.value))));
             props.actions = vec![SelectAction {
-                title: Rc::new({
-                    let weak = weak.clone();
-                    move |option: Option<&SelectOption<String>>| {
-                        let server = weak.upgrade().zip(option).and_then(|(mcp, option)| mcp.server(&option.value));
-                        toggle_title(server.as_ref()).to_owned()
-                    }
-                }),
+                title: Rc::new(bind!(weak, |mcp, option: Option<&SelectOption<String>>| {
+                    toggle_title(option.and_then(|option| mcp.server(&option.value)).as_ref()).to_owned()
+                }, else toggle_title(None).to_owned())),
                 ..SelectAction::new(
                     "dialog.mcp.toggle",
                     "connect",
@@ -102,7 +96,12 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
             // The footer reads the selection through the handle, which exists only now.
             mcp.refresh();
             if let Some(tui) = mcp.tui.upgrade() {
-                cx.on_close(tui.follow(&mcp, |mcp, _, changes| mcp.sync(changes)));
+                // Refreshes the list after each store flush that touched the location.
+                cx.on_close(tui.follow(&mcp, |mcp, _, changes| {
+                    if changes.location(&mcp.location) {
+                        mcp.refresh();
+                    }
+                }));
             }
             // The dialog owns the list; handlers hold weak references.
             cx.on_close(Disposer::new(move || {
@@ -140,13 +139,6 @@ impl Mcp {
                     mcp.refresh();
                 }
             });
-        }
-    }
-
-    /// Refreshes the list after each store flush that touched the location, while the dialog is open.
-    fn sync(&self, changes: &Changes) {
-        if changes.location(&self.location) {
-            self.refresh();
         }
     }
 
@@ -200,18 +192,12 @@ impl Mcp {
         if kind(&server.status) == "needs_auth"
             && let Some(integration) = server.integration_id.clone()
         {
-            let weak = self.tui.clone();
             // After the sign-in, back to the list on this server (#62245).
-            let back: super::integration::OnConnected = Rc::new({
-                let (weak, name) = (weak.clone(), name.to_owned());
-                move |_, _| {
-                    if let Some(tui) = weak.upgrade() {
-                        show_server(&tui, Some(name.clone()), false);
-                    }
-                }
-            });
+            let name = name.to_owned();
+            let back: super::integration::OnConnected =
+                Rc::new(bind!(self.tui, |tui, _, _| show_server(&tui, Some(name.clone()), false)));
             if let Some(tui) = self.tui.upgrade() {
-                tui.app.defer(bind!(weak, |tui, _| super::integration::show_auto_connect(
+                tui.app.defer(bind!(tui, |tui, _| super::integration::show_auto_connect(
                     &tui,
                     &integration,
                     Some(back.clone())
@@ -277,7 +263,6 @@ impl Mcp {
     /// The error view in place of the list; Escape goes back to the list on this server.
     fn detail(self: &Rc<Self>, server: McpServer) {
         let Some(tui) = self.tui.upgrade() else { return };
-        let weak = tui.weak();
         let mut context = format!("Status: {}\nConfiguration: mcp.servers.{}", kind(&server.status), server.name);
         if let Some(integration) = &server.integration_id {
             context.push_str(&format!("\nIntegration: {}", integration.0));
@@ -290,15 +275,14 @@ impl Mcp {
             diagnostic_ref: None,
             on_back: Rc::new({
                 let name = server.name.clone();
-                bind!(weak, |tui| {
-                    let (weak, name) = (tui.weak(), name.clone());
-                    tui.app.defer(bind!(weak, |tui, _| show_server(&tui, Some(name), false)));
+                bind!(tui, |tui| {
+                    let name = name.clone();
+                    tui.app.defer(bind!(tui, |tui, _| show_server(&tui, Some(name), false)));
                 })
             }),
         };
-        let weak = tui.weak();
         tui.app.defer(bind!(tui, |tui, _| tui.dialogs.replace(
-            bind!(weak, |tui, cx| error_details::view(&tui, cx, props.clone()), else View::new(&cx.app)),
+            bind!(tui, |tui, cx| error_details::view(&tui, cx, props.clone()), else View::new(&cx.app)),
             None,
             DialogOptions::default()
         )));

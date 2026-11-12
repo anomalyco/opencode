@@ -413,10 +413,9 @@ impl Transcript {
     pub fn load_all(&self, tui: &Tui, done: impl FnOnce(&Tui, Result<(), String>) + 'static) {
         let Some(session) = self.session() else { return };
         let data = tui.data.clone();
-        let weak = self.0.this.clone();
         tui.app.spawn(
             async move { data.message_load_more(&session, LoadMore { all: true, ..LoadMore::default() }).await },
-            bind!(weak, |inner, _, result| {
+            bind!(self.0.this, |inner, _, result| {
                 let Some(tui) = inner.tui.upgrade() else { return };
                 done(&tui, result.map_err(|error| error.to_string()));
             }),
@@ -520,11 +519,10 @@ impl Inner {
 
     /// `session.toggle.thinking` (`index.tsx:1163-1180`): writes `session.thinking`, which the rows follow.
     fn register(&self, tui: &Tui) {
-        let weak = self.this.clone();
         let title = if self.view.get().hide_thinking { "Expand thinking" } else { "Collapse thinking" };
         let toggle = TuiCommand::new(
             "session.toggle.thinking",
-            bind!(weak, |inner, _, _| {
+            bind!(self.this, |inner, _, _| {
                 let Some(tui) = inner.tui.upgrade() else { return };
                 let next = if inner.view.get().hide_thinking { Visibility::Show } else { Visibility::Hide };
                 crate::dialogs::settings::update(&tui, move |draft| {
@@ -715,10 +713,9 @@ impl Inner {
         self.boundary.set(Some(count));
         self.loading.set(true);
         let data = tui.data.clone();
-        let weak = self.this.clone();
         tui.app.spawn(
             async move { data.message_load_more(&session, LoadMore::default()).await },
-            bind!(weak, |inner, _, result| {
+            bind!(self.this, |inner, _, result| {
                 inner.loading.set(false);
                 if let Err(error) = result {
                     log::error!("Failed to load older messages: {error}");
@@ -858,10 +855,9 @@ impl Inner {
         self.hint.visible(true);
         *self.start.borrow_mut() = Start::Top;
         let data = tui.data.clone();
-        let weak = self.this.clone();
         tui.app.spawn(
             async move { data.message_load_more(&session, LoadMore::default()).await },
-            bind!(weak, |inner, _, result| {
+            bind!(self.this, |inner, _, result| {
                 inner.loading.set(false);
                 inner.hint.visible(false);
                 let Some(tui) = inner.tui.upgrade() else { return };

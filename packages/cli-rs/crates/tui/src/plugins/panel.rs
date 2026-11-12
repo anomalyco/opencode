@@ -73,12 +73,11 @@ fn ask(tui: &Tui, id: &str, title: String, placeholder: Option<String>, action: 
     let (weak, clear, id) = (tui.weak(), tui.dialogs.clone(), id.to_owned());
     tui.dialogs.replace(
         move |cx| {
-            let (weak, clear, id, action) = (weak.clone(), clear.clone(), id.clone(), action.clone());
-            let on_confirm = move |value: &str| {
-                let Some(tui) = weak.upgrade() else { return };
+            let (clear, id, action) = (clear.clone(), id.clone(), action.clone());
+            let on_confirm = bind!(weak, |tui, value: &str| {
                 tui.dialogs.clear();
                 run(&tui, &id, &action, Some(value));
-            };
+            });
             let (view, _) = prompt(
                 cx,
                 PromptProps {
@@ -116,12 +115,11 @@ fn pick(tui: &Tui, id: &str, select: abi::Select) {
             let mut props = SelectProps::new(select.title.clone(), options);
             props.placeholder = select.placeholder.clone();
             props.current = select.current.clone();
-            let (weak, id, action) = (weak.clone(), id.clone(), select.action.clone());
-            props.on_select = Some(Rc::new(move |option: &SelectOption<String>| {
-                let Some(tui) = weak.upgrade() else { return };
+            let (id, action) = (id.clone(), select.action.clone());
+            props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<String>| {
                 tui.dialogs.clear();
                 run(&tui, &id, &action, Some(&option.value));
-            }));
+            })));
             opencode_ui::select::select(cx, props).0
         },
         None,
@@ -148,10 +146,9 @@ fn panel(tui: &Tui, id: &str, panel: abi::Panel) {
         }
     }
     let plugin = id.to_owned();
-    let (weak, options) = (tui.weak(), DialogOptions::new(size).key(key.clone()));
+    let options = DialogOptions::new(size).key(key.clone());
     tui.dialogs.replace(
-        move |cx| {
-            let Some(tui) = weak.upgrade() else { return View::new(&cx.app) };
+        bind!(tui, |tui, cx| {
             // Built again in a new theme, the panel shows what the plugin sent last.
             let live = tui.reads.panel.borrow_mut().take_if(|live| live.key == key);
             let shown = live.as_ref().map_or_else(|| panel.clone(), |live| live.shown.borrow().clone());
@@ -159,7 +156,7 @@ fn panel(tui: &Tui, id: &str, panel: abi::Panel) {
             let (view, live) = build(&tui, cx, key.clone(), plugin.clone(), shown);
             *tui.reads.panel.borrow_mut() = Some(live);
             view
-        },
+        }, else View::new(&cx.app)),
         None,
         options,
     );
@@ -227,12 +224,11 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, plugin: String, panel: abi::
         drop(emptied.borrow_mut().take());
         resizes.remove_handler(resize);
     }));
-    let (weak, closed, app) = (tui.weak(), key.clone(), app.clone());
-    cx.on_dismiss(move || {
-        let Some(tui) = weak.upgrade() else { return };
+    let (closed, app) = (key.clone(), app.clone());
+    cx.on_dismiss(bind!(tui, |tui| {
         let live = tui.reads.panel.borrow_mut().take_if(|live| live.key == closed);
         app.defer(move |_| drop(live));
-    });
+    }));
     let live = Live {
         key,
         plugin,
@@ -295,14 +291,13 @@ impl Live {
                 let mut item = FooterAction::new(action.title);
                 item.key = action.key;
                 item.color = action.color.as_ref().and_then(|color| node::color_of(theme, color));
-                let (weak, plugin, close, run_action) = (tui.weak(), self.plugin.clone(), action.close, action.action);
-                item.on_trigger(move || {
-                    let Some(tui) = weak.upgrade() else { return };
+                let (plugin, close, run_action) = (self.plugin.clone(), action.close, action.action);
+                item.on_trigger(bind!(tui, |tui| {
                     if close {
                         tui.dialogs.clear();
                     }
                     run(&tui, &plugin, &run_action, None);
-                })
+                }))
             })
             .collect();
         self.footer.clear();
@@ -311,14 +306,10 @@ impl Live {
             .binds
             .into_iter()
             .map(|bind| {
-                let (weak, plugin, action) = (tui.weak(), self.plugin.clone(), bind.action);
-                TuiCommand::inline(bind.key, move |_, _| {
-                    if let Some(tui) = weak.upgrade() {
-                        run(&tui, &plugin, &action, None);
-                    }
-                })
-                .title(bind.title)
-                .group("Dialog")
+                let (plugin, action) = (self.plugin.clone(), bind.action);
+                TuiCommand::inline(bind.key, bind!(tui, |tui, _, _| run(&tui, &plugin, &action, None)))
+                    .title(bind.title)
+                    .group("Dialog")
             })
             .collect();
         let layer = self.cx.keymap.layer(KeymapLayer::new(commands).mode(MODAL_MODE));
@@ -366,12 +357,8 @@ impl Live {
     }
 
     fn act(&self, tui: &Tui) -> Act {
-        let (weak, plugin) = (tui.weak(), self.plugin.clone());
-        Rc::new(move |action| {
-            if let Some(tui) = weak.upgrade() {
-                run(&tui, &plugin, action, None);
-            }
-        })
+        let plugin = self.plugin.clone();
+        Rc::new(bind!(tui, |tui, action| run(&tui, &plugin, action, None)))
     }
 }
 
@@ -379,12 +366,9 @@ impl Live {
 fn run(tui: &Tui, _id: &str, action: &abi::Action, value: Option<&str>) {
     let abi::Action::Command { name, input } = action.clone();
     let input = value.map(str::to_owned).or(input);
-    let weak = tui.weak();
-    tui.app.defer(move |_| {
-        if let Some(tui) = weak.upgrade() {
-            tui.keymap.dispatch(&name, input.as_deref());
-        }
-    });
+    tui.app.defer(bind!(tui, |tui, _| {
+        tui.keymap.dispatch(&name, input.as_deref());
+    }));
 }
 
 #[doc(hidden)]

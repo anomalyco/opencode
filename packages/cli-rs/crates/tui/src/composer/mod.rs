@@ -217,8 +217,7 @@ impl Inner {
 
     /// A keymap condition on the composer's own cells: conditions must not lock the store.
     fn condition(self: &Rc<Self>, check: impl Fn(&Inner) -> bool + 'static) -> Condition {
-        let weak = Rc::downgrade(self);
-        Condition::when(move || weak.upgrade().is_some_and(|inner| check(&inner)))
+        Condition::when(bind!(self, |inner| check(&inner)))
     }
 
     /// `session.child.first`: opens on the named tab (the prompt footer names one), else toggles the subagent picker.

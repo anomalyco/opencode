@@ -414,9 +414,8 @@ impl Component for Strip {
                 .find(|(_, _, id)| id == session)
                 .is_some_and(|(start, width, _)| x == (start + width) as i32 - 2)
         };
-        let weak = self.tui.clone();
         let defer = |cx: &mut Cx<'_>, run: Box<dyn FnOnce(&Tui)>| {
-            cx.defer(bind!(weak, |tui, _| run(&tui)));
+            cx.defer(bind!(self.tui, |tui, _| run(&tui)));
         };
         match event.kind {
             MouseEventKind::Moved => {

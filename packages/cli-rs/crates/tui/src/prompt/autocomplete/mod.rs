@@ -436,14 +436,12 @@ impl State {
             let location = prompt.location(&tui);
             for catalog in [Catalog::Agent, Catalog::Skill, Catalog::Reference] {
                 let task = tui.data.catalog_sync(catalog, Some(&location));
-                let weak = self.prompt.clone();
-                tui.app.spawn(task, move |_, _| {
-                    if let Some(prompt) = weak.upgrade()
-                        && let Some(complete) = prompt.autocomplete.get()
-                    {
+                tui.app.spawn(
+                    task,
+                    bind!(self.prompt, |prompt, _, _| if let Some(complete) = prompt.autocomplete.get() {
                         complete.sync();
-                    }
-                });
+                    }),
+                );
             }
         }
         self.refresh();
@@ -545,8 +543,7 @@ impl State {
         let directory = location.directory.clone();
         let home = home();
         let width = self.content_width(tui);
-        let weak = self.prompt.clone();
-        let finish = bind!(weak, |prompt, results: Option<Results>| {
+        let finish = bind!(self.prompt, |prompt, results: Option<Results>| {
             let Some(complete) = prompt.autocomplete.get() else { return };
             let state = &complete.0;
             if state.generation.get() != generation {
@@ -893,8 +890,7 @@ impl State {
                     row.child(&Text::new(app, label).fg(muted).shrink(0.0));
                 }
             }
-            let weak = self.prompt.clone();
-            row.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(weak, |prompt, _, event| {
+            row.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(self.prompt, |prompt, _, event| {
                 let Some(complete) = prompt.autocomplete.get() else { return };
                 match event.kind {
                     MouseEventKind::Down(_) | MouseEventKind::Moved => {
@@ -966,22 +962,18 @@ fn rail(app: &App, theme: &opencode_ui::theme::Theme, color: Option<Color>, row:
 
 /// The autocomplete's key layer (`autocomplete.tsx:684-752`).
 fn install(tui: &Tui, state: &Rc<State>, target: FocusId) {
-    let weak = Rc::downgrade(state);
     let command = |id: &str, title: &str, action: fn(&State)| {
-        let weak = weak.clone();
-        TuiCommand::new(id, move |_: Option<&str>, _: Option<&KeyEvent>| {
-            if let Some(state) = weak.upgrade() {
-                action(&state);
-            }
+        TuiCommand::new(
+            id,
+            bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| {
+            action(&state);
             true
-        })
+        }, else true),
+        )
         .title(title)
         .group("Autocomplete")
     };
-    let visible = {
-        let weak = weak.clone();
-        Condition::when(move || weak.upgrade().is_some_and(|state| state.visible.get().is_some()))
-    };
+    let visible = Condition::when(bind!(state, |state| state.visible.get().is_some()));
     let layer = KeymapLayer::new(vec![
         command("prompt.autocomplete.prev", "Previous autocomplete item", |state| state.move_by(-1)),
         command("prompt.autocomplete.next", "Next autocomplete item", |state| state.move_by(1)),

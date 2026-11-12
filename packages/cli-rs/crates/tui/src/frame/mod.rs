@@ -368,14 +368,13 @@ impl SessionState {
                 let width = if fullscreen { available as u16 } else { size };
                 let host = Host::new(tui, target, width, self.active.get() == Pane::Right);
                 // `PanelHost`'s `onMouseDown={props.onFocus}`.
-                let weak = tui.weak();
-                host.root.on_mouse(move |_, event| {
-                    if let (MouseEventKind::Down(_), Some(tui)) = (event.kind, weak.upgrade())
+                host.root.on_mouse(bind!(tui, |tui, _, event| {
+                    if matches!(event.kind, MouseEventKind::Down(_))
                         && let Some(session) = tui.frame.session()
                     {
                         session.focus_right(&tui);
                     }
-                });
+                }));
                 self.right.add(&host.root);
                 *self.host.borrow_mut() = Some(host);
                 focus = true;
@@ -519,22 +518,14 @@ fn install_commands(tui: &Rc<Tui>) {
             }
         })
     };
-    let right_pane = {
-        let weak = weak.clone();
-        Condition::when(move || {
-            weak.upgrade().is_some_and(|tui| {
-                !tui.dialogs.is_open()
-                    && tui
-                        .frame
-                        .session()
-                        .is_some_and(|session| session.host.borrow().is_some() || session.terminal.borrow().is_some())
-            })
-        })
-    };
-    let not_fullscreen = {
-        let weak = weak.clone();
-        Condition::when(move || weak.upgrade().is_some_and(|tui| !fullscreen_panel(&tui)))
-    };
+    let right_pane = Condition::when(bind!(weak, |tui| {
+        !tui.dialogs.is_open()
+            && tui
+                .frame
+                .session()
+                .is_some_and(|session| session.host.borrow().is_some() || session.terminal.borrow().is_some())
+    }));
+    let not_fullscreen = Condition::when(bind!(weak, |tui| !fullscreen_panel(&tui)));
     let commands = vec![
         TuiCommand::new("pane.focus.left", run(SessionState::focus_session))
             .title("Focus session pane")

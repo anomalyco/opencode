@@ -25,9 +25,8 @@ pub const ID: &str = "opencode.plugins";
 
 /// The host entry: `plugins.list` in the global layer while it is active.
 pub fn activate(tui: &Rc<Tui>) -> Disposer {
-    let weak = tui.weak();
     let layer = KeymapLayer::global(vec![
-        TuiCommand::new("plugins.list", bind!(weak, |tui, _, _| show(&tui)))
+        TuiCommand::new("plugins.list", bind!(tui, |tui, _, _| show(&tui)))
             .bind(Bind::Default)
             .title("Plugins")
             .group("System")
@@ -203,28 +202,18 @@ impl Manager {
             })
         };
         let hidden = |test: fn(&Manager, Option<&Entry>) -> bool| {
-            let weak = weak.clone();
-            Rc::new(move |option: Option<&SelectOption<String>>| {
-                weak.upgrade().is_none_or(|manager| {
-                    let entry = option.and_then(|option| manager.entry(&option.value));
-                    test(&manager, entry.as_ref())
-                })
-            })
+            Rc::new(bind!(weak, |manager, option: Option<&SelectOption<String>>| {
+                let entry = option.and_then(|option| manager.entry(&option.value));
+                test(&manager, entry.as_ref())
+            }, else true))
         };
         vec![
             SelectAction {
-                title: Rc::new({
-                    let weak = weak.clone();
-                    move |_| {
-                        let checking = weak.upgrade().is_some_and(|manager| manager.checking.get());
-                        if checking { "checking for updates" } else { "check for updates" }.to_owned()
-                    }
-                }),
+                title: Rc::new(bind!(weak, |manager, _| {
+                    if manager.checking.get() { "checking for updates" } else { "check for updates" }.to_owned()
+                }, else "check for updates".to_owned())),
                 hidden_when: Some(hidden(|manager, _| !manager.entries().iter().any(|entry| package(entry).is_some()))),
-                disabled: Some(Rc::new({
-                    let weak = weak.clone();
-                    move |_| weak.upgrade().is_some_and(|manager| manager.checking.get())
-                })),
+                disabled: Some(Rc::new(bind!(weak, |manager, _| manager.checking.get()))),
                 run: ActionRun::Dialog(Rc::new(bind!(weak, |manager| manager.check()))),
                 ..SelectAction::new("dialog.plugins.check", "check for updates", |_| {})
             },
@@ -513,9 +502,8 @@ impl Manager {
         };
         // The select is still handling the key that opened the error.
         tui.app.defer(bind!(tui, |tui, _| {
-            let weak = tui.weak();
             tui.dialogs.replace(
-                bind!(weak, |tui, cx| error_details::view(&tui, cx, props.clone()), else View::new(&cx.app)),
+                bind!(tui, |tui, cx| error_details::view(&tui, cx, props.clone()), else View::new(&cx.app)),
                 None,
                 DialogOptions::new(DialogSize::Large),
             );

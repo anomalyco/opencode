@@ -543,9 +543,8 @@ impl Component for Rail {
         let compact = self.compact(u32::from(width));
         let row = self.row_at(y);
         let on_close = x == i32::from(width) - 2;
-        let weak = self.tui.clone();
         let defer = |cx: &mut Cx<'_>, run: Box<dyn FnOnce(&Tui)>| {
-            cx.defer(bind!(weak, |tui, _| run(&tui)));
+            cx.defer(bind!(self.tui, |tui, _| run(&tui)));
         };
         match event.kind {
             MouseEventKind::Moved => {

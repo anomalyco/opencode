@@ -34,10 +34,6 @@ pub(super) struct State {
 }
 
 impl State {
-    fn rows(&self) -> usize {
-        self.entries.len().min(super::ROWS)
-    }
-
     /// `moveTo`.
     fn move_to(&mut self, next: usize, center: bool) {
         self.selected = next;
@@ -47,7 +43,7 @@ impl State {
     /// `scrollToIndex` on a box as tall as its rows, at most five.
     fn scroll_to_index(&mut self, index: usize, center: bool) {
         let len = self.entries.len();
-        let height = self.rows();
+        let height = len.min(super::ROWS);
         if center {
             self.offset = clamp_offset(index as isize - (height / 2) as isize, len);
             return;

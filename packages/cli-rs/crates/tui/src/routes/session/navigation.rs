@@ -97,10 +97,9 @@ impl Inner {
                     return;
                 }
                 let data = tui.data.clone();
-                let weak = inner.this.clone();
                 tui.app.spawn(
                     async move { data.message_load_more(&session, LoadMore::default()).await },
-                    bind!(weak, |inner, _, result| {
+                    bind!(inner.this, |inner, _, result| {
                         let Some(tui) = inner.tui.upgrade() else { return };
                         match result {
                             Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
@@ -129,10 +128,9 @@ impl Inner {
     /// `jumpToMessage`: aligns the message's first row with the top, one row higher for an
     /// assistant message.
     pub fn jump(&self, tui: &Tui, id: String) {
-        let weak = self.this.clone();
         self.ensure_all_rows(
             tui,
-            bind!(weak, |inner, tui| {
+            bind!(self.this, |inner, tui| {
                 let Some(session) = inner.transcript.session() else { return };
                 let Some(&(_, y)) = inner.transcript.anchors().iter().find(|(message, _)| *message == id) else {
                     return;
@@ -158,10 +156,9 @@ impl Inner {
         let viewport = f64::from(scroll.rect().height);
         self.set_slack(slack(top, viewport, content, self.slack_height.get()));
         self.update_away();
-        let weak = self.this.clone();
         after_layout(
             &tui.app,
-            bind!(weak, |inner| {
+            bind!(self.this, |inner| {
                 if inner.navigation.borrow().as_deref() != Some(id.as_str()) {
                     return;
                 }
@@ -178,8 +175,7 @@ impl Inner {
             return;
         }
         self.transcript.mount_all(tui);
-        let weak = self.tui.clone();
-        after_layout(&tui.app, bind!(weak, |tui| continuation(&tui)));
+        after_layout(&tui.app, bind!(self.tui, |tui| continuation(&tui)));
     }
 }
 

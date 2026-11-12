@@ -125,12 +125,8 @@ fn open_if_allowed(local: &Rc<Local>, offer: Offer) {
 
 /// `DialogGoUpsell`: "Free limit reached" with "don't show again", "dismiss", and "subscribe".
 pub fn show(local: &Rc<Local>, offer: Offer) {
-    let weak = Rc::downgrade(local);
     local.dialogs.replace(
-        move |cx| match weak.upgrade() {
-            Some(local) => build(cx, &local, offer.clone()),
-            None => View::new(&cx.app),
-        },
+        bind!(local, |local, cx| build(cx, &local, offer.clone()), else View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );
@@ -398,18 +394,9 @@ fn build_connect(cx: &Rc<DialogCx>, state: &Rc<Connect>) -> View {
     let footer_slot = View::new(app);
     *state.ui.borrow_mut() = Some(ConnectUi { cx: cx.clone(), title, body: body.clone(), footer: footer_slot.clone() });
     state.render();
-    let open = {
-        let state = Rc::downgrade(state);
-        bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| state.open())
-    };
-    let copy = {
-        let state = Rc::downgrade(state);
-        bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| state.copy())
-    };
-    let enabled = {
-        let state = Rc::downgrade(state);
-        Condition::when(move || state.upgrade().is_some_and(|state| state.attempt.borrow().is_some()))
-    };
+    let open = bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| state.open());
+    let copy = bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| state.copy());
+    let enabled = Condition::when(bind!(state, |state| state.attempt.borrow().is_some()));
     cx.layer(
         KeymapLayer::new(vec![
             TuiCommand::inline("return", open).title("Open authorization URL").group("Dialog"),
@@ -517,15 +504,12 @@ impl Connect {
         *self.label.borrow_mut() = Some(label);
 
         if self.valid() {
-            let weak = Rc::downgrade(self);
-            self.sync(false, move |outcome| {
-                if outcome.is_none()
-                    && let Some(state) = weak.upgrade()
-                    && !state.closed.get()
-                {
+            self.sync(
+                false,
+                bind!(self, |state, outcome| if outcome.is_none() && !state.closed.get() {
                     state.start_oauth(&form);
-                }
-            });
+                }),
+            );
             return;
         }
         self.start_oauth(&form);
@@ -569,10 +553,9 @@ impl Connect {
             location: self.location(),
         };
         let client = self.local.client.clone();
-        let weak = Rc::downgrade(self);
         self.local.app.spawn(
             async move { client.integration_oauth_status(&input).await },
-            bind!(weak, |state, cx, result| {
+            bind!(self, |state, cx, result| {
                 if state.closed.get() {
                     return;
                 }
@@ -592,15 +575,12 @@ impl Connect {
                     }
                     IntegrationAttemptStatus::Complete(_) => {
                         state.settled.set(true);
-                        let weak = Rc::downgrade(&state);
-                        state.sync(true, move |outcome| {
-                            if outcome.is_none()
-                                && let Some(state) = weak.upgrade()
-                                && !state.closed.get()
-                            {
+                        state.sync(
+                            true,
+                            bind!(state, |state, outcome| if outcome.is_none() && !state.closed.get() {
                                 state.local.dialogs.clear();
-                            }
-                        });
+                            }),
+                        );
                     }
                     IntegrationAttemptStatus::Failed(failed) => {
                         state.settled.set(true);

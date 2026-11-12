@@ -73,19 +73,16 @@ pub fn show(tui: &Tui) {
                     list.refresh_later();
                 }
             })));
-            props.on_select = Some(Rc::new({
-                let weak = weak.clone();
-                move |option: &SelectOption<SessionID>| {
-                    let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else { return };
-                    let id = option.value.clone();
-                    let app = tui.app.clone();
-                    app.defer(bind!(tui, |tui, _| {
-                        // Closed first, so the new view takes the focus.
-                        tui.dialogs.clear();
-                        tui.navigate(Route::Session { id });
-                    }));
-                }
-            }));
+            props.on_select = Some(Rc::new(bind!(weak, |list, option: &SelectOption<SessionID>| {
+                let Some(tui) = list.tui.upgrade() else { return };
+                let id = option.value.clone();
+                let app = tui.app.clone();
+                app.defer(bind!(tui, |tui, _| {
+                    // Closed first, so the new view takes the focus.
+                    tui.dialogs.clear();
+                    tui.navigate(Route::Session { id });
+                }));
+            })));
             let tabs = list.tui.upgrade().is_some_and(|tui| tui.config().tabs.enabled);
             props.actions = vec![
                 SelectAction {
@@ -101,25 +98,23 @@ pub fn show(tui: &Tui) {
                     "delete",
                     bind!(weak, |list, option: &SelectOption<SessionID>| list.delete(&option.value)),
                 ),
-                SelectAction::new("session.rename", "rename", {
-                    let weak = weak.clone();
-                    move |option: &SelectOption<SessionID>| {
-                        let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else { return };
+                SelectAction::new(
+                    "session.rename",
+                    "rename",
+                    bind!(weak, |list, option: &SelectOption<SessionID>| {
+                        let Some(tui) = list.tui.upgrade() else { return };
                         let (id, title) = (option.value.clone(), option.title.clone());
                         let app = tui.app.clone();
                         app.defer(bind!(tui, |tui, _| crate::dialogs::rename::show(&tui, id, Some(title))));
-                    }
-                }),
+                    }),
+                ),
             ];
             props.bindings = vec![
                 TuiCommand::inline("ctrl+a", bind!(weak, |list, _, _| list.toggle_all_projects()))
                     .title(if all_projects { "Show current directory sessions" } else { "Show all project sessions" })
                     .group("Dialog"),
             ];
-            props.dynamic_hints = Some(Rc::new({
-                let weak = weak.clone();
-                move || weak.upgrade().map(|list| list.hints()).unwrap_or_default()
-            }));
+            props.dynamic_hints = Some(Rc::new(bind!(weak, |list| list.hints())));
             let empty: Rc<dyn Fn() -> AnyWidget> = Rc::new({
                 let weak = weak.clone();
                 let app = cx.app.clone();
@@ -322,12 +317,11 @@ impl List {
         }
         let client = tui.data.client().clone();
         let input = SessionRemoveInput { session_id: id.clone() };
-        let weak = Rc::downgrade(self);
         let toasts = tui.weak();
         let id = id.clone();
         tui.app.spawn(
             async move { client.session_remove(&input).await },
-            bind!(weak, |list, _, result| {
+            bind!(self, |list, _, result| {
                 match result {
                     Ok(()) => {
                         if let Some(results) = &mut list.state.borrow_mut().results {

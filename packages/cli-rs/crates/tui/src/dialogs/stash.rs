@@ -27,18 +27,18 @@ pub fn show(tui: &Tui, on_select: OnSelect) {
                 }
             })));
             props.on_select = Some(Rc::new({
-                let (weak, on_select) = (weak.clone(), on_select.clone());
-                move |option: &SelectOption<usize>| {
-                    let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else { return };
-                    let (index, on_select, weak) = (option.value, on_select.clone(), tui.weak());
-                    tui.app.defer(bind!(weak, |tui, _| {
+                let on_select = on_select.clone();
+                bind!(weak, |list, option: &SelectOption<usize>| {
+                    let Some(tui) = list.tui.upgrade() else { return };
+                    let (index, on_select) = (option.value, on_select.clone());
+                    tui.app.defer(bind!(tui, |tui, _| {
                         if let Some(entry) = tui.prompt.stash.list().get(index) {
                             tui.prompt.stash.remove(&tui.app, index);
                             on_select(entry);
                         }
                         tui.dialogs.clear();
                     }));
-                }
+                })
             }));
             props.actions = vec![SelectAction::new(
                 "stash.delete",

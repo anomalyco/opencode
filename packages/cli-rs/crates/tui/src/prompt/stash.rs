@@ -115,21 +115,15 @@ impl Stash {
 /// The stash commands, in the palette (`stashCommands`).
 pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
     let when = |check: fn(&Inner, &Tui) -> bool| {
-        let weak = Rc::downgrade(inner);
-        Condition::when(move || {
-            weak.upgrade().is_some_and(|prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui)))
-        })
+        Condition::when(bind!(inner, |prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui))))
     };
     let run = |action: fn(&Rc<Inner>, &Tui)| {
-        let weak = Rc::downgrade(inner);
-        move |_: Option<&str>, _: Option<&KeyEvent>| {
-            if let Some(prompt) = weak.upgrade()
-                && let Some(tui) = prompt.tui.upgrade()
-            {
+        bind!(inner, |prompt, _: Option<&str>, _: Option<&KeyEvent>| {
+            if let Some(tui) = prompt.tui.upgrade() {
                 action(&prompt, &tui);
             }
             true
-        }
+        }, else true)
     };
     let command = |id: &str, title: &str, action: fn(&Rc<Inner>, &Tui)| {
         TuiCommand::new(id, run(action)).title(title).group("Prompt").bind(Bind::Off).palette()
@@ -154,10 +148,9 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
         })
         .enabled(when(|_, tui| !tui.prompt.stash.is_empty())),
         command("prompt.stash.list", "Stash list", |prompt, tui| {
-            let weak: Weak<Inner> = Rc::downgrade(prompt);
             crate::dialogs::stash::show(
                 tui,
-                Rc::new(bind!(weak, |prompt, entry: &Value| show(&prompt, entry["prompt"].clone()))),
+                Rc::new(bind!(prompt, |prompt, entry: &Value| show(&prompt, entry["prompt"].clone()))),
             );
         })
         .enabled(when(|_, tui| !tui.prompt.stash.is_empty())),

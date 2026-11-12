@@ -45,12 +45,9 @@ impl User {
             .child(&files);
         let hovered = theme.decrease(&theme.background.raised.base, 1);
         let body = Rc::new(body);
-        let target = Rc::downgrade(&body);
-        body.on_hover(move |_, hover| {
-            if let Some(body) = target.upgrade() {
-                body.bg(if hover { hovered } else { raised });
-            }
-        });
+        body.on_hover(bind!(body, |body, _, hover| {
+            body.bg(if hover { hovered } else { raised });
+        }));
         // A release (`onMouseUp`) opens the pending steer dialog for a prompt waiting to steer, else the message
         // actions (E.10b); a release that ends a text selection opens neither.
         let id = Rc::new(RefCell::new(String::new()));

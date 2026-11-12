@@ -27,9 +27,8 @@ pub fn install(tui: &Rc<Tui>) {
 
 /// `DialogStatus`, in place of any open dialog.
 pub fn show(tui: &Tui) {
-    let weak = tui.weak();
     tui.dialogs.replace(
-        bind!(weak, |tui, cx| {
+        bind!(tui, |tui, cx| {
             let body = View::new(&cx.app);
             draw(&body, cx, &servers(&tui));
             load(&tui);
