@@ -184,7 +184,8 @@ const layer = Layer.effect(
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
-      const all = [...rules, ...(yield* savedRules())]
+      const saved = yield* savedRules()
+      const all = [...rules, ...saved]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
@@ -196,6 +197,12 @@ const layer = Layer.effect(
         source: input.source,
         effect,
       })
+      // A saved approval is the user's own "always" for this request, so it also answers an ask a hook raised.
+      if (
+        event.effect === "ask" &&
+        input.resources.every((resource) => evaluate(input.action, resource, saved).effect === "allow")
+      )
+        return { effect: "allow" as const, rules: all }
       const unattended = yield* Unattended
       if (event.effect !== "ask" || unattended === undefined)
         return { effect: event.effect, message: event.message, rules: all }
