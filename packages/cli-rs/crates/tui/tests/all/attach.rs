@@ -162,6 +162,23 @@ fn copying_a_selection_over_a_paste_copies_its_text() {
 }
 
 #[test]
+fn copying_a_selection_copies_the_paste_inside_it_not_an_earlier_one_with_the_same_label() {
+    let capture = testing::capture();
+    let setup = Setup::new();
+    setup.app.paste("a\nb\nc");
+    setup.wait_text("[Pasted ~3 lines] ");
+    setup.app.type_text("and ");
+    setup.app.paste("d\ne\nf");
+    setup.wait_text("[Pasted ~3 lines] and [Pasted ~3 lines] ");
+    let (x, y) = setup.find("and [Pasted");
+    // From "and" to the second label's last cell: matching labels in order would copy the first paste.
+    setup.app.drag((x, y), (x + 20, y));
+    let copied = setup.app.wait_until(WAIT, || !capture.0.copied.borrow().is_empty());
+    assert!(copied, "nothing copied:\n{}", setup.app.text());
+    assert_eq!(capture.0.copied.borrow().last().unwrap(), "and d\ne\nf");
+}
+
+#[test]
 fn short_pastes_go_in_as_they_are_and_full_turns_compaction_off() {
     let setup = Setup::new();
     setup.app.paste("short \u{1b}[31mred\u{1b}[0m\rpaste");
