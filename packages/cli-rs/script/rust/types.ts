@@ -3,6 +3,8 @@ import type { SchemaRepresentation } from "effect"
 
 type R = SchemaRepresentation.Representation
 type Objects = SchemaRepresentation.Objects
+/** A generated common-field method: the JSON path it reads, the field's Rust type, and what it returns. */
+type Accessor = { keys: Array<string>; field: string; ret: string; parent?: string }
 
 const keywords = new Set(
   "as async await break const continue crate dyn else enum extern false fn for gen if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while abstract become box do final macro override priv try typeof unsized virtual yield".split(
@@ -45,6 +47,18 @@ export class Types {
   private readonly shapes = new Map<string, string>()
   // The tag key of every generated tagged enum, so an outer union can delegate `tag()` to an inner one.
   private readonly taggedKeys = new Map<string, string>()
+  // The fields of every generated struct, the target of every `pub type` alias, the string newtypes, and
+  // `Copy` scalars with their aliases (`EventSeq`), so a tagged enum can read the fields its members share.
+  private readonly structs = new Map<string, Array<{ key: string; ident: string; type: string }>>()
+  private readonly aliases = new Map<string, string>()
+  private readonly strings = new Set<string>()
+  private readonly scalars = new Map<string, string>([
+    ["f64", "f64"],
+    ["i64", "i64"],
+    ["bool", "bool"],
+  ])
+  // The common-field accessors of every generated tagged enum, so an outer enum can delegate to an inner one.
+  private readonly accessors = new Map<string, Map<string, Accessor>>()
 
   constructor(private readonly references: SchemaRepresentation.References) {}
 
@@ -148,6 +162,7 @@ export class Types {
       if (resolved._tag === "String" || resolved._tag === "TemplateLiteral") {
         const name = this.name(ref)
         this.defaultable.add(name)
+        this.strings.add(name)
         this.items.push(newtype(name, ref))
         return name
       }
@@ -156,6 +171,9 @@ export class Types {
       const name = this.name(ref)
       if (this.isDefault(type)) this.defaultable.add(name)
       if (this.floats.has(type)) this.floats.add(name)
+      this.aliases.set(name, type)
+      const scalar = this.scalars.get(type)
+      if (scalar !== undefined) this.scalars.set(name, scalar)
       this.items.push(`/// \`${ref}\`\npub type ${name} = ${type};`)
       return name
     })()
@@ -188,6 +206,7 @@ export class Types {
       return `IndexMap<String, ${value}>`
     }
     const used = new Set<string>()
+    const record: Array<{ key: string; ident: string; type: string }> = []
     const fields = r.propertySignatures.flatMap((property) => {
       const key = String(property.name)
       const field = this.field(property.type, property.isOptional, `${hint}${pascal(key)}`)
@@ -195,6 +214,7 @@ export class Types {
       let ident = snake(key)
       for (let i = 2; used.has(ident); i++) ident = `${snake(key)}_${i}`
       used.add(ident)
+      record.push({ key, ident, type: field.type })
       const plain = ident.replace(/^r#/, "")
       const attrs = [plain === key ? undefined : `rename = ${JSON.stringify(key)}`, ...field.attrs].filter(Boolean)
       const doc = docOf(property.annotations)
@@ -211,6 +231,7 @@ export class Types {
     }
     const defaults = types.every((type) => this.isDefault(type) || type === "IndexMap")
     if (defaults) this.defaultable.add(name)
+    this.structs.set(name, record)
     this.items.push(
       `#[derive(Debug, Clone, PartialEq, Serialize, Deserialize${defaults ? ", Default" : ""})]\npub struct ${name} {\n${lines.join("\n")}\n}`,
     )
@@ -488,15 +509,121 @@ export class Types {
       return `            Self::${variant}(value) => value.tag(),`
     }
     this.taggedKeys.set(name, tag.key)
-    const tagMethod =
-      kind === "boolean"
-        ? ""
-        : `\n\nimpl ${name} {\n    /// The \`${tag.key}\` tag, also of an unknown member.\n    pub fn tag(&self) -> &str {\n        match self {\n${variants.map(arm).join("\n")}\n            Self::Unknown(value) => value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::as_str).unwrap_or_default(),\n        }\n    }\n}`
+    const methods = [
+      ...(kind === "boolean"
+        ? []
+        : [
+            `    /// The \`${tag.key}\` tag, also of an unknown member.\n    pub fn tag(&self) -> &str {\n        match self {\n${variants.map(arm).join("\n")}\n            Self::Unknown(value) => value.get(${JSON.stringify(tag.key)}).and_then(serde_json::Value::as_str).unwrap_or_default(),\n        }\n    }`,
+          ]),
+      ...this.shared(name, variants, types, tag.key),
+    ]
+    const tagMethod = methods.length === 0 ? "" : `\n\nimpl ${name} {\n${methods.join("\n\n")}\n}`
     const doc = ref === undefined ? "" : `/// \`${ref}\`, tagged by \`${tag.key}\`.\n`
     this.items.push(
       `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let raw = crate::de::Raw::deserialize(deserializer)?;\n        match raw.field(${JSON.stringify(tag.key)}).${access}() {\n${ordered.join("\n")}\n            _ => raw.unknown().map(Self::Unknown),\n        }\n    }\n}${tagMethod}`,
     )
     return name
+  }
+
+  /**
+   * A method for every field that at least two members share with one Rust type, and for every field one level
+   * down that all members with its parent share (`time_created` for `time.created`). It returns the value itself when
+   * every member has it and an unknown member can supply it from JSON (a string or a scalar), else an `Option`
+   * that is `None` for the members without it.
+   */
+  private shared(name: string, variants: Array<string>, types: Array<string>, tagKey: string) {
+    const resolve = (type: string): string => {
+      const target = this.aliases.get(type)
+      return target === undefined ? type : resolve(target)
+    }
+    const bare = (ident: string) => ident.replace(/^r#/, "")
+    type Entry = { name: string; keys: Array<string>; field: string; parent?: string } & (
+      | { access: string }
+      | Pick<Accessor, "ret">
+    )
+    const entries = types.map((type): Array<Entry> => {
+      const inner = this.accessors.get(resolve(type))
+      if (inner !== undefined) return [...inner].map(([method, accessor]) => ({ name: method, ...accessor }))
+      return (this.structs.get(resolve(type)) ?? []).flatMap(
+        (field): Array<Entry> => [
+          { name: field.ident, keys: [field.key], field: field.type, access: field.ident },
+          ...(this.structs.get(resolve(field.type)) ?? []).map((leaf) => ({
+            name: `${bare(field.ident)}_${bare(leaf.ident)}`,
+            keys: [field.key, leaf.key],
+            field: leaf.type,
+            parent: field.ident,
+            access: `${field.ident}.${leaf.ident}`,
+          })),
+        ],
+      )
+    })
+    const names = [...new Set(entries.flat().map((entry) => entry.name))].filter(
+      (method) => method !== "tag" && method !== snake(tagKey),
+    )
+    const candidates = names.flatMap((method) => {
+      const slots = entries.map((member) => member.find((entry) => entry.name === method))
+      const present = slots.filter((slot) => slot !== undefined)
+      const first = present[0]
+      if (present.length < 2) return []
+      if (present.some((slot) => slot.field !== first.field || slot.keys.join("/") !== first.keys.join("/"))) return []
+      // A nested field must be in every member that has its parent: `durable.seq`, not `data.inboxID`.
+      const parent = present.find((slot) => slot.parent !== undefined)?.parent
+      const parents = entries.filter((member) =>
+        member.some((entry) => entry.name === parent || entry.parent === parent),
+      )
+      if (parent !== undefined && parents.length !== present.length) return []
+      return [{ method, slots, first, parent }]
+    })
+    const table = new Map<string, Accessor>()
+    const methods = candidates.flatMap((item) => {
+      const optional = /^Option<(.*)>$/.exec(item.first.field)
+      if (optional !== null && optional[1].startsWith("Option<")) return []
+      const base = optional === null ? item.first.field : optional[1]
+      const scalar = this.scalars.get(base)
+      const element = /^Vec<(.*)>$/.exec(base)?.[1]
+      const kind =
+        base === "String" || this.strings.has(base)
+          ? "str"
+          : scalar !== undefined
+            ? "scalar"
+            : element !== undefined
+              ? "slice"
+              : "ref"
+      const every = item.slots.every((slot) => slot !== undefined && !("ret" in slot && slot.ret.startsWith("Option<")))
+      const plain = every && optional === null && (kind === "str" || kind === "scalar")
+      const value = { str: "&str", scalar: base, slice: `&[${element}]`, ref: `&${base}` }[kind]
+      const ret = plain ? value : `Option<${value}>`
+      const read = (slot: Entry) => {
+        if ("ret" in slot) return slot.ret === ret ? `value.${item.method}()` : `Some(value.${item.method}())`
+        const field = `value.${slot.access}`
+        if (plain) return kind === "str" ? `${field}.as_str()` : field
+        if (optional === null)
+          return `Some(${{ str: `${field}.as_str()`, scalar: field, slice: `${field}.as_slice()`, ref: `&${field}` }[kind]})`
+        if (kind === "str") return base === "String" ? `${field}.as_deref()` : `${field}.as_ref().map(${base}::as_str)`
+        return { scalar: field, slice: `${field}.as_deref()`, ref: `${field}.as_ref()` }[kind]
+      }
+      const arms = item.slots.flatMap((slot, index) =>
+        slot === undefined ? [] : [`            Self::${variants[index]}(value) => ${read(slot)},`],
+      )
+      const absent = [
+        ...item.slots.flatMap((slot, index) => (slot === undefined ? [`Self::${variants[index]}(_)`] : [])),
+        "Self::Unknown(_)",
+      ]
+      const json =
+        item.first.keys.length === 1
+          ? `.get(${JSON.stringify(item.first.keys[0])})`
+          : `.pointer(${JSON.stringify(`/${item.first.keys.join("/")}`)})`
+      const unknown = plain
+        ? `            Self::Unknown(value) => value${json}.and_then(serde_json::Value::as_${kind === "str" ? "str" : scalar}).unwrap_or_default(),`
+        : `            ${absent.join(" | ")} => None,`
+      table.set(item.method, { keys: item.first.keys, field: item.first.field, ret, parent: item.parent })
+      const doc = plain ? "also of an unknown member" : "of the members that have it"
+      return [
+        `    /// The \`${item.first.keys.join(".")}\` field, ${doc}.\n    pub fn ${item.method}(&self) -> ${ret} {\n        match self {\n${arms.join("\n")}\n${unknown}\n        }\n    }`,
+      ]
+    })
+    this.accessors.set(name, table)
+    return methods
   }
 
   private untagged(members: Array<R>, seed: string, ref: string | undefined) {
