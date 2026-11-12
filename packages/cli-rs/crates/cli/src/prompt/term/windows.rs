@@ -41,9 +41,14 @@ pub fn stdout_rows() -> Option<usize> {
     Output::Stdout.is_terminal().then(|| opentui::term::size().ok()).flatten().map(|size| usize::from(size.1))
 }
 
-/// The rows of the prompt's output console, or 10 when it is not one (`limitOptions`).
+/// The rows of the prompt's output console, or 10 when it is not one (`limitOptions`). Asked of that output, so a
+/// picker on stderr keeps its rows while stdout goes to a file.
 pub fn rows(output: Output) -> usize {
-    output.is_terminal().then(|| opentui::term::size().ok()).flatten().map_or(10, |size| usize::from(size.1))
+    let size = match output {
+        Output::Stdout => win::console_size(std::io::stdout()),
+        Output::Stderr => win::console_size(std::io::stderr()),
+    };
+    size.map_or(10, |size| usize::from(size.1))
 }
 
 impl Output {
