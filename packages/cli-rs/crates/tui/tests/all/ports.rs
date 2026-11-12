@@ -442,6 +442,52 @@ fn a_slash_command_waits_for_a_pending_interrupt() {
     assert_eq!(order, ["/api/session/ses_p/interrupt", "/api/session/ses_p/generate"]);
 }
 
+// Expected (deviation O89-slash-after-interrupt): `/compact` picked from the popup, then from the palette, right after
+// an interrupt runs once the server has the interrupt.
+#[test]
+fn a_slash_command_picked_from_the_popup_or_the_palette_waits_for_a_pending_interrupt() {
+    use opencode_ui::keymap::COMMAND_PALETTE_COMMAND;
+
+    let h = open("force-input", 120, running);
+    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+    let order = || -> Vec<String> {
+        h.log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|seen| seen.path.ends_with("/interrupt") || seen.path.contains("compact"))
+            .map(|seen| seen.path.rsplit('/').next().unwrap().to_owned())
+            .collect()
+    };
+    let interrupt_then = |pick: &dyn Fn()| {
+        let (release, held) = tokio::sync::oneshot::channel();
+        *h.hold.lock().unwrap() = Some(held);
+        let count = order().len();
+        h.app.press("escape");
+        h.app.press("escape");
+        pick();
+        let early = h.app.wait_until(Duration::from_millis(300), || order().len() > count);
+        assert!(!early, "{:?}", order());
+        release.send(()).unwrap();
+        h.wait("both are sent", || order().len() == count + 2);
+    };
+    interrupt_then(&|| {
+        h.app.type_text("/compact");
+        h.wait_for("Compact session");
+        h.app.press("return");
+        h.wait("the popup runs it", || h.text().is_empty());
+    });
+    interrupt_then(&|| {
+        h.tui.keymap.dispatch(COMMAND_PALETTE_COMMAND, None);
+        h.wait_for("Search commands");
+        h.app.type_text("compact session");
+        h.wait_for("Compact session");
+        h.app.press("return");
+        h.wait_gone("Search commands");
+    });
+    assert_eq!(order(), ["interrupt", "compact", "interrupt", "compact"]);
+}
+
 // --- opencode-session-usage
 
 /// `count` assistant messages of `cost` each, `tokens` input tokens each, on model `p/m`.

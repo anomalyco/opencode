@@ -772,7 +772,10 @@ impl State {
                 }
             }
             Action::Run(id) => {
-                tui.keymap.dispatch(id, None);
+                let id = id.clone();
+                tui.prompt.after_interrupts(&tui, prompt.session.as_ref(), move |tui| {
+                    tui.keymap.dispatch(&id, None);
+                });
             }
             Action::Slash(name) => {
                 let text = format!("/{name} ");

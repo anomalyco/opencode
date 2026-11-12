@@ -10,8 +10,11 @@ use crate::select::{SelectOption, SelectProps, select};
 use opentui::prelude::*;
 use std::rc::Rc;
 
-/// The palette's rows for the commands `keymap` can reach now.
-pub fn command_options(keymap: &Rc<DialogKeymap>) -> Vec<(SelectOption<String>, bool)> {
+/// Runs a picked command by its id, in place of dispatching it at once.
+pub type Run = Rc<dyn Fn(&str)>;
+
+/// The palette's rows for the commands `keymap` can reach now; a pick goes to `run` when given.
+pub fn command_options(keymap: &Rc<DialogKeymap>, run: Option<&Run>) -> Vec<(SelectOption<String>, bool)> {
     keymap
         .commands()
         .into_iter()
@@ -32,13 +35,19 @@ pub fn command_options(keymap: &Rc<DialogKeymap>) -> Vec<(SelectOption<String>, 
                 .join(" · ");
             let id = command.id.clone();
             let run_keymap = Rc::downgrade(keymap);
+            let run = run.cloned();
             let mut option =
                 SelectOption::new(command.title.clone().unwrap_or_else(|| command.id.clone()), command.id.clone())
                     .search_text(search_text)
                     .on_select(move |dialogs: &Dialogs| {
                         dialogs.clear();
-                        if let Some(keymap) = run_keymap.upgrade() {
-                            keymap.dispatch(&id, None);
+                        match &run {
+                            Some(run) => run(&id),
+                            None => {
+                                if let Some(keymap) = run_keymap.upgrade() {
+                                    keymap.dispatch(&id, None);
+                                }
+                            }
                         }
                     });
             option.description = command.description.clone();
@@ -52,8 +61,8 @@ pub fn command_options(keymap: &Rc<DialogKeymap>) -> Vec<(SelectOption<String>, 
 
 /// `CommandPaletteDialog`. `settings` are the settings rows (TS `settingOptions` of `dialog-config.tsx`), shown
 /// only while filtering.
-pub fn palette(cx: &Rc<DialogCx>, settings: Vec<SelectOption<String>>) -> View {
-    let commands = command_options(&cx.keymap);
+pub fn palette(cx: &Rc<DialogCx>, settings: Vec<SelectOption<String>>, run: Option<&Run>) -> View {
+    let commands = command_options(&cx.keymap, run);
     let options = Rc::new(move |filter: &str| {
         if !filter.is_empty() {
             return commands.iter().map(|(option, _)| option.clone()).chain(settings.iter().cloned()).collect();
@@ -75,6 +84,6 @@ pub fn palette(cx: &Rc<DialogCx>, settings: Vec<SelectOption<String>>) -> View {
 }
 
 /// Opens the palette in place of any open dialog.
-pub fn show(dialogs: &Dialogs, settings: Vec<SelectOption<String>>) {
-    dialogs.replace(move |cx| palette(cx, settings.clone()), None, DialogOptions::default());
+pub fn show(dialogs: &Dialogs, settings: Vec<SelectOption<String>>, run: Option<Run>) {
+    dialogs.replace(move |cx| palette(cx, settings.clone(), run.as_ref()), None, DialogOptions::default());
 }
