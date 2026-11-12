@@ -42,8 +42,7 @@ async function setup(content: string, width = 80) {
     content,
     syntaxStyle,
     streaming: true,
-    internalBlockMode: "top-level",
-    renderNode: createMarkdownCodeBlockRenderer({ latex: render, math: render }),
+    renderBlock: createMarkdownCodeBlockRenderer({ latex: render, math: render }),
   })
   output.renderer.root.add(markdown)
   await output.renderOnce()
@@ -140,7 +139,8 @@ test.each(["close", "stop"])("discards an incomplete preview when the stream end
   await output.renderOnce()
   expect(output.markdown.getChildren()[0]).toBeInstanceOf(ScrollBoxRenderable)
 
-  if (end === "close") output.markdown.content += "\n```"
+  // A closing fence counts once its line ends.
+  if (end === "close") output.markdown.content += "\n```\n"
   if (end === "stop") output.markdown.streaming = false
   await output.renderOnce()
   expect(output.markdown.getChildren()[0]).toBeInstanceOf(CodeRenderable)

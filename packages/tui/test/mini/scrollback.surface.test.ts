@@ -341,15 +341,9 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
       active && typeof active === "object" && "renderable" in active && active.renderable instanceof MarkdownRenderable
         ? active.renderable
         : undefined
-    expect(renderable?._blockStates.slice(-3).map((state) => state.token.type)).toEqual([
-      "paragraph",
-      "paragraph",
-      "paragraph",
-    ])
-    const link = renderable?._blockStates.at(-1)?.token
-    const tokens = link && "tokens" in link && Array.isArray(link.tokens) ? link.tokens : []
-    const href = tokens.find((token) => "href" in token)
-    expect(href && "href" in href ? href.href : undefined).toBe("https://example.com/café")
+    // Mono mode changes what shows, not what Markdown parses: the bullet, the dashes and the link stay paragraphs.
+    expect(renderable?.blocks.slice(-3).map((block) => block.kind)).toEqual(["paragraph", "paragraph", "paragraph"])
+    expect(renderable?.content.endsWith("[café](https://example.com/café)")).toBe(true)
     await out.scrollback.complete()
     out.renderer.writeToScrollback((ctx) => ({
       root: new TextRenderable(ctx.renderContext, {
@@ -363,7 +357,7 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
     }))
 
     const rendered = output.join("").replace(/ +\n/g, "\n")
-    expect(rendered).toContain("# H?ading ->")
+    expect(rendered).toContain("H?ading ->")
     expect(rendered).toContain('| "quote"')
     expect(rendered).toContain("------------------------------------------------------------")
     expect(rendered).toContain("?  ?")
@@ -401,10 +395,10 @@ test("renders completed subagent markdown in monochrome mode", async () => {
 
     const commits = claim(out.renderer)
     try {
-      expect(commits).toHaveLength(1)
-      expect(commits[0]?.trailingNewline).toBe(true)
+      // The heading is final before the list, so it can go out first.
+      expect(commits.at(-1)?.trailingNewline).toBe(true)
       const output = render(commits)
-      expect(output).toContain("# Findings")
+      expect(output).toContain("Findings\n\n- Caf? -> stable")
       expect(output).toContain("- Caf? -> stable")
       expect(output).not.toMatch(/[^\x00-\x7f]/)
     } finally {

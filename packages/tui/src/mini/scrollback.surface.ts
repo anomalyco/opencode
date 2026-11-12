@@ -49,15 +49,18 @@ function commitMarkdownBlocks(input: {
     return false
   }
 
-  const first = input.renderable._blockStates[input.startBlock]
-  const last = input.renderable._blockStates[input.endBlockExclusive - 1]
+  // One child per top-level block, in order.
+  const blocks = input.renderable.getChildren()
+  const first = blocks[input.startBlock]
+  const last = blocks[input.endBlockExclusive - 1]
   if (!first || !last) {
     return false
   }
 
-  const next = input.renderable._blockStates[input.endBlockExclusive]
-  const start = first.renderable.y
-  const end = next ? next.renderable.y : last.renderable.y + last.renderable.height
+  // A block goes out with the gap above it; the gap below waits for the next block, which may never show one.
+  const previous = blocks[input.startBlock - 1]
+  const start = previous ? previous.y + previous.height : first.y
+  const end = last.y + last.height
 
   input.beforeCommit?.()
   input.surface.commitRows(start, end, {
@@ -208,8 +211,7 @@ export class RunScrollbackStream {
               syntaxStyle: syntax!,
               width: "100%",
               streaming: true,
-              internalBlockMode: "top-level",
-              tableOptions: this.mono ? monoMarkdownTableOptions : { widthMode: "content" },
+              tableOptions: this.mono ? monoMarkdownTableOptions : { style: "columns", widthMode: "content" },
               fg: entryColor(commit, this.theme),
               treeSitterClient,
             })
@@ -317,7 +319,8 @@ export class RunScrollbackStream {
     renderable.streaming = !done
     await active.surface.settle()
     this.releasePendingThemes()
-    const targetBlockCount = done ? renderable._blockStates.length : renderable._stableBlockCount
+    const blockCount = renderable.getChildren().length
+    const targetBlockCount = done ? blockCount : renderable.committedBlockCount
     if (targetBlockCount <= active.committedBlocks) {
       return false
     }
@@ -328,7 +331,7 @@ export class RunScrollbackStream {
         renderable,
         startBlock: active.committedBlocks,
         endBlockExclusive: targetBlockCount,
-        trailingNewline: done && targetBlockCount === renderable._blockStates.length ? trailingNewline : false,
+        trailingNewline: done && targetBlockCount === blockCount ? trailingNewline : false,
         beforeCommit: () => this.flushPendingSpacer(active),
       })
     ) {

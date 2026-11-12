@@ -868,8 +868,8 @@ test("run entry content eagerly renders final monochrome markdown", async () => 
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
-    expect(frame).toContain("# Caf? ->")
-    expect(frame).toContain("Caf? ->")
+    // The heading (its marker concealed) and the fence's code.
+    expect(frame.match(/^Caf\? ->/gm)).toHaveLength(2)
     expect(frame).not.toMatch(/[^\x00-\x7f]/)
   } finally {
     app.renderer.destroy()
