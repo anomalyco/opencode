@@ -118,19 +118,22 @@
   line-gap-override: 0%;
 }
 
+/* The page behind the app, in the page step of the shared grey scale (--stats-bg), written out because the tokens
+   live on [data-page], inside this element. grey-ok: outside the tokens' scope */
 :root {
-  background: #ffffff;
+  background: #fbfbfb;
 }
 
 :root[data-stats-theme="dark"] {
-  background: #161616;
+  background: #0c0c0c;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-stats-theme="light"]) {
-    background: #161616;
+    background: #0c0c0c;
   }
 }
+/* grey-ok-end */
 
 body {
   min-width: 320px;
@@ -139,34 +142,28 @@ body {
 
 [data-page="stats"] {
   color-scheme: light;
-  --color-background: #ffffff;
-  --color-background-weak: #fafafa;
-  --color-background-weak-hover: #eeeeee;
-  --color-background-strong: #161616;
-  --color-background-strong-hover: #242424;
-  --color-text: #5c5c5c;
-  --color-text-weak: #707070;
-  --color-text-strong: #161616;
-  --color-text-inverted: #ffffff;
-  --color-border-weak: #0000001a;
-  --stats-bg: #ffffff;
-  --stats-layer: #fafafa;
+  --stats-bg: #fbfbfb;
+  --stats-layer: #ffffff;
   --stats-layer-2: #eeeeee;
   --stats-line: #0000001a;
   --stats-line-strong: #00000033;
   --stats-text: #161616;
   --stats-muted: #5c5c5c;
-  --stats-faint: #707070;
+  --stats-faint: #6b6b6b;
   --stats-theme-icon-active: #3a3a3a;
   --stats-accent: #3b5cf6;
   --stats-accent-text: #3b5cf6;
-  --stats-bar-idle: #d4d4d4;
-  --stats-dot: #d4d4d4;
+  --stats-bar-idle: #d2d2d2;
+  --stats-dot: #d2d2d2;
   --stats-hero-muted: #5c5c5c;
   --stats-hero-pattern: #eeeeee;
-  --stats-logo-bg: #161616;
-  --stats-logo-fill: #454545;
-  --stats-logo-stroke: #e2e2e2;
+  --stats-logo-bg: #0c0c0c;
+  --stats-logo-fill: #4b4b4b;
+  --stats-logo-stroke: #eeeeee;
+  --stats-popover: #ffffff;
+  --stats-layer-hover: #ffffff;
+  --stats-on-accent: #ffffff;
+  --stats-knob: #fafafa;
   --stats-page-padding: 5rem;
   --stats-section-padding: 6rem;
   min-height: 100vh;
@@ -404,11 +401,11 @@ body {
 
 [data-page="stats"] [data-slot="header-button"][data-variant="contrast"] {
   gap: 8px;
-  color: #ffffff;
-  background: #242424;
+  color: var(--stats-bg);
+  background: var(--stats-text);
   box-shadow:
     0 0 0 0 #00000000,
-    0 0 0 0.5px #3a3a3a,
+    0 0 0 0.5px var(--stats-text),
     0 1px 1.5px 0 #00000033,
     inset 0 -1px 2px 0 #0000000f,
     inset 0 1px 2px 0 #ffffff24;
@@ -1393,7 +1390,7 @@ body {
 }
 
 [data-page="stats"] [data-component="content"] button[data-active="true"] {
-  color: #fff;
+  color: var(--stats-bg);
   background: var(--stats-text);
 }
 
@@ -1580,7 +1577,7 @@ body {
   gap: 8px;
   min-width: 220px;
   padding: 16px;
-  background: #ffffff;
+  background: var(--stats-popover);
   border: 1px solid var(--stats-line-strong);
   box-shadow:
     0 8px 16px #0000000a,
@@ -1648,7 +1645,7 @@ body {
   width: 192px;
   min-width: 192px;
   padding: 0;
-  background: #ffffff;
+  background: var(--stats-popover);
   border: 0;
   box-shadow:
     0 0 0 0.5px #00000024,
@@ -2226,7 +2223,7 @@ body {
 
 [data-page="stats"] [data-component="leader-card"][data-active="true"] {
   border-color: var(--stats-line-strong);
-  background: #ffffff;
+  background: var(--stats-layer-hover);
   box-shadow:
     0 0 0 0.5px #00000024,
     0 6px 16px #0000000d,
@@ -2248,7 +2245,7 @@ body {
   [data-page="stats"] [data-component="leader-card"]:hover,
   [data-page="stats"] [data-component="leader-card"]:focus-visible {
     border-color: var(--stats-line-strong);
-    background: #ffffff;
+    background: var(--stats-layer-hover);
     box-shadow:
       0 0 0 0.5px #00000024,
       0 6px 16px #0000000d,
@@ -2447,7 +2444,7 @@ body {
   min-width: 228px;
   padding: 0;
   border: 0;
-  background: #ffffff;
+  background: var(--stats-popover);
   box-shadow:
     0 0 0 0.5px #00000024,
     0 8px 16px #0000000f,
@@ -3163,7 +3160,7 @@ body {
   height: 64px;
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
-  color: #ffffff;
+  color: var(--stats-on-accent);
 }
 
 [data-page="stats"] [data-slot="lab-hero-avatar"][data-empty="true"] {
@@ -3442,7 +3439,7 @@ body {
   height: 40px;
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
-  color: #ffffff;
+  color: var(--stats-on-accent);
 }
 
 [data-page="stats"] [data-slot="model-hero-avatar"] svg {
@@ -4411,7 +4408,7 @@ body {
   flex: 0 0 auto;
   width: 20px;
   height: 20px;
-  color: #ffffff;
+  color: var(--stats-on-accent);
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
 }
@@ -4488,7 +4485,7 @@ body {
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  color: #ffffff;
+  color: var(--stats-on-accent);
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
 }
@@ -4634,7 +4631,7 @@ body {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  color: #ffffff;
+  color: var(--stats-on-accent);
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
 }
@@ -4971,10 +4968,10 @@ body {
   --lab-usage-column-gutter: calc(var(--lab-usage-gap) / 2);
   --lab-usage-bar-height: 76px;
   --lab-usage-line-bottom: 124px;
-  --lab-usage-bar: #dbdbdb;
-  --lab-usage-line: #808080;
+  --lab-usage-bar: #d2d2d2;
+  --lab-usage-line: #6b6b6b;
   --lab-usage-active: #3b5cf6;
-  --lab-usage-band: #f2f2f2;
+  --lab-usage-band: #eeeeee;
   grid-template-rows: minmax(0, 450px) 14px;
   gap: 40px;
   height: 504px;
@@ -5161,10 +5158,10 @@ body {
   --model-trend-column-gutter: calc(var(--model-trend-gap) / 2);
   --model-trend-bar-height: 76px;
   --model-trend-line-bottom: 124px;
-  --model-trend-bar: #dbdbdb;
-  --model-trend-line: #808080;
+  --model-trend-bar: #d2d2d2;
+  --model-trend-line: #6b6b6b;
   --model-trend-active: #3b5cf6;
-  --model-trend-band: #f2f2f2;
+  --model-trend-band: #eeeeee;
   grid-template-rows: minmax(0, 450px) 14px;
   gap: 40px;
   height: 504px;
@@ -5838,11 +5835,12 @@ body {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  color: #ffffff;
+  color: var(--stats-on-accent);
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
 }
 
+/* grey-ok: the labs' own brand colours */
 [data-page="stats"] [data-slot="compare-home-avatar"][data-lab="deepseek"] {
   background: #5d6ff4;
 }
@@ -5854,6 +5852,7 @@ body {
 [data-page="stats"] [data-slot="compare-home-avatar"][data-lab="anthropic"] {
   background: #c99b75;
 }
+/* grey-ok-end */
 
 [data-page="stats"] [data-slot="compare-home-avatar"][data-size="large"] {
   width: 40px;
@@ -6289,7 +6288,7 @@ body {
   [data-slot="compare-detail-action"][aria-pressed="true"]
   [data-slot="compare-detail-highlight-icon"]
   i:last-child {
-  background: #fafafa;
+  background: var(--stats-knob);
   box-shadow:
     0 0 0 0.5px rgb(0 0 0 / 12%),
     0 1px 2px -1px rgb(0 0 0 / 8%),
@@ -7377,42 +7376,34 @@ body {
 [data-page="stats"][data-theme="dark"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) {
   color-scheme: dark;
-  --color-background: #161616;
-  --color-background-weak: #242424;
-  --color-background-weak-hover: #303030;
-  --color-background-strong: #ffffff;
-  --color-background-strong-hover: #eeeeee;
-  --color-text: #d4d4d4;
-  --color-text-weak: #a3a3a3;
-  --color-text-strong: #ffffff;
-  --color-text-inverted: #161616;
-  --color-border-weak: #ffffff1a;
-  --stats-bg: #161616;
-  --stats-layer: #242424;
-  --stats-layer-2: #303030;
+  --stats-bg: #0c0c0c;
+  --stats-layer: #161616;
+  --stats-layer-2: #242424;
   --stats-line: #ffffff1a;
   --stats-line-strong: #ffffff33;
-  --stats-text: #ffffff;
-  --stats-muted: #d4d4d4;
-  --stats-faint: #a3a3a3;
+  --stats-text: #fafafa;
+  --stats-muted: #aeaeae;
+  --stats-faint: #8f8f8f;
   --stats-accent: #6b8fff;
   --stats-accent-text: #6b8fff;
   --stats-theme-icon-active: #fafafa;
-  --stats-bar-idle: #303030;
-  --stats-dot: #303030;
-  --stats-hero-muted: #a3a3a3;
-  --stats-hero-pattern: #303030;
-  --stats-logo-bg: #f1ecec;
-  --stats-logo-fill: #b7b1b1;
-  --stats-logo-stroke: #211e1e;
+  --stats-bar-idle: #2e2e2e;
+  --stats-dot: #2e2e2e;
+  --stats-hero-muted: #aeaeae;
+  --stats-hero-pattern: #242424;
+  --stats-logo-bg: #f5f5f5;
+  --stats-logo-fill: #d2d2d2;
+  --stats-logo-stroke: #1f1f1f;
+  --stats-popover: #242424;
+  --stats-layer-hover: #242424;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="model-usage-chart"][data-variant="lab-usage"],
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-component="model-usage-chart"][data-variant="lab-usage"] {
-  --lab-usage-bar: #3a3a3a;
-  --lab-usage-line: #a3a3a3;
+  --lab-usage-bar: #4b4b4b;
+  --lab-usage-line: #8f8f8f;
   --lab-usage-band: #242424;
   --lab-usage-active: #6b8fff;
 }
@@ -7421,15 +7412,15 @@ body {
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-component="model-usage-chart"][data-variant="model-trend"] {
-  --model-trend-bar: #3a3a3a;
-  --model-trend-line: #a3a3a3;
+  --model-trend-bar: #4b4b4b;
+  --model-trend-line: #8f8f8f;
   --model-trend-band: #242424;
   --model-trend-active: #6b8fff;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-  background: #242424;
+  background: var(--stats-popover);
 }
 
 [data-page="stats"][data-theme="dark"]
@@ -7444,7 +7435,7 @@ body {
   [data-page="stats"]:not([data-theme="light"])
   :is([data-section="top-models"], [data-section="unique-users"])
   [data-component="chart-tooltip"] {
-  background: #242424;
+  background: var(--stats-popover);
   box-shadow:
     0 0 0 0.5px #ffffff24,
     0 8px 16px #0000003d,
@@ -7483,7 +7474,7 @@ body {
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-component="leader-card"]:focus-visible {
-  background: #303030;
+  background: var(--stats-layer-hover);
   box-shadow:
     0 0 0 0.5px #ffffff24,
     0 6px 16px #0000003d,
@@ -7528,8 +7519,8 @@ body {
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-slot="header-button"][data-variant="contrast"] {
-  color: #ffffff;
-  background: #5c5c5c;
+  color: var(--stats-bg);
+  background: var(--stats-text);
   box-shadow:
     0 -0.5px 0 0 #ffffff4d,
     0 0 0 0.5px #ffffff66,
@@ -7539,41 +7530,33 @@ body {
 @media (prefers-color-scheme: dark) {
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) {
     color-scheme: dark;
-    --color-background: #161616;
-    --color-background-weak: #242424;
-    --color-background-weak-hover: #303030;
-    --color-background-strong: #ffffff;
-    --color-background-strong-hover: #eeeeee;
-    --color-text: #d4d4d4;
-    --color-text-weak: #a3a3a3;
-    --color-text-strong: #ffffff;
-    --color-text-inverted: #161616;
-    --color-border-weak: #ffffff1a;
-    --stats-bg: #161616;
-    --stats-layer: #242424;
-    --stats-layer-2: #303030;
+    --stats-bg: #0c0c0c;
+    --stats-layer: #161616;
+    --stats-layer-2: #242424;
     --stats-line: #ffffff1a;
     --stats-line-strong: #ffffff33;
-    --stats-text: #ffffff;
-    --stats-muted: #d4d4d4;
-    --stats-faint: #a3a3a3;
+    --stats-text: #fafafa;
+    --stats-muted: #aeaeae;
+    --stats-faint: #8f8f8f;
     --stats-accent: #6b8fff;
     --stats-accent-text: #6b8fff;
     --stats-theme-icon-active: #fafafa;
-    --stats-bar-idle: #303030;
-    --stats-dot: #303030;
-    --stats-hero-muted: #a3a3a3;
-    --stats-hero-pattern: #303030;
-    --stats-logo-bg: #f1ecec;
-    --stats-logo-fill: #b7b1b1;
-    --stats-logo-stroke: #211e1e;
+    --stats-bar-idle: #2e2e2e;
+    --stats-dot: #2e2e2e;
+    --stats-hero-muted: #aeaeae;
+    --stats-hero-pattern: #242424;
+    --stats-logo-bg: #f5f5f5;
+    --stats-logo-fill: #d2d2d2;
+    --stats-logo-stroke: #1f1f1f;
+    --stats-popover: #242424;
+    --stats-layer-hover: #242424;
   }
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-component="model-usage-chart"][data-variant="lab-usage"] {
-    --lab-usage-bar: #3a3a3a;
-    --lab-usage-line: #a3a3a3;
+    --lab-usage-bar: #4b4b4b;
+    --lab-usage-line: #8f8f8f;
     --lab-usage-band: #242424;
     --lab-usage-active: #6b8fff;
   }
@@ -7581,21 +7564,21 @@ body {
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-component="model-usage-chart"][data-variant="model-trend"] {
-    --model-trend-bar: #3a3a3a;
-    --model-trend-line: #a3a3a3;
+    --model-trend-bar: #4b4b4b;
+    --model-trend-line: #8f8f8f;
     --model-trend-band: #242424;
     --model-trend-active: #6b8fff;
   }
 
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-    background: #242424;
+    background: var(--stats-popover);
   }
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-section="top-models"]
     [data-component="chart-tooltip"] {
-    background: #242424;
+    background: var(--stats-popover);
     box-shadow:
       0 0 0 0.5px #ffffff24,
       0 8px 16px #0000003d,
@@ -7628,7 +7611,7 @@ body {
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-component="leader-card"]:focus-visible {
-    background: #303030;
+    background: var(--stats-layer-hover);
     box-shadow:
       0 0 0 0.5px #ffffff24,
       0 6px 16px #0000003d,
@@ -7654,8 +7637,8 @@ body {
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-slot="header-button"][data-variant="contrast"] {
-    color: #ffffff;
-    background: #5c5c5c;
+    color: var(--stats-bg);
+    background: var(--stats-text);
     box-shadow:
       0 -0.5px 0 0 #ffffff4d,
       0 0 0 0.5px #ffffff66,

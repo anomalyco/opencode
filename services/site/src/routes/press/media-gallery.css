@@ -80,7 +80,7 @@
     width: 1.5rem;
     height: 1.5rem;
     background: rgb(0 0 0 / 0.7);
-    color: #fff;
+    color: var(--fixed-white);
   }
 
   /* "products" (default): the four products side by side in the page's columns (2 × 2 at medium
@@ -383,7 +383,7 @@
     background: rgb(0 0 0 / 0.7);
     font-family: var(--font-mono);
     font-size: var(--fs-meta);
-    color: #fff;
+    color: var(--fixed-white);
   }
 
   [data-slot="strip"] {
@@ -598,7 +598,7 @@
       width: auto;
       height: auto;
       object-fit: contain;
-      background: #0a0a0a;
+      background: var(--fixed-dark);
       pointer-events: auto;
     }
   }
@@ -616,11 +616,11 @@
     gap: 1rem;
     font-family: var(--font-mono);
     font-size: var(--mono-size);
-    color: #fff;
+    color: var(--fixed-white);
   }
 
   [data-slot="counter"] {
-    color: hsl(0, 0%, 64%);
+    color: var(--fixed-dark-muted);
   }
 
   [data-slot="actions"] {
