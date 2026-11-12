@@ -104,6 +104,7 @@ mod tests {
             ("$(calc)", "'$(calc)'"),
             // `escapeArgument` of `powershell-utils`: PowerShell also ends a string at a typographic single quote.
             ("C:\\Ada\u{2019}s notes", "'C:\\Ada\u{2019}\u{2019}s notes'"),
+            ("C:\\Users\\Bob\u{2019}s; calc #", "'C:\\Users\\Bob\u{2019}\u{2019}s; calc #'"),
             ("\u{2018}a\u{201A}b\u{201B}", "'\u{2018}\u{2018}a\u{201A}\u{201A}b\u{201B}\u{201B}'"),
         ];
         for (target, quoted) in cases {
