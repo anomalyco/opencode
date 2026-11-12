@@ -221,6 +221,7 @@ describe("queue changes run one at a time", () => {
       { type: "edit.start", id: "inb_2", reverted: false, draft: draft("") },
       { type: "edit.confirm", delivery: "queue", reverted: false, prompt: prompt("inb_2 edited") },
       { type: "edit.start", id: "inb_1", reverted: false, draft: draft("my draft") },
+      { type: "inbox.synced", items: [item(one.id, "another client's edit"), two] },
       { type: "edit.confirm", delivery: "steer", reverted: false, prompt: prompt("inb_1 text") },
     ])
 

@@ -69,14 +69,6 @@ const encodeMove = Schema.encodeSync(MovePayload)
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 
-const queuedUser = (ref: PendingRef) =>
-  and(
-    eq(SessionInboxTable.id, ref.id),
-    eq(SessionInboxTable.session_id, ref.sessionID),
-    eq(SessionInboxTable.type, "user"),
-    eq(SessionInboxTable.delivery, "queue"),
-  )
-
 export const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
   inboxLocks.withLock(sessionID)(effect)
 
@@ -270,19 +262,11 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
   const edit = Effect.fn("SessionInbox.edit")((input: PendingRef, item: Extract<Item, { type: "user" }>) =>
     publishMutation(
       input,
-      Effect.gen(function* () {
-        const original = yield* db
-          .select({ created: SessionInboxTable.time_created })
-          .from(SessionInboxTable)
-          .where(queuedUser(input))
-          .get()
-          .pipe(Effect.orDie)
-        if (!original) return yield* new LifecycleConflict({ id: input.id })
-        yield* bus.publish(SessionEvent.InboxEdited, {
-          ...input,
-          ...item,
-          time: original,
-        })
+      bus.publish(SessionEvent.InboxEdited, {
+        sessionID: input.sessionID,
+        inboxID: input.id,
+        payload: item.payload,
+        delivery: item.delivery,
       }),
     ),
   )
@@ -412,12 +396,19 @@ export const projectEdited = Effect.fn("SessionInbox.projectEdited")(function* (
   const updated = yield* db
     .update(SessionInboxTable)
     .set({ payload, delivery: item.delivery })
-    .where(queuedUser(item))
+    .where(
+      and(
+        eq(SessionInboxTable.id, item.inboxID),
+        eq(SessionInboxTable.session_id, item.sessionID),
+        eq(SessionInboxTable.type, "user"),
+        eq(SessionInboxTable.delivery, "queue"),
+      ),
+    )
     .returning({ seq: SessionInboxTable.enqueued_seq })
     .get()
     .pipe(Effect.orDie)
-  if (!updated) return yield* Effect.die(new LifecycleConflict({ id: item.id }))
-  yield* SessionBlob.syncRefs(db, { sessionID: item.sessionID, messageID: item.id, seq: updated.seq }, payload)
+  if (!updated) return yield* Effect.die(new LifecycleConflict({ id: item.inboxID }))
+  yield* SessionBlob.syncRefs(db, { sessionID: item.sessionID, messageID: item.inboxID, seq: updated.seq }, payload)
 })
 
 export const projectCancelled = Effect.fn("SessionInbox.projectCancelled")(function* (

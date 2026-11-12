@@ -311,21 +311,6 @@ export type SessionInboxCancelOperation<E = never> = (
   input: SessionInboxCancelInput,
 ) => Effect.Effect<SessionInboxCancelOutput, E>
 
-export type SessionInboxEditInput = {
-  readonly sessionID: Session.ID
-  readonly inboxID: SessionMessage.ID
-  readonly text: string
-  readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
-  readonly agents?: ReadonlyArray<AgentAttachment> | undefined
-  readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
-  readonly metadata?: { readonly [x: string]: unknown } | undefined
-  readonly delivery: SessionInbox.Delivery
-}
-export type SessionInboxEditOutput = void
-export type SessionInboxEditOperation<E = never> = (
-  input: SessionInboxEditInput,
-) => Effect.Effect<SessionInboxEditOutput, E>
-
 export type SessionInboxUpdateInput = {
   readonly sessionID: Session.ID
   readonly inboxID: SessionMessage.ID
@@ -450,8 +435,10 @@ export interface SessionApi<E = never> {
   readonly inbox: {
     readonly list: SessionInboxListOperation<E>
     readonly cancel: SessionInboxCancelOperation<E>
-    readonly edit: SessionInboxEditOperation<E>
     readonly update: SessionInboxUpdateOperation<E>
+
+    /** @deprecated Use `client.experimental.session.inbox.edit`. Removed in the next minor. */
+    readonly edit: ExperimentalSessionInboxEditOperation<E>
   }
   readonly generate: SessionGenerateOperation<E>
   readonly interrupt: SessionInterruptOperation<E>
@@ -602,6 +589,21 @@ export type ExperimentalSessionWaitOutput = void
 export type ExperimentalSessionWaitOperation<E = never> = (
   input: ExperimentalSessionWaitInput,
 ) => Effect.Effect<ExperimentalSessionWaitOutput, E>
+
+export type ExperimentalSessionInboxEditInput = {
+  readonly sessionID: Session.ID
+  readonly inboxID: SessionMessage.ID
+  readonly text: string
+  readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
+  readonly agents?: ReadonlyArray<AgentAttachment> | undefined
+  readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
+  readonly metadata?: { readonly [x: string]: unknown } | undefined
+  readonly delivery: SessionInbox.Delivery
+}
+export type ExperimentalSessionInboxEditOutput = void
+export type ExperimentalSessionInboxEditOperation<E = never> = (
+  input: ExperimentalSessionInboxEditInput,
+) => Effect.Effect<ExperimentalSessionInboxEditOutput, E>
 
 export type ExperimentalSessionInstructionsEntryListInput = { readonly sessionID: Session.ID }
 export type ExperimentalSessionInstructionsEntryListOutput = ReadonlyArray<InstructionEntry.Info>
@@ -835,10 +837,8 @@ export type ExperimentalSessionLogOutput =
             | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
             | undefined
           readonly data: {
-            readonly id: SessionMessage.ID
             readonly sessionID: Session.ID
-            readonly time: { readonly created: number }
-            readonly type: "user"
+            readonly inboxID: SessionMessage.ID
             readonly payload: SessionInbox.UserPayload
             readonly delivery: SessionInbox.Delivery
           }
@@ -1480,6 +1480,7 @@ export interface ExperimentalSessionApi<E = never> {
   readonly export: ExperimentalSessionExportOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
+  readonly inbox: { readonly edit: ExperimentalSessionInboxEditOperation<E> }
   readonly instructions: {
     readonly entry: {
       readonly list: ExperimentalSessionInstructionsEntryListOperation<E>
@@ -2896,6 +2897,15 @@ export type SessionWaitOutput = ExperimentalSessionWaitOutput
 
 /** @deprecated Use `ExperimentalSessionWaitOperation`. Removed in the next minor. */
 export type SessionWaitOperation<E = never> = ExperimentalSessionWaitOperation<E>
+
+/** @deprecated Use `ExperimentalSessionInboxEditInput`. Removed in the next minor. */
+export type SessionInboxEditInput = ExperimentalSessionInboxEditInput
+
+/** @deprecated Use `ExperimentalSessionInboxEditOutput`. Removed in the next minor. */
+export type SessionInboxEditOutput = ExperimentalSessionInboxEditOutput
+
+/** @deprecated Use `ExperimentalSessionInboxEditOperation`. Removed in the next minor. */
+export type SessionInboxEditOperation<E = never> = ExperimentalSessionInboxEditOperation<E>
 
 /** @deprecated Use `ExperimentalSessionInstructionsEntryListInput`. Removed in the next minor. */
 export type SessionInstructionsEntryListInput = ExperimentalSessionInstructionsEntryListInput

@@ -1,5 +1,11 @@
 import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
-import type { PromptAttachment } from "@opencode/client/promise"
+import {
+  ClientError,
+  isMessageNotFoundError,
+  isSessionNotFoundError,
+  type PromptAttachment,
+} from "@opencode/client/promise"
+import { uuid } from "@opencode/util/uuid"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { ComposerDelivery, ComposerSession } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
@@ -255,39 +261,89 @@ export function createSessionQueue(input: {
       return
     }
 
-    const settled = await (
-      operation.type === "reorder" ? rewrite(attempt, progress, operation.inboxIDs) : sendEdit(operation, progress)
-    ).then(
+    if (operation.type === "edit") return sendEdit(operation, progress)
+
+    const settled = await rewrite(attempt, progress, operation.inboxIDs).then(
       () => true,
       () => false,
     )
 
     if (settled) progress.stage = "settled"
 
-    data.session.pending.invalidate(input.sessionID)
     // The rows keep their optimistic state until the server's queue has caught up.
-    await data.session.pending.sync(input.sessionID).catch(() => undefined)
+    await refresh().catch(() => undefined)
     dispatch(
       settled ? { type: "mutation.succeeded", attempt } : { type: "mutation.failed", attempt, hidden: progress.hidden },
     )
   }
 
+  const refresh = () => {
+    data.session.pending.invalidate(input.sessionID)
+
+    return data.session.pending.sync(input.sessionID)
+  }
+
   const sendEdit = async (operation: EditOperation & { attempt: number }, progress: MutationProgress) => {
-    const signal = progress.controller.signal
-
-    const replacement = await editedPromptInput(
-      input.sessionID,
-      location().directory,
-      operation.item,
-      operation.prompt,
-      operation.raw,
-    )
-
-    signal.throwIfAborted()
+    const attempt = operation.attempt
+    const sessionID = input.sessionID
+    const inboxID = operation.original
+    // Preparation can normalize attachment bytes and expand skills. Identify this replacement even after delivery.
+    const editID = uuid()
     const background = operation.delivery === "steer" ? input.background() : undefined
-    progress.stage = "committed"
-    await server.api.session.inbox.edit({ ...replacement, inboxID: operation.original, delivery: operation.delivery })
+
+    try {
+      const replacement = await editedPromptInput(
+        sessionID,
+        location().directory,
+        operation.item,
+        operation.prompt,
+        operation.raw,
+      )
+
+      progress.controller.signal.throwIfAborted()
+      progress.stage = "committed"
+      await server.api.experimental.session.inbox.edit({
+        ...replacement,
+        inboxID,
+        delivery: operation.delivery,
+        metadata: { ...replacement.metadata, queueEditID: editID },
+      })
+    } catch (error) {
+      // The SDK throws declared HTTP rejections as Errors; transport and unreadable responses are ClientErrors.
+      if (progress.stage === "running" || !(error instanceof ClientError)) {
+        dispatch({ type: "mutation.failed", attempt, hidden: [] })
+        void refresh().catch(() => undefined)
+
+        return
+      }
+
+      const applied = await refresh()
+        .then(async () => {
+          const item = data.session.pending.list(sessionID).find((item) => item.id === inboxID)
+
+          if (item) return item.type === "user" && item.payload.metadata?.queueEditID === editID
+          const message = await server.api.session.message.get({ sessionID, messageID: inboxID })
+
+          return message.type === "user" && message.metadata?.queueEditID === editID
+        })
+        .catch((error) => (isMessageNotFoundError(error) || isSessionNotFoundError(error) ? false : undefined))
+
+      if (applied !== true)
+        return dispatch({
+          type: "mutation.failed",
+          attempt,
+          hidden: [],
+          unconfirmed: applied === undefined,
+        })
+      void background?.move()
+
+      return dispatch({ type: "mutation.succeeded", attempt })
+    }
+
+    progress.stage = "settled"
     void background?.move()
+    await refresh().catch(() => undefined)
+    dispatch({ type: "mutation.succeeded", attempt })
   }
 
   const rewrite = async (attempt: number, progress: MutationProgress, inboxIDs: readonly string[]) => {

@@ -67,8 +67,6 @@ import type {
   SessionInboxListOutput,
   SessionInboxCancelInput,
   SessionInboxCancelOutput,
-  SessionInboxEditInput,
-  SessionInboxEditOutput,
   SessionInboxUpdateInput,
   SessionInboxUpdateOutput,
   SessionGenerateInput,
@@ -103,6 +101,8 @@ import type {
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
   ExperimentalSessionWaitOutput,
+  ExperimentalSessionInboxEditInput,
+  ExperimentalSessionInboxEditOutput,
   ExperimentalSessionInstructionsEntryListInput,
   ExperimentalSessionInstructionsEntryListOutput,
   ExperimentalSessionInstructionsEntryPutInput,
@@ -656,21 +656,6 @@ const EndpointSessionInboxCancel = (raw: RawClient["server.session"]) => (input:
     ),
   )
 
-const EndpointSessionInboxEdit = (raw: RawClient["server.session"]) => (input: SessionInboxEditInput) =>
-  preserveEffect<SessionInboxEditOutput>()(
-    raw["session.inbox.edit"]({
-      params: { sessionID: input["sessionID"], inboxID: input["inboxID"] },
-      payload: {
-        text: input["text"],
-        files: input["files"],
-        agents: input["agents"],
-        skills: input["skills"],
-        metadata: input["metadata"],
-        delivery: input["delivery"],
-      },
-    }).pipe(Effect.mapError(mapClientError)),
-  )
-
 const EndpointSessionInboxUpdate = (raw: RawClient["server.session"]) => (input: SessionInboxUpdateInput) =>
   preserveEffect<SessionInboxUpdateOutput>()(
     raw["session.inbox.update"]({
@@ -791,7 +776,6 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   inbox: {
     list: EndpointSessionInboxList(raw),
     cancel: EndpointSessionInboxCancel(raw),
-    edit: EndpointSessionInboxEdit(raw),
     update: EndpointSessionInboxUpdate(raw),
   },
   generate: EndpointSessionGenerate(raw),
@@ -859,6 +843,22 @@ const EndpointExperimentalSessionWait = (raw: RawClient["server.session"]) => (i
     raw["session.wait"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalSessionInboxEdit =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInboxEditInput) =>
+    preserveEffect<ExperimentalSessionInboxEditOutput>()(
+      raw["experimental.session.inbox.edit"]({
+        params: { sessionID: input["sessionID"], inboxID: input["inboxID"] },
+        payload: {
+          text: input["text"],
+          files: input["files"],
+          agents: input["agents"],
+          skills: input["skills"],
+          metadata: input["metadata"],
+          delivery: input["delivery"],
+        },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const EndpointExperimentalSessionInstructionsEntryList =
   (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstructionsEntryListInput) =>
     preserveEffect<ExperimentalSessionInstructionsEntryListOutput>()(
@@ -904,6 +904,7 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   export: EndpointExperimentalSessionExport(raw),
   skill: EndpointExperimentalSessionSkill(raw),
   wait: EndpointExperimentalSessionWait(raw),
+  inbox: { edit: EndpointExperimentalSessionInboxEdit(raw) },
   instructions: {
     entry: {
       list: EndpointExperimentalSessionInstructionsEntryList(raw),
@@ -2035,6 +2036,11 @@ const adaptClient = (raw: RawClient) => {
       skill: client.experimental.session.skill,
       /** @deprecated Use `client.experimental.session.wait`. Removed in the next minor. */
       wait: client.experimental.session.wait,
+      inbox: {
+        ...client.session.inbox,
+        /** @deprecated Use `client.experimental.session.inbox.edit`. Removed in the next minor. */
+        edit: client.experimental.session.inbox.edit,
+      },
       /** @deprecated Use `client.experimental.session.instructions`. Removed in the next minor. */
       instructions: {
         /** @deprecated Use `client.experimental.session.instructions.entry`. Removed in the next minor. */

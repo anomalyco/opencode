@@ -547,7 +547,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "session.inbox.edit",
+        "experimental.session.inbox.edit",
         Effect.fn(function* (ctx) {
           yield* session.editInbox({ ...ctx.params, ...ctx.payload }).pipe(
             Effect.catchTag("Session.NotFoundError", missingSession),

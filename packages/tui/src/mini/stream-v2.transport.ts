@@ -8,6 +8,7 @@ import type {
   SessionMessageInfo,
   SessionMessageUser,
   SessionInboxInfo,
+  SessionInboxItem,
 } from "@opencode/client/promise"
 import { ClientError } from "@opencode/client/promise"
 import { Event } from "@opencode/schema/event"
@@ -194,11 +195,11 @@ function errorMessage(error: { message?: string; _tag?: string }) {
   return error.message || error._tag || "Session execution failed"
 }
 
-function pendingPrompt(item: SessionInboxInfo): PendingPrompt | undefined {
+function pendingPrompt(id: string, item: SessionInboxItem): PendingPrompt | undefined {
   if (item.type !== "user") return undefined
   return {
-    messageID: item.id,
-    prompt: { messageID: item.id, ...messagePrompt(item.payload) },
+    messageID: id,
+    prompt: { messageID: id, ...messagePrompt(item.payload) },
     files: item.payload.files,
     delivery: item.delivery,
     ...(item.payload.skills?.length
@@ -580,12 +581,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     )
   }
 
-  let syncedPending: string[] | undefined
+  let syncedPending: PendingPrompt[] | undefined
   const syncPending = () => {
     const prompts = [...state.pending.values()]
-    const ids = prompts.map((item) => `${item.messageID}:${item.delivery}`)
-    if (syncedPending?.length === ids.length && syncedPending.every((id, index) => id === ids[index])) return
-    syncedPending = ids
+    if (syncedPending?.length === prompts.length && syncedPending.every((item, index) => item === prompts[index]))
+      return
+    syncedPending = prompts
     input.trace?.write("ui.patch", { pending: prompts.length })
     input.footer.event({ type: "queued.prompts", prompts })
   }
@@ -618,8 +619,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     ])
   }
 
-  const mergePending = (item: SessionInboxInfo) => {
-    const prompt = pendingPrompt(item)
+  const mergePending = (id: string, item: SessionInboxItem) => {
+    const prompt = pendingPrompt(id, item)
     if (!prompt) return
     if (state.promotedMessages.has(prompt.messageID)) {
       renderUser(prompt.messageID, prompt.prompt.text, prompt.files, prompt.skills)
@@ -989,7 +990,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (!current(attempt)) return
     state.pending = new Map(
       pending.flatMap((item) => {
-        const prompt = pendingPrompt(item)
+        const prompt = pendingPrompt(item.id, item)
         return prompt ? [[prompt.messageID, prompt] as const] : []
       }),
     )
@@ -1056,17 +1057,11 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (event.type === "session.inbox.edited") {
-      mergePending(event.data)
+      mergePending(event.data.inboxID, { type: "user", payload: event.data.payload, delivery: event.data.delivery })
       return
     }
     if (event.type === "session.inbox.enqueued") {
-      if (event.data.item.type !== "user") return
-      mergePending({
-        id: event.data.inboxID,
-        sessionID: event.data.sessionID,
-        time: { created: event.created },
-        ...event.data.item,
-      })
+      mergePending(event.data.inboxID, event.data.item)
       return
     }
     if (event.type === "session.inbox.delivered") {
@@ -1641,7 +1636,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     next.signal?.addEventListener("abort", interrupt, { once: true })
     try {
       const admitted = await send()
-      if (admitted) mergePending(admitted)
+      if (admitted) mergePending(admitted.id, admitted)
       onAdmitted?.()
       await settleSession(client)
       if (active.terminalError && !active.failureRendered)
@@ -1825,7 +1820,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
       }
       const admitted = await admitPrompt(next, client, delivery)
-      if (admitted) mergePending(admitted)
+      if (admitted) mergePending(admitted.id, admitted)
       settlementClient = client
     },
     async waitForIdle() {

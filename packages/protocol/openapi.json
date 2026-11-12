@@ -3410,124 +3410,6 @@
         "description": "Cancel an inbox item that has not yet been delivered. Unavailable items are a no-op.",
         "summary": "Cancel inbox input"
       },
-      "put": {
-        "tags": ["session"],
-        "operationId": "session.inbox.edit",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
-          },
-          {
-            "name": "inboxID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.Message.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ConflictError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Replace a queued user prompt in place. Returns a conflict if it has already left the queue.",
-        "summary": "Edit queued prompt",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "text": {
-                    "type": "string"
-                  },
-                  "files": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/PromptInput.FileAttachment"
-                    }
-                  },
-                  "agents": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Prompt.AgentAttachment"
-                    }
-                  },
-                  "skills": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/PromptInput.SkillAttachment"
-                    }
-                  },
-                  "metadata": {
-                    "type": "object"
-                  },
-                  "delivery": {
-                    "$ref": "#/components/schemas/Session.Inbox.Delivery"
-                  }
-                },
-                "required": ["text", "delivery"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
-      },
       "patch": {
         "tags": ["session"],
         "operationId": "session.inbox.update",
@@ -3608,6 +3490,126 @@
                   }
                 },
                 "required": ["delivery"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/session/{sessionID}/inbox/{inboxID}": {
+      "put": {
+        "tags": ["session"],
+        "operationId": "experimental.session.inbox.edit",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "inboxID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.Message.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace a queued user prompt in place. Returns a conflict if it has already left the queue. Experimental: may change without compatibility guarantees.",
+        "summary": "Edit queued prompt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PromptInput.FileAttachment"
+                    }
+                  },
+                  "agents": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Prompt.AgentAttachment"
+                    }
+                  },
+                  "skills": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PromptInput.SkillAttachment"
+                    }
+                  },
+                  "metadata": {
+                    "type": "object"
+                  },
+                  "delivery": {
+                    "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                  }
+                },
+                "required": ["text", "delivery"],
                 "additionalProperties": false
               }
             }
@@ -28373,33 +28375,11 @@
           "data": {
             "type": "object",
             "properties": {
-              "id": {
-                "$ref": "#/components/schemas/Session.Message.ID"
-              },
               "sessionID": {
                 "$ref": "#/components/schemas/Session.ID"
               },
-              "time": {
-                "type": "object",
-                "properties": {
-                  "created": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN", "Infinity", "-Infinity"]
-                      }
-                    ]
-                  }
-                },
-                "required": ["created"],
-                "additionalProperties": false
-              },
-              "type": {
-                "type": "string",
-                "enum": ["user"]
+              "inboxID": {
+                "$ref": "#/components/schemas/Session.Message.ID"
               },
               "payload": {
                 "$ref": "#/components/schemas/Session.Inbox.UserPayload"
@@ -28408,7 +28388,7 @@
                 "$ref": "#/components/schemas/Session.Inbox.Delivery"
               }
             },
-            "required": ["id", "sessionID", "time", "type", "payload", "delivery"],
+            "required": ["sessionID", "inboxID", "payload", "delivery"],
             "additionalProperties": false
           }
         },

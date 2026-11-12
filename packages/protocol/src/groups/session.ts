@@ -566,7 +566,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       ),
     )
     .add(
-      HttpApiEndpoint.put("session.inbox.edit", "/api/session/:sessionID/inbox/:inboxID", {
+      HttpApiEndpoint.put("experimental.session.inbox.edit", "/api/experimental/session/:sessionID/inbox/:inboxID", {
         params: { sessionID: Session.ID, inboxID: SessionMessage.ID },
         payload: Schema.Struct({
           ...PromptInput.Prompt.fields,
@@ -579,9 +579,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "session.inbox.edit",
+            identifier: "experimental.session.inbox.edit",
             summary: "Edit queued prompt",
-            description: "Replace a queued user prompt in place. Returns a conflict if it has already left the queue.",
+            description:
+              "Replace a queued user prompt in place. Returns a conflict if it has already left the queue. Experimental: may change without compatibility guarantees.",
           }),
         ),
     )

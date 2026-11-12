@@ -5,8 +5,9 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { Schema } from "effect"
+import { ConflictError, InvalidRequestError } from "../../../protocol/src/errors"
 import { holdRoute, provider, seed, SERVER } from "../utils/app"
-import type { MockServerConfig } from "../utils/mock-server"
+import type { MockAnswer, MockServerConfig } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
 import { openSession } from "../utils/workspace"
@@ -97,10 +98,10 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
     shells,
     emit,
     events: () => events.splice(0),
-    onInboxEdit: (input: Parameters<NonNullable<MockServerConfig["onInboxEdit"]>>[0]) => {
+    onInboxEdit: (input: Parameters<NonNullable<MockServerConfig["onInboxEdit"]>>[0]): void | MockAnswer => {
       const original = rows.find((item) => item.id === input.inboxID && item.delivery === "queue")
 
-      if (!original) throw new Error("Original delivered")
+      if (!original) return { status: 409, body: new ConflictError({ message: "Prompt is no longer queued" }) }
       const body = decodePromptBody(input.body)
       prompts.push(body)
       original.payload = {
@@ -110,7 +111,12 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
         agents: body.agents?.map((agent) => ({ ...agent })),
       }
       original.delivery = body.delivery ?? "queue"
-      emit("session.inbox.edited", original)
+      emit("session.inbox.edited", {
+        sessionID,
+        inboxID: original.id,
+        payload: original.payload,
+        delivery: original.delivery,
+      })
     },
     onPrompt: (input: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]) => {
       const body = decodePromptBody(input.body)
@@ -686,9 +692,10 @@ for (const change of ["reorder", "edit"] as const) {
     const order = ["first queued prompt", "second queued prompt", "third queued prompt"]
     const mock = createQueueMock(order)
     const admit = mock.onPrompt
-    mock.onInboxEdit = () => {
-      throw new Error("Cannot prepare attachment")
-    }
+    mock.onInboxEdit = () => ({
+      status: 400,
+      body: new InvalidRequestError({ message: "Cannot prepare attachment" }),
+    })
 
     // The last prompt's re-admission fails after the server admitted it, so its response is lost.
     mock.onPrompt = (input) => {
@@ -724,11 +731,13 @@ for (const change of ["reorder", "edit"] as const) {
     // The replacements admitted before the failure are withdrawn; the originals stay in place.
     if (change === "edit") await expect(page.getByText("Request failed")).toBeVisible()
 
-    if (change === "reorder") await expect.poll(() => mock.log.includes(`cancel:${mock.prompts.at(-1)?.id}`)).toBe(true)
-    await expect.poll(() => mock.changes.length).toBe(mock.prompts.length)
-    expect(mock.changes.every((entry) => entry.action === "cancel" && !entry.inboxID.startsWith("inb_seed_"))).toBe(
-      true,
-    )
+    if (change === "reorder") {
+      await expect.poll(() => mock.changes.length).toBe(order.length)
+      expect(mock.changes).toEqual(
+        expect.arrayContaining(mock.prompts.map((prompt) => ({ inboxID: prompt.id, action: "cancel" }))),
+      )
+    }
+
     await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(order)
     expect(mock.rows.map((row) => row.payload.text)).toEqual(order)
     await expect(
@@ -740,8 +749,12 @@ for (const change of ["reorder", "edit"] as const) {
   })
 }
 
-test("editing restores the existing draft and replaces only the original queue position", async ({ page }) => {
+test("an applied edit keeps its position and restores the existing draft even if its response is lost", async ({
+  page,
+}) => {
   const mock = createQueueMock(["first queued prompt", "tighten the error copy", "third queued prompt"])
+  const edit = mock.onInboxEdit
+  mock.onInboxEdit = (input) => edit(input) ?? { status: 502, body: "Lost response" }
   const view = await openQueue(page, mock)
   const original = view.rows.getByText("tighten the error copy", { exact: true })
   await expect(original).toBeVisible()
@@ -767,10 +780,11 @@ test("editing restores the existing draft and replaces only the original queue p
     "tighten the error copy and add a retry hint",
     "third queued prompt",
   ])
-  await expect(view.input).toHaveText("my in-progress draft")
   await expect
     .poll(() => mock.prompts.map((prompt) => prompt.text))
     .toEqual(["tighten the error copy and add a retry hint"])
+  await expect(view.rows.and(page.locator('[aria-busy="true"]'))).toHaveCount(0)
+  await expect(view.input).toHaveText("my in-progress draft")
   expect(mock.rows.map((item) => item.id)).toEqual(["inb_seed_1", "inb_seed_2", "inb_seed_3"])
   expect(mock.changes).toEqual([])
 })
@@ -785,7 +799,7 @@ test("an edit racing delivery keeps the edit draft and sends only the original",
 
   // Let the runner take B just before the write that would change or remove B.
   // In the admit/cancel implementation the replacement is already queued at this point.
-  await page.route(`**/api/session/${sessionID}/**`, async (route) => {
+  await page.route(`**/session/${sessionID}/inbox/*`, async (route) => {
     if (["DELETE", "PUT"].includes(route.request().method()) && mock.rows[0]?.payload.text === "B") mock.rows.shift()
     await route.fallback()
   })
@@ -878,7 +892,7 @@ for (const delivery of ["steer", "queue"] as const) {
     ]
     const view = await openQueue(page, mock)
 
-    const edit = await holdRoute(page, new RegExp(`/api/session/${sessionID}/inbox/inb_seed_2(\\?|$)`), {
+    const edit = await holdRoute(page, new RegExp(`/api/experimental/session/${sessionID}/inbox/inb_seed_2(\\?|$)`), {
       method: "PUT",
     })
 

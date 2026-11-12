@@ -2639,10 +2639,8 @@ export type SessionInboxEdited = {
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
   data: {
-    id: SessionMessageID
     sessionID: SessionID
-    time: { created: number }
-    type: "user"
+    inboxID: SessionMessageID
     payload: SessionInboxUserPayload1
     delivery: SessionInboxDelivery
   }
@@ -3574,37 +3572,6 @@ export type SessionInboxCancelInput = { readonly sessionID: string; readonly inb
 
 export type SessionInboxCancelOutput = void
 
-export type SessionInboxEditInput = {
-  readonly sessionID: string
-  readonly inboxID: string
-  readonly text: string
-  readonly files?:
-    | ReadonlyArray<{
-        readonly uri: string
-        readonly source?: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
-        readonly name?: string
-        readonly description?: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-    | undefined
-  readonly agents?:
-    | ReadonlyArray<{
-        readonly name: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-    | undefined
-  readonly skills?:
-    | ReadonlyArray<{
-        readonly id: string
-        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-      }>
-    | undefined
-  readonly metadata?: { readonly [x: string]: JsonValue } | undefined
-  readonly delivery: "steer" | "queue"
-}
-
-export type SessionInboxEditOutput = void
-
 export type SessionInboxUpdateInput = {
   readonly sessionID: string
   readonly inboxID: string
@@ -3962,6 +3929,37 @@ export type ExperimentalSessionSkillOutput = void
 export type ExperimentalSessionWaitInput = { readonly sessionID: string }
 
 export type ExperimentalSessionWaitOutput = void
+
+export type ExperimentalSessionInboxEditInput = {
+  readonly sessionID: string
+  readonly inboxID: string
+  readonly text: string
+  readonly files?:
+    | ReadonlyArray<{
+        readonly uri: string
+        readonly source?: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
+        readonly name?: string
+        readonly description?: string
+        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    | undefined
+  readonly agents?:
+    | ReadonlyArray<{
+        readonly name: string
+        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    | undefined
+  readonly skills?:
+    | ReadonlyArray<{
+        readonly id: string
+        readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    | undefined
+  readonly metadata?: { readonly [x: string]: JsonValue } | undefined
+  readonly delivery: "steer" | "queue"
+}
+
+export type ExperimentalSessionInboxEditOutput = void
 
 export type ExperimentalSessionInstructionsEntryListInput = { readonly sessionID: string }
 
@@ -4987,6 +4985,12 @@ export type SessionWaitInput = ExperimentalSessionWaitInput
 
 /** @deprecated Use `ExperimentalSessionWaitOutput`. Removed in the next minor. */
 export type SessionWaitOutput = ExperimentalSessionWaitOutput
+
+/** @deprecated Use `ExperimentalSessionInboxEditInput`. Removed in the next minor. */
+export type SessionInboxEditInput = ExperimentalSessionInboxEditInput
+
+/** @deprecated Use `ExperimentalSessionInboxEditOutput`. Removed in the next minor. */
+export type SessionInboxEditOutput = ExperimentalSessionInboxEditOutput
 
 /** @deprecated Use `ExperimentalSessionInstructionsEntryListInput`. Removed in the next minor. */
 export type SessionInstructionsEntryListInput = ExperimentalSessionInstructionsEntryListInput

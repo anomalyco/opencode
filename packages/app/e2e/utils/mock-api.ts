@@ -486,7 +486,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.put("sessionInboxEdit", "/api/session/:sessionID/inbox/:inboxID", {
+    HttpApiEndpoint.put("sessionInboxEdit", "/api/experimental/session/:sessionID/inbox/:inboxID", {
       params: { ...SessionParams, inboxID: Schema.String },
       payload: JsonPayload,
       success: NoContent,

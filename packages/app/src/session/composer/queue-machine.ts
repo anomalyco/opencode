@@ -1,4 +1,5 @@
 import { Option, Schema } from "effect"
+import { unwrap } from "solid-js/store"
 import type { PromptAttachment, SessionInboxInfo } from "@opencode/client/promise"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
@@ -150,7 +151,12 @@ export type QueueEvent =
       readonly context: readonly ContextItem[]
     }
   // `hidden` lists the inbox IDs the failed operation already withdrew or cancelled.
-  | { readonly type: "mutation.failed"; readonly attempt: number; readonly hidden: readonly string[] }
+  | {
+      readonly type: "mutation.failed"
+      readonly attempt: number
+      readonly hidden: readonly string[]
+      readonly unconfirmed?: boolean
+    }
   // `hidden` as for a failure: what the operation withdrew or cancelled before the bound ran out.
   | {
       readonly type: "mutation.timed-out"
@@ -295,7 +301,9 @@ function settleDisposed(state: Extract<QueueState, { status: "disposed" }>, even
 
   return changed(
     { status: "disposed" },
-    returning.type === "edit" ? [{ type: "draft.merge", prompt: returning.prompt, context: [], focus: false }] : [],
+    returning.type === "edit" && !event.unconfirmed
+      ? [{ type: "draft.merge", prompt: returning.prompt, context: [], focus: false }]
+      : [],
   )
 }
 
@@ -426,7 +434,14 @@ function startEdit(state: LiveQueueState, event: Extract<QueueEvent, { type: "ed
   if (current?.id === event.id) return unchanged(state)
   const text = queuedPromptText(item)
   const attachments = queuedPromptAttachments(item)
-  const edit = { id: item.id, item, pin: state.seq + 1, stash: current?.stash ?? event.draft }
+
+  // Inbox refreshes can reconcile the Solid store row in place while its editor is open.
+  const edit = {
+    id: item.id,
+    item: structuredClone(unwrap(item)),
+    pin: state.seq + 1,
+    stash: current?.stash ?? event.draft,
+  }
 
   // Pin the media for a draft that may outlive the queued item.
   const effects: QueueEffect[] = [
@@ -463,7 +478,7 @@ function confirmEdit(state: LiveQueueState, event: Extract<QueueEvent, { type: "
   const attachments = event.prompt.filter(isAttachment)
 
   if (!raw.trim() && !attachments.length) return changed(closed, [restored])
-  const item = state.items.find((entry) => entry.id === state.edit.id) ?? state.edit.item
+  const item = state.edit.item
   const pristine = isPristine(item, event.prompt)
 
   if (pristine && event.delivery === "queue") return changed(closed, [restored])
@@ -590,7 +605,7 @@ function settle(
   const hidden = hide(state, event.hidden)
   // Nothing typed is lost: an edit that never reached the server returns to the composer, merged into what it holds
   // now, or into the draft an open edit stashed.
-  const returned = active.type === "edit"
+  const returned = active.type === "edit" && !event.unconfirmed
 
   const restored =
     returned && hidden.state.status === "editing-while-mutating"
@@ -804,7 +819,7 @@ export function isPristine(item: QueuedPrompt, prompt: Prompt) {
   const original = queuedPromptAttachments(item)
 
   return (
-    promptText(prompt).trim() === queuedPromptText(item) &&
+    promptText(prompt).trim() === queuedPromptText(item).trim() &&
     attachments.length === original.length &&
     attachments.every((attachment, index) => attachment.id === original[index].id)
   )

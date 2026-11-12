@@ -220,10 +220,16 @@ describe("public event manifest", () => {
     expect(SessionEvent.Tool.Called.durable?.version).toBe(1)
   })
 
-  test("keeps current session deletion minimal", () => {
+  test("keeps current session deletion and inbox edits minimal", () => {
     const sessionID = SessionID.make("ses_test")
 
     expect(SessionEvent.Deleted.data.make({ sessionID })).toEqual({ sessionID })
     expect(SessionEvent.Deleted.durable?.version).toBe(2)
+    expect(Object.keys(SessionEvent.InboxEdited.data.fields).sort()).toEqual([
+      "delivery",
+      "inboxID",
+      "payload",
+      "sessionID",
+    ])
   })
 })

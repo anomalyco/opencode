@@ -61,8 +61,6 @@ import type {
   SessionInboxListOutput,
   SessionInboxCancelInput,
   SessionInboxCancelOutput,
-  SessionInboxEditInput,
-  SessionInboxEditOutput,
   SessionInboxUpdateInput,
   SessionInboxUpdateOutput,
   SessionGenerateInput,
@@ -97,6 +95,8 @@ import type {
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
   ExperimentalSessionWaitOutput,
+  ExperimentalSessionInboxEditInput,
+  ExperimentalSessionInboxEditOutput,
   ExperimentalSessionInstructionsEntryListInput,
   ExperimentalSessionInstructionsEntryListOutput,
   ExperimentalSessionInstructionsEntryPutInput,
@@ -908,25 +908,6 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
-        edit: (input: SessionInboxEditInput, requestOptions?: RequestOptions) =>
-          request<SessionInboxEditOutput>(
-            {
-              method: "PUT",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
-              body: {
-                text: input["text"],
-                files: input["files"],
-                agents: input["agents"],
-                skills: input["skills"],
-                metadata: input["metadata"],
-                delivery: input["delivery"],
-              },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 409],
-              empty: true,
-            },
-            requestOptions,
-          ),
         update: (input: SessionInboxUpdateInput, requestOptions?: RequestOptions) =>
           request<SessionInboxUpdateOutput>(
             {
@@ -1140,6 +1121,27 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+        inbox: {
+          edit: (input: ExperimentalSessionInboxEditInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalSessionInboxEditOutput>(
+              {
+                method: "PUT",
+                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
+                body: {
+                  text: input["text"],
+                  files: input["files"],
+                  agents: input["agents"],
+                  skills: input["skills"],
+                  metadata: input["metadata"],
+                  delivery: input["delivery"],
+                },
+                successStatus: 204,
+                declaredStatuses: [400, 401, 404, 409],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
         instructions: {
           entry: {
             list: (input: ExperimentalSessionInstructionsEntryListInput, requestOptions?: RequestOptions) =>
@@ -2724,6 +2726,11 @@ export function make(options: ClientOptions) {
       skill: client.experimental.session.skill,
       /** @deprecated Use `client.experimental.session.wait`. Removed in the next minor. */
       wait: client.experimental.session.wait,
+      inbox: {
+        ...client.session.inbox,
+        /** @deprecated Use `client.experimental.session.inbox.edit`. Removed in the next minor. */
+        edit: client.experimental.session.inbox.edit,
+      },
       /** @deprecated Use `client.experimental.session.instructions`. Removed in the next minor. */
       instructions: {
         /** @deprecated Use `client.experimental.session.instructions.entry`. Removed in the next minor. */

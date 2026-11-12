@@ -322,7 +322,8 @@ export function createData(config: CreateDataInput) {
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
-  const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+  type PendingUpdate = (snapshot: Map<string, SessionInboxInfo>) => void
+  const pendingUpdates = new Map<string, PendingUpdate[]>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -331,7 +332,7 @@ export function createData(config: CreateDataInput) {
 
   function removePending(sessionID: string, inboxID?: string) {
     if (!inboxID) return
-    pendingUpdates.get(sessionID)?.set(inboxID, undefined)
+    pendingUpdates.get(sessionID)?.push((snapshot) => snapshot.delete(inboxID))
     if (store.session.pending[sessionID]?.some((item) => item.id === inboxID))
       setStore(
         "session",
@@ -378,11 +379,23 @@ export function createData(config: CreateDataInput) {
       })
   }
 
-  function updatePending(sessionID: string, inboxID: string, delivery: SessionInbox.Delivery) {
+  function updatePending(
+    sessionID: string,
+    inboxID: string,
+    delivery: SessionInbox.Delivery,
+    payload?: Extract<SessionInboxInfo, { type: "user" }>["payload"],
+  ) {
+    const update = (item: SessionInboxInfo): SessionInboxInfo =>
+      item.type === "user" && payload ? { ...item, delivery, payload } : { ...item, delivery }
     const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inboxID) ?? -1
     const item = store.session.pending[sessionID]?.[index]
-    pendingUpdates.get(sessionID)?.set(inboxID, item ? { ...item, delivery } : delivery)
-    if (index < 0 || !item || item.delivery === delivery) return
+    pendingUpdates.get(sessionID)?.push((snapshot) => {
+      const existing = snapshot.get(inboxID) ?? item
+      if (existing) snapshot.set(inboxID, update(existing))
+    })
+    if (!item) return
+    if (payload) return admitLocal(update(item))
+    if (item.delivery === delivery) return
     setStore("session", "pending", sessionID, index, { ...item, delivery })
   }
 
@@ -903,12 +916,9 @@ export function createData(config: CreateDataInput) {
         compacting.get(event.data.sessionID)?.observed.add(event.data.inboxID)
         return
       }
-      case "session.inbox.edited": {
-        const item = event.data
-        pendingUpdates.get(item.sessionID)?.set(item.id, item)
-        admitLocal(item)
+      case "session.inbox.edited":
+        updatePending(event.data.sessionID, event.data.inboxID, event.data.delivery, event.data.payload)
         return
-      }
       case "session.inbox.enqueued": {
         outbox.delete(event.data.inboxID)
         const item = {
@@ -917,7 +927,7 @@ export function createData(config: CreateDataInput) {
           time: { created: event.created },
           ...event.data.item,
         }
-        pendingUpdates.get(item.sessionID)?.set(item.id, item)
+        pendingUpdates.get(item.sessionID)?.push((snapshot) => snapshot.set(item.id, item))
         admitLocal(item)
         if (event.data.item.type === "compaction") {
           const active = compacting.get(event.data.sessionID)
@@ -1602,7 +1612,7 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
             const started = deletionEpoch
-            const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()
+            const updates: PendingUpdate[] = []
             pendingUpdates.set(sessionID, updates)
             try {
               const snapshot = await api().session.inbox.list({ sessionID }).catch(evictMissing)
@@ -1610,13 +1620,7 @@ export function createData(config: CreateDataInput) {
               // Events can overtake this HTTP response on a remote connection.
               // Reconcile them before an older snapshot can resurrect delivered input.
               const current = new Map(snapshot.map((item) => [item.id, item]))
-              updates.forEach((item, id) => {
-                if (item === undefined) current.delete(id)
-                else if (typeof item === "string") {
-                  const existing = current.get(id)
-                  if (existing) current.set(id, { ...existing, delivery: item })
-                } else current.set(id, item)
-              })
+              updates.forEach((update) => update(current))
               const pending = [...current.values()]
               // A positive read acknowledges admission even when its SSE echo is delayed.
               pending.forEach((item) => outbox.delete(item.id))
