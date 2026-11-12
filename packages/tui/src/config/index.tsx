@@ -152,10 +152,7 @@ export const Info = Schema.Struct({
   session: Schema.optional(
     Schema.Struct({
       inbox: Schema.optional(Schema.Boolean).annotate({
-        description: "Open the session Inbox on launch (default: false)",
-      }),
-      inbox_layout: Schema.optional(Schema.Literals(["sidebar", "side-overlay"])).annotate({
-        description: "Dock the Inbox beside the session or open it as a side overlay (default: sidebar)",
+        description: "Open the Inbox overlay on launch (default: false)",
       }),
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",

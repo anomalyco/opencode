@@ -29,144 +29,111 @@ test("open inbox sessions in different locations by mouse and by keyboard", asyn
   const lines = app.captureCharFrame().split("\n")
   const y = lines.findIndex((line) => line.includes("Other work"))
   await app.mockMouse.click(lines[y]!.indexOf("Other work"), y)
-  await app.waitForFrame((frame) => frame.includes("▸ Other work"))
-
-  app.mockInput.pressKey("p", { ctrl: true })
-  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
-  await app.mockInput.typeText("Open inbox session")
-  await app.waitForFrame((frame) => frame.includes("Open inbox session"))
-  app.mockInput.pressEnter()
+  await app.waitForFrame(
+    (frame) =>
+      !frame.includes("Search inbox sessions") &&
+      frame.includes("Other work") &&
+      app.renderer.currentFocusedEditor instanceof TextareaRenderable,
+  )
+  const prompt = app.renderer.currentFocusedEditor!
+  const width = prompt.width
+  app.mockInput.pressKey("x", { ctrl: true })
+  app.mockInput.pressKey("o")
   await app.waitForFrame(
     (frame) => frame.includes("Search inbox sessions") && app.renderer.currentFocusedEditor instanceof InputRenderable,
   )
-  await app.mockInput.typeText("work")
+  expect(prompt.width).toBe(width)
   app.mockInput.pressArrow("up")
-  app.mockInput.pressEnter()
-  await app.waitForFrame((frame) => frame.includes("▸ Local work"))
-  expect(app.captureCharFrame()).not.toContain("▸ Other work")
-})
-
-test("section headers fold without stealing prompt arrows outside the section", async () => {
-  const question = session("ses_question")
-  const permission = session("ses_permission")
-  await using app = await createAppFixture({
-    width: 76,
-    height: 26,
-    config: { animations: false, session: { inbox: true } },
-    fetch: (url) => {
-      if (url.pathname === "/api/session")
-        return json({
-          data: [
-            { ...permission, title: "Check a very long session title" },
-            { ...question, title: "Decide" },
-          ],
-          cursor: {},
-        })
-      if (url.pathname === "/api/form")
-        return json({ data: [{ id: "form", sessionID: question.id, title: "Answer", fields: [] }] })
-      if (url.pathname === "/api/permission/request")
-        return json({ data: [{ id: "request", sessionID: permission.id, action: "read", resources: ["a"] }] })
-    },
-  })
-  await app.ready
-  await app.waitForFrame((frame) => frame.includes("▾ Needs attention 2") && frame.includes("[?] Decide"))
-  const lines = app
-    .captureCharFrame()
-    .split("\n")
-    .map((line) => line.slice(0, 32))
-  const y = lines.findIndex((line) => line.includes("Needs attention"))
-  expect(lines[y + 1]).toContain("[!] Check")
-  expect(lines[y + 2]).toContain("[?] Decide")
-  expect(lines.join("\n")).not.toMatch(/Review permission|Answer question/)
-  const colors = app
-    .captureSpans()
-    .lines.slice(y + 1, y + 3)
-    .map((line) => line.spans.find((span) => /\[[!?]\]/.test(span.text))?.fg.toInts())
-  expect(colors[0]).toBeDefined()
-  expect(colors[1]).toBeDefined()
-  expect(colors[0]).not.toEqual(colors[1])
-  const titles = app
-    .captureSpans()
-    .lines.slice(y + 1, y + 3)
-    .map((line) => line.spans.find((span) => /Check|Decide/.test(span.text))?.fg.toInts())
-  expect(titles[0]).toBeDefined()
-  expect(titles[0]).toEqual(titles[1])
-  expect(titles[0]).not.toEqual(colors[0])
-  expect(titles[1]).not.toEqual(colors[1])
-  await app.mockMouse.click(6, y)
-  await app.waitForFrame((frame) => frame.includes("▸ Needs attention 2") && !frame.includes("[?] Decide"))
-  app.mockInput.pressArrow("right")
-  await app.waitForFrame((frame) => frame.includes("[!] Check"))
-  await app.mockMouse.moveTo(6, y + 1)
-  app.mockInput.pressArrow("left")
-  await app.waitForFrame((frame) => frame.includes("▸ Needs attention 2"))
-  await app.mockMouse.moveTo(60, y)
-  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
-  await app.mockInput.typeText("ac")
-  app.mockInput.pressArrow("left")
-  await app.mockInput.typeText("b")
-  app.mockInput.pressArrow("right")
-  await app.waitForFrame((frame) => frame.includes("abc") && frame.includes("▸ Needs attention 2"))
-
-  // The sidebar is collapsed: these results come from the picker, not the rail behind it.
-  app.mockInput.pressKey("p", { ctrl: true })
-  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
-  await app.mockInput.typeText("Open inbox session")
   app.mockInput.pressEnter()
   await app.waitForFrame(
     (frame) =>
-      frame.includes("[!] Check") &&
-      frame.includes("[?] Decide") &&
-      app.renderer.currentFocusedEditor instanceof InputRenderable,
+      !frame.includes("Search inbox sessions") &&
+      frame.includes("Local work") &&
+      app.renderer.currentFocusedEditor instanceof TextareaRenderable,
   )
-  await app.mockInput.typeText("Answer question")
-  await app.waitForFrame((frame) => frame.includes("[?] Decide") && !frame.includes("[!] Check"))
 })
 
-test("Focus Inbox traverses headers and sessions with the keyboard and releases focus", async () => {
+test("scroll through a long inbox without leaving the overlay", async () => {
+  const sessions = Array.from({ length: 10 }, (_, index) => ({
+    ...session(`ses_wheel_${index}`),
+    title: `Wheel session ${index}`,
+  }))
+  await using app = await createAppFixture({
+    width: 64,
+    height: 15,
+    config: { animations: false, session: { inbox: true } },
+    fetch: (url) => (url.pathname === "/api/session" ? json({ data: sessions, cursor: {} }) : undefined),
+  })
+  await app.ready
+  await app.waitForFrame((frame) => frame.includes("Wheel session 0"))
+  expect(app.captureCharFrame()).not.toContain("Wheel session 9")
+  const y = app
+    .captureCharFrame()
+    .split("\n")
+    .findIndex((line) => line.includes("Wheel session 0"))
+  for (let i = 0; i < 15; i++) await app.mockMouse.scroll(12, y, "down")
+  await app.waitForFrame((frame) => frame.includes("Wheel session 9") && !frame.includes("Wheel session 0"))
+})
+
+test("attention rows explain their action; headers fold with remapped keys or a click", async () => {
   const sessions = [
-    { ...session("ses_work"), title: "Running task" },
-    { ...session("ses_notes"), title: "Project notes" },
+    {
+      ...session("ses_question"),
+      title: "Choose " + "a very long title ".repeat(10),
+      location: { directory: "/work/Atlas" },
+    },
+    { ...session("ses_permission"), title: "Deploy", location: { directory: "/work/Atlas" } },
+    { ...session("ses_recent"), title: "Finished earlier" },
   ]
   await using app = await createAppFixture({
     width: 100,
-    height: 26,
-    config: { animations: false, session: { inbox: true } },
+    height: 24,
+    config: {
+      animations: false,
+      session: { inbox: true },
+      keybinds: { "inbox.section.collapse": "f8", "inbox.section.expand": "f9", "dialog.select.submit": "none" },
+    },
     fetch: (url) => {
       if (url.pathname === "/api/session") return json({ data: sessions, cursor: {} })
-      if (url.pathname === "/api/session/active") return json({ data: { ses_work: { type: "running" } } })
-      const item = sessions.find((s) => url.pathname === `/api/session/${s.id}`)
-      if (item) return json({ data: item })
-      if (/^\/api\/session\/[^/]+\/(message|inbox)$/.test(url.pathname)) return json({ data: [], cursor: {} })
+      if (url.searchParams.get("location[directory]") !== "/work/Atlas") return
+      if (url.pathname === "/api/permission/request")
+        return json({ data: [{ id: "permission", sessionID: "ses_permission", action: "read", resources: ["a"] }] })
+      if (url.pathname === "/api/form")
+        return json({ data: [{ id: "form", sessionID: "ses_question", title: "Answer", fields: [] }] })
     },
   })
-  async function focus() {
-    app.mockInput.pressKey("p", { ctrl: true })
-    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
-    await app.mockInput.typeText("Focus Inbox")
-    app.mockInput.pressEnter()
-    await app.waitFor(() => app.renderer.currentFocusedRenderable?.id === "inbox-sidebar")
-  }
   await app.ready
-  await app.waitForFrame((frame) => frame.includes("▾ Working 1") && frame.includes("▾ Recent 1"))
-  expect(app.captureCharFrame()).toMatch(/⋯ +Running task/)
-  await focus()
-  app.mockInput.pressArrow("left")
-  await app.waitForFrame((frame) => frame.includes("▸ Working 1") && !frame.includes("Running task"))
+  await app.waitForFrame(
+    (frame) =>
+      frame.includes("▾ Needs attention 2") &&
+      frame.includes("[?] Choose") &&
+      app.renderer.currentFocusedEditor instanceof InputRenderable,
+  )
+  const frame = app.captureCharFrame()
+  expect(frame).toContain("[?] Choose")
+  expect(frame).toContain("[!] Deploy")
+  expect(frame).not.toMatch(/Review permission|Answer question/)
+  expect(frame).toMatch(/collapse f8/i)
+  expect(frame).not.toMatch(/enter open|open enter|esc close/i)
+  expect(frame).not.toContain("Atlas")
+  app.mockInput.pressKey("HOME")
   app.mockInput.pressArrow("down")
-  app.mockInput.pressArrow("left")
-  await app.waitForFrame((frame) => frame.includes("▸ Recent 1") && !frame.includes("Project notes"))
+  await app.waitForFrame((frame) => /▌ +\[!\] Deploy/.test(frame))
+  app.mockInput.pressKey("F8")
+  await app.waitForFrame((frame) => frame.includes("▌ ▸ Needs attention 2") && !frame.includes("[!] Deploy"))
+  app.mockInput.pressArrow("down")
+  await app.waitForFrame((frame) => frame.includes("▌ ▾ Recent 1"))
   app.mockInput.pressArrow("up")
-  app.mockInput.pressArrow("right")
-  await app.waitForFrame((frame) => frame.includes("Running task") && frame.includes("▸ Recent 1"))
-  app.mockInput.pressEscape()
-  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
-  await app.mockInput.typeText("ac")
-  app.mockInput.pressArrow("left")
-  await app.mockInput.typeText("b")
-  await app.waitForFrame((frame) => frame.includes("abc") && frame.includes("▾ Working 1"))
-  await focus()
-  app.mockInput.pressArrow("down")
-  app.mockInput.pressEnter()
-  await app.waitForFrame((frame) => frame.includes("▸ ⋯ Running task"))
+  await app.waitForFrame((frame) => frame.includes("▌ ▸ Needs attention 2") && /expand f9/i.test(frame))
+  app.mockInput.pressKey("F9")
+  await app.waitForFrame((frame) => frame.includes("▌ ▾ Needs attention 2") && frame.includes("[!] Deploy"))
+  const lines = app.captureCharFrame().split("\n")
+  const y = lines.findIndex((line) => line.includes("Needs attention"))
+  await app.mockMouse.click(lines[y]!.indexOf("Needs attention"), y)
+  await app.waitForFrame((frame) => frame.includes("▸ Needs attention 2") && !frame.includes("[?] Choose"))
+  await app.mockInput.typeText("Atlas")
+  await app.waitForFrame((frame) => frame.includes("[?] Choose") && !frame.includes("Finished earlier"))
+  app.resize(180, 24)
+  await app.waitForFrame((frame) => /\[\?\] Choose[^\n]+Dir: Atlas/.test(frame))
+  expect(app.captureCharFrame()).toMatch(/\[!\] Deploy[^\n]+Dir: Atlas/)
 })

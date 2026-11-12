@@ -536,17 +536,15 @@ function App() {
       .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
       .catch(toast.error)
   })
-  const [railWidth, setRailWidth] = createSignal(0)
-  const workspaceWidth = () => Math.max(0, dimensions().width - railWidth())
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
   const tabsResize = createPaneResize({
     value: () => layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH,
     defaultValue: () => SESSION_SIDEBAR_WIDTH,
-    clamp: (width) => clampSessionTabsWidth(width, workspaceWidth()),
-    fromMouse: (event) => event.x - railWidth() + 1,
-    contains: (event, width) => event.x >= railWidth() + width - 1 && event.x <= railWidth() + width,
+    clamp: (width) => clampSessionTabsWidth(width, dimensions().width),
+    fromMouse: (event) => event.x + 1,
+    contains: (event, width) => event.x >= width - 1 && event.x <= width,
     onCommit: (width) => {
       void updateLayout((draft) => {
         draft.verticalTabsWidth = width
@@ -613,19 +611,17 @@ function App() {
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
-    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(workspaceWidth(), tabsResize.size())
+    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, tabsResize.size())
   const tabsAvailable = () => sessionTabs.enabled() && sessionTabs.tabs().length > 0 && route.data.type !== "plugin"
   const fullscreenPanel = () =>
     route.data.type === "session" &&
     panels.current()?.sessionID === route.data.sessionID &&
     panels.presentation() === "fullscreen"
   const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
-  const tabWidth = () => (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)
-  const leftPaneWidth = () => railWidth() + tabWidth()
   const verticalTabsVisible = () => tabsVisible() && tabsVertical()
 
   // Measure the prospective split layout, even while full-screen hides the tabs.
-  createEffect(() => panels.setWidth(dimensions().width - leftPaneWidth()))
+  createEffect(() => panels.setWidth(dimensions().width - (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)))
   createEffect(() => {
     const current = panels.current()
     if (!current || (route.data.type === "session" && route.data.sessionID === current.sessionID)) return
@@ -1434,17 +1430,6 @@ function App() {
         onMouseDragEnd={tabsResize.onMouseDragEnd}
         onMouseUp={tabsResize.onMouseUp}
       >
-        <box
-          flexShrink={0}
-          minWidth={0}
-          flexDirection="row"
-          onSizeChange={function () {
-            // The render buffer is at least one cell wide even when the rail occupies no layout space.
-            setRailWidth(this.getComputedLayout().width)
-          }}
-        >
-          <Slot path="workspace.rail" input={{ tabWidth: tabWidth() }} />
-        </box>
         <Show when={verticalTabsVisible()}>
           <SessionTabs orientation="vertical" width={tabsResize.size()} />
         </Show>
@@ -1452,7 +1437,7 @@ function App() {
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
               <Show when={tabsVisible() && !tabsVertical()}>
-                <SessionTabs width={dimensions().width - railWidth()} />
+                <SessionTabs />
               </Show>
               <Switch>
                 <Match when={route.data.type === "home"}>
@@ -1463,7 +1448,7 @@ function App() {
                     {(sessionID) => (
                       <SessionFrame
                         sessionID={sessionID}
-                        leftPaneWidth={fullscreenPanel() ? railWidth() : leftPaneWidth()}
+                        verticalTabsWidth={verticalTabsVisible() ? tabsResize.size() : 0}
                       />
                     )}
                   </Show>
@@ -1481,7 +1466,7 @@ function App() {
           </Show>
         </box>
         <Show when={verticalTabsVisible()}>
-          <PaneResizeHandle resize={tabsResize} left={railWidth() + tabsResize.size() - 1} />
+          <PaneResizeHandle resize={tabsResize} left={tabsResize.size() - 1} />
         </Show>
       </box>
       <Show when={devtools() && !(route.data.type === "plugin" && route.data.id === "opencode.stats")}>

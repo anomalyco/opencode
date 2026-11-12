@@ -86,7 +86,7 @@ test
         get: async () => ({
           animations: false,
           tabs: { mode: "off" },
-          session: { inbox_layout: "side-overlay" },
+          session: {},
           keybinds: { "session.inbox.toggle": "f7" },
         }),
         update: async () => ({}),

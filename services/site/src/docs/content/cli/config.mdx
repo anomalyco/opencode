@@ -150,23 +150,15 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 
 ## Inbox
 
-Press `<leader>o` (by default, `Ctrl+X` then `o`) anywhere in the full-screen TUI to toggle the Inbox across locations on the connected server. In **Open settings → Inbox**, choose its layout and whether it opens on launch. The default is a sidebar, closed on launch.
+Press `<leader>o` (by default, `Ctrl+X` then `o`) anywhere in the full-screen TUI to toggle the Inbox overlay across locations on the connected server. The overlay opens over the current screen without resizing it, uses at least half of the terminal width, and fills narrow terminals. In **Open settings → Inbox**, choose whether it opens on launch.
 
 ```json title="cli.json"
 {
-  "session": { "inbox": true, "inbox_layout": "sidebar" }
+  "session": { "inbox": true }
 }
 ```
 
-- **Sidebar** sits at the far left, beside vertical tabs, and remembers whether you left it open. Below 76 terminal columns, the same shortcut opens the overlay instead.
-- **Side-overlay** opens over the session without resizing it and fills narrow terminals. Dismissing it leaves **Show Inbox on launch** unchanged.
-
-Drag the sidebar's right edge to resize it independently of vertical tabs. It starts at 64 columns, allows 32–96 columns, and keeps at least 44 columns for the remaining workspace. The width is saved across launches. Double-click the edge to reset it to 64 columns.
-
-`[?]` before a session title means a question is waiting for an answer. `[!]` means a permission request needs review. Click a session to open it. Click a section heading to fold or unfold it, or point at the section and press Left or Right.
-
-- In the sidebar, choose **Focus Inbox** from the command palette to navigate with the keyboard. The overlay receives focus when it opens. Up and Down move between headings and sessions. Left folds a section, Right unfolds it, Enter opens a session, and Escape returns to the prompt.
-- Type in the overlay, or choose **Open inbox session** in sidebar mode, to search by title, status or directory.
+`[?]` before a session title means a question is waiting for an answer. `[!]` means a permission request needs review. Type to filter by title, status, or directory. Use Up and Down to move between headings and sessions. Press Left to collapse a section, Right to expand it, or click its heading. Press Enter or click a session to open it. Escape or `<leader>o` closes the overlay and returns focus.
 
 ## Tabs
 

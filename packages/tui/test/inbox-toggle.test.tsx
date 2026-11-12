@@ -2,55 +2,76 @@ import { expect, test } from "bun:test"
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { createAppFixture } from "./fixture/app"
 
-test("changing Inbox layout in settings switches the same shortcut from sidebar to drawer", async () => {
+test("the leader opens and dismisses the overlay without changing prompt text, focus or layout", async () => {
   await using app = await createAppFixture({
+    width: 150,
+    height: 30,
+    config: { animations: false, session: {} },
+  })
+  await app.ready
+  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+  const prompt = app.renderer.currentFocusedEditor!
+  await app.mockInput.typeText("unfinished draft")
+  await app.renderOnce()
+  const draft = prompt.plainText
+  const bounds = () => [prompt.x, prompt.y, prompt.width, prompt.height]
+  const original = bounds()
+  const toggle = () => {
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("o")
+  }
+  toggle()
+  await app.waitForFrame(
+    (frame) => frame.includes("Search inbox sessions") && app.renderer.currentFocusedEditor instanceof InputRenderable,
+  )
+  const drawer = app.renderer.root.findDescendantById("dialog-drawer")!
+  expect([drawer.x, drawer.width, drawer.height]).toEqual([0, 75, 30])
+  expect(bounds()).toEqual(original)
+  await app.mockInput.typeText("filter only")
+  expect(prompt.plainText).toBe(draft)
+  toggle()
+  await app.waitFor(() => app.renderer.currentFocusedEditor === prompt)
+  expect(app.renderer.root.findDescendantById("dialog-drawer")).toBeUndefined()
+  expect(app.config().session?.inbox).toBeUndefined()
+  app.mockInput.pressKey("u", { ctrl: true })
+  await app.waitFor(() => prompt.plainText === "")
+})
+
+test("the launch preference, remapped shortcut and palette open the same responsive overlay", async () => {
+  await using app = await createAppFixture({
+    width: 50,
+    height: 24,
     config: {
       animations: false,
       session: { inbox: true },
-      keybinds: { "opencode.settings": "f5", "session.inbox.toggle": "f6" },
+      keybinds: { "session.inbox.toggle": "f6" },
     },
   })
   await app.ready
-  await app.waitForFrame(
-    (frame) => frame.includes("Inbox") && app.renderer.currentFocusedEditor instanceof TextareaRenderable,
-  )
-  const prompt = app.renderer.currentFocusedEditor!
-  app.mockInput.pressKey("F5")
-  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
-  await app.mockInput.typeText("Inbox layout")
-  await app.waitForFrame((frame) => /Inbox layout +sidebar/.test(frame))
-  app.mockInput.pressEnter()
-  await app.waitForFrame((frame) => /Inbox layout +side-overlay/.test(frame))
-  expect(app.config().session).toEqual({ inbox: true, inbox_layout: "side-overlay" })
+  const drawer = () => app.renderer.root.findDescendantById("dialog-drawer")
+  const ready = () =>
+    app.waitForFrame(
+      (frame) =>
+        frame.includes("Search inbox sessions") && app.renderer.currentFocusedEditor instanceof InputRenderable,
+    )
+  await ready()
+  expect(drawer()?.width).toBe(50)
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("Inbox") && app.renderer.currentFocusedEditor === prompt)
+  await app.waitFor(() => !drawer() && app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+  app.resize(100, 24)
+  await app.renderOnce()
   app.mockInput.pressKey("F6")
-  await app.waitForFrame((frame) => frame.includes("Search inbox sessions"))
-  app.mockInput.pressKey("F6")
-  await app.waitFor(() => app.renderer.currentFocusedEditor === prompt)
+  await ready()
+  expect(drawer()?.width).toBe(56)
+  await app.mockMouse.click(94, 2)
+  await app.waitForFrame(() => !drawer() && app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+  app.mockInput.pressKey("p", { ctrl: true })
+  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+  await app.mockInput.typeText("Open Inbox")
+  await app.waitForFrame((frame) => frame.includes("Open Inbox"))
+  app.mockInput.pressEnter()
+  await ready()
+  app.mockInput.pressEscape()
+  await app.waitFor(() => !drawer() && app.renderer.currentFocusedEditor instanceof TextareaRenderable)
   expect(app.config().session?.inbox).toBe(true)
-})
-
-test("the palette toggles the Inbox preference without changing other session settings", async () => {
-  await using app = await createAppFixture({ config: { session: { sidebar: "hide" } } })
-  await app.ready
-  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
-  expect(app.captureCharFrame()).not.toContain("Inbox")
-
-  for (const show of [true, false]) {
-    app.mockInput.pressKey("p", { ctrl: true })
-    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
-    await app.mockInput.typeText("inbox sidebar")
-    await app.waitForFrame((frame) => frame.includes(`${show ? "Show" : "Hide"} Inbox sidebar`))
-    app.mockInput.pressEnter()
-    await app.waitForFrame((frame) => !frame.includes("Inbox sidebar") && frame.includes("Inbox") === show)
-    expect(app.config().session).toEqual({ sidebar: "hide", inbox: show })
-
-    if (show) {
-      app.resize(70, 30)
-      await app.waitForFrame((frame) => !frame.includes("Inbox"))
-      app.resize(100, 30)
-      await app.waitForFrame((frame) => frame.includes("Inbox"))
-    }
-  }
 })

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { createAppFixture } from "./fixture/app"
 
-test("disabling the built-in Inbox removes its rail, shortcut and palette command", async () => {
+test("disabling the built-in Inbox removes its launch overlay, shortcut and palette command", async () => {
   await using app = await createAppFixture({
     config: {
       animations: false,
@@ -13,13 +13,13 @@ test("disabling the built-in Inbox removes its rail, shortcut and palette comman
   })
   await app.ready
   await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
-  expect(app.captureCharFrame()).not.toContain("Inbox")
+  expect(app.captureCharFrame()).not.toContain("Search inbox sessions")
   app.mockInput.pressKey("F6")
   await app.renderOnce()
-  expect(app.config().session?.inbox).toBe(true)
+  expect(app.captureCharFrame()).not.toContain("Search inbox sessions")
   app.mockInput.pressKey("p", { ctrl: true })
   await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
   await app.mockInput.typeText("Inbox")
   await app.renderOnce()
-  expect(app.captureCharFrame()).not.toMatch(/(Open Inbox|Hide Inbox sidebar|Show Inbox sidebar|Focus Inbox)/)
+  expect(app.captureCharFrame()).not.toMatch(/Open Inbox(?! on launch)/)
 })

@@ -190,8 +190,6 @@ export interface PanelInput {
  */
 export interface SlotMap {
   readonly app: Readonly<Record<string, never>>
-  /** Far-left rail across all routes, beside any vertical tabs. tabWidth is the eligible vertical tabs' width. */
-  readonly "workspace.rail": { readonly tabWidth: number }
   readonly "home.footer": Readonly<Record<string, never>>
   readonly "home.footer.status": Readonly<Record<string, never>>
   readonly "prompt.footer": PromptFooterInput

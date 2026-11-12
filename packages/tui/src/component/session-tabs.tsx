@@ -528,7 +528,6 @@ export function SessionTabs(
       </Match>
       <Match when={true}>
         <HorizontalSessionTabs
-          width={props.width}
           controller={props.controller}
           animations={props.animations}
           spinner={props.spinner}
@@ -1274,7 +1273,6 @@ function VerticalSessionTabs(props: {
 }
 
 function HorizontalSessionTabs(props: {
-  width?: number
   controller?: SessionTabsController
   animations?: boolean
   spinner?: TabSpinner
@@ -1284,7 +1282,6 @@ function HorizontalSessionTabs(props: {
   const tabs = props.controller ?? useSessionTabs()
   const data = props.controller ? undefined : useData()
   const dimensions = useTerminalDimensions()
-  const width = () => props.width ?? dimensions().width
   const theme = useTheme()
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
@@ -1347,7 +1344,7 @@ function HorizontalSessionTabs(props: {
       adaptiveSessionTabLayout(
         items(),
         activeID(),
-        width() - (showPlus() ? ADD_TAB_WIDTH : 0),
+        dimensions().width - (showPlus() ? ADD_TAB_WIDTH : 0),
         previous?.start,
       ),
   )
@@ -1389,7 +1386,7 @@ function HorizontalSessionTabs(props: {
   )
   let signature = ""
   let total = 0
-  let terminalWidth = width()
+  let terminalWidth = dimensions().width
 
   // createComputed runs before render effects, so seeded widths are visible on the first frame
   // of a membership change instead of flashing the final layout.
@@ -1398,11 +1395,11 @@ function HorizontalSessionTabs(props: {
     const nextSignature = identity()
     const changed = Boolean(signature) && signature !== nextSignature
     const resized = Boolean(total) && total !== layout().total
-    const terminalResized = terminalWidth !== width()
+    const terminalResized = terminalWidth !== dimensions().width
     const previous = signature
     signature = nextSignature
     total = layout().total
-    terminalWidth = width()
+    terminalWidth = dimensions().width
     const releasing = releasingCloseHold
     releasingCloseHold = false
     if (terminalResized && closeHold()) {
