@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Browser } from "../src/rpc.js"
-import { Schema } from "effect"
+import { Result, Schema } from "effect"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 
@@ -26,6 +26,25 @@ test("browser input bounds and optional fields survive the wire", () => {
   })
   expect(() => decode({ type: "evaluate", tabID, ref: "button", script: "(element) => element.id" })).toThrow()
   expect(() => decode({ type: "network.list", tabID, resourceType: "imaginary" })).toThrow()
+})
+
+test("an unknown parameter fails with the operation's valid parameters", () => {
+  const input = (name: string) => Browser.Operations.find((operation) => operation.name === name)!.input
+  const issues = (name: string, value: unknown) =>
+    Schema.decodeUnknownResult(input(name))(value, { errors: "all" }).pipe(
+      Result.match({ onSuccess: () => "", onFailure: (issue) => String(issue) }),
+    )
+  expect(issues("console", { tabID, levels: "error" })).toContain(
+    "Not a parameter of browser.console. Valid parameters: tabID, level, limit.",
+  )
+  expect(issues("tabs.list", { tabID })).toContain("Not a parameter of browser.tabs.list. Valid parameters: none.")
+  expect(Schema.decodeUnknownSync(input("console"))({ tabID, level: "error" })).toEqual({ tabID, level: "error" })
+  // Input repair drops unknown keys of a closed object before validation; an open one keeps them for this check.
+  for (const operation of Browser.Operations)
+    expect(Schema.toJsonSchemaDocument(operation.input, { onExcessProperty: "error" }).schema).not.toHaveProperty(
+      "additionalProperties",
+      false,
+    )
 })
 
 test("browser files are bounded bytes, not remote filesystem paths", () => {

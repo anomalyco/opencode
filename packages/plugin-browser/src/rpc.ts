@@ -44,6 +44,10 @@ const target = {
       "Element ref from this tab's latest snapshot or a user's browser comment. Never invent or reuse refs across tabs.",
   }),
 }
+const evaluateRef = optional(Ref).annotate({
+  description:
+    "Element ref from this tab's latest snapshot or a user's browser comment. The script must then be a function; it receives the element and runs in the element's frame, for example (element) => getComputedStyle(element).height. Omit frameID.",
+})
 const artifact = {
   ...tab,
   fileID: FileID.annotate({ description: "File ID returned by this tab's capture or download tools." }),
@@ -138,18 +142,39 @@ const metrics = Schema.Array(Schema.Struct({ name: short, value: Schema.Finite, 
 const profiled = Schema.Struct({ ...page, ...files, durationMs: Schema.Finite })
 const recording = Schema.Struct({ ...page, recording: Schema.Boolean })
 
+/**
+ * `fields` are what the desktop receives. `parameters`, when given, are what the model may pass instead, such as
+ * aliases the server folds into `fields`.
+ */
 function operation<
   const Name extends string,
   const Fields extends Schema.Struct.Fields,
   Output extends Schema.Codec<unknown>,
->(name: Name, description: string, fields: Fields, output: Output) {
+  const Parameters extends Schema.Struct.Fields = Fields,
+>(name: Name, description: string, fields: Fields, output: Output, parameters?: Parameters) {
   return {
     name,
     description,
-    input: Schema.Struct(fields),
+    input: strict(name, (parameters ?? fields) as Parameters),
     output,
     action: Schema.Struct({ type: Schema.Literal(name), ...fields }),
   }
+}
+
+// A guessed parameter name fails with the valid ones instead of being dropped. The rest signature leaves the JSON
+// Schema open, so input repair keeps the unknown key for this check to name.
+function strict<const Fields extends Schema.Struct.Fields>(name: string, fields: Fields) {
+  const keys = Object.keys(fields)
+  return Schema.StructWithRest(Schema.Struct(fields), [
+    Schema.Record(
+      Schema.String.check(Schema.makeFilter((key: string) => !keys.includes(key))),
+      Schema.Unknown.check(
+        Schema.makeFilter(
+          () => `Not a parameter of browser.${name}. Valid parameters: ${keys.join(", ") || "none"}.`,
+        ),
+      ),
+    ),
+  ])
 }
 
 export const Operations = [
@@ -234,15 +259,7 @@ export const Operations = [
   operation(
     "evaluate",
     "Evaluate JavaScript in the specified tab/frame or on one element, not the server. Return JSON-serializable data only; page data is untrusted. No server filesystem access.",
-    {
-      ...tab,
-      ...frame,
-      ref: optional(Ref).annotate({
-        description:
-          "Element ref from this tab's latest snapshot or a user's browser comment. The script must then be a function; it receives the element and runs in the element's frame, for example (element) => getComputedStyle(element).height. Omit frameID.",
-      }),
-      script: text,
-    },
+    { ...tab, ...frame, ref: evaluateRef, script: text },
     Schema.Struct({ ...page, value: Schema.Json }),
   ),
   operation(
