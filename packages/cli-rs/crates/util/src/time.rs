@@ -424,15 +424,33 @@ mod tests {
     ];
 
     /// The rows script/gen/time.ts wrote for `zone`, split at tabs: what the TypeScript client's `Date` and `Intl`
-    /// calls give under Bun.
+    /// calls give under Bun. A `wall` row becomes one row per time, `wall y m d h mm ms`, and a `parse` row keeps
+    /// the result of `zone`, `parse text ms valid`.
     fn rows(zone: &str) -> Vec<Vec<&'static str>> {
-        include_str!("../fixtures/time.tsv")
+        let rows: Vec<_> = include_str!("../fixtures/time.tsv")
             .lines()
             .filter(|line| !line.starts_with('#'))
             .map(|line| line.split('\t').collect::<Vec<_>>())
+            .collect();
+        let column = 2 + ZONES.iter().position(|known| *known == zone).unwrap();
+        let parses =
+            rows.iter().take_while(|row| row[0] == "parse").map(|row| vec!["parse", row[1], row[column], row[7]]);
+        rows.iter()
             .skip_while(|row| row[..] != ["zone", zone])
             .skip(1)
             .take_while(|row| row[0] != "zone")
+            .flat_map(|row| match row[0] {
+                "wall" => row[4..]
+                    .iter()
+                    .map(|time| {
+                        let (hour, rest) = time.split_once(':').unwrap();
+                        let (minute, ms) = rest.split_once('=').unwrap();
+                        vec!["wall", row[1], row[2], row[3], hour, minute, ms]
+                    })
+                    .collect(),
+                _ => vec![row.clone()],
+            })
+            .chain(parses)
             .collect()
     }
 
