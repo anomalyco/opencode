@@ -36,15 +36,16 @@ AGENTS.md
 
 Keep guidance that applies everywhere in the global file. Put repository-wide guidance at the project root and more specific guidance closer to the code it covers. OpenCode combines the files and does not resolve conflicts between them.
 
-If the workspace is outside the project root, only the global file is loaded. Set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to skip project `AGENTS.md` discovery without disabling the global file.
+If the workspace is outside the project root, only the global file is loaded. Set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to skip project instruction file discovery without disabling the global file.
 
 <Callout type="note">
-  OpenCode V2 recognizes `AGENTS.md` only. It does not use `CLAUDE.md` as a fallback.
+  By default OpenCode V2 recognizes `AGENTS.md` only. It does not use `CLAUDE.md` as a fallback. To look up other names,
+  see [File names](#file-names).
 </Callout>
 
 ## Discovery
 
-Instruction files below the workspace are discovered as the agent explores the project. Reading a file or listing a directory loads any `AGENTS.md` files between that target and the workspace.
+Instruction files below the workspace are discovered as the agent explores the project. Reading a file or listing a directory loads any instruction files (`AGENTS.md` unless [File names](#file-names) lists other names) between that target and the workspace.
 
 ```text
 my-project/                         ← current workspace
@@ -60,6 +61,31 @@ Nested files are loaded nearest-first and deduplicated while their instruction e
 
 Edits to a nested file are not detected automatically after it loads. Start a new session when updated text must apply immediately.
 
+## File names
+
+Turn on the experimental `instruction_files` flag and list the file names to look up in place of `AGENTS.md`, for example to also load `CLAUDE.md`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "instruction_files": true,
+  },
+  "instruction_files": ["AGENTS.md", "CLAUDE.md"],
+}
+```
+
+OpenCode looks up every listed name exactly like `AGENTS.md`: in the global config directory, in every directory from the workspace up to the stop point described in [Scope](#scope), and when the agent reads a file or lists a directory.
+
+- In one directory, files load in list order. Directories still load in the order described in [Scope](#scope): the global file first, then the nearest directory first.
+- A file reached through two names, such as a `CLAUDE.md` symlink to `AGENTS.md`, loads once. Two separate files with the same text both load.
+- Each entry must be a plain file name. An entry that is `.` alone, has two dots in a row, a path separator, a glob character, a control character or one of `<>:"|` is skipped and logged as a warning. If no entry is valid, OpenCode uses the default list, `["AGENTS.md"]`.
+- The flag and the list for the global file come only from config outside the project, such as the global and managed config, from `OPENCODE_CONFIG_CONTENT` and, for the flag, from `OPENCODE_FLAGS`. A project's `opencode.json` sets them only for the project's own instruction files, so a cloned repository cannot hide or swap your global file.
+- An empty list, `[]`, turns off the upward lookup and the lookup on read. When it comes from config outside the project, it also turns off the global file. Files from the [`instructions`](#configuration) array still load.
+- A changed list applies on the next config reload, without a restart. Nested files that a read already added to a session stay in it until compaction or a revert removes them.
+- Without the flag, or with the flag and no list, OpenCode looks up `AGENTS.md` only.
+- Names match the way the file system matches them, so letter case matters on Linux. On macOS and Windows, listing two spellings of one name, such as `AGENTS.md` and `agents.md`, loads the same file twice.
+
 ## Ordering
 
 The selected agent or provider system prompt is sent first. OpenCode then assembles initial instructions in this order:
@@ -68,16 +94,16 @@ The selected agent or provider system prompt is sent first. OpenCode then assemb
 1. Agent or provider system prompt
 2. Code Mode tool guidance, when enabled
 3. MCP server, reference, and skill guidance
-4. Global and project AGENTS.md files, then configured instructions
+4. Global and project instruction files, then configured instructions
 5. Built-in date and environment context
 6. Session-specific instruction entries supplied through the API
 ```
 
-These sources are combined rather than used as overrides. Nested `AGENTS.md` files discovered later are added to session history in discovery order.
+These sources are combined rather than used as overrides. Nested instruction files discovered later are added to session history in discovery order.
 
 ## Updates
 
-Edit a global or upward-discovered `AGENTS.md` while a session is running to update its guidance.
+Edit a global or upward-discovered instruction file while a session is running to update its guidance.
 
 ```bash
 $ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
@@ -91,7 +117,7 @@ AGENTS.md changes
 → next prompt
 ```
 
-- Removing every ambient `AGENTS.md` tells the session that the previous ambient instructions no longer apply.
+- Removing every ambient instruction file tells the session that the previous ambient instructions no longer apply.
 - A temporary read failure preserves the last known instructions instead of treating them as deleted.
 - Moving a session retains its instruction state, so guidance at the destination is introduced as an update.
 - Committing a session revert clears its instruction state and reloads instructions before the next prompt.
@@ -100,7 +126,7 @@ Instruction values remain privileged. Clients can see which sources changed, but
 
 ## Configuration
 
-Use the `instructions` array to add files, glob patterns, or HTTP(S) URLs alongside discovered `AGENTS.md` files:
+Use the `instructions` array to add files, glob patterns, or HTTP(S) URLs alongside discovered instruction files:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -114,7 +140,7 @@ Use the `instructions` array to add files, glob patterns, or HTTP(S) URLs alongs
 }
 ```
 
-Configured instructions load after `AGENTS.md` files, in the order they are listed. Entries from every config document are combined.
+Configured instructions load after discovered instruction files, in the order they are listed. Entries from every config document are combined.
 
 | Entry                   | Resolution                                                           |
 | ----------------------- | -------------------------------------------------------------------- |

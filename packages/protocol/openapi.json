@@ -16585,6 +16585,13 @@
               "type": "string"
             }
           },
+          "instruction_files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Config.InstructionFileName"
+            },
+            "uniqueItems": true
+          },
           "references": {
             "type": "object",
             "additionalProperties": {
@@ -16675,6 +16682,9 @@
                 "type": "boolean"
               },
               "mcp_events": {
+                "type": "boolean"
+              },
+              "instruction_files": {
                 "type": "boolean"
               },
               "part_rows": {
@@ -16771,6 +16781,10 @@
           }
         },
         "additionalProperties": false
+      },
+      "Config.InstructionFileName": {
+        "type": "string",
+        "pattern": "^\\.?[^./\\\\*?[\\]{}<>:\"|\\u0000-\\u001f]+(?:\\.[^./\\\\*?[\\]{}<>:\"|\\u0000-\\u001f]+)*\\.?$"
       },
       "Config.LSP.ServerEncoded": {
         "type": "object",
