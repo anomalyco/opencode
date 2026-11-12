@@ -329,10 +329,12 @@ fn a_pending_permission_does_not_take_the_plugin_manager_search() {
 mod model {
     use crate::support::{self, WAIT};
 
+    use std::cell::Cell;
+    use std::rc::Rc;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use opencode_api::generated::SessionInfo;
+    use opencode_api::generated::{PermissionListInput, SessionID, SessionInfo};
     use opencode_api::memory::{Memory, Route as MemoryRoute};
     use opencode_api::transport::{BoxFuture, Request, Response, Transport};
     use opencode_tui::{Deps, Tui};
@@ -772,6 +774,27 @@ mod model {
                 }
             }
         }
+
+        /// Whether the client's store has every pending request of the server and no other.
+        fn synced(&self) -> bool {
+            let pending = |session: &str| -> Vec<String> {
+                let state = self.server.state.lock().unwrap();
+                let items = state.pending.iter().filter(|item| item["sessionID"] == session);
+                items.map(|item| item["id"].as_str().unwrap().to_owned()).collect()
+            };
+            let held = |session: &str| -> Vec<String> {
+                self.tui.data.read(|state| {
+                    let requests = state.permissions(&SessionID(session.to_owned())).unwrap_or_default();
+                    requests.iter().map(|request| request.id.0.clone()).collect()
+                })
+            };
+            [A, B, C].iter().all(|session| {
+                let (mut pending, mut held) = (pending(session), held(session));
+                pending.sort();
+                held.sort();
+                pending == held
+            })
+        }
     }
 
     /// Runs `steps` random events from `seed` and checks the TUI after each one.
@@ -791,12 +814,15 @@ mod model {
             let mut want = run.apply(&mut model, &event);
             history.push(event);
             let observation = model.observation();
+            // The store must hold what the server holds: a request asked or answered in a session the screen
+            // does not show changes nothing visible, and the next step would act on the store before it. A reply
+            // the step should not cause lands in this step's replies or the next one's, which the model never
+            // wants.
             run.app.wait_until(WAIT, || {
                 observe(&run.app, &run.tui) == observation
                     && run.server.state.lock().unwrap().replies.len() >= want.len()
+                    && run.synced()
             });
-            // A quiet moment, so a reply or key layer the change should not cause has time to show.
-            run.app.wait_until(Duration::from_millis(10), || false);
             let mut got = std::mem::take(&mut run.server.state.lock().unwrap().replies);
             run.server.state.lock().unwrap().fail = false;
             got.sort();
@@ -809,6 +835,22 @@ mod model {
                 run.app.text(),
             );
         }
+        // No later step catches a reply the last one should not cause. Two requests on the client's runtime, each
+        // after the one before came back, reach the server after a reply the client spawned before them; then the
+        // store takes in what that reply changed.
+        for _ in 0..2 {
+            let done = Rc::new(Cell::new(false));
+            let data = run.tui.data.clone();
+            let input = PermissionListInput { session_id: SessionID(A.to_owned()) };
+            let finish = done.clone();
+            run.app.app().spawn(async move { data.client().permission_list(&input).await.is_ok() }, move |_, ok| {
+                finish.set(ok);
+            });
+            assert!(run.app.wait_until(WAIT, || done.get()), "seed {seed}: the round trip did not come back");
+        }
+        run.app.wait_until(WAIT, || run.synced());
+        let got = std::mem::take(&mut run.server.state.lock().unwrap().replies);
+        assert!(got.is_empty(), "seed {seed}, after the last step: {history:#?}\nunwanted {got:#?}");
     }
 
     #[test]
