@@ -1109,7 +1109,7 @@ pub(super) fn answer_form(fields: Option<&[FormField]>, input: &[String]) -> err
         let external = matches!(field, FormField::External(_));
         let value = match supplied.get(key) {
             Some(provided) => Some(supplied_answer(field, provided)?),
-            None if !external && hidden(field) => default(field),
+            None if field.hidden() == Some(true) => default(field),
             None => answer_field(field)?,
         };
         if !external && let Some(invalid) = form::validate(field, value.as_ref()) {
@@ -1156,17 +1156,11 @@ enum Pick {
 
 fn answer_field(field: &FormField) -> error::Result<Option<FormValue>> {
     require_interactive("Authentication form input requires an interactive terminal")?;
-    let (title, description) = match field {
-        FormField::String(field) => (&field.title, &field.description),
-        FormField::Number(field) => (&field.title, &field.description),
-        FormField::Integer(field) => (&field.title, &field.description),
-        FormField::Boolean(field) => (&field.title, &field.description),
-        FormField::Multiselect(field) => (&field.title, &field.description),
-        FormField::External(field) => (&field.title, &field.description),
-        FormField::Unknown(_) => return Ok(None),
-    };
-    let message = title.clone().unwrap_or_else(|| form::key(field).to_owned());
-    if let Some(description) = description {
+    if let FormField::Unknown(_) = field {
+        return Ok(None);
+    }
+    let message = field.title().unwrap_or(field.key()).to_owned();
+    if let Some(description) = field.description() {
         prompt::log::info(description);
     }
     match field {
@@ -1348,18 +1342,6 @@ fn shell_exit_text(value: &SessionMessageShellExit) -> String {
         SessionMessageShellExit::String(text) => text.clone(),
         SessionMessageShellExit::Unknown(value) => value.to_string(),
     }
-}
-
-fn hidden(field: &FormField) -> bool {
-    let hidden = match field {
-        FormField::String(field) => field.hidden,
-        FormField::Number(field) => field.hidden,
-        FormField::Integer(field) => field.hidden,
-        FormField::Boolean(field) => field.hidden,
-        FormField::Multiselect(field) => field.hidden,
-        _ => None,
-    };
-    hidden == Some(true)
 }
 
 fn default(field: &FormField) -> Option<FormValue> {

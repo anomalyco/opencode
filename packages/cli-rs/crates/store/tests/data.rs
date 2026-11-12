@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::Event;
 use opencode_api::generated::*;
-use opencode_store::{CreateSession, Data, LoadMore, MessageExt, Options, SessionStatus};
+use opencode_store::{CreateSession, Data, LoadMore, Options, SessionStatus};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
