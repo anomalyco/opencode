@@ -2,6 +2,7 @@ export * as BrowserConnection from "./connection.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
+import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
@@ -17,16 +18,18 @@ type Attachment = {
 export type Connection = Effect.Success<ReturnType<typeof make>>
 
 export const make = Effect.fn("BrowserConnection.make")(function* (
-  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event">,
+  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event" | "permission">,
 ) {
+  // Each agent's rules from config and its definition, which an attachment's grant must not override.
+  const configured = new Map<string, readonly Permission.Rule[]>()
   // Appended after config, so every agent hides the browser until an attachment allows it.
-  yield* ctx.agent.transform((editor) =>
-    editor
-      .list()
-      .forEach((agent) =>
-        agent.permissions.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const }))),
-      ),
-  )
+  yield* ctx.agent.transform((editor) => {
+    configured.clear()
+    editor.list().forEach((agent) => {
+      configured.set(agent.id, [...agent.permissions])
+      agent.permissions.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const })))
+    })
+  })
   // Permission syncs run here. Registered first, so it closes last: after disposal has drained the revokes.
   const work = yield* Scope.make()
   yield* Effect.addFinalizer((exit) => Scope.close(work, exit))
@@ -253,6 +256,32 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   })
 
   return {
+    /**
+     * The attachment's grant is a session rule, evaluated after every agent rule, so it would override a `browser` deny
+     * from config or the agent's definition. Such a deny, or one in the session's own rules, refuses the call. The
+     * permission check then runs `permission.evaluate` hooks such as `tool.use` policies.
+     */
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, operation: Browser.Method) {
+      const session = yield* ctx.session
+        .get({ sessionID: tool.sessionID })
+        .pipe(Effect.mapError((error) => new Tool.Error({ message: `Session not found: ${tool.sessionID}`, error })))
+      const rules = [
+        ...(configured.get(tool.agent) ?? []),
+        ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
+      ]
+      if (BrowserMachine.deniesBrowser(rules))
+        return yield* new Tool.Error({
+          message:
+            "[browser.denied] Browser tools are denied for this agent by configuration; no action ran. Do not retry browser tools.",
+        })
+      yield* ctx.permission.assert({
+        sessionID: tool.sessionID,
+        agent: tool.agent,
+        action: "browser",
+        resources: [operation],
+        source: { type: "tool", messageID: tool.messageID, id: tool.id },
+      })
+    }),
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
       if (!selected.ok) return yield* selected.error

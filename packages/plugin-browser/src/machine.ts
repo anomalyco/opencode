@@ -548,11 +548,7 @@ export function reconcileBrowserPermissions(
   allow: boolean,
 ): Permission.Rule[] | undefined {
   const rules = current ?? []
-  const kept = rules.filter(
-    (rule) =>
-      rule.effect !== "allow" ||
-      !ACCESS.some((access) => access.action === rule.action && access.resource === rule.resource),
-  )
+  const kept = rules.filter((rule) => !isGrant(rule))
   const next = allow ? [...kept, ...ACCESS.map((rule) => ({ ...rule, effect: "allow" as const }))] : kept
   const unchanged =
     next.length === rules.length &&
@@ -564,6 +560,31 @@ export function reconcileBrowserPermissions(
     )
 
   return unchanged ? undefined : next
+}
+
+/** One of the allows an attachment grants. A user rule of the same shape cannot be told apart from it. */
+export function isGrant(rule: Permission.Rule) {
+  return (
+    rule.effect === "allow" &&
+    ACCESS.some((access) => access.action === rule.action && access.resource === rule.resource)
+  )
+}
+
+/** Whether the rules deny every browser tool, decided as core's tool filter does: the last rule for `browser` wins. */
+export function deniesBrowser(rules: readonly Permission.Rule[]) {
+  const rule = rules.findLast((rule) => matchesBrowser(rule.action))
+  return rule?.resource === "*" && rule.effect === "deny"
+}
+
+// Core's `Wildcard.match("browser", pattern)`, which plugins cannot import.
+function matchesBrowser(pattern: string) {
+  const escaped = pattern
+    .replaceAll("\\", "/")
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
+  const source = escaped.endsWith(" .*") ? escaped.slice(0, -3) + "( .*)?" : escaped
+  return new RegExp("^" + source + "$", process.platform === "win32" ? "si" : "s").test("browser")
 }
 
 export function isConnectionDisposed(state: ConnectionState) {
