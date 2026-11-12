@@ -6,6 +6,8 @@ import net from "node:net"
 export * as PortOwner from "./port-owner"
 
 /** Stable stderr lines for the SSH bootstrap, so it never matches the user-facing message text. */
+export const markerEnv = "OPENCODE_SERVICE_PORT_OWNER_MARKER"
+
 export function marker(owner: Owner) {
   const lines = [`OPENCODE_SERVICE_PORT_OWNER=${owner.kind}`]
   if (owner.kind !== "none" && owner.pid !== undefined) lines.push(`OPENCODE_SERVICE_PORT_OWNER_PID=${owner.pid}`)

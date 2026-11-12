@@ -139,7 +139,11 @@ serviceTest(
     await using home = await serviceHome()
     using listener = Bun.serve({ hostname: "127.0.0.1", port: home.port, fetch: () => new Response("unrelated") })
 
-    await expect(cli(home, "service", "start")).rejects.toThrow(
+    const plain = await cliFailure(home, "service", "start")
+    expect(plain.message).toContain("already in use")
+    expect(plain.message).not.toContain("OPENCODE_SERVICE_PORT_OWNER=")
+
+    await expect(cliWithEnv(home, { OPENCODE_SERVICE_PORT_OWNER_MARKER: "1" }, "service", "start")).rejects.toThrow(
       /OPENCODE_SERVICE_PORT_OWNER=foreign[\s\S]*already in use/,
     )
 
@@ -174,7 +178,9 @@ serviceTest(
     const before = await settled(owner)
 
     // The contender cannot see the owner's registration, so it must not start a second service.
-    await expect(cli(contender, "service", "start")).rejects.toThrow(
+    await expect(
+      cliWithEnv(contender, { OPENCODE_SERVICE_PORT_OWNER_MARKER: "1" }, "service", "start"),
+    ).rejects.toThrow(
       new RegExp(
         `OPENCODE_SERVICE_PORT_OWNER=opencode\\nOPENCODE_SERVICE_PORT_OWNER_PID=${before.pid}[\\s\\S]*already in use`,
       ),
@@ -263,7 +269,29 @@ async function serviceHome(options: { readonly failBoot?: boolean; readonly port
 }
 
 async function cli(home: Home, ...args: string[]) {
-  const child = Bun.spawn([process.execPath, home.entry, ...args], { env: home.env, stdout: "pipe", stderr: "pipe" })
+  return runCli(home, {}, ...args)
+}
+
+async function cliWithEnv(home: Home, env: Record<string, string>, ...args: string[]) {
+  return runCli(home, env, ...args)
+}
+
+async function cliFailure(home: Home, ...args: string[]) {
+  try {
+    await cli(home, ...args)
+  } catch (error) {
+    if (error instanceof Error) return error
+    throw error
+  }
+  throw new Error(`opencode ${args.join(" ")} succeeded`)
+}
+
+async function runCli(home: Home, env: Record<string, string>, ...args: string[]) {
+  const child = Bun.spawn([process.execPath, home.entry, ...args], {
+    env: { ...home.env, ...env },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),

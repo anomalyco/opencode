@@ -29,32 +29,46 @@ ${registrationScript}`
 export function startScript(version: string, replace = false) {
   const command = replace ? "restart" : "start"
 
-  // A conflict keeps its fixed port when the holder is an OpenCode service left behind
-  // by a dropped connection: stop it and start again on the configured port. A foreign
-  // or absent listener (the default port sits inside the Linux ephemeral range) falls
-  // back to a free port, and the registration carries the address that was chosen.
-  // An unrecognized listener stays untouched and the failure is reported.
+  // A conflict keeps its fixed port when the holder is an OpenCode service recorded by
+  // a registration in this state directory, for example one left behind by a dropped
+  // connection: stop it and start again on the configured port. A foreign or absent
+  // listener (the default port sits inside the Linux ephemeral range) falls back to a
+  // free port. Any other OpenCode service belongs to another profile, so it is left
+  // untouched and the failure is reported.
   return `set -eu
+export OPENCODE_SERVICE_PORT_OWNER_MARKER=1
 cli="${binaryPath(version)}"
 start() { "$cli" service ${command} "$@"; }
 if ! output=$(start 2>&1); then
   case "$output" in
     *"OPENCODE_SERVICE_PORT_OWNER=opencode"*)
       pid=$(printf '%s\\n' "$output" | sed -n 's/^OPENCODE_SERVICE_PORT_OWNER_PID=//p')
-      verify=$(ps -o command= -p "$pid" 2>/dev/null || true)
-      case "$verify" in
-        *opencode*serve*--service*)
-          kill "$pid" 2>/dev/null || true
-          i=0
-          while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
-            sleep 1
-            i=$((i + 1))
-          done
-          kill -9 "$pid" 2>/dev/null || true
-          ;;
-      esac
-      if ! retry=$(start 2>&1); then
-        printf '%s\\n%s\\n' "$output" "$retry" >&2
+      own=
+      for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/opencode/service*.json; do
+        if [ -f "$file" ] && grep -Eq "\\"pid\\"[[:space:]]*:[[:space:]]*$pid([^0-9]|$)" "$file"; then
+          own=1
+          break
+        fi
+      done
+      if [ "$own" = 1 ]; then
+        verify=$(ps -o command= -p "$pid" 2>/dev/null || true)
+        case "$verify" in
+          *opencode*serve*--service*)
+            kill "$pid" 2>/dev/null || true
+            i=0
+            while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
+              sleep 1
+              i=$((i + 1))
+            done
+            kill -9 "$pid" 2>/dev/null || true
+            ;;
+        esac
+        if ! retry=$(start 2>&1); then
+          printf '%s\\n%s\\n' "$output" "$retry" >&2
+          exit 1
+        fi
+      else
+        printf '%s\\n' "$output" >&2
         exit 1
       fi
       ;;

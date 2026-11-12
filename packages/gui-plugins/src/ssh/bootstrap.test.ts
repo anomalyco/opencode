@@ -94,7 +94,7 @@ if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; else printf '%s\\n'
 
 const reclaim = `case "$2" in
   status)
-    if [ -f "$HOME/.local/state/opencode/service.json" ]; then printf '%s\\n' "${FIXED_URL}"; else printf '%s\\n' stopped; fi
+    if [ -f "$HOME/.local/state/opencode/restarted" ]; then printf '%s\\n' "${FIXED_URL}"; else printf '%s\\n' stopped; fi
     ;;
   start|restart)
     if [ "$3" = "--port" ] && [ "$4" = "0" ]; then
@@ -129,14 +129,53 @@ bootTest(
   }),
 )
 
+const foreignProfile = `case "$2" in
+  status) printf '%s\\n' stopped ;;
+  start|restart)
+    if [ "$3" = "--port" ]; then touch "$HOME/.local/state/opencode/free-port"; fi
+    printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=opencode" "OPENCODE_SERVICE_PORT_OWNER_PID=999999" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+    exit 1
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
+
 bootTest(
   "restarts an OpenCode service that holds the managed port",
   Effect.gen(function* () {
     const machine = yield* Effect.promise(() => remote(reclaim))
 
     try {
+      // An unhealthy service still leaves its registration, so the holder is this home's own.
+      yield* Effect.promise(() =>
+        fs.writeFile(
+          path.join(machine.home, ".local/state/opencode/service.json"),
+          JSON.stringify({ url: FIXED_URL, password: "secret", version: VERSION, pid: 999999 }),
+        ),
+      )
       const endpoint = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env })
       expect(endpoint).toEqual({ host: "127.0.0.1", port: 49374, password: "secret" })
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+bootTest(
+  "reports an OpenCode service from another profile without touching it",
+  Effect.gen(function* () {
+    const machine = yield* Effect.promise(() => remote(foreignProfile))
+
+    try {
+      const error = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env }).pipe(
+        Effect.flip,
+      )
+
+      expect(error.code).toBe("service")
+      expect(
+        yield* Effect.promise(() => Bun.file(path.join(machine.home, ".local/state/opencode/free-port")).exists()),
+      ).toBe(false)
     } finally {
       yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
     }

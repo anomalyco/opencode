@@ -176,9 +176,9 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               if (server !== undefined) return server
             }
             const owner = port === undefined ? { kind: "unknown" as const } : yield* PortOwner.inspect(port, hostname)
-            // The SSH bootstrap reads this marker to decide whether a free port is safe. Keep it
-            // separate from the message, which stays readable for CLI users.
-            yield* Effect.sync(() => process.stderr.write(PortOwner.marker(owner) + "\n"))
+            // Only the SSH bootstrap asks for this marker, so normal CLI output stays readable.
+            if (process.env[PortOwner.markerEnv] === "1")
+              yield* Effect.sync(() => process.stderr.write(PortOwner.marker(owner) + "\n"))
             return yield* Effect.fail(
               new Error(
                 `Managed service port ${port} on ${hostname} is already in use by ${PortOwner.format(owner)}. ` +
