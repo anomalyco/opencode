@@ -39,7 +39,8 @@ export function currentToolError(tool: SessionMessageAssistantTool) {
 export function currentToolFailed(tool: SessionMessageAssistantTool) {
   return (
     tool.state.status === "error" ||
-    (tool.name === "execute" && executeToolFailed(currentToolMetadata(tool))) ||
+    // A script can succeed after catching a child error or leaving a call pending.
+    (tool.name === "execute" && currentToolMetadata(tool).error === true) ||
     (tool.name === "shell" && tool.state.status === "completed" && shellResultFailed(currentToolMetadata(tool)))
   )
 }
@@ -47,11 +48,6 @@ export function currentToolFailed(tool: SessionMessageAssistantTool) {
 export function shellResultFailed(metadata: Record<string, unknown>) {
   // Shell completion reports the process outcome in metadata, not the tool status.
   return metadata.timeout === true || (typeof metadata.exit === "number" && metadata.exit !== 0)
-}
-
-function executeToolFailed(metadata: Record<string, unknown>) {
-  // Code Mode can report failed nested calls in a completed tool result.
-  return metadata.error === true || executeToolCalls(metadata).some((call) => call.status === "error")
 }
 
 const decodeExecuteCall = Schema.decodeUnknownOption(

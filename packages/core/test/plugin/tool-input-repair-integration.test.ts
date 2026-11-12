@@ -228,22 +228,61 @@ for (const [path, hookName] of [
       const fixture = yield* redirected
       const result = yield* program(fixture.snapshot, `return await tools.${path}({})`)
       expect(result.output).toMatchObject({ output: "call-program:7" })
+      expect(result.metadata).toEqual({
+        toolCalls: [{ tool: "example.target", input: { count: 7 }, status: "completed" }],
+      })
       expect(fixture.before).toEqual([hookName])
       expect(fixture.executed).toEqual(["target"])
     }),
   )
 }
 
-it.effect("keeps an unmodified underscore spelling unknown inside Code Mode", () =>
+it.effect("records an unknown underscore spelling when the program catches the lookup error", () =>
   Effect.gen(function* () {
     const fixture = yield* redirected
-    const result = yield* program(fixture.snapshot, "return await tools.example_target({ count: 4 })")
+    const result = yield* program(
+      fixture.snapshot,
+      "try { await tools.example_target({ count: 4 }) } catch (e) { return e.message }",
+    )
     expect(result.output).toMatchObject({
-      error: true,
       output: expect.stringContaining("Unknown tool 'example_target'"),
     })
+    expect(result.metadata).toEqual({ toolCalls: [{ tool: "example_target", input: { count: 4 }, status: "error" }] })
     expect(fixture.before).toEqual(["example_target"])
     expect(fixture.executed).toEqual([])
+  }),
+)
+
+it.effect("a program can catch a plugin veto and return successfully with one failed tool call", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    yield* plugins.activate([
+      {
+        id: "deny-tool",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.hook("execute.before", (event) =>
+            event.tool === "blocked" ? Effect.fail(new Tool.Error({ message: "denied by plugin" })) : Effect.void,
+          ),
+      },
+    ])
+    const executed: unknown[] = []
+    yield* registry.transform((draft) =>
+      draft.add({
+        name: "blocked",
+        description: "Blocked tool",
+        input: Schema.Struct({ value: Schema.Int }),
+        execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "unexpected" })),
+      }),
+    )
+    const result = yield* program(
+      yield* registry.snapshot(),
+      "try { await tools.blocked({ value: 2 }) } catch (e) { return e.message }",
+    )
+    expect(result.output).toMatchObject({ output: expect.stringContaining("denied by plugin") })
+    expect(result.metadata).toEqual({ toolCalls: [{ tool: "blocked", input: { value: 2 }, status: "error" }] })
+    expect(executed).toEqual([])
   }),
 )
 
@@ -290,13 +329,23 @@ it.effect("keeps parallel text results clean and reports the alias on the outer 
     const plugins = yield* Plugin.Service
     const registry = yield* Tool.Service
     const siblingFinished = yield* Deferred.make<void>()
-    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "wait-for-sibling",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.hook("execute.before", (event) =>
+            event.tool === "shell" ? Deferred.await(siblingFinished) : Effect.void,
+          ),
+      },
+    ])
     yield* registry.transform((draft) => {
       draft.add({
         name: "shell",
         description: "Shell",
         input: Schema.Struct({}),
-        execute: () => Deferred.await(siblingFinished).pipe(Effect.as({ content: "shell text" })),
+        execute: () => Effect.succeed({ content: "shell text" }),
       })
       draft.add({
         name: "sibling",
@@ -308,6 +357,12 @@ it.effect("keeps parallel text results clean and reports the alias on the outer 
     const snapshot = yield* registry.snapshot()
     const result = yield* program(snapshot, "return await Promise.all([tools.bash({}), tools.sibling({})])")
     expect(result.output).toMatchObject({ output: '["shell text","sibling text"]' })
+    expect(result.metadata).toEqual({
+      toolCalls: [
+        { tool: "shell", status: "completed" },
+        { tool: "sibling", status: "completed" },
+      ],
+    })
     expect(result.content).toContainEqual({
       type: "text",
       text: 'There is no "bash" tool, so this ran as "shell". Call "shell" directly.',

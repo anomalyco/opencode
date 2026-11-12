@@ -66,7 +66,10 @@ class Run extends Context.Service<
     readonly executeTool: (name: string, tool: Info, input: unknown, key: string) => Effect.Effect<unknown, unknown>
     readonly before?: Before<string>
     readonly alias?: (key: string, note: string) => void
-    readonly hooks: CodeMode.Hooks
+    readonly progress?: (
+      call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation,
+      status: ExecuteCall["status"],
+    ) => Effect.Effect<void>
   }
 >()("@opencode/CodeModeTool/Run") {}
 
@@ -158,7 +161,7 @@ export const create = (
                     yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
                   return resultValue(executed)
                 }),
-              hooks: progressHooks(record),
+              progress: progressRows(record),
             }),
             // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
             Effect.onError(() =>
@@ -200,40 +203,20 @@ export const create = (
   } satisfies Info
 }
 
-// Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
+// The runtime carries one call object from admission to settlement, including across a repair.
+function progressRows(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<void>) {
   const rows = new WeakMap<object, number>()
-  const start = (call: object, entry: ExecuteCall) =>
-    record((items) => {
+  return (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation, status: ExecuteCall["status"]) => {
+    if ("extension" in call && call.name !== "fetch") return Effect.void
+    const input = "extension" in call ? CodeModeFetch.display(call.args) : displayInput(call.input)
+    const entry = { tool: call.name, status, ...(input ? { input } : {}) }
+    return record((items) => {
+      const index = rows.get(call)
+      if (index !== undefined) return items.with(index, entry)
       rows.set(call, items.length)
       return [...items, entry]
     })
-  const settle = (call: object, result: CodeMode.CallResult) => {
-    const index = rows.get(call)
-    if (index === undefined) return Effect.void
-    return record((items) => {
-      const next = [...items]
-      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
-      return next
-    })
   }
-  return {
-    "tool.before": (call) => {
-      const shown = displayInput(call.input)
-      return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) })
-    },
-    "tool.after": settle,
-    // Only listed extension functions get a row; anything else stays out of the TUI.
-    "extension.before": (call) => {
-      switch (call.name) {
-        case "fetch":
-          return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
-        default:
-          return Effect.void
-      }
-    },
-    "extension.after": settle,
-  } satisfies CodeMode.Hooks
 }
 
 export const catalog = (inventory: Inventory) => {
@@ -320,7 +303,6 @@ export const check = (
       Effect.provideService(Run, {
         before,
         executeTool: (name, tool, input, key) => executeTool(name, tool, input, key).pipe(Effect.map(resultValue)),
-        hooks: {},
       }),
     )
 
@@ -357,10 +339,15 @@ function resultValue(executed: Result) {
 
 function runHooks(inventory: Inventory): CodeMode.Hooks<Run> {
   const ids = new Map(Array.from(inventory.tools, ([id, tool]) => [qualifiedName(tool), id]))
+  const running = (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation) =>
+    Run.use((run) => run.progress?.(call, "running") ?? Effect.void)
+  const settled = (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation, result: CodeMode.CallResult) =>
+    Run.use((run) => run.progress?.(call, result.status === "success" ? "completed" : "error") ?? Effect.void)
   return {
     "tool.resolve": (call) =>
       Run.use((run) =>
         Effect.gen(function* () {
+          if (run.progress) yield* run.progress(call, "running")
           if (!run.before) return call
           const id = ids.get(call.name)
           const requested = id ?? call.name
@@ -375,10 +362,10 @@ function runHooks(inventory: Inventory): CodeMode.Hooks<Run> {
           return { name, input: event.input }
         }),
       ),
-    "tool.before": (call) => Run.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
-    "tool.after": (call, result) => Run.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
-    "extension.before": (call) => Run.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
-    "extension.after": (call, result) => Run.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
+    "tool.before": running,
+    "tool.after": settled,
+    "extension.before": running,
+    "extension.after": settled,
   }
 }
 

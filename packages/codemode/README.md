@@ -103,7 +103,9 @@ global rejects its promise, and a synchronous global throws.
 
 `tool.resolve` lets the host rewrite a plain tool call's path and input before lookup. It also sees unknown paths.
 The runtime counts the attempt toward `maxToolCalls` before invoking this hook. Return the original path to keep
-the usual lookup and suggestions. Search, durable tools, and idempotent tools use their own execution paths.
+the usual lookup and suggestions. The same call object carries the resolved path and input to `tool.before`.
+`tool.after` sees every admitted attempt, including a veto, lookup or validation failure, or interruption during repair.
+Search, durable tools, and idempotent tools use their own execution paths.
 
 ### Suspending and resuming a run
 

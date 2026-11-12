@@ -80,6 +80,8 @@ describe("dotted tool names", () => {
 describe("host resolution", () => {
   test("reserves the last slot before an async rewrite and counts the attempted call once", async () => {
     const attempts: string[] = []
+    const calls = new Set<CodeMode.ToolInvocation>()
+    const settled: string[] = []
     const runtime = CodeMode.make({
       tools: { available: echo("Available", "ok") },
       limits: { maxToolCalls: 1 },
@@ -87,8 +89,15 @@ describe("host resolution", () => {
         "tool.resolve": (call) =>
           Effect.gen(function* () {
             attempts.push(call.name)
+            calls.add(call)
             yield* Effect.yieldNow
             return { name: "available", input: call.input }
+          }),
+        "tool.before": (call) => Effect.sync(() => void calls.add(call)),
+        "tool.after": (call, result) =>
+          Effect.sync(() => {
+            calls.add(call)
+            settled.push(`${call.name}:${result.status}`)
           }),
       },
     })
@@ -96,6 +105,8 @@ describe("host resolution", () => {
       runtime.execute(`return await Promise.allSettled([tools.first(), tools.second()])`),
     )
     expect(attempts).toEqual(["first"])
+    expect(calls.size).toBe(1)
+    expect(settled).toEqual(["available:success"])
     expect(result.toolCalls).toEqual([{ name: "first" }])
     expect(result.ok && result.value).toMatchObject([{ status: "fulfilled", value: "ok" }, { status: "rejected" }])
   })

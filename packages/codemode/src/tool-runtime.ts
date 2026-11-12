@@ -34,7 +34,7 @@ export type ToolCall = {
   readonly name: string
 }
 
-/** A tool call the program is making, with its decoded input. */
+/** A tool call the program is making. Host resolution updates its path and input; `tool.before` sees decoded input. */
 export type ToolInvocation = {
   readonly name: string
   readonly input: unknown
@@ -57,6 +57,12 @@ export type CallResult =
   | { readonly status: "success"; readonly value: unknown }
   | { readonly status: "failure"; readonly error: unknown }
   | { readonly status: "interrupted" }
+
+function callResult(exit: Exit.Exit<unknown, unknown>): CallResult {
+  if (Exit.isSuccess(exit)) return { status: "success", value: exit.value }
+  if (Cause.hasInterruptsOnly(exit.cause)) return { status: "interrupted" }
+  return { status: "failure", error: Cause.squash(exit.cause) }
+}
 
 /** Hooks around every call the program makes into the host. A failing `before` denies the call. */
 export type Hooks<R = never> = {
@@ -83,9 +89,7 @@ export const hooked = <Call, A, R>(
       ? run
       : Effect.onExit(run, (exit) => {
           if (detaching?.()) return Effect.void
-          if (Exit.isSuccess(exit)) return after(call, { status: "success", value: exit.value })
-          if (Cause.hasInterruptsOnly(exit.cause)) return after(call, { status: "interrupted" })
-          return after(call, { status: "failure", error: Cause.squash(exit.cause) })
+          return after(call, callResult(exit))
         })
   return before === undefined ? observed : Effect.andThen(before(call), observed)
 }
@@ -679,25 +683,21 @@ export const make = <R>(
       catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
     })
 
-  const executeTool = (name: string, tool: Tool<R>, argument: unknown, options: ExecuteCallOptions, admitted = false) =>
+  const invoke = (tool: Tool<R>, call: ToolInvocation) =>
     Effect.gen(function* () {
       if ("_tag" in tool.execute && tool.execute._tag === "CodeModeDurable") {
-        throw new TypeError(`Tool '${name}' is a durable tool; start it with ToolRuntime.start.`)
+        throw new TypeError(`Tool '${call.name}' is a durable tool; start it with ToolRuntime.start.`)
       }
       const run = "_tag" in tool.execute ? tool.execute.execute : tool.execute
-      const key = options.key
-      const input = yield* decode(name, tool, argument)
-      if (!admitted) options.admit(name)
-      return yield* hooked(
-        { name, input, key },
-        hooks["tool.before"],
-        hooks["tool.after"],
-        Effect.gen(function* () {
-          const raw = yield* failure(Effect.suspend(() => run(input, { key })))
-          return yield* output(name, tool, raw)
-        }),
-        options.detaching,
-      )
+      const raw = yield* failure(Effect.suspend(() => run(call.input, { key: call.key })))
+      return yield* output(call.name, tool, raw)
+    })
+
+  const executeTool = (name: string, tool: Tool<R>, argument: unknown, options: ExecuteCallOptions) =>
+    Effect.gen(function* () {
+      const call = { name, input: yield* decode(name, tool, argument), key: options.key }
+      options.admit(name)
+      return yield* hooked(call, hooks["tool.before"], hooks["tool.after"], invoke(tool, call), options.detaching)
     })
 
   const durableTool = (
@@ -738,13 +738,28 @@ export const make = <R>(
         if (!rewrite || (original && "_tag" in original.execute))
           return yield* executeTool(name, resolve(root, path, prepared.searchIndex), argument(name, args), options)
         const input = wrap(original, argument(name, args))
-        // Admission is synchronous: parallel attempts cannot all enter an asynchronous host hook on one slot.
-        options.admit(name)
-        const target = yield* rewrite({ name, input, key: options.key })
-        const tool = resolve(root, target.name === name ? path : [target.name], prepared.searchIndex)
-        if ("_tag" in tool.execute)
-          throw new ToolRuntimeError("InvalidToolInput", `Cannot redirect a call to resumable tool '${target.name}'.`)
-        return yield* executeTool(target.name, tool, target.input, options, true)
+        return yield* Effect.acquireUseRelease(
+          Effect.sync(() => {
+            options.admit(name)
+            return { name, input, key: options.key }
+          }),
+          (call) =>
+            Effect.gen(function* () {
+              const target = yield* rewrite(call)
+              call.name = target.name
+              call.input = target.input
+              const tool = resolve(root, [call.name], prepared.searchIndex)
+              if ("_tag" in tool.execute)
+                throw new ToolRuntimeError(
+                  "InvalidToolInput",
+                  `Cannot redirect a call to resumable tool '${call.name}'.`,
+                )
+              call.input = yield* decode(call.name, tool, call.input)
+              if (hooks["tool.before"]) yield* hooks["tool.before"](call)
+              return yield* invoke(tool, call)
+            }),
+          (call, exit) => hooks["tool.after"]?.(call, callResult(exit)) ?? Effect.void,
+        )
       }),
     mode: (path) => {
       const segments = canonicalSegments(path)

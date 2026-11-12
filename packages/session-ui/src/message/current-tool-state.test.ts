@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import {
+  currentToolError,
+  currentToolFailed,
+  currentToolInput,
+  currentToolMetadata,
+  currentToolOutput,
+  executeToolCalls,
+} from "./current-tool-state"
 
 const time = { created: 1 }
 
@@ -67,6 +74,38 @@ describe("current tool state", () => {
 
     expect(currentToolOutput(tool)).toBe("first\nsecond")
     expect(currentToolMetadata(tool)).toBe(tool.state.metadata)
+  })
+
+  test("keeps a caught or interrupted call marked as an error when execute succeeds", () => {
+    // Both kinds of child termination are persisted as an error row.
+    const metadata = { toolCalls: [{ tool: "fetch", status: "error" }] }
+    const tool = {
+      type: "tool",
+      id: "tool_execute",
+      name: "execute",
+      state: { status: "completed", input: {}, content: [{ type: "text", text: "recovered" }], metadata },
+      time,
+    } satisfies SessionMessageAssistantTool
+
+    expect(currentToolFailed(tool)).toBe(false)
+    expect(executeToolCalls(metadata)).toEqual([{ tool: "fetch", status: "error" }])
+  })
+
+  test("marks an execute script failure even without recorded child calls", () => {
+    const tool = {
+      type: "tool",
+      id: "tool_execute",
+      name: "execute",
+      state: {
+        status: "completed",
+        input: {},
+        content: [{ type: "text", text: "Code cannot be empty." }],
+        metadata: { error: true },
+      },
+      time,
+    } satisfies SessionMessageAssistantTool
+
+    expect(currentToolFailed(tool)).toBe(true)
   })
 
   test("keeps structured errors at the current boundary", () => {
