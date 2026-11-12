@@ -1,701 +1,702 @@
 {
-  "version": 1,
+  "version": 2,
   "generator": "og-studio",
   "width": 1200,
   "height": 630,
+  "base": "/files/site/og",
   "cards": {
     "/": {
       "image": "home-98637499f6.png",
-      "alt": "OpenCode link card: “The open source coding agent”.",
+      "alt": "OpenCode link card: \u201cThe open source coding agent\u201d.",
       "video": "home-ec8331a4d6.mp4",
       "locales": {
         "de": {
           "image": "home-de-7ab9fafeea.png",
-          "alt": "OpenCode link card: “Der Open-Source-Coding-Agent”."
+          "alt": "OpenCode link card: \u201cDer Open-Source-Coding-Agent\u201d."
         },
         "ko": {
           "image": "home-ko-e2105c0c9d.png",
-          "alt": "OpenCode link card: “오픈 소스 코딩 에이전트”."
+          "alt": "OpenCode link card: \u201c\uc624\ud508 \uc18c\uc2a4 \ucf54\ub529 \uc5d0\uc774\uc804\ud2b8\u201d."
         },
         "es": {
           "image": "home-es-f7763c256a.png",
-          "alt": "OpenCode link card: “El agente de programación de código abierto”."
+          "alt": "OpenCode link card: \u201cEl agente de programaci\u00f3n de c\u00f3digo abierto\u201d."
         },
         "zh": {
           "image": "home-zh-df85e49f5d.png",
-          "alt": "OpenCode link card: “开源编程代理”."
+          "alt": "OpenCode link card: \u201c\u5f00\u6e90\u7f16\u7a0b\u4ee3\u7406\u201d."
         },
         "zht": {
           "image": "home-zht-98c8b3339f.png",
-          "alt": "OpenCode link card: “開源編碼代理”."
+          "alt": "OpenCode link card: \u201c\u958b\u6e90\u7de8\u78bc\u4ee3\u7406\u201d."
         },
         "fr": {
           "image": "home-fr-8d71106c36.png",
-          "alt": "OpenCode link card: “L'agent de code open source”."
+          "alt": "OpenCode link card: \u201cL'agent de code open source\u201d."
         },
         "it": {
           "image": "home-it-5cf7f568ab.png",
-          "alt": "OpenCode link card: “L'agente di coding open source”."
+          "alt": "OpenCode link card: \u201cL'agente di coding open source\u201d."
         },
         "da": {
           "image": "home-da-45a88d4705.png",
-          "alt": "OpenCode link card: “Open source-kodningsagenten”."
+          "alt": "OpenCode link card: \u201cOpen source-kodningsagenten\u201d."
         },
         "pl": {
           "image": "home-pl-f087f2cf92.png",
-          "alt": "OpenCode link card: “Agent do kodowania open source”."
+          "alt": "OpenCode link card: \u201cAgent do kodowania open source\u201d."
         },
         "ja": {
           "image": "home-ja-587ab3cf42.png",
-          "alt": "OpenCode link card: “オープンソースのコーディング​エージェント”."
+          "alt": "OpenCode link card: \u201c\u30aa\u30fc\u30d7\u30f3\u30bd\u30fc\u30b9\u306e\u30b3\u30fc\u30c7\u30a3\u30f3\u30b0\u200b\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u201d."
         },
         "ru": {
-          "image": "home-ru-a3b2207018.png",
-          "alt": "OpenCode link card: “Агент с открытым кодом для программирования”."
+          "image": "home-ru-964cb68c8b.png",
+          "alt": "OpenCode link card: \u201c\u0410\u0433\u0435\u043d\u0442 \u0441 \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c \u043a\u043e\u0434\u043e\u043c \u0434\u043b\u044f \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f\u201d."
         },
         "uk": {
-          "image": "home-uk-7dbf00d466.png",
-          "alt": "OpenCode link card: “Відкритий агент для кодування”."
+          "image": "home-uk-307b0149bf.png",
+          "alt": "OpenCode link card: \u201c\u0412\u0456\u0434\u043a\u0440\u0438\u0442\u0438\u0439 \u0430\u0433\u0435\u043d\u0442 \u0434\u043b\u044f \u043a\u043e\u0434\u0443\u0432\u0430\u043d\u043d\u044f\u201d."
         },
         "no": {
           "image": "home-no-f022750ce7.png",
-          "alt": "OpenCode link card: “Kodeagenten med åpen kildekode”."
+          "alt": "OpenCode link card: \u201cKodeagenten med \u00e5pen kildekode\u201d."
         },
         "ar": {
           "image": "home-ar-b920e0ad64.png",
-          "alt": "OpenCode link card: “وكيل برمجة مفتوح المصدر”."
+          "alt": "OpenCode link card: \u201c\u0648\u0643\u064a\u0644 \u0628\u0631\u0645\u062c\u0629 \u0645\u0641\u062a\u0648\u062d \u0627\u0644\u0645\u0635\u062f\u0631\u201d."
         },
         "br": {
           "image": "home-br-b231c2eeda.png",
-          "alt": "OpenCode link card: “O agente de codificação de código aberto”."
+          "alt": "OpenCode link card: \u201cO agente de codifica\u00e7\u00e3o de c\u00f3digo aberto\u201d."
         },
         "th": {
           "image": "home-th-6c04ac9833.png",
-          "alt": "OpenCode link card: “เอเจนต์เขียนโค้ดแบบโอเพนซอร์ส”."
+          "alt": "OpenCode link card: \u201c\u0e40\u0e2d\u0e40\u0e08\u0e19\u0e15\u0e4c\u0e40\u0e02\u0e35\u0e22\u0e19\u0e42\u0e04\u0e49\u0e14\u0e41\u0e1a\u0e1a\u0e42\u0e2d\u0e40\u0e1e\u0e19\u0e0b\u0e2d\u0e23\u0e4c\u0e2a\u201d."
         },
         "tr": {
           "image": "home-tr-47a272dcfc.png",
-          "alt": "OpenCode link card: “Açık kaynaklı kodlama ajanı”."
+          "alt": "OpenCode link card: \u201cA\u00e7\u0131k kaynakl\u0131 kodlama ajan\u0131\u201d."
         }
       }
     },
     "/brand": {
       "image": "brand-4e61968505.png",
-      "alt": "OpenCode link card: “Brand guidelines” and “Resources and assets to help you work with the OpenCode brand.”.",
+      "alt": "OpenCode link card: \u201cBrand guidelines\u201d and \u201cResources and assets to help you work with the OpenCode brand.\u201d.",
       "video": "brand-9a58b5052b.mp4",
       "locales": {
         "zh": {
           "image": "brand-zh-dcc60b4c81.png",
-          "alt": "OpenCode link card: “品牌指南” and “帮助您使用 OpenCode 品牌的资源和资产。”."
+          "alt": "OpenCode link card: \u201c\u54c1\u724c\u6307\u5357\u201d and \u201c\u5e2e\u52a9\u60a8\u4f7f\u7528 OpenCode \u54c1\u724c\u7684\u8d44\u6e90\u548c\u8d44\u4ea7\u3002\u201d."
         },
         "zht": {
           "image": "brand-zht-2bef6d786d.png",
-          "alt": "OpenCode link card: “品牌指南” and “協助你使用 OpenCode 品牌的資源與素材。”."
+          "alt": "OpenCode link card: \u201c\u54c1\u724c\u6307\u5357\u201d and \u201c\u5354\u52a9\u4f60\u4f7f\u7528 OpenCode \u54c1\u724c\u7684\u8cc7\u6e90\u8207\u7d20\u6750\u3002\u201d."
         },
         "ko": {
           "image": "brand-ko-ab18888ef9.png",
-          "alt": "OpenCode link card: “브랜드 가이드라인” and “OpenCode 브랜드를 활용하는 데 도움이 되는 리소스와 자산입니다.”."
+          "alt": "OpenCode link card: \u201c\ube0c\ub79c\ub4dc \uac00\uc774\ub4dc\ub77c\uc778\u201d and \u201cOpenCode \ube0c\ub79c\ub4dc\ub97c \ud65c\uc6a9\ud558\ub294 \ub370 \ub3c4\uc6c0\uc774 \ub418\ub294 \ub9ac\uc18c\uc2a4\uc640 \uc790\uc0b0\uc785\ub2c8\ub2e4.\u201d."
         },
         "de": {
           "image": "brand-de-f966de83b2.png",
-          "alt": "OpenCode link card: “Markenrichtlinien” and “Die Markenrichtlinien von OpenCode”."
+          "alt": "OpenCode link card: \u201cMarkenrichtlinien\u201d and \u201cDie Markenrichtlinien von OpenCode\u201d."
         },
         "es": {
           "image": "brand-es-bc04e49810.png",
-          "alt": "OpenCode link card: “Guías de marca” and “Recursos y activos para ayudarte a trabajar con la marca OpenCode.”."
+          "alt": "OpenCode link card: \u201cGu\u00edas de marca\u201d and \u201cRecursos y activos para ayudarte a trabajar con la marca OpenCode.\u201d."
         },
         "fr": {
           "image": "brand-fr-7e3c48cfb2.png",
-          "alt": "OpenCode link card: “Guide de marque” and “La charte de marque OpenCode”."
+          "alt": "OpenCode link card: \u201cGuide de marque\u201d and \u201cLa charte de marque OpenCode\u201d."
         },
         "it": {
           "image": "brand-it-58abfa8752.png",
-          "alt": "OpenCode link card: “Linee guida del brand” and “Risorse e asset per aiutarti a lavorare con il brand OpenCode.”."
+          "alt": "OpenCode link card: \u201cLinee guida del brand\u201d and \u201cRisorse e asset per aiutarti a lavorare con il brand OpenCode.\u201d."
         },
         "da": {
           "image": "brand-da-7742cbb96d.png",
-          "alt": "OpenCode link card: “Brandretningslinjer” and “OpenCodes brandretningslinjer”."
+          "alt": "OpenCode link card: \u201cBrandretningslinjer\u201d and \u201cOpenCodes brandretningslinjer\u201d."
         },
         "ja": {
           "image": "brand-ja-9cdf8661f4.png",
-          "alt": "OpenCode link card: “ブランドガイドライン” and “OpenCodeブランドを扱うためのリソースと素材です。”."
+          "alt": "OpenCode link card: \u201c\u30d6\u30e9\u30f3\u30c9\u30ac\u30a4\u30c9\u30e9\u30a4\u30f3\u201d and \u201cOpenCode\u30d6\u30e9\u30f3\u30c9\u3092\u6271\u3046\u305f\u3081\u306e\u30ea\u30bd\u30fc\u30b9\u3068\u7d20\u6750\u3067\u3059\u3002\u201d."
         },
         "pl": {
           "image": "brand-pl-4c3904aa47.png",
-          "alt": "OpenCode link card: “Wytyczne marki” and “Zasoby i aktywa, które pomogą Ci pracować z marką OpenCode.”."
+          "alt": "OpenCode link card: \u201cWytyczne marki\u201d and \u201cZasoby i aktywa, kt\u00f3re pomog\u0105 Ci pracowa\u0107 z mark\u0105 OpenCode.\u201d."
         },
         "ru": {
-          "image": "brand-ru-3bbf5faf69.png",
-          "alt": "OpenCode link card: “Гайдлайны бренда” and “Ресурсы и активы, которые помогут вам работать с брендом OpenCode.”."
+          "image": "brand-ru-a70005ae20.png",
+          "alt": "OpenCode link card: \u201c\u0413\u0430\u0439\u0434\u043b\u0430\u0439\u043d\u044b \u0431\u0440\u0435\u043d\u0434\u0430\u201d and \u201c\u0420\u0435\u0441\u0443\u0440\u0441\u044b \u0438 \u0430\u043a\u0442\u0438\u0432\u044b, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u043f\u043e\u043c\u043e\u0433\u0443\u0442 \u0432\u0430\u043c \u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0441 \u0431\u0440\u0435\u043d\u0434\u043e\u043c OpenCode.\u201d."
         },
         "uk": {
-          "image": "brand-uk-7ee60e7ba3.png",
-          "alt": "OpenCode link card: “Рекомендації щодо бренду” and “Ресурси та матеріали для роботи з брендом OpenCode.”."
+          "image": "brand-uk-11a4e768ea.png",
+          "alt": "OpenCode link card: \u201c\u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0430\u0446\u0456\u0457 \u0449\u043e\u0434\u043e \u0431\u0440\u0435\u043d\u0434\u0443\u201d and \u201c\u0420\u0435\u0441\u0443\u0440\u0441\u0438 \u0442\u0430 \u043c\u0430\u0442\u0435\u0440\u0456\u0430\u043b\u0438 \u0434\u043b\u044f \u0440\u043e\u0431\u043e\u0442\u0438 \u0437 \u0431\u0440\u0435\u043d\u0434\u043e\u043c OpenCode.\u201d."
         },
         "ar": {
           "image": "brand-ar-e187032cd0.png",
-          "alt": "OpenCode link card: “إرشادات العلامة التجارية” and “موارد وأصول لمساعدتك في العمل مع العلامة التجارية لـ OpenCode.”."
+          "alt": "OpenCode link card: \u201c\u0625\u0631\u0634\u0627\u062f\u0627\u062a \u0627\u0644\u0639\u0644\u0627\u0645\u0629 \u0627\u0644\u062a\u062c\u0627\u0631\u064a\u0629\u201d and \u201c\u0645\u0648\u0627\u0631\u062f \u0648\u0623\u0635\u0648\u0644 \u0644\u0645\u0633\u0627\u0639\u062f\u062a\u0643 \u0641\u064a \u0627\u0644\u0639\u0645\u0644 \u0645\u0639 \u0627\u0644\u0639\u0644\u0627\u0645\u0629 \u0627\u0644\u062a\u062c\u0627\u0631\u064a\u0629 \u0644\u0640 OpenCode.\u201d."
         },
         "br": {
           "image": "brand-br-3681ae5782.png",
-          "alt": "OpenCode link card: “Diretrizes da marca” and “Recursos e ativos para ajudá-lo a trabalhar com a marca OpenCode.”."
+          "alt": "OpenCode link card: \u201cDiretrizes da marca\u201d and \u201cRecursos e ativos para ajud\u00e1-lo a trabalhar com a marca OpenCode.\u201d."
         },
         "no": {
           "image": "brand-no-e44bce8749.png",
-          "alt": "OpenCode link card: “Retningslinjer for merkevare” and “Ressurser og assets som hjelper deg å jobbe med OpenCode-brandet.”."
+          "alt": "OpenCode link card: \u201cRetningslinjer for merkevare\u201d and \u201cRessurser og assets som hjelper deg \u00e5 jobbe med OpenCode-brandet.\u201d."
         },
         "th": {
           "image": "brand-th-6a64e2e42f.png",
-          "alt": "OpenCode link card: “แนวทางการใช้แบรนด์” and “ทรัพยากรและแอสเซทเพื่อช่วยให้คุณใช้งานแบรนด์ OpenCode”."
+          "alt": "OpenCode link card: \u201c\u0e41\u0e19\u0e27\u0e17\u0e32\u0e07\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e41\u0e1a\u0e23\u0e19\u0e14\u0e4c\u201d and \u201c\u0e17\u0e23\u0e31\u0e1e\u0e22\u0e32\u0e01\u0e23\u0e41\u0e25\u0e30\u0e41\u0e2d\u0e2a\u0e40\u0e0b\u0e17\u0e40\u0e1e\u0e37\u0e48\u0e2d\u0e0a\u0e48\u0e27\u0e22\u0e43\u0e2b\u0e49\u0e04\u0e38\u0e13\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19\u0e41\u0e1a\u0e23\u0e19\u0e14\u0e4c OpenCode\u201d."
         },
         "tr": {
           "image": "brand-tr-b939ad63b2.png",
-          "alt": "OpenCode link card: “Marka kılavuzu” and “OpenCode marka kuralları”."
+          "alt": "OpenCode link card: \u201cMarka k\u0131lavuzu\u201d and \u201cOpenCode marka kurallar\u0131\u201d."
         }
       }
     },
     "/changelog": {
       "image": "changelog-a404a3db2b.png",
-      "alt": "OpenCode link card: “Changelog” and “New updates and improvements to OpenCode”.",
+      "alt": "OpenCode link card: \u201cChangelog\u201d and \u201cNew updates and improvements to OpenCode\u201d.",
       "video": "changelog-9e6442949d.mp4"
     },
     "/desktop": {
       "image": "desktop-f98d91d47d.png",
-      "alt": "OpenCode link card: “Desktop” and “Run several agents at once, each session in its own tab”.",
+      "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cRun several agents at once, each session in its own tab\u201d.",
       "video": "desktop-fd77cfeffc.mp4",
       "locales": {
         "zh": {
           "image": "desktop-zh-50547b564e.png",
-          "alt": "OpenCode link card: “Desktop” and “同时运行多个代理，每个会话都有独立的标签页”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201c\u540c\u65f6\u8fd0\u884c\u591a\u4e2a\u4ee3\u7406\uff0c\u6bcf\u4e2a\u4f1a\u8bdd\u90fd\u6709\u72ec\u7acb\u7684\u6807\u7b7e\u9875\u201d."
         },
         "de": {
           "image": "desktop-de-9406d53da1.png",
-          "alt": "OpenCode link card: “Desktop” and “Lass mehrere Agents gleichzeitig laufen, jede Session in einem eigenen Tab”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cLass mehrere Agents gleichzeitig laufen, jede Session in einem eigenen Tab\u201d."
         },
         "ko": {
           "image": "desktop-ko-0f5228f239.png",
-          "alt": "OpenCode link card: “Desktop” and “여러 에이전트를 동시에 실행하고, 세션마다 각자의 탭을 쓰세요”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201c\uc5ec\ub7ec \uc5d0\uc774\uc804\ud2b8\ub97c \ub3d9\uc2dc\uc5d0 \uc2e4\ud589\ud558\uace0, \uc138\uc158\ub9c8\ub2e4 \uac01\uc790\uc758 \ud0ed\uc744 \uc4f0\uc138\uc694\u201d."
         },
         "zht": {
           "image": "desktop-zht-0932f029e6.png",
-          "alt": "OpenCode link card: “Desktop” and “同時執行多個代理，每個工作階段都有獨立的分頁”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201c\u540c\u6642\u57f7\u884c\u591a\u500b\u4ee3\u7406\uff0c\u6bcf\u500b\u5de5\u4f5c\u968e\u6bb5\u90fd\u6709\u7368\u7acb\u7684\u5206\u9801\u201d."
         },
         "es": {
           "image": "desktop-es-8f9bc611c9.png",
-          "alt": "OpenCode link card: “Desktop” and “Ejecuta varios agentes a la vez, cada sesión en su propia pestaña”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cEjecuta varios agentes a la vez, cada sesi\u00f3n en su propia pesta\u00f1a\u201d."
         },
         "fr": {
           "image": "desktop-fr-77596c43cb.png",
-          "alt": "OpenCode link card: “Desktop” and “Lancez plusieurs agents à la fois, chaque session dans son propre onglet”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cLancez plusieurs agents \u00e0 la fois, chaque session dans son propre onglet\u201d."
         },
         "it": {
           "image": "desktop-it-44bbc6db83.png",
-          "alt": "OpenCode link card: “Desktop” and “Esegui più agenti insieme, ogni sessione nella sua scheda”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cEsegui pi\u00f9 agenti insieme, ogni sessione nella sua scheda\u201d."
         },
         "da": {
           "image": "desktop-da-d09be44295.png",
-          "alt": "OpenCode link card: “Desktop” and “Kør flere agenter på én gang, hver session i sin egen fane”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cK\u00f8r flere agenter p\u00e5 \u00e9n gang, hver session i sin egen fane\u201d."
         },
         "ja": {
           "image": "desktop-ja-7f55912afd.png",
-          "alt": "OpenCode link card: “Desktop” and “複数のエージェントを同時に実行し、セッションごとに専用のタブで管理できます”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201c\u8907\u6570\u306e\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u3092\u540c\u6642\u306b\u5b9f\u884c\u3057\u3001\u30bb\u30c3\u30b7\u30e7\u30f3\u3054\u3068\u306b\u5c02\u7528\u306e\u30bf\u30d6\u3067\u7ba1\u7406\u3067\u304d\u307e\u3059\u201d."
         },
         "pl": {
           "image": "desktop-pl-90701984e4.png",
-          "alt": "OpenCode link card: “Desktop” and “Uruchamiaj kilku agentów naraz, każdą sesję w osobnej karcie”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cUruchamiaj kilku agent\u00f3w naraz, ka\u017cd\u0105 sesj\u0119 w osobnej karcie\u201d."
         },
         "ru": {
           "image": "desktop-ru-247a36b9b4.png",
-          "alt": "OpenCode link card: “Desktop” and “Запускайте несколько агентов сразу, каждую сессию в своей вкладке”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201c\u0417\u0430\u043f\u0443\u0441\u043a\u0430\u0439\u0442\u0435 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0430\u0433\u0435\u043d\u0442\u043e\u0432 \u0441\u0440\u0430\u0437\u0443, \u043a\u0430\u0436\u0434\u0443\u044e \u0441\u0435\u0441\u0441\u0438\u044e \u0432 \u0441\u0432\u043e\u0435\u0439 \u0432\u043a\u043b\u0430\u0434\u043a\u0435\u201d."
         },
         "uk": {
           "image": "desktop-uk-90ba41627f.png",
-          "alt": "OpenCode link card: “Desktop” and “Запускайте кілька агентів одночасно, кожну сесію у своїй вкладці”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201c\u0417\u0430\u043f\u0443\u0441\u043a\u0430\u0439\u0442\u0435 \u043a\u0456\u043b\u044c\u043a\u0430 \u0430\u0433\u0435\u043d\u0442\u0456\u0432 \u043e\u0434\u043d\u043e\u0447\u0430\u0441\u043d\u043e, \u043a\u043e\u0436\u043d\u0443 \u0441\u0435\u0441\u0456\u044e \u0443 \u0441\u0432\u043e\u0457\u0439 \u0432\u043a\u043b\u0430\u0434\u0446\u0456\u201d."
         },
         "ar": {
           "image": "desktop-ar-388d8017c4.png",
-          "alt": "OpenCode link card: “Desktop” and “شغّل عدة وكلاء معًا، وكل جلسة في علامة تبويب خاصة”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201c\u0634\u063a\u0651\u0644 \u0639\u062f\u0629 \u0648\u0643\u0644\u0627\u0621 \u0645\u0639\u064b\u0627\u060c \u0648\u0643\u0644 \u062c\u0644\u0633\u0629 \u0641\u064a \u0639\u0644\u0627\u0645\u0629 \u062a\u0628\u0648\u064a\u0628 \u062e\u0627\u0635\u0629\u201d."
         },
         "no": {
           "image": "desktop-no-cc2b6484dc.png",
-          "alt": "OpenCode link card: “Desktop” and “Kjør flere agenter samtidig, hver sesjon i sin egen fane”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cKj\u00f8r flere agenter samtidig, hver sesjon i sin egen fane\u201d."
         },
         "tr": {
           "image": "desktop-tr-82d26cda7b.png",
-          "alt": "OpenCode link card: “Desktop” and “Birden fazla ajanı aynı anda, her oturumu kendi sekmesinde çalıştırın”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cBirden fazla ajan\u0131 ayn\u0131 anda, her oturumu kendi sekmesinde \u00e7al\u0131\u015ft\u0131r\u0131n\u201d."
         },
         "br": {
           "image": "desktop-br-fb89a41fdd.png",
-          "alt": "OpenCode link card: “Desktop” and “Rode vários agentes ao mesmo tempo, cada sessão na sua própria aba”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201cRode v\u00e1rios agentes ao mesmo tempo, cada sess\u00e3o na sua pr\u00f3pria aba\u201d."
         },
         "th": {
           "image": "desktop-th-f7dd62da10.png",
-          "alt": "OpenCode link card: “Desktop” and “รันเอเจนต์ OpenCode พร้อมกันได้มากเท่าที่ต้องการ ดูทุกการเปลี่ยนแปลงในเบราว์เซอร์ข้างๆ และทำต่อได้บนทุกอุปกรณ์ สำหรับ macOS, Windows และ Linux”."
+          "alt": "OpenCode link card: \u201cDesktop\u201d and \u201c\u0e23\u0e31\u0e19\u0e40\u0e2d\u0e40\u0e08\u0e19\u0e15\u0e4c OpenCode \u0e1e\u0e23\u0e49\u0e2d\u0e21\u0e01\u0e31\u0e19\u0e44\u0e14\u0e49\u0e21\u0e32\u0e01\u0e40\u0e17\u0e48\u0e32\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e01\u0e32\u0e23 \u0e14\u0e39\u0e17\u0e38\u0e01\u0e01\u0e32\u0e23\u0e40\u0e1b\u0e25\u0e35\u0e48\u0e22\u0e19\u0e41\u0e1b\u0e25\u0e07\u0e43\u0e19\u0e40\u0e1a\u0e23\u0e32\u0e27\u0e4c\u0e40\u0e0b\u0e2d\u0e23\u0e4c\u0e02\u0e49\u0e32\u0e07\u0e46 \u0e41\u0e25\u0e30\u0e17\u0e33\u0e15\u0e48\u0e2d\u0e44\u0e14\u0e49\u0e1a\u0e19\u0e17\u0e38\u0e01\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c \u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a macOS, Windows \u0e41\u0e25\u0e30 Linux\u201d."
         }
       }
     },
     "/docs": {
       "image": "docs-e416d17432.png",
-      "alt": "OpenCode link card: “Docs” and “Guides and reference for every part of OpenCode, in one place”.",
+      "alt": "OpenCode link card: \u201cDocs\u201d and \u201cGuides and reference for every part of OpenCode, in one place\u201d.",
       "video": "docs-40387ee840.mp4"
     },
     "/font": {
       "image": "font-f345dc0fb4.png",
-      "alt": "OpenCode link card: “OpenCode Font” and “A typeface cut from the OpenCode wordmark, with infinite combinations”.",
+      "alt": "OpenCode link card: \u201cOpenCode Font\u201d and \u201cA typeface cut from the OpenCode wordmark, with infinite combinations\u201d.",
       "video": "font-f768cba1a4.mp4"
     },
     "/legal": {
       "image": "legal-84723c3950.png",
-      "alt": "OpenCode link card: “Legal” and “The legal documents for the OpenCode website and hosted services.”.",
+      "alt": "OpenCode link card: \u201cLegal\u201d and \u201cThe legal documents for the OpenCode website and hosted services.\u201d.",
       "video": "legal-b1b3009c7e.mp4"
     },
     "/mini": {
       "image": "mini-8925d0cfb2.png",
-      "alt": "OpenCode link card: “Mini” and “A minimal terminal interface”.",
+      "alt": "OpenCode link card: \u201cMini\u201d and \u201cA minimal terminal interface\u201d.",
       "video": "mini-40b065f853.mp4",
       "locales": {
         "zht": {
           "image": "mini-zht-92ff4b74c6.png",
-          "alt": "OpenCode link card: “Mini” and “OpenCode 的極簡終端機介面”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cOpenCode \u7684\u6975\u7c21\u7d42\u7aef\u6a5f\u4ecb\u9762\u201d."
         },
         "zh": {
           "image": "mini-zh-d93b26b0f0.png",
-          "alt": "OpenCode link card: “Mini” and “OpenCode 的极简终端界面”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cOpenCode \u7684\u6781\u7b80\u7ec8\u7aef\u754c\u9762\u201d."
         },
         "de": {
           "image": "mini-de-7bb140b7ce.png",
-          "alt": "OpenCode link card: “Mini” and “Ein minimales Terminal-Interface für OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cEin minimales Terminal-Interface f\u00fcr OpenCode\u201d."
         },
         "es": {
           "image": "mini-es-7fe7879e9f.png",
-          "alt": "OpenCode link card: “Mini” and “Una interfaz de terminal mínima para OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cUna interfaz de terminal m\u00ednima para OpenCode\u201d."
         },
         "ko": {
           "image": "mini-ko-bcfac56878.png",
-          "alt": "OpenCode link card: “Mini” and “OpenCode를 위한 미니멀한 터미널 인터페이스입니다”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cOpenCode\ub97c \uc704\ud55c \ubbf8\ub2c8\uba40\ud55c \ud130\ubbf8\ub110 \uc778\ud130\ud398\uc774\uc2a4\uc785\ub2c8\ub2e4\u201d."
         },
         "fr": {
           "image": "mini-fr-28ba3b5c4b.png",
-          "alt": "OpenCode link card: “Mini” and “Une interface terminal minimale pour OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cUne interface terminal minimale pour OpenCode\u201d."
         },
         "it": {
           "image": "mini-it-9337e405db.png",
-          "alt": "OpenCode link card: “Mini” and “Un'interfaccia da terminale minimale per OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cUn'interfaccia da terminale minimale per OpenCode\u201d."
         },
         "ja": {
           "image": "mini-ja-4b20294714.png",
-          "alt": "OpenCode link card: “Mini” and “OpenCodeのための最小限のターミナルインターフェース”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cOpenCode\u306e\u305f\u3081\u306e\u6700\u5c0f\u9650\u306e\u30bf\u30fc\u30df\u30ca\u30eb\u30a4\u30f3\u30bf\u30fc\u30d5\u30a7\u30fc\u30b9\u201d."
         },
         "pl": {
           "image": "mini-pl-9c504fe22b.png",
-          "alt": "OpenCode link card: “Mini” and “Minimalny interfejs terminalowy dla OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cMinimalny interfejs terminalowy dla OpenCode\u201d."
         },
         "da": {
           "image": "mini-da-4276a15528.png",
-          "alt": "OpenCode link card: “Mini” and “En minimal terminalbrugerflade til OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cEn minimal terminalbrugerflade til OpenCode\u201d."
         },
         "ru": {
           "image": "mini-ru-cf5249f206.png",
-          "alt": "OpenCode link card: “Mini” and “Минимальный терминальный интерфейс для OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201c\u041c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u044b\u0439 \u0442\u0435\u0440\u043c\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441 \u0434\u043b\u044f OpenCode\u201d."
         },
         "uk": {
           "image": "mini-uk-b1a0ce7ada.png",
-          "alt": "OpenCode link card: “Mini” and “Мінімальний термінальний інтерфейс для OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201c\u041c\u0456\u043d\u0456\u043c\u0430\u043b\u044c\u043d\u0438\u0439 \u0442\u0435\u0440\u043c\u0456\u043d\u0430\u043b\u044c\u043d\u0438\u0439 \u0456\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441 \u0434\u043b\u044f OpenCode\u201d."
         },
         "ar": {
           "image": "mini-ar-d7e44843fb.png",
-          "alt": "OpenCode link card: “Mini” and “واجهة طرفية بسيطة لـ OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201c\u0648\u0627\u062c\u0647\u0629 \u0637\u0631\u0641\u064a\u0629 \u0628\u0633\u064a\u0637\u0629 \u0644\u0640 OpenCode\u201d."
         },
         "no": {
           "image": "mini-no-77c2f54b76.png",
-          "alt": "OpenCode link card: “Mini” and “Et minimalt terminalgrensesnitt for OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cEt minimalt terminalgrensesnitt for OpenCode\u201d."
         },
         "th": {
           "image": "mini-th-44230e6a55.png",
-          "alt": "OpenCode link card: “Mini” and “Mini รัน OpenCode ในอินเทอร์เฟซเทอร์มินัลแบบมินิมอล คำตอบจะพิมพ์ลงใน scrollback ของเทอร์มินัลเอง และมีเพียงพรอมต์กับบรรทัดสถานะอยู่ด้านล่าง”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cMini \u0e23\u0e31\u0e19 OpenCode \u0e43\u0e19\u0e2d\u0e34\u0e19\u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e40\u0e1f\u0e0b\u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e21\u0e34\u0e19\u0e31\u0e25\u0e41\u0e1a\u0e1a\u0e21\u0e34\u0e19\u0e34\u0e21\u0e2d\u0e25 \u0e04\u0e33\u0e15\u0e2d\u0e1a\u0e08\u0e30\u0e1e\u0e34\u0e21\u0e1e\u0e4c\u0e25\u0e07\u0e43\u0e19 scrollback \u0e02\u0e2d\u0e07\u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e21\u0e34\u0e19\u0e31\u0e25\u0e40\u0e2d\u0e07 \u0e41\u0e25\u0e30\u0e21\u0e35\u0e40\u0e1e\u0e35\u0e22\u0e07\u0e1e\u0e23\u0e2d\u0e21\u0e15\u0e4c\u0e01\u0e31\u0e1a\u0e1a\u0e23\u0e23\u0e17\u0e31\u0e14\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e2d\u0e22\u0e39\u0e48\u0e14\u0e49\u0e32\u0e19\u0e25\u0e48\u0e32\u0e07\u201d."
         },
         "br": {
           "image": "mini-br-e02808797d.png",
-          "alt": "OpenCode link card: “Mini” and “Uma interface de terminal mínima para o OpenCode”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cUma interface de terminal m\u00ednima para o OpenCode\u201d."
         },
         "tr": {
           "image": "mini-tr-902044f5b1.png",
-          "alt": "OpenCode link card: “Mini” and “OpenCode için minimal bir terminal arayüzü”."
+          "alt": "OpenCode link card: \u201cMini\u201d and \u201cOpenCode i\u00e7in minimal bir terminal aray\u00fcz\u00fc\u201d."
         }
       }
     },
     "/mobile": {
       "image": "mobile-5d6ef9e218.png",
-      "alt": "OpenCode link card: “Mobile” and “Start and steer sessions from your phone, wherever you are”.",
+      "alt": "OpenCode link card: \u201cMobile\u201d and \u201cStart and steer sessions from your phone, wherever you are\u201d.",
       "video": "mobile-3078f52f0b.mp4",
       "locales": {
         "zh": {
           "image": "mobile-zh-efbc913b2d.png",
-          "alt": "OpenCode link card: “Mobile” and “无论身在何处，都能在手机上启动并引导会话”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201c\u65e0\u8bba\u8eab\u5728\u4f55\u5904\uff0c\u90fd\u80fd\u5728\u624b\u673a\u4e0a\u542f\u52a8\u5e76\u5f15\u5bfc\u4f1a\u8bdd\u201d."
         },
         "zht": {
           "image": "mobile-zht-40ad44a7bc.png",
-          "alt": "OpenCode link card: “Mobile” and “無論身在何處，都能在手機上啟動並引導工作階段”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201c\u7121\u8ad6\u8eab\u5728\u4f55\u8655\uff0c\u90fd\u80fd\u5728\u624b\u6a5f\u4e0a\u555f\u52d5\u4e26\u5f15\u5c0e\u5de5\u4f5c\u968e\u6bb5\u201d."
         },
         "ko": {
           "image": "mobile-ko-8006f2c551.png",
-          "alt": "OpenCode link card: “Mobile” and “어디서든 휴대폰에서 세션을 시작하고 조작하세요”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201c\uc5b4\ub514\uc11c\ub4e0 \ud734\ub300\ud3f0\uc5d0\uc11c \uc138\uc158\uc744 \uc2dc\uc791\ud558\uace0 \uc870\uc791\ud558\uc138\uc694\u201d."
         },
         "it": {
           "image": "mobile-it-9b75162215.png",
-          "alt": "OpenCode link card: “Mobile” and “Avvia e guida sessioni dal telefono, ovunque tu sia”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cAvvia e guida sessioni dal telefono, ovunque tu sia\u201d."
         },
         "es": {
           "image": "mobile-es-150c9bc64d.png",
-          "alt": "OpenCode link card: “Mobile” and “Inicia y dirige sesiones desde el móvil, estés donde estés”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cInicia y dirige sesiones desde el m\u00f3vil, est\u00e9s donde est\u00e9s\u201d."
         },
         "de": {
           "image": "mobile-de-4333c9568f.png",
-          "alt": "OpenCode link card: “Mobile” and “Starte und steuere Sessions vom Smartphone aus, wo immer du bist”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cStarte und steuere Sessions vom Smartphone aus, wo immer du bist\u201d."
         },
         "fr": {
           "image": "mobile-fr-426ec197eb.png",
-          "alt": "OpenCode link card: “Mobile” and “Lancez et pilotez des sessions OpenCode depuis votre téléphone”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cLancez et pilotez des sessions OpenCode depuis votre t\u00e9l\u00e9phone\u201d."
         },
         "da": {
           "image": "mobile-da-95ed46fc52.png",
-          "alt": "OpenCode link card: “Mobile” and “Start og styr sessioner fra din telefon, hvor du end er”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cStart og styr sessioner fra din telefon, hvor du end er\u201d."
         },
         "ru": {
           "image": "mobile-ru-a427270345.png",
-          "alt": "OpenCode link card: “Mobile” and “Запускайте сеансы и управляйте ими с телефона, где бы вы ни были”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201c\u0417\u0430\u043f\u0443\u0441\u043a\u0430\u0439\u0442\u0435 \u0441\u0435\u0430\u043d\u0441\u044b \u0438 \u0443\u043f\u0440\u0430\u0432\u043b\u044f\u0439\u0442\u0435 \u0438\u043c\u0438 \u0441 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430, \u0433\u0434\u0435 \u0431\u044b \u0432\u044b \u043d\u0438 \u0431\u044b\u043b\u0438\u201d."
         },
         "ja": {
           "image": "mobile-ja-3b2f77645f.png",
-          "alt": "OpenCode link card: “Mobile” and “どこにいても、スマートフォンからセッションを開始して操作できます”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201c\u3069\u3053\u306b\u3044\u3066\u3082\u3001\u30b9\u30de\u30fc\u30c8\u30d5\u30a9\u30f3\u304b\u3089\u30bb\u30c3\u30b7\u30e7\u30f3\u3092\u958b\u59cb\u3057\u3066\u64cd\u4f5c\u3067\u304d\u307e\u3059\u201d."
         },
         "pl": {
           "image": "mobile-pl-fb5b61ee83.png",
-          "alt": "OpenCode link card: “Mobile” and “Uruchamiaj i prowadź sesje z telefonu, gdziekolwiek jesteś”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cUruchamiaj i prowad\u017a sesje z telefonu, gdziekolwiek jeste\u015b\u201d."
         },
         "ar": {
           "image": "mobile-ar-375257861f.png",
-          "alt": "OpenCode link card: “Mobile” and “ابدأ الجلسات وقُدها من هاتفك أينما كنت”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201c\u0627\u0628\u062f\u0623 \u0627\u0644\u062c\u0644\u0633\u0627\u062a \u0648\u0642\u064f\u062f\u0647\u0627 \u0645\u0646 \u0647\u0627\u062a\u0641\u0643 \u0623\u064a\u0646\u0645\u0627 \u0643\u0646\u062a\u201d."
         },
         "uk": {
           "image": "mobile-uk-d51e745314.png",
-          "alt": "OpenCode link card: “Mobile” and “Запускайте сеанси й керуйте ними з телефона, де б ви не були”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201c\u0417\u0430\u043f\u0443\u0441\u043a\u0430\u0439\u0442\u0435 \u0441\u0435\u0430\u043d\u0441\u0438 \u0439 \u043a\u0435\u0440\u0443\u0439\u0442\u0435 \u043d\u0438\u043c\u0438 \u0437 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430, \u0434\u0435 \u0431 \u0432\u0438 \u043d\u0435 \u0431\u0443\u043b\u0438\u201d."
         },
         "no": {
           "image": "mobile-no-ee27348e57.png",
-          "alt": "OpenCode link card: “Mobile” and “Start og styr økter fra telefonen, uansett hvor du er”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cStart og styr \u00f8kter fra telefonen, uansett hvor du er\u201d."
         },
         "br": {
           "image": "mobile-br-d4805263f3.png",
-          "alt": "OpenCode link card: “Mobile” and “Inicie e conduza sessões pelo celular, onde você estiver”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cInicie e conduza sess\u00f5es pelo celular, onde voc\u00ea estiver\u201d."
         },
         "tr": {
           "image": "mobile-tr-502c613f4d.png",
-          "alt": "OpenCode link card: “Mobile” and “Nerede olursanız olun oturumları telefonunuzdan başlatın ve yönetin”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201cNerede olursan\u0131z olun oturumlar\u0131 telefonunuzdan ba\u015flat\u0131n ve y\u00f6netin\u201d."
         },
         "th": {
           "image": "mobile-th-a689afa7d7.png",
-          "alt": "OpenCode link card: “Mobile” and “เริ่มและควบคุมเซสชัน OpenCode จากโทรศัพท์ของคุณ พูดคุยกับเอเจนต์ขณะที่มันทำงานบนคอมพิวเตอร์ของคุณ”."
+          "alt": "OpenCode link card: \u201cMobile\u201d and \u201c\u0e40\u0e23\u0e34\u0e48\u0e21\u0e41\u0e25\u0e30\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21\u0e40\u0e0b\u0e2a\u0e0a\u0e31\u0e19 OpenCode \u0e08\u0e32\u0e01\u0e42\u0e17\u0e23\u0e28\u0e31\u0e1e\u0e17\u0e4c\u0e02\u0e2d\u0e07\u0e04\u0e38\u0e13 \u0e1e\u0e39\u0e14\u0e04\u0e38\u0e22\u0e01\u0e31\u0e1a\u0e40\u0e2d\u0e40\u0e08\u0e19\u0e15\u0e4c\u0e02\u0e13\u0e30\u0e17\u0e35\u0e48\u0e21\u0e31\u0e19\u0e17\u0e33\u0e07\u0e32\u0e19\u0e1a\u0e19\u0e04\u0e2d\u0e21\u0e1e\u0e34\u0e27\u0e40\u0e15\u0e2d\u0e23\u0e4c\u0e02\u0e2d\u0e07\u0e04\u0e38\u0e13\u201d."
         }
       }
     },
     "/press": {
       "image": "press-7302275958.png",
-      "alt": "OpenCode link card: “Press” and “Facts, brand assets and contacts for writing about OpenCode and Anomaly.”.",
+      "alt": "OpenCode link card: \u201cPress\u201d and \u201cFacts, brand assets and contacts for writing about OpenCode and Anomaly.\u201d.",
       "video": "press-e1999bf877.mp4",
       "locales": {
         "zh": {
           "image": "press-zh-64d48f25c7.png",
-          "alt": "OpenCode link card: “媒体” and “报道 OpenCode 和 Anomaly 所需的信息、品牌资产和联系方式。”."
+          "alt": "OpenCode link card: \u201c\u5a92\u4f53\u201d and \u201c\u62a5\u9053 OpenCode \u548c Anomaly \u6240\u9700\u7684\u4fe1\u606f\u3001\u54c1\u724c\u8d44\u4ea7\u548c\u8054\u7cfb\u65b9\u5f0f\u3002\u201d."
         },
         "zht": {
           "image": "press-zht-9fd76be7af.png",
-          "alt": "OpenCode link card: “媒體” and “報導 OpenCode 和 Anomaly 所需的資訊、品牌素材和聯絡方式。”."
+          "alt": "OpenCode link card: \u201c\u5a92\u9ad4\u201d and \u201c\u5831\u5c0e OpenCode \u548c Anomaly \u6240\u9700\u7684\u8cc7\u8a0a\u3001\u54c1\u724c\u7d20\u6750\u548c\u806f\u7d61\u65b9\u5f0f\u3002\u201d."
         },
         "de": {
           "image": "press-de-6ea8ec3da2.png",
-          "alt": "OpenCode link card: “Presse” and “Fakten, Marken-Assets und Kontakte für Berichte über OpenCode und Anomaly.”."
+          "alt": "OpenCode link card: \u201cPresse\u201d and \u201cFakten, Marken-Assets und Kontakte f\u00fcr Berichte \u00fcber OpenCode und Anomaly.\u201d."
         },
         "ko": {
           "image": "press-ko-14af5ff28a.png",
-          "alt": "OpenCode link card: “언론” and “OpenCode와 Anomaly에 관해 쓰기 위한 정보, 브랜드 자산, 연락처.”."
+          "alt": "OpenCode link card: \u201c\uc5b8\ub860\u201d and \u201cOpenCode\uc640 Anomaly\uc5d0 \uad00\ud574 \uc4f0\uae30 \uc704\ud55c \uc815\ubcf4, \ube0c\ub79c\ub4dc \uc790\uc0b0, \uc5f0\ub77d\ucc98.\u201d."
         },
         "fr": {
           "image": "press-fr-335aaac834.png",
-          "alt": "OpenCode link card: “Presse” and “Informations, ressources de marque et contacts pour écrire sur OpenCode et Anomaly.”."
+          "alt": "OpenCode link card: \u201cPresse\u201d and \u201cInformations, ressources de marque et contacts pour \u00e9crire sur OpenCode et Anomaly.\u201d."
         },
         "es": {
           "image": "press-es-6c94963b28.png",
-          "alt": "OpenCode link card: “Prensa” and “Datos, recursos de marca y contactos para escribir sobre OpenCode y Anomaly.”."
+          "alt": "OpenCode link card: \u201cPrensa\u201d and \u201cDatos, recursos de marca y contactos para escribir sobre OpenCode y Anomaly.\u201d."
         },
         "da": {
           "image": "press-da-f8576fc87c.png",
-          "alt": "OpenCode link card: “Presse” and “Fakta, brand-assets og kontakter til at skrive om OpenCode og Anomaly.”."
+          "alt": "OpenCode link card: \u201cPresse\u201d and \u201cFakta, brand-assets og kontakter til at skrive om OpenCode og Anomaly.\u201d."
         },
         "it": {
           "image": "press-it-36a3ec1056.png",
-          "alt": "OpenCode link card: “Stampa” and “Dati, asset del brand e contatti per scrivere di OpenCode e Anomaly.”."
+          "alt": "OpenCode link card: \u201cStampa\u201d and \u201cDati, asset del brand e contatti per scrivere di OpenCode e Anomaly.\u201d."
         },
         "pl": {
           "image": "press-pl-ecd83e566f.png",
-          "alt": "OpenCode link card: “Prasa” and “Fakty, zasoby marki i kontakty dla piszących o OpenCode i Anomaly.”."
+          "alt": "OpenCode link card: \u201cPrasa\u201d and \u201cFakty, zasoby marki i kontakty dla pisz\u0105cych o OpenCode i Anomaly.\u201d."
         },
         "ja": {
           "image": "press-ja-1da88d40a5.png",
-          "alt": "OpenCode link card: “プレス” and “OpenCodeとAnomalyについて書くための情報、ブランド素材、連絡先。”."
+          "alt": "OpenCode link card: \u201c\u30d7\u30ec\u30b9\u201d and \u201cOpenCode\u3068Anomaly\u306b\u3064\u3044\u3066\u66f8\u304f\u305f\u3081\u306e\u60c5\u5831\u3001\u30d6\u30e9\u30f3\u30c9\u7d20\u6750\u3001\u9023\u7d61\u5148\u3002\u201d."
         },
         "ru": {
-          "image": "press-ru-21f9d654c1.png",
-          "alt": "OpenCode link card: “Пресса” and “Факты, материалы бренда и контакты для тех, кто пишет об OpenCode и Anomaly.”."
+          "image": "press-ru-6492c49f5c.png",
+          "alt": "OpenCode link card: \u201c\u041f\u0440\u0435\u0441\u0441\u0430\u201d and \u201c\u0424\u0430\u043a\u0442\u044b, \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b \u0431\u0440\u0435\u043d\u0434\u0430 \u0438 \u043a\u043e\u043d\u0442\u0430\u043a\u0442\u044b \u0434\u043b\u044f \u0442\u0435\u0445, \u043a\u0442\u043e \u043f\u0438\u0448\u0435\u0442 \u043e\u0431 OpenCode \u0438 Anomaly.\u201d."
         },
         "uk": {
-          "image": "press-uk-c641acaaa2.png",
-          "alt": "OpenCode link card: “Преса” and “Факти, матеріали бренду й контакти для тих, хто пише про OpenCode і Anomaly.”."
+          "image": "press-uk-9c6ac236c6.png",
+          "alt": "OpenCode link card: \u201c\u041f\u0440\u0435\u0441\u0430\u201d and \u201c\u0424\u0430\u043a\u0442\u0438, \u043c\u0430\u0442\u0435\u0440\u0456\u0430\u043b\u0438 \u0431\u0440\u0435\u043d\u0434\u0443 \u0439 \u043a\u043e\u043d\u0442\u0430\u043a\u0442\u0438 \u0434\u043b\u044f \u0442\u0438\u0445, \u0445\u0442\u043e \u043f\u0438\u0448\u0435 \u043f\u0440\u043e OpenCode \u0456 Anomaly.\u201d."
         },
         "no": {
           "image": "press-no-dd4dd40f57.png",
-          "alt": "OpenCode link card: “Presse” and “Fakta, merkevareressurser og kontakter for deg som skriver om OpenCode og Anomaly.”."
+          "alt": "OpenCode link card: \u201cPresse\u201d and \u201cFakta, merkevareressurser og kontakter for deg som skriver om OpenCode og Anomaly.\u201d."
         },
         "ar": {
           "image": "press-ar-c93124613c.png",
-          "alt": "OpenCode link card: “الصحافة” and “حقائق وأصول العلامة وجهات اتصال للكتابة عن OpenCode وAnomaly.”."
+          "alt": "OpenCode link card: \u201c\u0627\u0644\u0635\u062d\u0627\u0641\u0629\u201d and \u201c\u062d\u0642\u0627\u0626\u0642 \u0648\u0623\u0635\u0648\u0644 \u0627\u0644\u0639\u0644\u0627\u0645\u0629 \u0648\u062c\u0647\u0627\u062a \u0627\u062a\u0635\u0627\u0644 \u0644\u0644\u0643\u062a\u0627\u0628\u0629 \u0639\u0646 OpenCode \u0648Anomaly.\u201d."
         },
         "br": {
           "image": "press-br-3a70f6deeb.png",
-          "alt": "OpenCode link card: “Imprensa” and “Dados, ativos da marca e contatos para escrever sobre o OpenCode e a Anomaly.”."
+          "alt": "OpenCode link card: \u201cImprensa\u201d and \u201cDados, ativos da marca e contatos para escrever sobre o OpenCode e a Anomaly.\u201d."
         },
         "th": {
           "image": "press-th-d380e8e759.png",
-          "alt": "OpenCode link card: “สื่อมวลชน” and “ข้อมูล แอสเซทแบรนด์ และช่องทางติดต่อสำหรับการเขียนถึง OpenCode และ Anomaly”."
+          "alt": "OpenCode link card: \u201c\u0e2a\u0e37\u0e48\u0e2d\u0e21\u0e27\u0e25\u0e0a\u0e19\u201d and \u201c\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25 \u0e41\u0e2d\u0e2a\u0e40\u0e0b\u0e17\u0e41\u0e1a\u0e23\u0e19\u0e14\u0e4c \u0e41\u0e25\u0e30\u0e0a\u0e48\u0e2d\u0e07\u0e17\u0e32\u0e07\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d\u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e40\u0e02\u0e35\u0e22\u0e19\u0e16\u0e36\u0e07 OpenCode \u0e41\u0e25\u0e30 Anomaly\u201d."
         },
         "tr": {
           "image": "press-tr-f35943d004.png",
-          "alt": "OpenCode link card: “Basın” and “OpenCode basın kiti”."
+          "alt": "OpenCode link card: \u201cBas\u0131n\u201d and \u201cOpenCode bas\u0131n kiti\u201d."
         }
       }
     },
     "/product": {
       "image": "product-7c9ecd8a39.png",
-      "alt": "OpenCode link card: “Product” and “One agent, every surface”.",
+      "alt": "OpenCode link card: \u201cProduct\u201d and \u201cOne agent, every surface\u201d.",
       "video": "product-c179b05171.mp4",
       "locales": {
         "zh": {
           "image": "product-zh-8d8bc557f4.png",
-          "alt": "OpenCode link card: “产品” and “一个代理，覆盖所有界面”."
+          "alt": "OpenCode link card: \u201c\u4ea7\u54c1\u201d and \u201c\u4e00\u4e2a\u4ee3\u7406\uff0c\u8986\u76d6\u6240\u6709\u754c\u9762\u201d."
         },
         "ko": {
           "image": "product-ko-4fc8d9b1d6.png",
-          "alt": "OpenCode link card: “제품” and “하나의 에이전트, 모든 화면”."
+          "alt": "OpenCode link card: \u201c\uc81c\ud488\u201d and \u201c\ud558\ub098\uc758 \uc5d0\uc774\uc804\ud2b8, \ubaa8\ub4e0 \ud654\uba74\u201d."
         },
         "zht": {
           "image": "product-zht-06d0c500b3.png",
-          "alt": "OpenCode link card: “產品” and “一個代理，涵蓋所有介面”."
+          "alt": "OpenCode link card: \u201c\u7522\u54c1\u201d and \u201c\u4e00\u500b\u4ee3\u7406\uff0c\u6db5\u84cb\u6240\u6709\u4ecb\u9762\u201d."
         },
         "de": {
           "image": "product-de-827b14e025.png",
-          "alt": "OpenCode link card: “Produkt” and “Ein Agent auf jeder Oberfläche”."
+          "alt": "OpenCode link card: \u201cProdukt\u201d and \u201cEin Agent auf jeder Oberfl\u00e4che\u201d."
         },
         "fr": {
           "image": "product-fr-0bebf29659.png",
-          "alt": "OpenCode link card: “Produit” and “Un agent, partout”."
+          "alt": "OpenCode link card: \u201cProduit\u201d and \u201cUn agent, partout\u201d."
         },
         "it": {
           "image": "product-it-8ae226ef99.png",
-          "alt": "OpenCode link card: “Prodotto” and “Un agente, ovunque”."
+          "alt": "OpenCode link card: \u201cProdotto\u201d and \u201cUn agente, ovunque\u201d."
         },
         "es": {
           "image": "product-es-340a74e4fc.png",
-          "alt": "OpenCode link card: “Producto” and “Un agente, en todas partes”."
+          "alt": "OpenCode link card: \u201cProducto\u201d and \u201cUn agente, en todas partes\u201d."
         },
         "da": {
           "image": "product-da-f4f586f9dc.png",
-          "alt": "OpenCode link card: “Produkt” and “Én agent, alle flader”."
+          "alt": "OpenCode link card: \u201cProdukt\u201d and \u201c\u00c9n agent, alle flader\u201d."
         },
         "ja": {
           "image": "product-ja-2d38926c36.png",
-          "alt": "OpenCode link card: “製品” and “1つのエージェントを、あらゆる場所で”."
+          "alt": "OpenCode link card: \u201c\u88fd\u54c1\u201d and \u201c1\u3064\u306e\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u3092\u3001\u3042\u3089\u3086\u308b\u5834\u6240\u3067\u201d."
         },
         "pl": {
           "image": "product-pl-4e06d0a0b6.png",
-          "alt": "OpenCode link card: “Produkt” and “Jeden agent, wszędzie”."
+          "alt": "OpenCode link card: \u201cProdukt\u201d and \u201cJeden agent, wsz\u0119dzie\u201d."
         },
         "ru": {
-          "image": "product-ru-411e66278c.png",
-          "alt": "OpenCode link card: “Продукт” and “Один агент на всех устройствах”."
+          "image": "product-ru-bdc2201a48.png",
+          "alt": "OpenCode link card: \u201c\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u201d and \u201c\u041e\u0434\u0438\u043d \u0430\u0433\u0435\u043d\u0442 \u043d\u0430 \u0432\u0441\u0435\u0445 \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u0430\u0445\u201d."
         },
         "uk": {
-          "image": "product-uk-7878aeafca.png",
-          "alt": "OpenCode link card: “Продукт” and “Один агент на всіх пристроях”."
+          "image": "product-uk-2037d8b379.png",
+          "alt": "OpenCode link card: \u201c\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u201d and \u201c\u041e\u0434\u0438\u043d \u0430\u0433\u0435\u043d\u0442 \u043d\u0430 \u0432\u0441\u0456\u0445 \u043f\u0440\u0438\u0441\u0442\u0440\u043e\u044f\u0445\u201d."
         },
         "ar": {
           "image": "product-ar-4e66be4d55.png",
-          "alt": "OpenCode link card: “المنتج” and “وكيل واحد على كل الشاشات”."
+          "alt": "OpenCode link card: \u201c\u0627\u0644\u0645\u0646\u062a\u062c\u201d and \u201c\u0648\u0643\u064a\u0644 \u0648\u0627\u062d\u062f \u0639\u0644\u0649 \u0643\u0644 \u0627\u0644\u0634\u0627\u0634\u0627\u062a\u201d."
         },
         "no": {
           "image": "product-no-4a2be52aea.png",
-          "alt": "OpenCode link card: “Produkt” and “Én agent, alle flater”."
+          "alt": "OpenCode link card: \u201cProdukt\u201d and \u201c\u00c9n agent, alle flater\u201d."
         },
         "br": {
           "image": "product-br-f77fb5a75d.png",
-          "alt": "OpenCode link card: “Produto” and “Um agente, em todo lugar”."
+          "alt": "OpenCode link card: \u201cProduto\u201d and \u201cUm agente, em todo lugar\u201d."
         },
         "tr": {
           "image": "product-tr-1e9442de6c.png",
-          "alt": "OpenCode link card: “Ürün” and “Tek ajan, her yerde”."
+          "alt": "OpenCode link card: \u201c\u00dcr\u00fcn\u201d and \u201cTek ajan, her yerde\u201d."
         },
         "th": {
           "image": "product-th-cc450951de.png",
-          "alt": "OpenCode link card: “ผลิตภัณฑ์” and “เอเจนต์เดียว ทุกพื้นที่ทำงาน เริ่มเซสชันบนเดสก์ท็อป สั่งงานจากโทรศัพท์ ทำต่อในเทอร์มินัล หรือควบคุมจากโค้ดของคุณเอง”."
+          "alt": "OpenCode link card: \u201c\u0e1c\u0e25\u0e34\u0e15\u0e20\u0e31\u0e13\u0e11\u0e4c\u201d and \u201c\u0e40\u0e2d\u0e40\u0e08\u0e19\u0e15\u0e4c\u0e40\u0e14\u0e35\u0e22\u0e27 \u0e17\u0e38\u0e01\u0e1e\u0e37\u0e49\u0e19\u0e17\u0e35\u0e48\u0e17\u0e33\u0e07\u0e32\u0e19 \u0e40\u0e23\u0e34\u0e48\u0e21\u0e40\u0e0b\u0e2a\u0e0a\u0e31\u0e19\u0e1a\u0e19\u0e40\u0e14\u0e2a\u0e01\u0e4c\u0e17\u0e47\u0e2d\u0e1b \u0e2a\u0e31\u0e48\u0e07\u0e07\u0e32\u0e19\u0e08\u0e32\u0e01\u0e42\u0e17\u0e23\u0e28\u0e31\u0e1e\u0e17\u0e4c \u0e17\u0e33\u0e15\u0e48\u0e2d\u0e43\u0e19\u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e21\u0e34\u0e19\u0e31\u0e25 \u0e2b\u0e23\u0e37\u0e2d\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21\u0e08\u0e32\u0e01\u0e42\u0e04\u0e49\u0e14\u0e02\u0e2d\u0e07\u0e04\u0e38\u0e13\u0e40\u0e2d\u0e07\u201d."
         }
       }
     },
     "/sdk": {
       "image": "sdk-d26c8f84d9.png",
-      "alt": "OpenCode link card: “SDK” and “Drive OpenCode from your own scripts, CI jobs and tools”.",
+      "alt": "OpenCode link card: \u201cSDK\u201d and \u201cDrive OpenCode from your own scripts, CI jobs and tools\u201d.",
       "video": "sdk-d329895728.mp4",
       "locales": {
         "zht": {
           "image": "sdk-zht-07c6538f46.png",
-          "alt": "OpenCode link card: “SDK” and “從你自己的腳本、CI 工作和工具驅動 OpenCode”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201c\u5f9e\u4f60\u81ea\u5df1\u7684\u8173\u672c\u3001CI \u5de5\u4f5c\u548c\u5de5\u5177\u9a45\u52d5 OpenCode\u201d."
         },
         "zh": {
           "image": "sdk-zh-f935310ad9.png",
-          "alt": "OpenCode link card: “SDK” and “在您自己的脚本、CI 任务和工具中驱动 OpenCode”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201c\u5728\u60a8\u81ea\u5df1\u7684\u811a\u672c\u3001CI \u4efb\u52a1\u548c\u5de5\u5177\u4e2d\u9a71\u52a8 OpenCode\u201d."
         },
         "fr": {
           "image": "sdk-fr-48c4aaf56f.png",
-          "alt": "OpenCode link card: “SDK” and “Pilotez OpenCode depuis vos scripts, jobs CI et outils”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cPilotez OpenCode depuis vos scripts, jobs CI et outils\u201d."
         },
         "ko": {
           "image": "sdk-ko-5fc0543a2c.png",
-          "alt": "OpenCode link card: “SDK” and “직접 만든 스크립트, CI 작업, 도구에서 OpenCode를 제어하세요”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201c\uc9c1\uc811 \ub9cc\ub4e0 \uc2a4\ud06c\ub9bd\ud2b8, CI \uc791\uc5c5, \ub3c4\uad6c\uc5d0\uc11c OpenCode\ub97c \uc81c\uc5b4\ud558\uc138\uc694\u201d."
         },
         "de": {
           "image": "sdk-de-745692762f.png",
-          "alt": "OpenCode link card: “SDK” and “Steuere OpenCode aus deinen eigenen Skripten, CI-Jobs und Tools”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cSteuere OpenCode aus deinen eigenen Skripten, CI-Jobs und Tools\u201d."
         },
         "da": {
           "image": "sdk-da-67d88441cf.png",
-          "alt": "OpenCode link card: “SDK” and “Styr OpenCode fra dine egne scripts, CI-jobs og værktøjer”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cStyr OpenCode fra dine egne scripts, CI-jobs og v\u00e6rkt\u00f8jer\u201d."
         },
         "es": {
           "image": "sdk-es-aa394787f8.png",
-          "alt": "OpenCode link card: “SDK” and “Controla OpenCode desde tus scripts, jobs de CI y herramientas”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cControla OpenCode desde tus scripts, jobs de CI y herramientas\u201d."
         },
         "it": {
           "image": "sdk-it-ac41238478.png",
-          "alt": "OpenCode link card: “SDK” and “Controlla OpenCode dai tuoi script, job di CI e strumenti”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cControlla OpenCode dai tuoi script, job di CI e strumenti\u201d."
         },
         "ja": {
           "image": "sdk-ja-4edf56821b.png",
-          "alt": "OpenCode link card: “SDK” and “自分のスクリプト、CIジョブ、ツールからOpenCodeを操作できます”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201c\u81ea\u5206\u306e\u30b9\u30af\u30ea\u30d7\u30c8\u3001CI\u30b8\u30e7\u30d6\u3001\u30c4\u30fc\u30eb\u304b\u3089OpenCode\u3092\u64cd\u4f5c\u3067\u304d\u307e\u3059\u201d."
         },
         "ru": {
           "image": "sdk-ru-0a0de7fe5a.png",
-          "alt": "OpenCode link card: “SDK” and “Управляйте OpenCode из своих скриптов, CI-задач и инструментов”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201c\u0423\u043f\u0440\u0430\u0432\u043b\u044f\u0439\u0442\u0435 OpenCode \u0438\u0437 \u0441\u0432\u043e\u0438\u0445 \u0441\u043a\u0440\u0438\u043f\u0442\u043e\u0432, CI-\u0437\u0430\u0434\u0430\u0447 \u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u0432\u201d."
         },
         "uk": {
           "image": "sdk-uk-872475bacf.png",
-          "alt": "OpenCode link card: “SDK” and “Керуйте OpenCode зі своїх скриптів, CI-завдань та інструментів”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201c\u041a\u0435\u0440\u0443\u0439\u0442\u0435 OpenCode \u0437\u0456 \u0441\u0432\u043e\u0457\u0445 \u0441\u043a\u0440\u0438\u043f\u0442\u0456\u0432, CI-\u0437\u0430\u0432\u0434\u0430\u043d\u044c \u0442\u0430 \u0456\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u0456\u0432\u201d."
         },
         "pl": {
           "image": "sdk-pl-9b00e23de8.png",
-          "alt": "OpenCode link card: “SDK” and “Steruj OpenCode z własnych skryptów, zadań CI i narzędzi”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cSteruj OpenCode z w\u0142asnych skrypt\u00f3w, zada\u0144 CI i narz\u0119dzi\u201d."
         },
         "ar": {
           "image": "sdk-ar-9ce21753f1.png",
-          "alt": "OpenCode link card: “SDK” and “تحكّم في OpenCode من سكربتاتك ومهام CI وأدواتك”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201c\u062a\u062d\u0643\u0651\u0645 \u0641\u064a OpenCode \u0645\u0646 \u0633\u0643\u0631\u0628\u062a\u0627\u062a\u0643 \u0648\u0645\u0647\u0627\u0645 CI \u0648\u0623\u062f\u0648\u0627\u062a\u0643\u201d."
         },
         "br": {
           "image": "sdk-br-3015a30545.png",
-          "alt": "OpenCode link card: “SDK” and “Controle o OpenCode pelos seus scripts, jobs de CI e ferramentas”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cControle o OpenCode pelos seus scripts, jobs de CI e ferramentas\u201d."
         },
         "th": {
           "image": "sdk-th-782715452d.png",
-          "alt": "OpenCode link card: “SDK” and “ควบคุม OpenCode จากสคริปต์ งาน CI และเครื่องมือของคุณเอง ไคลเอนต์ TypeScript แบบมีชนิดข้อมูลสร้างเซสชัน ส่งพรอมต์ และสตรีมทุกอีเวนต์ทันทีที่เกิดขึ้น”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201c\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21 OpenCode \u0e08\u0e32\u0e01\u0e2a\u0e04\u0e23\u0e34\u0e1b\u0e15\u0e4c \u0e07\u0e32\u0e19 CI \u0e41\u0e25\u0e30\u0e40\u0e04\u0e23\u0e37\u0e48\u0e2d\u0e07\u0e21\u0e37\u0e2d\u0e02\u0e2d\u0e07\u0e04\u0e38\u0e13\u0e40\u0e2d\u0e07 \u0e44\u0e04\u0e25\u0e40\u0e2d\u0e19\u0e15\u0e4c TypeScript \u0e41\u0e1a\u0e1a\u0e21\u0e35\u0e0a\u0e19\u0e34\u0e14\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e40\u0e0b\u0e2a\u0e0a\u0e31\u0e19 \u0e2a\u0e48\u0e07\u0e1e\u0e23\u0e2d\u0e21\u0e15\u0e4c \u0e41\u0e25\u0e30\u0e2a\u0e15\u0e23\u0e35\u0e21\u0e17\u0e38\u0e01\u0e2d\u0e35\u0e40\u0e27\u0e19\u0e15\u0e4c\u0e17\u0e31\u0e19\u0e17\u0e35\u0e17\u0e35\u0e48\u0e40\u0e01\u0e34\u0e14\u0e02\u0e36\u0e49\u0e19\u201d."
         },
         "no": {
           "image": "sdk-no-58988ed6f2.png",
-          "alt": "OpenCode link card: “SDK” and “Styr OpenCode fra dine egne skript, CI-jobber og verktøy”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cStyr OpenCode fra dine egne skript, CI-jobber og verkt\u00f8y\u201d."
         },
         "tr": {
           "image": "sdk-tr-a39e14c52c.png",
-          "alt": "OpenCode link card: “SDK” and “OpenCode'u kendi betiklerinizden, CI işlerinizden ve araçlarınızdan yönetin”."
+          "alt": "OpenCode link card: \u201cSDK\u201d and \u201cOpenCode'u kendi betiklerinizden, CI i\u015flerinizden ve ara\u00e7lar\u0131n\u0131zdan y\u00f6netin\u201d."
         }
       }
     },
     "/terminal": {
       "image": "terminal-d2dc426c65.png",
-      "alt": "OpenCode link card: “Terminal” and “A fast terminal UI that works in any shell, editor or remote server”.",
+      "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cA fast terminal UI that works in any shell, editor or remote server\u201d.",
       "video": "terminal-b25f4ce5fe.mp4",
       "locales": {
         "zh": {
           "image": "terminal-zh-d87bec3290.png",
-          "alt": "OpenCode link card: “Terminal” and “快速的终端界面，可在任意 shell、编辑器或远程服务器中使用”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201c\u5feb\u901f\u7684\u7ec8\u7aef\u754c\u9762\uff0c\u53ef\u5728\u4efb\u610f shell\u3001\u7f16\u8f91\u5668\u6216\u8fdc\u7a0b\u670d\u52a1\u5668\u4e2d\u4f7f\u7528\u201d."
         },
         "zht": {
           "image": "terminal-zht-2c14139b59.png",
-          "alt": "OpenCode link card: “Terminal” and “快速的終端機介面，可在任何 shell、編輯器或遠端伺服器中使用”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201c\u5feb\u901f\u7684\u7d42\u7aef\u6a5f\u4ecb\u9762\uff0c\u53ef\u5728\u4efb\u4f55 shell\u3001\u7de8\u8f2f\u5668\u6216\u9060\u7aef\u4f3a\u670d\u5668\u4e2d\u4f7f\u7528\u201d."
         },
         "ko": {
           "image": "terminal-ko-6b4b1c271a.png",
-          "alt": "OpenCode link card: “Terminal” and “어떤 셸, 에디터, 원격 서버에서도 동작하는 빠른 터미널 UI입니다”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201c\uc5b4\ub5a4 \uc178, \uc5d0\ub514\ud130, \uc6d0\uaca9 \uc11c\ubc84\uc5d0\uc11c\ub3c4 \ub3d9\uc791\ud558\ub294 \ube60\ub978 \ud130\ubbf8\ub110 UI\uc785\ub2c8\ub2e4\u201d."
         },
         "de": {
           "image": "terminal-de-d2b06871e4.png",
-          "alt": "OpenCode link card: “Terminal” and “Ein schnelles Terminal-UI für jede Shell, jeden Editor und jeden Remote-Server”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cEin schnelles Terminal-UI f\u00fcr jede Shell, jeden Editor und jeden Remote-Server\u201d."
         },
         "es": {
           "image": "terminal-es-b616a76d0a.png",
-          "alt": "OpenCode link card: “Terminal” and “Una interfaz de terminal rápida que funciona en cualquier shell, editor o servidor remoto”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cUna interfaz de terminal r\u00e1pida que funciona en cualquier shell, editor o servidor remoto\u201d."
         },
         "it": {
           "image": "terminal-it-c824bb8ef6.png",
-          "alt": "OpenCode link card: “Terminal” and “Un'interfaccia da terminale veloce che funziona in qualsiasi shell, editor o server remoto”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cUn'interfaccia da terminale veloce che funziona in qualsiasi shell, editor o server remoto\u201d."
         },
         "fr": {
           "image": "terminal-fr-6d7406601e.png",
-          "alt": "OpenCode link card: “Terminal” and “Une interface terminal rapide qui fonctionne dans tout shell, éditeur ou serveur distant”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cUne interface terminal rapide qui fonctionne dans tout shell, \u00e9diteur ou serveur distant\u201d."
         },
         "da": {
           "image": "terminal-da-c497b08041.png",
-          "alt": "OpenCode link card: “Terminal” and “En hurtig terminalbrugerflade, der virker i enhver shell, editor eller fjernserver”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cEn hurtig terminalbrugerflade, der virker i enhver shell, editor eller fjernserver\u201d."
         },
         "pl": {
           "image": "terminal-pl-d09d1d4401.png",
-          "alt": "OpenCode link card: “Terminal” and “Szybki interfejs terminalowy, który działa w każdej powłoce, edytorze i na zdalnym serwerze”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cSzybki interfejs terminalowy, kt\u00f3ry dzia\u0142a w ka\u017cdej pow\u0142oce, edytorze i na zdalnym serwerze\u201d."
         },
         "ja": {
           "image": "terminal-ja-583888e16d.png",
-          "alt": "OpenCode link card: “Terminal” and “どのシェル、エディタ、リモートサーバーでも動く高速なターミナルUI”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201c\u3069\u306e\u30b7\u30a7\u30eb\u3001\u30a8\u30c7\u30a3\u30bf\u3001\u30ea\u30e2\u30fc\u30c8\u30b5\u30fc\u30d0\u30fc\u3067\u3082\u52d5\u304f\u9ad8\u901f\u306a\u30bf\u30fc\u30df\u30ca\u30ebUI\u201d."
         },
         "ru": {
           "image": "terminal-ru-d7933e2f12.png",
-          "alt": "OpenCode link card: “Terminal” and “Быстрый терминальный интерфейс для любой оболочки, редактора или удалённого сервера”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201c\u0411\u044b\u0441\u0442\u0440\u044b\u0439 \u0442\u0435\u0440\u043c\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441 \u0434\u043b\u044f \u043b\u044e\u0431\u043e\u0439 \u043e\u0431\u043e\u043b\u043e\u0447\u043a\u0438, \u0440\u0435\u0434\u0430\u043a\u0442\u043e\u0440\u0430 \u0438\u043b\u0438 \u0443\u0434\u0430\u043b\u0451\u043d\u043d\u043e\u0433\u043e \u0441\u0435\u0440\u0432\u0435\u0440\u0430\u201d."
         },
         "uk": {
           "image": "terminal-uk-179b0bf424.png",
-          "alt": "OpenCode link card: “Terminal” and “Швидкий термінальний інтерфейс для будь-якої оболонки, редактора чи віддаленого сервера”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201c\u0428\u0432\u0438\u0434\u043a\u0438\u0439 \u0442\u0435\u0440\u043c\u0456\u043d\u0430\u043b\u044c\u043d\u0438\u0439 \u0456\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441 \u0434\u043b\u044f \u0431\u0443\u0434\u044c-\u044f\u043a\u043e\u0457 \u043e\u0431\u043e\u043b\u043e\u043d\u043a\u0438, \u0440\u0435\u0434\u0430\u043a\u0442\u043e\u0440\u0430 \u0447\u0438 \u0432\u0456\u0434\u0434\u0430\u043b\u0435\u043d\u043e\u0433\u043e \u0441\u0435\u0440\u0432\u0435\u0440\u0430\u201d."
         },
         "ar": {
           "image": "terminal-ar-9f1b9a236a.png",
-          "alt": "OpenCode link card: “Terminal” and “واجهة طرفية سريعة تعمل في أي صدفة أو محرر أو خادم بعيد”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201c\u0648\u0627\u062c\u0647\u0629 \u0637\u0631\u0641\u064a\u0629 \u0633\u0631\u064a\u0639\u0629 \u062a\u0639\u0645\u0644 \u0641\u064a \u0623\u064a \u0635\u062f\u0641\u0629 \u0623\u0648 \u0645\u062d\u0631\u0631 \u0623\u0648 \u062e\u0627\u062f\u0645 \u0628\u0639\u064a\u062f\u201d."
         },
         "no": {
           "image": "terminal-no-6c9eef767f.png",
-          "alt": "OpenCode link card: “Terminal” and “Et raskt terminalgrensesnitt som fungerer i alle skall, editorer og eksterne servere”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cEt raskt terminalgrensesnitt som fungerer i alle skall, editorer og eksterne servere\u201d."
         },
         "br": {
           "image": "terminal-br-51344a44be.png",
-          "alt": "OpenCode link card: “Terminal” and “Uma interface de terminal rápida que funciona em qualquer shell, editor ou servidor remoto”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cUma interface de terminal r\u00e1pida que funciona em qualquer shell, editor ou servidor remoto\u201d."
         },
         "th": {
           "image": "terminal-th-3e10fd190f.png",
-          "alt": "OpenCode link card: “Terminal” and “UI เทอร์มินัลที่รวดเร็วของ OpenCode ใช้ได้ในทุกเชลล์ อีดิเตอร์ หรือเซิร์ฟเวอร์ระยะไกล บอกสิ่งที่ต้องการ ดูการแก้ไขแต่ละครั้งเป็น diff และอนุมัติคำสั่ง”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cUI \u0e40\u0e17\u0e2d\u0e23\u0e4c\u0e21\u0e34\u0e19\u0e31\u0e25\u0e17\u0e35\u0e48\u0e23\u0e27\u0e14\u0e40\u0e23\u0e47\u0e27\u0e02\u0e2d\u0e07 OpenCode \u0e43\u0e0a\u0e49\u0e44\u0e14\u0e49\u0e43\u0e19\u0e17\u0e38\u0e01\u0e40\u0e0a\u0e25\u0e25\u0e4c \u0e2d\u0e35\u0e14\u0e34\u0e40\u0e15\u0e2d\u0e23\u0e4c \u0e2b\u0e23\u0e37\u0e2d\u0e40\u0e0b\u0e34\u0e23\u0e4c\u0e1f\u0e40\u0e27\u0e2d\u0e23\u0e4c\u0e23\u0e30\u0e22\u0e30\u0e44\u0e01\u0e25 \u0e1a\u0e2d\u0e01\u0e2a\u0e34\u0e48\u0e07\u0e17\u0e35\u0e48\u0e15\u0e49\u0e2d\u0e07\u0e01\u0e32\u0e23 \u0e14\u0e39\u0e01\u0e32\u0e23\u0e41\u0e01\u0e49\u0e44\u0e02\u0e41\u0e15\u0e48\u0e25\u0e30\u0e04\u0e23\u0e31\u0e49\u0e07\u0e40\u0e1b\u0e47\u0e19 diff \u0e41\u0e25\u0e30\u0e2d\u0e19\u0e38\u0e21\u0e31\u0e15\u0e34\u0e04\u0e33\u0e2a\u0e31\u0e48\u0e07\u201d."
         },
         "tr": {
           "image": "terminal-tr-f04135ed01.png",
-          "alt": "OpenCode link card: “Terminal” and “Her kabukta, editörde ya da uzak sunucuda çalışan hızlı bir terminal arayüzü”."
+          "alt": "OpenCode link card: \u201cTerminal\u201d and \u201cHer kabukta, edit\u00f6rde ya da uzak sunucuda \u00e7al\u0131\u015fan h\u0131zl\u0131 bir terminal aray\u00fcz\u00fc\u201d."
         }
       }
     }
