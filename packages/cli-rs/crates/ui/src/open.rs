@@ -4,6 +4,19 @@
 use base64::Engine;
 use std::process::Command;
 
+/// `openUrl`'s check: the normalized `href` of an http or https link, or the error to show. Check a URL with this
+/// before [`command`], which also starts programs and opens files.
+pub fn web_url(input: &str) -> Result<String, String> {
+    match opencode_api_types::js::parse_url(input) {
+        Err(error @ opencode_api_types::js::UrlError::NonAsciiHost(_)) => Err(error.to_string()),
+        url => url
+            .ok()
+            .filter(|url| matches!(url.scheme(), "http" | "https"))
+            .map(String::from)
+            .ok_or_else(|| format!("Only http and https links can be opened in the browser: {input}")),
+    }
+}
+
 /// A command that opens `target` in the system's default app. The caller sets stdio and spawns it.
 pub fn command(target: &str) -> Command {
     let system_root = std::env::var("SYSTEMROOT").or_else(|_| std::env::var("windir")).ok();
@@ -52,6 +65,14 @@ mod tests {
         let bytes = base64::engine::general_purpose::STANDARD.decode(encoded).unwrap();
         let units: Vec<u16> = bytes.chunks(2).map(|pair| u16::from_le_bytes([pair[0], pair[1]])).collect();
         String::from_utf16(&units).unwrap()
+    }
+
+    #[test]
+    fn only_web_links_pass_as_urls() {
+        assert_eq!(web_url("HTTPS://opencode.ai"), Ok("https://opencode.ai/".to_owned()));
+        for input in [r"C:\Windows\System32\calc.exe", "calc", "file:///etc/passwd", "ms-settings:"] {
+            assert_eq!(web_url(input), Err(format!("Only http and https links can be opened in the browser: {input}")));
+        }
     }
 
     #[test]
