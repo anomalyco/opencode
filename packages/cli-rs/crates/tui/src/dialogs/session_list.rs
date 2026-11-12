@@ -77,6 +77,7 @@ pub fn show(tui: &Tui) {
             props.title_placeholder = Some(list.placeholder());
             props.skip_filter = true;
             props.current = current.clone();
+            props.focus_current = false;
             props.on_filter = Some(Rc::new(bind!(weak, |list, _: &str| list.debounce_search())));
             props.on_move = Some(Rc::new(bind!(weak, |list, _: &SelectOption<SessionID>| {
                 if list.state.borrow_mut().to_delete.take().is_some() {
