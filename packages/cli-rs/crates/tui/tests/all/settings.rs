@@ -439,6 +439,42 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     assert_eq!(footer(&app, "Mouse"), "off");
 }
 
+// Expected: TS keeps `saving` while `useTheme()` restyles the open dialog, so a step while the previous one is being
+// written is ignored after a theme change too. Holding the config lock keeps the first write from landing.
+#[test]
+fn a_settings_step_while_saving_is_ignored_after_a_theme_change() {
+    use opentui::prelude::Event;
+    use opentui::theme::ThemeMode;
+
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::xdg_paths(home.path());
+    std::fs::create_dir_all(&paths.config).unwrap();
+    let config = CliConfig::new(&paths);
+    std::fs::write(config.path(), "{}\n").unwrap();
+    let app = TestApp::new(80, 30);
+    let tui = support::mount_empty(
+        &app,
+        config.get().unwrap(),
+        Some(Roots { paths: paths.clone(), storage_channel: "test".into() }),
+    );
+    settings::show(&tui, Some("animations"));
+    wait_for(&app, "Animations");
+    let lock = opencode_local::lock::acquire(
+        &paths.state.join("locks"),
+        &config.path().to_string_lossy(),
+        &opencode_local::lock::Options::default(),
+    )
+    .unwrap();
+    app.press("right");
+    assert_eq!(tui.settings.pending_writes(), 1);
+    app.event(Event::ThemeMode(ThemeMode::Light));
+    app.press("right");
+    assert_eq!(tui.settings.pending_writes(), 1, "the step after the theme change was written too");
+    lock.release().unwrap();
+    assert!(app.wait_until(WAIT, || tui.settings.pending_writes() == 0));
+    assert_eq!(footer(&app, "Animations"), "on");
+}
+
 // Expected (O-89): a theme change from outside an open dialog restyles it in place, as TS `useTheme()` does. Each kind
 // (a select, a prompt, Settings), open with a filter or typed text and a moved selection or cursor, draws what it
 // draws when opened in the new theme after the same keys, and goes on from there. The change comes from the terminal

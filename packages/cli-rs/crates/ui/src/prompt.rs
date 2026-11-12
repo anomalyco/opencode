@@ -83,10 +83,12 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
     });
     let owner = inner.clone();
     cx.on_close(Disposer::new(move || drop(owner)));
-    let kept = cx.keep(bind!(inner, |inner| Some((inner.field.text(), inner.field.cursor_offset()))));
-    if let Some((text, cursor)) = kept.flatten() {
+    // A build in a new theme while saving stays busy, so the user cannot submit twice.
+    let kept = cx.keep(bind!(inner, |inner| Some((inner.field.text(), inner.field.cursor_offset(), inner.busy.get()))));
+    if let Some((text, cursor, busy)) = kept.flatten() {
         inner.field.set_text(&text);
         inner.field.set_cursor_offset(cursor);
+        inner.busy.set(busy);
     }
     let prompt = Prompt(inner);
     prompt.register_layers();
