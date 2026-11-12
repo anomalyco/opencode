@@ -273,19 +273,18 @@ mod tests {
                 { "type": "content", "content": { "type": "image", "mimeType": "image/png", "data": "AAAA" } },
             ])
         );
-        assert_eq!(update["locations"], json!([{ "path": "/w/a.ts" }]));
+        assert_eq!(update["locations"], json!([{ "path": paths::resolve_from("/w", "a.ts") }]));
         assert_eq!(read_display_text("{\"entries\":[\"a\",{\"path\":\"b\"},3]}").as_deref(), Some("a\nb"));
         assert_eq!(read_display_text("plain"), None);
     }
 
     #[test]
     fn locates_tool_paths() {
+        // `path.resolve("/w", "a.ts")`: `/w/a.ts`, and on Windows `D:\w\a.ts` on the working directory's drive.
+        let at = |path: &str| json!({ "path": paths::resolve_from("/w", path) });
         let patch = "*** Begin Patch\n*** Update File: a.ts\n*** Move to: b.ts\n@@\n-x\n+y\n*** Add File: a.ts\n+z\n*** End Patch";
-        assert_eq!(
-            locations("apply_patch", &json!({ "patchText": patch }), "/w"),
-            json!([{ "path": "/w/a.ts" }, { "path": "/w/b.ts" }]).as_array().unwrap().clone()
-        );
-        assert_eq!(locations("bash", &json!({ "cwd": "sub" }), "/w"), vec![json!({ "path": "/w/sub" })]);
+        assert_eq!(locations("apply_patch", &json!({ "patchText": patch }), "/w"), vec![at("a.ts"), at("b.ts")]);
+        assert_eq!(locations("bash", &json!({ "cwd": "sub" }), "/w"), vec![at("sub")]);
         assert_eq!(locations("glob", &json!({ "path": "/abs/../x" }), "/w"), vec![json!({ "path": "/abs/../x" })]);
         assert!(locations("webfetch", &json!({ "url": "x" }), "/w").is_empty());
     }

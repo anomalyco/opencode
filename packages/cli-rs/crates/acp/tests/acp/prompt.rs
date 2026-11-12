@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use opencode_acp::paths::resolve_from;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -159,7 +160,7 @@ async fn streams_an_admitted_turn_and_resolves_with_usage_after_its_terminal_eve
     assert_matches(
         &updates[5]["update"],
         &json!({
-            "title": "printf done", "kind": "execute", "locations": [{ "path": "/workspace/sub" }],
+            "title": "printf done", "kind": "execute", "locations": [{ "path": resolve_from("/workspace", "sub") }],
             "rawInput": { "command": "printf done", "workdir": "sub" },
         }),
     );
@@ -517,7 +518,7 @@ async fn stops_waiting_for_a_wind_down_that_never_ends_and_fails_the_tools_left_
 async fn reports_full_file_diffs_for_a_completed_edit_and_patch() {
     let dir = opencode_util::temp::tempdir().unwrap();
     let root = dir.path().to_str().unwrap().to_owned();
-    let file = |name: &str| format!("{root}/{name}");
+    let file = |name: &str| resolve_from(&root, name);
     let edited = "one\r\nthree\r\n";
     let indented = "  const x = 1\n  const y = 3\n";
     let formatted = "keep\nnew\n// formatted\n";
