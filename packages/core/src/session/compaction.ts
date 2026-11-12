@@ -284,7 +284,10 @@ export const layer = Layer.effect(
       const model =
         (agent?.model &&
           (yield* models
-            .resolve({ ...context.session, model: agent.model }, catalog.available)
+            .resolve({ ...context.session, model: agent.model }, catalog.available, {
+              kind: "compaction",
+              agent: agent.id,
+            })
             .pipe(Effect.orElseSucceed(() => undefined)))) ??
         context.model
       const ceiling = calculateCeiling(model.limit, buffer)

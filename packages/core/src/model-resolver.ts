@@ -147,6 +147,8 @@ export type MediaError =
 
 export interface Interface {
   readonly resolve: (requested?: Ref) => Effect.Effect<Resolved | undefined, Error>
+  /** The model used when nothing is selected: the configured default, or the first available text model. */
+  readonly fallback: () => Effect.Effect<Info | undefined>
   readonly resolveModel: (model: Info, variant?: VariantID) => Effect.Effect<Resolved, Error>
   /** An enabled image model by ref, or undefined when no image model has that ref. */
   readonly resolveImage: (ref: Ref) => Effect.Effect<ImageModel | undefined, MediaError>
@@ -515,27 +517,33 @@ export const layer = Layer.effect(
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
       if (!info) return undefined
-      const { credential, runtimeInfo } = yield* prepare(info, ref.variant)
-      return yield* fromCatalogMedia(runtimeInfo, is, credential, dependencies)
+      const { provider, credential, runtimeInfo } = yield* prepare(info, ref.variant)
+      // Same no-key rule as chat in `load`. A built image or decision model can't have its auth swapped like chat,
+      // so the package gets `apiKey: false` up front and builds the model without auth.
+      const keyless =
+        provider?.activation === "enabled" &&
+        credential === undefined &&
+        !hasConfiguredAuth(runtimeInfo) &&
+        usesAPIKeyAuth(runtimeInfo.package)
+      return yield* fromCatalogMedia(
+        keyless ? { ...runtimeInfo, settings: { ...runtimeInfo.settings, apiKey: false } } : runtimeInfo,
+        is,
+        credential,
+        dependencies,
+      )
+    })
+    const fallback = Effect.fn("ModelResolver.fallback")(function* () {
+      const model = yield* models.default()
+      if (model && hasPackage(model)) return model
+      return (yield* models.available()).find((model) => hasPackage(model) && Model.supportsText(model))
     })
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
-        const selected = requested
-          ? yield* models.get(requested.providerID, requested.id)
-          : yield* models
-              .default()
-              .pipe(
-                Effect.flatMap((model) =>
-                  model && hasPackage(model)
-                    ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) =>
-                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
-                      ),
-                ),
-              )
+        const selected = requested ? yield* models.get(requested.providerID, requested.id) : yield* fallback()
         if (!selected) return undefined
         return yield* load(selected, requested?.variant)
       }),
+      fallback,
       resolveModel: load,
       resolveImage: Effect.fn("ModelResolver.resolveImage")(function* (ref) {
         return yield* loadMedia(ref, "image", isImageModel)
@@ -548,9 +556,12 @@ export const layer = Layer.effect(
 )
 
 function hasConfiguredAuth(model: RuntimeInfo) {
-  return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
-    (value) => typeof value === "string" && value !== "",
-  )
+  return [
+    model.settings?.apiKey,
+    model.settings?.gatewayApiKey,
+    model.settings?.authToken,
+    model.settings?.accessToken,
+  ].some((value) => typeof value === "string" && value !== "")
 }
 
 const API_KEY_AUTH_PACKAGES: ReadonlySet<string> = new Set([
@@ -577,6 +588,7 @@ const API_KEY_AUTH_PACKAGES: ReadonlySet<string> = new Set([
   "@opencode/ai/providers/deepseek",
   "@opencode/ai/providers/fireworks",
   "@opencode/ai/providers/openai-compatible",
+  "@opencode/ai/providers/openai-compatible/decisions",
   "@opencode/ai/providers/google",
   "@opencode/ai/providers/google/interactions",
   "@opencode/ai/providers/groq",

@@ -2474,16 +2474,17 @@
     [data-docs-variants~="switchers-4"],
     [data-docs-variants~="switchers-5"]
   )
-  [data-component="docs-article"]
+  :is([data-component="docs-article"], [data-slot="footer-controls"])
   select {
   appearance: none;
   min-height: 2.25rem;
-  padding: 0 2rem 0 0.75rem;
+  padding-block: 0;
+  padding-inline: 0.75rem 2rem;
   border: 0;
   border-radius: 0;
   background: transparent
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23808080' stroke-width='1.5'%3E%3Cpath d='M4 6l4 4l4-4'/%3E%3C/svg%3E")
-    no-repeat right 0.5rem center;
+    no-repeat var(--x-end, right) 0.5rem center;
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--text-weak);
@@ -2496,7 +2497,9 @@
   }
 }
 
-[data-page="docs"][data-docs-variants~="switchers-2"] [data-component="docs-article"] select {
+[data-page="docs"][data-docs-variants~="switchers-2"]
+  :is([data-component="docs-article"], [data-slot="footer-controls"])
+  select {
   min-width: 9.5rem;
   border: 1px solid var(--border);
   transition: border-color 150ms ease;
@@ -2756,7 +2759,7 @@
      (the site serves no 500 weight); 12px uppercase keeps them reading as labels. */
   --ref-head: var(--text-strong);
   --code-number: light-dark(#737373, #858585);
-  --code-mark: light-dark(#3b5cf6, #4f8bff);
+  --code-mark: light-dark(#3b5cf6, #6b8fff);
   --code-mark-tint: light-dark(#eff2fe, #1e2637);
   --code-del: light-dark(#d61f1f, #f04c4c);
   --code-add: light-dark(#1a9347, #2dd269);

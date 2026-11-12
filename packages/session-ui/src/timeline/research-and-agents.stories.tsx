@@ -1,4 +1,4 @@
-import type { JsonValue, SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
@@ -134,11 +134,9 @@ function CodebaseExplorationStory() {
       state: completed
         ? { status: "completed", input, content: [{ type: "text", text: "Complete" }], metadata: {} }
         : { status: "running", input, metadata: {} },
-      time: {
-        created: STORY_TIME,
-        ran: STORY_TIME + 100,
-        ...(completed ? { completed: STORY_TIME + 200 } : {}),
-      },
+      time: completed
+        ? { created: STORY_TIME, ran: STORY_TIME + 100, completed: STORY_TIME + 200 }
+        : { created: STORY_TIME, ran: STORY_TIME + 100 },
     } satisfies SessionMessageAssistantTool
   }
 
@@ -154,7 +152,9 @@ function CodebaseExplorationStory() {
             agent: "build",
             model: STORY_MODEL,
             content: [tool("read", state.read), tool("glob", state.glob)],
-            time: { created: STORY_TIME, ...(state.read && state.glob ? { completed: STORY_TIME + 300 } : {}) },
+            time: state.read && state.glob
+              ? { created: STORY_TIME, completed: STORY_TIME + 300 }
+              : { created: STORY_TIME },
           } satisfies SessionMessageAssistant,
         ],
         status: { type: state.read && state.glob ? "idle" : "busy" },
@@ -327,7 +327,7 @@ const RecoverFromToolFailures = {
   render: () => {
     const names = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
 
-    const input = (name: string): Record<string, JsonValue> => {
+    const input = (name: string) => {
       if (name === "shell") return { command: "exit 1" }
 
       if (name === "edit" || name === "write") return { path: "src/error.ts", content: "" }
@@ -423,7 +423,7 @@ const StartingBackgroundWork = {
             "tool_notice_background",
             "subagent",
             "running",
-            { description: "Inspect code", background: true },
+            { description: "Inspect code" },
             {
               metadata: { status: "running" },
             },
@@ -452,5 +452,8 @@ const researchScenarios = {
 export const AgentResearch = {
   args: { scenario: "workflow" },
   argTypes: { scenario: { control: "select", options: Object.keys(researchScenarios) } },
-  render: (args: { scenario: string }) => researchScenarios[args.scenario as keyof typeof researchScenarios].render(),
+  render: (args: { scenario: string }) =>
+    Object.entries(researchScenarios)
+      .find(([name]) => name === args.scenario)?.[1]
+      .render() ?? researchScenarios.workflow.render(),
 }

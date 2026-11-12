@@ -500,7 +500,6 @@ export const dict = {
   "session.new.project.search": "Søg efter projekter",
   "session.new.project.add": "Tilføj projekt",
   "session.new.workspace.runIn": "Kør session i",
-  "session.new.workspace.triggerLocal": "Lokal",
   "session.new.workspace.local": "Lokalt repository",
   "session.new.git.none": "Ingen Git",
 

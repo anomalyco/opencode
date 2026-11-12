@@ -115,13 +115,16 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
       if (path === "/api/v2/config") {
         config.push({ authorization: request.headers.get("authorization"), orgID: request.headers.get("x-org-id") })
         if (orgID === "org-missing") return new Response("Forbidden", { status: 403 })
-        return Response.json({ providers: {} })
+        return Response.json({ providers: {} }, withLists)
       }
       return new Response("Not found", { status: 404 })
     },
   })
   return { server, config, requests, agents }
 }
+
+// Console's config answer while the workspace has instructions and skills.
+const withLists = { headers: { "x-opencode-instructions-skills": "1" } }
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
@@ -327,7 +330,7 @@ describe("OpencodePlugin", () => {
                   methodID: Integration.MethodID.make("device"),
                   access: "expired-access",
                   refresh: "old-refresh",
-                  expires: 0,
+                  expires: 1,
                   metadata: { server: server.url.origin, orgID: "org-a", orgName: "Alpha", custom: "preserved" },
                 }),
               })
@@ -366,7 +369,7 @@ describe("OpencodePlugin", () => {
               ])
               // The refresh and every Console fetch say which OpenCode is asking.
               expect(agents).toEqual(requests.map(() => "opencode/beta/1.2.3/test"))
-            }).pipe(Effect.provideService(App.Metadata, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
+            }).pipe(Effect.provideService(App.Service, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
           ({ server }) => Effect.promise(() => server.stop(true)),
         ),
     )
@@ -1094,7 +1097,7 @@ describe("OpencodePlugin", () => {
               methodID: Integration.MethodID.make("device"),
               access: "expired",
               refresh: "revoked",
-              expires: 0,
+              expires: 1,
               metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
             }),
           })
@@ -1394,8 +1397,6 @@ describe("OpencodePlugin", () => {
           )
           expect(requests).toEqual([
             "https://opencode.ai/console/api/v2/config",
-            "https://opencode.ai/console/api/v2/instructions",
-            "https://opencode.ai/console/api/v2/skills",
             "https://opencode.ai/console/api/websearch",
           ])
         }),
@@ -1580,7 +1581,7 @@ describe("OpencodePlugin", () => {
               authorization: request.headers.get("authorization"),
               orgID: request.headers.get("x-org-id"),
             })
-            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} })
+            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} }, withLists)
             if (url.pathname === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
             if (url.pathname === "/api/v2/skills/deploy") {
               // Skill archives come from presigned storage on its own host, where the signature covers the encoding.
@@ -1634,7 +1635,7 @@ describe("OpencodePlugin", () => {
       const server = {
         fetch: (request: Request) => {
           const path = new URL(request.url).pathname
-          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if (path === "/api/v2/config") return Response.json({ providers: {} }, withLists)
           if ((path === "/api/v2/instructions" || path === "/api/v2/skills") && state.lists !== 200)
             return new Response(null, { status: state.lists })
           if (path === "/api/v2/instructions")
@@ -1682,6 +1683,99 @@ describe("OpencodePlugin", () => {
     }),
   )
 
+  it.effect("applies Console policies while its instructions and skills fail, and keeps a list over a malformed one", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const config = yield* Config.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+      const state: { lists: "down" | "ok" | "malformed" } = { lists: "down" }
+      const server = {
+        fetch: (request: Request) => {
+          const path = new URL(request.url).pathname
+          if (path === "/api/v2/config")
+            return Response.json({ providers: {}, policies: [sudo] }, withLists)
+          if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
+          if (state.lists === "down") return new Response("Unavailable", { status: 503 })
+          if (path === "/api/v2/skills") return Response.json({ skills: [] })
+          if (state.lists === "malformed") return Response.json({ instructions: [{ id: "style" }] })
+          return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+        },
+      }
+      const instructions = discovery
+        .list()
+        .pipe(
+          Effect.map((files) =>
+            Array.isArray(files)
+              ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+              : [],
+          ),
+        )
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+
+      // Once the lists' retries run out, startup still applies the config's policies, just without the lists.
+      const started = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("10 seconds")
+      yield* Fiber.join(started)
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+      expect(yield* instructions).toEqual([])
+
+      state.lists = "ok"
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* instructions).toEqual(["Use tabs."])
+
+      state.lists = "malformed"
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+      expect(yield* instructions).toEqual(["Use tabs."])
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+    }),
+  )
+
+  it.effect("requests Console instructions and skills together", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const discovery = yield* InstructionDiscovery.Service
+      const requests: string[] = []
+      // Instructions answer only once skills were requested, so fetching the lists one after the other never finishes.
+      const skillsRequested = Promise.withResolvers<void>()
+      const server = {
+        fetch: async (request: Request) => {
+          const path = new URL(request.url).pathname
+          requests.push(path)
+          if (path === "/api/v2/config") return Response.json({ providers: {} }, withLists)
+          if (path === "/api/v2/instructions") {
+            await skillsRequested.promise
+            return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
+          }
+          if (path === "/api/v2/skills") {
+            skillsRequested.resolve()
+            return Response.json({ skills: [] })
+          }
+          return new Response(null, { status: 404 })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      const activation = yield* addPlugin().pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+      yield* drain
+      expect(requests.toSorted()).toEqual(["/api/v2/config", "/api/v2/instructions", "/api/v2/skills"])
+      yield* Fiber.join(activation)
+      const files = yield* discovery.list()
+      expect(
+        Array.isArray(files)
+          ? files.filter((file) => file.path.startsWith("OpenCode Console")).map((file) => file.content)
+          : [],
+      ).toEqual(["Use tabs."])
+    }),
+  )
+
   it.live("keeps credentials on a same-origin skill redirect", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -1691,7 +1785,7 @@ describe("OpencodePlugin", () => {
           fetch: (request) => {
             const url = new URL(request.url)
             downloads.push({ path: url.pathname, authorization: request.headers.get("authorization") })
-            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} })
+            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} }, withLists)
             if (url.pathname === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
             if (url.pathname === "/api/v2/skills/deploy")
               return Response.redirect(`${url.origin}/assets/deploy.json`, 302)

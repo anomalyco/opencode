@@ -11,8 +11,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    padding: 1rem;
-    margin-inline: -1rem;
+    padding: var(--doc-row-pad);
+    margin-inline: calc(-1 * var(--doc-row-pad));
     text-decoration: none;
     color: var(--text);
     outline: 2px solid transparent;
@@ -151,17 +151,17 @@
   /* "grey": the menus' hover in neutral grey whatever Menu color is: a light tint and a mid-grey
      bar on the left edge. No arrow. */
   &[data-hover="grey"] a:focus-visible {
-    background: var(--bg-weak);
+    background: var(--doc-row-fill);
   }
 
   @media (hover: hover) and (pointer: fine) {
     &[data-hover="grey"] a:hover {
-      background: var(--bg-weak);
+      background: var(--doc-row-fill);
     }
   }
 
   &[data-hover="grey"] a:active {
-    background: var(--bg-weak);
+    background: var(--doc-row-fill);
   }
 
   &[data-hover="grey"] a::before {
@@ -169,7 +169,7 @@
     bottom: 0;
     inset-inline-start: 0;
     width: 2px;
-    background: light-dark(hsl(0, 0%, 50%), hsl(0, 0%, 46%));
+    background: var(--doc-row-bar);
   }
 
   &[data-hover="grey"] a:focus-visible::before {

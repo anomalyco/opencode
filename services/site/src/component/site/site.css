@@ -53,9 +53,18 @@ html:has([data-site][data-theme="dark"]) {
   /* Light follows Settings › Light background (pure white unless set). */
   --bg: light-dark(#fff, #0c0c0c);
   --bg-weak: light-dark(hsl(0, 0%, 96%), hsl(0, 0%, 10%));
+  /* A pressed full-width row on phones (the docs' sticky rows, the Contents list, the DOCS menu): a
+     subtle surface tint, lighter than the chevrons' and menus' press fills. */
+  --row-press: var(--bg-weak);
   /* The product cards' media backdrop (products.css), which their covers and reels are graded to in
      both themes. */
   --card-media-bg: #161616;
+  /* The document rows' model (doc-list.css, and the product lists in product-list.css): a row's text
+     on the content edge with this padding outside it, so the hover fill and the bar at its start
+     edge bleed past the edge. */
+  --doc-row-pad: 1rem;
+  --doc-row-fill: var(--bg-weak);
+  --doc-row-bar: light-dark(hsl(0, 0%, 50%), hsl(0, 0%, 46%));
   /* The home Console band (routes/index.css), dark in both themes: the panel grey in light, and in
      dark #121212, a muted step above the #0c0c0c page so it reads as a band, not a slab. A registered
      colour, so light-dark() resolves in the page's scheme here and not in the band's own forced-dark
@@ -98,6 +107,17 @@ html:has([data-site][data-theme="dark"]) {
     0 1px 1px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.3)),
     0 2px 4px -1px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.35)),
     0 6px 12px -4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+  /* Cards fanned out with no panel (the section menus' fan style, the press gallery's fan): like the
+     icons in a macOS Dock stack, each casts only a small, soft shadow close to itself, and a hairline
+     ring carries the edge, which matters most in the dark theme. Lifted while one drops. */
+  --fan-shadow:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1)),
+    0 1px 2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4)),
+    0 2px 5px -2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  --fan-shadow-lifted:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1)),
+    0 2px 4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4)),
+    0 4px 8px -4px light-dark(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.5));
   /* The brand greys: the logo ink at 20% / 70% on white (light) and 28% / 72% on #0b0b0b (dark). */
   --logo-inner: light-dark(#d2d2d2, #4b4b4b);
   --logo-open: light-dark(#626262, #aeaeae);
@@ -582,6 +602,17 @@ html:has([data-site][data-theme="dark"]) {
     flex-direction: column;
   }
 
+  /* The page stays mounted under the Markdown view (markdown-view.tsx, whose styles load with it), so
+     its state survives a round trip. It's hidden while the view shows, and on a reload in the view
+     until the view has loaded (site.tsx). */
+  [data-component="content"] > [data-slot="page"] {
+    display: contents;
+  }
+
+  &:is([data-markdown], [data-markdown-boot]) [data-component="content"] > [data-slot="page"] {
+    display: none;
+  }
+
   [data-component="site-button"] {
     display: inline-flex;
     align-items: center;
@@ -647,10 +678,15 @@ html:has([data-site][data-theme="dark"]) {
 
   /* A leading icon carries visual weight, so trim the left padding to keep the button optically
      centered. The gap to the label matches the space left of the icon (the artwork sits about
-     1.3px inside its box), so both read as about 13px. */
+     1.3px inside its box), so both read as about 13px. The menus such a button opens set their row
+     icons with the same inset and gap (--icon-inset, --icon-gap; the store rows below), so each row's
+     icon and label start line up with the button's. */
+  --icon-inset: 0.75rem;
+  --icon-gap: 0.75rem;
+
   [data-component="site-button"]:has(> [data-slot="platform-icon"]:first-child) {
-    padding-inline-start: 0.75rem;
-    gap: 0.75rem;
+    padding-inline-start: var(--icon-inset);
+    gap: var(--icon-gap);
   }
 
   /* A trailing chevron sits midway between the label and the button's right edge: the gap and the
@@ -809,6 +845,11 @@ html:has([data-site][data-theme="dark"]) {
       transform-origin: bottom var(--x-start, left);
       animation: menu-in 160ms var(--ease-out);
 
+      /* Closed: in the page (site-menu.tsx), but not shown. */
+      &[hidden] {
+        display: none;
+      }
+
       [data-slot="install"],
       [data-slot="store"],
       [data-slot="item"] {
@@ -851,9 +892,12 @@ html:has([data-site][data-theme="dark"]) {
       }
     }
 
+    /* Rows with a platform icon: the menu starts at the button's edge, so the button's icon inset
+       and gap (above) put each row's icon and label exactly under the button's. */
     [data-slot="menu"] [data-slot="store"] {
       grid-template-columns: 14px auto auto;
-      column-gap: 0.625rem;
+      column-gap: var(--icon-gap);
+      padding-inline-start: var(--icon-inset);
       color: var(--text-strong);
 
       [data-slot="platform-icon"] {
@@ -1052,10 +1096,6 @@ html:has([data-site][data-theme="dark"]) {
       font-size: var(--fs-large);
 
       /* Draw the icon with two bars so the vertical one can collapse into a minus. */
-      svg {
-        display: none;
-      }
-
       &::before,
       &::after {
         content: "";
@@ -1355,7 +1395,7 @@ html:has([data-site][data-theme="dark"]) {
   }
 
   /* The label (Design mode can swap in longer wording) stays on one line beside the bars. */
-  [data-component="status"] [data-design-copy] {
+  [data-component="status"] [data-slot="status-label"] {
     white-space: nowrap;
   }
 
@@ -1585,22 +1625,6 @@ html:has([data-site][data-theme="dark"]) {
     );
     --menu-open: var(--menu-hover);
     --menu-hint: var(--link);
-  }
-
-  /* In blue, a hovered current row (or one whose submenu is open) is treated like any other: its
-     active bar turns the hover bar's blue. */
-  &[data-menu-color="blue"][data-menu-active="bar"]
-    :is(
-      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
-      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
-    ):is(
-      :hover:not(:is([data-slot="menu"], [data-slot="dropdown"]):has(:focus-visible:not(:hover)) *),
-      [data-open]:not(
-          [data-slot="menu"]:has(:is([role="menuitem"]:hover, :focus-visible):not([data-slot="parent"] *)) *
-        )
-        > *
-    )::before {
-    background: var(--menu-hint);
   }
 
   /* Every menu's rows span it edge to edge, with a square tint on hover. */
@@ -3313,11 +3337,95 @@ html:has([data-site][data-theme="dark"]) {
   }
 }
 
+/* The two blue bars, the announcement banner above and the footer's letters bar, share
+   one look: a highlight in solid white ("NEW", "Like letters?") and a body at 92% white (the message
+   or the font line, with its chevron, and the banner's ×), 4.5:1 on the blue. Hover and keyboard
+   focus bring the body to full white in 150ms and nudge the chevron 2px right; focus adds a white
+   ring inset in the bar; a press dims the blue a little. Here in the shell, not in site-banner.css,
+   which production leaves out while the banner is off. */
+:is([data-component="letters-bar"], [data-component="announcement-banner"]) {
+  --bar-highlight: #fff;
+  --bar-body: rgb(255 255 255 / 0.92);
+
+  a {
+    color: var(--bar-highlight);
+  }
+
+  [data-slot="body"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    color: var(--bar-body);
+    transition: color 150ms ease;
+  }
+
+  /* The home announcement's light chevron (icons.tsx), drawn for 13px text, scaled to the 15px
+     text (10/13 em) with its stroke kept at 1px. */
+  [data-slot="chevron-right"] {
+    flex-shrink: 0;
+    width: calc(1em * 10 / 13);
+    height: calc(1em * 10 / 13);
+    transition: translate 150ms var(--ease-out, ease-out);
+
+    path {
+      vector-effect: non-scaling-stroke;
+    }
+  }
+
+  [data-slot="dismiss"] {
+    color: var(--bar-body);
+    transition: color 150ms ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    a:hover [data-slot="body"],
+    [data-slot="dismiss"]:hover {
+      color: var(--bar-highlight);
+    }
+
+    a:hover [data-slot="chevron-right"] {
+      translate: calc(2px * var(--x-dir, 1)) 0;
+    }
+  }
+
+  a:focus-visible [data-slot="body"],
+  [data-slot="dismiss"]:focus-visible {
+    color: var(--bar-highlight);
+  }
+
+  a:focus-visible [data-slot="chevron-right"] {
+    translate: calc(2px * var(--x-dir, 1)) 0;
+  }
+
+  a:focus-visible {
+    outline: 2px solid var(--bar-highlight);
+    outline-offset: -6px;
+  }
+
+  [data-slot="dismiss"]:focus-visible {
+    outline: 2px solid var(--bar-highlight);
+    outline-offset: -8px;
+  }
+
+  a:active {
+    background-color: color-mix(in srgb, var(--bar-blue) 90%, #000);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="body"],
+    [data-slot="chevron-right"],
+    [data-slot="dismiss"] {
+      transition: none;
+    }
+  }
+}
+
 /* "Like letters?": a full-width blue bar at the very end of the page (after the footer, in the flow),
    which grows open and pushes the page up while the wordmark's letters are out of order. */
 [data-site] {
   --letters-bar-height: 3.25rem;
-  /* The blue bars' shared look (site-banner.css): the link blue, the same as the blue buttons and
+  /* The blue bars' shared look (above): the link blue, the same as the blue buttons and
      the announcement banner (dark mode keeps the deeper light-mode blue, so white keeps 4.5:1). */
   --bar-blue: light-dark(var(--link), #3b5cf6);
 }
@@ -3358,36 +3466,53 @@ html:has([data-site][data-theme="dark"]) {
     overflow: hidden;
   }
 
-  /* The link slides up into the bar as it opens, and back down as it closes. */
+  /* The bar's room in the page, which the opening grows to and the page moves up with. */
   [data-slot="slide"] {
-    position: relative;
+    height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The label slides up into the bar as it opens, and back down as it closes. */
+  a > span {
     opacity: 0;
-    translate: 0 100%;
+    translate: 0 calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
     transition:
       translate 300ms var(--ease-out),
       opacity 200ms ease;
   }
 
   a {
+    position: relative;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
     height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    /* The blue bars' shared look (--bar-blue above, site-banner.css): a highlight and a 92% body. */
+    /* The blue bars' shared look (--bar-blue and the shared rules above): a highlight and a 92% body. */
     background: var(--bar-blue);
     font-family: var(--font-sans);
     font-size: var(--fs-ui);
     font-weight: 500;
     text-decoration: none;
-    transition: background-color 150ms ease;
+    /* Hidden once the bar has closed. iOS Safari keeps tinting its bottom toolbar from the blue
+       link it last pinned to the bottom edge for as long as the link is drawn, even unpinned and
+       clipped to nothing, so the toolbar would stay blue after the bar has gone. */
+    visibility: hidden;
+    transition:
+      background-color 150ms ease,
+      visibility 0s 300ms;
   }
 
   &[data-shown] {
     grid-template-rows: 1fr;
 
-    [data-slot="slide"] {
+    a {
+      visibility: visible;
+      transition: background-color 150ms ease;
+    }
+
+    a > span {
       opacity: 1;
       translate: 0;
     }
@@ -3399,14 +3524,38 @@ html:has([data-site][data-theme="dark"]) {
       transition: none;
     }
 
+    a {
+      transition: background-color 150ms ease;
+    }
+
     /* Important, past the page-wide reduced-motion rule that zeroes every transition on small
        screens: a fade is the reduced form of this motion, not none. */
-    [data-slot="slide"] {
+    a > span {
       translate: 0;
       transition: opacity 200ms ease;
       transition-duration: 200ms !important;
     }
   }
+}
+
+/* Development only (site.tsx, ?letters-bar=instant): the bar appears at once, pushing the page up,
+   with the bottom's blue. */
+[data-site][data-letters-motion="instant"] [data-component="letters-bar"] {
+  &,
+  a,
+  a > span {
+    transition: none;
+  }
+}
+
+/* While the bar fills the bottom of the screen (site.tsx), the whole bar is pinned to the bottom
+   edge, so it is blue at full height in the same frame as iOS Safari's bottom toolbar area, while
+   its room in the page grows and the page moves up behind it. Once open it is exactly where the
+   page puts it. */
+[data-site][data-letters-end] [data-component="letters-bar"] a {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 1;
 }
 
 /* Settings › Footer › columns: the sidebar column stays empty. Under the link columns, a bar across
@@ -4156,4 +4305,54 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
    untouched. Approved by David (5 Nov). */
 :where([data-site]) :is(h2, h3) {
   text-wrap: pretty;
+}
+
+/* The logo, and the docs lockup beside it, stay fixed in the top-left corner on every page. On most
+   pages the whole sidebar is fixed; in the docs layout (the docs, Press and Brand) it sticks while
+   you read and leaves with the article at the page's end, but the logo and lockup stay. Out of the
+   flow, the sidebar's top padding keeps their place for the nav (the content line, --content-top).
+   While the sidebar is on its way out (Site sets data-under), a strip of the page colour behind the
+   logo row hides what passes under it, ending in the docs nav's 2.5rem fade (docs.css). */
+@media (min-width: 60.0625rem) {
+  [data-site][data-layout="docs"] [data-component="sidebar"] {
+    padding-top: var(--content-top);
+
+    > [data-slot="logo"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + var(--top));
+      inset-inline-start: calc(var(--page-offset) + var(--edge) - var(--bracket-bearing));
+      z-index: 3;
+
+      &::after {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        top: calc(-1 * var(--top));
+        inset-inline-start: calc(var(--bracket-bearing) - var(--edge));
+        width: var(--sidebar-width);
+        height: var(--content-top);
+        background: var(--bg);
+        mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    &[data-under] > [data-slot="logo"]::after {
+      opacity: 1;
+    }
+
+    /* A link reached with Tab scrolls into view below the logo row, never under its strip. */
+    a {
+      scroll-margin-top: var(--content-top);
+    }
+
+    > [data-component="docs-lockup"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + var(--top));
+      inset-inline-start: calc(var(--page-offset) + var(--edge) + var(--lockup-logo) + 12px - 6px);
+      /* Over the logo's strip, so the lockup and its menus show above it. */
+      z-index: 4;
+    }
+  }
 }

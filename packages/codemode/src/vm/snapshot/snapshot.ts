@@ -1,9 +1,20 @@
 import type { Interpreter } from "../runtime/interpreter.js"
 import type { ToolCall } from "../../tool-runtime.js"
-import { fromBytes, SnapshotError, toBytes } from "../../suspend-error.js"
-import type { Encoded, Record } from "./codec.js"
+import { type Encoded, type Record, SnapshotError } from "./codec.js"
 
-export { fromBytes, SnapshotError, toBytes }
+export { SnapshotError }
+
+/** A snapshot as bytes: UTF-8 JSON. */
+export const toBytes = (snapshot: Snapshot): Uint8Array => new TextEncoder().encode(JSON.stringify(snapshot))
+
+/** Reads bytes `toBytes` wrote; `restore` checks what they hold. */
+export const fromBytes = (bytes: Uint8Array): unknown => {
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
+  } catch (error) {
+    throw new SnapshotError(`Invalid snapshot: the bytes are not UTF-8 JSON (${String(error)}).`)
+  }
+}
 
 /** The snapshot format this build writes and reads: the bytecode VM's (see `src/vm/snapshot.ts`). */
 export const FORMAT = 2
@@ -23,8 +34,12 @@ export type Snapshot = {
 export type Header = {
   /** The build that wrote it: the package version, and a hash of the opcodes, the prelude's bytecode, codecs, and built-ins. */
   readonly build: string
-  /** A hash of the host's globals (extensions, a test harness), which the restoring runtime must have too. */
+  /**
+   * A hash of the host's globals (extensions, a test harness), and of each extension's name and whether it has
+   * `snapshot` hooks, which the restoring runtime must have too.
+   */
   readonly hosts: string
+  readonly runId: string
   /** The program texts, re-parsed and recompiled on restore, and checked against their hashes and bytecode hashes. */
   readonly sources: ReadonlyArray<{
     readonly id: string
@@ -45,7 +60,15 @@ export type Header = {
 
 export type SnapshotHeader = Header
 
-export const hostsId = (ctx: Interpreter<unknown>): string => hash(ctx.intrinsics.hosts().join("\n"))
+export const hostsId = (ctx: Interpreter<unknown>): string =>
+  hash(
+    [
+      ...ctx.intrinsics.hosts(),
+      ...(ctx.hosts?.extensions ?? []).map(
+        (extension) => `${extension.name} ${extension.hooked ? "hooks" : "no hooks"}`,
+      ),
+    ].join("\n"),
+  )
 
 // --- Validation ---
 
@@ -82,6 +105,7 @@ export const validate = (saved: unknown): Snapshot => {
   const checked: Header = {
     build: string(header.build, "the build"),
     hosts: string(header.hosts, "the host globals"),
+    runId: string(header.runId, "the run id"),
     sources: array(header.sources, "the sources").map((item) => {
       const source = object(item, "a source")
       return {

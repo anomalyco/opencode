@@ -70,7 +70,7 @@ import {
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
-import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
+import { markSessionLinks, sessionReferenceClipboardText, setupSessionLinks } from "./markdown-session-links"
 import { markdownClipboardHtml } from "./markdown-clipboard"
 import { createCopyFeedback } from "./copy"
 
@@ -663,7 +663,10 @@ function copySelection(event: ClipboardEvent & { currentTarget: HTMLDivElement }
 
   if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
   event.preventDefault()
-  event.clipboardData.setData("text/plain", selection.toString())
+  event.clipboardData.setData(
+    "text/plain",
+    sessionReferenceClipboardText(event.currentTarget, ranges) ?? selection.toString(),
+  )
   event.clipboardData.setData(
     "text/html",
     `<meta charset="utf-8">${ranges.map((range) => markdownClipboardHtml(event.currentTarget, range)).join("")}`,
@@ -1100,7 +1103,12 @@ export function Markdown(
 
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
 
-    if (!sessionLinkCleanup) sessionLinkCleanup = setupSessionLinks(container, () => markdown?.openSession)
+    if (!sessionLinkCleanup)
+      sessionLinkCleanup = setupSessionLinks(
+        container,
+        () => markdown?.openSession,
+        () => markdown?.sessionMenu,
+      )
 
     if (!fragmentLinkCleanup) fragmentLinkCleanup = setupFragmentLinks(container)
 

@@ -93,7 +93,7 @@ test.each(modes.flatMap((mode) => [100, 48].map((width) => ({ mode, width }))))(
       height: 30,
       state: state.path,
       args: { sessionID: session.id },
-      config: { animations: false, tabs: { enabled: true, scope: "global" } },
+      config: { animations: false, session: { verbosity: "medium" }, tabs: { enabled: true, scope: "global" } },
       fetch: async (url) => {
         if (url.pathname === "/api/session") return json({ data: [session, other], cursor: {} })
         if (url.pathname === `/api/session/${session.id}`) return json({ data: session })

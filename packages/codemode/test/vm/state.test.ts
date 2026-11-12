@@ -29,7 +29,7 @@ const runtimeTools = {
   }),
 }
 
-const runtime = CodeMode.make({ tools: runtimeTools, engine: "vm" })
+const runtime = CodeMode.make({ tools: runtimeTools })
 
 const run = (code: string) => Effect.runPromise(runtime.execute(code))
 

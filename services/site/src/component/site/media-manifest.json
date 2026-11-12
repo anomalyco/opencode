@@ -4,30 +4,6 @@
       [1920, "av1", "f4aac9d0", 8],
       [1920, "hevc", "9a8fdd1e", 120]
     ],
-    "/product-videos/card-hover/angled-continue/desktop.mp4": [
-      [1080, "av1", "3d944be5", 8, "hi"],
-      [720, "av1", "8c2f11ae", 4],
-      [1080, "hevc", "06dafc49", 120, "hi"],
-      [720, "hevc", "dd4ef775", 93]
-    ],
-    "/product-videos/card-hover/angled-continue/mobile.mp4": [
-      [1080, "av1", "1d02d18f", 8, "hi"],
-      [720, "av1", "fc122802", 4],
-      [1080, "hevc", "029f5c19", 120, "hi"],
-      [720, "hevc", "c94ebb22", 93]
-    ],
-    "/product-videos/card-hover/angled-continue/sdk.mp4": [
-      [1080, "av1", "2eef5975", 8, "hi"],
-      [720, "av1", "35b2a488", 4],
-      [1080, "hevc", "d7a76c34", 120, "hi"],
-      [720, "hevc", "270b3d5f", 93]
-    ],
-    "/product-videos/card-hover/angled-continue/terminal.mp4": [
-      [1080, "av1", "de1a465e", 8, "hi"],
-      [720, "av1", "32caf68d", 4],
-      [1080, "hevc", "1fb02df6", 120, "hi"],
-      [720, "hevc", "383908d2", 93]
-    ],
     "/product-videos/card-hover/angled/desktop.mp4": [
       [1080, "av1", "000848bb", 8, "hi"],
       [720, "av1", "7a8ced27", 4],
@@ -52,54 +28,6 @@
       [1080, "hevc", "5802fcd0", 120, "hi"],
       [720, "hevc", "33b9daa2", 93]
     ],
-    "/product-videos/card-hover/cinematic-continue/desktop.mp4": [
-      [1080, "av1", "79e8094e", 8, "hi"],
-      [720, "av1", "50aaddc3", 4],
-      [1080, "hevc", "efc2e19a", 120, "hi"],
-      [720, "hevc", "7b98ff3e", 93]
-    ],
-    "/product-videos/card-hover/cinematic-continue/mobile.mp4": [
-      [1080, "av1", "735cceb4", 8, "hi"],
-      [720, "av1", "97fa967a", 4],
-      [1080, "hevc", "d0d339af", 120, "hi"],
-      [720, "hevc", "ed5ead76", 93]
-    ],
-    "/product-videos/card-hover/cinematic-continue/sdk.mp4": [
-      [1080, "av1", "5b45cb59", 8, "hi"],
-      [720, "av1", "e2cc8efd", 4],
-      [1080, "hevc", "fb1bc058", 120, "hi"],
-      [720, "hevc", "e0752306", 93]
-    ],
-    "/product-videos/card-hover/cinematic-continue/terminal.mp4": [
-      [1080, "av1", "c6c59bed", 8, "hi"],
-      [720, "av1", "2f9535de", 4],
-      [1080, "hevc", "6995f361", 120, "hi"],
-      [720, "hevc", "80276e87", 93]
-    ],
-    "/product-videos/card-hover/cinematic/desktop.mp4": [
-      [1080, "av1", "829c3da8", 8, "hi"],
-      [720, "av1", "598a8997", 4],
-      [1080, "hevc", "176438ec", 120, "hi"],
-      [720, "hevc", "70baa9dc", 93]
-    ],
-    "/product-videos/card-hover/cinematic/mobile.mp4": [
-      [1080, "av1", "0c67eb98", 8, "hi"],
-      [720, "av1", "b5fa7ce2", 4],
-      [1080, "hevc", "5abf1f1e", 120, "hi"],
-      [720, "hevc", "d9b47452", 93]
-    ],
-    "/product-videos/card-hover/cinematic/sdk.mp4": [
-      [1080, "av1", "0de9145c", 8, "hi"],
-      [720, "av1", "847247e6", 4],
-      [1080, "hevc", "1c34707c", 120, "hi"],
-      [720, "hevc", "0a03196c", 93]
-    ],
-    "/product-videos/card-hover/cinematic/terminal.mp4": [
-      [1080, "av1", "9776cf70", 8, "hi"],
-      [720, "av1", "76a5c8b0", 4],
-      [1080, "hevc", "fa24ac2a", 120, "hi"],
-      [720, "hevc", "24c9487e", 93]
-    ],
     "/product-videos/card-loops/desktop.ja.mp4": [
       [1064, "av1", "8d53f4c4", 8, "hi"],
       [720, "av1", "03051f4d", 4],
@@ -117,11 +45,9 @@
       [1064, "hevc", "de5e01b6", 120, "hi"],
       [720, "hevc", "2adfbc82", 93]
     ],
-    "/product-videos/card-loops/mobile.mp4": [
-      [1064, "av1", "969038f3", 8, "hi"],
-      [720, "av1", "0ad54196", 4],
-      [1064, "hevc", "b522b660", 120, "hi"],
-      [720, "hevc", "13e6540a", 93]
+    "/product-videos/card-loops/mobile-orb-75.mp4": [
+      [720, "av1", "a8d0f5bc", 4],
+      [720, "hevc", "a82f1012", 93]
     ],
     "/product-videos/card-loops/sdk.mp4": [
       [1064, "av1", "57dfbb5d", 8, "hi"],
@@ -134,30 +60,6 @@
       [720, "av1", "adf275c5", 4],
       [1064, "hevc", "cb91d991", 120, "hi"],
       [720, "hevc", "e8322dc4", 93]
-    ],
-    "/product-videos/features/desktop-1.mp4": [
-      [1200, "av1", "ff4a4260", 5, "hi"],
-      [800, "av1", "ef555136", 4],
-      [1200, "hevc", "9cdc5d28", 93, "hi"],
-      [800, "hevc", "d0e2cfef", 90]
-    ],
-    "/product-videos/features/desktop-2.mp4": [
-      [1200, "av1", "b92cab97", 5, "hi"],
-      [800, "av1", "34d0517c", 4],
-      [1200, "hevc", "d598ea33", 93, "hi"],
-      [800, "hevc", "96b8b510", 90]
-    ],
-    "/product-videos/features/desktop-3.mp4": [
-      [1200, "av1", "10f94e71", 5, "hi"],
-      [800, "av1", "47a5a8a9", 4],
-      [1200, "hevc", "aa172509", 93, "hi"],
-      [800, "hevc", "ba0c50ee", 90]
-    ],
-    "/product-videos/features/desktop-4.mp4": [
-      [1200, "av1", "6cfaeefa", 5, "hi"],
-      [800, "av1", "0316f39c", 4],
-      [1200, "hevc", "5719cc56", 93, "hi"],
-      [800, "hevc", "1fcebe5c", 90]
     ],
     "/product-videos/features/focused/desktop-1.mp4": [
       [1200, "av1", "a4464782", 5, "hi"],
@@ -231,124 +133,60 @@
       [1200, "hevc", "ddc881b8", 93, "hi"],
       [800, "hevc", "1bfc3877", 90]
     ],
-    "/product-videos/features/mobile-1.mp4": [
-      [1200, "av1", "dc15a609", 5, "hi"],
-      [800, "av1", "95c72454", 4],
-      [1200, "hevc", "8013fea3", 93, "hi"],
-      [800, "hevc", "be07c96c", 90]
-    ],
-    "/product-videos/features/mobile-2.mp4": [
-      [1200, "av1", "3a868173", 5, "hi"],
-      [800, "av1", "b333f8f4", 4],
-      [1200, "hevc", "d1cc1d25", 93, "hi"],
-      [800, "hevc", "27840268", 90]
-    ],
-    "/product-videos/features/mobile-3.mp4": [
-      [1200, "av1", "0924e4e2", 5, "hi"],
-      [800, "av1", "a5a118d2", 4],
-      [1200, "hevc", "596b8211", 93, "hi"],
-      [800, "hevc", "b819f9f5", 90]
-    ],
-    "/product-videos/features/mobile-4.mp4": [
-      [1200, "av1", "3eb473b1", 5, "hi"],
-      [800, "av1", "dea200a1", 4],
-      [1200, "hevc", "b066c55e", 93, "hi"],
-      [800, "hevc", "10402b50", 90]
-    ],
-    "/product-videos/features/sdk-1.mp4": [
-      [1200, "av1", "eead75dc", 5, "hi"],
-      [800, "av1", "8d1247ee", 4],
-      [1200, "hevc", "11e6218a", 93, "hi"],
-      [800, "hevc", "c62e3038", 90]
-    ],
-    "/product-videos/features/sdk-2.mp4": [
-      [1200, "av1", "178c6b50", 5, "hi"],
-      [800, "av1", "d52a969f", 4],
-      [1200, "hevc", "810895c4", 93, "hi"],
-      [800, "hevc", "2d8678dc", 90]
-    ],
-    "/product-videos/features/sdk-3.mp4": [
-      [1200, "av1", "fe427d04", 5, "hi"],
-      [800, "av1", "22015ab8", 4],
-      [1200, "hevc", "fa20dfe7", 93, "hi"],
-      [800, "hevc", "3f1c498c", 90]
-    ],
-    "/product-videos/features/terminal-1.mp4": [
-      [1200, "av1", "8e233258", 5, "hi"],
-      [800, "av1", "4fa5af14", 4],
-      [1200, "hevc", "17334020", 93, "hi"],
-      [800, "hevc", "d614132e", 90]
-    ],
-    "/product-videos/features/terminal-2.mp4": [
-      [1200, "av1", "65d38182", 5, "hi"],
-      [800, "av1", "f0cbdd1a", 4],
-      [1200, "hevc", "561a6203", 93, "hi"],
-      [800, "hevc", "a617561a", 90]
-    ],
-    "/product-videos/features/terminal-3.mp4": [
-      [1200, "av1", "9e447bd5", 5, "hi"],
-      [800, "av1", "0a311ac9", 4],
-      [1200, "hevc", "8615f916", 93, "hi"],
-      [800, "hevc", "f43c3475", 90]
-    ],
-    "/product-videos/features/terminal-4.mp4": [
-      [800, "av1", "114cdf52", 4],
-      [800, "hevc", "4123e308", 90]
-    ],
     "/product-videos/heroes/desktop-landscape-dark.mp4": [
-      [1280, "av1", "87488462", 5, "phone"],
+      [1344, "av1", "786fbf2f", 8, "lo"],
       [1920, "av1", "476dd57a", 8],
-      [1280, "hevc", "f9408e0f", 120, "phone"],
+      [1344, "hevc", "0ec0f786", 120, "lo"],
       [1920, "hevc", "4a955f68", 150]
     ],
     "/product-videos/heroes/desktop-landscape-light.mp4": [
-      [1280, "av1", "166905a1", 5, "phone"],
+      [1344, "av1", "15c689fc", 8, "lo"],
       [1920, "av1", "461fb508", 8],
-      [1280, "hevc", "27a6e47e", 120, "phone"],
+      [1344, "hevc", "abbd4c51", 120, "lo"],
       [1920, "hevc", "d0bae749", 150]
     ],
     "/product-videos/heroes/mini-landscape-dark.mp4": [
-      [1280, "av1", "47ac0990", 5, "phone"],
-      [1280, "hevc", "a0d62021", 120, "phone"]
+      [1344, "av1", "3b3f1848", 8, "lo"],
+      [1344, "hevc", "5fd0a3a4", 120, "lo"]
     ],
     "/product-videos/heroes/mini-landscape-light.mp4": [
-      [1280, "av1", "d1ec2aa0", 5, "phone"],
-      [1280, "hevc", "cf388476", 120, "phone"]
+      [1344, "av1", "53928eae", 8, "lo"],
+      [1344, "hevc", "8bd6c6da", 120, "lo"]
     ],
     "/product-videos/heroes/mobile-landscape-dark.mp4": [
-      [1280, "av1", "968f138e", 5, "phone"],
+      [1344, "av1", "bafd5cce", 8, "lo"],
       [1920, "av1", "2d4e37e8", 8],
-      [1280, "hevc", "dd010af3", 120, "phone"],
+      [1344, "hevc", "89e31924", 120, "lo"],
       [1920, "hevc", "731d098b", 150]
     ],
     "/product-videos/heroes/mobile-landscape-light.mp4": [
-      [1280, "av1", "968f138e", 5, "phone"],
+      [1344, "av1", "bafd5cce", 8, "lo"],
       [1920, "av1", "2d4e37e8", 8],
-      [1280, "hevc", "dd010af3", 120, "phone"],
+      [1344, "hevc", "89e31924", 120, "lo"],
       [1920, "hevc", "731d098b", 150]
     ],
     "/product-videos/heroes/sdk-landscape-dark.mp4": [
-      [1280, "av1", "034290df", 5, "phone"],
+      [1344, "av1", "a224db24", 8, "lo"],
       [1920, "av1", "29015746", 8],
-      [1280, "hevc", "05b60004", 120, "phone"],
+      [1344, "hevc", "a5d12f85", 120, "lo"],
       [1920, "hevc", "d644d9f8", 150]
     ],
     "/product-videos/heroes/sdk-landscape-light.mp4": [
-      [1280, "av1", "e9956023", 5, "phone"],
+      [1344, "av1", "c1c71f19", 8, "lo"],
       [1920, "av1", "8bbc435d", 8],
-      [1280, "hevc", "39c3c112", 120, "phone"],
+      [1344, "hevc", "8e891c4e", 120, "lo"],
       [1920, "hevc", "2b6ebcca", 150]
     ],
     "/product-videos/heroes/terminal-landscape-dark.mp4": [
-      [1280, "av1", "c5372903", 5, "phone"],
+      [1344, "av1", "36d71505", 8, "lo"],
       [1920, "av1", "2b371817", 8],
-      [1280, "hevc", "d717c7ac", 120, "phone"],
+      [1344, "hevc", "6ab989de", 120, "lo"],
       [1920, "hevc", "0f4dba50", 150]
     ],
     "/product-videos/heroes/terminal-landscape-light.mp4": [
-      [1280, "av1", "ea1f17d7", 5, "phone"],
+      [1344, "av1", "2495c008", 8, "lo"],
       [1920, "av1", "51bebb60", 8],
-      [1280, "hevc", "61386db5", 120, "phone"],
+      [1344, "hevc", "04f5da93", 120, "lo"],
       [1920, "hevc", "3e2fb1e7", 150]
     ],
     "/product-videos/more/mini-portrait.mp4": [[720, "av1", "1bdc53ec", 4]]
