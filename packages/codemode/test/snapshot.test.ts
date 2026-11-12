@@ -13,6 +13,10 @@ import { buildId } from "../src/snapshot.js"
 // The VM's snapshots: a run saved and restored into a fresh runtime anywhere it slices goes on as if it never stopped.
 
 const programs: Record<string, string> = {
+  "a UTF-8 decoder with pending bytes and a consumed BOM": `
+    const decoder = new TextDecoder('utf8', { fatal: true })
+    const start = decoder.decode(new Uint8Array([0xef, 0xbb, 0xbf, 0xef]), { stream: true })
+    return [start, decoder.decode(new Uint8Array([0xbb, 0xbf]))]`,
   "closures over per-iteration bindings": `
     const fns = []
     for (let i = 0; i < 5; i++) fns.push(() => i * 2)

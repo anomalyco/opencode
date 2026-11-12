@@ -1218,6 +1218,56 @@ describe("TextEncoder and TextDecoder", () => {
     ])
   })
 
+  test("streams an emoji one byte at a time and copies the pending bytes", async () => {
+    expect(
+      await value(`
+      const decoder = new TextDecoder()
+      const chunk = new Uint8Array([65, 0xf0])
+      const stream = { stream: true }
+      const start = decoder.decode(chunk, stream)
+      chunk[1] = 0
+      return [start, decoder.decode(undefined, stream), decoder.decode(new Uint8Array([0x9f]), stream),
+        decoder.decode(new Uint8Array([0x98]), stream), decoder.decode(new Uint8Array([0x80, 66])), decoder.decode()]
+    `),
+    ).toEqual(["A", "", "", "", "😀B", ""])
+  })
+
+  test("only strips the first BOM of each stream, including a split BOM", async () => {
+    expect(
+      await value(`
+      return [false, true].map(ignoreBOM => {
+        const decoder = new TextDecoder('utf8', { ignoreBOM })
+        const bom = new Uint8Array([0xef, 0xbb, 0xbf])
+        return [decoder.decode(bom.slice(0, 1), { stream: true }), decoder.decode(bom.slice(1), { stream: true }),
+          decoder.decode(bom), decoder.decode(bom)]
+      })
+    `),
+    ).toEqual([
+      ["", "", "\ufeff", ""],
+      ["", "\ufeff", "\ufeff", "\ufeff"],
+    ])
+  })
+
+  test("reports malformed UTF-8 immediately and truncated UTF-8 on flush", async () => {
+    expect(
+      await value(`
+      return [false, true].map(fatal => {
+        const decoder = new TextDecoder('utf8', { fatal })
+        const read = (bytes, stream) => {
+          try { return decoder.decode(bytes && new Uint8Array(bytes), { stream }) }
+          catch (error) { return error.name }
+        }
+        return [read([0xe0], true), read([0x80], true), read([0xed, 0xa0], true),
+          read([0xf0, 0x80], true), read([0xf4, 0x90], true), read([0xe2, 0x82], true),
+          read([65], true), read([0xf0, 0x9f], true), read(), read(), read([0xef, 0xbb, 0xbf, 66])]
+      })
+    `),
+    ).toEqual([
+      ["", "��", "��", "��", "��", "", "�A", "", "�", "", "B"],
+      ["", "TypeError", "TypeError", "TypeError", "TypeError", "", "TypeError", "", "TypeError", "", "B"],
+    ])
+  })
+
   test("only UTF-8 is supported; fatal decoding rejects malformed input", async () => {
     expect((await error(`new TextDecoder("latin1")`)).message).toContain('The "latin1" encoding is not supported')
     expect((await error(`new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array([0xff]))`)).message).toContain(

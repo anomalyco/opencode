@@ -196,13 +196,61 @@ export const textEncoderGlobal = <R>(ctx: Interpreter<R>) => {
   })
 }
 
-/** A `TextDecoder` holding the host decoder its label and options configured. */
+// A valid but incomplete final code point can span at most three bytes. Invalid prefixes
+// (including overlong forms, surrogates and values above U+10FFFF) must be decoded now.
+const completeEnd = (bytes: Uint8Array) => {
+  for (let i = bytes.length - 1; i >= Math.max(0, bytes.length - 3); i--) {
+    const lead = bytes[i]!
+    if (lead >= 0x80 && lead <= 0xbf) continue
+    if (lead < 0xc2 || lead > 0xf4) break
+    const width = lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4
+    if (bytes.length - i >= width) break
+    const second = bytes[i + 1]
+    if (second !== undefined) {
+      if (lead === 0xe0 && second < 0xa0) break
+      if (lead === 0xed && second > 0x9f) break
+      if (lead === 0xf0 && second < 0x90) break
+      if (lead === 0xf4 && second > 0x8f) break
+    }
+    return i
+  }
+  return bytes.length
+}
+
+const empty = new Uint8Array()
+
 export class TextDecoderObj extends Obj {
+  pending: Uint8Array = empty
+  seen = false
+
   constructor(
     proto: Obj,
     readonly decoder: TextDecoder,
+    readonly ignoreBOM: boolean,
   ) {
     super(proto)
+  }
+
+  decode(bytes: Uint8Array, stream: boolean) {
+    if (this.pending.length) {
+      const joined = new Uint8Array(this.pending.length + bytes.length)
+      joined.set(this.pending)
+      joined.set(bytes, this.pending.length)
+      bytes = joined
+    }
+    const end = stream ? completeEnd(bytes) : bytes.length
+    const stripBOM = !this.ignoreBOM && !this.seen
+    if (!stream) this.seen = false
+    this.pending = empty
+    try {
+      // Keep the host decoder stateless: snapshots own the pending bytes and BOM decision.
+      const text = this.decoder.decode(end === bytes.length ? bytes : bytes.subarray(0, end))
+      if (end < bytes.length) this.pending = bytes.slice(end)
+      if (stream && text.length) this.seen = true
+      return stripBOM && text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+    } catch {
+      throw typeError("TextDecoder.decode: the input is not valid utf-8.")
+    }
   }
 }
 
@@ -215,22 +263,18 @@ export const textDecoderGlobal = <R>(ctx: Interpreter<R>) => {
   const self = (thisValue: Value, name: string) => receiver(TextDecoderObj, thisValue, `TextDecoder.prototype.${name}`)
   defineAccessor(proto, "encoding", (thisValue) => self(thisValue, "encoding").decoder.encoding)
   defineAccessor(proto, "fatal", (thisValue) => self(thisValue, "fatal").decoder.fatal)
-  defineAccessor(proto, "ignoreBOM", (thisValue) => self(thisValue, "ignoreBOM").decoder.ignoreBOM)
+  defineAccessor(proto, "ignoreBOM", (thisValue) => self(thisValue, "ignoreBOM").ignoreBOM)
   methods(builtins, proto, [
     [
       "decode",
       0,
       (thisValue, args) => {
-        const decoder = self(thisValue, "decode").decoder
-        if (args[0] === undefined) return ""
-        if (!(args[0] instanceof Bytes)) {
+        const decoder = self(thisValue, "decode")
+        if (args[0] !== undefined && !(args[0] instanceof Bytes)) {
           throw typeError(`TextDecoder.decode expects a Uint8Array, received ${describeValue(args[0])}.`)
         }
-        try {
-          return decoder.decode(args[0].bytes)
-        } catch {
-          throw typeError(`TextDecoder.decode: the input is not valid ${decoder.encoding}.`)
-        }
+        const stream = args[1] instanceof Obj && Boolean(get(args[1], "stream"))
+        return decoder.decode(args[0]?.bytes ?? empty, stream)
       },
     ],
   ])
@@ -244,7 +288,8 @@ export const textDecoderGlobal = <R>(ctx: Interpreter<R>) => {
       const flag = (name: string) => options !== undefined && Boolean(get(options, name))
       return new TextDecoderObj(
         prototypeFrom(newTarget, proto),
-        new TextDecoder("utf-8", { fatal: flag("fatal"), ignoreBOM: flag("ignoreBOM") }),
+        new TextDecoder("utf-8", { fatal: flag("fatal"), ignoreBOM: true }),
+        flag("ignoreBOM"),
       )
     },
   })
