@@ -25,6 +25,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use crate::bind;
+
 /// The runtime data name that holds the current input mode; layers require their mode in it.
 pub const MODE_KEY: &str = "opencode.mode";
 /// The mode a layer has when it names none, and the current mode when no pushed mode is active.
@@ -441,16 +443,14 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         let id = self.next_layer.get();
         self.next_layer.set(id + 1);
         self.layers.borrow_mut().push(Registered { id, layer, engine });
-        let layers = Rc::downgrade(&self.layers);
-        Ok(Disposer::new(move || {
-            let Some(layers) = layers.upgrade() else { return };
+        Ok(Disposer::new(bind!(self.layers, |layers| {
             // Dropped after the borrow ends, as `set_keybinds` drops what it replaced.
             let removed = {
                 let mut layers = layers.borrow_mut();
                 layers.iter().position(|registered| registered.id == id).map(|index| layers.remove(index))
             };
             drop(removed);
-        }))
+        })))
     }
 
     /// The engine layer of a declared one, with its commands' configured bindings.

@@ -83,8 +83,7 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
     });
     let owner = inner.clone();
     cx.on_close(Disposer::new(move || drop(owner)));
-    let weak = Rc::downgrade(&inner);
-    let kept = cx.keep(move || weak.upgrade().map(|inner| (inner.field.text(), inner.field.cursor_offset())));
+    let kept = cx.keep(bind!(inner, |inner| Some((inner.field.text(), inner.field.cursor_offset()))));
     if let Some((text, cursor)) = kept.flatten() {
         inner.field.set_text(&text);
         inner.field.set_cursor_offset(cursor);
@@ -98,8 +97,7 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
         body.add(&description(cx));
     }
     body.add(&prompt.0.field).add(&prompt.0.busy_line);
-    let weak = Rc::downgrade(&prompt.0);
-    let on_close: Rc<dyn Fn()> = Rc::new(bind!(weak, |inner| {
+    let on_close: Rc<dyn Fn()> = Rc::new(bind!(prompt.0, |inner| {
         if inner.busy.get() {
             return;
         }
@@ -175,13 +173,9 @@ impl Prompt {
 
     fn register_layers(&self) {
         let weak = Rc::downgrade(&self.0);
-        let busy = {
-            let weak = weak.clone();
-            Condition::When(Rc::new(move || weak.upgrade().is_some_and(|inner| !inner.busy.get())))
-        };
-        let submit = weak.clone();
+        let busy = Condition::when(bind!(weak, |inner| !inner.busy.get()));
         let mut commands = vec![
-            TuiCommand::new("dialog.prompt.submit", bind!(submit, |inner, _, _| Prompt(inner).confirm()))
+            TuiCommand::new("dialog.prompt.submit", bind!(weak, |inner, _, _| Prompt(inner).confirm()))
                 .title("Submit dialog prompt")
                 .group("Dialog"),
         ];
@@ -256,12 +250,11 @@ impl Prompt {
             .actions
             .iter()
             .map(|action| {
-                let weak = Rc::downgrade(&self.0);
                 let run = action.run.clone();
                 FooterAction::new(action.title.clone())
                     .command(action.command.clone())
                     .disabled(inner.busy.get())
-                    .on_trigger(bind!(weak, |inner| run(&Prompt(inner))))
+                    .on_trigger(bind!(self.0, |inner| run(&Prompt(inner))))
             })
             .collect();
         let mut primary = extra;

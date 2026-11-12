@@ -42,12 +42,6 @@ impl Cache {
             }
         }
     }
-
-    fn sweep(&mut self) {
-        let pass = self.pass;
-        self.prepared.retain(|_, entry| entry.1 == pass);
-        self.pass += 1;
-    }
 }
 
 /// Returns the indexes of the matching targets, best first. `keys` gives each target's searchable strings,
@@ -182,7 +176,9 @@ fn scan<T, const N: usize>(
         out[slot] = heap.poll().expect("one item per slot").1;
     }
     if let Some(cache) = cache {
-        cache.sweep();
+        let pass = cache.pass;
+        cache.prepared.retain(|_, entry| entry.1 == pass);
+        cache.pass += 1;
     }
     out
 }
