@@ -1118,6 +1118,12 @@ export function createPluginAttachment(apis: HostApis) {
     const result = { notification: false, sound: false }
     const session = options.session
 
+    if (session) {
+      await global.sessionPreferences.ready.promise
+
+      if (global.sessionPreferences.muted(session.server, session.id)) return result
+    }
+
     await Promise.allSettled([
       allowed.sound &&
         global.notifications.sound(key, () => {
