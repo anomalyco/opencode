@@ -26,8 +26,9 @@ use opentui::testing::TestApp;
 /// How long a checkpoint waits for its `until` text. Longer than any MS1 screen takes; a screen the Rust TUI
 /// does not draw yet is compared after this.
 const UNTIL: Duration = Duration::from_secs(2);
-/// How long a checkpoint waits for the client to go idle and the frame to settle.
-const SETTLE: Duration = Duration::from_secs(3);
+/// How long a checkpoint waits for the client to go idle and the frame to settle on the recorded cells. Only a frame
+/// that never matches waits this long.
+const SETTLE: Duration = Duration::from_secs(10);
 
 #[test]
 fn scenarios() {
@@ -134,7 +135,11 @@ fn run(recording: &Recording) -> (bool, String) {
             // The recorded socket sends what the step made the TS fake send.
             Step::Pty { .. } => {}
             Step::Checkpoint(checkpoint) => {
-                let capture = settle(&app, &memory, checkpoint.until.as_deref());
+                let capture = settle(&app, &memory, checkpoint.until.as_deref(), |capture| {
+                    app::compare_checkpoint(checkpoint, capture.clone()).is_ok_and(|result| {
+                        result.comparison.is_equal() || app::allows(&checkpoint.deviation, &result.comparison)
+                    })
+                });
                 let result = match app::compare_checkpoint(checkpoint, capture) {
                     Ok(result) => result,
                     Err(error) => {
@@ -366,9 +371,10 @@ fn routes(recording: &Recording) -> Vec<MemoryRoute> {
         .collect()
 }
 
-/// Waits for `until` (bounded by [`UNTIL`]), then until no request is in flight and two renders 25 ms apart
-/// are equal (bounded by [`SETTLE`]).
-fn settle(app: &TestApp, memory: &Memory, until: Option<&str>) -> Fixture {
+/// Waits for `until` (bounded by [`UNTIL`]), then until no request is in flight, two renders 25 ms apart are
+/// equal, and the frame is `expected` (bounded by [`SETTLE`]). A frame can stay still before a read that changes it
+/// has even been sent, so stillness alone is not enough.
+fn settle(app: &TestApp, memory: &Memory, until: Option<&str>, expected: impl Fn(&Fixture) -> bool) -> Fixture {
     if let Some(until) = until {
         app.wait_until(UNTIL, || memory.in_flight() == 0 && app.text().contains(until));
     }
@@ -377,7 +383,8 @@ fn settle(app: &TestApp, memory: &Memory, until: Option<&str>) -> Fixture {
     loop {
         app.wait_until(Duration::from_millis(25), || false);
         let capture = Fixture::from_capture(&app.render());
-        if memory.in_flight() == 0 && previous.as_ref() == Some(&capture) || Instant::now() >= deadline {
+        let still = memory.in_flight() == 0 && previous.as_ref() == Some(&capture);
+        if still && expected(&capture) || Instant::now() >= deadline {
             return capture;
         }
         previous = Some(capture);

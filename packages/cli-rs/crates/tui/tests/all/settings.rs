@@ -311,7 +311,7 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     app.click(column(line, "["), y as u16);
     wait_for(&app, "[x] Time to first draw");
     assert_eq!(tui.settings.info().debug.and_then(|debug| debug.timing), Some(true));
-    assert!(app.text().contains("Time to first draw: "));
+    wait_for(&app, "Time to first draw: ");
     app.press("escape");
     // A click hits what the last frame drew.
     app.render();

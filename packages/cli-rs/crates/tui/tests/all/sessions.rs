@@ -12,7 +12,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use opencode_api::generated::SessionID;
-use opencode_parity::assert_fixture;
 use opencode_tui::{Args, Deps, Route};
 use serde_json::{Value, json};
 
@@ -277,11 +276,11 @@ fn session_list_matches_typescript() {
     kit.open_list();
     kit.wait_gone("Loading");
     kit.only_dialog();
-    assert_fixture(&kit.app.render(), "E.11a/sessions");
+    support::wait_fixture(&kit.app, "E.11a/sessions");
 
     kit.app.press("ctrl+d");
     kit.wait_for("again to confirm");
-    assert_fixture(&kit.app.render(), "E.11a/sessions-delete");
+    support::wait_fixture(&kit.app, "E.11a/sessions-delete");
 }
 
 #[test]
@@ -292,7 +291,7 @@ fn session_list_scope_and_search_match_typescript() {
     kit.app.press("ctrl+a");
     kit.wait_for("Other project");
     kit.only_dialog();
-    assert_fixture(&kit.app.render(), "E.11a/sessions-all");
+    support::wait_fixture(&kit.app, "E.11a/sessions-all");
 
     let kit = Kit::new(Mode::List);
     kit.open_list();
@@ -301,7 +300,7 @@ fn session_list_scope_and_search_match_typescript() {
     kit.app.advance(Duration::from_millis(200));
     kit.wait_gone("Tue Mar 03 2026");
     kit.only_dialog();
-    assert_fixture(&kit.app.render(), "E.11a/sessions-search");
+    support::wait_fixture(&kit.app, "E.11a/sessions-search");
 }
 
 #[test]
@@ -311,14 +310,14 @@ fn open_dialog_matches_typescript() {
     kit.wait_for("Other project");
     kit.wait_gone("Refreshing");
     kit.only_dialog();
-    assert_fixture(&kit.app.render(), "E.11a/open");
+    support::wait_fixture(&kit.app, "E.11a/open");
 
     for _ in 0..4 {
         kit.app.press("down");
     }
     kit.app.press("right");
     kit.wait_for("app-feature    ");
-    assert_fixture(&kit.app.render(), "E.11a/open-worktrees");
+    support::wait_fixture(&kit.app, "E.11a/open-worktrees");
 }
 
 /// Home over an in-memory server with events, the projects of [`projects`], and `ses_r1` in a background tab.

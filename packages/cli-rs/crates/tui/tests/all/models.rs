@@ -15,7 +15,7 @@ use opencode_api::client::Client;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::model_pref::Model;
 use opencode_local::storage::Storage;
-use opencode_parity::{assert_fixture, fixtures_dir};
+use opencode_parity::fixtures_dir;
 use opencode_store::{Data, Options as StoreOptions};
 use opencode_tui::dialogs::go_upsell::{self, Offer};
 use opencode_tui::dialogs::model;
@@ -152,11 +152,9 @@ fn kit(width: u16, height: u16) -> Kit {
 }
 
 impl Kit {
-    fn settle(&self, text: &str) {
+    fn wait_for(&self, text: &str) {
         let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         assert!(found, "{text:?} never showed:\n{}", self.app.text());
-        // Let deferred row updates and refreshes land.
-        self.app.wait_until(Duration::from_millis(100), || false);
     }
 }
 
@@ -165,37 +163,37 @@ fn model_dialog_matches_typescript_opened_and_filtered() {
     // Tall enough for the whole list (parity/deviations/DLG13-model-scroll.md).
     let kit = kit(90, 60);
     model::show(&kit.local, None);
-    kit.settle("favorite");
-    assert_fixture(&kit.app.render(), "E.16/model");
+    kit.wait_for("favorite");
+    support::wait_fixture(&kit.app, "E.16/model");
     kit.app.type_text("gpt");
-    kit.settle("GPT-5 mini");
-    assert_fixture(&kit.app.render(), "E.16/model-filter");
+    kit.wait_for("GPT-5 mini");
+    support::wait_fixture(&kit.app, "E.16/model-filter");
 }
 
 #[test]
 fn agent_and_variant_dialogs_match_typescript() {
     let kit = kit(90, 34);
     agent::show(&kit.local);
-    kit.settle("plan");
-    assert_fixture(&kit.app.render(), "E.16/agent");
+    kit.wait_for("plan");
+    support::wait_fixture(&kit.app, "E.16/agent");
     variant::show(&kit.local);
-    kit.settle("high");
-    assert_fixture(&kit.app.render(), "E.16/variant");
+    kit.wait_for("high");
+    support::wait_fixture(&kit.app, "E.16/variant");
 }
 
 #[test]
 fn usage_dialogs_match_typescript() {
     let kit = kit(90, 34);
     usage::show(&kit.local);
-    kit.settle("left");
-    assert_fixture(&kit.app.render(), "E.16/usage");
+    kit.wait_for("left");
+    support::wait_fixture(&kit.app, "E.16/usage");
     kit.app.press("down");
-    kit.settle("Grok Code");
-    assert_fixture(&kit.app.render(), "E.16/usage-down");
+    kit.wait_for("Grok Code");
+    support::wait_fixture(&kit.app, "E.16/usage-down");
     let sonnet = kit.local.models(|models| models[0].clone());
     usage_model::show(&kit.local, sonnet);
-    kit.settle("remaining");
-    assert_fixture(&kit.app.render(), "E.16/usage-model");
+    kit.wait_for("remaining");
+    support::wait_fixture(&kit.app, "E.16/usage-model");
 }
 
 #[test]
@@ -205,17 +203,17 @@ fn go_upsell_matches_typescript_when_compact() {
         &kit.local,
         Offer { reset: Some("3:00 PM".into()), can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) },
     );
-    kit.settle("subscribe");
-    assert_fixture(&kit.app.render(), "E.16/go-upsell");
+    kit.wait_for("subscribe");
+    support::wait_fixture(&kit.app, "E.16/go-upsell");
 }
 
 #[test]
 fn dialogs_send_reads_only() {
     let kit = kit(90, 34);
     model::show(&kit.local, None);
-    kit.settle("favorite");
+    kit.wait_for("favorite");
     usage::show(&kit.local);
-    kit.settle("left");
+    kit.wait_for("left");
     let seen = kit.fixture.seen();
     assert!(seen.iter().all(|(method, _)| method == "GET"), "{seen:?}");
     assert!(seen.iter().all(|(_, path)| !path.contains("session/stats")), "{seen:?}");
@@ -316,7 +314,7 @@ fn leader_m_picks_a_model_and_saves_it_as_recent() {
 fn the_model_picker_shows_no_usage_with_the_limits_loaded() {
     let kit = kit(90, 60);
     model::show(&kit.local, None);
-    kit.settle("favorite ctrl+f");
+    kit.wait_for("favorite ctrl+f");
     let screen = kit.app.text();
     for text in ["usage ctrl+u", "per 1M", "left"] {
         assert!(!screen.contains(text), "{text:?} showed:\n{screen}");

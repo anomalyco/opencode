@@ -196,10 +196,11 @@ fn home_follows_the_canonical_default_location() {
         Deps { directory: "/project/".into(), route: Route::Home, events: true, ..support::deps(Arc::new(server)) };
     let h = support::mount(100, 30, deps);
     h.wait("the home agents", || !h.tui.local.agents().is_empty());
-    assert_eq!(
-        opencode_tui::features::location::current(&h.tui).map(|location| location.directory).as_deref(),
-        Some("/project")
-    );
+    // The location read follows the stream's `server.connected`, apart from the agents' read.
+    h.wait("the server's directory", || {
+        opencode_tui::features::location::current(&h.tui).map(|location| location.directory).as_deref()
+            == Some("/project")
+    });
 }
 
 /// `fake`'s answers, with the event stream from [`Memory`].

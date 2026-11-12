@@ -24,7 +24,7 @@ struct Fixture {
     seen: Seen,
     created: Arc<Mutex<Vec<String>>>,
     catalog: Arc<AtomicBool>,
-    /// The create answers 400 after its delay.
+    /// A create sent while this is set answers 400 once it is cleared again.
     reject: Arc<AtomicBool>,
 }
 
@@ -94,14 +94,17 @@ impl Transport for Fixture {
             _ => support::not_found(),
         };
         let catalog = ["/api/agent", "/api/model"].contains(&path.as_str()).then(|| self.catalog.clone());
-        let reject = self.reject.load(Ordering::SeqCst);
+        let reject = self.reject.load(Ordering::SeqCst).then(|| self.reject.clone());
         Box::pin(async move {
             while catalog.as_ref().is_some_and(|catalog| !catalog.load(Ordering::SeqCst)) {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
             if let Some((created, id)) = created {
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                if reject {
+                if let Some(reject) = reject {
+                    while reject.load(Ordering::SeqCst) {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
                     return Ok(support::respond(400, &json!({ "_tag": "BadRequest", "message": "Bad location" })));
                 }
                 created.lock().unwrap().push(id);
@@ -430,6 +433,8 @@ fn a_failed_create_goes_home_with_the_newer_text_and_closes_its_tab() {
     let opened = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Session { id: id.clone() });
     assert!(opened, "{:?}", setup.tui.route());
     setup.app.type_text("follow up");
+    // The create fails only now, so the route cannot go home before the wait above sees the session.
+    setup.reject.store(false, Ordering::SeqCst);
     setup.wait_for("Creating a session failed");
     let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
     assert!(home, "{:?}", setup.tui.route());

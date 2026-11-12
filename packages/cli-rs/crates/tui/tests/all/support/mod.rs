@@ -429,6 +429,13 @@ impl Harness {
         wait_for(&self.app, text)
     }
 
+    /// Waits until the screen shows every one of `texts`, and returns the screen. Use it when the texts come from
+    /// different reads or events, so one of them can show in a frame before another.
+    #[track_caller]
+    pub fn wait_for_all(&self, texts: &[&str]) -> String {
+        wait_for_all(&self.app, texts)
+    }
+
     #[track_caller]
     pub fn wait_gone(&self, text: &str) {
         let gone = self.app.wait_until(WAIT, || !self.app.text().contains(text));
@@ -521,6 +528,31 @@ pub fn wait_for(app: &TestApp, text: &str) -> String {
     let screen = app.text();
     assert!(found, "{text:?} never showed:\n{screen}");
     screen
+}
+
+/// Waits until `app` shows every one of `texts`, and returns the screen.
+#[track_caller]
+pub fn wait_for_all(app: &TestApp, texts: &[&str]) -> String {
+    let found = app.wait_until(WAIT, || {
+        let screen = app.text();
+        texts.iter().all(|text| screen.contains(text))
+    });
+    let screen = app.text();
+    let missing: Vec<_> = texts.iter().filter(|text| !screen.contains(*text)).collect();
+    assert!(found, "{missing:?} never showed:\n{screen}");
+    screen
+}
+
+/// Waits until `app` draws `parity/fixtures/<name>.json`, then compares it: a frame that shows the text a test waited
+/// for can still lack rows that land later.
+#[track_caller]
+pub fn wait_fixture(app: &TestApp, name: &str) {
+    let expected = opencode_parity::Fixture::load(opencode_parity::fixtures_dir().join(format!("{name}.json")))
+        .unwrap_or_else(|error| panic!("{error}"));
+    app.wait_until(WAIT, || {
+        opencode_parity::compare(&expected, &opencode_parity::Fixture::from_capture(&app.render())).is_equal()
+    });
+    opencode_parity::assert_fixture(&app.render(), name);
 }
 
 /// The cell where `needle` first starts in `screen`.

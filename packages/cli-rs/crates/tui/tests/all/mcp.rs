@@ -9,7 +9,6 @@ use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
 
 use std::sync::{Arc, Mutex};
 
-use opencode_parity::assert_fixture;
 use opencode_store::{Catalog, Location};
 use opencode_tui::{Args, Deps, Route};
 use serde_json::{Value, json};
@@ -160,17 +159,17 @@ fn mcp_dialog_matches_typescript() {
     kit.run("mcp.list");
     kit.wait_for("Sign in required");
     kit.only_dialog();
-    assert_fixture(&kit.app.render(), "E.17b/mcp");
+    support::wait_fixture(&kit.app, "E.17b/mcp");
 
     for _ in 0..3 {
         kit.app.press("down");
     }
     kit.wait_for("view error");
-    assert_fixture(&kit.app.render(), "E.17b/mcp-failed");
+    support::wait_fixture(&kit.app, "E.17b/mcp-failed");
 
     kit.app.press("return");
     kit.wait_for("MCP server: linear");
-    assert_fixture(&kit.app.render(), "E.17b/mcp-error");
+    support::wait_fixture(&kit.app, "E.17b/mcp-error");
 }
 
 #[test]
@@ -179,17 +178,17 @@ fn skills_dialog_matches_typescript() {
     kit.run("prompt.skills");
     kit.wait_for("bisect");
     kit.only_dialog();
-    assert_fixture(&kit.app.render(), "E.17b/skills");
+    support::wait_fixture(&kit.app, "E.17b/skills");
 
     kit.app.type_text("rel");
     kit.wait_gone("bisect");
-    assert_fixture(&kit.app.render(), "E.17b/skills-filter");
+    support::wait_fixture(&kit.app, "E.17b/skills-filter");
 
     let kit = Kit::with(servers(), Some(json!([])));
     kit.run("prompt.skills");
     kit.wait_for("No skills available");
     kit.only_dialog();
-    assert_fixture(&kit.app.render(), "E.17b/skills-empty");
+    support::wait_fixture(&kit.app, "E.17b/skills-empty");
 }
 
 #[test]

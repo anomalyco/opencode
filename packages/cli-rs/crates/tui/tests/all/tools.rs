@@ -145,20 +145,21 @@ fn inline_tools_show_pending_running_and_finished_lines() {
         tool("call_8", "bash", streaming("")),
     ]);
     let h = open(100, 40, messages, Vec::new());
-    let screen = h.wait_for("Grep \"TODO\"");
     let theme = h.tui.page();
 
-    // Running: the spinner (still with animations off) and the line; finished: the icon.
-    assert!(screen.contains("   ⋯ Read src/a.rs:10-89\n"), "{screen}");
-    assert!(screen.contains("   → Read src/b.rs\n"), "{screen}");
-    assert!(screen.contains("      ↳ Loaded AGENTS.md\n"), "{screen}");
-    // Still streaming its input: the pending label.
-    assert!(screen.contains("   ⋯ Finding files…\n"), "{screen}");
-    assert!(screen.contains("   ✱ Glob \"**/*.rs\" in src (3 matches)\n"), "{screen}");
-    assert!(screen.contains("   ✱ Grep \"TODO\" (1 match)\n"), "{screen}");
-    assert!(screen.contains("   ← Write new.rs\n"), "{screen}");
-    // A legacy name maps to its view: `bash` is the shell, here before its command arrives.
-    assert!(screen.contains("Writing command…"), "{screen}");
+    // Paths show relative to the location, whose read can land after the transcript's. Running: the spinner (still
+    // with animations off) and the line; finished: the icon. Still streaming its input: the pending label. A legacy
+    // name maps to its view: `bash` is the shell, here before its command arrives.
+    h.wait_for_all(&[
+        "   ⋯ Read src/a.rs:10-89\n",
+        "   → Read src/b.rs\n",
+        "      ↳ Loaded AGENTS.md\n",
+        "   ⋯ Finding files…\n",
+        "   ✱ Glob \"**/*.rs\" in src (3 matches)\n",
+        "   ✱ Grep \"TODO\" (1 match)\n",
+        "   ← Write new.rs\n",
+        "Writing command…",
+    ]);
     assert_eq!(h.fg("Read src/b.rs"), theme.text.muted);
 
     // A denied call is struck through in the muted color, not shown as an error.
@@ -188,7 +189,7 @@ fn a_failed_call_shows_its_error_on_click() {
     // Apart from the first click, so the two are not a double click that selects a word.
     h.app.advance(Duration::from_secs(1));
     h.click("Glob \"*.md\"");
-    let gone = h.app.wait_until(Duration::from_secs(2), || !h.app.text().contains("No such directory"));
+    let gone = h.app.wait_until(WAIT, || !h.app.text().contains("No such directory"));
     assert!(gone, "{}", h.app.text());
 }
 
@@ -206,18 +207,14 @@ fn shell_blocks_collapse_their_output_and_read_a_named_shell_on_click() {
         tool("call_4", "shell", failed(json!({ "command": "false" }), "Command failed")),
     ]);
     let h = open(100, 60, messages, Vec::new());
-    let screen = h.wait_for("$ false");
+    // Running: the spinner beside the command, with the working directory as a `cd` relative to the location, whose
+    // read can land after the transcript's. Finished: the command, then the output's tail under a count of the lines
+    // it hides.
+    let screen =
+        h.wait_for_all(&["$ false", "⋯ cd web && npm test", "$ seq 20", "(13 earlier lines)", "line 20", "$ echo hi"]);
     let theme = h.tui.page();
-
-    // Running: the spinner beside the command, with the working directory as a `cd`.
-    assert!(screen.contains("⋯ cd web && npm test"), "{screen}");
-    // Finished: the command, then the output's tail under a count of the lines it hides.
-    assert!(screen.contains("$ seq 20"), "{screen}");
-    assert!(screen.contains("(13 earlier lines)"), "{screen}");
     assert!(!screen.contains("line 13\n"), "{screen}");
-    assert!(screen.contains("line 20"), "{screen}");
     // A named shell's output is read from the server, not taken from the tool's content.
-    assert!(screen.contains("$ echo hi"), "{screen}");
     assert!(!screen.contains("<shell status>"), "{screen}");
     // The error under the command, in the error color.
     assert_eq!(h.fg("Command failed"), theme.text.feedback.error.base);
@@ -276,21 +273,23 @@ fn write_and_edit_blocks_show_the_file_and_the_diff() {
         ),
     ]);
     let h = open(100, 60, messages, Vec::new());
-    let screen = h.wait_for("new();");
-
-    assert!(screen.contains("# Wrote src/new.rs"), "{screen}");
-    assert!(screen.contains("  1 fn main() {}"), "{screen}");
-    assert!(screen.contains("  2 fn other() {}"), "{screen}");
-    assert!(screen.contains("Error [2:4] expected item"), "{screen}");
-    assert!(screen.contains("⋯ Preparing edit…"), "{screen}");
-    assert!(screen.contains("← Edit src/b.rs"), "{screen}");
-    assert!(screen.contains("← Edit src/a.rs"), "{screen}");
-    // 96 columns of content: a unified diff, the removed line above the added one.
+    // Paths show relative to the location, whose read can land after the transcript's. 96 columns of content: a
+    // unified diff.
+    let screen = h.wait_for_all(&[
+        "# Wrote src/new.rs",
+        "  1 fn main() {}",
+        "  2 fn other() {}",
+        "Error [2:4] expected item",
+        "⋯ Preparing edit…",
+        "← Edit src/b.rs",
+        "← Edit src/a.rs",
+        "2 -     old();",
+        "2 +     new();",
+    ]);
+    // The removed line above the added one.
     let (_, removed) = h.find("old();");
     let (_, added) = h.find("new();");
     assert_eq!(added, removed + 1, "{screen}");
-    assert!(screen.contains("2 -     old();"), "{screen}");
-    assert!(screen.contains("2 +     new();"), "{screen}");
 }
 
 #[test]
@@ -425,13 +424,14 @@ fn a_running_shell_the_store_lists_reads_its_output_every_second() {
     let first = reads();
     assert!(first >= 1);
     h.app.advance(Duration::from_millis(1100));
-    let polled = h.app.wait_until(Duration::from_secs(2), || reads() > first);
+    let polled = h.app.wait_until(WAIT, || reads() > first);
     assert!(polled, "no second read");
 
     // Once the shell exits, one last read drains it and the polling stops.
+    let running = reads();
     h.tui.data.apply(&[event("shell.exited", json!({ "id": "sh_1", "exit": 0, "status": "completed" }))]);
     h.app.advance(Duration::from_millis(10));
-    h.app.wait_until(Duration::from_millis(300), || false);
+    h.wait("the last read", || reads() > running);
     let stopped = reads();
     h.app.advance(Duration::from_secs(3));
     h.app.wait_until(Duration::from_millis(300), || false);

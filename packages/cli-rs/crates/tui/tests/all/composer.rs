@@ -402,8 +402,8 @@ fn the_subagents_tab_interrupts_a_running_subagent_and_hides_the_queued_dock() {
 fn terminal_select_opens_the_terminal_list_and_enter_shows_the_terminal() {
     let harness = mount();
     harness.tui.keymap.dispatch("terminal.select", None);
-    assert!(harness.wait(|harness| harness.app.text().contains("+ New terminal")));
-    assert!(harness.app.text().contains("vim"), "the foreground process names the terminal");
+    // The foreground process names the terminal.
+    support::wait_for_all(&harness.app, &["+ New terminal", "vim"]);
     harness.app.press("down");
     harness.app.press("enter");
     assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"] == "pty_1"));
