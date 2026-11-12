@@ -44,6 +44,34 @@ export type LabEntry = {
   states: LabState[]
 }
 
+/** Loads every story file. A file that fails to import is reported rather than hiding the rest. */
+export async function loadLabCatalog(
+  modules: Record<string, () => Promise<StoryModule>>,
+  sources: Record<string, () => Promise<string>>,
+) {
+  const files = Object.entries(modules)
+
+  const results: PromiseSettledResult<LabEntry>[] = []
+
+  // A few files at a time: hundreds of parallel module requests overflow a dev server reached through a proxy.
+  for (let index = 0; index < files.length; index += 8) {
+    const chunk = files.slice(index, index + 8).map(async ([file, load]) => {
+      const [module, source] = await Promise.all([load(), sources[file]?.() ?? ""])
+
+      return labEntry(file, module, source)
+    })
+
+    results.push(...(await Promise.allSettled(chunk)))
+  }
+
+  return {
+    entries: results
+      .flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+      .toSorted((a, b) => a.title.localeCompare(b.title)),
+    failed: results.filter((result) => result.status === "rejected").length,
+  }
+}
+
 // A story file as the lab shows it. A module lists its exports alphabetically, so `source`, the file's text, gives the
 // order the author wrote the states in.
 export function labEntry(file: string, module: StoryModule, source: string): LabEntry {
