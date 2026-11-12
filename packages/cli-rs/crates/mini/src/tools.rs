@@ -123,7 +123,7 @@ impl Frame {
     }
 
     fn path(&self, input: &str, home: bool) -> String {
-        let home = home.then(|| std::env::var("HOME").unwrap_or_default());
+        let home = home.then(opencode_local::paths::home);
         tool_path(input, self.directory.as_deref(), home.as_deref())
     }
 

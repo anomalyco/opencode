@@ -16,7 +16,7 @@ use opencode_store::state::State as Store;
 use opencode_store::{Location, SessionStatus};
 use opencode_ui::dialog::DIALOG_LIST_INSET;
 use opencode_ui::motion::Spinner;
-use opencode_ui::path::relative;
+use opencode_ui::path::{Flavor, relative};
 use opencode_ui::select::{FooterHint, Gutter, Select, SelectAction};
 use opencode_util::time::{self, Zone};
 
@@ -592,13 +592,14 @@ fn footer(session: &SessionInfo, project: Option<&Project>) -> Option<String> {
     let root = match &session.subpath {
         Some(subpath) => {
             let ups = subpath.as_str().split('/').count();
-            resolve_up(directory, ups)
+            resolve_up(Flavor::NATIVE, directory, ups)
         }
         None => directory.to_owned(),
     };
     let from = project.map_or(root.as_str(), |project| project.canonical.as_str());
     let relative = relative(from, &root);
-    (relative.starts_with("..") || relative.starts_with('/')).then(|| select::truncate(basename(&relative), 25))
+    (relative.starts_with("..") || Flavor::NATIVE.is_absolute(&relative))
+        .then(|| select::truncate(basename(&relative), 25))
 }
 
 /// `withTimestampedFallback`: the title, else `New session - <ISO time>`.
@@ -666,19 +667,16 @@ pub fn now_ms() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |elapsed| elapsed.as_millis() as f64)
 }
 
-/// `path.basename` (POSIX).
+/// `path.basename`.
 pub fn basename(path: &str) -> &str {
-    let trimmed = path.trim_end_matches('/');
-    trimmed.rsplit('/').next().unwrap_or(trimmed)
+    Flavor::NATIVE.basename(path)
 }
 
-/// `path.resolve(directory, "..", …)` with `ups` parent steps (POSIX).
-fn resolve_up(directory: &str, ups: usize) -> String {
-    let mut parts: Vec<&str> = directory.split('/').filter(|part| !part.is_empty()).collect();
-    for _ in 0..ups {
-        parts.pop();
-    }
-    format!("/{}", parts.join("/"))
+/// `path.resolve(directory, "..", …)` with `ups` parent steps.
+fn resolve_up(flavor: Flavor, directory: &str, ups: usize) -> String {
+    let root = flavor.sep().to_string();
+    let paths: Vec<&str> = [root.as_str(), directory].into_iter().chain(std::iter::repeat_n("..", ups)).collect();
+    flavor.resolve(&paths)
 }
 
 /// Pinned sessions in `<state>/session.json` (`context/local.tsx:508-603`), shared with the TS
@@ -765,7 +763,10 @@ mod tests {
         assert_eq!(relative("/a/b", "/a/b"), "");
         assert_eq!(relative("/a/b", "/a/c/d"), "../c/d");
         assert_eq!(relative("/a/b", "/a/b/c"), "c");
-        assert_eq!(resolve_up("/a/b/c", 2), "/a");
+        assert_eq!(resolve_up(Flavor::Posix, "/a/b/c", 2), "/a");
+        assert_eq!(resolve_up(Flavor::Posix, "/a", 3), "/");
+        assert_eq!(resolve_up(Flavor::Windows, "C:\\a\\b/c", 2), "C:\\a");
+        assert_eq!(resolve_up(Flavor::Windows, "C:\\a", 3), "C:\\");
         assert_eq!(basename("../c/d"), "d");
         assert_eq!(basename(".."), "..");
     }

@@ -6,6 +6,7 @@ use std::path::Path;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
+use opencode_util::path::Flavor;
 
 const ATTACH_FILE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
@@ -20,7 +21,7 @@ pub enum Prepared {
 
 /// Reads `input`, relative to `root`. The errors are the TS messages.
 pub fn prepare(input: &str, root: &Path) -> Result<Prepared, String> {
-    let file = resolve(root, input);
+    let file = std::path::PathBuf::from(resolve(Flavor::NATIVE, &root.to_string_lossy(), input));
     let mut handle = std::fs::File::open(&file).map_err(|_| format!("File not found: {input}"))?;
     let metadata = handle.metadata().map_err(|_| format!("File not found: {input}"))?;
     if !metadata.is_file() || metadata.len() > ATTACH_FILE_MAX_BYTES {
@@ -52,30 +53,19 @@ fn classify(path: &str, name: String, bytes: Vec<u8>) -> Prepared {
 }
 
 /// `path.resolve(root, input)`: absolute, with `.` and `..` resolved lexically.
-fn resolve(root: &Path, input: &str) -> std::path::PathBuf {
-    let joined = root.join(input);
-    let mut out = std::path::PathBuf::from("/");
-    for part in joined.components() {
-        match part {
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            std::path::Component::Normal(part) => out.push(part),
-            _ => {}
-        }
-    }
-    out
+fn resolve(flavor: Flavor, root: &str, input: &str) -> String {
+    flavor.resolve(&[&flavor.sep().to_string(), root, input])
 }
 
 /// `FSUtil.mimeType`: `mime-types`' `lookup`, else `application/octet-stream`.
 pub fn mime_type(path: &str) -> &'static str {
-    lookup(path).unwrap_or("application/octet-stream")
+    lookup(Flavor::NATIVE, path).unwrap_or("application/octet-stream")
 }
 
 // `extname("x." + path)`: the extension of the last segment, unless its only dot leads.
-fn lookup(path: &str) -> Option<&'static str> {
+fn lookup(flavor: Flavor, path: &str) -> Option<&'static str> {
     let base = format!("x.{path}");
-    let base = base.rsplit('/').next().unwrap_or_default();
+    let base = flavor.basename(&base);
     let dot = base.rfind('.').filter(|at| *at > 0)?;
     let extension = base[dot + 1..].to_lowercase();
     super::mime::TYPES
@@ -141,7 +131,13 @@ mod tests {
 
     #[test]
     fn paths_resolve_like_node() {
-        assert_eq!(resolve(Path::new("/w/x"), "../a/./b.txt"), Path::new("/w/a/b.txt"));
-        assert_eq!(resolve(Path::new("/w"), "/abs/c"), Path::new("/abs/c"));
+        let p = Flavor::Posix;
+        assert_eq!(resolve(p, "/w/x", "../a/./b.txt"), "/w/a/b.txt");
+        assert_eq!(resolve(p, "/w", "/abs/c"), "/abs/c");
+        let w = Flavor::Windows;
+        assert_eq!(resolve(w, "C:\\w\\x", "../a/./b.txt"), "C:\\w\\a\\b.txt");
+        assert_eq!(resolve(w, "C:\\w", "D:/abs\\c"), "D:\\abs\\c");
+        assert_eq!(lookup(w, "C:\\a.b\\Makefile"), None);
+        assert_eq!(lookup(w, "C:\\a\\b.png"), Some("image/png"));
     }
 }

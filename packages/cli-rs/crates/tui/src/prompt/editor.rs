@@ -651,7 +651,7 @@ impl Inner {
             };
             vec!["esc ".fg(key), (if armed { "again to interrupt" } else { "interrupt" }).fg(label)]
         } else {
-            let home = std::env::var("HOME").unwrap_or_default();
+            let home = opencode_local::paths::home();
             let directory = opencode_ui::path::abbreviate_home(&self.location(tui).directory, &home);
             let branch = catalog.as_ref().and_then(|catalog| catalog.branch.as_ref());
             let label = match branch {

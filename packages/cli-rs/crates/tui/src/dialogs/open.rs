@@ -801,7 +801,7 @@ fn selected_mark(color: Color) -> Gutter {
 }
 
 fn home() -> String {
-    std::env::var("HOME").unwrap_or_default()
+    opencode_local::paths::home()
 }
 
 /// `timeAgo`.
@@ -828,8 +828,8 @@ fn time_ago(now: f64, timestamp: f64) -> String {
     format!("{}y", days / 365)
 }
 
-/// `truncateFilePath` for POSIX paths: keeps the root and the basename, then as many parents as
-/// fit, with `…` for the rest.
+/// `truncateFilePath`: keeps the root (`/`, `C:\`, `\\server\share\`) and the basename, then as many parents as
+/// fit, with `…` for the rest. Windows paths are told by their shape, on any platform.
 pub(crate) fn truncate_file_path(value: &str, max: i64) -> String {
     if max <= 0 {
         return String::new();
@@ -838,8 +838,32 @@ pub(crate) fn truncate_file_path(value: &str, max: i64) -> String {
     if value.width() <= max {
         return value.to_owned();
     }
-    let root = if value.starts_with('/') { "/" } else { "" };
-    let segments: Vec<&str> = value[root.len()..].split('/').filter(|segment| !segment.is_empty()).collect();
+    let is_sep = |c: char| c == '/' || c == '\\';
+    let bytes = value.as_bytes();
+    let drive =
+        (bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && is_sep(char::from(bytes[2])))
+            .then(|| char::from(bytes[2]));
+    let unc = unc_root(value);
+    let windows = drive.is_some() || unc.is_some() || (!value.contains('/') && value.contains('\\'));
+    let separator = match (drive, unc) {
+        (Some(separator), _) => separator,
+        (None, Some(("//", ..))) => '/',
+        _ if windows => '\\',
+        _ => '/',
+    };
+    let (root, source) = match (drive, unc) {
+        (Some(_), _) => (format!("{}{separator}", &value[..2]), &value[3..]),
+        (None, Some((lead, server, share, end))) => {
+            (format!("{lead}{server}{separator}{share}{separator}"), &value[end..])
+        }
+        _ if value.starts_with('/') => ("/".to_owned(), &value[1..]),
+        _ => (String::new(), value),
+    };
+    let root = root.as_str();
+    let segments: Vec<&str> = source
+        .split(|c: char| if windows { is_sep(c) } else { c == separator })
+        .filter(|segment| !segment.is_empty())
+        .collect();
     let base = segments.last().copied().unwrap_or(value);
     if segments.len() < 2 {
         if root.width() >= max {
@@ -847,7 +871,7 @@ pub(crate) fn truncate_file_path(value: &str, max: i64) -> String {
         }
         return format!("{root}{}", truncate_basename(base, max - root.width()));
     }
-    let prefix = format!("{root}…/");
+    let prefix = format!("{root}…{separator}");
     let Some(base_width) = max.checked_sub(prefix.width()).filter(|width| *width > 0) else {
         return take_start(&prefix, max);
     };
@@ -869,7 +893,23 @@ pub(crate) fn truncate_file_path(value: &str, max: i64) -> String {
         selected.insert(0, (*segment).to_owned());
         width += next;
     }
-    prefix + &selected.join("/")
+    prefix + &selected.join(&separator.to_string())
+}
+
+// `^(\\\\|\/\/)([^\\/]+)[\\/]([^\\/]+)(?:[\\/]|$)`: the leading pair, the server, the share, and where the
+// match ends.
+fn unc_root(value: &str) -> Option<(&str, &str, &str, usize)> {
+    let lead = ["\\\\", "//"].into_iter().find(|lead| value.starts_with(lead))?;
+    let is_sep = |c: char| c == '/' || c == '\\';
+    let rest = &value[2..];
+    let server = rest.find(is_sep).filter(|end| *end > 0)?;
+    let after = &rest[server + 1..];
+    let share = after.find(is_sep).unwrap_or(after.len());
+    if share == 0 {
+        return None;
+    }
+    let end = 2 + server + 1 + share + usize::from(share < after.len());
+    Some((lead, &rest[..server], &after[..share], end))
 }
 
 fn truncate_basename(value: &str, max: usize) -> String {
@@ -914,6 +954,18 @@ mod tests {
         assert_eq!(truncate_file_path("/home/user/projects/opencode", 20), "/…/projects/opencode");
         assert_eq!(truncate_file_path("/a/very-long-name.txt", 10), "/…/ve….txt");
         assert_eq!(truncate_file_path("/x", 0), "");
+        // `packages/tui/test/ui/file-path.test.ts`.
+        for (path, max, expected) in [
+            ("packages\\tui\\src\\ui\\dialog-select.tsx", 22, "…\\ui\\dialog-select.tsx"),
+            ("dir/file\\name.ts", 14, "…/file\\name.ts"),
+            ("C:\\file.ts", 9, "C:\\fi….ts"),
+            ("C:\\Users\\kit\\src\\file.ts", 16, "C:\\…\\src\\file.ts"),
+            ("C:/Users/kit/src/file.ts", 16, "C:/…/src/file.ts"),
+            ("C:\\Users\\kit/src/file.ts", 16, "C:\\…\\src\\file.ts"),
+            ("\\\\server\\share\\src\\file.ts", 25, "\\\\server\\share\\…\\file.ts"),
+        ] {
+            assert_eq!(truncate_file_path(path, max), expected, "{path}");
+        }
     }
 
     #[test]
