@@ -10,9 +10,10 @@ export const mediaBase = "/files/site/2026-11"
 export const mediaFile = /\.(mp4|webm|mov|mp3|wav|ogg|m4a|zip|glb|gltf)$/i
 
 /**
- * Whether a file under public/ (its path from there) goes to the files bucket. The link-card videos
- * script/og.ts writes to og/ (og:video, under 100 kB each) are the exception: they ship as static
- * assets with the cards that name them.
+ * Whether a file under public/ (its path from there) goes to the files bucket. og/ is the exception:
+ * OG Studio's cards and videos are in the bucket under site/og (MEDIA.md) and never reach public/,
+ * but a version 1 manifest without a `base` still copies its videos there, and they must ship with
+ * the cards that name them (script/og.ts).
  */
 export const inBucket = (file: string) => mediaFile.test(file) && !/^og[\\/]/.test(file)
 
