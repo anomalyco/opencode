@@ -410,6 +410,37 @@ fn cd_completes_directories_moves_the_session_and_keeps_recents() {
     setup.wait_file("latest/tui/directory-recents.json", "\"project\":[]");
 }
 
+// Expected (bigboi-fixes-3): a recent touched before the startup load ran shows alone until its write merges the file
+// back in; the open `/cd` picker then lists the stored recents too, as TS's reactive store redraws it.
+#[test]
+fn an_open_cd_picker_shows_the_recents_a_write_merges_back() {
+    use opencode_local::lock;
+
+    let home = opencode_util::temp::tempdir().unwrap();
+    let state = home.path().join("state");
+    std::fs::create_dir_all(state.join("latest/tui")).unwrap();
+    std::fs::write(
+        state.join("latest/tui/directory-recents.json"),
+        r#"{"projects":{"project":[{"directory":"/legacy-dir","usedAt":1}]}}"#,
+    )
+    .unwrap();
+    let acquire =
+        |locks: &Path, file: &Path| lock::acquire(locks, &file.to_string_lossy(), &lock::Options::default()).unwrap();
+    // The startup load waits on the frecency file first, so the touch runs before it reads the recents.
+    let frecency = acquire(&state.join("locks"), &state.join("frecency.jsonl"));
+    let setup = Setup::with_home(home);
+    let recents = acquire(&state.join("latest/locks"), &state.join("latest/tui/directory-recents.json"));
+    setup.tui.prompt.complete.touch(&setup.tui, "project", "/new-dir");
+    frecency.release().unwrap();
+    setup.app.type_text("/cd ");
+    setup.wait_for("packages/");
+    let screen = setup.wait_for("/new-dir");
+    assert!(!screen.contains("/legacy-dir"), "{screen}");
+    recents.release().unwrap();
+    setup.wait("the merged recents show", || setup.tui.prompt.complete.recents("project").len() == 2);
+    setup.wait_for("/legacy-dir");
+}
+
 #[test]
 fn escape_hides_and_ctrl_c_dismisses_the_command() {
     let setup = Setup::new();
