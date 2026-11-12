@@ -26,10 +26,15 @@ impl TsCommand {
     /// found on `PATH` when it runs. On Windows `opencode` is looked up here, through `PATHEXT`, because
     /// `Command` finds only `opencode.exe` and npm installs an `opencode.cmd` shim.
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> Self {
+        Self::resolve(var, cfg!(windows))
+    }
+
+    /// `from_vars` as it runs on Windows when `windows` is set, so tests on other systems reach the lookup.
+    pub fn resolve(var: impl Fn(&str) -> Option<OsString>, windows: bool) -> Self {
         if let Some(program) = var(Self::VAR).filter(|program| !program.is_empty()) {
             return Self::new(program);
         }
-        let found = if cfg!(windows) {
+        let found = if windows {
             var("PATH").and_then(|path| {
                 search(
                     &path,
@@ -206,6 +211,28 @@ mod tests {
         for (pathext, files, shim, expected) in cases {
             assert_eq!(find(pathext, &files, shim), expected, "{pathext:?} {files:?}");
         }
+    }
+
+    // `Command` runs a found `.cmd` through `cmd.exe /c` and escapes its arguments for it.
+    #[cfg(windows)]
+    #[test]
+    fn a_found_cmd_shim_spawns_with_its_arguments() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        std::fs::write(dir.path().join("opencode"), "#!/bin/sh\n").unwrap();
+        std::fs::write(dir.path().join("opencode.cmd"), "@ECHO off\r\nECHO %*\r\n").unwrap();
+        let ts = TsCommand::resolve(
+            |name| match name {
+                "PATH" => Some(dir.path().into()),
+                "PATHEXT" => Some(".COM;.EXE;.BAT;.CMD;.VBS;.JS".into()),
+                _ => None,
+            },
+            true,
+        );
+        assert_eq!(ts.program, dir.path().join("opencode.cmd"));
+        let command = ts.with(&["serve", "--stdio", "a b"]);
+        let output = std::process::Command::new(&command[0]).args(&command[1..]).output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "serve --stdio \"a b\"");
     }
 
     #[test]
