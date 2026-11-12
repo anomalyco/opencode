@@ -4,6 +4,7 @@
 // Writes parity/fixtures/F.8/session-target.json; crates/store/tests/target_oracle.rs serves the same routes to the
 // Rust port and compares.
 import { OpenCode } from "@opencode/client/promise"
+import { records } from "../lib/records"
 import {
   createWorktreeLocation,
   parseSessionTargetModel,
@@ -352,6 +353,11 @@ const modelResults = models.map((value) => {
 const file = new URL("../fixtures/F.8/session-target.json", import.meta.url).pathname
 await Bun.write(
   file,
-  JSON.stringify({ targets: targetResults, worktrees: worktreeResults, models: modelResults }, null, 2) + "\n",
+  records({ targets: targetResults, worktrees: worktreeResults, models: modelResults }, [
+    "targets[]",
+    "targets[].routes[]",
+    "worktrees[]",
+    "models[]",
+  ]),
 )
 console.log(`session-target: ${targetResults.length} targets, ${worktreeResults.length} worktrees, ${models.length} models`)

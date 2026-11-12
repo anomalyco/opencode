@@ -4,6 +4,7 @@
 // expects the same order.
 import fuzzysort from "../../../tui/node_modules/fuzzysort"
 import { Definitions } from "../../../tui/src/config/keybind"
+import { records } from "../lib/records"
 
 const options = Object.entries(Definitions).map(([name, definition]) => ({
   title: definition.description,
@@ -52,5 +53,5 @@ const cases = [0, 0.7].flatMap((threshold) =>
 )
 
 const path = new URL("../fixtures/U.3/fuzzy.json", import.meta.url).pathname
-await Bun.write(path, JSON.stringify({ options, cases }, null, 1) + "\n")
+await Bun.write(path, records({ options, cases }, ["options[]", "cases[]"]))
 console.log(`oracle: U.3/fuzzy ${cases.length} cases`)
