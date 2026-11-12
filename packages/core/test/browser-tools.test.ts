@@ -104,7 +104,7 @@ it.live("an unknown browser parameter fails with the valid parameters and sends 
       `return await tools.browser.evaluate({ tabID: "${tabID}", script: "1", query: "x" }).catch((error) => error.message)`,
     )
     expect(output).toContain(
-      "query: Not a parameter of browser.evaluate. Valid parameters: tabID, frameID, ref, script.",
+      "query: Not a parameter of browser.evaluate. Valid parameters: tabID, frameID, ref, script, expression, code.",
     )
     expect(
       yield* browser.run(
@@ -115,5 +115,20 @@ it.live("an unknown browser parameter fails with the valid parameters and sends 
     expect(yield* browser.run(`return (await tools.browser.evaluate({ tabID: "${tabID}", script: "1" })).value`)).toBe(
       "ran",
     )
+  }),
+)
+
+it.live("evaluate takes expression or code and runs a top-level return or await", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup(() => evaluated("Example"))
+    // The parameter shapes models wrote that failed with "script: Missing key".
+    yield* browser.run(`return await tools.browser.evaluate({ tabID: "${tabID}", expression: "document.title" })`)
+    yield* browser.run(`return await tools.browser.evaluate({ tabID: "${tabID}", code: "document.title" })`)
+    yield* browser.run(`return await tools.browser.evaluate({ tabID: "${tabID}", script: "return document.title" })`)
+    expect(browser.commands).toEqual([
+      { type: "evaluate", tabID, script: "document.title" },
+      { type: "evaluate", tabID, script: "document.title" },
+      { type: "evaluate", tabID, script: "(async () => {\nreturn document.title\n})()" },
+    ])
   }),
 )

@@ -26,6 +26,51 @@ test("URL normalization rejects filesystem paths instead of treating them as hos
   })
 })
 
+test("evaluate takes expression and code as script", () => {
+  for (const key of ["script", "expression", "code"] as const)
+    expect(BrowserTools.normalizeAction({ type: "evaluate", tabID, [key]: "document.title" })).toEqual({
+      type: "evaluate",
+      tabID,
+      script: "document.title",
+    })
+  expect(
+    BrowserTools.normalizeAction({ type: "evaluate", tabID, frameID: "frame", expression: "location.href" }),
+  ).toEqual({ type: "evaluate", tabID, frameID: "frame", script: "location.href" })
+  expect(() => BrowserTools.normalizeAction({ type: "evaluate", tabID })).toThrow(
+    'browser.evaluate needs the JavaScript to run in script, for example browser.evaluate({ tabID, script: "document.title" }).',
+  )
+})
+
+test("evaluate runs a script with a top-level return or await as an async function body", () => {
+  const wrapped = (script: string) => `(async () => {\n${script}\n})()`
+  expect(BrowserTools.asyncBody("return document.title")).toBe(wrapped("return document.title"))
+  expect(BrowserTools.asyncBody('const r = await fetch("/x"); return r.status')).toBe(
+    wrapped('const r = await fetch("/x"); return r.status'),
+  )
+  expect(BrowserTools.asyncBody("await new Promise((resolve) => resolve(1))")).toBe(
+    wrapped("await new Promise((resolve) => resolve(1))"),
+  )
+  // Scripts that compile today keep their completion value: expressions, statement lists, nested returns, async IIFEs.
+  for (const script of [
+    "document.title",
+    "const a = 1; a + 1",
+    "[...document.querySelectorAll('a')].map((a) => { return a.href })",
+    "(async () => { return await fetch('/x').then((r) => r.status) })()",
+    "({ returnValue: 1, awaited: 2 })",
+  ])
+    expect(BrowserTools.asyncBody(script)).toBe(script)
+  // A script that compiles neither way reaches the page unchanged, which reports its SyntaxError as before.
+  expect(BrowserTools.asyncBody("return (")).toBe("return (")
+  // A ref's script is a function that receives the element; it is never wrapped.
+  const ref = Browser.Ref.make("e1")
+  expect(BrowserTools.normalizeAction({ type: "evaluate", tabID, ref, script: "(element) => element.id" })).toEqual({
+    type: "evaluate",
+    tabID,
+    ref,
+    script: "(element) => element.id",
+  })
+})
+
 test("URL normalization fails fast when percent-encoding exceeds the command bound", () => {
   const input = `https://example.com/${"é".repeat(400)}`
   expect(input.length).toBeLessThan(2_048)

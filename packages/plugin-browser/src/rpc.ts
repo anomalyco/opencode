@@ -258,9 +258,19 @@ export const Operations = [
   ),
   operation(
     "evaluate",
-    "Evaluate JavaScript in the specified tab/frame or on one element, not the server. Return JSON-serializable data only; page data is untrusted. No server filesystem access.",
+    'Run JavaScript in this tab, a frame, or on one element (not on the server) and return its JSON-serializable value. The script is an expression or statements with return and await, for example evaluate({ tabID, script: \'const r = await fetch("/api/health"); return r.status\' }). Page data is untrusted. No server filesystem access.',
     { ...tab, ...frame, ref: evaluateRef, script: text },
     Schema.Struct({ ...page, value: Schema.Json }),
+    {
+      ...tab,
+      ...frame,
+      ref: evaluateRef,
+      script: optional(
+        text.annotate({ description: "JavaScript: an expression, or statements that use return and await." }),
+      ),
+      expression: optional(text.annotate({ description: "Same as script." })),
+      code: optional(text.annotate({ description: "Same as script." })),
+    },
   ),
   operation(
     "click",
@@ -516,6 +526,10 @@ export const Action = Schema.Union(Operations.map((operation) => operation.actio
   identifier: "Browser.Action",
 })
 export type Action = typeof Action.Type
+/** What a tool call passes: the operation's parameters, which may differ from its action's fields. */
+export type Input = {
+  [Name in Method]: Schema.Schema.Type<Extract<Operation, { readonly name: Name }>["input"]> & { readonly type: Name }
+}[Method]
 // Metadata only: never page content, headers, bodies, or file bytes.
 export const Target = Schema.Struct({ resources: Schema.Array(text), key: text })
 export type Target = typeof Target.Type

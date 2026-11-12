@@ -4,6 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Result, Schema } from "effect"
 import { Base64 } from "effect/encoding"
+import { Script } from "node:vm"
 import type { BrowserConnection } from "./connection.js"
 import { BrowserFiles } from "./files.js"
 import { Browser } from "./rpc.js"
@@ -15,12 +16,12 @@ export const register = Effect.fn("BrowserTools.register")(function* (
 ) {
   const execute = Effect.fn("BrowserTools.execute")(function* (
     operation: Browser.Operation,
-    input: Browser.Action,
+    input: Browser.Input,
     tool: Tool.Context,
   ) {
     const action = yield* Effect.try({
       try: () => normalizeAction(input),
-      catch: (error) => new Tool.Error({ message: invalidURL, error }),
+      catch: (error) => (error instanceof Tool.Error ? error : new Tool.Error({ message: invalidURL, error })),
     })
     const target = yield* connection.target(tool.sessionID, action)
     const uploads =
@@ -53,7 +54,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
             codemode: true,
           },
           // The selected schema owns this correlation; the heterogeneous registry erases it.
-          execute: (input, tool) => execute(operation, { ...input, type: operation.name } as Browser.Action, tool),
+          execute: (input, tool) => execute(operation, { ...input, type: operation.name } as Browser.Input, tool),
         })
       })
     })
@@ -119,7 +120,8 @@ function exportResult(output: Schema.Schema.Type<Browser.Operation["output"]>, f
 const invalidURL =
   "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.preview to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server."
 
-export function normalizeAction(action: Browser.Action): Browser.Action {
+export function normalizeAction(action: Browser.Input): Browser.Action {
+  if (action.type === "evaluate") return evaluateAction(action)
   if (action.type !== "navigate" && action.type !== "tabs.open") return action
   if (action.type === "tabs.open" && action.url === undefined) return action
   const value = action.url?.trim() || "about:blank"
@@ -133,4 +135,38 @@ export function normalizeAction(action: Browser.Action): Browser.Action {
     throw new Error("Unsupported browser URL")
   // Percent-encoding can grow the URL past the bound the desktop decodes from `command`.
   return Schema.decodeUnknownSync(Browser.Action)({ ...action, url: url.href })
+}
+
+function evaluateAction(input: Extract<Browser.Input, { readonly type: "evaluate" }>): Browser.Action {
+  const script = input.script ?? input.expression ?? input.code
+  if (script === undefined)
+    throw new Tool.Error({
+      message:
+        'browser.evaluate needs the JavaScript to run in script, for example browser.evaluate({ tabID, script: "document.title" }).',
+    })
+  return {
+    type: "evaluate",
+    tabID: input.tabID,
+    ...(input.frameID === undefined ? {} : { frameID: input.frameID }),
+    ...(input.ref === undefined ? {} : { ref: input.ref }),
+    script: input.ref === undefined ? asyncBody(script) : script,
+  }
+}
+
+// The page runs a script as a classic script, where a top-level return or await is a SyntaxError. A script that fails
+// to compile that way but compiles as an async function body runs as one, so its return value is the result. Every
+// script that compiles today is sent unchanged.
+export function asyncBody(script: string) {
+  if (!/\b(?:return|await)\b/.test(script) || compiles(script)) return script
+  const body = `(async () => {\n${script}\n})()`
+  return body.length <= Browser.MAX_TEXT && compiles(body) ? body : script
+}
+
+function compiles(source: string) {
+  try {
+    new Script(source)
+    return true
+  } catch {
+    return false
+  }
 }
