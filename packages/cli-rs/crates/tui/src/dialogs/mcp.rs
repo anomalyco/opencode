@@ -55,7 +55,6 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
         location: crate::features::location::active(tui),
         loading: RefCell::new(HashSet::new()),
         select: RefCell::new(None),
-        seen: Cell::new(tui.data.read(|state| state.revision())),
     });
     if details
         && let Some(server) =
@@ -102,6 +101,9 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
             *mcp.select.borrow_mut() = Some(handle);
             // The footer reads the selection through the handle, which exists only now.
             mcp.refresh();
+            if let Some(tui) = mcp.tui.upgrade() {
+                cx.on_close(tui.follow(&mcp, |mcp, _, changes| mcp.sync(changes)));
+            }
             // The dialog owns the list; handlers hold weak references.
             cx.on_close(Disposer::new(move || {
                 mcp.select.borrow_mut().take();
@@ -120,12 +122,10 @@ struct Mcp {
     /// Servers with a connect or disconnect in flight.
     loading: RefCell<HashSet<String>>,
     select: RefCell<Option<Select<String>>>,
-    /// The store revision the list last saw.
-    seen: Cell<u64>,
 }
 
 impl Mcp {
-    /// Reads the list when the location has none yet, then follows the store.
+    /// Reads the list when the location has none yet.
     fn load(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
         let loaded =
@@ -141,23 +141,13 @@ impl Mcp {
                 }
             });
         }
-        self.watch(tui.data.subscribe());
     }
 
     /// Refreshes the list after each store flush that touched the location, while the dialog is open.
-    fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-        let Some(tui) = self.tui.upgrade() else { return };
-        let weak = Rc::downgrade(self);
-        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-            let (Some(mcp), Some(revisions)) = (weak.upgrade(), revisions) else { return };
-            let Some(tui) = mcp.tui.upgrade() else { return };
-            let (revision, changes) = tui.data.changes_since(mcp.seen.get());
-            mcp.seen.set(revision);
-            if changes.location(&mcp.location) {
-                mcp.refresh();
-            }
-            mcp.watch(revisions);
-        });
+    fn sync(&self, changes: &Changes) {
+        if changes.location(&self.location) {
+            self.refresh();
+        }
     }
 
     /// The location's servers by name.
