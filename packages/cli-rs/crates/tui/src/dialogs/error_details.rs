@@ -62,6 +62,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
                 if let Some(composer) = composer {
                     let mut value = opencode_local::jsonl::empty_prompt();
                     value["text"] = serde_json::Value::String(prompt);
+                    composer.history.reset();
                     composer.restore(value);
                     composer.textarea.set_cursor_offset(u32::MAX);
                 }

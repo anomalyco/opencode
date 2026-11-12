@@ -304,9 +304,57 @@ fn history_steps_through_submitted_prompts_and_is_written_as_typescript_writes_i
     assert_eq!(setup.textarea().text(), "one\ntwo");
     setup.app.press("up");
     assert_eq!(setup.textarea().cursor_offset(), 0);
-    // A typed prompt that is not the current entry does not step.
+    // A typed prompt is kept as the draft while Up recalls the newest entry (#63262).
     setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "second");
+    // An edited entry does not step.
+    setup.app.press("ctrl+e");
+    setup.app.type_text("!");
+    setup.app.press("ctrl+a");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "second!");
+    setup.app.press("ctrl+e");
+    setup.app.press("backspace");
+    setup.app.press("down");
     assert_eq!(setup.textarea().text(), "one\ntwo");
+}
+
+// #63262 (`history-composer.test.tsx`): Down past the newest entry brings back the draft and its shell mode.
+#[test]
+fn down_past_the_newest_entry_restores_the_draft_text_and_shell_mode() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("previous");
+    setup.app.press("return");
+    setup.wait_history(1);
+    setup.app.type_text("!echo pen");
+    setup.wait_for("Shell");
+    setup.app.press("ctrl+a");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "previous");
+    setup.wait_gone("Shell");
+    setup.app.press("ctrl+e");
+    setup.app.press("down");
+    assert_eq!(setup.textarea().text(), "echo pen");
+    setup.wait_for("Shell");
+}
+
+// #63262: clearing a recalled entry drops the draft, so Down stays empty.
+#[test]
+fn clearing_a_recalled_entry_drops_the_draft_so_down_stays_empty() {
+    let setup = Setup::new(session_route());
+    setup.ready();
+    setup.app.type_text("previous");
+    setup.app.press("return");
+    setup.wait_history(1);
+    setup.app.type_text("unsent");
+    setup.app.press("ctrl+a");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "previous");
+    setup.app.press("ctrl+c");
+    assert_eq!(setup.textarea().text(), "");
+    setup.app.press("down");
+    assert_eq!(setup.textarea().text(), "");
 }
 
 #[test]

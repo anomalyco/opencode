@@ -111,7 +111,6 @@ pub fn parse_history(text: &str) -> Vec<Value> {
 #[derive(Debug, Default)]
 pub struct History {
     entries: Vec<Value>,
-    index: i64,
 }
 
 impl History {
@@ -129,35 +128,16 @@ impl History {
         if let Err(error) = healed {
             log::warn!("prompt-history.jsonl: {error}");
         }
-        Self { entries: parse_history(&fs::read_to_string(&file).unwrap_or_default()), index: 0 }
+        Self { entries: parse_history(&fs::read_to_string(&file).unwrap_or_default()) }
     }
 
     pub fn entries(&self) -> &[Value] {
         &self.entries
     }
 
-    /// `move(direction, input)`: the entry to show, the empty prompt when back at the end, or `None`
-    /// when the cursor does not move.
-    pub fn step(&mut self, direction: i64, input: &str) -> Option<Value> {
-        let current = at(&self.entries, self.index)?;
-        if current.get("text").and_then(Value::as_str) != Some(input) && !input.is_empty() {
-            return None;
-        }
-        let next = self.index + direction;
-        if next.unsigned_abs() as usize > self.entries.len() || next > 0 {
-            return None;
-        }
-        self.index = next;
-        if next == 0 {
-            return Some(empty_prompt());
-        }
-        at(&self.entries, next).cloned()
-    }
-
-    /// `append(item)` in memory: skips a repeat of the last entry, trims to the limit, and resets the
-    /// cursor. Returns whether the entry is new, so the caller saves it.
+    /// `append(item)` in memory: skips a repeat of the last entry and trims to the limit. Returns whether the
+    /// entry is new, so the caller saves it. Each prompt keeps its own place in the entries.
     pub fn append(&mut self, entry: Value) -> bool {
-        self.index = 0;
         if self.entries.last().is_some_and(|previous| jsonc::stringify(previous) == jsonc::stringify(&entry)) {
             return false;
         }
@@ -256,11 +236,6 @@ fn unchanged(file: &Path, read: Option<&Vec<u8>>) -> io::Result<bool> {
 }
 
 // `Array.prototype.at`.
-fn at(items: &[Value], index: i64) -> Option<&Value> {
-    let index = if index < 0 { items.len().checked_sub(index.unsigned_abs() as usize)? } else { index as usize };
-    items.get(index)
-}
-
 /// `parsePromptStash`: entries rebuilt as `{prompt, timestamp}`.
 pub fn parse_stash(text: &str) -> Vec<Value> {
     let entries = lines(text)
@@ -501,7 +476,7 @@ mod tests {
     }
 
     #[test]
-    fn history_heals_appends_and_moves() {
+    fn history_heals_and_appends() {
         let state = opencode_util::temp::tempdir().unwrap();
         let file = state.path().join("prompt-history.jsonl");
         fs::write(&file, "{\"text\":\"a\",\"pasted\":[]}\nbroken\n{\"text\":1}\n").unwrap();
@@ -509,13 +484,7 @@ mod tests {
         assert_eq!(fs::read_to_string(&file).unwrap(), "{\"text\":\"a\",\"pasted\":[]}\n");
         assert!(history.append(prompt("b")));
         assert!(!history.append(prompt("b")));
-        assert_eq!(history.entries().len(), 2);
-        assert_eq!(history.step(-1, ""), Some(prompt("b")));
-        assert_eq!(history.step(-1, "b"), Some(json!({"text": "a", "pasted": []})));
-        assert_eq!(history.step(-1, "a"), None);
-        assert_eq!(history.step(1, "x"), None);
-        assert_eq!(history.step(1, "a"), Some(prompt("b")));
-        assert_eq!(history.step(1, "b"), Some(empty_prompt()));
+        assert_eq!(history.entries(), [json!({"text": "a", "pasted": []}), prompt("b")]);
         for index in 0..60 {
             history.append(prompt(&index.to_string()));
         }
