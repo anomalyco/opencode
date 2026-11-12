@@ -12,7 +12,7 @@ use opencode_store::target::{self, Prepared, SessionTarget, TargetError};
 use opencode_ui::motion::{Spinner, SpinnerColor};
 use opencode_ui::theme::ThemeMode;
 use opencode_util::error::{self, Context as _};
-use opentui::native::{KittyKeyboard, MouseTracking};
+use opentui::native::{Control, KittyKeyboard, MouseTracking};
 use opentui::split::{Scrollback, SplitFooter};
 
 use crate::footers::Footers;
@@ -51,12 +51,7 @@ pub fn run(input: Input) -> error::Result<()> {
     // `applyHeight` below sizes the footer to the composer before the first frame.
     options.host.split_footer = Some(FOOTER_HEIGHT);
     options.host.terminal.mouse = MouseTracking::Off;
-    if settings.mono {
-        options.host.terminal.kitty_keyboard = KittyKeyboard::OFF;
-    } else if cfg!(windows) {
-        // As `runtime.lifecycle.ts`: `{ events: platform === "win32" }`, the default flags plus event types.
-        options.host.terminal.kitty_keyboard = options.host.terminal.kitty_keyboard | KittyKeyboard::EVENT_TYPES;
-    }
+    options.host.terminal.kitty_keyboard = keyboard_flags(settings.mono, cfg!(windows));
     let app = App::new(options)?;
     let footer = SplitFooter::of(app.session()).context("mini runs in a split footer")?;
     let theme_input = ThemeInput {
@@ -616,6 +611,11 @@ impl Mini {
         let mut writer = self.writer.borrow_mut();
         writer.set_shell_output(settings.shell_output == Visibility::Show);
         if previous.mono != settings.mono {
+            // `onMonoChange`: mono turns the Kitty keyboard off, and switching it off turns the flags back on.
+            let flags = keyboard_flags(settings.mono, cfg!(windows));
+            if let Err(error) = self.app.session().control(Control::KittyKeyboard(flags)) {
+                log::warn!("mini could not switch the keyboard flags: {error}");
+            }
             if let Err(error) = writer.set_mono(settings.mono) {
                 log::warn!("mini could not switch mono: {error}");
             }
@@ -2014,6 +2014,16 @@ fn opened_variant(target: &SessionTarget) -> Option<String> {
     (session.provider_id == model.provider_id && session.id == model.id).then(|| session.variant.clone())?
 }
 
+/// The Kitty keyboard flags of `runtime.lifecycle.ts`: none in mono, else `buildKittyKeyboardFlags({ events:
+/// platform === "win32" })`, the host's default flags plus event types on Windows.
+fn keyboard_flags(mono: bool, windows: bool) -> KittyKeyboard {
+    if mono {
+        return KittyKeyboard::OFF;
+    }
+    let flags = KittyKeyboard::DISAMBIGUATE | KittyKeyboard::ALTERNATE_KEYS;
+    if windows { flags | KittyKeyboard::EVENT_TYPES } else { flags }
+}
+
 /// Whether an event's `sessionID(event)` names `session` (`stream-v2.transport.ts:180-183,1048-1053`).
 fn own_event(event: &Value, session: &str) -> bool {
     let data = &event["data"];
@@ -2098,6 +2108,15 @@ mod tests {
         assert!(own_event(&event("form.created", json!({ "form": { "sessionID": "ses_1" } })), "ses_1"));
         assert!(!own_event(&event("form.created", json!({ "form": { "sessionID": "global" } })), "ses_1"));
         assert!(!own_event(&event("model.updated", json!({})), "ses_1"));
+    }
+
+    #[test]
+    fn mono_turns_the_kitty_keyboard_off_and_windows_adds_event_types() {
+        let default = AppOptions::default().host.terminal.kitty_keyboard;
+        assert_eq!(keyboard_flags(false, false), default);
+        assert_eq!(keyboard_flags(false, true), default | KittyKeyboard::EVENT_TYPES);
+        assert_eq!(keyboard_flags(true, false), KittyKeyboard::OFF);
+        assert_eq!(keyboard_flags(true, true), KittyKeyboard::OFF);
     }
 
     #[test]
