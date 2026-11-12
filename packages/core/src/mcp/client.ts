@@ -34,6 +34,9 @@ import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
 import { McpStdio } from "./stdio.js"
+import { EventStreamRejectedError, EventStreamTerminatedError } from "./event-errors.js"
+
+export { EventStreamRejectedError, EventStreamTerminatedError }
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -82,7 +85,7 @@ const EventType = Schema.Struct({
   payloadSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 })
 export type EventType = typeof EventType.Type
-const EventError = Schema.Struct({ code: Schema.Number, message: Schema.String, data: Schema.optional(Schema.Unknown) })
+const EventError = Schema.Struct({ code: Schema.Number, message: Schema.String, data: Schema.optional(Schema.Json) })
 export type EventError = typeof EventError.Type
 // An absent cursor means null: the event type has no replay.
 const Cursor = Schema.optional(Schema.NullOr(Schema.String))
@@ -99,7 +102,7 @@ const EventNotification = Schema.toStandardSchemaV1(
     eventId: Schema.String,
     name: Schema.String,
     timestamp: Schema.String,
-    data: Schema.Unknown,
+    data: Schema.Json,
     cursor: Cursor,
     ...Subscribed,
   }),
@@ -119,7 +122,7 @@ export type EventMessage =
       readonly eventId: string
       readonly name: string
       readonly timestamp: string
-      readonly data: unknown
+      readonly data: Schema.Json
       readonly cursor: string | null
     }
   /** Nothing matched; the server has checked up to `cursor`. */
@@ -130,33 +133,6 @@ export type EventMessage =
 // JSON-RPC errors that mean an `events/stream` request can never succeed as sent: unknown method, bad arguments, and
 // the events extension's NotFound, Forbidden and Unsupported.
 const EVENT_STREAM_REJECTED = new Set([-32601, -32602, -32023, -32024, -32026])
-
-/**
- * The server refused the subscription, as for an unknown event type, bad arguments or missing access.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
- */
-export class EventStreamRejectedError extends Schema.TaggedError<EventStreamRejectedError>()(
-  "MCP.EventStreamRejectedError",
-  {
-    server: Schema.String,
-    code: Schema.Number,
-    message: Schema.String,
-  },
-) {}
-
-/**
- * The server ended the subscription, as when access was revoked or the event type was removed or changed.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
- */
-export class EventStreamTerminatedError extends Schema.TaggedError<EventStreamTerminatedError>()(
-  "MCP.EventStreamTerminatedError",
-  {
-    server: Schema.String,
-    code: Schema.Number,
-    message: Schema.String,
-    data: Schema.optional(Schema.Unknown),
-  },
-) {}
 
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
 export type ResourceTemplate = ResourceTemplateType

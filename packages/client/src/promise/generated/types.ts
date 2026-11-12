@@ -2123,7 +2123,7 @@ export type ExperimentalMcpEvent = {
     name: string
     eventId: string
     timestamp: string
-    data: any
+    data: JsonValue
     cursor: string | null
     truncated?: boolean | undefined
   }

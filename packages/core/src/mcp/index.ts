@@ -39,6 +39,8 @@ import { Hash } from "@opencode/util/hash"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
+import { EventStreamRejectedError, EventStreamTerminatedError } from "./event-errors.js"
+import { canonicalJson } from "../util/canonical-json.js"
 import { McpConnection } from "./connection.js"
 import { McpPool } from "./pool.js"
 
@@ -137,17 +139,8 @@ const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesCha
 // A broken, silent or closed event stream reopens after a delay growing from a second to this cap.
 const EVENT_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")])
 
-// Arguments compare by value: keys sort at every depth, so their order never makes a different subscription.
-const canonical = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`
-  if (value === null || typeof value !== "object") return JSON.stringify(value)
-  const fields = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))
-  return `{${fields.map(([key, field]) => `${JSON.stringify(key)}:${canonical(field)}`).join(",")}}`
-}
-
-// The server ended the subscription for good. The client module loads lazily, so its errors match by tag.
-const isEnded = (error: Error): error is McpClient.EventStreamTerminatedError | McpClient.EventStreamRejectedError =>
-  "_tag" in error && (error._tag === "MCP.EventStreamTerminatedError" || error._tag === "MCP.EventStreamRejectedError")
+const isEnded = (error: Error) =>
+  error instanceof EventStreamRejectedError || error instanceof EventStreamTerminatedError
 
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
@@ -213,7 +206,7 @@ export interface Interface extends State.Transformable<Editor> {
     server: ServerName | string,
     input: {
       readonly name: string
-      readonly arguments?: Record<string, unknown>
+      readonly arguments?: Schema.JsonObject
       /** Where to start; omitted or null starts from now. */
       readonly cursor?: string | null
     },
@@ -244,7 +237,7 @@ export interface Subscription {
   readonly id: string
   readonly server: ServerName
   readonly name: string
-  readonly arguments?: Record<string, unknown>
+  readonly arguments?: Schema.JsonObject
   readonly status: Mcp.SubscriptionStatus
   /** Where it resumes from: the last cursor the server sent. */
   readonly cursor: string | null
@@ -379,7 +372,7 @@ export const layer = (options?: Options) =>
             isEnded(error)
               ? setStatus(sub, {
                   status: "ended",
-                  reason: error._tag === "MCP.EventStreamRejectedError" ? "rejected" : "terminated",
+                  reason: error instanceof EventStreamRejectedError ? "rejected" : "terminated",
                   error: { code: error.code, message: error.message },
                 })
               : Effect.void,
@@ -1082,7 +1075,7 @@ export const layer = (options?: Options) =>
           if (!mcpEvents)
             return yield* new EventsUnavailableError({ server: name, message: "MCP events need the mcp_events flag." })
           yield* requireServer(name)
-          const id = "mcpsub_" + Hash.sha256(canonical([name, input.name, input.arguments ?? {}])).slice(0, 24)
+          const id = "mcpsub_" + Hash.sha256(canonicalJson([name, input.name, input.arguments ?? {}])).slice(0, 24)
           const subs = followed.get(name) ?? new Map<string, Followed>()
           followed.set(name, subs)
           const existing = subs.get(id)

@@ -103,14 +103,13 @@ export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsA
 export const SubscriptionStatus = Schema.Union([
   Schema.Struct({ status: Schema.Literal("pending") }),
   Schema.Struct({ status: Schema.Literal("active") }),
+  Schema.Struct({ status: Schema.Literal("ended"), reason: Schema.Literal("unavailable") }),
   Schema.Struct({
     status: Schema.Literal("ended"),
-    reason: Schema.Literals(["terminated", "rejected", "unavailable"]),
-    error: Schema.optional(Schema.Struct({ code: Schema.optional(Schema.Number), message: Schema.String })),
+    reason: Schema.Literals(["terminated", "rejected"]),
+    error: Schema.Struct({ code: Schema.Number, message: Schema.String }),
   }),
-])
-  .pipe(Schema.toTaggedUnion("status"))
-  .annotate({ identifier: "Mcp.SubscriptionStatus" })
+]).annotate({ identifier: "Mcp.SubscriptionStatus" })
 export type SubscriptionStatus = typeof SubscriptionStatus.Type
 
 export interface Server extends Schema.Schema.Type<typeof Server> {}

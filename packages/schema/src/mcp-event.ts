@@ -38,7 +38,7 @@ export const ExperimentalEvent = Event.ephemeral({
     name: Schema.String,
     eventId: Schema.String,
     timestamp: Schema.String,
-    data: Schema.Unknown,
+    data: Schema.Json,
     /** Where the subscription resumes from after this event; null when the event type has no replay. */
     cursor: Schema.NullOr(Schema.String),
     /** The server skipped events before this one, which it could not replay. */

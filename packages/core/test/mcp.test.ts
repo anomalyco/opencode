@@ -4116,7 +4116,12 @@ describe("MCP events", () => {
           name: "job.finished",
           arguments: { job: "j1", filter: { a: 1, b: 2 } },
         })
-        expect(subscription).toMatchObject({ server: "resources", status: { status: "pending" }, cursor: null })
+        expect(subscription).toMatchObject({
+          id: "mcpsub_2c691983d6df57af6bb5e2e8",
+          server: "resources",
+          status: { status: "pending" },
+          cursor: null,
+        })
         const stream = yield* server.opened
         stream.send("notifications/events/active", { cursor: "c1", truncated: false })
         yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
@@ -4124,7 +4129,7 @@ describe("MCP events", () => {
           eventId: "e1",
           name: "job.finished",
           timestamp: "2026-11-11T00:00:00Z",
-          data: { job: "j1" },
+          data: [null, { job: "j1" }, false],
           cursor: "c2",
         })
         expect(yield* bus.delivered(1)).toEqual([
@@ -4136,7 +4141,7 @@ describe("MCP events", () => {
               name: "job.finished",
               eventId: "e1",
               timestamp: "2026-11-11T00:00:00Z",
-              data: { job: "j1" },
+              data: [null, { job: "j1" }, false],
               cursor: "c2",
             },
           },
