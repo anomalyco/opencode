@@ -2747,8 +2747,22 @@ export type ExperimentalMigrationV1StatusOperation<E = never> = () => Effect.Eff
   E
 >
 
+export type ExperimentalMigrationSessionSearchStatusOutput =
+  | { readonly status: "disabled" }
+  | {
+      readonly status: "running" | "paused"
+      readonly progress: { readonly label: string; readonly numerator: number; readonly denominator: number }
+    }
+  | { readonly status: "completed"; readonly skipped: number }
+  | { readonly status: "unsupported" | "error"; readonly error: string }
+export type ExperimentalMigrationSessionSearchStatusOperation<E = never> = () => Effect.Effect<
+  ExperimentalMigrationSessionSearchStatusOutput,
+  E
+>
+
 export interface ExperimentalMigrationApi<E = never> {
   readonly v1: { readonly status: ExperimentalMigrationV1StatusOperation<E> }
+  readonly sessionSearch: { readonly status: ExperimentalMigrationSessionSearchStatusOperation<E> }
 }
 
 export type WebsearchProvidersInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -3018,6 +3032,12 @@ export type MigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput
 /** @deprecated Use `ExperimentalMigrationV1StatusOperation`. Removed in the next minor. */
 export type MigrationV1StatusOperation<E = never> = ExperimentalMigrationV1StatusOperation<E>
 
+/** @deprecated Use `ExperimentalMigrationSessionSearchStatusOutput`. Removed in the next minor. */
+export type MigrationSessionSearchStatusOutput = ExperimentalMigrationSessionSearchStatusOutput
+
+/** @deprecated Use `ExperimentalMigrationSessionSearchStatusOperation`. Removed in the next minor. */
+export type MigrationSessionSearchStatusOperation<E = never> = ExperimentalMigrationSessionSearchStatusOperation<E>
+
 /** @deprecated Use `ExperimentalUsageLimitsInput`. Removed in the next minor. */
 export type UsageLimitsInput = ExperimentalUsageLimitsInput
 
@@ -3115,6 +3135,12 @@ export interface AppApi<E = never> {
     readonly v1: {
       /** @deprecated Use `client.experimental.migration.v1.status`. Removed in the next minor. */
       readonly status: ExperimentalMigrationV1StatusOperation<E>
+    }
+
+    /** @deprecated Use `client.experimental.migration.sessionSearch`. Removed in the next minor. */
+    readonly sessionSearch: {
+      /** @deprecated Use `client.experimental.migration.sessionSearch.status`. Removed in the next minor. */
+      readonly status: ExperimentalMigrationSessionSearchStatusOperation<E>
     }
   }
 
