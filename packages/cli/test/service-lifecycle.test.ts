@@ -139,7 +139,9 @@ serviceTest(
     await using home = await serviceHome()
     using listener = Bun.serve({ hostname: "127.0.0.1", port: home.port, fetch: () => new Response("unrelated") })
 
-    await expect(cli(home, "service", "start")).rejects.toThrow("already in use")
+    await expect(cli(home, "service", "start")).rejects.toThrow(
+      /OPENCODE_SERVICE_PORT_OWNER=foreign[\s\S]*already in use/,
+    )
 
     const url = await cli(home, "service", "start", "--port", "0")
     const info = await Bun.file(home.registration).json()

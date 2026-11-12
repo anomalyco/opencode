@@ -19,6 +19,8 @@ const VERSION = "2.0.26"
 
 const URL = "http://127.0.0.1:54321"
 
+const FIXED_URL = "http://127.0.0.1:49374"
+
 test("ignores stopped services and registrations that do not match the healthy endpoint", () => {
   const registration = { url: "http://127.0.0.1:1234", password: "secret", version: "2.0.0", pid: 42 }
   const frame = `OPENCODE_SSH_REGISTRATION_BEGIN\n${JSON.stringify(registration)}\nOPENCODE_SSH_REGISTRATION_END\n`
@@ -75,7 +77,7 @@ const service = `case "$2" in
       printf '%s' '{"url":"${URL}","password":"secret","version":"${VERSION}","pid":7}' > "$HOME/.local/state/opencode/service.json"
       printf '%s\\n' "${URL}"
     else
-      printf '%s\\n' "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+      printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=foreign" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
       exit 1
     fi
     ;;
@@ -85,10 +87,33 @@ const service = `case "$2" in
 esac`
 
 const unavailable = `if [ "$2" = "start" ] || [ "$2" = "restart" ]; then
-  printf '%s\\n' "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+  printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=opencode" "OPENCODE_SERVICE_PORT_OWNER_PID=999999" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
   exit 1
 fi
 if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; else printf '%s\\n' stopped; fi`
+
+const reclaim = `case "$2" in
+  status)
+    if [ -f "$HOME/.local/state/opencode/service.json" ]; then printf '%s\\n' "${FIXED_URL}"; else printf '%s\\n' stopped; fi
+    ;;
+  start|restart)
+    if [ "$3" = "--port" ] && [ "$4" = "0" ]; then
+      printf '%s\\n' "Free-port fallback started a second service." >&2
+      exit 1
+    fi
+    if [ -f "$HOME/.local/state/opencode/restarted" ]; then
+      printf '%s' '{"url":"${FIXED_URL}","password":"secret","version":"${VERSION}","pid":7}' > "$HOME/.local/state/opencode/service.json"
+      printf '%s\\n' "${FIXED_URL}"
+    else
+      touch "$HOME/.local/state/opencode/restarted"
+      printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=opencode" "OPENCODE_SERVICE_PORT_OWNER_PID=999999" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
 
 bootTest(
   "starts on a free port when the managed port is already taken",
@@ -98,6 +123,20 @@ bootTest(
     try {
       const endpoint = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env })
       expect(endpoint).toEqual({ host: "127.0.0.1", port: 54321, password: "secret" })
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+bootTest(
+  "restarts an OpenCode service that holds the managed port",
+  Effect.gen(function* () {
+    const machine = yield* Effect.promise(() => remote(reclaim))
+
+    try {
+      const endpoint = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env })
+      expect(endpoint).toEqual({ host: "127.0.0.1", port: 49374, password: "secret" })
     } finally {
       yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
     }

@@ -29,16 +29,38 @@ ${registrationScript}`
 export function startScript(version: string, replace = false) {
   const command = replace ? "restart" : "start"
 
-  // A foreign process can hold the managed port: its default lives inside the
-  // Linux ephemeral range. The registration carries the real address, so a
-  // reconnect falls back to a free port instead of failing on the stale one.
+  // A conflict keeps its fixed port when the holder is an OpenCode service left behind
+  // by a dropped connection: stop it and start again on the configured port. A foreign
+  // or absent listener (the default port sits inside the Linux ephemeral range) falls
+  // back to a free port, and the registration carries the address that was chosen.
+  // An unrecognized listener stays untouched and the failure is reported.
   return `set -eu
 cli="${binaryPath(version)}"
-if ! output=$("$cli" service ${command} 2>&1); then
+start() { "$cli" service ${command} "$@"; }
+if ! output=$(start 2>&1); then
   case "$output" in
-    *"already in use"*)
-      if ! "$cli" service ${command} --port 0; then
-        printf '%s\\n' "$output" >&2
+    *"OPENCODE_SERVICE_PORT_OWNER=opencode"*)
+      pid=$(printf '%s\\n' "$output" | sed -n 's/^OPENCODE_SERVICE_PORT_OWNER_PID=//p')
+      verify=$(ps -o command= -p "$pid" 2>/dev/null || true)
+      case "$verify" in
+        *opencode*serve*--service*)
+          kill "$pid" 2>/dev/null || true
+          i=0
+          while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
+            sleep 1
+            i=$((i + 1))
+          done
+          kill -9 "$pid" 2>/dev/null || true
+          ;;
+      esac
+      if ! retry=$(start 2>&1); then
+        printf '%s\\n%s\\n' "$output" "$retry" >&2
+        exit 1
+      fi
+      ;;
+    *"OPENCODE_SERVICE_PORT_OWNER=foreign"*|*"OPENCODE_SERVICE_PORT_OWNER=none"*)
+      if ! retry=$(start --port 0 2>&1); then
+        printf '%s\\n%s\\n' "$output" "$retry" >&2
         exit 1
       fi
       ;;
