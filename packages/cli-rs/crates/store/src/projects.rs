@@ -1,5 +1,7 @@
 //! Projects (F.8), and the adoption of sessions into a project when
 //! its repository is resolved (`worktree.resolved`).
+use std::collections::HashSet;
+
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
@@ -34,6 +36,17 @@ impl State {
             sandboxes: data.sandboxes.clone(),
         };
         self.projects.insert(data.id.clone(), project);
+        self.log.projects();
+    }
+
+    /// Replaces the cached set as Solid's `reconcile` does: a kept project keeps its place, a new one
+    /// goes last, so the order of projects that sort equal does not change between reads.
+    fn replace_projects(&mut self, projects: Vec<Project>) {
+        let ids: HashSet<&ProjectID> = projects.iter().map(|project| &project.id).collect();
+        self.projects.retain(|id, _| ids.contains(id));
+        for project in projects {
+            self.projects.insert(project.id.clone(), project);
+        }
         self.log.projects();
     }
 
@@ -118,10 +131,7 @@ impl Data {
     pub fn project_sync(&self) -> Task<()> {
         self.sync_run("project".to_owned(), |data| async move {
             let projects = data.client().project_list(&ProjectListInput::default()).await.map_err(Error::new)?;
-            data.write(|state| {
-                state.projects = projects.into_iter().map(|project| (project.id.clone(), project)).collect();
-                state.log.projects();
-            });
+            data.write(|state| state.replace_projects(projects));
             Ok(())
         })
     }
@@ -138,6 +148,26 @@ mod tests {
             previous: ProjectID("global".into()),
             adopted: Some(adopted.iter().map(|id| ProjectID((*id).into())).collect()),
         }
+    }
+
+    #[test]
+    fn projects_that_sort_equal_keep_their_first_read_order() {
+        let project = |id: &str, active: i64| Project {
+            id: ProjectID(id.into()),
+            time: ProjectTime { active, ..ProjectTime::default() },
+            ..Project::default()
+        };
+        let order = |state: &State| state.projects().iter().map(|project| project.id.0.clone()).collect::<Vec<_>>();
+        let mut state = State::default();
+        let ids = ["p", "c", "x", "a", "m", "k", "z", "b"];
+        state.replace_projects(ids.iter().map(|id| project(id, 1)).collect());
+        assert_eq!(order(&state), ids);
+        // A later read in another order with one project gone and one new keeps the kept ones in place.
+        let mut again: Vec<Project> =
+            ["new", "b", "z", "k", "m", "a", "x", "c"].iter().map(|id| project(id, 1)).collect();
+        again.push(project("recent", 2));
+        state.replace_projects(again);
+        assert_eq!(order(&state), ["recent", "c", "x", "a", "m", "k", "z", "b", "new"]);
     }
 
     #[test]
