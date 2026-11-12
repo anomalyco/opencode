@@ -1435,9 +1435,11 @@ function App() {
       >
         <box
           flexShrink={0}
+          minWidth={0}
           flexDirection="row"
           onSizeChange={function () {
-            setRailWidth(this.width)
+            // The render buffer is at least one cell wide even when the rail occupies no layout space.
+            setRailWidth(this.getComputedLayout().width)
           }}
         >
           <Slot path="workspace.rail" input={{ tabWidth: tabWidth() }} />
