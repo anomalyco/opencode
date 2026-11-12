@@ -79,6 +79,7 @@ describe("current tool state", () => {
   test("keeps a caught or interrupted call marked as an error when execute succeeds", () => {
     // Both kinds of child termination are persisted as an error row.
     const metadata = { toolCalls: [{ tool: "fetch", status: "error" }] }
+
     const tool = {
       type: "tool",
       id: "tool_execute",
