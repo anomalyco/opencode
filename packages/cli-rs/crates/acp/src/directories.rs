@@ -99,8 +99,7 @@ fn rules(directories: &[String]) -> Vec<PermissionRule> {
         .into_iter()
         .map(|directory| PermissionRule {
             action: "external_directory".to_owned(),
-            // `join(directory, "*")`.
-            resource: format!("{}{}*", directory.trim_end_matches(|c| Flavor::NATIVE.is_sep(c)), Flavor::NATIVE.sep()),
+            resource: Flavor::NATIVE.join(&[&directory, "*"]),
             effect: PermissionEffect::Allow,
         })
         .collect()

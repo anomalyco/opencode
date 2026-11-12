@@ -1,16 +1,16 @@
 //! `additional-directories.test.ts`.
 
 use opencode_acp::paths::resolve_lexical;
+use opencode_util::path::Flavor;
 use serde_json::{Value, json};
 
 use crate::wire::{Wire, WireOptions, assert_matches, make_session, start_wire};
 
 const KEY: &str = "opencode.acp.additionalDirectories";
 
-/// `path.join(directory, "*")` of a resolved directory.
+/// `path.join(directory, "*")`.
 fn grant(directory: &str) -> Value {
-    let resource = format!("{directory}{}*", std::path::MAIN_SEPARATOR);
-    json!({ "action": "external_directory", "resource": resource, "effect": "allow" })
+    json!({ "action": "external_directory", "resource": Flavor::NATIVE.join(&[directory, "*"]), "effect": "allow" })
 }
 
 fn user_grant() -> Value {
