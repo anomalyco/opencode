@@ -120,7 +120,7 @@ currently use these actions and resources:
 | `websearch`          | Search query                                                                |
 | `experimental_image_generate` | Selected image model as `providerID/modelID`, plus `#variant` when set |
 | `external_directory` | Canonical external directory boundary, normally ending in `/*`              |
-| `<server>_<tool>`    | `*` for an MCP tool; unsupported characters in both names become `_`        |
+| `<server>_<tool>`    | `*` for an MCP tool. Names keep letters, numbers, `-`, and `_`; other characters become `_` |
 | `opencode_list_mcp_resources` | MCP server name                                                    |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`; a deny removes Code Mode and lists its tools directly, while nested tools enforce their rules |
@@ -137,6 +137,20 @@ For example, allow one skill and deny all other skills:
 ```
 
 `doom_loop` and `lsp` are not current V2 Core permission actions.
+
+MCP names keep hyphens. A server named `mcp-atlassian` produces actions like
+`mcp-atlassian_confluence_update_page`, so match the server name exactly as
+configured:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "mcp-atlassian_*", "resource": "*", "effect": "ask" },
+  ],
+}
+```
+
+A rule written as `mcp_atlassian_*` does not match that server.
 
 ## Directories
 
