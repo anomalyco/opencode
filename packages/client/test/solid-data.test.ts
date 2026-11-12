@@ -406,6 +406,85 @@ test("reads a function omitToolFileData for each live tool result", async () => 
   }
 })
 
+test("restores dropped tool files from the server once they are shown again", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
+  const assistant = (state: object) => ({
+    id: "msg_assistant",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    time: { created: 1 },
+    content: [{ type: "tool", id: "call_shot", name: "execute", time: { created: 1, ran: 1 }, state }],
+  })
+  const requests: string[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      requests.push(url.pathname)
+      if (url.pathname.endsWith("/message/msg_assistant"))
+        return Response.json({
+          data: assistant({
+            status: "completed",
+            input: {},
+            content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+          }),
+        })
+      return Response.json({ data: [assistant({ status: "running", input: {}, metadata: {} })], cursor: {} })
+    },
+  })
+  const [omit, setOmit] = createSignal(true)
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      omitToolFileData: omit,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_restore")
+    const success: OpenCodeEvent = {
+      id: "evt_shot",
+      created: 2,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_restore", seq: 1, version: 2 },
+      data: {
+        sessionID: "ses_restore",
+        assistantMessageID: "msg_assistant",
+        id: "call_shot",
+        executed: true,
+        content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: success.type, details: success }))
+    expect(setup.data.session.message.get("ses_restore", "msg_assistant")).toMatchObject({
+      content: [{ state: { content: [{ uri: "data:image/png;base64," }] } }],
+    })
+
+    setOmit(false)
+    await setup.data.session.message.restoreFiles()
+
+    expect(requests.filter((path) => path.endsWith("/message/msg_assistant"))).toHaveLength(1)
+    expect(setup.data.session.message.get("ses_restore", "msg_assistant")).toMatchObject({
+      content: [{ state: { content: [{ type: "file", uri: screenshot, mime: "image/png" }] } }],
+    })
+    // Nothing is left to restore, so a second call reads nothing.
+    await setup.data.session.message.restoreFiles()
+    expect(requests.filter((path) => path.endsWith("/message/msg_assistant"))).toHaveLength(1)
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("refreshes a loaded session's execution start when it starts running", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({

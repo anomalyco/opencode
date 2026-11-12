@@ -188,6 +188,16 @@ const hasFileData = (part: Extract<SessionMessageInfo, { type: "assistant" }>["c
   "content" in part.state &&
   !!part.state.content?.some((item) => item.type === "file" && item.uri.startsWith("data:"))
 
+// A tool file whose `data:` payload `omitFileData` emptied.
+const hasDroppedFileData = (message: SessionMessageInfo) =>
+  message.type === "assistant" &&
+  message.content.some(
+    (part) =>
+      part.type === "tool" &&
+      "content" in part.state &&
+      !!part.state.content?.some((item) => item.type === "file" && item.uri === `data:${item.mime};base64,`),
+  )
+
 // Returns the same message when there is nothing to drop, so the store keeps its objects.
 function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
   if (message.type !== "assistant" || !message.content.some(hasFileData)) return message
@@ -1831,6 +1841,26 @@ export function createData(config: CreateDataInput) {
           const messages = store.session.message[sessionID]
           const position = messageIndex.get(sessionID)?.get(messageID)
           return position === undefined ? undefined : messages?.[position]
+        },
+        /** Re-reads every loaded message whose tool file data was dropped, for a client that starts showing tool files. */
+        restoreFiles() {
+          const dropped = Object.entries(store.session.message).flatMap(([sessionID, messages]) =>
+            (messages ?? []).filter(hasDroppedFileData).map((item) => ({ sessionID, messageID: item.id })),
+          )
+          return Promise.all(
+            dropped.map((input) =>
+              api()
+                .session.message.get(input)
+                .then((item) =>
+                  message.update(input.sessionID, (draft, index) => {
+                    const position = index.get(item.id)
+                    if (position !== undefined) draft[position] = stored(item)
+                  }),
+                )
+                // A message deleted or evicted meanwhile has nothing left to restore.
+                .catch(() => undefined),
+            ),
+          )
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {

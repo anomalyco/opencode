@@ -1,6 +1,7 @@
 import { createData } from "@opencode/client/solid"
 import { withMediaRefs, type LocationRef } from "@opencode/client"
 import type { Plugin } from "@opencode/plugin/tui"
+import { createEffect, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -24,6 +25,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       // Read per event, so toggling previews applies to new results without a restart.
       omitToolFileData: () => !config.data.session?.image_preview,
     })
+    // Turning previews on brings back the screenshots dropped while they were off.
+    createEffect(
+      on(
+        () => config.data.session?.image_preview === true,
+        (preview) => {
+          if (preview) void data.session.message.restoreFiles()
+        },
+        { defer: true },
+      ),
+    )
     data satisfies Plugin.Context["data"]
     const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})
     return {
