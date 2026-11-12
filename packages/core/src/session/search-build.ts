@@ -1,6 +1,6 @@
 export * as SessionSearchBuild from "./search-build.js"
 
-import { Cause, Clock, Context, Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Cause, Clock, Context, Effect, Exit, Latch, Layer, Scope } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "../database/database.js"
 import { SessionSearchIndex } from "./search-index.js"
@@ -19,9 +19,14 @@ export type Status =
 
 export interface Interface {
   /**
-   * Keeps `experimental.sqlite_fts` on for the scope it runs in, as a location with the flag on does for as long as it
-   * is loaded. The one-time build of existing history runs while any location holds it, from a persisted cursor, and
-   * pauses when none does; triggers keep the index current once it is done.
+   * Runs the one-time build of existing history whenever a location holds it, until it is done; triggers keep the
+   * index current after that. The server forks it, like `Schedule.run`, so it runs once per server process and never
+   * in a Durable Object. Runs until interrupted.
+   */
+  readonly run: Effect.Effect<never>
+  /**
+   * Marks `experimental.sqlite_fts` on for the scope it runs in, as a location with the flag on does while it is
+   * loaded. The build runs while any location holds it and pauses, from its persisted cursor, when none does.
    */
   readonly hold: Effect.Effect<void, never, Scope.Scope>
   readonly status: Effect.Effect<Status>
@@ -39,12 +44,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
-    const scope = yield* Scope.Scope
+    const wanted = yield* Latch.make()
+    const released = yield* Latch.make(true)
     const runtime = {
       holds: 0,
       // A failed build waits for the flag to be turned off and on again, or for a version that rebuilds it.
       retry: false,
-      fiber: undefined as Fiber.Fiber<void> | undefined,
       building: false,
       unsupported: undefined as string | undefined,
     }
@@ -103,7 +108,7 @@ export const layer = Layer.effect(
       ),
     )
 
-    const run = Effect.gen(function* () {
+    const attempt = Effect.gen(function* () {
       const state = yield* SessionSearchIndex.state(db)
       if (state && state.version > SessionSearchIndex.Version) return
       const built = SessionSearchIndex.current(state) ? state : undefined
@@ -127,25 +132,29 @@ export const layer = Layer.effect(
         (cause) => !Cause.hasInterrupts(cause),
         (cause) => Effect.logError("session search build stopped", { cause }),
       ),
-      Effect.ensuring(
-        Effect.sync(() => {
-          runtime.fiber = undefined
-        }),
-      ),
     )
 
-    // The first hold starts the build, if it isn't done; releasing the last one interrupts it between transactions.
+    // Each time a location holds it, attempt the build, interrupted between transactions once none does.
+    const run = Effect.gen(function* () {
+      yield* wanted.await
+      yield* attempt.pipe(Effect.raceFirst(released.await))
+      yield* released.await
+    }).pipe(Effect.forever)
+
     const hold = Effect.acquireRelease(
       Effect.gen(function* () {
         runtime.holds++
-        if (runtime.holds === 1 && !runtime.fiber) runtime.fiber = yield* Effect.forkIn(run, scope)
+        if (runtime.holds > 1) return
+        yield* released.close
+        yield* wanted.open
       }),
       () =>
         Effect.gen(function* () {
           runtime.holds--
           if (runtime.holds > 0) return
           runtime.retry = true
-          if (runtime.fiber) yield* Fiber.interrupt(runtime.fiber)
+          yield* wanted.close
+          yield* released.open
         }),
     )
 
@@ -166,7 +175,7 @@ export const layer = Layer.effect(
       } satisfies Status
     })
 
-    return Service.of({ hold, status })
+    return Service.of({ run, hold, status })
   }),
 )
 

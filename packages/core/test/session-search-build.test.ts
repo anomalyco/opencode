@@ -42,6 +42,7 @@ const setup = Effect.gen(function* () {
       .pipe(Effect.orDie)
   yield* Effect.forEach(["ses_a", "ses_b", "ses_c"], (id) => insert(id, `Existing walrus ${id}`))
   const build = yield* SessionSearchBuild.Service
+  yield* build.run.pipe(Effect.forkScoped)
   return { db, insert, build }
 })
 
@@ -132,6 +133,17 @@ describe("SessionSearchBuild", () => {
       expect(yield* build.status).toEqual({ status: "completed", skipped: 0 })
       expect(yield* titles(db, "walrus")).toEqual(["ses_a", "ses_b", "ses_c"])
       yield* release(retried)
+    }),
+  )
+
+  it.effect("does not build without the server's run, as in a Durable Object", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const build = yield* SessionSearchBuild.Service
+      const held = yield* hold(build)
+      yield* elapse
+      expect(yield* objects(db)).toBe(0)
+      yield* release(held)
     }),
   )
 

@@ -25,6 +25,7 @@ describe("ConfigSessionSearchPlugin.Plugin", () => {
           Effect.sync(() => holds.count++),
           () => Effect.sync(() => holds.count--),
         ).pipe(Effect.asVoid),
+        run: Effect.never,
         status: Effect.succeed({ status: "disabled" }),
       }),
     )
