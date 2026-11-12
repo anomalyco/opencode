@@ -480,37 +480,27 @@ export function Autocomplete(props: {
       ),
   )
 
-  // Callers have already removed the typed token, so the cursor sits at store.index.
   function insertSlash(name: string) {
-    const input = props.input()
-    const needsSpace = input.getTextRange(input.cursorOffset, input.cursorOffset + 1) !== " "
-    const newText = `/${name}` + (needsSpace ? " " : "")
-    input.insertText(newText)
-    input.cursorOffset = store.index + measureEditText(newText, { widthMethod: renderer.widthMethod })
+    const newText = `/${name} `
+    const cursor = props.input().logicalCursor
+    props.input().deleteRange(0, 0, cursor.row, cursor.col)
+    props.input().insertText(newText)
+    props.input().cursorOffset = measureEditText(newText, { widthMethod: renderer.widthMethod })
   }
 
   const commands = createMemo((): AutocompleteOption[] => {
-    // Past the start of the prompt a command cannot run, so only offer entries that insert text,
-    // and match names by prefix so prose like "and/or" never opens a list of unrelated commands.
-    const inline = store.index !== 0
-    const query = search().toLowerCase()
-    const matches = (name: string) => !inline || name.toLowerCase().startsWith(query)
-
     const results: AutocompleteOption[] = keymapCommands().flatMap((command) => {
       const slash = command.slash
-      if (!slash || (inline && !slash.arguments)) return []
-      return [slash.name, ...(slash.aliases ?? [])]
-        .filter(matches)
-        .map((name) => ({
-          display: `/${name}`,
-          description: command.description ?? command.title,
-          onSelect: slash.arguments ? () => insertSlash(name) : command.run,
-        }))
+      if (!slash) return []
+      return [slash.name, ...(slash.aliases ?? [])].map((name) => ({
+        display: `/${name}`,
+        description: command.description ?? command.title,
+        onSelect: slash.arguments ? () => insertSlash(name) : command.run,
+      }))
     })
     const commandNames = new Set<string>()
 
     for (const serverCommand of data.location.command.list(location.current) ?? []) {
-      if (!matches(serverCommand.name)) continue
       commandNames.add(serverCommand.name)
       results.push({
         display: "/" + serverCommand.name,
@@ -544,6 +534,16 @@ export function Autocomplete(props: {
     })
   })
 
+  // Past the start of the prompt a "/" token mentions skills, so each pick becomes an @skill mention.
+  // Match by prefix and skip skills already in the prompt, so prose never opens an unrelated list.
+  const inlineSkillOptions = createMemo(() => {
+    const query = search().toLowerCase()
+    return skillOptions().filter((option) => {
+      const id = option.display.slice(1)
+      return id.toLowerCase().startsWith(query) && !props.hasSkill(id)
+    })
+  })
+
   const options = createMemo(() => {
     const fileSearch = visibleFiles()
     const referenceMatchValue = referenceMatch()
@@ -568,7 +568,9 @@ export function Autocomplete(props: {
     const nonFileOptions: AutocompleteOption[] =
       store.visible === "reference"
         ? [...skillOptions(), ...referenceAliasesValue, ...agentsValue]
-        : [...commandsValue]
+        : store.index === 0
+          ? [...commandsValue]
+          : inlineSkillOptions()
 
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]
@@ -843,8 +845,7 @@ export function Autocomplete(props: {
         const slash = slashTriggerIndex(beforeCursor, renderer.widthMethod)
         // A bare "/" past the start of the prompt is usually prose or a path, not a command.
         if (slash !== undefined && (slash === 0 || offset > slash + 1)) {
-          show("command")
-          setStore("index", slash)
+          show("command", slash)
           return
         }
 
