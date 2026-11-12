@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Namespace, Tool } from "./lib/index.js"
+import { ToolRuntime } from "../src/tool-runtime.js"
 
 const echo = (description: string, result: string) =>
   Tool.make({
@@ -39,6 +40,30 @@ describe("dotted tool names", () => {
   test("bracket access with a dotted segment spells the same canonical path", async () => {
     expect(await value(runtime, `return await tools.api["issues.list"]({})`)).toBe("listed")
     expect(await value(runtime, `return await tools["api.issues"].list({})`)).toBe("listed")
+  })
+
+  test("known calls skip discovery while missing tools still get suggestions", async () => {
+    const prepared = ToolRuntime.prepare({ "api.read": echo("Read data", "read") })
+    let reads = 0
+    const tools = ToolRuntime.make(
+      {
+        root: prepared.root,
+        get catalog() {
+          return prepared.catalog
+        },
+        get searchIndex() {
+          reads += 1
+          return prepared.searchIndex
+        },
+      },
+      undefined,
+    )
+    expect(await Effect.runPromise(tools.execute(["api", "read"], [{}]))).toBe("read")
+    expect(reads).toBe(0)
+    await expect(Effect.runPromise(tools.execute(["api", "read-data"], [{}]))).rejects.toThrow(
+      "Did you mean tools.api.read?",
+    )
+    expect(reads).toBeGreaterThan(0)
   })
 
   test("intermediate segments enumerate like ordinary namespaces", async () => {
