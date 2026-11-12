@@ -796,11 +796,11 @@ impl Renderer {
         });
         let completed = state["status"] == "completed";
         let projected = if completed {
-            json_object! { "status": "completed", "input"?: state.get("input"), "output": output_text(name, state.get("content")), "title": name, "metadata": metadata, "time": time }
+            json_object! { "status": "completed", "input"?: state.get("input"), "output": output_text(name, state.get("content")), "title": name, "metadata": move metadata, "time": time }
         } else {
-            json_object! { "status": "error", "input"?: state.get("input"), "error"?: state["error"].get("message"), "metadata": metadata, "time": time }
+            json_object! { "status": "error", "input"?: state.get("input"), "error"?: state["error"].get("message"), "metadata": move metadata, "time": time }
         };
-        let part = json_object! { "partID": part_id, "sessionID": self.session_id, "messageID": message_id, "type": "tool", "id"?: item.get("id"), "tool": name, "state": projected };
+        let part = json_object! { "partID": part_id, "sessionID": self.session_id, "messageID": message_id, "type": "tool", "id"?: item.get("id"), "tool": name, "state": move projected };
         if self.emit("tool_use", timestamp, json!({ "part": part })) {
             return;
         }
@@ -957,14 +957,14 @@ impl Renderer {
         };
         let success = text(&event["type"]) == "session.tool.success";
         let (state, metadata) = if success {
-            let state = json_object! { "status": "completed", "input": current.input, "metadata"?: data.get("metadata"), "content"?: data.get("content") };
+            let state = json_object! { "status": "completed", "input": move current.input, "metadata"?: data.get("metadata"), "content"?: data.get("content") };
             let metadata = json_object! { "metadata"?: data.get("metadata"), "content"?: data.get("content"), ..call };
             (state, metadata)
         } else {
-            let state = json_object! { "status": "error", "input": current.input, "metadata": present(data.get("metadata")).unwrap_or(current.metadata.clone()), "content"?: data.get("content"), "error"?: data.get("error") };
+            let state = json_object! { "status": "error", "input": move current.input, "metadata": move present(data.get("metadata")).unwrap_or(current.metadata), "content"?: data.get("content"), "error"?: data.get("error") };
             (state, call)
         };
-        let item = json_object! { "type": "tool", "id"?: data.get("id"), "name": current.name, "executed"?: data.get("executed"), "native"?: native, "time": json!({ "created": current.timestamp, "ran": current.timestamp, "completed": time }), "state": state };
+        let item = json_object! { "type": "tool", "id"?: data.get("id"), "name": current.name, "executed"?: data.get("executed"), "native"?: move native, "time": json!({ "created": current.timestamp, "ran": current.timestamp, "completed": time }), "state": move state };
         self.tool(current.id, message, &item, metadata, &time);
     }
 
