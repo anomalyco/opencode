@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use opencode_tui::Deps;
 use opencode_ui::path::Flavor;
+use opencode_ui::prompt_input::parse::file_url;
 use serde_json::{Value, json};
 
 fn fake() -> Fake {
@@ -52,14 +53,16 @@ fn fake() -> Fake {
             200,
             list(DIRECTORY, json!([{ "path": "src/main.rs", "type": "file" }, { "path": "src", "type": "directory" }])),
         ),
-        // On Windows a listed subdirectory is `path.resolve`d with `\`.
+        // The location's directory lists as it is; a subdirectory is `path.resolve`d, `D:\project\packages` on
+        // Windows.
         ("GET", "/api/fs/list") => {
-            let entries = match seen.param("path").replace('\\', "/").as_str() {
+            let path = seen.param("path");
+            let entries = match path.as_str() {
                 "/project" => json!([
                     { "path": "packages", "type": "directory" }, { "path": ".git", "type": "directory" },
                     { "path": "README.md", "type": "file" },
                 ]),
-                "/project/packages" => json!([
+                path if path == Flavor::NATIVE.resolve(&["/project/packages"]) => json!([
                     { "path": "packages/tui", "type": "directory" }, { "path": "packages/cli", "type": "directory" },
                 ]),
                 _ => json!([]),
@@ -318,7 +321,7 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
     assert!(searched, "{:?}", setup.requests("GET", "/api/fs/find"));
     setup.app.press("return");
     assert_eq!(setup.text(), "@src/main.rs ");
-    // `path.resolve(cwd, path)`: `\project\src\main.rs` on Windows.
+    // `path.resolve(cwd, path)`: `D:\project\src\main.rs` on Windows, with the working directory's drive.
     let main = Flavor::NATIVE.resolve(&[DIRECTORY, "src/main.rs"]);
     let frecency = setup.wait_file("frecency.jsonl", &serde_json::to_string(&main).unwrap());
     let line: Value = serde_json::from_str(frecency.lines().next().unwrap()).unwrap();
@@ -337,9 +340,9 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
     assert_eq!(
         sent[0].1["files"],
         json!([
-            { "uri": "file:///project/src/main.rs", "name": "src/main.rs",
+            { "uri": file_url(Flavor::NATIVE, &main), "name": "src/main.rs",
               "mention": { "start": 0, "end": 12, "text": "@src/main.rs" } },
-            { "uri": "file:///project/src/main.rs?start=3&end=5", "name": "src/main.rs#3-5",
+            { "uri": format!("{}?start=3&end=5", file_url(Flavor::NATIVE, &main)), "name": "src/main.rs#3-5",
               "mention": { "start": 13, "end": 29, "text": "@src/main.rs#3-5" } },
         ])
     );
@@ -372,7 +375,7 @@ fn skills_and_references_are_listed_and_sent() {
     let sent = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
     assert_eq!(
         sent[0].1["files"],
-        json!([{ "uri": "file:///refs/docs", "name": "docs",
+        json!([{ "uri": file_url(Flavor::NATIVE, "/refs/docs"), "name": "docs",
                  "mention": { "start": 0, "end": 5, "text": "@docs" } }])
     );
     assert_eq!(
