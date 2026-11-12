@@ -6,7 +6,7 @@
 //! gone; never stop a service this call did not start.
 
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -147,7 +147,10 @@ impl Run<'_> {
             self.pool.service_answered();
             return match probe::decide(&service, None) {
                 Decision::Fail(reason) => Err(Error(reason)),
-                Decision::Reuse => Ok(Some(reuse(service, &file))),
+                Decision::Reuse => {
+                    handoff::complete(&file, &service.registration);
+                    Ok(Some(Ensured { service, file }))
+                }
                 Decision::Wait | Decision::Replace { .. } => Ok(None),
             };
         }
@@ -227,11 +230,6 @@ async fn started_elsewhere(
     let ready = answered.iter().position(|(service, _)| probe::decide(service, None) == Decision::Reuse);
     let owned = answered.iter().position(|(service, _)| pool.owns(service.registration.pid));
     ready.or(owned).map(|index| answered.swap_remove(index))
-}
-
-fn reuse(service: LocalService, file: &Path) -> Ensured {
-    handoff::complete(file, &service.registration);
-    Ensured { service, file: file.to_owned() }
 }
 
 fn spawn_error(command: &[OsString], error: &std::io::Error) -> String {
