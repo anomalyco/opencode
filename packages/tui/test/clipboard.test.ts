@@ -159,16 +159,20 @@ test.skipIf(!Bun.which("tmux"))("copies through the tmux client showing the pane
     ).text()
   await tmux("new-session", "-d")
   await using _server = { [Symbol.asyncDispose]: async () => void (await tmux("kill-server")) }
-  const writes: ClipboardWriteOptions[] = []
-  const clipboard = createClipboardAdapter(coreClipboard({ onWrite: (_, input) => writes.push(input) }), {
-    ...env,
-    TMUX: `${socket},0,0`,
-    TMUX_PANE: (await tmux("display-message", "-p", "#{pane_id}")).trim(),
-  })
+  // No OpenTUI route accepts the write, so only the tmux route can make it succeed.
+  const clipboard = createClipboardAdapter(
+    coreClipboard({
+      write: { host: { status: "unsupported" }, terminal: { status: "not-attempted", capability: "unsupported" } },
+    }),
+    {
+      ...env,
+      TMUX: `${socket},0,0`,
+      TMUX_PANE: (await tmux("display-message", "-p", "#{pane_id}")).trim(),
+    },
+  )
 
-  // With no client attached, tmux cannot deliver the text, so the OpenTUI routes take it.
-  await clipboard.write("detached")
-  expect(writes).toEqual([{ destination: "all-available", selection: "clipboard" }])
+  // With no client attached, tmux has nowhere to send the text.
+  await expect(clipboard.write("detached")).rejects.toThrow("Clipboard write failed")
 
   const terminal = { output: "" }
   const client = Bun.spawn(["tmux", "-S", socket, "-f", "/dev/null", "attach"], {
@@ -178,11 +182,10 @@ test.skipIf(!Bun.which("tmux"))("copies through the tmux client showing the pane
   const deadline = Date.now() + 10_000
   while (!(await tmux("list-clients")).trim() && Date.now() < deadline) await Bun.sleep(10)
 
-  await clipboard.write("hello tmux")
+  expect(await clipboard.write("hello tmux")).toBeUndefined()
   const sequence = `]52;;${Buffer.from("hello tmux").toString("base64")}`
   while (!terminal.output.includes(sequence) && Date.now() < deadline) await Bun.sleep(10)
   client.kill()
 
   expect(terminal.output).toContain(sequence)
-  expect(writes.at(-1)).toEqual({ destination: "host-only", selection: "clipboard" })
 })

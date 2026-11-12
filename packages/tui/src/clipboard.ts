@@ -58,15 +58,12 @@ export function createClipboardAdapter(
     async write(text) {
       // OpenTUI rejects NUL before any destination; host clipboard text cannot contain it.
       const clean = text.replaceAll("\0", "")
-      if (await writeTmux(clean, env)) {
-        await clipboard.writeText(clean, { destination: "host-only", selection: "clipboard" })
-        return
-      }
-      const result = await clipboard.writeText(clean, {
-        destination: "all-available",
-        selection: "clipboard",
-      })
-      if (result.host.status === "written" || result.terminal.status === "attempted") return
+      // tmux exits 0 even when it forwards nothing, so the OpenTUI routes still run alongside it.
+      const [tmux, result] = await Promise.all([
+        writeTmux(clean, env),
+        clipboard.writeText(clean, { destination: "all-available", selection: "clipboard" }),
+      ])
+      if (tmux || result.host.status === "written" || result.terminal.status === "attempted") return
       if (result.host.status === "failed") throw result.host.error
       throw new Error(`Clipboard write failed (host: ${result.host.status}, terminal: ${result.terminal.status})`)
     },
