@@ -86,20 +86,16 @@ export const configure = (input: Config = {}) => {
   const configured = route.with(
     bearerRouteDefaults(input, ["ARK_API_KEY", "BYTEPLUS_API_KEY", "ARK_CODING_PLAN_API_KEY"], baseURL),
   )
-  return {
-    id,
-    model: (modelID: string | ModelID) =>
-      configured.model<ChatOptionsInput>({
-        id: modelID,
-        compatibility: {
-          reasoningField: "reasoning_content",
-          maxTokensField: "max_tokens",
-        },
-        capabilities: { tools: { strict: false }, promptCacheKey: true },
-      }),
-    chat: (modelID: string | ModelID) => configured.model<ChatOptionsInput>({ id: modelID }),
-    configure,
-  }
+  const chat = (modelID: string | ModelID) =>
+    configured.model<ChatOptionsInput>({
+      id: modelID,
+      compatibility: {
+        reasoningField: "reasoning_content",
+        maxTokensField: "max_tokens",
+      },
+      capabilities: { tools: { strict: false }, promptCacheKey: true },
+    })
+  return { id, model: chat, chat, configure }
 }
 
 export const provider = configure()
