@@ -72,36 +72,19 @@ pub fn open_url(input: &str) -> Result<(), String> {
             .filter(|url| matches!(url.scheme(), "http" | "https"))
             .ok_or_else(|| format!("Only http and https links can be opened in the browser: {input}"))?,
     };
-    open(url.as_str(), true)
+    open(url.as_str())
 }
 
 /// `openPath`: a file or folder in the system's default app.
 pub fn open_path(path: &str) -> Result<(), String> {
-    open(path, false)
+    open(path)
 }
 
-fn open(target: &str, url: bool) -> Result<(), String> {
+fn open(target: &str) -> Result<(), String> {
     if testing::record(target) {
         return Ok(());
     }
-    let (program, args) = opener(std::env::consts::OS, url);
-    let mut command = std::process::Command::new(program);
-    // `open` detaches `xdg-open`, so a browser it starts does not stop with this client's group on Ctrl+Z.
-    #[cfg(all(unix, not(target_os = "macos")))]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    command.args(args).arg(target);
-    spawn(command).map(drop)
-}
-
-/// The system opener. On Windows, `cmd /c start` would parse `&`, `|` and `%VAR%` in the target; these programs
-/// take it verbatim.
-fn opener(os: &str, url: bool) -> (&'static str, &'static [&'static str]) {
-    match os {
-        "macos" => ("open", &[]),
-        "windows" if url => ("rundll32", &["url.dll,FileProtocolHandler"]),
-        "windows" => ("explorer", &[]),
-        _ => ("xdg-open", &[]),
-    }
+    spawn(opencode_ui::open::command(target)).map(drop)
 }
 
 /// Starts `command` and waits for it off the UI thread, so the exited opener does not stay a zombie.
@@ -184,13 +167,6 @@ mod tests {
         }
         assert_eq!(open_path("/tmp/project"), Ok(()));
         assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/v2/docs", "/tmp/project"]);
-    }
-
-    #[test]
-    fn windows_opens_without_a_shell() {
-        assert_eq!(opener("windows", true), ("rundll32", &["url.dll,FileProtocolHandler"][..]));
-        assert_eq!(opener("windows", false), ("explorer", &[][..]));
-        assert_eq!(opener("linux", true), ("xdg-open", &[][..]));
     }
 
     #[cfg(target_os = "linux")]

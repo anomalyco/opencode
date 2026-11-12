@@ -15,6 +15,7 @@ pub mod keymap;
 pub mod locale;
 pub mod markdown;
 pub mod motion;
+pub mod open;
 pub mod palette;
 pub mod path;
 pub mod permission;
