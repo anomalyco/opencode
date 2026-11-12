@@ -291,8 +291,8 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
 fn reconcile_loads_reloads_keeps_and_unloads() {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    let lib_dir = config.join("plugins/fake");
-    let ts_dir = config.join("plugins/typescript");
+    let lib_dir = config.join("plugins").join("fake");
+    let ts_dir = config.join("plugins").join("typescript");
     fs::create_dir_all(&ts_dir).unwrap();
     write(&lib_dir.join(entry_file()), "id=fake");
     let file = root.path().join(format!("extra.{}", std::env::consts::DLL_EXTENSION));
@@ -409,7 +409,7 @@ fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
         entry(&registry.entries(), &target("b")).status,
         Status::Failed("plugin ID same is already registered".to_owned())
     );
-    fs::remove_dir_all(config.join("plugins/a")).unwrap();
+    fs::remove_dir_all(config.join("plugins").join("a")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let entries = registry.entries();
     assert_eq!(
@@ -434,7 +434,7 @@ fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
     loader.reconcile(&dynamic(&host), &registry);
     write(&file("b"), "id=x");
     loader.reconcile(&dynamic(&host), &registry);
-    let target = config.join("plugins/b").to_string_lossy().into_owned();
+    let target = config.join("plugins").join("b").to_string_lossy().into_owned();
     let b = || {
         let entries = registry.entries();
         let b = entry(&entries, &target);
@@ -447,7 +447,7 @@ fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
             Status::Failed("plugin ID x is already registered (previous version still active)".to_owned())
         )
     );
-    fs::remove_dir_all(config.join("plugins/a")).unwrap();
+    fs::remove_dir_all(config.join("plugins").join("a")).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     assert_eq!(b(), ("x".to_owned(), Status::Active));
 }
