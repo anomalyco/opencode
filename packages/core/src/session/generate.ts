@@ -2,6 +2,7 @@ export * as SessionGenerate from "./generate.js"
 
 import type { FileSystem } from "../filesystem.js"
 import { LLMClient, Message, type AIError } from "@opencode/ai/effect"
+import type { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
@@ -34,6 +35,11 @@ export type Result = SessionUsage.Recorded & { readonly text: string }
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {
   session: SessionSchema.Info
   prompt: string
+  /** Overrides the Session's model, as compaction does with its agent's model. */
+  model?: Model.Ref
+  toolChoice?: "none"
+  /** `false` sends only the prompt: no system prompt, history or tools. */
+  transcript?: boolean
 }) {
   const instances = yield* Instance.Service
   const database = yield* Database.Service
@@ -44,26 +50,38 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     yield* Plugin.awaitActivation
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
-    const model = yield* context.resolveModel(selection.session, { kind: "generate", agent: selection.agent.id })
-    const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions, model.ref)
-    const transcript = SessionModelRequest.baseTranscript({
-      agent: selection.agent.info,
-      model,
-      tools: selection.tools,
-      initial: history.initial,
-      messages: history.messages,
-    })
+    const model = yield* context.resolveModel(
+      input.model ? { ...selection.session, model: input.model } : selection.session,
+      { kind: "generate", agent: selection.agent.id },
+    )
+    const full = input.transcript !== false
+    const history = full
+      ? yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions, model.ref)
+      : undefined
+    const transcript = history
+      ? SessionModelRequest.baseTranscript({
+          agent: selection.agent.info,
+          model,
+          tools: selection.tools,
+          initial: history.initial,
+          messages: history.messages,
+        })
+      : undefined
+    const instructionUpdate = history?.instructionUpdate
     const prepared = yield* context.request.generate({
       session: selection.session,
       agent: selection.agent.id,
       model,
-      tools: selection.tools,
-      system: transcript.system,
-      messages: [
-        ...transcript.messages,
-        ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
-        Message.user(input.prompt),
-      ],
+      tools: full ? selection.tools : undefined,
+      system: transcript ? transcript.system : [],
+      messages: transcript
+        ? [
+            ...transcript.messages,
+            ...(instructionUpdate ? [Message.system(instructionUpdate)] : []),
+            Message.user(input.prompt),
+          ]
+        : [Message.user(input.prompt)],
+      toolChoice: input.toolChoice,
     })
     yield* Effect.logInfo("sending session generation request", {
       sessionID: selection.session.id,
