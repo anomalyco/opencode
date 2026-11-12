@@ -23,7 +23,12 @@ const context = {
 const allowAll = permissionService({ assert: () => Effect.void })
 
 const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
+  CodeModeTool.create(
+    { tools },
+    (_, tool, input, context) => execute(tool, input, context),
+    permission,
+    Effect.succeed(true),
+  )
 
 test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
   const input = Schema.Struct({ text: Schema.NonEmptyString })
@@ -150,6 +155,121 @@ test("execute rejects filesystem fetches", async () => {
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+describe("streaming fetch", () => {
+  const run = (url: URL, code: string) =>
+    createCodeMode(new Map()).execute(
+      { code: `const res = await fetch(${JSON.stringify(url.href)}); ${code}` },
+      context,
+    )
+
+  test.each([
+    ["return with a live reader", "const reader = res.body.getReader(); return (await reader.read()).value[0]"],
+    [
+      "reader cancellation",
+      "const reader = res.body.getReader(); const chunk = await reader.read(); await reader.cancel(); return chunk.value[0]",
+    ],
+    [
+      "break from async iteration",
+      "let first; for await (const chunk of res.body) { first = chunk[0]; break } return res.body.locked ? 'locked' : first",
+    ],
+  ])("reads the first chunk before EOF: %s", async (_, code) => {
+    const closed = Promise.withResolvers<void>()
+    await using server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(Uint8Array.of(42))
+            },
+            cancel: closed.resolve,
+          }),
+        ),
+    })
+    const result = await Effect.runPromise(run(server.url, code))
+    expect(result.output.output).toBe("42")
+    await closed.promise
+  })
+
+  test("interrupting execute aborts a pending request", async () => {
+    const started = Promise.withResolvers<void>()
+    const closed = Promise.withResolvers<void>()
+    await using server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        req.signal.addEventListener("abort", () => closed.resolve(), { once: true })
+        started.resolve()
+        await closed.promise
+        return new Response(null)
+      },
+    })
+    const fiber = Effect.runFork(run(server.url, "return res.status"))
+    await started.promise
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    await closed.promise
+  })
+
+  test("whole-body methods share consumption and expose Bun's empty body", async () => {
+    await using server = Bun.serve({
+      port: 0,
+      fetch: (req) => (req.method === "HEAD" ? new Response(null) : new Response("42")),
+    })
+    const result = await Effect.runPromise(
+      run(
+        server.url,
+        `
+      const before = res.bodyUsed
+      const number = await res.json()
+      const second = await res.text().catch(e => e.name)
+      const bytes = await (await fetch(res.url)).bytes()
+      const buffer = await (await fetch(res.url)).arrayBuffer()
+      const empty = await fetch(res.url, { method: "HEAD" })
+      return [before, number, res.bodyUsed, second, [...bytes], [...buffer], empty.body === null]
+    `,
+      ),
+    )
+    expect(JSON.parse(result.output.output)).toEqual([false, 42, true, "TypeError", [52, 50], [52, 50], true])
+  })
+
+  test("discards a redirect body before reading the destination", async () => {
+    const discarded = Promise.withResolvers<void>()
+    await using server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        if (new URL(req.url).pathname === "/")
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(Uint8Array.of(1))
+              },
+              cancel: discarded.resolve,
+            }),
+            { status: 302, headers: { location: "/next" } },
+          )
+        await discarded.promise
+        return new Response("ok")
+      },
+    })
+    const permission = permissionService({ assert: () => Effect.void, assertNotDenied: () => Effect.void })
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), permission).execute(
+        {
+          code: `
+      const res = await fetch(${JSON.stringify(server.url.href)})
+      const reader = res.body.getReader()
+      const first = await reader.read()
+      const end = await reader.read()
+      reader.releaseLock()
+      return [res.redirected, [...first.value], end.done, res.body.locked, await res.text().catch(e => e.name)]
+    `,
+        },
+        context,
+      ),
+    )
+    expect(JSON.parse(result.output.output)).toEqual([true, [111, 107], true, false, "TypeError"])
+  })
 })
 
 describe("fetch permissions", () => {

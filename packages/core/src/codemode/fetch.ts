@@ -20,7 +20,8 @@ const fetch = (input: string | URL, init: Init = {}) =>
     // matching.
     const url = String(input).split("#")[0]
     const parsed = URL.parse(url)
-    if (parsed?.protocol === "file:") return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
+    if (parsed?.protocol === "file:")
+      return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
     // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
     if (parsed?.username || parsed?.password)
       return yield* Effect.fail(new TypeError("fetch cannot be used with credentials in the URL."))
@@ -54,7 +55,7 @@ const fetch = (input: string | URL, init: Init = {}) =>
         agent: execution.agent,
         source,
       })
-    const signal = AbortSignal.timeout(TIMEOUT_MS)
+    const signal = AbortSignal.any([execution.signal, AbortSignal.timeout(TIMEOUT_MS)])
     const follow = (
       target: string,
       request: Init,
@@ -64,24 +65,27 @@ const fetch = (input: string | URL, init: Init = {}) =>
         try: () => globalThis.fetch(target, { ...request, redirect: "manual", signal }),
         catch: (error) => error,
       }).pipe(
-        Effect.flatMap((response) => {
-          const location = response.headers.get("location")
-          if (!redirectStatuses.has(response.status) || location === null)
-            return Effect.succeed({ response, url: target, redirects })
-          if (redirects >= MAX_REDIRECTS)
-            return Effect.fail(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`))
-          const next = new URL(location, target)
-          if (next.protocol !== "http:" && next.protocol !== "https:")
-            return Effect.fail(new Error(`fetch cannot follow a redirect to ${next.protocol} URLs.`))
-          if (next.username || next.password)
-            return Effect.fail(new Error("fetch cannot follow a redirect with credentials in the URL."))
-          next.hash = ""
-          return check(next.href).pipe(
-            Effect.andThen(follow(next.href, redirected(request, response.status, target, next), redirects + 1)),
-          )
-        }),
+        Effect.flatMap(
+          Effect.fnUntraced(function* (response) {
+            const location = response.headers.get("location")
+            if (!redirectStatuses.has(response.status) || location === null) return { response, url: target, redirects }
+            yield* Effect.tryPromise({ try: async () => response.body?.cancel(), catch: (error) => error })
+            if (redirects >= MAX_REDIRECTS)
+              return yield* Effect.fail(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`))
+            const next = new URL(location, target)
+            if (next.protocol !== "http:" && next.protocol !== "https:")
+              return yield* Effect.fail(new Error(`fetch cannot follow a redirect to ${next.protocol} URLs.`))
+            if (next.username || next.password)
+              return yield* Effect.fail(new Error("fetch cannot follow a redirect with credentials in the URL."))
+            next.hash = ""
+            return yield* check(next.href).pipe(
+              Effect.andThen(follow(next.href, redirected(request, response.status, target, next), redirects + 1)),
+            )
+          }),
+        ),
       )
     const result = yield* follow(url, init, 0)
+    if (execution.streaming) return new Extension.StreamingResponse(result.response, result.redirects > 0)
     return yield* Effect.tryPromise({ try: () => read(result), catch: (error) => error })
   })
 

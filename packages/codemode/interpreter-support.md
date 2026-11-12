@@ -603,6 +603,7 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       `[Symbol.iterator]`; iteration is live and sorted by name, with `set-cookie` values kept apart.
 - [x] Headers serialize to a `{ name: value }` object in JSON, in results, and in tool arguments.
 - [ ] `Request`, `Response`, and `Blob`.
+- [x] A host-provided streaming fetch response exposes `bodyUsed`, whole-body readers, a default stream reader and `for await` iteration. `arrayBuffer()` crosses as a `Uint8Array`.
 - [ ] `crypto.subtle` and `TextDecoder` streaming or non-UTF-8 encodings.
 
 ## Extensions
