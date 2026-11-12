@@ -199,9 +199,8 @@ fn import(context: &Context, args: &SessionImportArgs) -> error::Result<()> {
     let Value::Object(mut body) = serde_json::from_str::<Value>(&text)? else {
         bail!("Expected an object, got {}", text.trim());
     };
-    // Against the working directory even when absolute: on Windows `\x` takes its drive, as `path.resolve` does.
     let directory = match &args.directory {
-        Some(directory) => Flavor::NATIVE.resolve(&[&cwd()?, directory]),
+        Some(directory) => import_directory(Flavor::NATIVE, directory, cwd)?,
         None => cwd()?,
     };
     let imported = block_on(async {
@@ -276,6 +275,20 @@ fn data(mut response: Value) -> Vec<Value> {
     }
 }
 
+// `path.resolve(directory)`, which reads the working directory only when `directory` names no complete root: a
+// relative path, or on Windows `\x`, which takes the working directory's drive.
+fn import_directory(
+    flavor: Flavor,
+    directory: &str,
+    cwd: impl FnOnce() -> error::Result<String>,
+) -> error::Result<String> {
+    let resolved = flavor.resolve(&[directory]);
+    if flavor.is_absolute(&resolved) && flavor.root(&resolved) != "\\" {
+        return Ok(resolved);
+    }
+    Ok(flavor.resolve(&[&cwd()?, directory]))
+}
+
 fn cwd() -> error::Result<String> {
     Ok(std::env::current_dir()?.to_string_lossy().into_owned())
 }
@@ -331,6 +344,20 @@ mod tests {
         assert_eq!(rows[1], "ses_b\tUntitled session\tInvalid Date");
         let titled = table(&[json!({ "id": "ses_c", "title": "x\x1b]52;c;cHduZWQ=\x07y", "time": {} })]);
         assert_eq!(titled, "ses_c\txy\tInvalid Date");
+    }
+
+    #[test]
+    fn an_import_directory_reads_the_working_directory_only_when_path_resolve_does() {
+        let gone = || -> error::Result<String> { bail!("the working directory was deleted") };
+        let p = Flavor::Posix;
+        assert_eq!(import_directory(p, "/w/x/../y", gone).unwrap(), "/w/y");
+        assert!(import_directory(p, "y", gone).is_err());
+        assert_eq!(import_directory(p, "y", || Ok("/w".to_owned())).unwrap(), "/w/y");
+        let w = Flavor::Windows;
+        assert_eq!(import_directory(w, "C:/x", gone).unwrap(), "C:\\x");
+        assert_eq!(import_directory(w, "//srv/share/x", gone).unwrap(), "\\\\srv\\share\\x");
+        assert!(import_directory(w, "\\x", gone).is_err());
+        assert_eq!(import_directory(w, "\\x", || Ok("D:\\w".to_owned())).unwrap(), "D:\\x");
     }
 
     #[test]
