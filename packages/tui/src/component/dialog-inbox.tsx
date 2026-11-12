@@ -104,8 +104,24 @@ export function DialogInbox() {
     const index = headers.findIndex((item) => item.section === selected()?.section)
     setKey(headers[moveSelection(index, { count: headers.length, delta, policy: "wrap" })]?.key)
   }
+  const keymap = Keymap.use()
+  // Escape is the overlay's top-level dismiss, ahead of selection handling and other modal layers.
+  onCleanup(
+    keymap.intercept(
+      "key",
+      ({ event }) => {
+        if (event.name !== "escape") return
+        event.preventDefault()
+        event.stopPropagation()
+        renderer.clearSelection()
+        dialog.clear()
+      },
+      { priority: 102 },
+    ),
+  )
   Keymap.createLayer(() => ({
     mode: "modal",
+    priority: 102,
     commands: [
       { id: "dialog.select.prev", run: () => move(-1) },
       { id: "dialog.select.next", run: () => move(1) },

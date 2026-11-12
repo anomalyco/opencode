@@ -37,6 +37,32 @@ test("the leader opens and dismisses the overlay without changing prompt text, f
   await app.waitFor(() => prompt.plainText === "")
 })
 
+test("Escape closes the overlay before filter text or a selection consumes it", async () => {
+  await using app = await createAppFixture({ width: 100, height: 24, config: { animations: false } })
+  await app.ready
+  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+  const prompt = app.renderer.currentFocusedEditor
+  app.mockInput.pressKey("x", { ctrl: true })
+  app.mockInput.pressKey("o")
+  await app.waitForFrame(
+    (frame) => frame.includes("Search inbox sessions") && app.renderer.currentFocusedEditor instanceof InputRenderable,
+  )
+  await app.mockInput.typeText("draft")
+  const y = app
+    .captureCharFrame()
+    .split("\n")
+    .findIndex((line) => line.includes("Inbox"))
+  await app.mockMouse.drag(1, y, 5, y)
+  await app.waitFor(() => app.renderer.getSelection()?.getSelectedText() === "Inbox")
+  app.mockInput.pressEscape()
+  await app.waitFor(
+    () =>
+      !app.renderer.root.findDescendantById("dialog-drawer") &&
+      !app.renderer.getSelection() &&
+      app.renderer.currentFocusedEditor === prompt,
+  )
+})
+
 test("the launch preference, remapped shortcut and palette open the same responsive overlay", async () => {
   await using app = await createAppFixture({
     width: 50,
