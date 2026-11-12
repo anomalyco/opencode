@@ -13,6 +13,9 @@ const SUPPORTED = new Set([
   "background",
   "clipboardRead",
   "clipboardWrite",
+  "declarativeNetRequest",
+  "declarativeNetRequestFeedback",
+  "declarativeNetRequestWithHostAccess",
   "idle",
   "management",
   "offscreen",
@@ -23,18 +26,14 @@ const SUPPORTED = new Set([
   "system.display",
   "tabs",
   "unlimitedStorage",
+  "webRequestBlocking",
 ])
 
 /**
- * Permissions whose API is missing here, or does nothing, by what the user would notice. The profile's own
- * `session.webRequest` guard for `file:` pages takes every request away from extensions, so neither `webRequest`
- * nor `declarativeNetRequest` sees one, although Electron supports both.
+ * Permissions whose API is missing here, or does nothing, by what the user would notice. A service worker's
+ * `chrome.webRequest` listeners hear no request in Electron 44; a background page's do, and blocking works in both.
  */
 const MISSING = new Map<string, ExtensionFeature>([
-  ["webRequestBlocking", "blocking"],
-  ["declarativeNetRequest", "blocking"],
-  ["declarativeNetRequestWithHostAccess", "blocking"],
-  ["declarativeNetRequestFeedback", "blocking"],
   ["webRequest", "network"],
   ["webRequestAuthProvider", "network"],
   ["contextMenus", "menus"],
@@ -86,7 +85,6 @@ const STARTUP = new Set([
 
 // Most noticeable first.
 const ORDER: readonly ExtensionFeature[] = [
-  "blocking",
   "native",
   "popup",
   "toolbar",
@@ -115,7 +113,7 @@ export function extensionCompatibility(manifest: Manifest): ExtensionCompatibili
   const action = manifest.action ?? manifest.browser_action ?? manifest.page_action
 
   const declared = [
-    ...[...required, ...optional].map(permissionFeature),
+    ...[...required, ...optional].map((permission) => permissionFeature(permission, manifest.manifest_version)),
     action ? (action.default_popup ? "popup" : "toolbar") : undefined,
     manifest.commands === undefined ? undefined : "shortcuts",
     manifest.devtools_page === undefined ? undefined : "devtools",
@@ -124,7 +122,6 @@ export function extensionCompatibility(manifest: Manifest): ExtensionCompatibili
     manifest.oauth2 === undefined ? undefined : "signin",
     manifest.chrome_url_overrides === undefined ? undefined : "newTab",
     manifest.chrome_settings_overrides === undefined ? undefined : "settings",
-    manifest.declarative_net_request === undefined ? undefined : "blocking",
     // `chrome.permissions`, which asks for them, is missing.
     optional.length > 0 || (manifest.optional_host_permissions?.length ?? 0) > 0 ? "access" : undefined,
   ]
@@ -145,17 +142,16 @@ function unsupportedCause(manifest: Manifest, required: readonly string[]) {
 
   if (manifest.background !== undefined && stops) return "startup"
 
-  if (manifest.declarative_net_request !== undefined || required.some((item) => MISSING.get(item) === "blocking"))
-    return "blocking"
-
   if (required.includes("nativeMessaging")) return "native"
 
   return undefined
 }
 
 /** A missing permission's feature; undefined for one that works here or a host pattern. */
-function permissionFeature(permission: string): ExtensionFeature | undefined {
+function permissionFeature(permission: string, manifestVersion: number): ExtensionFeature | undefined {
   if (SUPPORTED.has(permission) || permission === "<all_urls>" || permission.includes("://")) return undefined
+  const feature = MISSING.get(permission) ?? "other"
 
-  return MISSING.get(permission) ?? "other"
+  // A Manifest V2 background page hears `chrome.webRequest`.
+  return feature === "network" && manifestVersion === 2 ? undefined : feature
 }

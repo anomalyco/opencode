@@ -7,8 +7,7 @@ const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Sch
 
 /**
  * A part of an extension that does not work in this browser, by what the user would notice.
- * - `blocking`: blocking or changing requests (`webRequestBlocking`, `declarativeNetRequest`).
- * - `network`: watching requests (`webRequest`).
+ * - `network`: watching requests (`webRequest`) from a service worker.
  * - `toolbar`: a toolbar button without a popup, which only tells the extension it was clicked.
  * - `popup`: a toolbar popup about the current page; here it opens as a tab of its own.
  * - `menus`: right-click menu items. `shortcuts`: keyboard shortcuts. `native`: an app on the computer.
@@ -19,7 +18,6 @@ const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Sch
  * - `access`: asking for more access after install. `userScripts`: user scripts. `other`: any other missing API.
  */
 export const ExtensionFeature = Schema.Literals([
-  "blocking",
   "network",
   "toolbar",
   "popup",
@@ -48,12 +46,11 @@ export type ExtensionFeature = typeof ExtensionFeature.Type
  * - `supported`: everything it declares works here.
  * - `partial`: it runs, but `missing` does not work.
  * - `unsupported`: it will not do its job here, for `cause`: `startup`, its background script needs an API this
- *   browser lacks and stops when it starts; `blocking`, it blocks or changes requests; `native`, it needs an app on
- *   the computer.
+ *   browser lacks and stops when it starts; `native`, it needs an app on the computer.
  */
 export const ExtensionCompatibility = Schema.Struct({
   level: Schema.Literals(["supported", "partial", "unsupported"]),
-  cause: Schema.optional(Schema.Literals(["startup", "blocking", "native"])),
+  cause: Schema.optional(Schema.Literals(["startup", "native"])),
   missing: Schema.Array(ExtensionFeature),
 })
 

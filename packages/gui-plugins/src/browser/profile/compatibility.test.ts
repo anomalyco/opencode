@@ -55,7 +55,7 @@ test.each([
     },
   },
   {
-    // Its static rules only block once its worker turns them on, and requests never reach them here.
+    // Its manifest's rulesets block requests even while its worker does not start.
     name: "uBlock Origin Lite",
     manifest: manifest({
       background: worker,
@@ -64,7 +64,7 @@ test.each([
       action: { default_popup: "popup.html" },
       commands: {},
     }),
-    expected: { level: "unsupported", cause: "blocking", missing: ["blocking", "popup", "shortcuts", "userScripts"] },
+    expected: { level: "partial", missing: ["popup", "shortcuts", "userScripts"] },
   },
   {
     // Manifest V2: its background page stops at `chrome.browserAction`.
@@ -75,7 +75,7 @@ test.each([
       permissions: ["storage", "tabs", "webRequest", "webRequestBlocking", "<all_urls>"],
       browser_action: { default_popup: "popup-fenix.html" },
     }),
-    expected: { level: "unsupported", cause: "startup", missing: ["blocking", "popup", "network"] },
+    expected: { level: "unsupported", cause: "startup", missing: ["popup"] },
   },
   {
     // A developer tools extension, and the pane opens no developer tools.

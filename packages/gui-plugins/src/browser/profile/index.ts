@@ -6,6 +6,7 @@ import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { fileURLWithin } from "../policy"
 import { extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, type CookieRead } from "./cookie"
+import { createFileGuard } from "./file-guard"
 import {
   displayName,
   extensionIcon,
@@ -53,10 +54,14 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
   const icons = new Map<string, string | undefined>()
 
   // Documents are guarded by the page; subresources (img, script, fetch) must not read file: URLs outside the roots
-  // of the page that asked either. One listener serves every page, so each page registers its roots by id.
-  session.webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (request, callback) => {
-    const allowed = request.webContentsId === undefined ? undefined : roots.get(request.webContentsId)
-    callback({ cancel: !fileURLWithin(request.url, allowed?.() ?? []) })
+  // of the page that asked either. One guard serves every page, so each page registers its roots by id.
+  const stopFileGuard = createFileGuard({
+    session,
+    allowed: (request) => {
+      const allowed = request.webContentsId === undefined ? undefined : roots.get(request.webContentsId)
+
+      return fileURLWithin(request.url, allowed?.() ?? [])
+    },
   })
 
   const describe = async (record: StoredExtension): Promise<ProfileExtension | undefined> => {
@@ -359,7 +364,7 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       }
     },
     dispose() {
-      session.webRequest.onBeforeRequest(null)
+      stopFileGuard()
       roots.clear()
       session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
     },
