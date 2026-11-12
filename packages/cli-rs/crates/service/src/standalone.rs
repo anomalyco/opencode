@@ -14,6 +14,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 
 use crate::probe::Endpoint;
+#[cfg(unix)]
 use crate::stop::{self, Signal};
 
 /// How long `shutdown` waits after SIGTERM before SIGKILL (`forceKillAfter`).
@@ -49,6 +50,12 @@ pub async fn start(command: &[OsString], cwd: &Path, print_logs: bool) -> Result
     // `detached: true`: its own process group, so Ctrl+Z, which stops this client's group, leaves it running.
     #[cfg(unix)]
     command.process_group(0);
+    // On Windows it shares the console, as `detached: false` does. libuv's `windowsHide` adds `CREATE_NO_WINDOW` only
+    // when the child inherits no stdio.
+    #[cfg(windows)]
+    if !print_logs {
+        command.creation_flags(crate::spawn::CREATE_NO_WINDOW);
+    }
     let mut child = command
         .args(args)
         .current_dir(cwd)
@@ -84,12 +91,27 @@ impl Server {
         self.child.wait().await
     }
 
-    /// Ends the lease, then SIGTERM, then SIGKILL after 3 s, and waits for the exit.
+    /// Ends the lease, then SIGTERM, then SIGKILL after 3 s, and waits for the exit. On Windows both are
+    /// `taskkill /T /F`, which also ends the LSP and MCP servers it started.
     pub async fn shutdown(mut self) {
         self.lease.take();
+        #[cfg(unix)]
         stop::signal(self.pid, Signal::Term);
+        #[cfg(windows)]
+        self.kill_tree().await;
         if tokio::time::timeout(FORCE_KILL_AFTER, self.child.wait()).await.is_err() {
+            #[cfg(windows)]
+            self.kill_tree().await;
             let _ = self.child.kill().await;
+        }
+    }
+
+    /// TS's `killGroup` on Windows, `taskkill /pid <pid> /T /F`; when that fails, the server alone (`killOne`).
+    #[cfg(windows)]
+    async fn kill_tree(&mut self) {
+        let status = Command::from(taskkill(self.pid)).status().await;
+        if !status.is_ok_and(|status| status.success()) {
+            let _ = self.child.start_kill();
         }
     }
 }
@@ -98,7 +120,58 @@ impl Drop for Server {
     fn drop(&mut self) {
         self.lease.take();
         if matches!(self.child.try_wait(), Ok(None)) {
+            #[cfg(unix)]
             stop::signal(self.pid, Signal::Term);
+            // Not waited for: a drop cannot await, and the tree ends either way.
+            #[cfg(windows)]
+            if taskkill(self.pid).spawn().is_err() {
+                let _ = self.child.start_kill();
+            }
         }
+    }
+}
+
+#[cfg(windows)]
+fn taskkill(pid: u32) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    let mut command = std::process::Command::new("taskkill");
+    command
+        .args(["/pid", &pid.to_string(), "/T", "/F"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(crate::spawn::CREATE_NO_WINDOW);
+    command
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    // Whether a `waitfor.exe` runs; no other test starts one.
+    fn waiting() -> bool {
+        let output = std::process::Command::new("tasklist")
+            .args(["/fo", "csv", "/nh", "/fi", "IMAGENAME eq waitfor.exe"])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).contains("waitfor.exe")
+    }
+
+    #[tokio::test]
+    async fn shutdown_ends_the_server_and_its_children() {
+        let signal = format!("opencode-standalone-{}", std::process::id());
+        let script = format!("Write-Output '{{\"url\":\"http://127.0.0.1:1\"}}'; waitfor /t 60 {signal}");
+        let command = ["powershell", "-NoProfile", "-NonInteractive", "-Command", &script].map(OsString::from);
+        let server = start(&command, &std::env::temp_dir(), false).await.unwrap();
+        assert_eq!(server.endpoint.url, "http://127.0.0.1:1");
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while !waiting() {
+            assert!(std::time::Instant::now() < deadline, "waitfor did not start");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let started = std::time::Instant::now();
+        server.shutdown().await;
+        assert!(started.elapsed() < FORCE_KILL_AFTER, "taskkill did not end the server");
+        assert!(!waiting(), "the server's child survived");
     }
 }

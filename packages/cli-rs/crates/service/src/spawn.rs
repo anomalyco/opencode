@@ -11,6 +11,14 @@ use std::sync::{Arc, Mutex};
 /// How much of a contender's stderr is kept (`stderrLimit`).
 pub const STDERR_LIMIT: usize = 8 * 1024;
 
+// Process creation flags (`winbase.h`).
+#[cfg(windows)]
+const DETACHED_PROCESS: u32 = 0x0000_0008;
+#[cfg(windows)]
+const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+#[cfg(windows)]
+pub(crate) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// A started service process.
 #[derive(Clone)]
 pub struct Contender {
@@ -42,6 +50,13 @@ impl Contender {
         // `detached: true`: its own process group, so a terminal's Ctrl+C does not reach it.
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut process, 0);
+        // On Windows, libuv's `detached` and `windowsHide`: no console, so closing the terminal does not end it, its
+        // own group for Ctrl+Break, and no window.
+        #[cfg(windows)]
+        std::os::windows::process::CommandExt::creation_flags(
+            &mut process,
+            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+        );
         let mut child = process.spawn()?;
         let mut stderr = child.stderr.take().expect("stderr is piped");
         let contender = Self { pid: child.id(), state: Arc::default() };
@@ -90,6 +105,28 @@ fn exit_failure() -> ExitStatus {
     return std::os::unix::process::ExitStatusExt::from_raw(1 << 8);
     #[cfg(not(unix))]
     return std::os::windows::process::ExitStatusExt::from_raw(1);
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_detached_contender_keeps_its_stderr_and_exit_code() {
+        let command = ["cmd", "/d", "/c", "echo actionable failure 1>&2& exit /b 3"].map(OsString::from);
+        let contender = Contender::spawn(&command, &[]).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let status = loop {
+            if let Some(status) = contender.status() {
+                break status;
+            }
+            assert!(Instant::now() < deadline, "contender did not finish");
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        assert_eq!(status.code(), Some(3));
+        assert_eq!(contender.stderr(), "actionable failure");
+    }
 }
 
 #[cfg(all(test, unix))]
