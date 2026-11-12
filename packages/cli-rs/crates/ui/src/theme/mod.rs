@@ -165,11 +165,6 @@ impl Theme {
             .map(|(hue, position)| HueSource { hue: &self.views.hue[hue].0, step: STEPS[position] })
     }
 
-    /// `color` moved `amount` steps toward 900 on its hue, clamped. See [`Theme::decrease`].
-    pub fn increase(&self, color: &Color, amount: i32) -> Color {
-        self.shift(color, amount)
-    }
-
     /// `color` moved `amount` steps toward 100 on its hue, clamped. A reference into the theme shifts by its
     /// [`Theme::source`]. A copy shifts by value: by the tokens of that value on this surface, else on the
     /// others, else by the hue steps of that value, when they all move it alike. Otherwise it is unchanged.

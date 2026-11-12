@@ -85,13 +85,6 @@ pub fn model_info(providers: &[Provider], model: &ModelSelection) -> (String, St
     )
 }
 
-/// `formatModelLabel`: `model · provider`, then the variant.
-pub fn format_model_label(model: &ModelSelection, variant: Option<&str>, providers: &[Provider]) -> String {
-    let (name, provider) = model_info(providers, model);
-    let variant = variant.map(|variant| format!(" · {variant}")).unwrap_or_default();
-    format!("{name} · {provider}{variant}")
-}
-
 /// `variantsFor`.
 pub fn variants_for(providers: &[Provider], model: &ModelSelection) -> Vec<String> {
     find(providers, model).1.map(|model| model.variants.clone()).unwrap_or_default()
@@ -143,6 +136,13 @@ pub fn save_variant(preferences: &ModelPreferences, model: &ModelSelection, vari
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `formatModelLabel`: `model · provider`, then the variant.
+    fn format_model_label(model: &ModelSelection, variant: Option<&str>, providers: &[Provider]) -> String {
+        let (name, provider) = model_info(providers, model);
+        let variant = variant.map(|variant| format!(" · {variant}")).unwrap_or_default();
+        format!("{name} · {provider}{variant}")
+    }
 
     fn catalog() -> Vec<Provider> {
         let model = Model {
