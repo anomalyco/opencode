@@ -27,8 +27,10 @@ const defaultBaseURL = {
 export function unloadRequest(model: LocalChatModel): UnloadRequest | undefined {
   const custom = customUnload(model)
   if (custom) return custom
-  if (model.providerID === "ollama" || port(model.baseURL) === "11434") return ollama(model)
-  if (model.providerID === "lmstudio" || port(model.baseURL) === "1234") return lmstudio(model)
+  // Only these two names have a known unload call. A matching port is not enough:
+  // another server on that port would receive the request and the API key.
+  if (model.providerID === "ollama") return ollama(model)
+  if (model.providerID === "lmstudio") return lmstudio(model)
   return
 }
 
@@ -81,10 +83,6 @@ function post(url: URL, body: Record<string, unknown>, apiKey: string | undefine
     },
     body: JSON.stringify(body),
   }
-}
-
-function port(baseURL: string | undefined) {
-  return httpUrl(baseURL)?.port
 }
 
 function httpUrl(value: string | undefined) {

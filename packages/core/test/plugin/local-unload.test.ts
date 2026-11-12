@@ -15,8 +15,8 @@ describe("unloadRequest", () => {
   test("a local server with no unload address does not guess", () => {
     expect(
       unloadRequest({
-        providerID: "bonsai",
-        modelID: "bonsai-2-9b",
+        providerID: "local",
+        modelID: "local-model",
         baseURL: "http://127.0.0.1:8081/v1",
       }),
     ).toBeUndefined()
@@ -61,21 +61,21 @@ describe("unloadRequest", () => {
     })
   })
 
-  test("a loopback server on Ollama's port unloads even under another name", () => {
+  test("another server on Ollama's port is left alone", () => {
     expect(
       unloadRequest({
         providerID: "local",
         modelID: "qwen",
         baseURL: "http://localhost:11434/v1",
-      })?.url,
-    ).toBe("http://localhost:11434/api/generate")
+      }),
+    ).toBeUndefined()
   })
 
   test("a custom unload URL on this machine is posted as given", () => {
     expect(
       unloadRequest({
-        providerID: "bonsai",
-        modelID: "bonsai-2-9b",
+        providerID: "local",
+        modelID: "local-model",
         baseURL: "http://127.0.0.1:8081/v1",
         unload: "http://127.0.0.1:8081/proxy/stop",
       }),
@@ -88,8 +88,8 @@ describe("unloadRequest", () => {
   test("a custom unload URL on another website is ignored", () => {
     expect(
       unloadRequest({
-        providerID: "bonsai",
-        modelID: "bonsai-2-9b",
+        providerID: "local",
+        modelID: "local-model",
         baseURL: "http://127.0.0.1:8081/v1",
         unload: "https://example.com/stop",
       }),
