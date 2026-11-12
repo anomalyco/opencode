@@ -253,8 +253,8 @@ fn the_revert_banner_counts_reverted_prompts_and_a_click_clears_it() {
         ],
     }});
     let h = open(30, session(revert), messages, Vec::new(), Info::default());
-    let screen = h.wait_for("messages reverted");
-    assert!(screen.contains("┃  2 messages reverted"), "{screen}");
+    // The session can load before its messages, and TS then also counts 0 for a moment.
+    let screen = h.wait_for("┃  2 messages reverted");
     assert!(screen.contains("┃  M src/parser.rs +4 -2"), "{screen}");
     assert!(screen.contains("┃  A src/new.rs +10"), "{screen}");
     assert!(screen.contains("or /redo to restore"), "{screen}");
