@@ -105,11 +105,8 @@ async fn capture(context: &Context, args: &HeapDumpArgs) -> error::Result<()> {
     let transport: Arc<dyn Transport> = Arc::new(Reqwest::default());
     let endpoint = running(transport.clone(), context.server.server.clone()).await?;
     let client = endpoint.client(transport)?;
-    // The server writes the file, so a relative directory resolves against this shell. An absolute
-    // one passes through untouched, which keeps a POSIX path for a remote server intact on Windows.
     let directory = match &args.directory {
-        Some(value) if Path::new(value).is_absolute() => Some(value.clone()),
-        Some(value) => Some(Flavor::NATIVE.resolve(&[&std::env::current_dir()?.to_string_lossy(), value])),
+        Some(value) => Some(destination(Flavor::NATIVE, &std::env::current_dir()?.to_string_lossy(), value)),
         None => None,
     };
     let snapshot = client.debug_heap_dump(&DebugHeapDumpInput { directory: directory.clone() }).await.map_err(
@@ -128,6 +125,13 @@ async fn capture(context: &Context, args: &HeapDumpArgs) -> error::Result<()> {
         eprintln!("The server ignored --directory. Update and restart it to choose where snapshots go.");
     }
     print(&format!("{}\n", snapshot.path))
+}
+
+// The server writes the file, so a relative directory resolves against this shell. An absolute one
+// (`path.isAbsolute`, so `/x` on Windows too) passes through untouched, which keeps a POSIX path for a
+// remote server intact on Windows.
+fn destination(flavor: Flavor, cwd: &str, value: &str) -> String {
+    if flavor.is_absolute(value) { value.to_owned() } else { flavor.resolve(&[cwd, value]) }
 }
 
 // A fresh server has nothing worth capturing, so only an already-running one is used: never
@@ -369,5 +373,16 @@ mod tests {
         assert!(written_in("/tmp/snaps/heap-1.heapsnapshot", "/tmp/snaps/"));
         assert!(!written_in("/var/log/heap-1.heapsnapshot", "/tmp/snaps"));
         assert!(written_in("C:\\snaps\\heap.heapsnapshot", "C:/snaps"));
+    }
+
+    #[test]
+    fn an_absolute_heap_dump_directory_goes_to_the_server_as_given() {
+        // A Windows client of a POSIX server: `/var/tmp/snaps` is the server's directory, not one on drive C.
+        let w = Flavor::Windows;
+        assert_eq!(destination(w, "C:\\w", "/var/tmp/snaps"), "/var/tmp/snaps");
+        assert_eq!(destination(w, "C:\\w", "D:/snaps"), "D:/snaps");
+        assert_eq!(destination(w, "C:\\w", "snaps\\..\\out"), "C:\\w\\out");
+        assert_eq!(destination(Flavor::Posix, "/w", "snaps"), "/w/snaps");
+        assert_eq!(destination(Flavor::Posix, "/w", "/tmp"), "/tmp");
     }
 }
