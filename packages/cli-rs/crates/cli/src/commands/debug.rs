@@ -9,6 +9,7 @@ use opencode_local::paths::Paths;
 use opencode_service::connect::{self, Env, Options};
 use opencode_service::discover;
 use opencode_service::probe::Endpoint;
+use opencode_util::path::{Flavor, strip_verbatim};
 use opencode_util::{bail, err, error};
 use regex::Regex;
 use serde_json::Value;
@@ -108,7 +109,7 @@ async fn capture(context: &Context, args: &HeapDumpArgs) -> error::Result<()> {
     // one passes through untouched, which keeps a POSIX path for a remote server intact on Windows.
     let directory = match &args.directory {
         Some(value) if Path::new(value).is_absolute() => Some(value.clone()),
-        Some(value) => Some(normalize(&format!("{}/{value}", std::env::current_dir()?.display()), false)),
+        Some(value) => Some(Flavor::NATIVE.resolve(&[&std::env::current_dir()?.to_string_lossy(), value])),
         None => None,
     };
     let snapshot = client.debug_heap_dump(&DebugHeapDumpInput { directory: directory.clone() }).await.map_err(
@@ -202,7 +203,7 @@ fn paths(args: &PathsArgs) -> error::Result<()> {
     for directory in [&paths.data, &paths.config, &paths.state, &paths.log, &paths.bin, &paths.repos, &paths.tmp] {
         std::fs::create_dir_all(directory)?;
     }
-    paths.tmp = paths.tmp.canonicalize()?;
+    paths.tmp = strip_verbatim(&paths.tmp.canonicalize()?.to_string_lossy()).as_ref().into();
     let db = database(&paths.data);
     let show = |path: &Path| path.display().to_string();
     let entries = [
@@ -257,10 +258,7 @@ fn database(data: &Path) -> String {
     if filename == ":memory:" {
         return filename;
     }
-    if Path::new(&filename).is_absolute() {
-        return normalize(&filename, false);
-    }
-    normalize(&format!("{}/{filename}", data.display()), false)
+    Flavor::NATIVE.resolve(&[&data.to_string_lossy(), &filename])
 }
 
 #[cfg(test)]

@@ -45,7 +45,7 @@ fn view(read: &dyn abi::Read, session: &str) -> Node {
     if info.size.1 >= 22 && connected == Some(false) && !dismissed {
         children.push(card());
     }
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = opencode_local::paths::home();
     let directory = opencode_ui::path::abbreviate_home(&location.directory, &home);
     let value = match branch {
         Some(branch) => format!("{directory}:{branch}"),

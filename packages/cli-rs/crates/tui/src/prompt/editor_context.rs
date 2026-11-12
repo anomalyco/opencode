@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
+use opencode_ui::path::Flavor;
 use serde::Deserialize;
 use tokio_tungstenite::tungstenite::Message as Frame;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -42,7 +43,7 @@ pub struct Source {
 impl Source {
     pub fn from_env() -> Self {
         let var = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
-        let home = var("HOME").map(PathBuf::from);
+        let home = Some(opencode_local::paths::home()).filter(|home| !home.is_empty()).map(PathBuf::from);
         let port = var("CLAUDE_CODE_SSE_PORT")
             .or_else(|| var("OPENCODE_EDITOR_SSE_PORT"))
             .and_then(|value| parse_port(&value));
@@ -462,9 +463,9 @@ impl Context {
 pub fn insert_mention(prompt: &crate::prompt::editor::Inner, tui: &Tui, mention: &Mention) {
     use crate::prompt::autocomplete::{parse, parts};
     let base = prompt.location(tui).directory;
-    let path = parse::mention_path(&base, &mention.file_path);
+    let path = parse::mention_path(Flavor::NATIVE, &base, &mention.file_path);
     let end = (mention.line_end > mention.line_start).then_some(mention.line_end);
-    let mut uri = parse::file_url(&absolute(&mention.file_path).to_string_lossy());
+    let mut uri = parse::file_url(Flavor::NATIVE, &absolute(&mention.file_path).to_string_lossy());
     uri.push_str(&format!("?start={}", mention.line_start));
     let mut name = format!("{path}#{}", mention.line_start);
     if let Some(end) = end {
@@ -542,12 +543,13 @@ fn parse_port(value: &str) -> Option<u16> {
 /// `path.resolve`: absolute against the process's directory, and lexically normalized.
 fn absolute(path: &str) -> PathBuf {
     let base = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
-    PathBuf::from(super::autocomplete::parse::resolve(&base.to_string_lossy(), path))
+    PathBuf::from(super::autocomplete::parse::resolve(Flavor::NATIVE, &base.to_string_lossy(), path))
 }
 
 /// Whether `child` is `parent` or inside it (`pathContains`); both absolute and normalized.
 fn contains(parent: &Path, child: &Path) -> bool {
-    child.starts_with(parent)
+    let relative = Flavor::NATIVE.relative(&parent.to_string_lossy(), &child.to_string_lossy());
+    relative.is_empty() || !Flavor::NATIVE.outside(&relative)
 }
 
 /// The connection loop: the IDE server when there is one, else Zed's database in a Zed terminal, else nothing,

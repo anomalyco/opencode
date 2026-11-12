@@ -4,9 +4,9 @@
 //!
 //! Offsets count as the textarea's cursor does: display columns, with one per line break.
 
-use std::path::{Component, Path, PathBuf};
-
 use unicode_width::UnicodeWidthStr;
+
+use crate::path::Flavor;
 
 /// The cursor offset at the end of `text` (`measureEditText`).
 pub fn measure(text: &str) -> u32 {
@@ -93,24 +93,24 @@ pub struct DirectorySearch {
     pub query: String,
 }
 
-pub fn directory_search(query: &str, directory: &str, home: &str) -> DirectorySearch {
+pub fn directory_search(flavor: Flavor, query: &str, directory: &str, home: &str) -> DirectorySearch {
     if query == "~" {
         return DirectorySearch { directory: home.to_owned(), prefix: "~/".to_owned(), query: String::new() };
     }
     if let Some(rest) = query.strip_prefix("~/") {
-        return search_in(rest, home, "~/");
+        return search_in(flavor, rest, home, "~/");
     }
     if is_parent_chain(query) {
         return DirectorySearch {
-            directory: resolve(directory, query),
+            directory: resolve(flavor, directory, query),
             prefix: format!("{query}/"),
             query: String::new(),
         };
     }
     if let Some(rest) = query.strip_prefix('/') {
-        return search_in(rest, "/", "/");
+        return search_in(flavor, rest, &flavor.root(directory), "/");
     }
-    search_in(query, directory, "")
+    search_in(flavor, query, directory, "")
 }
 
 /// `/^(?:\.\.\/)*\.\.$/`.
@@ -118,13 +118,13 @@ fn is_parent_chain(query: &str) -> bool {
     query.split('/').all(|part| part == "..")
 }
 
-fn search_in(query: &str, root: &str, prefix: &str) -> DirectorySearch {
+fn search_in(flavor: Flavor, query: &str, root: &str, prefix: &str) -> DirectorySearch {
     let Some(separator) = query.rfind('/') else {
         return DirectorySearch { directory: root.to_owned(), prefix: prefix.to_owned(), query: query.to_owned() };
     };
     let parent = &query[..separator + 1];
     DirectorySearch {
-        directory: resolve(root, parent),
+        directory: resolve(flavor, root, parent),
         prefix: format!("{prefix}{parent}"),
         query: query[separator + 1..].to_owned(),
     }
@@ -150,49 +150,58 @@ pub fn directory_matches(directory: &str, query: &str) -> bool {
 }
 
 /// `directoryRecentValue`: `~`-relative inside the home directory, else absolute.
-pub fn directory_recent_value(directory: &str, home: &str) -> String {
-    let (directory, home) = (resolve(directory, ""), resolve(home, ""));
-    let Ok(relative) = Path::new(&directory).strip_prefix(&home) else { return directory.to_owned() };
-    let relative = relative.to_string_lossy();
+pub fn directory_recent_value(flavor: Flavor, directory: &str, home: &str) -> String {
+    let directory = resolve(flavor, directory, "");
+    let relative = flavor.relative(home, &directory);
     if relative.is_empty() {
         return "~".to_owned();
     }
-    format!("~/{relative}")
+    if flavor.outside(&relative) {
+        return directory;
+    }
+    format!("~/{}", slashes(flavor, &relative))
 }
 
 /// `path.resolve(base, path)`: absolute and lexically normalized.
-pub fn resolve(base: &str, path: &str) -> String {
-    let mut out = PathBuf::from("/");
-    for component in Path::new(base).join(path).components() {
-        match component {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::Normal(part) => out.push(part),
-            Component::RootDir | Component::CurDir | Component::Prefix(_) => {}
-        }
-    }
-    out.to_string_lossy().into_owned()
+pub fn resolve(flavor: Flavor, base: &str, path: &str) -> String {
+    flavor.resolve(&[base, path])
 }
 
 /// `path.basename`.
-pub fn basename(path: &str) -> &str {
-    path.trim_end_matches('/').rsplit('/').next().unwrap_or_default()
+pub fn basename(flavor: Flavor, path: &str) -> &str {
+    flavor.basename(path)
 }
 
-/// `path.relative(base, path)` when `path` is inside `base`, with `/` separators
-/// (`normalizeMentionPath`); else `path` resolved.
-pub fn mention_path(base: &str, path: &str) -> String {
-    let (absolute, base) = (resolve(base, path), resolve(base, ""));
-    match Path::new(&absolute).strip_prefix(&base) {
-        Ok(relative) if !relative.as_os_str().is_empty() => relative.to_string_lossy().into_owned(),
-        _ => absolute,
+/// `path.relative(base, path)` when `path` is inside `base`, else `path` resolved; with `/` separators
+/// (`normalizeMentionPath`).
+pub fn mention_path(flavor: Flavor, base: &str, path: &str) -> String {
+    let absolute = resolve(flavor, base, path);
+    let relative = flavor.relative(base, &absolute);
+    if relative.is_empty() || flavor.outside(&relative) {
+        return slashes(flavor, &absolute);
     }
+    slashes(flavor, &relative)
 }
 
-/// `pathToFileURL(path).href`: the URL path percent-encode set, plus `%` and `\`, as Node encodes it.
-pub fn file_url(path: &str) -> String {
-    let mut url = String::from("file://");
+// `path.split(path.sep).join("/")`.
+fn slashes(flavor: Flavor, path: &str) -> String {
+    path.replace(flavor.sep(), "/")
+}
+
+/// `pathToFileURL(path).href`: the URL path percent-encode set, plus `%` and `\`, as Node encodes it. On Windows
+/// `\` separates segments, a drive path starts `file:///C:/`, and a UNC path names its server as the host.
+pub fn file_url(flavor: Flavor, path: &str) -> String {
+    let (mut url, path) = match flavor {
+        Flavor::Posix => (String::from("file://"), path.to_owned()),
+        Flavor::Windows => {
+            let path = path.replace('\\', "/");
+            match path.strip_prefix("//") {
+                Some(unc) => (String::from("file://"), unc.to_owned()),
+                None if path.starts_with('/') => (String::from("file://"), path),
+                None => (String::from("file:///"), path),
+            }
+        }
+    };
     for byte in path.bytes() {
         let encode = byte <= 0x20 || byte >= 0x7f || b"\"#%<>?`{}\\".contains(&byte);
         if !encode {
@@ -239,7 +248,7 @@ mod tests {
 
     #[test]
     fn directory_searches_follow_typescript() {
-        let search = |query| directory_search(query, "/p/app", "/home/u");
+        let search = |query| directory_search(Flavor::Posix, query, "/p/app", "/home/u");
         let dir = |directory: &str, prefix: &str, query: &str| DirectorySearch {
             directory: directory.into(),
             prefix: prefix.into(),
@@ -258,18 +267,51 @@ mod tests {
         assert!(directory_matches("Packages", "pa"));
         assert!(!directory_matches(".git", ""));
         assert!(directory_matches(".git", ".g"));
-        assert_eq!(directory_recent_value("/home/u", "/home/u"), "~");
-        assert_eq!(directory_recent_value("/home/u/src/x", "/home/u"), "~/src/x");
-        assert_eq!(directory_recent_value("/srv/x", "/home/u"), "/srv/x");
+        let recent = |directory| directory_recent_value(Flavor::Posix, directory, "/home/u");
+        assert_eq!(recent("/home/u"), "~");
+        assert_eq!(recent("/home/u/src/x"), "~/src/x");
+        assert_eq!(recent("/srv/x"), "/srv/x");
+        assert_eq!(recent("/home/user"), "/home/user");
+    }
+
+    #[test]
+    fn windows_directory_searches_follow_path_win32() {
+        let w = Flavor::Windows;
+        let search = |query| directory_search(w, query, "C:\\p\\app", "C:\\Users\\u");
+        let dir = |directory: &str, prefix: &str, query: &str| DirectorySearch {
+            directory: directory.into(),
+            prefix: prefix.into(),
+            query: query.into(),
+        };
+        assert_eq!(search("~/src/o"), dir("C:\\Users\\u\\src", "~/src/", "o"));
+        assert_eq!(search("../.."), dir("C:\\", "../../", ""));
+        assert_eq!(search("/Windows/Sy"), dir("C:\\Windows", "/Windows/", "Sy"));
+        assert_eq!(search("/"), dir("C:\\", "/", ""));
+        assert_eq!(search("packages/t"), dir("C:\\p\\app\\packages", "packages/", "t"));
+        assert_eq!(directory_search(w, "/x", "\\\\srv\\share\\p", "").directory, "\\\\srv\\share\\");
+        let recent = |directory| directory_recent_value(w, directory, "C:\\Users\\u");
+        assert_eq!(recent("c:\\users\\U"), "~");
+        assert_eq!(recent("C:\\Users\\u\\src/x"), "~/src/x");
+        assert_eq!(recent("D:\\x"), "D:\\x");
     }
 
     #[test]
     fn paths_and_urls() {
-        assert_eq!(resolve("/p", "a/../b/./c"), "/p/b/c");
-        assert_eq!(mention_path("/p", "/p/src/a.ts"), "src/a.ts");
-        assert_eq!(mention_path("/p", "/q/a.ts"), "/q/a.ts");
-        assert_eq!(basename("/p/src/"), "src");
-        assert_eq!(file_url("/p/a b#1.ts"), "file:///p/a%20b%231.ts");
+        let p = Flavor::Posix;
+        assert_eq!(resolve(p, "/p", "a/../b/./c"), "/p/b/c");
+        assert_eq!(mention_path(p, "/p", "/p/src/a.ts"), "src/a.ts");
+        assert_eq!(mention_path(p, "/p", "/q/a.ts"), "/q/a.ts");
+        assert_eq!(mention_path(p, "/p", "/p"), "/p");
+        assert_eq!(basename(p, "/p/src/"), "src");
+        assert_eq!(file_url(p, "/p/a b#1.ts"), "file:///p/a%20b%231.ts");
+        assert_eq!(file_url(p, "/p/a\\b"), "file:///p/a%5Cb");
+        let w = Flavor::Windows;
+        assert_eq!(resolve(w, "C:\\p", "a/../b"), "C:\\p\\b");
+        assert_eq!(mention_path(w, "C:\\p", "src\\a.ts"), "src/a.ts");
+        assert_eq!(mention_path(w, "C:\\p", "D:\\q\\a.ts"), "D:/q/a.ts");
+        assert_eq!(basename(w, "C:\\p\\src\\"), "src");
+        assert_eq!(file_url(w, "C:\\p\\a b#1.ts"), "file:///C:/p/a%20b%231.ts");
+        assert_eq!(file_url(w, "\\\\srv\\share\\a.ts"), "file://srv/share/a.ts");
         assert_eq!(index_at("日本x", 2), 3);
         assert_eq!(index_at("日本x", 3), 3);
     }

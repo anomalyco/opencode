@@ -16,7 +16,7 @@ use opencode_api::generated::{
 use opencode_store::Location;
 use opencode_ui::dialog::DIALOG_LIST_INSET;
 use opencode_ui::motion::Spinner;
-use opencode_ui::path::abbreviate_home;
+use opencode_ui::path::{Flavor, abbreviate_home};
 use opencode_ui::select::{ActionRun, Select, SelectAction, Truncate};
 
 use super::file_changes::{self, Choice};
@@ -345,7 +345,7 @@ impl Workspaces {
         });
         let width = u32::from(tui.app.size().0).saturating_sub(2).min(DialogSize::XLarge.width());
         let title_width = (select::content_width(width) as usize).max(1);
-        let home = std::env::var("HOME").unwrap_or_default();
+        let home = opencode_local::paths::home();
         let delete_key = tui.keymap.shortcut("dialog.move_session.delete").unwrap_or_default();
         list.into_iter()
             .map(|(location, index)| {
@@ -370,7 +370,7 @@ impl Workspaces {
                     )]);
                     option.bg = Some(theme.background.action.destructive.base);
                 } else if subdirectory {
-                    let suffix = format!("/{}", location[root.len()..].trim_start_matches('/'));
+                    let suffix = format!("{}{}", Flavor::NATIVE.sep(), Flavor::NATIVE.relative(root, &location));
                     let visible: Vec<char> = select::truncate_left(&title, title_width).chars().collect();
                     let split = visible.len().saturating_sub(suffix.chars().count());
                     option.title_spans = Some(vec![
@@ -766,12 +766,17 @@ fn force_required(error: &opencode_api::error::Error) -> bool {
 
 /// `contains`: `directory` is `root` or below it.
 pub(crate) fn contains(root: &str, directory: &str) -> bool {
-    root == directory || directory.strip_prefix(root.trim_end_matches('/')).is_some_and(|rest| rest.starts_with('/'))
+    contains_in(Flavor::NATIVE, root, directory)
+}
+
+fn contains_in(flavor: Flavor, root: &str, directory: &str) -> bool {
+    let relative = flavor.relative(root, directory);
+    root == directory || (!relative.is_empty() && !flavor.outside(&relative))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::contains;
+    use super::{Flavor, contains, contains_in};
 
     #[test]
     fn contains_follows_path_relative() {
@@ -780,5 +785,10 @@ mod tests {
         assert!(!contains("/a/b", "/a/bc"));
         assert!(!contains("/a/b", "/a"));
         assert!(contains("/", "/a"));
+        let w = |root, directory| contains_in(Flavor::Windows, root, directory);
+        assert!(w("C:\\a\\b", "c:\\A\\b/c"));
+        assert!(!w("C:\\a\\b", "C:\\a\\bc"));
+        assert!(!w("C:\\a", "D:\\a\\b"));
+        assert!(w("C:\\", "C:\\a"));
     }
 }

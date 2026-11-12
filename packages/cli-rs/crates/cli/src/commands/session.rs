@@ -1,6 +1,7 @@
 //! `session`: list, delete, export, and import sessions
 //! (`packages/cli/src/commands/handlers/session/*.ts`).
 
+use opencode_util::path::Flavor;
 use opencode_util::{bail, err, error, json_object, time::Zone};
 use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
@@ -187,8 +188,8 @@ fn import(context: &Context, args: &SessionImportArgs) -> error::Result<()> {
         bail!("Expected an object, got {}", text.trim());
     };
     let directory = match &args.directory {
-        Some(directory) if std::path::Path::new(directory).is_absolute() => super::debug::normalize(directory, false),
-        Some(directory) => super::debug::normalize(&format!("{}/{directory}", cwd()?), false),
+        Some(directory) if Flavor::NATIVE.is_absolute(directory) => Flavor::NATIVE.resolve(&[directory]),
+        Some(directory) => Flavor::NATIVE.resolve(&[&cwd()?, directory]),
         None => cwd()?,
     };
     let imported = block_on(async {

@@ -4,6 +4,7 @@
 
 use opencode_api::generated::{AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput};
 use opencode_ui::keymap::Slash;
+use opencode_ui::path::Flavor;
 
 use super::parse;
 use crate::prelude::*;
@@ -42,7 +43,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
     }
     let project = project(tui, prompt);
     let value = input.trim();
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = opencode_local::paths::home();
     let expanded = match value {
         "~" => home.clone(),
         _ => match value.strip_prefix("~/") {
@@ -50,7 +51,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
             None => value.to_owned(),
         },
     };
-    let directory = parse::resolve(&prompt.location(tui).directory, &expanded);
+    let directory = parse::resolve(Flavor::NATIVE, &prompt.location(tui).directory, &expanded);
     let client = tui.data.client().clone();
     let weak = prompt.this.clone();
     let failed = |tui: &Tui, error: String| {
