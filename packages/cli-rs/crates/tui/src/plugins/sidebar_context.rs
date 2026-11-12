@@ -7,7 +7,6 @@ use std::cell::RefCell;
 use opencode_api::generated::{ModelInfo, SessionMessageCompaction, SessionMessageInfo};
 use opencode_plugin::abi::{self, Changed, Node, Placement, Render, Span};
 use opencode_plugin::slot;
-use opencode_store::MessageExt;
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.context", setup }

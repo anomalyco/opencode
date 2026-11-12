@@ -7,7 +7,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-use crate::inbox::InboxExt;
 use crate::state::{Data, Error, MESSAGE_PAGE, OVERLAY_LIMIT, State, Task, evict_missing};
 
 /// One session's loaded messages, oldest first, with an index by ID.
@@ -104,53 +103,13 @@ impl Transcript {
 
 /// Fields every message member has.
 pub trait MessageExt {
-    /// The message ID; empty for an unknown member without one.
-    fn id(&self) -> &str;
     fn created(&self) -> f64;
     fn set_created(&mut self, created: f64);
 }
 
 impl MessageExt for SessionMessageInfo {
-    fn id(&self) -> &str {
-        match self {
-            Self::AgentSwitched(item) => item.id.as_str(),
-            Self::ModelSwitched(item) => item.id.as_str(),
-            Self::LocationSwitched(item) => item.id.as_str(),
-            Self::User(item) => item.id.as_str(),
-            Self::Synthetic(item) => item.id.as_str(),
-            Self::System(item) => item.id.as_str(),
-            Self::Skill(item) => item.id.as_str(),
-            Self::Shell(item) => item.id.as_str(),
-            Self::Assistant(item) => item.id.as_str(),
-            Self::Compaction(SessionMessageCompaction::Running(item)) => item.id.as_str(),
-            Self::Compaction(SessionMessageCompaction::Completed(item)) => item.id.as_str(),
-            Self::Compaction(SessionMessageCompaction::Failed(item)) => item.id.as_str(),
-            Self::Idle(item) => item.id.as_str(),
-            Self::Compaction(SessionMessageCompaction::Unknown(value)) | Self::Unknown(value) => {
-                value.get("id").and_then(Value::as_str).unwrap_or_default()
-            }
-        }
-    }
-
     fn created(&self) -> f64 {
-        match self {
-            Self::AgentSwitched(item) => item.time.created,
-            Self::ModelSwitched(item) => item.time.created,
-            Self::LocationSwitched(item) => item.time.created,
-            Self::User(item) => item.time.created,
-            Self::Synthetic(item) => item.time.created,
-            Self::System(item) => item.time.created,
-            Self::Skill(item) => item.time.created,
-            Self::Shell(item) => item.time.created,
-            Self::Assistant(item) => item.time.created,
-            Self::Compaction(SessionMessageCompaction::Running(item)) => item.time.created,
-            Self::Compaction(SessionMessageCompaction::Completed(item)) => item.time.created,
-            Self::Compaction(SessionMessageCompaction::Failed(item)) => item.time.created,
-            Self::Idle(item) => item.time.created,
-            Self::Compaction(SessionMessageCompaction::Unknown(value)) | Self::Unknown(value) => {
-                value.pointer("/time/created").and_then(Value::as_f64).unwrap_or_default()
-            }
-        }
+        self.time_created()
     }
 
     fn set_created(&mut self, created: f64) {
@@ -373,7 +332,8 @@ impl State {
         };
         // Like TS `reconcile`: the same IDs in the same order only update the changed messages.
         let current = self.messages.get_mut(session).filter(|transcript| {
-            paged && transcript.items().iter().map(MessageExt::id).eq(messages.iter().map(MessageExt::id))
+            paged
+                && transcript.items().iter().map(SessionMessageInfo::id).eq(messages.iter().map(SessionMessageInfo::id))
         });
         match current {
             None => {
@@ -946,27 +906,6 @@ impl HeadRead {
         }
         !self.overflowed
     }
-}
-
-/// The `durable.seq` of an event that may create a transcript row.
-pub(crate) fn durable_seq(event: &V2Event) -> Option<i64> {
-    Some(match event {
-        V2Event::SessionAgentSelected(event) => event.durable.seq,
-        V2Event::SessionModelSelected(event) => event.durable.seq,
-        V2Event::SessionMoved(event) => event.durable.seq,
-        V2Event::SessionInboxDelivered(event) => event.durable.seq,
-        V2Event::SessionInstructionsUpdated(event) => event.durable.seq,
-        V2Event::SessionSynthetic(event) => event.durable.seq,
-        V2Event::SessionShellStarted(event) => event.durable.seq,
-        V2Event::SessionStepStarted(event) => event.durable.seq,
-        V2Event::SessionCompactionStarted(event) => event.durable.seq,
-        V2Event::SessionCompactionEnded(event) => event.durable.seq,
-        V2Event::SessionCompactionFailed(event) => event.durable.seq,
-        V2Event::SessionExecutionSucceeded(event) => event.durable.seq,
-        V2Event::SessionExecutionFailed(event) => event.durable.seq,
-        V2Event::SessionExecutionInterrupted(event) => event.durable.seq,
-        _ => return None,
-    })
 }
 
 /// The session of a durable edit that only changes rows by ID, so replaying it onto a page is safe.

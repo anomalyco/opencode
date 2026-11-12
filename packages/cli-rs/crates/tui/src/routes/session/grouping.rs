@@ -13,7 +13,6 @@ use opencode_api::generated::{
     SessionMessageAssistantTool, SessionMessageAssistantToolState, SessionMessageCompaction,
 };
 use opencode_local::cli_config::{Grouping, Info, Verbosity};
-use opencode_store::MessageExt;
 use opencode_ui::motion::Spinner;
 use opencode_ui::tool_info::{canonical_tool_name, tool_display_metadata};
 use opentui::widget::Markdown;

@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use opencode_api::generated::SessionMessageAssistantContentItem;
-use opencode_store::{LoadMore, MessageExt};
+use opencode_store::LoadMore;
 
 use super::scroll::{Inner, after_layout};
 
