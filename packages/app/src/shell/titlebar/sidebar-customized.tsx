@@ -15,6 +15,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import type { Project } from "@/runtime/server/types"
 import { projectSettingsKey, useSettings } from "@/settings/model"
+import { managedWorkspaceDirectories, workspaceDirectories } from "@/workspaces/paths"
 import { sessionStatus } from "@/shell/layout/project-avatar-state"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
@@ -311,6 +312,43 @@ export function SidebarCustomized(props: {
   const projectOptions = () =>
     [...projectLabels().values()].map((project) => ({ id: project.id, label: displayName(project) }))
 
+  const sameDir = (a: string, b: string) => a.replace(/\/+$/, "") === b.replace(/\/+$/, "")
+
+  const dirName = (path: string) => path.replace(/\/+$/, "").split("/").pop() || path.replace(/\/+$/, "")
+
+  const hueOf = (value: string) =>
+    Array.from(value).reduce((hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0, 0) % 360
+
+  // A project's sessions can come from its root or from any of its worktrees. The project group names the project; this
+  // badge names the worktree, so rows from different worktrees stay apart at a glance.
+  const worktreeOf = (row: Row) => {
+    const directory = row.session?.location?.directory
+
+    if (!directory) return undefined
+
+    const project = row.project ?? (row.projectID ? projectLabels().get(row.projectID) : undefined)
+    const root = project?.worktree
+
+    if (!root) return undefined
+
+    const worktrees = workspaceDirectories(project)
+    const managed = managedWorkspaceDirectories(project)
+
+    if (worktrees.length === 0 && managed.length === 0) return undefined
+
+    const color = `hsl(${hueOf(directory)} 65% 55%)`
+
+    if (sameDir(directory, root)) return { label: "main", color }
+
+    const name = dirName(directory)
+    const main = dirName(root)
+
+    return {
+      label: main && name.startsWith(`${main}-`) ? name.slice(main.length + 1) : name,
+      color,
+    }
+  }
+
   const showLabel = (row: Row, group: SidebarGroup<Row> | undefined) => {
     if (!view.show.serverLabels || !row.conn) return
 
@@ -377,6 +415,7 @@ export function SidebarCustomized(props: {
             openTab={false}
             active={value().row.active}
             label={showLabel(value().row, group())}
+            worktree={worktreeOf(value().row)}
             depth={rowProps.flat ? 0 : depthOf(value().row, rowByKey())}
             project={avatarOf(value().row, group())}
             onOpen={() => openSession(value().row)}
