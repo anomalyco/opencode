@@ -1120,6 +1120,15 @@ impl SessionForkBoundary {
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `messageID` field, also of an unknown member.
+    pub fn message_id(&self) -> &str {
+        match self {
+            Self::Before(value) => value.message_id.as_str(),
+            Self::Through(value) => value.message_id.as_str(),
+            Self::Unknown(value) => value.get("messageID").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2312,6 +2321,25 @@ impl SessionMessageAssistantContentItem {
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `text` field, of the members that have it.
+    pub fn text(&self) -> Option<&str> {
+        match self {
+            Self::Text(value) => Some(value.text.as_str()),
+            Self::Reasoning(value) => Some(value.text.as_str()),
+            Self::Tool(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `native` field, of the members that have it.
+    pub fn native(&self) -> Option<&SessionMessageNative> {
+        match self {
+            Self::Text(value) => value.native.as_ref(),
+            Self::Reasoning(value) => value.native.as_ref(),
+            Self::Tool(value) => value.native.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -2533,6 +2561,95 @@ impl SessionMessageCompaction {
             Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `type` field, also of an unknown member.
+    pub fn r#type(&self) -> &str {
+        match self {
+            Self::Running(value) => value.r#type.as_str(),
+            Self::Completed(value) => value.r#type.as_str(),
+            Self::Failed(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `id` field, also of an unknown member.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Running(value) => value.id.as_str(),
+            Self::Completed(value) => value.id.as_str(),
+            Self::Failed(value) => value.id.as_str(),
+            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `metadata` field, of the members that have it.
+    pub fn metadata(&self) -> Option<&IndexMap<String, serde_json::Value>> {
+        match self {
+            Self::Running(value) => value.metadata.as_ref(),
+            Self::Completed(value) => value.metadata.as_ref(),
+            Self::Failed(value) => value.metadata.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time` field, of the members that have it.
+    pub fn time(&self) -> Option<&SessionInboxUserTime> {
+        match self {
+            Self::Running(value) => Some(&value.time),
+            Self::Completed(value) => Some(&value.time),
+            Self::Failed(value) => Some(&value.time),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time.created` field, also of an unknown member.
+    pub fn time_created(&self) -> f64 {
+        match self {
+            Self::Running(value) => value.time.created,
+            Self::Completed(value) => value.time.created,
+            Self::Failed(value) => value.time.created,
+            Self::Unknown(value) => {
+                value.pointer("/time/created").and_then(serde_json::Value::as_f64).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `reason` field, of the members that have it.
+    pub fn reason(&self) -> Option<&SessionMessageCompactionRunningReason> {
+        match self {
+            Self::Running(value) => Some(&value.reason),
+            Self::Completed(value) => Some(&value.reason),
+            Self::Failed(value) => Some(&value.reason),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `summary` field, of the members that have it.
+    pub fn summary(&self) -> Option<&str> {
+        match self {
+            Self::Running(value) => Some(value.summary.as_str()),
+            Self::Completed(value) => Some(value.summary.as_str()),
+            Self::Failed(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `cost` field, of the members that have it.
+    pub fn cost(&self) -> Option<MoneyUSD> {
+        match self {
+            Self::Completed(value) => value.cost,
+            Self::Failed(value) => value.cost,
+            Self::Running(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `tokens` field, of the members that have it.
+    pub fn tokens(&self) -> Option<&TokenUsageInfo> {
+        match self {
+            Self::Completed(value) => value.tokens.as_ref(),
+            Self::Failed(value) => value.tokens.as_ref(),
+            Self::Running(_) | Self::Unknown(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2602,6 +2719,242 @@ impl SessionMessageInfo {
             Self::Compaction(_) => "compaction",
             Self::Idle(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `id` field, also of an unknown member.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::AgentSwitched(value) => value.id.as_str(),
+            Self::ModelSwitched(value) => value.id.as_str(),
+            Self::LocationSwitched(value) => value.id.as_str(),
+            Self::User(value) => value.id.as_str(),
+            Self::Synthetic(value) => value.id.as_str(),
+            Self::System(value) => value.id.as_str(),
+            Self::Skill(value) => value.id.as_str(),
+            Self::Shell(value) => value.id.as_str(),
+            Self::Assistant(value) => value.id.as_str(),
+            Self::Compaction(value) => value.id(),
+            Self::Idle(value) => value.id.as_str(),
+            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `metadata` field, of the members that have it.
+    pub fn metadata(&self) -> Option<&IndexMap<String, serde_json::Value>> {
+        match self {
+            Self::AgentSwitched(value) => value.metadata.as_ref(),
+            Self::ModelSwitched(value) => value.metadata.as_ref(),
+            Self::LocationSwitched(value) => value.metadata.as_ref(),
+            Self::User(value) => value.metadata.as_ref(),
+            Self::Synthetic(value) => value.metadata.as_ref(),
+            Self::System(value) => value.metadata.as_ref(),
+            Self::Skill(value) => value.metadata.as_ref(),
+            Self::Shell(value) => value.metadata.as_ref(),
+            Self::Assistant(value) => value.metadata.as_ref(),
+            Self::Compaction(value) => value.metadata(),
+            Self::Idle(value) => value.metadata.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time.created` field, also of an unknown member.
+    pub fn time_created(&self) -> f64 {
+        match self {
+            Self::AgentSwitched(value) => value.time.created,
+            Self::ModelSwitched(value) => value.time.created,
+            Self::LocationSwitched(value) => value.time.created,
+            Self::User(value) => value.time.created,
+            Self::Synthetic(value) => value.time.created,
+            Self::System(value) => value.time.created,
+            Self::Skill(value) => value.time.created,
+            Self::Shell(value) => value.time.created,
+            Self::Assistant(value) => value.time.created,
+            Self::Compaction(value) => value.time_created(),
+            Self::Idle(value) => value.time.created,
+            Self::Unknown(value) => {
+                value.pointer("/time/created").and_then(serde_json::Value::as_f64).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `agent` field, of the members that have it.
+    pub fn agent(&self) -> Option<&str> {
+        match self {
+            Self::AgentSwitched(value) => Some(value.agent.as_str()),
+            Self::Assistant(value) => Some(value.agent.as_str()),
+            Self::ModelSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Synthetic(_)
+            | Self::System(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Compaction(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `model` field, of the members that have it.
+    pub fn model(&self) -> Option<&ModelRef> {
+        match self {
+            Self::ModelSwitched(value) => Some(&value.model),
+            Self::Assistant(value) => Some(&value.model),
+            Self::AgentSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Synthetic(_)
+            | Self::System(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Compaction(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `model.id` field, of the members that have it.
+    pub fn model_id(&self) -> Option<&str> {
+        match self {
+            Self::ModelSwitched(value) => Some(value.model.id.as_str()),
+            Self::Assistant(value) => Some(value.model.id.as_str()),
+            Self::AgentSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Synthetic(_)
+            | Self::System(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Compaction(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `model.providerID` field, of the members that have it.
+    pub fn model_provider_id(&self) -> Option<&str> {
+        match self {
+            Self::ModelSwitched(value) => Some(value.model.provider_id.as_str()),
+            Self::Assistant(value) => Some(value.model.provider_id.as_str()),
+            Self::AgentSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Synthetic(_)
+            | Self::System(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Compaction(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `model.variant` field, of the members that have it.
+    pub fn model_variant(&self) -> Option<&str> {
+        match self {
+            Self::ModelSwitched(value) => value.model.variant.as_deref(),
+            Self::Assistant(value) => value.model.variant.as_deref(),
+            Self::AgentSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Synthetic(_)
+            | Self::System(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Compaction(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `text` field, of the members that have it.
+    pub fn text(&self) -> Option<&str> {
+        match self {
+            Self::User(value) => Some(value.text.as_str()),
+            Self::Synthetic(value) => Some(value.text.as_str()),
+            Self::System(value) => Some(value.text.as_str()),
+            Self::Skill(value) => Some(value.text.as_str()),
+            Self::AgentSwitched(_)
+            | Self::ModelSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::Shell(_)
+            | Self::Assistant(_)
+            | Self::Compaction(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `description` field, of the members that have it.
+    pub fn description(&self) -> Option<&str> {
+        match self {
+            Self::Synthetic(value) => value.description.as_deref(),
+            Self::System(value) => value.description.as_deref(),
+            Self::AgentSwitched(_)
+            | Self::ModelSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Assistant(_)
+            | Self::Compaction(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `cost` field, of the members that have it.
+    pub fn cost(&self) -> Option<MoneyUSD> {
+        match self {
+            Self::Assistant(value) => value.cost,
+            Self::Compaction(value) => value.cost(),
+            Self::AgentSwitched(_)
+            | Self::ModelSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Synthetic(_)
+            | Self::System(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `tokens` field, of the members that have it.
+    pub fn tokens(&self) -> Option<&TokenUsageInfo> {
+        match self {
+            Self::Assistant(value) => value.tokens.as_ref(),
+            Self::Compaction(value) => value.tokens(),
+            Self::AgentSwitched(_)
+            | Self::ModelSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Synthetic(_)
+            | Self::System(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Idle(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `error` field, of the members that have it.
+    pub fn error(&self) -> Option<&SessionStructuredError> {
+        match self {
+            Self::Assistant(value) => value.error.as_ref(),
+            Self::Idle(value) => value.error.as_ref(),
+            Self::AgentSwitched(_)
+            | Self::ModelSwitched(_)
+            | Self::LocationSwitched(_)
+            | Self::User(_)
+            | Self::Synthetic(_)
+            | Self::System(_)
+            | Self::Skill(_)
+            | Self::Shell(_)
+            | Self::Compaction(_)
+            | Self::Unknown(_) => None,
         }
     }
 }
@@ -2681,6 +3034,63 @@ impl SessionInboxInfo {
             Self::Compaction(value) => value.r#type.as_str(),
             Self::Move(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `id` field, also of an unknown member.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::User(value) => value.id.as_str(),
+            Self::Synthetic(value) => value.id.as_str(),
+            Self::Compaction(value) => value.id.as_str(),
+            Self::Move(value) => value.id.as_str(),
+            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `sessionID` field, also of an unknown member.
+    pub fn session_id(&self) -> &str {
+        match self {
+            Self::User(value) => value.session_id.as_str(),
+            Self::Synthetic(value) => value.session_id.as_str(),
+            Self::Compaction(value) => value.session_id.as_str(),
+            Self::Move(value) => value.session_id.as_str(),
+            Self::Unknown(value) => value.get("sessionID").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `time` field, of the members that have it.
+    pub fn time(&self) -> Option<&SessionInboxUserTime> {
+        match self {
+            Self::User(value) => Some(&value.time),
+            Self::Synthetic(value) => Some(&value.time),
+            Self::Compaction(value) => Some(&value.time),
+            Self::Move(value) => Some(&value.time),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time.created` field, also of an unknown member.
+    pub fn time_created(&self) -> f64 {
+        match self {
+            Self::User(value) => value.time.created,
+            Self::Synthetic(value) => value.time.created,
+            Self::Compaction(value) => value.time.created,
+            Self::Move(value) => value.time.created,
+            Self::Unknown(value) => {
+                value.pointer("/time/created").and_then(serde_json::Value::as_f64).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `delivery` field, of the members that have it.
+    pub fn delivery(&self) -> Option<&SessionInboxDelivery> {
+        match self {
+            Self::User(value) => Some(&value.delivery),
+            Self::Synthetic(value) => Some(&value.delivery),
+            Self::Compaction(value) => Some(&value.delivery),
+            Self::Move(value) => Some(&value.delivery),
+            Self::Unknown(_) => None,
         }
     }
 }
@@ -3092,6 +3502,108 @@ impl FormField {
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `key` field, also of an unknown member.
+    pub fn key(&self) -> &str {
+        match self {
+            Self::String(value) => value.key.as_str(),
+            Self::Number(value) => value.key.as_str(),
+            Self::Integer(value) => value.key.as_str(),
+            Self::Boolean(value) => value.key.as_str(),
+            Self::Multiselect(value) => value.key.as_str(),
+            Self::External(value) => value.key.as_str(),
+            Self::Unknown(value) => value.get("key").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `title` field, of the members that have it.
+    pub fn title(&self) -> Option<&str> {
+        match self {
+            Self::String(value) => value.title.as_deref(),
+            Self::Number(value) => value.title.as_deref(),
+            Self::Integer(value) => value.title.as_deref(),
+            Self::Boolean(value) => value.title.as_deref(),
+            Self::Multiselect(value) => value.title.as_deref(),
+            Self::External(value) => value.title.as_deref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `description` field, of the members that have it.
+    pub fn description(&self) -> Option<&str> {
+        match self {
+            Self::String(value) => value.description.as_deref(),
+            Self::Number(value) => value.description.as_deref(),
+            Self::Integer(value) => value.description.as_deref(),
+            Self::Boolean(value) => value.description.as_deref(),
+            Self::Multiselect(value) => value.description.as_deref(),
+            Self::External(value) => value.description.as_deref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `required` field, of the members that have it.
+    pub fn required(&self) -> Option<bool> {
+        match self {
+            Self::String(value) => value.required,
+            Self::Number(value) => value.required,
+            Self::Integer(value) => value.required,
+            Self::Boolean(value) => value.required,
+            Self::Multiselect(value) => value.required,
+            Self::External(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `hidden` field, of the members that have it.
+    pub fn hidden(&self) -> Option<bool> {
+        match self {
+            Self::String(value) => value.hidden,
+            Self::Number(value) => value.hidden,
+            Self::Integer(value) => value.hidden,
+            Self::Boolean(value) => value.hidden,
+            Self::Multiselect(value) => value.hidden,
+            Self::External(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `when` field, of the members that have it.
+    pub fn when(&self) -> Option<&[FormWhen]> {
+        match self {
+            Self::String(value) => value.when.as_deref(),
+            Self::Number(value) => value.when.as_deref(),
+            Self::Integer(value) => value.when.as_deref(),
+            Self::Boolean(value) => value.when.as_deref(),
+            Self::Multiselect(value) => value.when.as_deref(),
+            Self::External(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `custom` field, of the members that have it.
+    pub fn custom(&self) -> Option<bool> {
+        match self {
+            Self::String(value) => value.custom,
+            Self::Multiselect(value) => value.custom,
+            Self::Number(_) | Self::Integer(_) | Self::Boolean(_) | Self::External(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `minimum` field, of the members that have it.
+    pub fn minimum(&self) -> Option<&SessionMessageShellExit> {
+        match self {
+            Self::Number(value) => value.minimum.as_ref(),
+            Self::Integer(value) => value.minimum.as_ref(),
+            Self::String(_) | Self::Boolean(_) | Self::Multiselect(_) | Self::External(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `maximum` field, of the members that have it.
+    pub fn maximum(&self) -> Option<&SessionMessageShellExit> {
+        match self {
+            Self::Number(value) => value.maximum.as_ref(),
+            Self::Integer(value) => value.maximum.as_ref(),
+            Self::String(_) | Self::Boolean(_) | Self::Multiselect(_) | Self::External(_) | Self::Unknown(_) => None,
+        }
+    }
 }
 
 /// `Form.Fields`
@@ -3397,6 +3909,51 @@ impl SessionStatsTools {
             Self::Summary(value) => value.mode.as_str(),
             Self::Detail(value) => value.mode.as_str(),
             Self::Unknown(value) => value.get("mode").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `totals` field, of the members that have it.
+    pub fn totals(&self) -> Option<&SessionStatsToolTotals> {
+        match self {
+            Self::Summary(value) => Some(&value.totals),
+            Self::Detail(value) => Some(&value.totals),
+            Self::None(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `totals.calls` field, of the members that have it.
+    pub fn totals_calls(&self) -> Option<i64> {
+        match self {
+            Self::Summary(value) => Some(value.totals.calls),
+            Self::Detail(value) => Some(value.totals.calls),
+            Self::None(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `totals.succeeded` field, of the members that have it.
+    pub fn totals_succeeded(&self) -> Option<i64> {
+        match self {
+            Self::Summary(value) => Some(value.totals.succeeded),
+            Self::Detail(value) => Some(value.totals.succeeded),
+            Self::None(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `totals.failed` field, of the members that have it.
+    pub fn totals_failed(&self) -> Option<i64> {
+        match self {
+            Self::Summary(value) => Some(value.totals.failed),
+            Self::Detail(value) => Some(value.totals.failed),
+            Self::None(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `totals.unfinished` field, of the members that have it.
+    pub fn totals_unfinished(&self) -> Option<i64> {
+        match self {
+            Self::Summary(value) => Some(value.totals.unfinished),
+            Self::Detail(value) => Some(value.totals.unfinished),
+            Self::None(_) | Self::Unknown(_) => None,
         }
     }
 }
@@ -4055,6 +4612,17 @@ impl SessionInboxItem {
             Self::Compaction(value) => value.r#type.as_str(),
             Self::Move(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `delivery` field, of the members that have it.
+    pub fn delivery(&self) -> Option<&SessionInboxDelivery> {
+        match self {
+            Self::User(value) => Some(&value.delivery),
+            Self::Synthetic(value) => Some(&value.delivery),
+            Self::Compaction(value) => Some(&value.delivery),
+            Self::Move(value) => Some(&value.delivery),
+            Self::Unknown(_) => None,
         }
     }
 }
@@ -4994,6 +5562,25 @@ impl SessionMessageAssistantContentEncoded {
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `text` field, of the members that have it.
+    pub fn text(&self) -> Option<&str> {
+        match self {
+            Self::Text(value) => Some(value.text.as_str()),
+            Self::Reasoning(value) => Some(value.text.as_str()),
+            Self::Tool(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `native` field, of the members that have it.
+    pub fn native(&self) -> Option<&SessionMessageNative> {
+        match self {
+            Self::Text(value) => value.native.as_ref(),
+            Self::Reasoning(value) => value.native.as_ref(),
+            Self::Tool(value) => value.native.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -5185,6 +5772,454 @@ impl SessionEventDurable {
             Self::SessionUsageRecorded(value) => value.r#type.as_str(),
             Self::SessionMessageContentUpdated(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `id` field, also of an unknown member.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::SessionCreated(value) => value.id.as_str(),
+            Self::SessionAgentSelected(value) => value.id.as_str(),
+            Self::SessionModelSelected(value) => value.id.as_str(),
+            Self::SessionMoved(value) => value.id.as_str(),
+            Self::SessionRenamed(value) => value.id.as_str(),
+            Self::SessionMetadataUpdated(value) => value.id.as_str(),
+            Self::SessionPermissions(value) => value.id.as_str(),
+            Self::SessionViewed(value) => value.id.as_str(),
+            Self::SessionArchived(value) => value.id.as_str(),
+            Self::SessionUnarchived(value) => value.id.as_str(),
+            Self::SessionDeleted(value) => value.id.as_str(),
+            Self::SessionForked(value) => value.id.as_str(),
+            Self::SessionInboxDelivered(value) => value.id.as_str(),
+            Self::SessionInboxEnqueued(value) => value.id.as_str(),
+            Self::SessionInboxCancelled(value) => value.id.as_str(),
+            Self::SessionInboxDeliveryChanged(value) => value.id.as_str(),
+            Self::SessionExecutionStarted(value) => value.id.as_str(),
+            Self::SessionExecutionSucceeded(value) => value.id.as_str(),
+            Self::SessionExecutionFailed(value) => value.id.as_str(),
+            Self::SessionExecutionInterrupted(value) => value.id.as_str(),
+            Self::SessionInstructionsUpdated(value) => value.id.as_str(),
+            Self::SessionSynthetic(value) => value.id.as_str(),
+            Self::SessionSkillActivated(value) => value.id.as_str(),
+            Self::SessionShellStarted(value) => value.id.as_str(),
+            Self::SessionShellEnded(value) => value.id.as_str(),
+            Self::SessionStepStarted(value) => value.id.as_str(),
+            Self::SessionStepFirstToken(value) => value.id.as_str(),
+            Self::SessionStepStreamed(value) => value.id.as_str(),
+            Self::SessionStepEnded(value) => value.id.as_str(),
+            Self::SessionStepFailed(value) => value.id.as_str(),
+            Self::SessionTextStarted(value) => value.id.as_str(),
+            Self::SessionTextEnded(value) => value.id.as_str(),
+            Self::SessionReasoningStarted(value) => value.id.as_str(),
+            Self::SessionReasoningEnded(value) => value.id.as_str(),
+            Self::SessionToolInputStarted(value) => value.id.as_str(),
+            Self::SessionToolInputEnded(value) => value.id.as_str(),
+            Self::SessionToolCalled(value) => value.id.as_str(),
+            Self::SessionToolSuccess(value) => value.id.as_str(),
+            Self::SessionToolFailed(value) => value.id.as_str(),
+            Self::SessionRetryScheduled(value) => value.id.as_str(),
+            Self::SessionCompactionStarted(value) => value.id.as_str(),
+            Self::SessionCompactionEnded(value) => value.id.as_str(),
+            Self::SessionCompactionFailed(value) => value.id.as_str(),
+            Self::SessionRevertStaged(value) => value.id.as_str(),
+            Self::SessionRevertCleared(value) => value.id.as_str(),
+            Self::SessionRevertCommitted(value) => value.id.as_str(),
+            Self::SessionUsageRecorded(value) => value.id.as_str(),
+            Self::SessionMessageContentUpdated(value) => value.id.as_str(),
+            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `created` field, also of an unknown member.
+    pub fn created(&self) -> f64 {
+        match self {
+            Self::SessionCreated(value) => value.created,
+            Self::SessionAgentSelected(value) => value.created,
+            Self::SessionModelSelected(value) => value.created,
+            Self::SessionMoved(value) => value.created,
+            Self::SessionRenamed(value) => value.created,
+            Self::SessionMetadataUpdated(value) => value.created,
+            Self::SessionPermissions(value) => value.created,
+            Self::SessionViewed(value) => value.created,
+            Self::SessionArchived(value) => value.created,
+            Self::SessionUnarchived(value) => value.created,
+            Self::SessionDeleted(value) => value.created,
+            Self::SessionForked(value) => value.created,
+            Self::SessionInboxDelivered(value) => value.created,
+            Self::SessionInboxEnqueued(value) => value.created,
+            Self::SessionInboxCancelled(value) => value.created,
+            Self::SessionInboxDeliveryChanged(value) => value.created,
+            Self::SessionExecutionStarted(value) => value.created,
+            Self::SessionExecutionSucceeded(value) => value.created,
+            Self::SessionExecutionFailed(value) => value.created,
+            Self::SessionExecutionInterrupted(value) => value.created,
+            Self::SessionInstructionsUpdated(value) => value.created,
+            Self::SessionSynthetic(value) => value.created,
+            Self::SessionSkillActivated(value) => value.created,
+            Self::SessionShellStarted(value) => value.created,
+            Self::SessionShellEnded(value) => value.created,
+            Self::SessionStepStarted(value) => value.created,
+            Self::SessionStepFirstToken(value) => value.created,
+            Self::SessionStepStreamed(value) => value.created,
+            Self::SessionStepEnded(value) => value.created,
+            Self::SessionStepFailed(value) => value.created,
+            Self::SessionTextStarted(value) => value.created,
+            Self::SessionTextEnded(value) => value.created,
+            Self::SessionReasoningStarted(value) => value.created,
+            Self::SessionReasoningEnded(value) => value.created,
+            Self::SessionToolInputStarted(value) => value.created,
+            Self::SessionToolInputEnded(value) => value.created,
+            Self::SessionToolCalled(value) => value.created,
+            Self::SessionToolSuccess(value) => value.created,
+            Self::SessionToolFailed(value) => value.created,
+            Self::SessionRetryScheduled(value) => value.created,
+            Self::SessionCompactionStarted(value) => value.created,
+            Self::SessionCompactionEnded(value) => value.created,
+            Self::SessionCompactionFailed(value) => value.created,
+            Self::SessionRevertStaged(value) => value.created,
+            Self::SessionRevertCleared(value) => value.created,
+            Self::SessionRevertCommitted(value) => value.created,
+            Self::SessionUsageRecorded(value) => value.created,
+            Self::SessionMessageContentUpdated(value) => value.created,
+            Self::Unknown(value) => value.get("created").and_then(serde_json::Value::as_f64).unwrap_or_default(),
+        }
+    }
+
+    /// The `metadata` field, of the members that have it.
+    pub fn metadata(&self) -> Option<&IndexMap<String, serde_json::Value>> {
+        match self {
+            Self::SessionCreated(value) => value.metadata.as_ref(),
+            Self::SessionAgentSelected(value) => value.metadata.as_ref(),
+            Self::SessionModelSelected(value) => value.metadata.as_ref(),
+            Self::SessionMoved(value) => value.metadata.as_ref(),
+            Self::SessionRenamed(value) => value.metadata.as_ref(),
+            Self::SessionMetadataUpdated(value) => value.metadata.as_ref(),
+            Self::SessionPermissions(value) => value.metadata.as_ref(),
+            Self::SessionViewed(value) => value.metadata.as_ref(),
+            Self::SessionArchived(value) => value.metadata.as_ref(),
+            Self::SessionUnarchived(value) => value.metadata.as_ref(),
+            Self::SessionDeleted(value) => value.metadata.as_ref(),
+            Self::SessionForked(value) => value.metadata.as_ref(),
+            Self::SessionInboxDelivered(value) => value.metadata.as_ref(),
+            Self::SessionInboxEnqueued(value) => value.metadata.as_ref(),
+            Self::SessionInboxCancelled(value) => value.metadata.as_ref(),
+            Self::SessionInboxDeliveryChanged(value) => value.metadata.as_ref(),
+            Self::SessionExecutionStarted(value) => value.metadata.as_ref(),
+            Self::SessionExecutionSucceeded(value) => value.metadata.as_ref(),
+            Self::SessionExecutionFailed(value) => value.metadata.as_ref(),
+            Self::SessionExecutionInterrupted(value) => value.metadata.as_ref(),
+            Self::SessionInstructionsUpdated(value) => value.metadata.as_ref(),
+            Self::SessionSynthetic(value) => value.metadata.as_ref(),
+            Self::SessionSkillActivated(value) => value.metadata.as_ref(),
+            Self::SessionShellStarted(value) => value.metadata.as_ref(),
+            Self::SessionShellEnded(value) => value.metadata.as_ref(),
+            Self::SessionStepStarted(value) => value.metadata.as_ref(),
+            Self::SessionStepFirstToken(value) => value.metadata.as_ref(),
+            Self::SessionStepStreamed(value) => value.metadata.as_ref(),
+            Self::SessionStepEnded(value) => value.metadata.as_ref(),
+            Self::SessionStepFailed(value) => value.metadata.as_ref(),
+            Self::SessionTextStarted(value) => value.metadata.as_ref(),
+            Self::SessionTextEnded(value) => value.metadata.as_ref(),
+            Self::SessionReasoningStarted(value) => value.metadata.as_ref(),
+            Self::SessionReasoningEnded(value) => value.metadata.as_ref(),
+            Self::SessionToolInputStarted(value) => value.metadata.as_ref(),
+            Self::SessionToolInputEnded(value) => value.metadata.as_ref(),
+            Self::SessionToolCalled(value) => value.metadata.as_ref(),
+            Self::SessionToolSuccess(value) => value.metadata.as_ref(),
+            Self::SessionToolFailed(value) => value.metadata.as_ref(),
+            Self::SessionRetryScheduled(value) => value.metadata.as_ref(),
+            Self::SessionCompactionStarted(value) => value.metadata.as_ref(),
+            Self::SessionCompactionEnded(value) => value.metadata.as_ref(),
+            Self::SessionCompactionFailed(value) => value.metadata.as_ref(),
+            Self::SessionRevertStaged(value) => value.metadata.as_ref(),
+            Self::SessionRevertCleared(value) => value.metadata.as_ref(),
+            Self::SessionRevertCommitted(value) => value.metadata.as_ref(),
+            Self::SessionUsageRecorded(value) => value.metadata.as_ref(),
+            Self::SessionMessageContentUpdated(value) => value.metadata.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `durable.aggregateID` field, also of an unknown member.
+    pub fn durable_aggregate_id(&self) -> &str {
+        match self {
+            Self::SessionCreated(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionAgentSelected(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionModelSelected(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionMoved(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionRenamed(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionMetadataUpdated(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionPermissions(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionViewed(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionArchived(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionUnarchived(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionDeleted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionForked(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionInboxDelivered(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionInboxEnqueued(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionInboxCancelled(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionInboxDeliveryChanged(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionExecutionStarted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionExecutionSucceeded(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionExecutionFailed(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionExecutionInterrupted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionInstructionsUpdated(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionSynthetic(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionSkillActivated(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionShellStarted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionShellEnded(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionStepStarted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionStepFirstToken(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionStepStreamed(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionStepEnded(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionStepFailed(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionTextStarted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionTextEnded(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionReasoningStarted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionReasoningEnded(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionToolInputStarted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionToolInputEnded(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionToolCalled(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionToolSuccess(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionToolFailed(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionRetryScheduled(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionCompactionStarted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionCompactionEnded(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionCompactionFailed(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionRevertStaged(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionRevertCleared(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionRevertCommitted(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionUsageRecorded(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionMessageContentUpdated(value) => value.durable.aggregate_id.as_str(),
+            Self::Unknown(value) => {
+                value.pointer("/durable/aggregateID").and_then(serde_json::Value::as_str).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `durable.seq` field, also of an unknown member.
+    pub fn durable_seq(&self) -> EventSeq {
+        match self {
+            Self::SessionCreated(value) => value.durable.seq,
+            Self::SessionAgentSelected(value) => value.durable.seq,
+            Self::SessionModelSelected(value) => value.durable.seq,
+            Self::SessionMoved(value) => value.durable.seq,
+            Self::SessionRenamed(value) => value.durable.seq,
+            Self::SessionMetadataUpdated(value) => value.durable.seq,
+            Self::SessionPermissions(value) => value.durable.seq,
+            Self::SessionViewed(value) => value.durable.seq,
+            Self::SessionArchived(value) => value.durable.seq,
+            Self::SessionUnarchived(value) => value.durable.seq,
+            Self::SessionDeleted(value) => value.durable.seq,
+            Self::SessionForked(value) => value.durable.seq,
+            Self::SessionInboxDelivered(value) => value.durable.seq,
+            Self::SessionInboxEnqueued(value) => value.durable.seq,
+            Self::SessionInboxCancelled(value) => value.durable.seq,
+            Self::SessionInboxDeliveryChanged(value) => value.durable.seq,
+            Self::SessionExecutionStarted(value) => value.durable.seq,
+            Self::SessionExecutionSucceeded(value) => value.durable.seq,
+            Self::SessionExecutionFailed(value) => value.durable.seq,
+            Self::SessionExecutionInterrupted(value) => value.durable.seq,
+            Self::SessionInstructionsUpdated(value) => value.durable.seq,
+            Self::SessionSynthetic(value) => value.durable.seq,
+            Self::SessionSkillActivated(value) => value.durable.seq,
+            Self::SessionShellStarted(value) => value.durable.seq,
+            Self::SessionShellEnded(value) => value.durable.seq,
+            Self::SessionStepStarted(value) => value.durable.seq,
+            Self::SessionStepFirstToken(value) => value.durable.seq,
+            Self::SessionStepStreamed(value) => value.durable.seq,
+            Self::SessionStepEnded(value) => value.durable.seq,
+            Self::SessionStepFailed(value) => value.durable.seq,
+            Self::SessionTextStarted(value) => value.durable.seq,
+            Self::SessionTextEnded(value) => value.durable.seq,
+            Self::SessionReasoningStarted(value) => value.durable.seq,
+            Self::SessionReasoningEnded(value) => value.durable.seq,
+            Self::SessionToolInputStarted(value) => value.durable.seq,
+            Self::SessionToolInputEnded(value) => value.durable.seq,
+            Self::SessionToolCalled(value) => value.durable.seq,
+            Self::SessionToolSuccess(value) => value.durable.seq,
+            Self::SessionToolFailed(value) => value.durable.seq,
+            Self::SessionRetryScheduled(value) => value.durable.seq,
+            Self::SessionCompactionStarted(value) => value.durable.seq,
+            Self::SessionCompactionEnded(value) => value.durable.seq,
+            Self::SessionCompactionFailed(value) => value.durable.seq,
+            Self::SessionRevertStaged(value) => value.durable.seq,
+            Self::SessionRevertCleared(value) => value.durable.seq,
+            Self::SessionRevertCommitted(value) => value.durable.seq,
+            Self::SessionUsageRecorded(value) => value.durable.seq,
+            Self::SessionMessageContentUpdated(value) => value.durable.seq,
+            Self::Unknown(value) => {
+                value.pointer("/durable/seq").and_then(serde_json::Value::as_i64).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `durable.version` field, also of an unknown member.
+    pub fn durable_version(&self) -> i64 {
+        match self {
+            Self::SessionCreated(value) => value.durable.version,
+            Self::SessionAgentSelected(value) => value.durable.version,
+            Self::SessionModelSelected(value) => value.durable.version,
+            Self::SessionMoved(value) => value.durable.version,
+            Self::SessionRenamed(value) => value.durable.version,
+            Self::SessionMetadataUpdated(value) => value.durable.version,
+            Self::SessionPermissions(value) => value.durable.version,
+            Self::SessionViewed(value) => value.durable.version,
+            Self::SessionArchived(value) => value.durable.version,
+            Self::SessionUnarchived(value) => value.durable.version,
+            Self::SessionDeleted(value) => value.durable.version,
+            Self::SessionForked(value) => value.durable.version,
+            Self::SessionInboxDelivered(value) => value.durable.version,
+            Self::SessionInboxEnqueued(value) => value.durable.version,
+            Self::SessionInboxCancelled(value) => value.durable.version,
+            Self::SessionInboxDeliveryChanged(value) => value.durable.version,
+            Self::SessionExecutionStarted(value) => value.durable.version,
+            Self::SessionExecutionSucceeded(value) => value.durable.version,
+            Self::SessionExecutionFailed(value) => value.durable.version,
+            Self::SessionExecutionInterrupted(value) => value.durable.version,
+            Self::SessionInstructionsUpdated(value) => value.durable.version,
+            Self::SessionSynthetic(value) => value.durable.version,
+            Self::SessionSkillActivated(value) => value.durable.version,
+            Self::SessionShellStarted(value) => value.durable.version,
+            Self::SessionShellEnded(value) => value.durable.version,
+            Self::SessionStepStarted(value) => value.durable.version,
+            Self::SessionStepFirstToken(value) => value.durable.version,
+            Self::SessionStepStreamed(value) => value.durable.version,
+            Self::SessionStepEnded(value) => value.durable.version,
+            Self::SessionStepFailed(value) => value.durable.version,
+            Self::SessionTextStarted(value) => value.durable.version,
+            Self::SessionTextEnded(value) => value.durable.version,
+            Self::SessionReasoningStarted(value) => value.durable.version,
+            Self::SessionReasoningEnded(value) => value.durable.version,
+            Self::SessionToolInputStarted(value) => value.durable.version,
+            Self::SessionToolInputEnded(value) => value.durable.version,
+            Self::SessionToolCalled(value) => value.durable.version,
+            Self::SessionToolSuccess(value) => value.durable.version,
+            Self::SessionToolFailed(value) => value.durable.version,
+            Self::SessionRetryScheduled(value) => value.durable.version,
+            Self::SessionCompactionStarted(value) => value.durable.version,
+            Self::SessionCompactionEnded(value) => value.durable.version,
+            Self::SessionCompactionFailed(value) => value.durable.version,
+            Self::SessionRevertStaged(value) => value.durable.version,
+            Self::SessionRevertCleared(value) => value.durable.version,
+            Self::SessionRevertCommitted(value) => value.durable.version,
+            Self::SessionUsageRecorded(value) => value.durable.version,
+            Self::SessionMessageContentUpdated(value) => value.durable.version,
+            Self::Unknown(value) => {
+                value.pointer("/durable/version").and_then(serde_json::Value::as_i64).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `location` field, of the members that have it.
+    pub fn location(&self) -> Option<&LocationRef> {
+        match self {
+            Self::SessionCreated(value) => value.location.as_ref(),
+            Self::SessionAgentSelected(value) => value.location.as_ref(),
+            Self::SessionModelSelected(value) => value.location.as_ref(),
+            Self::SessionMoved(value) => value.location.as_ref(),
+            Self::SessionRenamed(value) => value.location.as_ref(),
+            Self::SessionMetadataUpdated(value) => value.location.as_ref(),
+            Self::SessionPermissions(value) => value.location.as_ref(),
+            Self::SessionViewed(value) => value.location.as_ref(),
+            Self::SessionArchived(value) => value.location.as_ref(),
+            Self::SessionUnarchived(value) => value.location.as_ref(),
+            Self::SessionDeleted(value) => value.location.as_ref(),
+            Self::SessionForked(value) => value.location.as_ref(),
+            Self::SessionInboxDelivered(value) => value.location.as_ref(),
+            Self::SessionInboxEnqueued(value) => value.location.as_ref(),
+            Self::SessionInboxCancelled(value) => value.location.as_ref(),
+            Self::SessionInboxDeliveryChanged(value) => value.location.as_ref(),
+            Self::SessionExecutionStarted(value) => value.location.as_ref(),
+            Self::SessionExecutionSucceeded(value) => value.location.as_ref(),
+            Self::SessionExecutionFailed(value) => value.location.as_ref(),
+            Self::SessionExecutionInterrupted(value) => value.location.as_ref(),
+            Self::SessionInstructionsUpdated(value) => value.location.as_ref(),
+            Self::SessionSynthetic(value) => value.location.as_ref(),
+            Self::SessionSkillActivated(value) => value.location.as_ref(),
+            Self::SessionShellStarted(value) => value.location.as_ref(),
+            Self::SessionShellEnded(value) => value.location.as_ref(),
+            Self::SessionStepStarted(value) => value.location.as_ref(),
+            Self::SessionStepFirstToken(value) => value.location.as_ref(),
+            Self::SessionStepStreamed(value) => value.location.as_ref(),
+            Self::SessionStepEnded(value) => value.location.as_ref(),
+            Self::SessionStepFailed(value) => value.location.as_ref(),
+            Self::SessionTextStarted(value) => value.location.as_ref(),
+            Self::SessionTextEnded(value) => value.location.as_ref(),
+            Self::SessionReasoningStarted(value) => value.location.as_ref(),
+            Self::SessionReasoningEnded(value) => value.location.as_ref(),
+            Self::SessionToolInputStarted(value) => value.location.as_ref(),
+            Self::SessionToolInputEnded(value) => value.location.as_ref(),
+            Self::SessionToolCalled(value) => value.location.as_ref(),
+            Self::SessionToolSuccess(value) => value.location.as_ref(),
+            Self::SessionToolFailed(value) => value.location.as_ref(),
+            Self::SessionRetryScheduled(value) => value.location.as_ref(),
+            Self::SessionCompactionStarted(value) => value.location.as_ref(),
+            Self::SessionCompactionEnded(value) => value.location.as_ref(),
+            Self::SessionCompactionFailed(value) => value.location.as_ref(),
+            Self::SessionRevertStaged(value) => value.location.as_ref(),
+            Self::SessionRevertCleared(value) => value.location.as_ref(),
+            Self::SessionRevertCommitted(value) => value.location.as_ref(),
+            Self::SessionUsageRecorded(value) => value.location.as_ref(),
+            Self::SessionMessageContentUpdated(value) => value.location.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `data.sessionID` field, also of an unknown member.
+    pub fn data_session_id(&self) -> &str {
+        match self {
+            Self::SessionCreated(value) => value.data.session_id.as_str(),
+            Self::SessionAgentSelected(value) => value.data.session_id.as_str(),
+            Self::SessionModelSelected(value) => value.data.session_id.as_str(),
+            Self::SessionMoved(value) => value.data.session_id.as_str(),
+            Self::SessionRenamed(value) => value.data.session_id.as_str(),
+            Self::SessionMetadataUpdated(value) => value.data.session_id.as_str(),
+            Self::SessionPermissions(value) => value.data.session_id.as_str(),
+            Self::SessionViewed(value) => value.data.session_id.as_str(),
+            Self::SessionArchived(value) => value.data.session_id.as_str(),
+            Self::SessionUnarchived(value) => value.data.session_id.as_str(),
+            Self::SessionDeleted(value) => value.data.session_id.as_str(),
+            Self::SessionForked(value) => value.data.session_id.as_str(),
+            Self::SessionInboxDelivered(value) => value.data.session_id.as_str(),
+            Self::SessionInboxEnqueued(value) => value.data.session_id.as_str(),
+            Self::SessionInboxCancelled(value) => value.data.session_id.as_str(),
+            Self::SessionInboxDeliveryChanged(value) => value.data.session_id.as_str(),
+            Self::SessionExecutionStarted(value) => value.data.session_id.as_str(),
+            Self::SessionExecutionSucceeded(value) => value.data.session_id.as_str(),
+            Self::SessionExecutionFailed(value) => value.data.session_id.as_str(),
+            Self::SessionExecutionInterrupted(value) => value.data.session_id.as_str(),
+            Self::SessionInstructionsUpdated(value) => value.data.session_id.as_str(),
+            Self::SessionSynthetic(value) => value.data.session_id.as_str(),
+            Self::SessionSkillActivated(value) => value.data.session_id.as_str(),
+            Self::SessionShellStarted(value) => value.data.session_id.as_str(),
+            Self::SessionShellEnded(value) => value.data.session_id.as_str(),
+            Self::SessionStepStarted(value) => value.data.session_id.as_str(),
+            Self::SessionStepFirstToken(value) => value.data.session_id.as_str(),
+            Self::SessionStepStreamed(value) => value.data.session_id.as_str(),
+            Self::SessionStepEnded(value) => value.data.session_id.as_str(),
+            Self::SessionStepFailed(value) => value.data.session_id.as_str(),
+            Self::SessionTextStarted(value) => value.data.session_id.as_str(),
+            Self::SessionTextEnded(value) => value.data.session_id.as_str(),
+            Self::SessionReasoningStarted(value) => value.data.session_id.as_str(),
+            Self::SessionReasoningEnded(value) => value.data.session_id.as_str(),
+            Self::SessionToolInputStarted(value) => value.data.session_id.as_str(),
+            Self::SessionToolInputEnded(value) => value.data.session_id.as_str(),
+            Self::SessionToolCalled(value) => value.data.session_id.as_str(),
+            Self::SessionToolSuccess(value) => value.data.session_id.as_str(),
+            Self::SessionToolFailed(value) => value.data.session_id.as_str(),
+            Self::SessionRetryScheduled(value) => value.data.session_id.as_str(),
+            Self::SessionCompactionStarted(value) => value.data.session_id.as_str(),
+            Self::SessionCompactionEnded(value) => value.data.session_id.as_str(),
+            Self::SessionCompactionFailed(value) => value.data.session_id.as_str(),
+            Self::SessionRevertStaged(value) => value.data.session_id.as_str(),
+            Self::SessionRevertCleared(value) => value.data.session_id.as_str(),
+            Self::SessionRevertCommitted(value) => value.data.session_id.as_str(),
+            Self::SessionUsageRecorded(value) => value.data.session_id.as_str(),
+            Self::SessionMessageContentUpdated(value) => value.data.session_id.as_str(),
+            Self::Unknown(value) => {
+                value.pointer("/data/sessionID").and_then(serde_json::Value::as_str).unwrap_or_default()
+            }
         }
     }
 }
@@ -6060,6 +7095,26 @@ impl GenerateDecisionQuestion {
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `name` field, also of an unknown member.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Predicate(value) => value.name.as_str(),
+            Self::Choice(value) => value.name.as_str(),
+            Self::Score(value) => value.name.as_str(),
+            Self::Unknown(value) => value.get("name").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `instructions` field, also of an unknown member.
+    pub fn instructions(&self) -> &str {
+        match self {
+            Self::Predicate(value) => value.instructions.as_str(),
+            Self::Choice(value) => value.instructions.as_str(),
+            Self::Score(value) => value.instructions.as_str(),
+            Self::Unknown(value) => value.get("instructions").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
 }
 
 /// Input of `Client::experimental_generate_decisions`.
@@ -6157,6 +7212,26 @@ impl GenerateDecisionAnswer {
             Self::Score(value) => value.r#type.as_str(),
             Self::Error(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `name` field, also of an unknown member.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Predicate(value) => value.name.as_str(),
+            Self::Choice(value) => value.name.as_str(),
+            Self::Score(value) => value.name.as_str(),
+            Self::Error(value) => value.name.as_str(),
+            Self::Unknown(value) => value.get("name").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `confidence` field, of the members that have it.
+    pub fn confidence(&self) -> Option<f64> {
+        match self {
+            Self::Choice(value) => Some(value.confidence),
+            Self::Score(value) => Some(value.confidence),
+            Self::Predicate(_) | Self::Error(_) | Self::Unknown(_) => None,
         }
     }
 }
@@ -6602,6 +7677,26 @@ impl IntegrationMethod {
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `id` field, of the members that have it.
+    pub fn id(&self) -> Option<&str> {
+        match self {
+            Self::Oauth(value) => Some(value.id.as_str()),
+            Self::Command(value) => Some(value.id.as_str()),
+            Self::External(value) => Some(value.id.as_str()),
+            Self::Key(_) | Self::Env(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `form` field, of the members that have it.
+    pub fn form(&self) -> Option<&FormFields> {
+        match self {
+            Self::Oauth(value) => value.form.as_ref(),
+            Self::Key(value) => value.form.as_ref(),
+            Self::External(value) => value.form.as_ref(),
+            Self::Command(_) | Self::Env(_) | Self::Unknown(_) => None,
+        }
+    }
 }
 
 /// `Credential.ID`
@@ -6736,6 +7831,15 @@ impl ConnectionInfo {
             Self::Credential(value) => value.r#type.as_str(),
             Self::Env(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `status` field, of the members that have it.
+    pub fn status(&self) -> Option<&ConnectionStatus> {
+        match self {
+            Self::Credential(value) => value.status.as_ref(),
+            Self::Env(value) => value.status.as_ref(),
+            Self::Unknown(_) => None,
         }
     }
 }
@@ -6969,6 +8073,43 @@ impl IntegrationAttemptStatus {
             Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `time` field, of the members that have it.
+    pub fn time(&self) -> Option<&IntegrationAttemptTime> {
+        match self {
+            Self::Pending(value) => Some(&value.time),
+            Self::Complete(value) => Some(&value.time),
+            Self::Failed(value) => Some(&value.time),
+            Self::Expired(value) => Some(&value.time),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time.created` field, also of an unknown member.
+    pub fn time_created(&self) -> f64 {
+        match self {
+            Self::Pending(value) => value.time.created,
+            Self::Complete(value) => value.time.created,
+            Self::Failed(value) => value.time.created,
+            Self::Expired(value) => value.time.created,
+            Self::Unknown(value) => {
+                value.pointer("/time/created").and_then(serde_json::Value::as_f64).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `time.expires` field, also of an unknown member.
+    pub fn time_expires(&self) -> f64 {
+        match self {
+            Self::Pending(value) => value.time.expires,
+            Self::Complete(value) => value.time.expires,
+            Self::Failed(value) => value.time.expires,
+            Self::Expired(value) => value.time.expires,
+            Self::Unknown(value) => {
+                value.pointer("/time/expires").and_then(serde_json::Value::as_f64).unwrap_or_default()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -7093,6 +8234,39 @@ impl IntegrationCommandAttemptStatus {
             Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `time` field, of the members that have it.
+    pub fn time(&self) -> Option<&IntegrationCommandAttemptStatusPendingTime> {
+        match self {
+            Self::Pending(value) => Some(&value.time),
+            Self::Complete(value) => Some(&value.time),
+            Self::Failed(value) => Some(&value.time),
+            Self::Expired(value) => Some(&value.time),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time.created` field, of the members that have it.
+    pub fn time_created(&self) -> Option<&SessionMessageShellExit> {
+        match self {
+            Self::Pending(value) => Some(&value.time.created),
+            Self::Complete(value) => Some(&value.time.created),
+            Self::Failed(value) => Some(&value.time.created),
+            Self::Expired(value) => Some(&value.time.created),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time.expires` field, of the members that have it.
+    pub fn time_expires(&self) -> Option<&SessionMessageShellExit> {
+        match self {
+            Self::Pending(value) => Some(&value.time.expires),
+            Self::Complete(value) => Some(&value.time.expires),
+            Self::Failed(value) => Some(&value.time.expires),
+            Self::Expired(value) => Some(&value.time.expires),
+            Self::Unknown(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -7185,6 +8359,15 @@ impl McpServerStatus {
             Self::Failed(value) => value.status.as_str(),
             Self::NeedsAuth(value) => value.status.as_str(),
             Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `error` field, of the members that have it.
+    pub fn error(&self) -> Option<&str> {
+        match self {
+            Self::Failed(value) => Some(value.error.as_str()),
+            Self::NeedsAuth(value) => Some(value.error.as_str()),
+            Self::Connected(_) | Self::Pending(_) | Self::Disabled(_) | Self::Unknown(_) => None,
         }
     }
 }
@@ -7407,6 +8590,51 @@ impl ExperimentalMcpAddInputConfig {
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `disabled` field, of the members that have it.
+    pub fn disabled(&self) -> Option<bool> {
+        match self {
+            Self::Local(value) => value.disabled,
+            Self::Remote(value) => value.disabled,
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `codemode` field, of the members that have it.
+    pub fn codemode(&self) -> Option<bool> {
+        match self {
+            Self::Local(value) => value.codemode,
+            Self::Remote(value) => value.codemode,
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `timeout` field, of the members that have it.
+    pub fn timeout(&self) -> Option<&ExperimentalMcpAddInputConfigLocalTimeout> {
+        match self {
+            Self::Local(value) => value.timeout.as_ref(),
+            Self::Remote(value) => value.timeout.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `protocol` field, of the members that have it.
+    pub fn protocol(&self) -> Option<&McpProtocol> {
+        match self {
+            Self::Local(value) => value.protocol.as_ref(),
+            Self::Remote(value) => value.protocol.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `pool` field, of the members that have it.
+    pub fn pool(&self) -> Option<bool> {
+        match self {
+            Self::Local(value) => value.pool,
+            Self::Remote(value) => value.pool,
+            Self::Unknown(_) => None,
+        }
+    }
 }
 
 /// Input of `Client::experimental_mcp_add`.
@@ -7518,6 +8746,25 @@ impl CredentialValue {
             Self::Key(value) => value.r#type.as_str(),
             Self::External(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `methodID` field, of the members that have it.
+    pub fn method_id(&self) -> Option<&str> {
+        match self {
+            Self::Oauth(value) => Some(value.method_id.as_str()),
+            Self::External(value) => Some(value.method_id.as_str()),
+            Self::Key(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `metadata` field, of the members that have it.
+    pub fn metadata(&self) -> Option<&IndexMap<String, serde_json::Value>> {
+        match self {
+            Self::Oauth(value) => value.metadata.as_ref(),
+            Self::Key(value) => value.metadata.as_ref(),
+            Self::External(value) => value.metadata.as_ref(),
+            Self::Unknown(_) => None,
         }
     }
 }
@@ -9696,6 +10943,647 @@ impl V2Event {
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
+
+    /// The `id` field, also of an unknown member.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::LocationShutdown(value) => value.id.as_str(),
+            Self::ModelsDevRefreshed(value) => value.id.as_str(),
+            Self::CredentialUpdated(value) => value.id.as_str(),
+            Self::CredentialSwitched(value) => value.id.as_str(),
+            Self::IntegrationUpdated(value) => value.id.as_str(),
+            Self::ProviderUpdated(value) => value.id.as_str(),
+            Self::ModelUpdated(value) => value.id.as_str(),
+            Self::AgentUpdated(value) => value.id.as_str(),
+            Self::SessionCreated(value) => value.id.as_str(),
+            Self::SessionAgentSelected(value) => value.id.as_str(),
+            Self::SessionModelSelected(value) => value.id.as_str(),
+            Self::SessionMoved(value) => value.id.as_str(),
+            Self::SessionRenamed(value) => value.id.as_str(),
+            Self::SessionMetadataUpdated(value) => value.id.as_str(),
+            Self::SessionPermissions(value) => value.id.as_str(),
+            Self::SessionViewed(value) => value.id.as_str(),
+            Self::SessionArchived(value) => value.id.as_str(),
+            Self::SessionUnarchived(value) => value.id.as_str(),
+            Self::SessionUsageUpdated(value) => value.id.as_str(),
+            Self::SessionDeleted(value) => value.id.as_str(),
+            Self::SessionForked(value) => value.id.as_str(),
+            Self::SessionInboxDelivered(value) => value.id.as_str(),
+            Self::SessionInboxEnqueued(value) => value.id.as_str(),
+            Self::SessionInboxCancelled(value) => value.id.as_str(),
+            Self::SessionInboxDeliveryChanged(value) => value.id.as_str(),
+            Self::SessionExecutionStarted(value) => value.id.as_str(),
+            Self::SessionExecutionSucceeded(value) => value.id.as_str(),
+            Self::SessionExecutionFailed(value) => value.id.as_str(),
+            Self::SessionExecutionInterrupted(value) => value.id.as_str(),
+            Self::SessionInstructionsUpdated(value) => value.id.as_str(),
+            Self::SessionSynthetic(value) => value.id.as_str(),
+            Self::SessionSkillActivated(value) => value.id.as_str(),
+            Self::SessionShellStarted(value) => value.id.as_str(),
+            Self::SessionShellEnded(value) => value.id.as_str(),
+            Self::SessionStepStarted(value) => value.id.as_str(),
+            Self::SessionStepFirstToken(value) => value.id.as_str(),
+            Self::SessionStepStreamed(value) => value.id.as_str(),
+            Self::SessionStepEnded(value) => value.id.as_str(),
+            Self::SessionStepFailed(value) => value.id.as_str(),
+            Self::SessionTextStarted(value) => value.id.as_str(),
+            Self::SessionTextDelta(value) => value.id.as_str(),
+            Self::SessionTextEnded(value) => value.id.as_str(),
+            Self::SessionReasoningStarted(value) => value.id.as_str(),
+            Self::SessionReasoningDelta(value) => value.id.as_str(),
+            Self::SessionReasoningEnded(value) => value.id.as_str(),
+            Self::SessionToolInputStarted(value) => value.id.as_str(),
+            Self::SessionToolInputDelta(value) => value.id.as_str(),
+            Self::SessionToolInputEnded(value) => value.id.as_str(),
+            Self::SessionToolCalled(value) => value.id.as_str(),
+            Self::SessionToolProgress(value) => value.id.as_str(),
+            Self::SessionToolSuccess(value) => value.id.as_str(),
+            Self::SessionToolFailed(value) => value.id.as_str(),
+            Self::SessionRetryScheduled(value) => value.id.as_str(),
+            Self::SessionCompactionStarted(value) => value.id.as_str(),
+            Self::SessionCompactionDelta(value) => value.id.as_str(),
+            Self::SessionCompactionEnded(value) => value.id.as_str(),
+            Self::SessionCompactionFailed(value) => value.id.as_str(),
+            Self::SessionRevertStaged(value) => value.id.as_str(),
+            Self::SessionRevertCleared(value) => value.id.as_str(),
+            Self::SessionRevertCommitted(value) => value.id.as_str(),
+            Self::FilesystemChanged(value) => value.id.as_str(),
+            Self::ReferenceUpdated(value) => value.id.as_str(),
+            Self::PermissionAsked(value) => value.id.as_str(),
+            Self::PermissionReplied(value) => value.id.as_str(),
+            Self::PluginUpdated(value) => value.id.as_str(),
+            Self::ProjectUpdated(value) => value.id.as_str(),
+            Self::WorktreeUpdated(value) => value.id.as_str(),
+            Self::WorktreeResolved(value) => value.id.as_str(),
+            Self::CommandUpdated(value) => value.id.as_str(),
+            Self::ConfigUpdated(value) => value.id.as_str(),
+            Self::SkillUpdated(value) => value.id.as_str(),
+            Self::PtyCreated(value) => value.id.as_str(),
+            Self::PtyUpdated(value) => value.id.as_str(),
+            Self::PtyExited(value) => value.id.as_str(),
+            Self::PtyDeleted(value) => value.id.as_str(),
+            Self::PersistentPtyAdded(value) => value.id.as_str(),
+            Self::PersistentPtyRemoved(value) => value.id.as_str(),
+            Self::PersistentPtyUpdated(value) => value.id.as_str(),
+            Self::ShellCreated(value) => value.id.as_str(),
+            Self::ShellExited(value) => value.id.as_str(),
+            Self::ShellDeleted(value) => value.id.as_str(),
+            Self::FormCreated(value) => value.id.as_str(),
+            Self::FormReplied(value) => value.id.as_str(),
+            Self::FormCancelled(value) => value.id.as_str(),
+            Self::WebsearchUpdated(value) => value.id.as_str(),
+            Self::ArtifactUpdated(value) => value.id.as_str(),
+            Self::SessionStatus(value) => value.id.as_str(),
+            Self::SessionIdle(value) => value.id.as_str(),
+            Self::TuiPromptAppend(value) => value.id.as_str(),
+            Self::TuiCommandExecute(value) => value.id.as_str(),
+            Self::TuiToastShow(value) => value.id.as_str(),
+            Self::TuiSessionSelect(value) => value.id.as_str(),
+            Self::InstallationUpdated(value) => value.id.as_str(),
+            Self::InstallationUpdateAvailable(value) => value.id.as_str(),
+            Self::VcsBranchUpdated(value) => value.id.as_str(),
+            Self::McpStatusChanged(value) => value.id.as_str(),
+            Self::McpResourcesChanged(value) => value.id.as_str(),
+            Self::ExperimentalMcpEvent(value) => value.id.as_str(),
+            Self::Rpc(value) => value.id.as_str(),
+            Self::ServerConnected(value) => value.id.as_str(),
+            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `created` field, of the members that have it.
+    pub fn created(&self) -> Option<f64> {
+        match self {
+            Self::LocationShutdown(value) => Some(value.created),
+            Self::ModelsDevRefreshed(value) => Some(value.created),
+            Self::CredentialUpdated(value) => Some(value.created),
+            Self::CredentialSwitched(value) => Some(value.created),
+            Self::IntegrationUpdated(value) => Some(value.created),
+            Self::ProviderUpdated(value) => Some(value.created),
+            Self::ModelUpdated(value) => Some(value.created),
+            Self::AgentUpdated(value) => Some(value.created),
+            Self::SessionCreated(value) => Some(value.created),
+            Self::SessionAgentSelected(value) => Some(value.created),
+            Self::SessionModelSelected(value) => Some(value.created),
+            Self::SessionMoved(value) => Some(value.created),
+            Self::SessionRenamed(value) => Some(value.created),
+            Self::SessionMetadataUpdated(value) => Some(value.created),
+            Self::SessionPermissions(value) => Some(value.created),
+            Self::SessionViewed(value) => Some(value.created),
+            Self::SessionArchived(value) => Some(value.created),
+            Self::SessionUnarchived(value) => Some(value.created),
+            Self::SessionUsageUpdated(value) => Some(value.created),
+            Self::SessionDeleted(value) => Some(value.created),
+            Self::SessionForked(value) => Some(value.created),
+            Self::SessionInboxDelivered(value) => Some(value.created),
+            Self::SessionInboxEnqueued(value) => Some(value.created),
+            Self::SessionInboxCancelled(value) => Some(value.created),
+            Self::SessionInboxDeliveryChanged(value) => Some(value.created),
+            Self::SessionExecutionStarted(value) => Some(value.created),
+            Self::SessionExecutionSucceeded(value) => Some(value.created),
+            Self::SessionExecutionFailed(value) => Some(value.created),
+            Self::SessionExecutionInterrupted(value) => Some(value.created),
+            Self::SessionInstructionsUpdated(value) => Some(value.created),
+            Self::SessionSynthetic(value) => Some(value.created),
+            Self::SessionSkillActivated(value) => Some(value.created),
+            Self::SessionShellStarted(value) => Some(value.created),
+            Self::SessionShellEnded(value) => Some(value.created),
+            Self::SessionStepStarted(value) => Some(value.created),
+            Self::SessionStepFirstToken(value) => Some(value.created),
+            Self::SessionStepStreamed(value) => Some(value.created),
+            Self::SessionStepEnded(value) => Some(value.created),
+            Self::SessionStepFailed(value) => Some(value.created),
+            Self::SessionTextStarted(value) => Some(value.created),
+            Self::SessionTextDelta(value) => Some(value.created),
+            Self::SessionTextEnded(value) => Some(value.created),
+            Self::SessionReasoningStarted(value) => Some(value.created),
+            Self::SessionReasoningDelta(value) => Some(value.created),
+            Self::SessionReasoningEnded(value) => Some(value.created),
+            Self::SessionToolInputStarted(value) => Some(value.created),
+            Self::SessionToolInputDelta(value) => Some(value.created),
+            Self::SessionToolInputEnded(value) => Some(value.created),
+            Self::SessionToolCalled(value) => Some(value.created),
+            Self::SessionToolProgress(value) => Some(value.created),
+            Self::SessionToolSuccess(value) => Some(value.created),
+            Self::SessionToolFailed(value) => Some(value.created),
+            Self::SessionRetryScheduled(value) => Some(value.created),
+            Self::SessionCompactionStarted(value) => Some(value.created),
+            Self::SessionCompactionDelta(value) => Some(value.created),
+            Self::SessionCompactionEnded(value) => Some(value.created),
+            Self::SessionCompactionFailed(value) => Some(value.created),
+            Self::SessionRevertStaged(value) => Some(value.created),
+            Self::SessionRevertCleared(value) => Some(value.created),
+            Self::SessionRevertCommitted(value) => Some(value.created),
+            Self::FilesystemChanged(value) => Some(value.created),
+            Self::ReferenceUpdated(value) => Some(value.created),
+            Self::PermissionAsked(value) => Some(value.created),
+            Self::PermissionReplied(value) => Some(value.created),
+            Self::PluginUpdated(value) => Some(value.created),
+            Self::ProjectUpdated(value) => Some(value.created),
+            Self::WorktreeUpdated(value) => Some(value.created),
+            Self::WorktreeResolved(value) => Some(value.created),
+            Self::CommandUpdated(value) => Some(value.created),
+            Self::ConfigUpdated(value) => Some(value.created),
+            Self::SkillUpdated(value) => Some(value.created),
+            Self::PtyCreated(value) => Some(value.created),
+            Self::PtyUpdated(value) => Some(value.created),
+            Self::PtyExited(value) => Some(value.created),
+            Self::PtyDeleted(value) => Some(value.created),
+            Self::PersistentPtyAdded(value) => Some(value.created),
+            Self::PersistentPtyRemoved(value) => Some(value.created),
+            Self::PersistentPtyUpdated(value) => Some(value.created),
+            Self::ShellCreated(value) => Some(value.created),
+            Self::ShellExited(value) => Some(value.created),
+            Self::ShellDeleted(value) => Some(value.created),
+            Self::FormCreated(value) => Some(value.created),
+            Self::FormReplied(value) => Some(value.created),
+            Self::FormCancelled(value) => Some(value.created),
+            Self::WebsearchUpdated(value) => Some(value.created),
+            Self::ArtifactUpdated(value) => Some(value.created),
+            Self::SessionStatus(value) => Some(value.created),
+            Self::SessionIdle(value) => Some(value.created),
+            Self::TuiPromptAppend(value) => Some(value.created),
+            Self::TuiCommandExecute(value) => Some(value.created),
+            Self::TuiToastShow(value) => Some(value.created),
+            Self::TuiSessionSelect(value) => Some(value.created),
+            Self::InstallationUpdated(value) => Some(value.created),
+            Self::InstallationUpdateAvailable(value) => Some(value.created),
+            Self::VcsBranchUpdated(value) => Some(value.created),
+            Self::McpStatusChanged(value) => Some(value.created),
+            Self::McpResourcesChanged(value) => Some(value.created),
+            Self::ExperimentalMcpEvent(value) => Some(value.created),
+            Self::Rpc(value) => Some(value.created),
+            Self::ServerConnected(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `metadata` field, of the members that have it.
+    pub fn metadata(&self) -> Option<&IndexMap<String, serde_json::Value>> {
+        match self {
+            Self::LocationShutdown(value) => value.metadata.as_ref(),
+            Self::ModelsDevRefreshed(value) => value.metadata.as_ref(),
+            Self::CredentialUpdated(value) => value.metadata.as_ref(),
+            Self::CredentialSwitched(value) => value.metadata.as_ref(),
+            Self::IntegrationUpdated(value) => value.metadata.as_ref(),
+            Self::ProviderUpdated(value) => value.metadata.as_ref(),
+            Self::ModelUpdated(value) => value.metadata.as_ref(),
+            Self::AgentUpdated(value) => value.metadata.as_ref(),
+            Self::SessionCreated(value) => value.metadata.as_ref(),
+            Self::SessionAgentSelected(value) => value.metadata.as_ref(),
+            Self::SessionModelSelected(value) => value.metadata.as_ref(),
+            Self::SessionMoved(value) => value.metadata.as_ref(),
+            Self::SessionRenamed(value) => value.metadata.as_ref(),
+            Self::SessionMetadataUpdated(value) => value.metadata.as_ref(),
+            Self::SessionPermissions(value) => value.metadata.as_ref(),
+            Self::SessionViewed(value) => value.metadata.as_ref(),
+            Self::SessionArchived(value) => value.metadata.as_ref(),
+            Self::SessionUnarchived(value) => value.metadata.as_ref(),
+            Self::SessionUsageUpdated(value) => value.metadata.as_ref(),
+            Self::SessionDeleted(value) => value.metadata.as_ref(),
+            Self::SessionForked(value) => value.metadata.as_ref(),
+            Self::SessionInboxDelivered(value) => value.metadata.as_ref(),
+            Self::SessionInboxEnqueued(value) => value.metadata.as_ref(),
+            Self::SessionInboxCancelled(value) => value.metadata.as_ref(),
+            Self::SessionInboxDeliveryChanged(value) => value.metadata.as_ref(),
+            Self::SessionExecutionStarted(value) => value.metadata.as_ref(),
+            Self::SessionExecutionSucceeded(value) => value.metadata.as_ref(),
+            Self::SessionExecutionFailed(value) => value.metadata.as_ref(),
+            Self::SessionExecutionInterrupted(value) => value.metadata.as_ref(),
+            Self::SessionInstructionsUpdated(value) => value.metadata.as_ref(),
+            Self::SessionSynthetic(value) => value.metadata.as_ref(),
+            Self::SessionSkillActivated(value) => value.metadata.as_ref(),
+            Self::SessionShellStarted(value) => value.metadata.as_ref(),
+            Self::SessionShellEnded(value) => value.metadata.as_ref(),
+            Self::SessionStepStarted(value) => value.metadata.as_ref(),
+            Self::SessionStepFirstToken(value) => value.metadata.as_ref(),
+            Self::SessionStepStreamed(value) => value.metadata.as_ref(),
+            Self::SessionStepEnded(value) => value.metadata.as_ref(),
+            Self::SessionStepFailed(value) => value.metadata.as_ref(),
+            Self::SessionTextStarted(value) => value.metadata.as_ref(),
+            Self::SessionTextDelta(value) => value.metadata.as_ref(),
+            Self::SessionTextEnded(value) => value.metadata.as_ref(),
+            Self::SessionReasoningStarted(value) => value.metadata.as_ref(),
+            Self::SessionReasoningDelta(value) => value.metadata.as_ref(),
+            Self::SessionReasoningEnded(value) => value.metadata.as_ref(),
+            Self::SessionToolInputStarted(value) => value.metadata.as_ref(),
+            Self::SessionToolInputDelta(value) => value.metadata.as_ref(),
+            Self::SessionToolInputEnded(value) => value.metadata.as_ref(),
+            Self::SessionToolCalled(value) => value.metadata.as_ref(),
+            Self::SessionToolProgress(value) => value.metadata.as_ref(),
+            Self::SessionToolSuccess(value) => value.metadata.as_ref(),
+            Self::SessionToolFailed(value) => value.metadata.as_ref(),
+            Self::SessionRetryScheduled(value) => value.metadata.as_ref(),
+            Self::SessionCompactionStarted(value) => value.metadata.as_ref(),
+            Self::SessionCompactionDelta(value) => value.metadata.as_ref(),
+            Self::SessionCompactionEnded(value) => value.metadata.as_ref(),
+            Self::SessionCompactionFailed(value) => value.metadata.as_ref(),
+            Self::SessionRevertStaged(value) => value.metadata.as_ref(),
+            Self::SessionRevertCleared(value) => value.metadata.as_ref(),
+            Self::SessionRevertCommitted(value) => value.metadata.as_ref(),
+            Self::FilesystemChanged(value) => value.metadata.as_ref(),
+            Self::ReferenceUpdated(value) => value.metadata.as_ref(),
+            Self::PermissionAsked(value) => value.metadata.as_ref(),
+            Self::PermissionReplied(value) => value.metadata.as_ref(),
+            Self::PluginUpdated(value) => value.metadata.as_ref(),
+            Self::ProjectUpdated(value) => value.metadata.as_ref(),
+            Self::WorktreeUpdated(value) => value.metadata.as_ref(),
+            Self::WorktreeResolved(value) => value.metadata.as_ref(),
+            Self::CommandUpdated(value) => value.metadata.as_ref(),
+            Self::ConfigUpdated(value) => value.metadata.as_ref(),
+            Self::SkillUpdated(value) => value.metadata.as_ref(),
+            Self::PtyCreated(value) => value.metadata.as_ref(),
+            Self::PtyUpdated(value) => value.metadata.as_ref(),
+            Self::PtyExited(value) => value.metadata.as_ref(),
+            Self::PtyDeleted(value) => value.metadata.as_ref(),
+            Self::PersistentPtyAdded(value) => value.metadata.as_ref(),
+            Self::PersistentPtyRemoved(value) => value.metadata.as_ref(),
+            Self::PersistentPtyUpdated(value) => value.metadata.as_ref(),
+            Self::ShellCreated(value) => value.metadata.as_ref(),
+            Self::ShellExited(value) => value.metadata.as_ref(),
+            Self::ShellDeleted(value) => value.metadata.as_ref(),
+            Self::FormCreated(value) => value.metadata.as_ref(),
+            Self::FormReplied(value) => value.metadata.as_ref(),
+            Self::FormCancelled(value) => value.metadata.as_ref(),
+            Self::WebsearchUpdated(value) => value.metadata.as_ref(),
+            Self::ArtifactUpdated(value) => value.metadata.as_ref(),
+            Self::SessionStatus(value) => value.metadata.as_ref(),
+            Self::SessionIdle(value) => value.metadata.as_ref(),
+            Self::TuiPromptAppend(value) => value.metadata.as_ref(),
+            Self::TuiCommandExecute(value) => value.metadata.as_ref(),
+            Self::TuiToastShow(value) => value.metadata.as_ref(),
+            Self::TuiSessionSelect(value) => value.metadata.as_ref(),
+            Self::InstallationUpdated(value) => value.metadata.as_ref(),
+            Self::InstallationUpdateAvailable(value) => value.metadata.as_ref(),
+            Self::VcsBranchUpdated(value) => value.metadata.as_ref(),
+            Self::McpStatusChanged(value) => value.metadata.as_ref(),
+            Self::McpResourcesChanged(value) => value.metadata.as_ref(),
+            Self::ExperimentalMcpEvent(value) => value.metadata.as_ref(),
+            Self::Rpc(value) => value.metadata.as_ref(),
+            Self::ServerConnected(value) => value.metadata.as_ref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `durable.aggregateID` field, of the members that have it.
+    pub fn durable_aggregate_id(&self) -> Option<&str> {
+        match self {
+            Self::SessionCreated(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionAgentSelected(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionModelSelected(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionMoved(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionRenamed(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionMetadataUpdated(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionPermissions(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionViewed(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionArchived(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionUnarchived(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionDeleted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionForked(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionInboxDelivered(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionInboxEnqueued(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionInboxCancelled(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionInboxDeliveryChanged(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionExecutionStarted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionExecutionSucceeded(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionExecutionFailed(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionExecutionInterrupted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionInstructionsUpdated(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionSynthetic(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionSkillActivated(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionShellStarted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionShellEnded(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionStepStarted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionStepFirstToken(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionStepStreamed(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionStepEnded(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionStepFailed(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionTextStarted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionTextEnded(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionReasoningStarted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionReasoningEnded(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionToolInputStarted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionToolInputEnded(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionToolCalled(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionToolSuccess(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionToolFailed(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionRetryScheduled(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionCompactionStarted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionCompactionEnded(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionCompactionFailed(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionRevertStaged(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionRevertCleared(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionRevertCommitted(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::WorktreeResolved(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::LocationShutdown(_)
+            | Self::ModelsDevRefreshed(_)
+            | Self::CredentialUpdated(_)
+            | Self::CredentialSwitched(_)
+            | Self::IntegrationUpdated(_)
+            | Self::ProviderUpdated(_)
+            | Self::ModelUpdated(_)
+            | Self::AgentUpdated(_)
+            | Self::SessionUsageUpdated(_)
+            | Self::SessionTextDelta(_)
+            | Self::SessionReasoningDelta(_)
+            | Self::SessionToolInputDelta(_)
+            | Self::SessionToolProgress(_)
+            | Self::SessionCompactionDelta(_)
+            | Self::FilesystemChanged(_)
+            | Self::ReferenceUpdated(_)
+            | Self::PermissionAsked(_)
+            | Self::PermissionReplied(_)
+            | Self::PluginUpdated(_)
+            | Self::ProjectUpdated(_)
+            | Self::WorktreeUpdated(_)
+            | Self::CommandUpdated(_)
+            | Self::ConfigUpdated(_)
+            | Self::SkillUpdated(_)
+            | Self::PtyCreated(_)
+            | Self::PtyUpdated(_)
+            | Self::PtyExited(_)
+            | Self::PtyDeleted(_)
+            | Self::PersistentPtyAdded(_)
+            | Self::PersistentPtyRemoved(_)
+            | Self::PersistentPtyUpdated(_)
+            | Self::ShellCreated(_)
+            | Self::ShellExited(_)
+            | Self::ShellDeleted(_)
+            | Self::FormCreated(_)
+            | Self::FormReplied(_)
+            | Self::FormCancelled(_)
+            | Self::WebsearchUpdated(_)
+            | Self::ArtifactUpdated(_)
+            | Self::SessionStatus(_)
+            | Self::SessionIdle(_)
+            | Self::TuiPromptAppend(_)
+            | Self::TuiCommandExecute(_)
+            | Self::TuiToastShow(_)
+            | Self::TuiSessionSelect(_)
+            | Self::InstallationUpdated(_)
+            | Self::InstallationUpdateAvailable(_)
+            | Self::VcsBranchUpdated(_)
+            | Self::McpStatusChanged(_)
+            | Self::McpResourcesChanged(_)
+            | Self::ExperimentalMcpEvent(_)
+            | Self::Rpc(_)
+            | Self::ServerConnected(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `durable.seq` field, of the members that have it.
+    pub fn durable_seq(&self) -> Option<EventSeq> {
+        match self {
+            Self::SessionCreated(value) => Some(value.durable.seq),
+            Self::SessionAgentSelected(value) => Some(value.durable.seq),
+            Self::SessionModelSelected(value) => Some(value.durable.seq),
+            Self::SessionMoved(value) => Some(value.durable.seq),
+            Self::SessionRenamed(value) => Some(value.durable.seq),
+            Self::SessionMetadataUpdated(value) => Some(value.durable.seq),
+            Self::SessionPermissions(value) => Some(value.durable.seq),
+            Self::SessionViewed(value) => Some(value.durable.seq),
+            Self::SessionArchived(value) => Some(value.durable.seq),
+            Self::SessionUnarchived(value) => Some(value.durable.seq),
+            Self::SessionDeleted(value) => Some(value.durable.seq),
+            Self::SessionForked(value) => Some(value.durable.seq),
+            Self::SessionInboxDelivered(value) => Some(value.durable.seq),
+            Self::SessionInboxEnqueued(value) => Some(value.durable.seq),
+            Self::SessionInboxCancelled(value) => Some(value.durable.seq),
+            Self::SessionInboxDeliveryChanged(value) => Some(value.durable.seq),
+            Self::SessionExecutionStarted(value) => Some(value.durable.seq),
+            Self::SessionExecutionSucceeded(value) => Some(value.durable.seq),
+            Self::SessionExecutionFailed(value) => Some(value.durable.seq),
+            Self::SessionExecutionInterrupted(value) => Some(value.durable.seq),
+            Self::SessionInstructionsUpdated(value) => Some(value.durable.seq),
+            Self::SessionSynthetic(value) => Some(value.durable.seq),
+            Self::SessionSkillActivated(value) => Some(value.durable.seq),
+            Self::SessionShellStarted(value) => Some(value.durable.seq),
+            Self::SessionShellEnded(value) => Some(value.durable.seq),
+            Self::SessionStepStarted(value) => Some(value.durable.seq),
+            Self::SessionStepFirstToken(value) => Some(value.durable.seq),
+            Self::SessionStepStreamed(value) => Some(value.durable.seq),
+            Self::SessionStepEnded(value) => Some(value.durable.seq),
+            Self::SessionStepFailed(value) => Some(value.durable.seq),
+            Self::SessionTextStarted(value) => Some(value.durable.seq),
+            Self::SessionTextEnded(value) => Some(value.durable.seq),
+            Self::SessionReasoningStarted(value) => Some(value.durable.seq),
+            Self::SessionReasoningEnded(value) => Some(value.durable.seq),
+            Self::SessionToolInputStarted(value) => Some(value.durable.seq),
+            Self::SessionToolInputEnded(value) => Some(value.durable.seq),
+            Self::SessionToolCalled(value) => Some(value.durable.seq),
+            Self::SessionToolSuccess(value) => Some(value.durable.seq),
+            Self::SessionToolFailed(value) => Some(value.durable.seq),
+            Self::SessionRetryScheduled(value) => Some(value.durable.seq),
+            Self::SessionCompactionStarted(value) => Some(value.durable.seq),
+            Self::SessionCompactionEnded(value) => Some(value.durable.seq),
+            Self::SessionCompactionFailed(value) => Some(value.durable.seq),
+            Self::SessionRevertStaged(value) => Some(value.durable.seq),
+            Self::SessionRevertCleared(value) => Some(value.durable.seq),
+            Self::SessionRevertCommitted(value) => Some(value.durable.seq),
+            Self::WorktreeResolved(value) => Some(value.durable.seq),
+            Self::LocationShutdown(_)
+            | Self::ModelsDevRefreshed(_)
+            | Self::CredentialUpdated(_)
+            | Self::CredentialSwitched(_)
+            | Self::IntegrationUpdated(_)
+            | Self::ProviderUpdated(_)
+            | Self::ModelUpdated(_)
+            | Self::AgentUpdated(_)
+            | Self::SessionUsageUpdated(_)
+            | Self::SessionTextDelta(_)
+            | Self::SessionReasoningDelta(_)
+            | Self::SessionToolInputDelta(_)
+            | Self::SessionToolProgress(_)
+            | Self::SessionCompactionDelta(_)
+            | Self::FilesystemChanged(_)
+            | Self::ReferenceUpdated(_)
+            | Self::PermissionAsked(_)
+            | Self::PermissionReplied(_)
+            | Self::PluginUpdated(_)
+            | Self::ProjectUpdated(_)
+            | Self::WorktreeUpdated(_)
+            | Self::CommandUpdated(_)
+            | Self::ConfigUpdated(_)
+            | Self::SkillUpdated(_)
+            | Self::PtyCreated(_)
+            | Self::PtyUpdated(_)
+            | Self::PtyExited(_)
+            | Self::PtyDeleted(_)
+            | Self::PersistentPtyAdded(_)
+            | Self::PersistentPtyRemoved(_)
+            | Self::PersistentPtyUpdated(_)
+            | Self::ShellCreated(_)
+            | Self::ShellExited(_)
+            | Self::ShellDeleted(_)
+            | Self::FormCreated(_)
+            | Self::FormReplied(_)
+            | Self::FormCancelled(_)
+            | Self::WebsearchUpdated(_)
+            | Self::ArtifactUpdated(_)
+            | Self::SessionStatus(_)
+            | Self::SessionIdle(_)
+            | Self::TuiPromptAppend(_)
+            | Self::TuiCommandExecute(_)
+            | Self::TuiToastShow(_)
+            | Self::TuiSessionSelect(_)
+            | Self::InstallationUpdated(_)
+            | Self::InstallationUpdateAvailable(_)
+            | Self::VcsBranchUpdated(_)
+            | Self::McpStatusChanged(_)
+            | Self::McpResourcesChanged(_)
+            | Self::ExperimentalMcpEvent(_)
+            | Self::Rpc(_)
+            | Self::ServerConnected(_)
+            | Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `durable.version` field, of the members that have it.
+    pub fn durable_version(&self) -> Option<i64> {
+        match self {
+            Self::SessionCreated(value) => Some(value.durable.version),
+            Self::SessionAgentSelected(value) => Some(value.durable.version),
+            Self::SessionModelSelected(value) => Some(value.durable.version),
+            Self::SessionMoved(value) => Some(value.durable.version),
+            Self::SessionRenamed(value) => Some(value.durable.version),
+            Self::SessionMetadataUpdated(value) => Some(value.durable.version),
+            Self::SessionPermissions(value) => Some(value.durable.version),
+            Self::SessionViewed(value) => Some(value.durable.version),
+            Self::SessionArchived(value) => Some(value.durable.version),
+            Self::SessionUnarchived(value) => Some(value.durable.version),
+            Self::SessionDeleted(value) => Some(value.durable.version),
+            Self::SessionForked(value) => Some(value.durable.version),
+            Self::SessionInboxDelivered(value) => Some(value.durable.version),
+            Self::SessionInboxEnqueued(value) => Some(value.durable.version),
+            Self::SessionInboxCancelled(value) => Some(value.durable.version),
+            Self::SessionInboxDeliveryChanged(value) => Some(value.durable.version),
+            Self::SessionExecutionStarted(value) => Some(value.durable.version),
+            Self::SessionExecutionSucceeded(value) => Some(value.durable.version),
+            Self::SessionExecutionFailed(value) => Some(value.durable.version),
+            Self::SessionExecutionInterrupted(value) => Some(value.durable.version),
+            Self::SessionInstructionsUpdated(value) => Some(value.durable.version),
+            Self::SessionSynthetic(value) => Some(value.durable.version),
+            Self::SessionSkillActivated(value) => Some(value.durable.version),
+            Self::SessionShellStarted(value) => Some(value.durable.version),
+            Self::SessionShellEnded(value) => Some(value.durable.version),
+            Self::SessionStepStarted(value) => Some(value.durable.version),
+            Self::SessionStepFirstToken(value) => Some(value.durable.version),
+            Self::SessionStepStreamed(value) => Some(value.durable.version),
+            Self::SessionStepEnded(value) => Some(value.durable.version),
+            Self::SessionStepFailed(value) => Some(value.durable.version),
+            Self::SessionTextStarted(value) => Some(value.durable.version),
+            Self::SessionTextEnded(value) => Some(value.durable.version),
+            Self::SessionReasoningStarted(value) => Some(value.durable.version),
+            Self::SessionReasoningEnded(value) => Some(value.durable.version),
+            Self::SessionToolInputStarted(value) => Some(value.durable.version),
+            Self::SessionToolInputEnded(value) => Some(value.durable.version),
+            Self::SessionToolCalled(value) => Some(value.durable.version),
+            Self::SessionToolSuccess(value) => Some(value.durable.version),
+            Self::SessionToolFailed(value) => Some(value.durable.version),
+            Self::SessionRetryScheduled(value) => Some(value.durable.version),
+            Self::SessionCompactionStarted(value) => Some(value.durable.version),
+            Self::SessionCompactionEnded(value) => Some(value.durable.version),
+            Self::SessionCompactionFailed(value) => Some(value.durable.version),
+            Self::SessionRevertStaged(value) => Some(value.durable.version),
+            Self::SessionRevertCleared(value) => Some(value.durable.version),
+            Self::SessionRevertCommitted(value) => Some(value.durable.version),
+            Self::WorktreeResolved(value) => Some(value.durable.version),
+            Self::LocationShutdown(_)
+            | Self::ModelsDevRefreshed(_)
+            | Self::CredentialUpdated(_)
+            | Self::CredentialSwitched(_)
+            | Self::IntegrationUpdated(_)
+            | Self::ProviderUpdated(_)
+            | Self::ModelUpdated(_)
+            | Self::AgentUpdated(_)
+            | Self::SessionUsageUpdated(_)
+            | Self::SessionTextDelta(_)
+            | Self::SessionReasoningDelta(_)
+            | Self::SessionToolInputDelta(_)
+            | Self::SessionToolProgress(_)
+            | Self::SessionCompactionDelta(_)
+            | Self::FilesystemChanged(_)
+            | Self::ReferenceUpdated(_)
+            | Self::PermissionAsked(_)
+            | Self::PermissionReplied(_)
+            | Self::PluginUpdated(_)
+            | Self::ProjectUpdated(_)
+            | Self::WorktreeUpdated(_)
+            | Self::CommandUpdated(_)
+            | Self::ConfigUpdated(_)
+            | Self::SkillUpdated(_)
+            | Self::PtyCreated(_)
+            | Self::PtyUpdated(_)
+            | Self::PtyExited(_)
+            | Self::PtyDeleted(_)
+            | Self::PersistentPtyAdded(_)
+            | Self::PersistentPtyRemoved(_)
+            | Self::PersistentPtyUpdated(_)
+            | Self::ShellCreated(_)
+            | Self::ShellExited(_)
+            | Self::ShellDeleted(_)
+            | Self::FormCreated(_)
+            | Self::FormReplied(_)
+            | Self::FormCancelled(_)
+            | Self::WebsearchUpdated(_)
+            | Self::ArtifactUpdated(_)
+            | Self::SessionStatus(_)
+            | Self::SessionIdle(_)
+            | Self::TuiPromptAppend(_)
+            | Self::TuiCommandExecute(_)
+            | Self::TuiToastShow(_)
+            | Self::TuiSessionSelect(_)
+            | Self::InstallationUpdated(_)
+            | Self::InstallationUpdateAvailable(_)
+            | Self::VcsBranchUpdated(_)
+            | Self::McpStatusChanged(_)
+            | Self::McpResourcesChanged(_)
+            | Self::ExperimentalMcpEvent(_)
+            | Self::Rpc(_)
+            | Self::ServerConnected(_)
+            | Self::Unknown(_) => None,
+        }
+    }
 }
 
 /// Output of `Client::event_subscribe`.
@@ -10214,6 +12102,17 @@ impl ScheduleWhen {
             Self::Every(value) => value.r#type.as_str(),
             Self::Cron(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `tz` field, of the members that have it.
+    pub fn tz(&self) -> Option<&str> {
+        match self {
+            Self::In(value) => value.tz.as_deref(),
+            Self::At(value) => value.tz.as_deref(),
+            Self::Every(value) => value.tz.as_deref(),
+            Self::Cron(value) => value.tz.as_deref(),
+            Self::Unknown(_) => None,
         }
     }
 }
@@ -10889,6 +12788,78 @@ impl JobInfo {
             Self::Subagent(value) => value.kind.as_str(),
             Self::Image(value) => value.kind.as_str(),
             Self::Unknown(value) => value.get("kind").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `id` field, also of an unknown member.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Shell(value) => value.id.as_str(),
+            Self::Subagent(value) => value.id.as_str(),
+            Self::Image(value) => value.id.as_str(),
+            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `sessionID` field, also of an unknown member.
+    pub fn session_id(&self) -> &str {
+        match self {
+            Self::Shell(value) => value.session_id.as_str(),
+            Self::Subagent(value) => value.session_id.as_str(),
+            Self::Image(value) => value.session_id.as_str(),
+            Self::Unknown(value) => value.get("sessionID").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `status` field, of the members that have it.
+    pub fn status(&self) -> Option<&JobStatus> {
+        match self {
+            Self::Shell(value) => Some(&value.status),
+            Self::Subagent(value) => Some(&value.status),
+            Self::Image(value) => Some(&value.status),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `title` field, of the members that have it.
+    pub fn title(&self) -> Option<&str> {
+        match self {
+            Self::Shell(value) => value.title.as_deref(),
+            Self::Subagent(value) => value.title.as_deref(),
+            Self::Image(value) => value.title.as_deref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time` field, of the members that have it.
+    pub fn time(&self) -> Option<&JobTime> {
+        match self {
+            Self::Shell(value) => Some(&value.time),
+            Self::Subagent(value) => Some(&value.time),
+            Self::Image(value) => Some(&value.time),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time.started` field, also of an unknown member.
+    pub fn time_started(&self) -> f64 {
+        match self {
+            Self::Shell(value) => value.time.started,
+            Self::Subagent(value) => value.time.started,
+            Self::Image(value) => value.time.started,
+            Self::Unknown(value) => {
+                value.pointer("/time/started").and_then(serde_json::Value::as_f64).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `time.completed` field, of the members that have it.
+    pub fn time_completed(&self) -> Option<f64> {
+        match self {
+            Self::Shell(value) => value.time.completed,
+            Self::Subagent(value) => value.time.completed,
+            Self::Image(value) => value.time.completed,
+            Self::Unknown(_) => None,
         }
     }
 }
