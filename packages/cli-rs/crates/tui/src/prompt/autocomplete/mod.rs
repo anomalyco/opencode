@@ -58,7 +58,8 @@ pub enum Mode {
 pub struct Shared {
     frecency: Arc<Mutex<Option<Frecency>>>,
     recents: Arc<Mutex<Option<Value>>>,
-    /// The last recents change sent; a written file replaces memory only if no newer change was sent.
+    /// The last recents change sent; a written file replaces memory only if no newer change was sent, and the
+    /// loaded file only if none was.
     recents_writes: Arc<AtomicU64>,
     writer: Rc<OnceCell<Serial>>,
     loaded: Rc<Cell<bool>>,
@@ -72,12 +73,17 @@ impl Shared {
         }
         let Some(state) = tui.state_dir() else { return };
         let (frecency, recents, storage) = (self.frecency.clone(), self.recents.clone(), tui.storage());
+        let writes = self.recents_writes.clone();
         // `paths.cwd`: the directory the TUI started in.
         let cwd = PathBuf::from(&tui.directory);
         self.writer().run(move || {
             load_frecency(&frecency, &state, &cwd);
             let stored = storage.and_then(|storage| storage.load(RECENTS_KEY, &recents_initial()).ok());
-            if let Ok(mut slot) = recents.lock() {
+            // A change made while this loaded is in memory already, and its queued write puts the file and the
+            // change back together; the file alone would drop it until then.
+            if let Ok(mut slot) = recents.lock()
+                && writes.load(atomic::Ordering::SeqCst) == 0
+            {
                 *slot = stored;
             }
         });
@@ -159,13 +165,14 @@ impl Shared {
             change(&mut list);
             value["projects"][&project] = Value::Array(list);
         };
+        // Counted before memory changes, so a load that checks meanwhile leaves memory alone.
+        let revision = self.recents_writes.fetch_add(1, atomic::Ordering::SeqCst) + 1;
         if let Ok(mut slot) = self.recents.lock() {
             let value = slot.get_or_insert_with(recents_initial);
             apply(value, &change);
         }
         let Some(storage): Option<Storage> = tui.storage() else { return };
         let (recents, writes) = (self.recents.clone(), self.recents_writes.clone());
-        let revision = writes.fetch_add(1, atomic::Ordering::SeqCst) + 1;
         self.writer().run(move || {
             let written = storage.update(RECENTS_KEY, &recents_initial(), |value| {
                 apply(value, &change);
