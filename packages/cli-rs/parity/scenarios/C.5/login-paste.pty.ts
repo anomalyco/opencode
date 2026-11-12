@@ -1,5 +1,6 @@
 // OAuth that also takes the redirect URL (`paste`, #61706): while the browser flow waits, a prompt asks for the URL
 // the browser was redirected to. The pasted URL completes the attempt, whose status then settles the login.
+import type { Logged } from "../../lib/fake-server"
 import { definePty } from "../../pty/run"
 import { integrationRoutes, location, oauthRoutes, sink } from "./fixture"
 import { enter, first, press } from "./keys"
@@ -17,7 +18,7 @@ export default definePty({
       { ...connect, json: { location, data: { ...(connect.json as { data: object }).data, paste: true } } },
       {
         path: status,
-        json: (_, requests) => ({
+        json: (_entry: Logged, requests: Logged[]) => ({
           location,
           data: {
             status: requests.some((request) => request.method === "POST" && request.path === `${status}/complete`)
