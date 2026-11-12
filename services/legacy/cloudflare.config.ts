@@ -17,8 +17,8 @@ export default defineConfig(({ mode }) => {
       compatibilityFlags: ["nodejs_compat"],
       entrypoint: "./src/index.ts",
       domains: dev ? ["dev.opncd.ai", "api.dev.opencode.ai"] : ["opncd.ai", "api.opencode.ai"],
-      // Set from AWS Secrets Manager (opencode/<stage>/GITHUB_APP_*) by the deploy job with --secrets-file.
-      env: {
+      // The production deploy supplies these from AWS Secrets Manager with --secrets-file.
+      env: mode !== "production" ? undefined : {
         GITHUB_APP_ID: bindings.secret(),
         GITHUB_APP_PRIVATE_KEY: bindings.secret(),
       },
