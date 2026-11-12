@@ -24,7 +24,8 @@ use serde_json::{Value, json};
 /// lacks, and the prompt writes.
 fn fake() -> Fake {
     Fake::new(|seen| {
-        let directory = Some(seen.param("location[directory]")).filter(|value| !value.is_empty());
+        // `/cd /project-b` resolves to `\project-b` on Windows.
+        let directory = Some(seen.param("location[directory]").replace('\\', "/")).filter(|value| !value.is_empty());
         let directory = directory.as_deref().unwrap_or("/project");
         let agent = |id| support::agent(id, "primary", false);
         let agents = if directory == "/project-b" {

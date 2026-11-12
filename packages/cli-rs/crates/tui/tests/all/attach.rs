@@ -261,8 +261,9 @@ fn pasted_paths_attach_files_and_svgs_paste_their_text() {
     let svg = files.path().join("logo.svg");
     std::fs::write(&svg, "<svg/>").unwrap();
     let setup = Setup::with(opencode_util::temp::tempdir().unwrap(), prompt_config(None, true), true);
-    // A dragged path arrives quoted or escaped; both attach.
-    setup.app.paste(&format!("'{}'", png.display()).replace(' ', "\\ "));
+    // A dragged path arrives quoted or escaped; both attach. Windows has no escapes: `\` separates.
+    let quoted = format!("'{}'", png.display());
+    setup.app.paste(&if cfg!(windows) { quoted } else { quoted.replace(' ', "\\ ") });
     setup.wait_text("[Image 1] ");
     setup.app.paste(&format!("{}", svg.display()));
     setup.wait_text("[Image 1] [SVG: logo.svg] ");

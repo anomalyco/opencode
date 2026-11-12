@@ -8,6 +8,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use opencode_tui::prompt::editor_context::{self, LabelState, Source, zed};
+use opencode_ui::path::Flavor;
+use opencode_ui::prompt_input::parse::file_url;
 use serde_json::{Value, json};
 
 use crate::support::ide;
@@ -145,12 +147,17 @@ fn ide_mentions_insert_file_parts_with_their_lines() {
     setup.app.press("return");
     setup.wait("the prompt", || setup.posts().iter().any(|(path, _)| path.ends_with("/prompt")));
     let prompt = setup.posts().into_iter().find(|(path, _)| path.ends_with("/prompt")).unwrap().1;
+    // `pathToFileURL`: on Windows the path takes the working directory's drive, `file:///D:/project/…`.
+    let url = |path: &str| {
+        let cwd = std::env::current_dir().unwrap();
+        file_url(Flavor::NATIVE, &Flavor::NATIVE.resolve(&[&cwd.to_string_lossy(), path]))
+    };
     assert_eq!(
         prompt["files"],
         json!([
-            { "uri": "file:///project/src/lib.rs?start=12&end=20", "name": "src/lib.rs#12-20",
+            { "uri": format!("{}?start=12&end=20", url("/project/src/lib.rs")), "name": "src/lib.rs#12-20",
               "mention": { "start": 8, "end": 25, "text": "@src/lib.rs#12-20" } },
-            { "uri": "file:///elsewhere/a%20b.ts?start=4", "name": "/elsewhere/a b.ts#4",
+            { "uri": format!("{}?start=4", url("/elsewhere/a b.ts")), "name": "/elsewhere/a b.ts#4",
               "mention": { "start": 26, "end": 46, "text": "@/elsewhere/a b.ts#4" } },
         ])
     );
