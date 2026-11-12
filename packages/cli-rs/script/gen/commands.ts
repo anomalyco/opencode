@@ -3,6 +3,7 @@
 import { Effect, Exit, Option } from "effect"
 import { GlobalFlag } from "effect/cli"
 import { Commands, PrintLogs } from "../../../cli/src/commands/commands"
+import { records } from "../../parity/lib/records"
 
 type Param = {
   readonly _tag: "Single" | "Map" | "Transform" | "Optional" | "Variadic"
@@ -111,5 +112,5 @@ const builtins = [...GlobalFlag.BuiltIns, PrintLogs].map((global) => flag(global
 const tree = { builtins, root }
 
 const output = new URL("../../crates/cli/tests/fixtures/commands.json", import.meta.url).pathname
-await Bun.write(output, JSON.stringify(tree, null, 2) + "\n")
+await Bun.write(output, records(tree, ["builtins[]", "**.flags[]", "**.arguments[]", "**.commands[]"]))
 console.log(`commands: wrote ${output}`)

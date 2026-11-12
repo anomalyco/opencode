@@ -7,6 +7,7 @@
 import { resolveThemeDocument, themeModes, type ResolvedTheme } from "../../../theme/src/tui/index.ts"
 import { allThemes, getOpenCode2Theme, parseTheme, type ThemeDocumentSource } from "../../../tui/src/theme/index.ts"
 import { generateSystem, terminalMode } from "../../../tui/src/theme/system.ts"
+import { records } from "../lib/records"
 
 const output = new URL("../fixtures/U.1/tokens.json", import.meta.url).pathname
 const sections = ["text", "background", "border", "scrollbar", "diff", "syntax", "markdown"] as const
@@ -145,5 +146,14 @@ const errors = Object.fromEntries(
   }),
 )
 
-await Bun.write(output, JSON.stringify({ paths, builtins, system, palettes, errors }, null, 1) + "\n")
+await Bun.write(
+  output,
+  records({ paths, builtins, system, palettes, errors }, [
+    "paths[]",
+    "builtins.*.*",
+    "system.*.*",
+    "palettes.*.*",
+    "errors.*.*",
+  ]),
+)
 console.log(`oracle U.1: ${Object.keys(builtins).length} built-in views, ${Object.keys(system).length} system views`)

@@ -4,6 +4,7 @@
 // parse failures.
 import { renderLatex } from "../../../latex/src/render"
 import { LatexParseError, type RenderLatexOptions } from "../../../latex/src/types"
+import { records } from "../lib/records"
 
 const tests = [
   // render.test.ts
@@ -233,5 +234,5 @@ const layouts = cases.map((item) => {
 })
 
 const path = new URL("../fixtures/P.2/layouts.json", import.meta.url).pathname
-await Bun.write(path, JSON.stringify(layouts, null, 1) + "\n")
+await Bun.write(path, records(layouts, ["[]"]))
 console.log(`P.2: ${layouts.length} layouts`)

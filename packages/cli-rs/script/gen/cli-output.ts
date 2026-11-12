@@ -6,6 +6,7 @@ import path from "node:path"
 import { mkdir, rm } from "node:fs/promises"
 import { Commands } from "../../../cli/src/commands/commands"
 import { command, sandbox } from "../../parity/cli/client"
+import { records } from "../../parity/lib/records"
 
 type Node = { readonly name: string; readonly commands: Record<string, Node> }
 
@@ -147,9 +148,9 @@ await pool(["bash", "zsh", "fish", "powershell"], 4, async (shell) => {
   const stdout = expectClean(await run(["--completions", shell]))
   await Bun.write(path.join(out, "completions", `${shell}.txt`), stdout)
 })
-const records = [
+const failures = [
   ...(await pool(errors, 6, (args) => run(args))),
   ...(await pool(environments, 4, (item) => run(item.args, item.env))),
 ]
-await Bun.write(path.join(out, "errors.json"), JSON.stringify(records, null, 2) + "\n")
-console.log(`cli-output: wrote ${paths.length} help pages, 4 completion scripts, ${records.length} errors to ${out}`)
+await Bun.write(path.join(out, "errors.json"), records(failures, ["[]"]))
+console.log(`cli-output: wrote ${paths.length} help pages, 4 completion scripts, ${failures.length} errors to ${out}`)

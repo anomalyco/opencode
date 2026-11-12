@@ -11,6 +11,7 @@
 // `bun --conditions=browser` when started without it.
 import type { CreateDataInput } from "@opencode/client/solid"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import { records } from "../lib/records"
 
 if (process.env.F7_BROWSER !== "1") {
   const proc = Bun.spawnSync(["bun", "--conditions=browser", "run", import.meta.path], {
@@ -452,6 +453,10 @@ for (const item of cases)
 const file = new URL("../fixtures/F.7/folds.json", import.meta.url).pathname
 await Bun.write(
   file,
-  JSON.stringify({ variants: variants.map((variant) => variant.type), routes, allow, cases: results }, null, 2) + "\n",
+  records({ variants: variants.map((variant) => variant.type), routes, allow, cases: results }, [
+    "routes.*",
+    "allow[]",
+    "cases[]",
+  ]),
 )
 console.log(`folds: ${variants.length} variants, ${results.length} cases`)
