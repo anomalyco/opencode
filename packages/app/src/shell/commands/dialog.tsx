@@ -126,7 +126,7 @@ export function CommandPaletteView(props: {
             return (
               <Show when={props.unhide?.(item())} fallback={entry()}>
                 {(unhide) => (
-                  <div class="flex items-center gap-1">
+                  <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
                     {entry()}
                     <Button size="small" variant="ghost-muted" onClick={() => unhide()()}>
                       {language.t("sidebar.recent.unhide")}
