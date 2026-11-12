@@ -1,7 +1,7 @@
 //! Pending permissions (F.7).
 use opencode_api::generated::*;
 
-use crate::state::{Data, Error, Overlay, State, Task, evict_missing, is_tag};
+use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
 
 impl State {
     /// Pending permission requests of a session; none until read or asked.
@@ -57,43 +57,22 @@ impl Data {
     /// Reads pending permissions once per invalidation (`permission.sync`). Requests asked or
     /// settled while the read was in flight win over the snapshot (deviation O89-list-snapshots).
     pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
-        let key = format!("session.permission:{}", session.0);
-        let begin = session.clone();
-        let session = session.clone();
-        self.sync_start(
-            key.clone(),
-            move |state| {
-                let ticket = state.token();
-                state.permission_reads.insert(begin, Overlay::new(ticket));
-                (state.deletion_epoch, ticket)
+        let (fetched, again) = (session.clone(), session.clone());
+        self.overlay_sync(
+            format!("session.permission:{}", session.0),
+            session.clone(),
+            |state| &mut state.permission_reads,
+            session.clone(),
+            |request| &request.id.0,
+            move |data| async move {
+                let list = data.client().permission_list(&PermissionListInput { session_id: fetched }).await;
+                Ok((list.map_err(|error| evict_missing(&data, error))?, ()))
             },
-            move |data, (started, ticket)| async move {
-                let list =
-                    match data.client().permission_list(&PermissionListInput { session_id: session.clone() }).await {
-                        Ok(list) => list,
-                        Err(error) => {
-                            data.write(|state| Overlay::take(&mut state.permission_reads, &session, ticket));
-                            return Err(evict_missing(&data, error));
-                        }
-                    };
-                let reread = data.write(|state| {
-                    let Some(read) = Overlay::take(&mut state.permission_reads, &session, ticket) else { return false };
-                    if state.deleted_since(&session, started) {
-                        return false;
-                    }
-                    let Some(list) = read.apply(list, |request| &request.id.0) else {
-                        state.syncs.invalidate(&key);
-                        return true;
-                    };
-                    state.permission.insert(session.clone(), list);
-                    state.log.permissions(&session);
-                    false
-                });
-                if reread {
-                    data.refresh(|data| data.permission_sync(&session));
-                }
-                Ok(())
+            |state, session, list, ()| {
+                state.permission.insert(session.clone(), list);
+                state.log.permissions(session);
             },
+            move |data| data.permission_sync(&again),
         )
     }
 
