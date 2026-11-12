@@ -20,5 +20,7 @@ export const registry = {
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
+  local_model_unload:
+    "When /clear or /exit runs and the chat is using a local model, unload that model from memory.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

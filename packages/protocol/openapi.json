@@ -16679,6 +16679,9 @@
               "mcp_events": {
                 "type": "boolean"
               },
+              "local_model_unload": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },

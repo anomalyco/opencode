@@ -5,6 +5,9 @@ import "./component/spinner-renderable"
 import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
+import { Flag } from "@opencode/core/flag"
+import { unloadLocalModel } from "@opencode/core/plugin/provider/local-unload"
+import type { Entry } from "@opencode/schema/config"
 import { Global } from "@opencode/util/global"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
@@ -749,6 +752,29 @@ function App() {
   })
 
   const connected = useConnected()
+  const releaseLocalModel = async () => {
+    const model = local.model.current()
+    if (!model) return
+    const ref = location.ref ?? data.location.default()
+    // The client stores the same config documents the flag reader expects.
+    const entries = (data.location.config.list(ref) ?? []) as readonly Entry[]
+    const enabled = Flag.resolve({
+      entries,
+      channel: app.channel,
+      overrides: process.env.OPENCODE_FLAGS,
+    }).local_model_unload.enabled
+    if (!enabled) return
+    const settings = data.location.provider.list(ref)?.find((item) => item.id === model.providerID)?.settings
+    // A missing server must not stop /clear or /exit.
+    await unloadLocalModel({
+      providerID: model.providerID,
+      modelID: model.modelID,
+      baseURL: typeof settings?.baseURL === "string" ? settings.baseURL : undefined,
+      apiKey: typeof settings?.apiKey === "string" ? settings.apiKey : undefined,
+      unload: typeof settings?.unload === "string" ? settings.unload : undefined,
+    }).catch(() => false)
+  }
+
   const appCommands = createMemo(() =>
     [
       {
@@ -802,7 +828,8 @@ function App() {
         title: "Clear session",
         category: "Session",
         slash: { name: "clear" },
-        run: () => {
+        run: async () => {
+          await releaseLocalModel()
           const model = local.model.current()
           const agent = local.agent.current()
           const current =
@@ -1178,7 +1205,10 @@ function App() {
         name: "app.exit",
         title: "Exit the app",
         slash: { name: "exit", aliases: ["quit", "q"] },
-        run: () => exit(),
+        run: async () => {
+          await releaseLocalModel()
+          exit()
+        },
         category: "System",
       },
       {
