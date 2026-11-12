@@ -74,9 +74,8 @@ async function runScenario(name: string, scenario: SimScenario) {
   const labels = sides[0] === sides[1] ? [sides[0], `${sides[1]}2`] : sides
   const results = []
   for (const [index, side] of sides.entries()) results.push(await runSide(box, side, labels[index], scenario))
-  // `.sim` keeps a P-TUI scenario's files apart from the P-APP scenario of the same name, whose recordings live in
-  // `fixtures/<step>/<name>/`.
-  const out = path.join(parityRoot, "fixtures", name.replace(/\//g, path.sep) + ".sim")
+  // Run outputs, ignored by git: nothing reads them, they are for a person to look at after a run.
+  const out = path.join(parityRoot, "out", name.replace(/\//g, path.sep) + ".sim")
   await rm(out, { recursive: true, force: true })
   await mkdir(out, { recursive: true })
   const checkpoints = scenario.steps.filter((step) => "checkpoint" in step)

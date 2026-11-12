@@ -7,6 +7,21 @@ packages/protocol/openapi.json linguist-generated
 packages/client/src/promise/generated/** linguist-generated
 packages/client/src/effect/generated/** linguist-generated
 packages/client/src/effect/api/** linguist-generated
+# cli-rs: parity recordings and the files `script/gen` writes.
+packages/cli-rs/parity/fixtures/** linguist-generated
+packages/cli-rs/assets/queries/** linguist-generated
+packages/cli-rs/crates/acp/src/permission/structured_patch.json linguist-generated
+packages/cli-rs/crates/api-types/src/types.rs linguist-generated
+packages/cli-rs/crates/api/src/generated/** linguist-generated
+packages/cli-rs/crates/cli/src/run/mime.rs linguist-generated
+packages/cli-rs/crates/cli/tests/fixtures/** linguist-generated
+packages/cli-rs/crates/local/src/generated/** linguist-generated
+packages/cli-rs/crates/mermaid/src/core/entities.rs linguist-generated
+packages/cli-rs/crates/mermaid/src/core/wide.rs linguist-generated
+packages/cli-rs/crates/ui/src/fuzzy/accents.rs linguist-generated
+packages/cli-rs/crates/ui/src/keymap/generated.rs linguist-generated
+packages/cli-rs/crates/ui/src/theme/generated/** linguist-generated
+packages/cli-rs/crates/util/fixtures/time.tsv linguist-generated
 packages/core/src/**/*.txt text eol=lf
 packages/httpapi-codegen/test/generated/*.ts text eol=lf
 # The site tests compare source text and humans.txt byte for byte, so Windows checkouts keep LF.
