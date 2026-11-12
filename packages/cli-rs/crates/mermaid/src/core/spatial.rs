@@ -112,13 +112,12 @@ impl SpatialIndex {
         &self.claims
     }
 
-    fn normalize(mut claim: Claim) -> Claim {
-        claim.spans.sort();
-        claim
-    }
-
     pub fn add(&self, claims: impl IntoIterator<Item = Claim>) -> SpatialIndex {
-        self.overlay(&SpatialIndex { claims: claims.into_iter().map(Self::normalize).collect() })
+        let claims = claims.into_iter().map(|mut claim| {
+            claim.spans.sort();
+            claim
+        });
+        self.overlay(&SpatialIndex { claims: claims.collect() })
     }
 
     /// Claims of both, sorted by ID; a later claim replaces one with the same ID.
