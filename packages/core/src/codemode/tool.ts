@@ -1,7 +1,7 @@
 export * as CodeModeTool from "./tool.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
-import { CodeMode, Namespace, Tool } from "@opencode/codemode"
+import { CodeMode, Namespace, Tool, toolExpression } from "@opencode/codemode"
 import type {
   Content,
   Context as ToolContext,
@@ -12,8 +12,10 @@ import type {
 } from "@opencode/schema/tool"
 import { Error } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { isDeepStrictEqual } from "node:util"
 import { toSessionError } from "../session/to-session-error.js"
 import { aliasNote, definition, normalizedName } from "../tool/runtime.js"
+import { prepare, type Target } from "../tool/prepare.js"
 import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
@@ -122,7 +124,10 @@ export const create = (
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
             Effect.gen(function* () {
-              yield* Ref.update(calls, update)
+              const previous = yield* Ref.get(calls)
+              const next = update(previous)
+              if (previous === next) return
+              yield* Ref.set(calls, next)
               if (yield* Ref.get(trailing)) return
               const wait = (yield* Ref.get(publishedAt)) + 100 - (yield* Clock.currentTimeMillis)
               if (wait <= 0) return yield* publish
@@ -212,9 +217,10 @@ function progressRows(record: (update: (items: Array<ExecuteCall>) => Array<Exec
     const entry = { tool: call.name, status, ...(input ? { input } : {}) }
     return record((items) => {
       const index = rows.get(call)
-      if (index !== undefined) return items.with(index, entry)
+      if (index !== undefined) return isDeepStrictEqual(items[index], entry) ? items : items.with(index, entry)
       rows.set(call, items.length)
-      return [...items, entry]
+      // A before hook can edit the argument object in place. Keep the admitted row as it was published.
+      return [...items, structuredClone(entry)]
     })
   }
 }
@@ -272,11 +278,10 @@ const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
-  const tools = inventoryTools(inventory)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
-    tools,
+  const entries = inventoryTools(inventory)
+  const created = CodeMode.make<typeof entries.tools, [typeof CodeModeFetch.extension]>({
+    ...entries,
     extensions: [CodeModeFetch.extension],
-    hooks: runHooks(inventory),
   })
   runtimes.set(inventory, created)
   return created
@@ -294,8 +299,7 @@ export const check = (
   before?: Before<string>,
 ) =>
   CodeMode.make({
-    tools: inventoryTools(inventory),
-    hooks: runHooks(inventory),
+    ...inventoryTools(inventory),
     limits,
   })
     .execute(code, bindings)
@@ -309,10 +313,16 @@ export const check = (
 function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
+  const paths = new Map<string, Target>()
+  const ids = new Map<string, Target>()
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
     const child = definition(registration)
-    getNode(root, qualifiedName(registration)).tool = Tool.make({
+    const path = qualifiedName(registration)
+    const target = { tool: registration, definition: child }
+    paths.set(path, target)
+    ids.set(name, target)
+    getNode(root, path).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
       freeform: registration.freeform !== undefined,
@@ -320,7 +330,7 @@ function inventoryTools(inventory: Inventory) {
       execute: (input, { key }) => Run.use((run) => run.executeTool(name, registration, input, key)),
     })
   }
-  return renderTools(root)
+  return { tools: renderTools(root), hooks: runHooks(paths, ids) }
 }
 
 function resultContent(executed: Result) {
@@ -337,8 +347,7 @@ function resultValue(executed: Result) {
   return text === "" ? null : text
 }
 
-function runHooks(inventory: Inventory): CodeMode.Hooks<Run> {
-  const ids = new Map(Array.from(inventory.tools, ([id, tool]) => [qualifiedName(tool), id]))
+function runHooks(paths: ReadonlyMap<string, Target>, ids: ReadonlyMap<string, Target>): CodeMode.Hooks<Run> {
   const running = (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation) =>
     Run.use((run) => run.progress?.(call, "running") ?? Effect.void)
   const settled = (call: CodeMode.ToolInvocation | CodeMode.ExtensionInvocation, result: CodeMode.CallResult) =>
@@ -348,18 +357,26 @@ function runHooks(inventory: Inventory): CodeMode.Hooks<Run> {
       Run.use((run) =>
         Effect.gen(function* () {
           if (run.progress) yield* run.progress(call, "running")
-          if (!run.before) return call
-          const id = ids.get(call.name)
-          const requested = id ?? call.name
-          const event = yield* run.before(requested, call.input, call.key)
-          // An unchanged unknown spelling goes back to the VM for its catalog diagnostic.
-          if (event.tool === requested) return { name: call.name, input: event.input }
-          const target = inventory.tools.get(event.tool)
-          const name = target ? qualifiedName(target) : ids.has(event.tool) ? event.tool : undefined
-          if (name === undefined)
-            return yield* new Error({ message: `Tool is not available for this request: ${event.tool}` })
-          if (id === undefined) run.alias?.(call.key, aliasNote(call.name, name))
-          return { name, input: event.input }
+          const before = run.before
+          if (!before) return call
+          const original = paths.get(call.name)
+          const requested = original?.definition.name ?? call.name
+          const selected = yield* prepare(
+            requested,
+            call.input,
+            (name) => {
+              // The script must use a catalog path. Only a plugin redirect can select by registration ID.
+              return name === requested ? original : (ids.get(name) ?? paths.get(name))
+            },
+            (name, input) => before(name, input, call.key),
+          )
+          if (!selected.target) {
+            if (selected.name === requested) return { name: call.name, input: selected.input }
+            return yield* new Error({ message: `Tool is not available for this request: ${selected.name}` })
+          }
+          const name = qualifiedName(selected.target.tool)
+          if (original === undefined) run.alias?.(call.key, aliasNote(toolExpression(call.name), toolExpression(name)))
+          return { name, input: selected.input }
         }),
       ),
     "tool.before": running,

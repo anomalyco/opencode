@@ -2,7 +2,8 @@ export * as ToolInputRepairPlugin from "./tool-input-repair.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, JsonSchema, Option, Predicate, Schema } from "effect"
-import { definition, RepairInventory } from "../tool/runtime.js"
+import { Selection } from "../tool/prepare.js"
+import { definition } from "../tool/runtime.js"
 
 // Repairs apply only when the input schema unambiguously supports them:
 // - Stringified root or nested object: '{"limit":"20"}' -> { limit: 20 }
@@ -28,22 +29,28 @@ export const Plugin = define({
     Effect.gen(function* () {
       yield* ctx.tool.hook("execute.before", (event) =>
         Effect.gen(function* () {
-          // The outer Code Mode tool is built per snapshot rather than registered, so it cannot be
-          // looked up here. Its `{ code }` input is trivial; the tools it calls are repaired normally.
-          if (event.tool === "execute") return
-          const tools = (yield* RepairInventory) ?? new Map((yield* ctx.tool.list()).map((tool) => [tool.id, tool]))
-          const name = tools.has(event.tool) ? event.tool : aliases.get(event.tool)
-          if (name === undefined) return
-          const tool = tools.get(name)
-          if (!tool) return
-          event.tool = name
-          const schema = definition(tool).inputSchema
-          if (schema.type !== "object") return
-          event.input = repair(event.input, schema, schema, 0)
+          const selection = yield* Selection
+          if (selection) {
+            const alias = aliases.get(event.tool)
+            if (alias && !selection.has(event.tool) && selection.has(alias)) event.tool = alias
+            selection.defer(repairInput)
+            return
+          }
+          // Standalone hook callers have no selection phase.
+          const tools = yield* ctx.tool.list()
+          const tool =
+            tools.find((tool) => tool.id === event.tool) ?? tools.find((tool) => tool.id === aliases.get(event.tool))
+          if (tool) {
+            event.tool = tool.id
+            event.input = repairInput(event.input, definition(tool).inputSchema)
+          }
         }),
       )
     }),
 })
+
+const repairInput = (input: unknown, schema: JsonSchema.JsonSchema) =>
+  schema.type === "object" ? repair(input, schema, schema, 0) : input
 
 function repair(value: unknown, schema: JsonSchema.JsonSchema, root: JsonSchema.JsonSchema, depth: number): unknown {
   if (depth > maxDepth) return value

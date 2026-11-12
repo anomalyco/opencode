@@ -94,18 +94,25 @@ runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
 ```
 
 The Effect environment is inferred from the supplied tools. `hooks` surround every call the program makes into the
-host: `tool.before`/`tool.after` receive `{ name, input, key }` with decoded input and the call's `<runId>:<callId>`
+host: `tool.before`/`tool.after` receive `{ name, input, key }` with the call's `<runId>:<callId>`
 idempotency key, and `extension.before`/`extension.after` receive `{ extension, name, args }`. An `after` hook also
 receives how the call ended (`success` with its value, `failure` with its error, or `interrupted`). A `before` hook
 runs before the call reaches the host, and a failing one denies it: the host function is never called, and the program
 catches the failure as a thrown error. A denied call fails the way the call itself would: a tool call or asynchronous
 global rejects its promise, and a synchronous global throws.
 
-`tool.resolve` lets the host rewrite a plain tool call's path and input before lookup. It also sees unknown paths.
-The runtime counts the attempt toward `maxToolCalls` before invoking this hook. Return the original path to keep
-the usual lookup and suggestions. The same call object carries the resolved path and input to `tool.before`.
-`tool.after` sees every admitted attempt, including a veto, lookup or validation failure, or interruption during repair.
-Search, durable tools, and idempotent tools use their own execution paths.
+The runtime counts a tool attempt toward `maxToolCalls` under its requested name before lookup or validation.
+The optional `tool.resolve` hook can rewrite the name and input, including an unknown path. Return the original
+name to keep the catalog's lookup and suggestions. The built-in `search` skips resolution. `tool.before` sees the
+decoded input. `tool.after` sees the same call object even if lookup, validation, or a hook failed; in that case
+it carries the last name and input reached. A veto from `tool.resolve` or `tool.before` rejects the script's call
+with `ToolFailure`.
+
+A redirect must preserve the execution mode (plain, idempotent, or durable) because the driver chooses how to
+suspend the call from its requested path. Unknown paths can redirect to plain tools. For resumable calls the
+runtime saves the resolved name and JSON input before schema decoding. Resume reuses a completed resolution;
+if suspension interrupted an idempotent call during resolution, the hook runs again with the same key.
+Detaching to suspend leaves `tool.after` pending until the call settles.
 
 ### Suspending and resuming a run
 

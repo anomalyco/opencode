@@ -16,15 +16,8 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
-import {
-  aliasNote,
-  definition,
-  effectiveName,
-  execute,
-  normalizedName,
-  normalizeContent,
-  RepairInventory,
-} from "./tool/runtime.js"
+import { aliasNote, definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
+import { prepare, type Target } from "./tool/prepare.js"
 import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
@@ -128,22 +121,15 @@ const layer = Layer.effect(
       ]
     })
 
-    const beforeExecute = (
-      name: string,
-      input: unknown,
-      context: Tool.Context,
-      tools: ReadonlyMap<string, Tool.Info>,
-    ) =>
-      hooks
-        .trigger("tool", "execute.before", {
-          tool: name,
-          sessionID: context.sessionID,
-          agent: context.agent,
-          messageID: context.messageID,
-          id: context.id,
-          input,
-        })
-        .pipe(Effect.provideService(RepairInventory, tools))
+    const beforeExecute = (name: string, input: unknown, context: Tool.Context) =>
+      hooks.trigger("tool", "execute.before", {
+        tool: name,
+        sessionID: context.sessionID,
+        agent: context.agent,
+        messageID: context.messageID,
+        id: context.id,
+        input,
+      })
 
     const executeTool = Effect.fn("Tool.execute")(function* (
       tool: Tool.Info,
@@ -292,13 +278,20 @@ const layer = Layer.effect(
                 codeModeInventory,
                 (name, tool, input, context) => executeTool(tool, name, input, context),
                 permission,
-                (name, input, context) => beforeExecute(name, input, context, codeModeInventory.tools),
+                beforeExecute,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
             ? undefined
             : (cached?.value ?? CodeModeTool.catalog(codeModeInventory))
           const codeModeDefinition = codeModeTool && (cached?.definition ?? definition(codeModeTool))
+          const targets = new Map<string, Target>(
+            Array.from(direct)
+              .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+              .map(([name, tool]) => [name, { tool, definition: data.definitions.get(name)! }]),
+          )
+          if (codeModeTool && codeModeDefinition)
+            targets.set(codeModeTool.name, { tool: codeModeTool, definition: codeModeDefinition })
           if (codeModeCatalog && codeModeDefinition)
             catalog = {
               data,
@@ -309,12 +302,7 @@ const layer = Layer.effect(
             }
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
-            definitions: [
-              ...Array.from(direct)
-                .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                .map(([name]) => data.definitions.get(name)!),
-              ...(codeModeDefinition ? [codeModeDefinition] : []),
-            ],
+            definitions: Array.from(targets.values(), (target) => target.definition),
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
                 sessionID: input.sessionID,
@@ -324,21 +312,32 @@ const layer = Layer.effect(
                 progress: input.progress ?? (() => Effect.void),
                 cancel: input.cancel,
               }
-              const event = yield* beforeExecute(input.call.name, input.call.input, context, direct)
-              const requested = input.definitions?.get(event.tool)
-              // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
-                return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
-              const name = requested?.name ?? event.tool
-              const tool = name === "execute" && codeModeTool ? codeModeTool : direct.get(name)
-              if (tool) {
-                const called = input.call.name
-                const missing = !direct.has(called) && called !== codeModeTool?.name && !input.definitions?.has(called)
-                const note = missing && called !== event.tool ? aliasNote(called, name) : undefined
-                return yield* executeTool(tool, name, event.input, context, note)
+              const lookup = (advertised: string) => {
+                const name = input.definitions ? input.definitions.get(advertised)?.name : advertised
+                if (name === undefined) return
+                return targets.get(name)
               }
+              const called = input.call.name
+              const selected = yield* prepare(called, input.call.input, lookup, (name, args) =>
+                beforeExecute(name, args, context),
+              )
+              if (selected.target) {
+                const note =
+                  called !== selected.name && !lookup(called)
+                    ? aliasNote(JSON.stringify(called), JSON.stringify(selected.name))
+                    : undefined
+                return yield* executeTool(
+                  selected.target.tool,
+                  selected.target.definition.name,
+                  selected.input,
+                  context,
+                  note,
+                )
+              }
+              if (input.definitions && targets.has(selected.name))
+                return yield* new Tool.Error({ message: `Tool is not available for this request: ${selected.name}` })
               return yield* new Tool.Error({
-                message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
+                message: `No tool named "${selected.name}" is currently available. Please use a tool from the available tool list.`,
               })
             }),
           }
@@ -372,7 +371,7 @@ const layer = Layer.effect(
           input.bindings,
           input.limits,
           (name, tool, toolInput, key) => executeTool(tool, name, toolInput, context(key)),
-          (name, toolInput, key) => beforeExecute(name, toolInput, context(key), tools),
+          (name, toolInput, key) => beforeExecute(name, toolInput, context(key)),
         )
       }),
     })

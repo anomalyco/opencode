@@ -2,21 +2,13 @@ import { emptyInputJsonSchema, ToolFailure, type ToolDefinition } from "@opencod
 import { isRecord } from "@opencode/util/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Context, Effect, JsonPointer, JsonSchema, Result, Schema, SchemaIssue, SchemaRepresentation } from "effect"
+import { Effect, JsonPointer, JsonSchema, Result, Schema, SchemaIssue, SchemaRepresentation } from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"
 
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
-// The built-in repair hook needs the schemas captured for this request, including which aliases are visible.
-export const RepairInventory = Context.Reference<ReadonlyMap<string, Tool.Info> | undefined>(
-  "@opencode/Tool/RepairInventory",
-  {
-    defaultValue: () => undefined,
-  },
-)
-
 export const aliasNote = (called: string, target: string) =>
-  `There is no "${called}" tool, so this ran as "${target}". Call "${target}" directly.`
+  `There is no ${called} tool, so this ran as ${target}. Call ${target} directly.`
 
 // Codecs for raw JSON Schema inputs (mostly MCP tools), built once per schema object; schemas are not edited after
 // registration. Not an Effect `Cache`: each entry keeps its lookup fiber, which keeps the caller's stack frames and
