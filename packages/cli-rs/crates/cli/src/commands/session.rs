@@ -70,10 +70,11 @@ fn list(context: &Context, args: &SessionListArgs) -> error::Result<()> {
     page(&output)
 }
 
-// `less -R -S` (`cmd /c more` on Windows) reads the list on stdin and draws on the terminal; without it, the list
-// is printed.
+// `less -R -S` (the system `more.com` on Windows) reads the list on stdin and draws on the terminal; without it, the
+// list is printed.
 fn page(output: &str) -> error::Result<()> {
-    let (program, args) = if cfg!(windows) { ("cmd", ["/c", "more"]) } else { ("less", ["-R", "-S"]) };
+    let system_root = std::env::var("SYSTEMROOT").or_else(|_| std::env::var("windir")).ok();
+    let (program, args) = pager(std::env::consts::OS, system_root.as_deref());
     let Ok(mut pager) = Command::new(program).args(args).stdin(Stdio::piped()).spawn() else {
         return print(output);
     };
@@ -83,6 +84,15 @@ fn page(output: &str) -> error::Result<()> {
     }
     crate::signals::wait_child("stop pager", pager, true)?;
     Ok(())
+}
+
+// TS runs `cmd /c more`, and `cmd` looks for `more` in the current directory before `PATH`, so a project could supply
+// its own (deviation W5-windows-session-pager). The absolute path names the system pager.
+fn pager(os: &str, system_root: Option<&str>) -> (String, &'static [&'static str]) {
+    match os {
+        "windows" => (format!(r"{}\System32\more.com", system_root.unwrap_or(r"C:\Windows")), &[]),
+        _ => ("less".to_owned(), &["-R", "-S"]),
+    }
 }
 
 // The JSON format's fields; a missing one stays missing, as `JSON.stringify` drops `undefined`.
@@ -321,6 +331,13 @@ mod tests {
         assert_eq!(rows[1], "ses_b\tUntitled session\tInvalid Date");
         let titled = table(&[json!({ "id": "ses_c", "title": "x\x1b]52;c;cHduZWQ=\x07y", "time": {} })]);
         assert_eq!(titled, "ses_c\txy\tInvalid Date");
+    }
+
+    #[test]
+    fn the_windows_pager_is_the_system_more() {
+        assert_eq!(pager("windows", Some(r"D:\Win")), (r"D:\Win\System32\more.com".to_owned(), &[][..]));
+        assert_eq!(pager("windows", None).0, r"C:\Windows\System32\more.com");
+        assert_eq!(pager("linux", None), ("less".to_owned(), &["-R", "-S"][..]));
     }
 
     #[test]
