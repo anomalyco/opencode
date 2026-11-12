@@ -12,6 +12,7 @@ use opencode_store::target::{self, Prepared, SessionTarget, TargetError};
 use opencode_ui::motion::{Spinner, SpinnerColor};
 use opencode_ui::theme::ThemeMode;
 use opencode_util::error::{self, Context as _};
+use opencode_util::path::Flavor;
 use opentui::native::{Control, KittyKeyboard, MouseTracking};
 use opentui::split::{Scrollback, SplitFooter};
 
@@ -730,7 +731,7 @@ impl Mini {
             .borrow()
             .as_ref()
             .map_or_else(|| self.input.directory.clone(), |session| session.directory.clone());
-        let detail = directory_label(&directory, &self.input.home);
+        let detail = directory_label(Flavor::NATIVE, &directory, &self.input.home);
         let header = crate::splash::entry(
             writer.app(),
             u32::from(width),
@@ -2053,12 +2054,13 @@ fn is_fallback_title(title: &str) -> bool {
 }
 
 /// `directoryLabel`: the home directory as `~`, with forward slashes.
-fn directory_label(directory: &str, home: &std::path::Path) -> String {
+fn directory_label(flavor: Flavor, directory: &str, home: &std::path::Path) -> String {
     let home = home.to_string_lossy();
+    let sep = flavor.sep();
     let display = if directory == home {
         "~".to_owned()
-    } else if let Some(rest) = directory.strip_prefix(&format!("{home}/")) {
-        format!("~/{rest}")
+    } else if let Some(rest) = directory.strip_prefix(&format!("{home}{sep}")) {
+        format!("~{sep}{rest}")
     } else {
         directory.to_owned()
     };
@@ -2134,10 +2136,15 @@ mod tests {
         assert!(is_fallback_title("Child session - 2026-11-05T10:20:30.123Z"));
         assert!(!is_fallback_title("New session - today"));
         assert!(!is_fallback_title("Fix the bug"));
+        let (p, w) = (Flavor::Posix, Flavor::Windows);
         let home = std::path::Path::new("/home/me");
-        assert_eq!(directory_label("/home/me", home), "~");
-        assert_eq!(directory_label("/home/me/src", home), "~/src");
-        assert_eq!(directory_label("/home/meow", home), "/home/meow");
+        assert_eq!(directory_label(p, "/home/me", home), "~");
+        assert_eq!(directory_label(p, "/home/me/src", home), "~/src");
+        assert_eq!(directory_label(p, "/home/meow", home), "/home/meow");
+        let home = std::path::Path::new("C:\\Users\\me");
+        assert_eq!(directory_label(w, "C:\\Users\\me", home), "~");
+        assert_eq!(directory_label(w, "C:\\Users\\me\\src\\app", home), "~/src/app");
+        assert_eq!(directory_label(w, "C:\\Users\\meow", home), "C:/Users/meow");
         assert_eq!(capitalize("build"), "Build");
     }
 }
