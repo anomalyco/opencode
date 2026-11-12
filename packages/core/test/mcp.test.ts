@@ -1,7 +1,7 @@
 import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import {
   Client,
   InMemoryTransport,
@@ -52,7 +52,6 @@ import {
   Clock,
   Context,
   Deferred,
-  Duration,
   Effect,
   Exit,
   Fiber,
@@ -4176,39 +4175,36 @@ describe("MCP events", () => {
       Effect.gen(function* () {
         const server = yield* streamServer({ failedOpens: 2 })
         const bus = yield* workingBus
-        const clock = yield* Clock.Clock
-        const delays = yield* Queue.unbounded<number>()
-        // A failed open stays pending: there is no status change to announce the retry timer.
-        // Observe sleeps in the retry window, not the longer stream idle deadline.
-        const observed: Clock.Clock = {
-          ...clock,
-          sleep: (duration) =>
-            Effect.gen(function* () {
-              const millis = Duration.toMillis(duration)
-              if (!server.attempts.length || millis > 30_000) return yield* clock.sleep(duration)
-              const timer = yield* clock.sleep(duration).pipe(Effect.forkChild({ startImmediately: true }))
-              yield* Queue.offer(delays, millis)
-              yield* Fiber.join(timer)
-            }),
-        }
-        const backoff = (millis: number) =>
-          Effect.gen(function* () {
-            expect(yield* Queue.take(delays)).toBe(millis)
-            yield* TestClock.adjust(millis)
-          })
         yield* Effect.gen(function* () {
           const mcp = yield* Mcp.Service
           expect(yield* ready(mcp)).toEqual({ status: "connected" })
+          const events = yield* mcp.events("resources")
+          if (!events) throw new Error("expected MCP events")
+          const clock = yield* Clock.Clock
+          const openedAt: number[] = []
+          const failed = yield* Queue.unbounded<void>()
+          const open = events.stream
+          // A failed open stays pending. Wait for the client stream to fail, not just for the server to reply.
+          using observer = spyOn(events, "stream")
+          observer.mockImplementation((input) => {
+            openedAt.push(clock.currentTimeMillisUnsafe())
+            return open(input).pipe(Stream.onError(() => Queue.offer(failed, undefined)))
+          })
           yield* mcp.subscribe("resources", { name: "job.finished" })
-          yield* backoff(1000)
-          yield* backoff(2000)
+          yield* Queue.take(failed)
+          yield* TestClock.adjust("1 second")
+          expect(openedAt).toEqual([0, 1000])
+          yield* Queue.take(failed)
+          yield* TestClock.adjust("2 seconds")
+          expect(openedAt).toEqual([0, 1000, 3000])
           const first = yield* server.opened
           first.send("notifications/events/active", { cursor: "c1", truncated: false })
           yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
           first.send("notifications/events/heartbeat", { cursor: "c5" })
           first.close()
           expect(yield* bus.until(only(mcp), (sub) => sub?.status.status === "pending")).toMatchObject({ cursor: "c5" })
-          yield* backoff(1000)
+          yield* TestClock.adjust("1 second")
+          expect(openedAt).toEqual([0, 1000, 3000, 4000])
           const reopened = yield* server.opened
           expect(server.attempts).toHaveLength(4)
           expect(reopened.params).toMatchObject({ name: "job.finished", cursor: "c5" })
@@ -4222,7 +4218,7 @@ describe("MCP events", () => {
           expect(yield* bus.until(only(mcp), (sub) => sub?.status.status === "pending")).toMatchObject({
             cursor: "c10",
           })
-        }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)), Effect.provideService(Clock.Clock, observed))
+        }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
       }),
   )
 
