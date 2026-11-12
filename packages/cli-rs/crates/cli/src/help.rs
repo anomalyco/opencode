@@ -13,6 +13,12 @@ pub const VERSION: &str = match option_env!("OPENCODE_VERSION") {
     None => "local",
 };
 
+/// The source commit CI stamps into a preview build; only the log shows it, so `--version` matches TypeScript.
+pub const COMMIT: &str = match option_env!("OPENCODE_RS_COMMIT") {
+    Some(commit) => commit,
+    None => "unknown",
+};
+
 /// The program name in help, version, and completions (plan 6.1).
 pub fn name() -> String {
     std::env::var("OPENCODE_CLI_NAME")
