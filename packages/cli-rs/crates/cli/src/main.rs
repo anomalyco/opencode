@@ -63,6 +63,7 @@ fn main() -> ExitCode {
     let logged = serde_json::to_string(&args).unwrap_or_default();
     log::info!(
         version = help::VERSION,
+        commit = help::COMMIT,
         channel = channel.as_str(),
         local = channel == "local",
         client = env::client().as_str(),
