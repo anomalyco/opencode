@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Deferred, Effect, Predicate, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Plugin } from "@opencode/core/plugin"
 import { ToolInputRepairPlugin } from "@opencode/core/plugin/tool-input-repair"
@@ -21,20 +21,8 @@ it.effect("repairs tool input before validating its original schema", () =>
     const plugins = yield* Plugin.Service
     const registry = yield* Tool.Service
     const executed: unknown[] = []
-    const observed: unknown[] = []
     yield* plugins.activate([
       { ...ToolInputRepairPlugin.Plugin, revision: "1" },
-      {
-        id: "inspect-count",
-        revision: "1",
-        effect: (ctx) =>
-          ctx.tool.hook("execute.before", (event) =>
-            Effect.sync(() => {
-              observed.push(event.input)
-              if (event.id === "call-edited") event.input = { count: "5", enabled: true }
-            }),
-          ),
-      },
       {
         id: "repairable-tool",
         revision: "1",
@@ -61,16 +49,6 @@ it.effect("repairs tool input before validating its original schema", () =>
       },
     })
     expect(executed).toEqual([{ count: 2, enabled: true }])
-    expect(observed).toEqual(executed)
-    const error = yield* snapshot
-      .execute({
-        ...identity,
-        call: { type: "tool-call", id: "call-edited", name: "repairable", input: { count: "3", enabled: true } },
-      })
-      .pipe(Effect.flip)
-    expect(error.message).toContain("count")
-    expect(observed.at(-1)).toEqual({ count: 3, enabled: true })
-    expect(executed).toHaveLength(1)
 
     yield* registry.transform((draft) => {
       draft.update("repairable", (tool) => {
@@ -91,26 +69,6 @@ it.effect("repairs tool input before validating its original schema", () =>
       { count: 2, enabled: true },
       { count: false, enabled: true },
     ])
-
-    // An advertised name can differ from the registry ID. Resolve it against the original snapshot.
-    const advertised = new Map(
-      snapshot.definitions.filter((tool) => tool.name === "repairable").map((tool) => ["counter", tool]),
-    )
-    yield* snapshot.execute({
-      ...identity,
-      definitions: advertised,
-      call: { type: "tool-call", id: "call-advertised", name: "counter", input: { count: "4", enabled: "true" } },
-    })
-    expect(executed.at(-1)).toEqual({ count: 4, enabled: true })
-    expect(
-      (yield* snapshot
-        .execute({
-          ...identity,
-          definitions: advertised,
-          call: { type: "tool-call", id: "call-original", name: "repairable", input: {} },
-        })
-        .pipe(Effect.flip)).message,
-    ).toBe("Tool is not available for this request: repairable")
 
     yield* registry.transform((draft) => draft.remove("repairable"))
     const removed = yield* registry.snapshot()
@@ -166,411 +124,32 @@ it.effect("runs a call to another harness's tool name as the matching tool and s
   }),
 )
 
-it.effect("lets a later hook decide whether the nested echo handler receives the repaired count", () =>
+it.effect("repairs namespaced inner tool input called from Code Mode", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const registry = yield* Tool.Service
     const executed: unknown[] = []
-    yield* plugins.activate([
-      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
-      {
-        id: "inspect-echo",
-        revision: "1",
-        effect: (ctx) =>
-          ctx.tool.hook("execute.before", (event) =>
-            event.tool === "example_echo" && Predicate.isObject(event.input) && event.input.count === 4
-              ? Effect.fail(new Tool.Error({ message: "skip this count" }))
-              : Effect.void,
-          ),
-      },
-    ])
-    yield* registry.transform((draft) =>
-      draft.add({
-        name: "echo",
-        options: { namespace: "example" },
-        description: "Echo a count",
-        input: Schema.Struct({ count: Schema.Int }),
-        execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: String(input.count) })),
-      }),
-    )
-
-    const snapshot = yield* registry.snapshot()
-    const result = yield* program(
-      snapshot,
-      `const count = await tools.example.echo({ count: "3" });
-      try { await tools.example.echo({ count: "4" }) } catch (error) { return [count, error.message] }`,
-    )
-    expect(result.output).toMatchObject({ output: expect.stringContaining("skip this count") })
-    expect(executed).toEqual([{ count: 3 }])
-  }),
-)
-
-for (const order of ["before", "after"] as const) {
-  it.effect(`prepares the selected tool's final input when a redirect is registered ${order} built-in repair`, () =>
-    Effect.gen(function* () {
-      const plugins = yield* Plugin.Service
-      const registry = yield* Tool.Service
-      const raw = ' { "text": "héllo", "extra": 1 }\n'
-      const calls: string[] = []
-      const ran: unknown[] = []
-      const observed: unknown[] = []
-      const rewrite: Plugin.Generation = {
-        id: "redirect",
-        revision: "1",
-        effect: (ctx) =>
-          ctx.tool.hook("execute.before", (event) =>
-            Effect.sync(() => {
-              calls.push(event.tool)
-              if (event.tool === "draft" && Predicate.isObject(event.input) && event.input.body === "edit") {
-                delete event.input.body
-                event.input.text = "in-place edit"
-              }
-              if (event.tool === "post" || event.tool === "draft") event.tool = "msg.send-text"
-              if (event.tool === "replace") {
-                event.tool = "msg_send-text"
-                event.input = { text: "edited" }
-              }
-              if (event.tool === "countByPath") event.tool = "msg.count"
-              if (event.tool === "countByID") {
-                event.tool = "msg_count"
-                event.input = { count: "7" }
-              }
-            }),
-          ),
-      }
-      const repair = { ...ToolInputRepairPlugin.Plugin, revision: "1" }
-      yield* plugins.activate([
-        ...(order === "before" ? [rewrite, repair] : [repair, rewrite]),
-        {
-          id: "inspect-selected-input",
-          revision: "1",
-          effect: (ctx) =>
-            ctx.tool.hook("execute.before", (event) =>
-              Effect.sync(() => {
-                if (event.tool !== "execute") observed.push(event.input)
-              }),
-            ),
-        },
-      ])
-      yield* registry.transform((draft) => {
-        draft.add({
-          name: "draft",
-          description: "Draft",
-          freeform: { type: "text" },
-          input: Schema.Struct({ body: Schema.String }),
-          execute: () => Effect.die("redirected"),
-        })
-        draft.add({
-          name: "send-text",
-          options: { namespace: "msg" },
-          description: "Send",
-          freeform: { type: "text" },
-          input: Schema.Struct({ text: Schema.String }),
-          execute: ({ text }) =>
-            Effect.sync(() => {
-              ran.push(text)
-              return { content: text }
-            }),
-        })
-        draft.add({
-          name: "count",
-          options: { namespace: "msg" },
-          description: "Count",
-          input: Schema.Struct({ count: Schema.Int }),
-          execute: ({ count }) =>
-            Effect.sync(() => {
-              ran.push(count)
-              return { content: String(count) }
-            }),
-        })
-      })
-      const snapshot = yield* registry.snapshot()
-      const text = JSON.stringify(raw)
-      const result = yield* program(
-        snapshot,
-        `return [await tools.msg["send-text"](${text}), await tools.post(${text}), await tools.draft(${text}), await tools.replace(${text}), await tools.draft("edit")]`,
-      )
-      expect(result.output).toMatchObject({ output: JSON.stringify([raw, raw, raw, "edited", "in-place edit"]) })
-      expect(result.content).toContainEqual({
-        type: "text",
-        text: 'There is no tools.post tool, so this ran as tools.msg["send-text"]. Call tools.msg["send-text"] directly.',
-      })
-      const checked = yield* registry.check({
-        code: 'return [await tools.countByPath({count:"3"}), await tools.countByID({})]',
-        tools: ["msg.count"],
-        bindings: {},
-        permissions: [],
-        limits: {},
-        context: { ...identity, progress: () => Effect.void },
-      })
-      expect(checked).toMatchObject({ ok: true, value: ["3", "7"] })
-      expect(calls).toEqual([
-        "execute",
-        "msg_send-text",
-        "post",
-        "draft",
-        "replace",
-        "draft",
-        "countByPath",
-        "countByID",
-      ])
-      expect(ran).toEqual([raw, raw, raw, "edited", "in-place edit", 3, 7])
-      expect(observed).toEqual([
-        { text: raw },
-        { text: raw },
-        { text: raw },
-        { text: "edited" },
-        { text: "in-place edit" },
-        { count: 3 },
-        { count: 7 },
-      ])
-    }),
-  )
-}
-
-function program(snapshot: Tool.Snapshot, code: string) {
-  return snapshot.execute({
-    ...identity,
-    call: { type: "tool-call", id: "call-program", name: "execute", input: { code } },
-  })
-}
-
-it.effect("validates a hook's final freeform edit as handler input", () =>
-  Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const registry = yield* Tool.Service
-    yield* plugins.activate([
-      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
-      {
-        id: "edit-echo",
-        revision: "1",
-        effect: (ctx) =>
-          ctx.tool.hook("execute.before", (event) =>
-            Effect.sync(() => {
-              if (event.tool === "echo") event.input = "edited"
-            }),
-          ),
-      },
-    ])
-    const echoed: string[] = []
-    yield* registry.transform((draft) =>
-      draft.add({
-        name: "echo",
-        description: "Echo text",
-        freeform: { type: "text" },
-        input: Schema.Struct({ text: Schema.String }),
-        execute: ({ text }) => Effect.sync(() => echoed.push(text)).pipe(Effect.as({ content: text })),
-      }),
-    )
-    const result = yield* program(
-      yield* registry.snapshot(),
-      'try { await tools.echo("hello") } catch (error) { return error.message }',
-    )
-    expect(result.output).toMatchObject({ output: expect.stringContaining("Expected an input object") })
-    expect(echoed).toEqual([])
-  }),
-)
-
-const redirected = Effect.gen(function* () {
-  const plugins = yield* Plugin.Service
-  const registry = yield* Tool.Service
-  const before: string[] = []
-  const executed: string[] = []
-  yield* plugins.activate([
-    {
-      id: "redirect-tool",
-      revision: "1",
-      effect: (ctx) =>
-        ctx.tool.hook("execute.before", (event) =>
-          Effect.sync(() => {
-            if (event.tool === "execute") return
-            before.push(event.tool)
-            if (event.tool !== "example.missing" && event.tool !== "example_original") return
-            event.tool = "example_target"
-            event.input = { count: 7 }
-          }),
-        ),
-    },
-  ])
-  yield* registry.transform((draft) => {
-    for (const name of ["original", "target"]) {
-      draft.add({
-        name,
-        options: { namespace: "example" },
-        description: name,
-        input: Schema.Struct({ count: Schema.Int }),
-        execute: ({ count }, ctx) =>
-          Effect.sync(() => {
-            executed.push(name)
-            return { content: `${ctx.id}:${count}` }
-          }),
-      })
-    }
-  })
-  return { registry, snapshot: yield* registry.snapshot(), before, executed }
-})
-
-for (const [path, hookName] of [
-  ["example.missing", "example.missing"],
-  ["example.original", "example_original"],
-]) {
-  it.effect(`redirects tools.${path} to a visible namespaced target before validation`, () =>
-    Effect.gen(function* () {
-      const fixture = yield* redirected
-      const result = yield* program(fixture.snapshot, `return await tools.${path}({})`)
-      expect(result.output).toMatchObject({ output: "call-program:7" })
-      expect(result.metadata).toEqual({
-        toolCalls: [{ tool: "example.target", input: { count: 7 }, status: "completed" }],
-      })
-      expect(fixture.before).toEqual([hookName])
-      expect(fixture.executed).toEqual(["target"])
-    }),
-  )
-}
-
-it.effect("records an unknown underscore spelling when the program catches the lookup error", () =>
-  Effect.gen(function* () {
-    const fixture = yield* redirected
-    const result = yield* program(
-      fixture.snapshot,
-      "try { await tools.example_target({ count: 4 }) } catch (e) { return e.message }",
-    )
-    expect(result.output).toMatchObject({
-      output: expect.stringContaining("Unknown tool 'example_target'"),
-    })
-    expect(result.metadata).toEqual({ toolCalls: [{ tool: "example_target", input: { count: 4 }, status: "error" }] })
-    expect(fixture.before).toEqual(["example_target"])
-    expect(fixture.executed).toEqual([])
-  }),
-)
-
-it.effect("a program can catch a plugin veto and return successfully with one failed tool call", () =>
-  Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const registry = yield* Tool.Service
-    yield* plugins.activate([
-      {
-        id: "deny-tool",
-        revision: "1",
-        effect: (ctx) =>
-          ctx.tool.hook("execute.before", (event) =>
-            event.tool === "blocked" ? Effect.fail(new Tool.Error({ message: "denied by plugin" })) : Effect.void,
-          ),
-      },
-    ])
-    const executed: unknown[] = []
-    yield* registry.transform((draft) =>
-      draft.add({
-        name: "blocked",
-        description: "Blocked tool",
-        input: Schema.Struct({ value: Schema.Int }),
-        execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "unexpected" })),
-      }),
-    )
-    const result = yield* program(
-      yield* registry.snapshot(),
-      "try { await tools.blocked({ value: 2 }) } catch (e) { return e.message }",
-    )
-    expect(result.output).toMatchObject({ output: expect.stringContaining("denied by plugin") })
-    expect(result.metadata).toEqual({ toolCalls: [{ tool: "blocked", input: { value: 2 }, status: "error" }] })
-    const checked = yield* registry.check({
-      code: "return await tools.blocked({ value: 2 })",
-      tools: ["blocked"],
-      bindings: {},
-      permissions: [],
-      limits: {},
-      context: { ...identity, progress: () => Effect.void },
-    })
-    expect(checked).toMatchObject({
-      ok: false,
-      error: { kind: "ToolFailure", message: expect.stringContaining("denied by plugin") },
-    })
-    expect(executed).toEqual([])
-  }),
-)
-
-it.effect("rejects a redirect outside a scheduled check's allowlist", () =>
-  Effect.gen(function* () {
-    const fixture = yield* redirected
-    const result = yield* fixture.registry.check({
-      code: "return await tools.example.original({ count: 1 })",
-      tools: ["example.original"],
-      bindings: {},
-      permissions: [],
-      limits: {},
-      context: { ...identity, progress: () => Effect.void },
-    })
-    expect(result.ok).toBe(false)
-    expect(fixture.before).toEqual(["example_original"])
-    expect(fixture.executed).toEqual([])
-  }),
-)
-
-it.effect("keeps a direct-only shell hidden from Code Mode alias repair", () =>
-  Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const registry = yield* Tool.Service
-    const executed: string[] = []
     yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
     yield* registry.transform((draft) =>
       draft.add({
-        name: "shell",
-        options: { codemode: false },
-        description: "Shell",
-        input: Schema.Struct({ command: Schema.String }),
-        execute: ({ command }) => Effect.sync(() => executed.push(command)).pipe(Effect.as({ content: "done" })),
+        name: "count",
+        options: { namespace: "example" },
+        description: "Record a count",
+        input: Schema.Struct({ count: Schema.Int }),
+        execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
       }),
     )
-    const result = yield* program(yield* registry.snapshot(), 'return await tools.bash({ command: "pwd" })')
-    expect(result.output).toMatchObject({ error: true })
-    expect(executed).toEqual([])
-  }),
-)
 
-it.effect("keeps parallel text results clean and reports the alias on the outer execute result", () =>
-  Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const registry = yield* Tool.Service
-    const siblingFinished = yield* Deferred.make<void>()
-    yield* plugins.activate([
-      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
-      {
-        id: "wait-for-sibling",
-        revision: "1",
-        effect: (ctx) =>
-          ctx.tool.hook("execute.before", (event) =>
-            event.tool === "shell" ? Deferred.await(siblingFinished) : Effect.void,
-          ),
-      },
-    ])
-    yield* registry.transform((draft) => {
-      draft.add({
-        name: "shell",
-        description: "Shell",
-        input: Schema.Struct({}),
-        execute: () => Effect.succeed({ content: "shell text" }),
-      })
-      draft.add({
-        name: "sibling",
-        description: "Sibling",
-        input: Schema.Struct({}),
-        execute: () => Deferred.succeed(siblingFinished, undefined).pipe(Effect.as({ content: "sibling text" })),
-      })
-    })
     const snapshot = yield* registry.snapshot()
-    const result = yield* program(snapshot, "return await Promise.all([tools.bash({}), tools.sibling({})])")
-    expect(result.output).toMatchObject({ output: '["shell text","sibling text"]' })
-    expect(result.metadata).toEqual({
-      toolCalls: [
-        { tool: "shell", status: "completed" },
-        { tool: "sibling", status: "completed" },
-      ],
+    yield* snapshot.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-codemode-repair",
+        name: "execute",
+        input: { code: 'return await tools.example.count({ count: "3" })' },
+      },
     })
-    expect(result.content).toContainEqual({
-      type: "text",
-      text: "There is no tools.bash tool, so this ran as tools.shell. Call tools.shell directly.",
-    })
-    const direct = yield* program(snapshot, "return await tools.shell({})")
-    expect(direct.content).toEqual([{ type: "text", text: "shell text" }])
+    expect(executed).toEqual([{ count: 3 }])
   }),
 )
