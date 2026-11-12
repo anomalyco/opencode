@@ -192,7 +192,7 @@ impl Lock {
         let (stop, stopped) = mpsc::channel();
         let handle = thread::spawn(move || {
             while let Err(mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(interval) {
-                let _ = fs::File::open(&file).and_then(|f| f.set_modified(SystemTime::now()));
+                let _ = touch(&file, SystemTime::now());
             }
         });
         self.heartbeat = Some((stop, handle));
@@ -272,6 +272,12 @@ fn mkdir(path: &Path) -> io::Result<()> {
     builder.create(path)
 }
 
+// `utimes` on a file, as the TypeScript heartbeat does. Windows sets times only through a handle with write
+// access; a read-only one fails with `PermissionDenied`.
+fn touch(path: &Path, time: SystemTime) -> io::Result<()> {
+    fs::OpenOptions::new().write(true).open(path)?.set_modified(time)
+}
+
 fn create_new(path: &Path, body: &[u8]) -> io::Result<()> {
     fs::OpenOptions::new().write(true).create_new(true).open(path)?.write_all(body)
 }
@@ -346,7 +352,7 @@ mod tests {
         fs::create_dir(&lock_dir).unwrap();
         fs::write(lock_dir.join("heartbeat"), "").unwrap();
         let old = SystemTime::now() - Duration::from_secs(5);
-        fs::File::open(lock_dir.join("heartbeat")).unwrap().set_modified(old).unwrap();
+        touch(&lock_dir.join("heartbeat"), old).unwrap();
         acquire(dir.path(), "k", &options).unwrap().release().unwrap();
     }
 
