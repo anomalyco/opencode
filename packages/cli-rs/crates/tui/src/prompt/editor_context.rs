@@ -49,18 +49,23 @@ impl Source {
             .and_then(|value| parse_port(&value));
         let zed_terminal = var("ZED_TERM").as_deref() == Some("true")
             || var("TERM_PROGRAM").is_some_and(|value| value.to_lowercase() == "zed");
-        let zed_db = var("OPENCODE_ZED_DB")
-            .map(PathBuf::from)
-            .into_iter()
-            .chain(home.iter().flat_map(|home| {
-                [
-                    home.join("Library/Application Support/Zed/db/0-stable/db.sqlite"),
-                    home.join(".local/share/zed/db/0-stable/db.sqlite"),
-                ]
-            }))
-            .collect();
+        let local_app_data = if cfg!(windows) { var("LOCALAPPDATA") } else { None };
+        let zed_db = zed_db_candidates(var("OPENCODE_ZED_DB"), home.as_deref(), local_app_data);
         Self { port, home, zed_terminal, zed_db }
     }
+}
+
+/// `resolveZedDbPath`'s candidates: `OPENCODE_ZED_DB`, then Zed's macOS and Linux paths under the home directory.
+/// On Windows, Zed's `%LOCALAPPDATA%\Zed` comes last, which TS does not read (deviation W11-zed-windows-db).
+fn zed_db_candidates(env: Option<String>, home: Option<&Path>, local_app_data: Option<String>) -> Vec<PathBuf> {
+    let db = |dir: PathBuf| dir.join("db").join("0-stable").join("db.sqlite");
+    env.map(PathBuf::from)
+        .into_iter()
+        .chain(home.into_iter().flat_map(|home| {
+            [db(home.join("Library").join("Application Support").join("Zed")), db(home.join(".local/share/zed"))]
+        }))
+        .chain(local_app_data.map(|dir| db(PathBuf::from(dir).join("Zed"))))
+        .collect()
 }
 
 /// A 1-based line and column, as the IDE sends them.
@@ -917,7 +922,10 @@ mod sqlite {
 
     #[cfg(target_os = "macos")]
     const LIBRARY: &str = "/usr/lib/libsqlite3.dylib";
-    #[cfg(not(target_os = "macos"))]
+    // The SQLite Windows itself uses, in System32 since Windows 10.
+    #[cfg(windows)]
+    const LIBRARY: &str = "winsqlite3.dll";
+    #[cfg(not(any(target_os = "macos", windows)))]
     const LIBRARY: &str = "libsqlite3.so.0";
 
     pub const READ_ONLY: c_int = 0x1;
@@ -1252,6 +1260,24 @@ mod tests {
         assert!(missing.is_none());
         // The caller keeps the last selection and polls again, as for a database it cannot read.
         assert_eq!(zed::resolve_with(missing.as_ref(), &db, Path::new("/w")), None);
+    }
+
+    #[test]
+    fn zed_database_candidates_in_order() {
+        let home = Path::new("/home/me");
+        let mac = home.join("Library/Application Support/Zed/db/0-stable/db.sqlite");
+        let linux = home.join(".local/share/zed/db/0-stable/db.sqlite");
+        let windows =
+            PathBuf::from(r"C:\Users\me\AppData\Local").join("Zed").join("db").join("0-stable").join("db.sqlite");
+        let cases = [
+            (None, None, None, vec![]),
+            (Some("/x/db"), None, None, vec![PathBuf::from("/x/db")]),
+            (Some("/x/db"), Some(home), None, vec![PathBuf::from("/x/db"), mac.clone(), linux.clone()]),
+            (None, Some(home), Some(r"C:\Users\me\AppData\Local"), vec![mac, linux, windows]),
+        ];
+        for (env, home, local, expected) in cases {
+            assert_eq!(zed_db_candidates(env.map(str::to_owned), home, local.map(str::to_owned)), expected);
+        }
     }
 
     #[test]
