@@ -485,6 +485,86 @@ test("restores dropped tool files from the server once they are shown again", as
   }
 })
 
+test("restoring dropped tool files keeps live progress made while the server read was in flight", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
+  const tool = (id: string, state: object) => ({ type: "tool", id, name: "execute", time: { created: 1, ran: 1 }, state })
+  const running = { status: "running", input: {}, metadata: {} }
+  const assistant = (content: object[]) => ({
+    id: "msg_assistant",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    time: { created: 1 },
+    content,
+  })
+  const read = Promise.withResolvers<Response>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      if (url.pathname.endsWith("/message/msg_assistant")) return read.promise
+      return Response.json({ data: [assistant([tool("call_shot", running), tool("call_work", running)])], cursor: {} })
+    },
+  })
+  const [omit, setOmit] = createSignal(true)
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      omitToolFileData: omit,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  const succeed = (
+    id: string,
+    seq: number,
+    content: Extract<OpenCodeEvent, { type: "session.tool.success" }>["data"]["content"],
+  ) => {
+    const event: OpenCodeEvent = {
+      id: `evt_${id}`,
+      created: 2,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_inflight", seq, version: 2 },
+      data: { sessionID: "ses_inflight", assistantMessageID: "msg_assistant", id, executed: true, content },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+  }
+  try {
+    await setup.data.session.message.sync("ses_inflight")
+    succeed("call_shot", 1, [{ type: "file", uri: screenshot, mime: "image/png" }])
+    setOmit(false)
+    const restoring = setup.data.session.message.restoreFiles()
+    // The second tool finishes while the read is in flight; the server's snapshot predates it.
+    succeed("call_work", 2, [{ type: "text", text: "done" }])
+    read.resolve(
+      Response.json({
+        data: assistant([
+          tool("call_shot", { status: "completed", input: {}, content: [{ type: "file", uri: screenshot, mime: "image/png" }] }),
+          tool("call_work", running),
+        ]),
+      }),
+    )
+    await restoring
+
+    expect(setup.data.session.message.get("ses_inflight", "msg_assistant")).toMatchObject({
+      content: [
+        { id: "call_shot", state: { status: "completed", content: [{ type: "file", uri: screenshot }] } },
+        { id: "call_work", state: { status: "completed", content: [{ type: "text", text: "done" }] } },
+      ],
+    })
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("refreshes a loaded session's execution start when it starts running", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({

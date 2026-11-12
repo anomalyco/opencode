@@ -189,13 +189,12 @@ const hasFileData = (part: Extract<SessionMessageInfo, { type: "assistant" }>["c
   !!part.state.content?.some((item) => item.type === "file" && item.uri.startsWith("data:"))
 
 // A tool file whose `data:` payload `omitFileData` emptied.
+const isDroppedFile = (item: ToolContent) => item.type === "file" && item.uri === `data:${item.mime};base64,`
+
 const hasDroppedFileData = (message: SessionMessageInfo) =>
   message.type === "assistant" &&
   message.content.some(
-    (part) =>
-      part.type === "tool" &&
-      "content" in part.state &&
-      !!part.state.content?.some((item) => item.type === "file" && item.uri === `data:${item.mime};base64,`),
+    (part) => part.type === "tool" && "content" in part.state && !!part.state.content?.some(isDroppedFile),
   )
 
 // Returns the same message when there is nothing to drop, so the store keeps its objects.
@@ -285,16 +284,35 @@ export function createData(config: CreateDataInput) {
 
   function refresh(load: () => Promise<unknown>) {
     if (disposed || (config.connection && config.connection.status() !== "connected")) return
-    void load().catch((error) => {
-      if (disposed || (config.connection && config.connection.status() !== "connected")) return
-      if (isSessionNotFoundError(error)) {
-        markDeleted(error.sessionID)
-        return
-      }
-      if (isMessageNotFoundError(error)) return
-      if (config.onError) return config.onError(error)
-      console.error("Failed to refresh client data", error)
-    })
+    void load().catch(refreshFailed)
+  }
+
+  // Copies back only the emptied tool files: live events may have moved the message on since the server read it.
+  function restoreMessageFiles(sessionID: string, messageID: string) {
+    return api()
+      .session.message.get({ sessionID, messageID })
+      .then((item) => {
+        if (item.type !== "assistant" || omitFiles()) return
+        message.editAssistant(sessionID, item.id, (assistant) => {
+          assistant.content.forEach((part) => {
+            if (part.type !== "tool" || !("content" in part.state) || !part.state.content?.some(isDroppedFile)) return
+            const fetched = item.content.findLast((other) => other.type === "tool" && other.id === part.id)
+            if (fetched?.type === "tool" && "content" in fetched.state && fetched.state.content)
+              part.state.content = fetched.state.content
+          })
+        })
+      })
+  }
+
+  function refreshFailed(error: unknown) {
+    if (disposed || (config.connection && config.connection.status() !== "connected")) return
+    if (isSessionNotFoundError(error)) {
+      markDeleted(error.sessionID)
+      return
+    }
+    if (isMessageNotFoundError(error)) return
+    if (config.onError) return config.onError(error)
+    console.error("Failed to refresh client data", error)
   }
 
   // Runs `load` once a burst of same-key events goes quiet, so N events cost one refetch.
@@ -1844,21 +1862,18 @@ export function createData(config: CreateDataInput) {
         },
         /** Re-reads every loaded message whose tool file data was dropped, for a client that starts showing tool files. */
         restoreFiles() {
-          const dropped = Object.entries(store.session.message).flatMap(([sessionID, messages]) =>
-            (messages ?? []).filter(hasDroppedFileData).map((item) => ({ sessionID, messageID: item.id })),
-          )
+          const sessions = Object.entries(store.session.message).flatMap(([sessionID, messages]) => {
+            const ids = (messages ?? []).filter(hasDroppedFileData).map((item) => item.id)
+            return ids.length === 0 ? [] : [{ sessionID, ids }]
+          })
+          // Each session's messages are re-read one at a time, so many screenshots don't fan out at once.
           return Promise.all(
-            dropped.map((input) =>
-              api()
-                .session.message.get(input)
-                .then((item) =>
-                  message.update(input.sessionID, (draft, index) => {
-                    const position = index.get(item.id)
-                    if (position !== undefined) draft[position] = stored(item)
-                  }),
-                )
-                // A message deleted or evicted meanwhile has nothing left to restore.
-                .catch(() => undefined),
+            sessions.map((session) =>
+              session.ids.reduce(
+                (previous, messageID) =>
+                  previous.then(() => restoreMessageFiles(session.sessionID, messageID).catch(refreshFailed)),
+                Promise.resolve(),
+              ),
             ),
           )
         },
