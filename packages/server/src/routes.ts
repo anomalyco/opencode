@@ -29,7 +29,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { LocationActivity } from "@opencode/core/location-activity"
-import { SessionSearchMaintenance } from "@opencode/core/session/search-maintenance"
+import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Schedule } from "@opencode/core/schedule"
@@ -88,7 +88,7 @@ const applicationServiceNodes = [
   LocationActivity.node,
   SessionRestart.node,
   Schedule.node,
-  SessionSearchMaintenance.node,
+  SessionSearchBuild.node,
   Workspace.node,
   FileWatch.node,
 ] as const

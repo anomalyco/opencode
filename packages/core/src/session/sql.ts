@@ -127,37 +127,6 @@ export const SessionPartTable = sqliteTable(
   ],
 )
 
-/**
- * A stable `session_search` rowid per source (message or session title); VACUUM may renumber the sources' implicit
- * rowids. No foreign keys: a cascade would drop this row but leave its index entry.
- */
-export const SessionSearchDocumentTable = sqliteTable(
-  "session_search_document",
-  {
-    id: integer().primaryKey(),
-    source_id: text().notNull(),
-    session_id: text().$type<SessionSchema.ID>().notNull(),
-  },
-  (table) => [
-    uniqueIndex("session_search_document_source_idx").on(table.source_id),
-    index("session_search_document_session_idx").on(table.session_id),
-  ],
-)
-
-/** Indexed text by document ID, kept only by the `text` layout: without contentless_delete, removal needs it. */
-export const SessionSearchTextTable = sqliteTable("session_search_text", {
-  id: integer().primaryKey(),
-  title: text().notNull(),
-  summary: text().notNull(),
-  user_text: text().notNull(),
-  assistant_text: text().notNull(),
-})
-
-/** Sources whose search entry may be stale, queued by triggers so every writer, even an older binary, records them. */
-export const SessionSearchDirtyTable = sqliteTable("session_search_dirty", {
-  source_id: text().primaryKey(),
-})
-
 export const SessionInboxTable = sqliteTable(
   "session_inbox",
   {

@@ -28,7 +28,7 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   }),
   sqlite_fts: Schema.Boolean.pipe(optional).annotate({
     description:
-      "Build and maintain an SQLite full-text index of session titles and message text in the background. The index covers every session in the database while any loaded location enables it. Defaults to false.",
+      "Build an SQLite full-text index of session titles and message text, once, in the background. It covers every session in the database and starts when any loaded location enables it; SQLite keeps it current from then on, also after this is turned off. Defaults to false.",
   }),
   image_generate: Schema.Union([
     Schema.Boolean,
