@@ -43,7 +43,8 @@ struct Server {
 impl Server {
     fn new() -> Arc<Self> {
         let text = std::fs::read_to_string(fixtures_dir().join("E.16/server.json")).unwrap();
-        let server: Value = serde_json::from_str(&text).unwrap();
+        let mut server: Value = serde_json::from_str(&text).unwrap();
+        shift_resets(&mut server["routes"]);
         Arc::new(Self { routes: server["routes"].clone(), seen: Mutex::default(), writes: Mutex::default() })
     }
 
@@ -88,6 +89,20 @@ impl Transport for Server {
             _ => (404, json!({})),
         };
         Box::pin(async move { Ok(support::respond(status, &body)) })
+    }
+}
+
+/// The TS fixtures render in UTC; the Rust dialogs use local time, so each `resetsAt` moves by the local offset.
+fn shift_resets(value: &mut Value) {
+    match value {
+        Value::Object(fields) => fields.iter_mut().for_each(|(key, field)| match field.as_i64() {
+            Some(at) if key == "resetsAt" => {
+                *field = json!(at - i64::from(opencode_util::time::Zone::Local.offset(at)) * 1000)
+            }
+            _ => shift_resets(field),
+        }),
+        Value::Array(items) => items.iter_mut().for_each(shift_resets),
+        _ => {}
     }
 }
 
