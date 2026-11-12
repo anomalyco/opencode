@@ -289,6 +289,7 @@ export function createComposerEditor(input: {
 
   const contextOpen = createMemo(() => state.popover.type === "context")
   const fileRows = createMemo(() => selectMentionFiles(mentionSearch()))
+
   const contextList = useFilteredList<ComposerSuggestion>({
     items: (query) => {
       if (!contextOpen()) return []

@@ -90,11 +90,13 @@ test("closing @ aborts its session search, and reopening on the same word waits 
 
 test("moving the @ highlight reuses the current query results", async () => {
   const searches: string[] = []
+
   const value = setup(
     { se: ["src/server.ts", "src/session.ts"] },
     {
       searchSessions: (query) => {
         searches.push(query)
+
         return []
       },
     },
