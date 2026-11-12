@@ -123,6 +123,9 @@ export async function createExtensionHost(input: {
 
     if (!worker || !extension) return
     workers.set(details.versionId, worker)
+    // A worker that stopped and starts again keeps its version and its handlers.
+    worker.ipc.removeHandler("browser-extension:call")
+    worker.ipc.removeHandler("browser-extension:subscribe")
     worker.ipc.handle("browser-extension:call", (_event, name: string, args: readonly Wire[]) =>
       call({ extension }, name, args),
     )
