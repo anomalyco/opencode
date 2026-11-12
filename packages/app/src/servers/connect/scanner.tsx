@@ -1,20 +1,27 @@
 import QrScanner from "qr-scanner"
-import { createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
+import { Button } from "@opencode/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
 import { pairingLink } from "./pairing"
 import type { RedeemPairing } from "./redeem"
 import {
   createScannerState,
   type ScannerEffect,
+  type ScannerError,
   type ScannerEvent,
   selectScannerView,
   transitionScanner,
 } from "./scanner-machine"
-import { PairingScannerView } from "./scanner-view"
+import "./scanner.css"
 
 // Redeems with the form's own redeem, so the form keeps the token and a failed connection check retries without the
 // spent code; the form gets back a link it can show, and fills it in.
-export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: string) => void; onCancel: () => void }) {
+export function PairingScanner(props: {
+  redeem: RedeemPairing
+  onScan: (link: string) => void
+  onCancel: () => void
+  camera?: typeof createCamera
+}) {
   const language = useLanguage()
   const [scannerState, setScannerState] = createSignal(createScannerState())
   const view = createMemo(() => selectScannerView(scannerState()))
@@ -22,6 +29,18 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
   video.setAttribute("aria-label", language.t("server.connect.camera"))
   video.setAttribute("playsinline", "")
   video.muted = true
+
+  const message = (error: ScannerError) => {
+    if (error.type === "camera") return language.t("server.connect.camera.error")
+
+    if (error.type === "invalid") return language.t("server.connect.scan.invalid")
+
+    if (error.type === "decode") return language.t("server.connect.scan.failed")
+
+    if (error.type === "timeout") return language.t("common.requestFailed")
+
+    return error.message
+  }
 
   onMount(() => {
     const cooldowns = new Map<string, ReturnType<typeof setTimeout>>()
@@ -89,21 +108,12 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
     }
 
     // QrScanner hides detached videos, so initialize only after this preview is mounted.
-    const scanner = new QrScanner(video, (result) => dispatch({ type: "code.detected", data: result.data }), {
-      preferredCamera: "environment",
-      maxScansPerSecond: 10,
-      returnDetailedScanResult: true,
-      // QrScanner only logs a decoder that fails (for example, a worker the page may not start), so the preview
-      // would look like it is still scanning.
-      onDecodeError: (error) => {
-        // The native BarcodeDetector engine reports an empty frame as "Scanner error: No QR code found".
-        if (String(error).includes(QrScanner.NO_QR_CODE_FOUND)) return
-        dispatch({ type: "decode.failed" })
-      },
-    })
+    const scanner = (props.camera ?? createCamera)(
+      video,
+      (data) => dispatch({ type: "code.detected", data }),
+      () => dispatch({ type: "decode.failed" }),
+    )
 
-    // Terminal QR codes can be light-on-dark depending on the terminal theme.
-    scanner.setInversionMode("both")
     onCleanup(() => {
       dispatch({ type: "disposed" })
       scanner.destroy()
@@ -115,8 +125,49 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
   })
 
   return (
-    <PairingScannerView view={view()} onCancel={props.onCancel}>
-      {video}
-    </PairingScannerView>
+    <section class="server-connect-scanner" aria-label={language.t("server.connect.scan")}>
+      <p>{language.t("server.connect.scan.description")}</p>
+      <div class="server-connect-video">
+        {video}
+        <Show when={view().overlay}>
+          {(overlay) => (
+            <span role="status" data-busy={overlay() === "redeeming" ? "" : undefined}>
+              {language.t(overlay() === "redeeming" ? "dialog.server.add.checking" : "server.connect.camera.starting")}
+            </span>
+          )}
+        </Show>
+      </div>
+      <Show when={view().error}>
+        {(error) => (
+          <p class="server-connect-error" role="alert">
+            {message(error())}
+          </p>
+        )}
+      </Show>
+      <Button variant="neutral" size="large" onClick={props.onCancel}>
+        {language.t("common.cancel")}
+      </Button>
+    </section>
   )
+}
+
+function createCamera(
+  video: HTMLVideoElement,
+  detect: (data: string) => void,
+  failed: () => void,
+): Pick<QrScanner, "start" | "stop" | "destroy"> {
+  const scanner = new QrScanner(video, (result) => detect(result.data), {
+    preferredCamera: "environment",
+    maxScansPerSecond: 10,
+    returnDetailedScanResult: true,
+    onDecodeError: (error) => {
+      // The native BarcodeDetector engine reports an empty frame as "Scanner error: No QR code found".
+      if (!String(error).includes(QrScanner.NO_QR_CODE_FOUND)) failed()
+    },
+  })
+
+  // Terminal QR codes can be light-on-dark depending on the terminal theme.
+  scanner.setInversionMode("both")
+
+  return scanner
 }

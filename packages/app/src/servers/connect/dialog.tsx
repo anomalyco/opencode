@@ -4,53 +4,43 @@ import { Divider } from "@opencode/ui/divider"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { type Component, type JSX, Show, Suspense, createMemo, lazy, untrack } from "solid-js"
+import { type Component, type ComponentProps, Show, Suspense, createMemo, lazy, untrack } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { isServerUnauthorized } from "@/runtime/server/health-machine"
-import { createServerConnectController } from "./controller"
+import { createServerConnectController, type ServerConnectControllerOptions } from "./controller"
 import type { ServerConnectField, ServerOriginal } from "./machine"
 import { ConnectMethodSwitch } from "./method"
 import "@/settings/settings.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
 
-export const DialogServer: Component<{
+type DialogLifecycle = Pick<
+  Extract<ServerConnectControllerOptions, { surface: "dialog" }>,
+  "surface" | "closing" | "onClose"
+>
+
+export function DialogServer(props: {
   mode: "add" | "edit"
   server?: ServerConnection.Http
   onSave?: (server: ServerConnection.Http) => void
-}> = (props) => {
-  const dialog = useDialog()
+  createForm?: (dialog: DialogLifecycle) => ReturnType<typeof createServerConnectController>
+  scanner?: Component<ComponentProps<typeof PairingScanner>>
+}) {
   const language = useLanguage()
-  const servers = useServers()
-  const global = useGlobal()
-  const tabs = useTabs()
-  const edited = props.mode === "edit" ? props.server : undefined
+  const dialog = useDialog()
+  const Scanner = props.scanner ?? PairingScanner
 
-  const originalOf = (server: ServerConnection.Http): ServerOriginal => ({
-    url: server.http.url,
-    displayName: server.displayName,
-    password: server.http.password,
-    unauthorized: isServerUnauthorized(global.servers.health[ServerConnection.key(server)]),
-  })
+  const createForm =
+    props.createForm ??
+    ((dialog: DialogLifecycle) => createRegistryForm(dialog, props.mode === "edit" ? props.server : undefined))
 
-  const original = createMemo(() => {
-    const server = servers.list.find(
-      (item): item is ServerConnection.Http => item.type === "http" && item.http.url === edited?.http.url,
-    )
-
-    return server && originalOf(server)
-  })
-
-  const form = createServerConnectController({
+  const form = createForm({
     surface: "dialog",
-    target: edited ? { kind: "edit", original: untrack(original) ?? originalOf(edited) } : { kind: "add" },
-    original,
-    removeTabs: (key) => tabs.removeServer(key),
     closing: () => dialog.closing,
-    // Close first: onSave may open the next dialog, such as the folder picker an interrupted action continues with.
+    // onSave may open the next dialog, such as the folder picker an interrupted action continues with.
     onClose: (saved) => {
       dialog.close()
 
@@ -58,27 +48,6 @@ export const DialogServer: Component<{
     },
   })
 
-  return (
-    <ServerDialogForm mode={props.mode} form={form}>
-      <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
-        <PairingScanner
-          onCancel={() => form.dispatch({ type: "scan.cancelled" })}
-          redeem={form.redeem}
-          onScan={(link) => form.dispatch({ type: "scan.completed", link })}
-        />
-      </Suspense>
-    </ServerDialogForm>
-  )
-}
-
-export function ServerDialogForm(props: {
-  mode: "add" | "edit"
-  form: Pick<ReturnType<typeof createServerConnectController>, "view" | "dispatch">
-  children: JSX.Element
-}) {
-  const language = useLanguage()
-  const dialog = useDialog()
-  const form = props.form
   const view = form.view
   const submit = () => form.dispatch({ type: "submitted" })
   const change = (field: ServerConnectField, value: string) => form.dispatch({ type: "field.changed", field, value })
@@ -115,7 +84,18 @@ export function ServerDialogForm(props: {
       </DialogHeader>
       <Divider />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
-        <Show when={!view().scanning} fallback={props.children}>
+        <Show
+          when={!view().scanning}
+          fallback={
+            <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
+              <Scanner
+                redeem={form.redeem}
+                onCancel={() => form.dispatch({ type: "scan.cancelled" })}
+                onScan={(link) => form.dispatch({ type: "scan.completed", link })}
+              />
+            </Suspense>
+          }
+        >
           <div class="flex w-full min-w-0 flex-col gap-6">
             <Show when={view().signedOut}>
               <p class="settings-server-dialog-notice" role="status">
@@ -242,4 +222,32 @@ export function ServerDialogForm(props: {
       </Show>
     </Dialog>
   )
+}
+
+function createRegistryForm(dialog: DialogLifecycle, edited: ServerConnection.Http | undefined) {
+  const servers = useServers()
+  const global = useGlobal()
+  const tabs = useTabs()
+
+  const originalOf = (server: ServerConnection.Http): ServerOriginal => ({
+    url: server.http.url,
+    displayName: server.displayName,
+    password: server.http.password,
+    unauthorized: isServerUnauthorized(global.servers.health[ServerConnection.key(server)]),
+  })
+
+  const original = createMemo(() => {
+    const server = servers.list.find(
+      (item): item is ServerConnection.Http => item.type === "http" && item.http.url === edited?.http.url,
+    )
+
+    return server && originalOf(server)
+  })
+
+  return createServerConnectController({
+    ...dialog,
+    target: edited ? { kind: "edit", original: untrack(original) ?? originalOf(edited) } : { kind: "add" },
+    original,
+    removeTabs: (key) => tabs.removeServer(key),
+  })
 }

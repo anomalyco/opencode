@@ -1,29 +1,24 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
-import { useLanguage } from "@/runtime/i18n/language"
-import { ServerDialogForm } from "./dialog"
-import {
-  selectServerConnectView,
-  startServerConnect,
-  transitionServerConnect,
-  type ServerCameraSupport,
-  type ServerConnectEvent,
-  type ServerConnectTarget,
-} from "./machine"
-import { PairingScannerView } from "./scanner-view"
-import type { ScannerView } from "./scanner-machine"
+import { createEffect, createSignal, onMount, Show, type ComponentProps } from "solid-js"
+import { createServerConnectController } from "./controller"
+import { DialogServer } from "./dialog"
+import type { ServerCameraSupport, ServerConnectEvent, ServerConnectTarget } from "./machine"
+import { PairingScanner } from "./scanner"
 
 export const address = "https://build.example.test"
 
 export const link = `${address}/auth/connect/example`
 
+type CameraScene = "ready" | "opening" | "denied" | "invalid" | "decode" | "redeeming" | "timeout"
+
 type Preset = {
-  camera?: ServerCameraSupport
+  camera?: ServerCameraSupport | "probing"
   target?: Extract<ServerConnectTarget, { kind: "edit" }>
-  events?: ServerConnectEvent[]
-  scanner?: ScannerView
-  redeemError?: "expired" | "unreachable"
+  events?: Extract<ServerConnectEvent, { type: "field.changed" | "method.changed" | "submitted" }>[]
+  scanner?: CameraScene
+  exchange?: "expired" | "unreachable"
+  check?: "unreachable" | "pending"
   closed?: boolean
 }
 
@@ -38,7 +33,9 @@ function Story(props: { preset: Preset }) {
 
   const open = () => {
     setSaved("")
-    void dialog.show(() => <Preview preset={props.preset} onSave={setSaved} />)
+    void dialog.show(() => (
+      <Preview preset={props.preset} onSave={(server) => setSaved(server.displayName ?? server.http.url)} />
+    ))
   }
 
   onMount(() => {
@@ -55,72 +52,108 @@ function Story(props: { preset: Preset }) {
   )
 }
 
-function Preview(props: { preset: Preset; onSave: (name: string) => void }) {
-  const dialog = useDialog()
-
-  const language = useLanguage()
-
+function Preview(props: { preset: Preset; onSave: ComponentProps<typeof DialogServer>["onSave"] }) {
   const preset = props.preset
 
-  const initial = startServerConnect(preset.target ?? { kind: "add" }, preset.camera ?? "probe").state
+  const createForm: NonNullable<ComponentProps<typeof DialogServer>["createForm"]> = (dialog) => {
+    const pending = new Promise<never>(() => {})
 
-  const [state, setState] = createSignal(
-    (preset.events ?? []).reduce((state, event) => transitionServerConnect(state, event).state, initial),
-  )
+    let check = preset.check
 
-  if (preset.redeemError) {
-    const message = language.t(`server.connect.link.${preset.redeemError}`, { url: address })
-    setState(
-      transitionServerConnect(state(), {
-        type: "submit.failed",
-        attempt: state().attempt,
-        error: { type: "redeem", message },
-      }).state,
+    let exchange = preset.exchange
+
+    const form = createServerConnectController(
+      { ...dialog, target: preset.target ?? { kind: "add" }, removeTabs() {} },
+      {
+        camera: preset.camera === "probing" ? "probe" : (preset.camera ?? "probe"),
+        probeCamera: () => (preset.camera === "probing" ? pending : Promise.resolve(true)),
+        pageHref: "https://lab.example.test",
+        servers: { list: [], add: (server) => server, remove() {} },
+        exchange: async (request) => {
+          if (request.code === "pending") return pending
+
+          if (exchange) {
+            const type = exchange
+            exchange = undefined
+
+            return { type }
+          }
+
+          return { type: "paired", pairing: { url: request.urls[0], password: "fixture" } }
+        },
+        check: async () => {
+          if (check === "pending") return pending
+
+          if (check === "unreachable") {
+            check = undefined
+
+            return { type: "unreachable" }
+          }
+
+          await new Promise<void>((resolve) => setTimeout(resolve, 700))
+
+          return { type: "healthy" }
+        },
+      },
     )
+
+    preset.events?.forEach(form.dispatch)
+
+    if (preset.scanner) {
+      let opened = false
+      createEffect(() => {
+        if (opened || !form.view().canScan) return
+        opened = true
+        form.dispatch({ type: "scan.started" })
+      })
+    }
+
+    return form
   }
-
-  const view = createMemo(() =>
-    selectServerConnectView(state(), { surface: "dialog", pageHref: "https://lab.example.test", t: language.t }),
-  )
-
-  let timer: ReturnType<typeof setTimeout> | undefined
-
-  const dispatch = (event: ServerConnectEvent) => {
-    const step = transitionServerConnect(untrack(state), event)
-    setState(step.state)
-    step.effects.forEach((effect) => {
-      if (effect.type === "camera.probe") dispatch({ type: "camera.settled", attempt: effect.attempt, available: true })
-
-      if (effect.type === "close") {
-        if (effect.saved) props.onSave(effect.saved.displayName ?? effect.saved.http.url)
-        dialog.close()
-      }
-
-      if (effect.type !== "connect.http" && effect.type !== "connect.link") return
-      const http = effect.type === "connect.http" ? effect.http : { url: effect.fallbackUrl }
-
-      timer = setTimeout(() => {
-        if (dialog.closing) return
-        dispatch({ type: "submit.succeeded", attempt: effect.attempt, http })
-      }, 700)
-    })
-  }
-
-  onCleanup(() => clearTimeout(timer))
 
   return (
-    <ServerDialogForm mode={preset.target?.kind ?? "add"} form={{ view, dispatch }}>
-      <PairingScannerView
-        view={preset.scanner ?? { overlay: undefined, error: undefined }}
-        onCancel={() => dispatch({ type: "scan.cancelled" })}
-      >
-        <video muted playsinline aria-label={language.t("server.connect.camera")} />
-      </PairingScannerView>
-      <Show when={!preset.scanner?.overlay && preset.scanner?.error?.type !== "camera"}>
-        <Button variant="neutral" onClick={() => dispatch({ type: "scan.completed", link })}>
+    <DialogServer
+      mode={preset.target?.kind ?? "add"}
+      createForm={createForm}
+      onSave={props.onSave}
+      scanner={(props) => <CameraPreview {...props} scene={preset.scanner ?? "ready"} />}
+    />
+  )
+}
+
+function CameraPreview(props: ComponentProps<typeof PairingScanner> & { scene: CameraScene }) {
+  let detect: ((data: string) => void) | undefined
+
+  const camera: NonNullable<ComponentProps<typeof PairingScanner>["camera"]> = (_, read, failed) => {
+    detect = read
+    let frame: ReturnType<typeof requestAnimationFrame>
+
+    return {
+      start: async () => {
+        if (props.scene === "denied") throw new Error("Camera permission denied")
+
+        if (props.scene === "opening") return new Promise<void>(() => {})
+        frame = requestAnimationFrame(() => {
+          if (props.scene === "invalid") read("not a pairing code")
+
+          if (props.scene === "decode") failed()
+
+          if (props.scene === "redeeming" || props.scene === "timeout") read(`${address}/auth/connect/pending`)
+        })
+      },
+      stop() {},
+      destroy: () => cancelAnimationFrame(frame),
+    }
+  }
+
+  return (
+    <>
+      <PairingScanner {...props} camera={camera} />
+      <Show when={props.scene !== "opening" && props.scene !== "denied" && props.scene !== "redeeming"}>
+        <Button variant="neutral" onClick={() => detect?.(link)}>
           Read fixture QR code
         </Button>
       </Show>
-    </ServerDialogForm>
+    </>
   )
 }
