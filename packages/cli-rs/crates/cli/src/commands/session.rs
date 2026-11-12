@@ -282,9 +282,8 @@ fn import_directory(
     directory: &str,
     cwd: impl FnOnce() -> error::Result<String>,
 ) -> error::Result<String> {
-    let resolved = flavor.resolve(&[directory]);
-    if flavor.is_absolute(&resolved) && flavor.root(&resolved) != "\\" {
-        return Ok(resolved);
+    if flavor.is_absolute(directory) && flavor.root(directory) != "\\" {
+        return Ok(flavor.resolve(&[directory]));
     }
     Ok(flavor.resolve(&[&cwd()?, directory]))
 }
@@ -357,6 +356,7 @@ mod tests {
         assert_eq!(import_directory(w, "C:/x", gone).unwrap(), "C:\\x");
         assert_eq!(import_directory(w, "//srv/share/x", gone).unwrap(), "\\\\srv\\share\\x");
         assert!(import_directory(w, "\\x", gone).is_err());
+        assert_eq!(import_directory(w, "C:x", || Ok("C:\\w".to_owned())).unwrap(), "C:\\w\\x");
         assert_eq!(import_directory(w, "\\x", || Ok("D:\\w".to_owned())).unwrap(), "D:\\x");
     }
 
