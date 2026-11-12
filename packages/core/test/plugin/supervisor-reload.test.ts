@@ -82,10 +82,11 @@ const instances = Layer.effect(
 ).pipe(Layer.provide(Watcher.testLayer))
 
 const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
-    [Global.node.replace(tempGlobalLayer), offlineModels, LocationServiceMap.node.replace(instances)],
-  ).pipe(Layer.provideMerge(Watcher.testLayer)),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+    Global.node.replace(tempGlobalLayer),
+    offlineModels,
+    LocationServiceMap.node.replace(instances),
+  ]).pipe(Layer.provideMerge(Watcher.testLayer)),
 )
 
 const greeter = (command: string) => `export default {
@@ -359,17 +360,17 @@ it.live("applies organization integration changes to running external plugins", 
         }),
       )
     })
+    const watcher = yield* Watcher.Test
     const locations = yield* LocationServiceMap.Service
     yield* Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const commands = yield* Command.Service
       const config = yield* Config.Service
-      const bus = yield* Bus.Service
       yield* plugins.awaitActivation
       expect(yield* commands.get("policy-greet")).toBeUndefined()
       expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(false)
       yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: [root] })))
-      yield* bus.publish(Event.Updated, {})
+      yield* watcher.emit({ path: configuration, type: "update" })
       yield* commands.get("policy-greet").pipe(
         Effect.flatMap((command) => (command ? Effect.void : Effect.fail("pending"))),
         Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),

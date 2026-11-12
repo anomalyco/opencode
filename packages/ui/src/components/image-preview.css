@@ -71,7 +71,8 @@
     pointer-events: auto;
   }
 
-  &[data-stage="flying"] > video {
+  /* A video fading out after a close, rather than flying home, must not take the page's clicks either. */
+  &:is([data-stage="flying"], [data-stage="closing"]) > video {
     pointer-events: none;
   }
 
@@ -79,7 +80,9 @@
     visibility: hidden;
   }
 
-  &[data-stage="pending"] :is([data-slot="image-preview-scrim"], [data-slot="image-preview-content"]) {
+  /* A preview closed before it revealed never painted its backdrop; one that did paints over this inline. */
+  &:is([data-stage="pending"], [data-stage="closing"])
+    :is([data-slot="image-preview-scrim"], [data-slot="image-preview-content"]) {
     opacity: 0;
   }
 
@@ -182,8 +185,9 @@
 }
 
 /* A modal Kobalte dialog turns the body's pointer events off and only restores them when its content unmounts, which
-   the closing flight above holds back; the page takes clicks again as soon as the close starts. */
-body:has([data-component="image-preview"] [data-slot="image-preview-content"][data-closed]) {
+   the closing flight above holds back; the page takes clicks again as soon as the close starts. The preview marks the
+   body itself: a body:has() rule made Chromium restyle the body on every DOM insertion anywhere in the page. */
+body[data-image-preview-closing] {
   pointer-events: auto !important;
 }
 

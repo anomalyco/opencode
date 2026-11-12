@@ -6,8 +6,5 @@ export default {
   loading: "Ielādē termināli…",
   "title.numbered": "Terminālis {{number}}",
   close: "Aizvērt termināli",
-  "connectionLost.title": "Savienojums zudis",
-  "connectionLost.abnormalClose": "WebSocket savienojums neparasti pārtraukts: {{code}}",
-  "connectionLost.description": "Termināļa savienojums tika pārtraukts. Tas var notikt, ja serveris tiek restartēts.",
   "tab.title": "Terminālis",
 }

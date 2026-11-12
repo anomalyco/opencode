@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/effect.js"
+import { ai, Media } from "../../src/effect.js"
 import { OpenRouter } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -21,14 +21,14 @@ describe("OpenRouter Images recorded", () => {
     "renders Gemini at the requested 2K tier",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: openrouter.image("google/gemini-3.1-flash-image"),
           prompt: "A simple flat black circle centered on a plain white background.",
           aspect: "16:9",
           resolution: "2K",
         })
 
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 2752, height: 1536 })
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 2752, height: 1536 })
       }),
     { timeout: 120_000 },
   )
@@ -37,14 +37,14 @@ describe("OpenRouter Images recorded", () => {
     "renders FLUX 3 from an aspect ratio and tier",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: openrouter.image("black-forest-labs/flux-3-image-klein"),
           prompt: "A simple flat black circle centered on a plain white background.",
           aspect: "16:9",
           resolution: "1K",
         })
 
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1360, height: 768 })
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1360, height: 768 })
       }),
     { timeout: 120_000 },
   )
@@ -54,7 +54,7 @@ describe("OpenRouter Images recorded", () => {
     "edits an image through input references",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: openrouter.image("openai/gpt-image-1-mini"),
           prompt: "Keep the simple shape and change it from black to bright green.",
           images: [
@@ -68,8 +68,8 @@ describe("OpenRouter Images recorded", () => {
           providerOptions: { outputFormat: "jpeg", quality: "low", outputCompression: 10 },
         })
 
-        expect(response.image.mediaType).toBe("image/jpeg")
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1024, height: 1024 })
+        expect(response.images[0].mediaType).toBe("image/jpeg")
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1024, height: 1024 })
       }),
     { timeout: 120_000 },
   )

@@ -5,6 +5,7 @@ const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 const modules = {
   fixture: source("../../gui-plugins/src/browser/panel.fixture.tsx"),
   embeds: source("../src/runtime/plugin/embeds.tsx"),
+  panelMotion: source("../src/shell/panel-motion.ts"),
   language: source("../src/runtime/i18n/language.tsx"),
 }
 
@@ -12,14 +13,16 @@ story.beforeEach(async ({ mount, page }) => {
   // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
   await mount("ui-line-comment--editor")
   await page.evaluate(async (modules) => {
-    const [{ mountBrowserPane }, { createEmbeds }, language] = await Promise.all([
+    const [{ mountBrowserPane }, { createEmbeds }, panelMotion, language] = await Promise.all([
       import(modules.fixture),
       import(modules.embeds),
+      import(modules.panelMotion),
       import(modules.language),
     ])
 
     mountBrowserPane({
       createEmbeds,
+      panelMotion,
       LanguageProvider: language.LanguageProvider,
       UiI18nBridge: language.UiI18nBridge,
       useLanguage: language.useLanguage,
@@ -96,6 +99,64 @@ story("paints a still of the page in place of the native view while a panel move
   await motion.click()
   await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
+})
+
+story("paints a still of the page in place of the native view while a resize handle is dragged", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handle = root.getByTestId("pane-resize-handle")
+  const native = root.getByTestId("native-Alpha")
+  const still = root.locator("#browser-panel img")
+
+  // A native view's bounds land on screen frames before the DOM around it, so one left up through a drag jumps against
+  // its pane on every move. A click on the handle moves nothing and must not blink the page out. Read in the same task
+  // as each event, so a view hidden and shown again before the next frame cannot pass.
+  const visible = await handle.evaluate((element) => {
+    const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+    const box = element.getBoundingClientRect()
+    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    document.dispatchEvent(new PointerEvent("pointerup", at))
+    const click = read()
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    const pressed = read()
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
+
+    return { click, pressed, dragging: read() }
+  })
+
+  expect(visible).toEqual({ click: "true", pressed: "true", dragging: "false" })
+  await expect(still).toBeVisible()
+  await handle.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    document.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: box.x, clientY: box.y }),
+    )
+  })
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+})
+
+story("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handle = root.getByTestId("pane-resize-handle")
+  const native = root.getByTestId("native-Alpha")
+  const still = root.locator("#browser-panel img")
+
+  // Alt+Tab mid-drag delivers no pointerup; the page must not stay locked behind a still.
+  await handle.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
+  })
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(handle).toHaveAttribute("data-dragging", "")
+
+  await handle.evaluate(() => window.dispatchEvent(new FocusEvent("blur")))
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+  await expect(handle).not.toHaveAttribute("data-dragging")
+  expect(await handle.evaluate(() => document.body.style.userSelect)).toBe("")
 })
 
 story("never flies a still of a page the tab has navigated away from", async ({ page }) => {
@@ -179,6 +240,33 @@ story("keeps a still of the page under floating content that covers it", async (
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
+story(
+  "freezes on the latest capture when floating content closes and reopens before a capture lands",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-pane-fixture")
+    const popover = root.getByRole("button", { name: "Toggle popover", exact: true })
+    const still = root.locator("#browser-panel img")
+    const native = root.getByTestId("native-Alpha")
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+    await popover.click()
+    await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+    await popover.click()
+    await expect(page.locator("[data-popper-positioner]")).toHaveCount(0)
+    // The pane measures the overlap on the next animation frame; nothing on screen changes while the capture is held.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await popover.click()
+    await expect(root.getByText("Captures: 2", { exact: true })).toBeVisible()
+
+    // Both captures land in order; the first one belongs to the cover that already closed.
+    await root.getByRole("button", { name: "Release capture", exact: true }).click()
+    await expect(native).toHaveAttribute("data-visible", "false")
+    await expect(still).toBeVisible()
+    // The fixture draws each capture a pixel wider: the second one is 5 pixels wide.
+    await expect(still).toHaveJSProperty("naturalWidth", 5)
+  },
+)
+
 story("keeps a still of the page under an open dialog instead of blanking the pane", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
@@ -206,6 +294,26 @@ story("keeps a still of the page under an open dialog instead of blanking the pa
   await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+})
+
+story("hides the native page under a dialog even when its still never arrives", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const native = root.getByTestId("native-Alpha")
+  const toggle = root.getByRole("button", { name: "Toggle dialog", exact: true })
+  await page.clock.install()
+  await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+  await toggle.click()
+  await page.clock.runFor(100)
+  await expect(native).toHaveAttribute("data-visible", "true")
+
+  // The capture never settles: after its timeout the page hides over the box background instead of the dialog.
+  await page.clock.runFor(5_000)
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(root.locator("#browser-panel img")).toHaveCount(0)
+
+  await toggle.click()
+  await page.clock.runFor(100)
+  await expect(native).toHaveAttribute("data-visible", "true")
 })
 
 story("comments on a picked element over a still of the page", async ({ page }) => {
@@ -275,6 +383,31 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByTestId("fixture-comments")).toHaveText("")
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+story("leaves the picker off and Escape to the app when main never answers", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await root.getByRole("button", { name: "Drop picker requests", exact: true }).click()
+  await picker.click()
+  await expect(picker).toHaveAttribute("aria-pressed", "false")
+
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  await expect(address).toBeFocused()
+  await address.press("Escape")
+  await expect(address).not.toBeFocused()
+})
+
+story("replaces an open page note with the comment for an element picked meanwhile", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.locator('[data-component="browser-address"]').hover()
+  await root.getByRole("button", { name: "Add page to session", exact: true }).click()
+  await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
+
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(1)
+  await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
 })
 
 story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
@@ -504,6 +637,14 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("https://example.com/")
   await address.press("Enter")
+  await expect(address).not.toBeFocused()
+  await expect(address).toHaveValue("https://example.com/")
+  await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
+
+  // Focusing and leaving the field before the browser reports keeps the submitted address.
+  await address.focus()
+  await expect(address).toHaveValue("https://example.com/")
+  await address.press("Escape")
   await expect(address).not.toBeFocused()
   await expect(address).toHaveValue("https://example.com/")
   await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
@@ -757,6 +898,19 @@ story("shows the page's cookies in the site information and clears them", async 
   await expect(site).toContainText("3 cookies in use")
   await site.getByRole("button", { name: "Clear", exact: true }).click()
   await expect(site).toContainText("0 cookies in use")
+})
+
+story("says a failed cookie read failed and reads again on retry", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Fail next site read", exact: true }).click()
+  await root.getByRole("button", { name: "Site information", exact: true }).click()
+  const site = page.getByRole("dialog")
+  await expect(site).toContainText("Request failed")
+  const retry = site.getByRole("button", { name: "Try again", exact: true })
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(site).toContainText("3 cookies in use")
+  await expect(site.getByRole("button", { name: "Clear", exact: true })).toBeEnabled()
 })
 
 story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {

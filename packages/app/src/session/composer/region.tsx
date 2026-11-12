@@ -14,7 +14,7 @@ import { setCursorPosition } from "@/composer/editor/dom"
 import { promptLength } from "@/composer/prompt-parts"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { showToast } from "@/shell/notifications/toast"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -243,7 +243,9 @@ export function createActiveSessionRegion(input: {
     setActiveMessage: input.timeline.actions.setActiveMessage,
   })
 
-  const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
+  const revertMessage: NonNullable<SessionUserActions["revert"]> = (target) =>
+    revert.to(target.messageID, target.sessionID)
+
   const fork = useSessionFork()
   const forkMessage: NonNullable<SessionUserActions["fork"]> = (target) => fork(target).then(() => undefined)
 
@@ -291,8 +293,12 @@ export function createActiveSessionRegion(input: {
     showToast({ title: language.t("common.requestFailed") })
   }
 
+  const handoffs = useServer().ctx.handoff
+
   const pendingSteer: TimelinePendingActions = {
-    status: (sessionID, messageID) => data.session.pending.status(sessionID, messageID),
+    // A prompt held for its Location's agents and models shows as sending until it has a server row.
+    status: (sessionID, messageID) =>
+      handoffs.held(sessionID, messageID) ? "sending" : data.session.pending.status(sessionID, messageID),
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox
         .update({ sessionID, inboxID: messageID, delivery: "queue" })
@@ -332,7 +338,12 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    onResponseSubmit: input.timeline.actions.resume,
+    // A reader far enough up to see the jump-to-latest button stays put; anyone closer is taken to the new prompt.
+    onResponseSubmit: () => {
+      const scroll = input.timeline.scroll
+
+      if (input.timeline.follow.following() || !(scroll.overflow && scroll.jump)) input.timeline.actions.resume()
+    },
     openParent,
     focusPrompt: () => focusPrompt(),
     setPromptRef: (element: HTMLDivElement) => {
@@ -379,11 +390,7 @@ export function createActiveSessionRegion(input: {
 
         if (source.length) prompt.capture().quoteSource.add(contextItemKey(item), source)
 
-        if (anchor) {
-          prompt.capture().quoteSource.pend(contextItemKey(item))
-
-          return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
-        }
+        if (anchor) return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
 
         focusPrompt()
       },
@@ -413,7 +420,6 @@ export function ActiveSessionComposerRegion(props: {
   screen: SessionScreen
   model: SessionComposerController
   suggestionBoundary: () => HTMLElement | undefined
-  onReveal: (target: string) => void
 }) {
   const location = useWorkspaceLocation()
   const data = useData()
@@ -422,23 +428,35 @@ export function ActiveSessionComposerRegion(props: {
   const openRoute = useOpenSessionRoute()
 
   // Only the server's LocationNotFoundError for the session's own Location replaces the composer.
-  const missing = createMemo(() => {
-    const ref = location().missing
-    const info = props.session.data.info()
+  // A refetched session info (on reconnect) must not remount the keyed view and close its open menu.
+  const missing = createMemo(
+    () => {
+      const ref = location().missing
+      const info = props.session.data.info()
 
-    if (!ref || !info || !sameDirectory(info.location.directory, ref.directory)) return
+      if (!ref || !info || !sameDirectory(info.location.directory, ref.directory)) return
 
-    return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
-  })
+      return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
+    },
+    undefined,
+    {
+      equals: (previous, next) =>
+        previous?.directory === next?.directory &&
+        previous?.sessionID === next?.sessionID &&
+        previous?.projectID === next?.projectID,
+    },
+  )
 
-  // Subagents count while their session runs, or while their blocking call waits for its child session.
   const subagents = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background.subagents().map((task) => ({
-      ...task,
-      agent: task.agent ?? (task.sessionID ? data.session.get(task.sessionID)?.agent : undefined),
-      key: task.id,
-      target: task.partID ?? task.id,
-    })),
+    props.model.region.state.background
+      .tasks()
+      .filter((task) => task.type === "subagent")
+      .map((task) => ({
+        ...task,
+        agent: task.agent ?? data.session.get(task.sessionID)?.agent,
+        key: task.id,
+        target: task.id,
+      })),
   )
 
   const shells = createMemo<SessionActivityItem[]>(() =>
@@ -462,24 +480,14 @@ export function ActiveSessionComposerRegion(props: {
       ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
       .at(-1)?.todo === true
 
-  const open = (item: SessionActivityItem) => {
-    const current = props.session.identity.params.id
-
-    if (!current) return
-
-    if (item.sessionID) return openRoute(current, item.sessionID)
-
-    // A starting subagent call has no session yet, so it lives in this timeline.
-    props.onReveal(item.target)
-  }
-
   const stop = (item: SessionActivityItem) => {
-    const request = item.sessionID
-      ? server.api.session.interrupt({ sessionID: item.sessionID })
-      : server.api.shell.remove({
-          id: item.target,
-          location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
-        })
+    const request =
+      item.type === "subagent"
+        ? server.api.session.interrupt({ sessionID: item.sessionID })
+        : server.api.shell.remove({
+            id: item.target,
+            location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
+          })
 
     return request.then(
       () => true,
@@ -570,7 +578,11 @@ export function ActiveSessionComposerRegion(props: {
               subagents={subagents()}
               shells={shells()}
               shell={shell}
-              onOpen={open}
+              onOpen={(item) => {
+                const current = props.session.identity.params.id
+
+                if (current) openRoute(current, item.sessionID)
+              }}
               onStop={stop}
               onEmpty={props.model.region.focusPrompt}
             />

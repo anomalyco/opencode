@@ -982,6 +982,7 @@ export function createData(config: CreateDataInput) {
             existing.rawFinish = undefined
             existing.native = undefined
             existing.time.created = event.data.started
+            existing.time.firstToken = undefined
             existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
@@ -1007,6 +1008,11 @@ export function createData(config: CreateDataInput) {
       case "session.step.streamed":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.time.streamed = event.created
+        })
+        return
+      case "session.step.first-token":
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.firstToken = event.created
         })
         return
       case "session.step.ended": {
@@ -1841,7 +1847,14 @@ export function createData(config: CreateDataInput) {
               (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
             )
             const messages = local.length === 0 ? fetched : [...fetched, ...local]
+            // The transcript only holds delivered input, so a pending row it contains missed its
+            // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
+            const delivered = [...admitted].filter((id) => ids.has(id))
             batch(() => {
+              delivered.forEach((id) => {
+                outbox.delete(id)
+                removePending(sessionID, id)
+              })
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
               setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)

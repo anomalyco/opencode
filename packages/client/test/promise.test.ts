@@ -62,10 +62,13 @@ test("exposes every standard HTTP API group", () => {
     "persistentPty",
     "media",
     "schedule",
+    "artifacts",
+    "job",
     "migration",
     "usage",
     "config",
   ])
+  expect(Object.keys(client.experimental.job)).toEqual(["list"])
   expect(Object.keys(client.experimental.session)).toEqual([
     "stats",
     "import",
@@ -1047,7 +1050,14 @@ test("session methods use the public HTTP contract", async () => {
         })
       }
       if (url.includes("/prompt")) return Response.json(admission)
-      if (url.includes("/generate")) return Response.json({ data: { text: "A transient answer" } })
+      if (url.includes("/generate"))
+        return Response.json({
+          data: {
+            text: "A transient answer",
+            tokens: { input: 12, output: 3, reasoning: 0, cache: { read: 40, write: 0 } },
+            cost: 0.0001,
+          },
+        })
       if (url.includes("/synthetic")) return Response.json(syntheticAdmission)
       if (url.endsWith("/compact")) return Response.json(compactionAdmission)
       if (url.includes("/context")) return Response.json({ data: [] })
@@ -1095,6 +1105,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(generated.text).toBe("A transient answer")
+  expect(generated.tokens.cache.read).toBe(40)
   expect(interrupted).toEqual({ interrupted: true })
   expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
   expect(context).toEqual([])

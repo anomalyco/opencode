@@ -1,11 +1,22 @@
-import { createMemo, onCleanup } from "solid-js"
+import { createMemo, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import type { ComposerDelivery } from "../adapter"
+import type { QuoteCommentView } from "../quote-comment-machine"
+
+const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
+const sendLabels = {
+  queue: "session.quote.queue",
+  steer: "session.quote.steer",
+  send: "session.quote.send",
+} as const
 
 const GAP = 8
 
@@ -15,15 +26,22 @@ export function QuoteCommentEditor(props: {
   anchor: HTMLElement
   source?: ComposerQuoteAnchor
   text: string
+  /** The saved comment. */
   comment: string
+  view: QuoteCommentView
   mention: (query: string) => Promise<string[]>
+  onInput: (draft: string) => void
   onSubmit: (comment: string) => void
   onClose: (focus?: boolean) => void
+  send?: {
+    available: boolean
+    delivery: ComposerDelivery | undefined
+    onSubmit: (comment: string) => void
+  }
 }) {
   const language = useLanguage()
 
   const [state, setState] = createStore({
-    draft: props.comment,
     rect: bounds(props.anchor),
     viewport: window.innerWidth,
     viewportHeight: window.innerHeight,
@@ -72,7 +90,7 @@ export function QuoteCommentEditor(props: {
 
     if (target instanceof Node && (element?.contains(target) || props.anchor.contains(target))) return
 
-    if (state.draft.trim() === props.comment.trim()) props.onClose()
+    if (props.view.canDismissOutside) props.onClose()
   })
 
   const left = () => Math.min(Math.max(source()?.left ?? state.rect.left, GAP), state.viewport - width() - GAP)
@@ -87,6 +105,19 @@ export function QuoteCommentEditor(props: {
 
   const availableHeight = () => Math.max(0, bottom() - GAP)
   const top = () => Math.max(GAP, bottom() - state.height)
+
+  const alternateSubmit = createMemo(() => {
+    const send = props.send
+
+    if (!send) return
+
+    return {
+      label: language.t(sendLabels[send.delivery ?? "send"]),
+      keys: [IS_MAC ? "⌘" : language.t("common.key.ctrl"), "⏎"],
+      disabled: !send.available,
+      onSubmit: send.onSubmit,
+    }
+  })
 
   return (
     <Portal>
@@ -113,23 +144,24 @@ export function QuoteCommentEditor(props: {
           opacity: state.height === 0 ? 0 : undefined,
         }}
       >
-        <div
-          data-scrollable
-          class="overflow-y-auto rounded-[8px] shadow-[var(--v2-elevation-floating)]"
+        <MenuScroll
+          class="rounded-[8px] shadow-[var(--v2-elevation-floating)]"
           style={{ "max-height": `${availableHeight()}px` }}
         >
           <LineCommentEditor
             variant="compact"
             style={{ "--line-comment-preview-lines": props.source ? 2 : 4 }}
-            value={state.draft}
-            onInput={(value) => setState("draft", value)}
+            value={props.view.draft}
+            onInput={props.onInput}
             onCancel={() => props.onClose(true)}
             onSubmit={props.onSubmit}
+            submitting={props.view.sending}
+            alternateSubmit={alternateSubmit()}
             placeholder={language.t("session.quote.optionalCommentPlaceholder")}
             submitLabel={language.t(
               props.comment.trim()
                 ? "common.save"
-                : state.draft.trim()
+                : props.view.draft.trim()
                   ? "session.quote.addComment"
                   : "session.quote.done",
             )}
@@ -137,7 +169,15 @@ export function QuoteCommentEditor(props: {
             mention={{ items: props.mention }}
             selection={<span dir="auto">{props.text}</span>}
           />
-        </div>
+          <Show when={props.view.failed}>
+            <p
+              role="alert"
+              class="rounded-b-[8px] bg-v2-background-bg-layer-01 px-3 pb-3 text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-base"
+            >
+              {language.t("session.quote.sendFailed")}
+            </p>
+          </Show>
+        </MenuScroll>
       </div>
     </Portal>
   )

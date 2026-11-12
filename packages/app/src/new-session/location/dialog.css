@@ -111,10 +111,6 @@
   color: var(--v2-text-text-faint);
 }
 
-.new-session-location-workspace .command-palette-row-icon {
-  color: var(--v2-icon-icon-base);
-}
-
 .new-session-location-workspace .command-palette-row-text > .command-palette-title {
   max-width: 60%;
   flex-shrink: 0;
@@ -163,6 +159,26 @@
   flex-shrink: 0;
   align-items: center;
   gap: 6px;
+}
+
+.new-session-location-branch {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.new-session-location-branch [data-slot="icon-svg"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.new-session-location-branch > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .new-session-location-tag {

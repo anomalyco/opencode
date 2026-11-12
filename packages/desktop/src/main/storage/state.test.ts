@@ -93,6 +93,16 @@ describe("state store", () => {
     ])
   })
 
+  // StorageUpdate broadcasts and acknowledges the revision `update` returns, so a closed store must refuse first.
+  test("refuses updates after close without handing out a revision", () => {
+    const { store } = open()
+    expect(store.update("w", { tabs: "[]" }, [])).toBe(1)
+    store.close()
+    expect(() => store.update("w", {}, [])).toThrow("Write-behind buffer is closed")
+    expect(() => store.set("w", "tabs", "[1]")).toThrow("Write-behind buffer is closed")
+    expect(store.items("w").revision).toBe(1)
+  })
+
   test("survives close and reopen on disk", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "opencode-state-"))
     roots.push(root)

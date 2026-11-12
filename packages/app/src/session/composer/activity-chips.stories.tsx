@@ -6,6 +6,7 @@ import {
   STORY_TIME,
   editThenTestDocument,
   largeCompletedDocument,
+  subagentReport,
 } from "@opencode/session-ui/storybook"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
@@ -85,7 +86,7 @@ function Preview(props: PreviewArgs) {
   )
 }
 
-// Each stage lists the work still running; finished work stays in the timeline as completed calls.
+// Each stage lists the work still running; finished subagents report back in the timeline.
 const stages = [
   { started: 0, finished: 0, shells: 0, finishedShells: 0 },
   { started: 1, finished: 0, shells: 0, finishedShells: 0 },
@@ -109,20 +110,17 @@ function liveDocument(stage: Stage): SessionDocument {
         type: "tool",
         id: `tool_${value.id}`,
         name: "subagent",
-        state:
-          index < stage.finished
-            ? {
-                status: "completed",
-                input: { agent: value.agent, description: value.description, prompt: value.description },
-                content: [{ type: "text", text: "No issues found." }],
-                metadata: { sessionID: value.id, status: "completed" },
-              }
-            : {
-                status: "running",
-                input: { agent: value.agent, description: value.description, prompt: value.description },
-                metadata: { sessionID: value.id },
-              },
-        time: { created: STORY_TIME + 301_000 + index * 1_000, ran: STORY_TIME + 301_100 + index * 1_000 },
+        state: {
+          status: "completed",
+          input: { agent: value.agent, description: value.description, prompt: value.description },
+          content: [{ type: "text", text: "The subagent is working in the background." }],
+          metadata: { sessionID: value.id, status: "running" },
+        },
+        time: {
+          created: STORY_TIME + 301_000 + index * 1_000,
+          ran: STORY_TIME + 301_100 + index * 1_000,
+          completed: STORY_TIME + 301_200 + index * 1_000,
+        },
       }),
     ),
     ...shells.slice(0, stage.shells).map(
@@ -162,13 +160,29 @@ function liveDocument(stage: Stage): SessionDocument {
           text: "I'll delegate the audit to subagents and keep the dev server and tests running in the background.",
         },
         ...tools,
-        ...(done
-          ? [{ type: "text" as const, text: "Both audits passed and the background commands have exited." }]
-          : []),
       ],
-      time: { created: STORY_TIME + 300_500, completed: done ? STORY_TIME + 310_000 : undefined },
+      time: { created: STORY_TIME + 300_500, completed: stage.finished ? STORY_TIME + 306_000 : undefined },
     },
+    ...subagents.slice(0, stage.finished).map((value, index) =>
+      subagentReport(`msg_report_${value.id}`, STORY_TIME + 307_000 + index * 1_000, {
+        childID: value.id,
+        agent: value.agent,
+        description: value.description,
+        state: "completed",
+        body: "No issues found.",
+      }),
+    ),
   ]
+
+  if (done)
+    messages.push({
+      id: "msg_activity_summary",
+      type: "assistant",
+      agent: "build",
+      model: STORY_MODEL,
+      content: [{ type: "text", text: "Both audits passed and the background commands have exited." }],
+      time: { created: STORY_TIME + 309_000, completed: STORY_TIME + 310_000 },
+    })
 
   return { sessionID: CURRENT_SESSION_ID, messages, status: done ? { type: "idle" } : { type: "busy" }, diffs: [] }
 }
@@ -206,7 +220,7 @@ function LiveActivity() {
           .slice(stage().finishedShells, stage().shells)
           .map((_, index) => shellItem(index + stage().finishedShells)),
         onOpen: (item) => {
-          // The app opens the shell's tool call, or the group holding it, and centers it in the timeline.
+          // The preview has no child route, so show the launch in its timeline.
           const part = document.querySelector(
             `[data-slot="story-timeline"] [data-timeline-part-ids*="tool_${item.target}"]`,
           )

@@ -3,6 +3,7 @@ export * as Instructions from "./index.js"
 import { createHash } from "crypto"
 import { Instruction } from "@opencode/schema/instruction"
 import { Data, Effect, Option, Schema } from "effect"
+import { canonicalJson } from "../util/canonical-json.js"
 
 export const Key = Instruction.Key
 export type Key = Instruction.Key
@@ -46,7 +47,7 @@ export declare namespace Source {
     readonly read: Effect.Effect<A | Unavailable | Removed>
     readonly render: {
       readonly initial: (current: A) => string
-      readonly changed: (previous: A, current: A) => string
+      readonly changed: (previous: A, current: A) => string | undefined
       readonly removed?: (previous: A) => string
     }
   }
@@ -109,7 +110,8 @@ export function make<A>(source: Source.Definition<A>): List {
         const after = decodeValue(current)
         if (after === undefined) return undefined
         if (before === undefined) return initial(after)
-        return requireText(source.key, "changed", source.render.changed(before, after))
+        const text = source.render.changed(before, after)
+        return text === undefined ? undefined : requireText(source.key, "changed", text)
       },
       removed: (previous) => {
         const decoded = decodeValue(previous)
@@ -201,7 +203,7 @@ export function renderUpdate(
 }
 
 export function hash(value: Schema.Json) {
-  return Hash.make(createHash("sha256").update(canonical(value)).digest("hex"))
+  return Hash.make(createHash("sha256").update(canonicalJson(value)).digest("hex"))
 }
 
 export function applyHashDelta(values: Values, delta: Delta): Values {
@@ -235,6 +237,36 @@ export function diffByKey<A>(
   }
 }
 
+/**
+ * Renders a keyed list update: added, changed, and removed entries as deltas,
+ * or the full list restated when no entry differs.
+ */
+export function listUpdate<A>(input: {
+  readonly key: (value: A) => string
+  readonly changed: (previous: A, current: A) => boolean
+  readonly entries: (values: ReadonlyArray<A>) => ReadonlyArray<string>
+  readonly render: (values: ReadonlyArray<A>) => string
+  readonly text: {
+    readonly replaced: string
+    readonly added: string
+    readonly changed: string
+    readonly removed: (keys: string) => string
+  }
+}) {
+  return (previous: ReadonlyArray<A>, current: ReadonlyArray<A>) => {
+    const diff = diffByKey(previous, current, input.key, input.changed)
+    if (diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0)
+      return [input.text.replaced, input.render(current)].join("\n")
+    return [
+      ...(diff.added.length === 0 ? [] : [input.text.added, ...input.entries(diff.added)]),
+      ...(diff.changed.length === 0
+        ? []
+        : [input.text.changed, ...input.entries(diff.changed.map((change) => change.current))]),
+      ...(diff.removed.length === 0 ? [] : [input.text.removed(diff.removed.map(input.key).join(", "))]),
+    ].join("\n")
+  }
+}
+
 function render(parts: ReadonlyArray<string>) {
   return parts.join("\n\n")
 }
@@ -247,16 +279,6 @@ function isUnavailable(value: unknown): value is Unavailable {
 
 function isRemoved(value: unknown): value is Removed {
   return value === removed
-}
-
-function canonical(value: Schema.Json): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`
-  if (value !== null && typeof value === "object")
-    return `{${Object.entries(value)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
-      .join(",")}}`
-  return JSON.stringify(value)
 }
 
 function requireText(key: Key, kind: string, text: string) {

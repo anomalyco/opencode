@@ -8,11 +8,13 @@ import { ServerConfig } from "@opencode/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
+import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Integration } from "../integration.js"
+import { IntegrationConnection } from "../integration/connection.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
@@ -48,12 +50,10 @@ const isRpcType = (type: string): type is RpcEvent["type"] => type.startsWith("r
 const isRpcEvent = (event: Event.Payload): event is RpcEvent => isRpcType(event.type)
 const isPublicEvent = (event: Event.Payload): event is EventManifest.ServerEvent | RpcEvent =>
   EventManifest.isServer(event) || isRpcEvent(event)
-export const make = Effect.fn("PluginHost.make")(function* (
-  plugin: Pick<Interface, "list">,
-  pluginID: string = "test",
-) {
-  const app = yield* App.Metadata
+export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interface, "list">, pluginID: string) {
+  const app = yield* App.Service
   const agents = yield* Agent.Service
+  const artifacts = yield* Artifact.Service
   const aisdk = yield* AISDK.Service
   const providers = yield* Provider.Service
   const models = yield* Model.Service
@@ -80,11 +80,11 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const worktrees = yield* Worktree.Service
   const worktreeStrategies = yield* WorktreeStrategies.Service
   const currentWorktreeStrategies = location.workspaceID ? undefined : worktreeStrategies
-  const locationInfo = () =>
+  const locationInfo = (current: Location.Interface = location) =>
     new Location.Info({
-      directory: location.directory,
-      workspaceID: location.workspaceID,
-      project: location.project,
+      directory: current.directory,
+      workspaceID: current.workspaceID,
+      project: current.project,
     })
   const locationRef = (input?: { readonly location?: { readonly directory?: string; readonly workspace?: string } }) =>
     input?.location === undefined
@@ -98,23 +98,30 @@ export const make = Effect.fn("PluginHost.make")(function* (
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+  const atLocation = <A, E, R>(ref: Location.Ref, effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      return { location: locationInfo(yield* Location.Service), data: yield* effect }
+    }).pipe(Effect.provide(locations.get(ref)))
+
+  const sessionPermission = (input: Parameters<Plugin.Context["permission"]["get"]>[0]) =>
+    permission
+      .get(input.requestID)
+      .pipe(
+        Effect.flatMap((request) =>
+          request?.sessionID === input.sessionID
+            ? Effect.succeed(request)
+            : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
+        ),
+      )
 
   const decodeWorktree = Schema.decodeUnknownEffect(Worktree.Info)
   const decodeWorktrees = Schema.decodeUnknownEffect(Schema.Array(Worktree.ListEntry))
 
   const listAgents = Effect.fn("PluginHost.listAgents")((ref: Location.Ref) =>
-    Effect.gen(function* () {
-      const location = yield* Location.Service
-      const agents = yield* Agent.Service
-      return {
-        location: new Location.Info({
-          directory: location.directory,
-          workspaceID: location.workspaceID,
-          project: location.project,
-        }),
-        data: yield* agents.list(),
-      }
-    }).pipe(Effect.provide(locations.get(ref)), Effect.orDie),
+    atLocation(
+      ref,
+      Effect.flatMap(Agent.Service, (agents) => agents.list()),
+    ).pipe(Effect.orDie),
   )
 
   // Keep the instance graph's inferred types independent of Session handles.
@@ -213,10 +220,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
             add: (definition) =>
               editor.add({
                 ...definition,
-                sourceConnection:
-                  definition.sourceConnection?.type === "credential"
-                    ? { ...definition.sourceConnection, id: Credential.ID.make(definition.sourceConnection.id) }
-                    : definition.sourceConnection,
+                sourceConnection: definition.sourceConnection && connectionInfo(definition.sourceConnection),
               }),
             update: (id, update) => editor.update(Provider.ID.make(id), update),
             remove: (id) => editor.remove(Provider.ID.make(id)),
@@ -287,6 +291,31 @@ export const make = Effect.fn("PluginHost.make")(function* (
         text: generateText,
         image: generate.image,
         decisions: generate.decisions,
+      },
+      artifact: {
+        reload: artifacts.reload,
+        transform: (callback) =>
+          artifacts.transform((editor) => {
+            callback({
+              add: (definition) =>
+                editor.add({
+                  id: Artifact.ProviderID.make(definition.id),
+                  name: definition.name,
+                  capabilities: definition.capabilities,
+                  prompt: definition.prompt,
+                  create: definition.create,
+                  read: definition.read,
+                  update: definition.update,
+                  delete: definition.delete,
+                }),
+              remove: (id) => editor.remove(Artifact.ProviderID.make(id)),
+              default: {
+                get: () => editor.default.get(),
+                set: (providerID) =>
+                  editor.default.set(providerID === undefined ? undefined : Artifact.ProviderID.make(providerID)),
+              },
+            })
+          }),
       },
     },
     generate: {
@@ -369,17 +398,11 @@ export const make = Effect.fn("PluginHost.make")(function* (
       reload: integration.reload,
       connection: {
         active: (id) => integration.connection.active(Integration.ID.make(id)),
-        resolve: (connection) =>
-          integration.connection.resolve(
-            connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
-          ),
+        resolve: (connection) => integration.connection.resolve(connectionInfo(connection)),
         status: (input) =>
           integration.connection.status({
             integrationID: Integration.ID.make(input.integrationID),
-            connection:
-              input.connection.type === "credential"
-                ? { ...input.connection, id: Credential.ID.make(input.connection.id) }
-                : input.connection,
+            connection: connectionInfo(input.connection),
             status: input.status,
           }),
       },
@@ -403,18 +426,10 @@ export const make = Effect.fn("PluginHost.make")(function* (
       list: (input) => {
         const ref = locationRef(input)
         if (ref && !isCurrentLocation(ref))
-          return Effect.gen(function* () {
-            const location = yield* Location.Service
-            const mcp = yield* Mcp.Service
-            return {
-              location: new Location.Info({
-                directory: location.directory,
-                workspaceID: location.workspaceID,
-                project: location.project,
-              }),
-              data: yield* mcp.servers(),
-            }
-          }).pipe(Effect.provide(locations.get(ref)))
+          return atLocation(
+            ref,
+            Effect.flatMap(Mcp.Service, (mcp) => mcp.servers()),
+          )
         return response(mcp.servers())
       },
       reload: mcp.reload,
@@ -432,26 +447,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
     permission: {
       hook: (name, callback) => hooks.register("permission", name, callback),
       list: (input) => permission.forSession(input.sessionID),
-      get: (input) =>
-        permission
-          .get(input.requestID)
-          .pipe(
-            Effect.flatMap((request) =>
-              request?.sessionID === input.sessionID
-                ? Effect.succeed(request)
-                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
-            ),
-          ),
+      get: sessionPermission,
       reply: (input) =>
-        permission
-          .get(input.requestID)
-          .pipe(
-            Effect.flatMap((request) =>
-              request?.sessionID === input.sessionID
-                ? permission.reply({ requestID: input.requestID, reply: input.decision, message: input.message })
-                : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
-            ),
+        sessionPermission(input).pipe(
+          Effect.andThen(() =>
+            permission.reply({ requestID: input.requestID, reply: input.decision, message: input.message }),
           ),
+        ),
       // Plain rejections stay defects, as for built-in tools, so they end the step.
       assert: (input) =>
         permission.assert(input).pipe(
@@ -586,7 +588,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
       switchAgent: sessions.switchAgent,
       switchModel: sessions.switchModel,
       prompt: sessions.prompt,
-      generate: (input) => sessions.generate(input).pipe(Effect.map((text) => ({ text }))),
+      generate: sessions.generate,
       command: (input) => sessions.command({ ...input, command: input.name }),
       compact: sessions.compact,
       update: Effect.fn(function* (input) {
@@ -631,6 +633,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
 export const requirements = LayerNode.group([
   App.node,
   Agent.node,
+  Artifact.node,
   AISDK.node,
   Provider.node,
   Model.node,
@@ -733,6 +736,14 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     integrationID: Integration.ID.make(input.integrationID),
     method: input.method,
   }
+}
+
+function connectionInfo(
+  connection:
+    | (Omit<IntegrationConnection.CredentialInfo, "id"> & { readonly id: string })
+    | IntegrationConnection.EnvInfo,
+): IntegrationConnection.Info {
+  return connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection
 }
 
 function credential(value: Credential.OAuth) {

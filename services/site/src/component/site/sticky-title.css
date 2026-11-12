@@ -1,0 +1,186 @@
+/* Settings › Sticky title (sticky-title.tsx). The row is the one the product breadcrumb uses: level
+   with the logo beside the sidebar, the first row under the top bar on phones. The bar covers the
+   window from its top edge to just above the content line, so the page passes under it. The title
+   shrinks over --sticky-range of scrolling once its top reaches the row. */
+[data-site] :is(h1[data-component="page-title"], [data-component="sticky-title"]) {
+  --sticky-top: var(--top);
+  --sticky-row: var(--logo-height);
+  --sticky-cover: calc(var(--top) + var(--logo-height) + var(--logo-gap) - 0.5rem);
+  --sticky-range: 80px;
+
+  @media (max-width: 60rem) {
+    --sticky-top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+    --sticky-row: 2.75rem;
+    --sticky-cover: calc(var(--sticky-top) + var(--sticky-row));
+  }
+}
+
+[data-site] [data-component="sticky-title"] {
+  display: none;
+}
+
+/* The bar's animation reads the title's timeline, so the timeline's name is lifted to the parent. */
+[data-site] :has(> h1[data-component="page-title"][data-sticky]) {
+  timeline-scope: --page-title;
+}
+
+[data-site] h1[data-component="page-title"][data-sticky] {
+  position: relative;
+  z-index: 6;
+  transform-origin: var(--x-start, left) top;
+  view-timeline: --page-title block;
+  view-timeline-inset: var(--sticky-top) auto;
+
+  + [data-component="sticky-title"] {
+    display: block;
+    position: fixed;
+    top: var(--banner-offset, 0px);
+    left: var(--sticky-left, 0);
+    z-index: 5;
+    width: var(--sticky-width, 100%);
+    height: var(--sticky-cover);
+    background: var(--bg);
+    visibility: hidden;
+    opacity: 0;
+
+    > div {
+      position: absolute;
+      top: var(--sticky-top);
+      inset-inline-start: 0;
+      inset-inline-end: 0;
+      display: flex;
+      align-items: center;
+      height: var(--sticky-row);
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    [data-slot="current"] {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-strong);
+    }
+
+    /* Phones: the bar and the top bar read as one header, so the top bar's hairline moves to the
+       bar's bottom edge and shows with the bar. */
+    @media (max-width: 60rem) {
+      inset-inline-start: 0;
+      width: 100%;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0;
+        height: 1px;
+        background: var(--border);
+      }
+
+      > div {
+        inset-inline-start: var(--edge);
+        inset-inline-end: var(--edge);
+      }
+    }
+  }
+
+  /* The V1 notice's frosted tint, without its rule, so nothing outlines the bar over dark blocks. */
+  &[data-sticky~="frosted"] + [data-component="sticky-title"] {
+    background: color-mix(in srgb, color-mix(in srgb, var(--bg-weak) 50%, var(--bg-weaker)) 92%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+}
+
+@media (max-width: 60rem) {
+  [data-site]:has(h1[data-component="page-title"][data-sticky]) [data-component="topbar"]::after {
+    display: none;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  [data-site] h1[data-component="page-title"][data-sticky] {
+    &,
+    + [data-component="sticky-title"],
+    + [data-component="sticky-title"] > div > * {
+      animation: sticky-title-shrink linear both;
+      animation-timeline: --page-title;
+      animation-range: exit 0% exit var(--sticky-range);
+    }
+
+    + [data-component="sticky-title"] {
+      animation-name: sticky-title-bar;
+    }
+
+    + [data-component="sticky-title"] > div > * {
+      animation-name: sticky-title-current;
+    }
+  }
+
+  /* Reduced motion: the title stays put and passes under the bar, which switches on at once. */
+  @media (prefers-reduced-motion: reduce) {
+    [data-site] h1[data-component="page-title"][data-sticky] {
+      z-index: auto;
+      animation: none;
+
+      + [data-component="sticky-title"],
+      + [data-component="sticky-title"] > div > * {
+        animation-range: exit 0% exit 1px;
+      }
+    }
+  }
+}
+
+@keyframes sticky-title-shrink {
+  85% {
+    opacity: 1;
+  }
+
+  99% {
+    pointer-events: auto;
+  }
+
+  to {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(var(--sticky-x, 0), calc(var(--sticky-range) + var(--sticky-y, 0px)))
+      scale(var(--sticky-scale, 1));
+  }
+}
+
+/* The bar fades in over the first quarter, so the frosted one doesn't snap in above the title. */
+@keyframes sticky-title-bar {
+  from {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  1% {
+    visibility: visible;
+  }
+
+  25%,
+  to {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@keyframes sticky-title-current {
+  from,
+  85% {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Beside the sidebar the bar is in the logo row, so its text stops short of the GitHub mark. */
+@media (min-width: 60.0625rem) {
+  [data-site] h1[data-component="page-title"][data-sticky] + [data-component="sticky-title"] > div {
+    inset-inline-end: var(--github-clear);
+  }
+}

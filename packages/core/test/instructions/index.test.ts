@@ -8,7 +8,7 @@ const source = (input: {
   key: string
   value: string | Instructions.Unavailable | Instructions.Removed
   initial?: (value: string) => string
-  changed?: (previous: string, current: string) => string
+  changed?: (previous: string, current: string) => string | undefined
   removed?: (value: string) => string
 }) =>
   Instructions.make({
@@ -180,9 +180,9 @@ describe("Instructions", () => {
   )
 
   test("hashes objects independently of key order", () => {
-    expect(Instructions.hash({ a: 1, b: { x: true, y: false } })).toBe(
-      Instructions.hash({ b: { y: false, x: true }, a: 1 }),
-    )
+    const hash = Instructions.Hash.make("21dc66ac9fce28900235d1cf33c48a7d131c80022dfa54990c7ef3070e926210")
+    expect(Instructions.hash({ a: 1, b: { x: true, y: false } })).toBe(hash)
+    expect(Instructions.hash({ b: { y: false, x: true }, a: 1 })).toBe(hash)
   })
 
   test("renders sources in composition order", () => {
@@ -202,12 +202,19 @@ describe("Instructions", () => {
     ).toThrow(new Instructions.DuplicateKeyError({ key: key("core/date") }))
   })
 
-  test("rejects empty model-visible renderings", () => {
-    const instructions = source({ key: "core/empty", value: "value", initial: () => "" })
+  test("rejects empty model-visible renderings while allowing silent updates", () => {
+    const empty = source({ key: "core/empty", value: "value", initial: () => "", changed: () => "" })
+    const silent = source({ key: "core/silent", value: "value", changed: () => undefined })
 
-    expect(() => Instructions.renderInitial(instructions, { "core/empty": "value" })).toThrow(
+    expect(() => Instructions.renderInitial(empty, { "core/empty": "value" })).toThrow(
       "Instruction source core/empty rendered an empty initial",
     )
+    expect(() =>
+      Instructions.renderUpdate(empty, { "core/empty": "before" }, { "core/empty": Option.some("after") }),
+    ).toThrow("Instruction source core/empty rendered an empty changed")
+    expect(
+      Instructions.renderUpdate(silent, { "core/silent": "before" }, { "core/silent": Option.some("after") }),
+    ).toBe("")
   })
 
   test("diffs list values by key", () => {

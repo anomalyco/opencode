@@ -1,15 +1,17 @@
 import { describe, expect } from "bun:test"
 import { FileSystem } from "@opencode/core/filesystem"
-import { DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Sink, Stream } from "effect"
+import { Clock, DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
 import { Agent } from "@opencode/core/agent"
+import { App } from "@opencode/core/app"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
+import { Flag } from "@opencode/core/flag"
 import { Image } from "@opencode/core/image"
 import { Instance } from "@opencode/core/instance/service"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -80,7 +82,16 @@ const enabledEntries = [
     }),
   }),
 ]
+const disabledEntries = [
+  new Document({
+    type: "document",
+    info: new Info({
+      experimental: new ConfigExperimental.Info({ schedules: false }),
+    }),
+  }),
+]
 const enabled = Config.testLayer(enabledEntries)
+const disabled = Config.testLayer(disabledEntries)
 /** A location whose flag the test turns on, counting every config read. */
 const toggle = { on: false, reads: 0 }
 const toggled = Layer.succeed(
@@ -89,7 +100,7 @@ const toggled = Layer.succeed(
     entries: () =>
       Effect.sync(() => {
         toggle.reads++
-        return toggle.on ? enabledEntries : []
+        return toggle.on ? enabledEntries : disabledEntries
       }),
     changes: () => Stream.empty,
   }),
@@ -116,7 +127,7 @@ const testEnvironment = Layer.effect(
     yield* files.mkdir(toggleDirectory).pipe(Effect.orDie)
     const spawner = ChildProcessSpawner.make((command) =>
       Effect.gen(function* () {
-        const script = command._tag === "StandardCommand" ? (command.args.at(-1) ?? command.command) : "pipeline"
+        const script = command._tag === "StandardCommand" ? String(command.args.at(-1) ?? command.command) : "pipeline"
         shellState.runs.push(script)
         if (shellState.hangMs > 0) yield* Effect.sleep(shellState.hangMs)
         const outBytes = new TextEncoder().encode(shellState.stdout)
@@ -206,6 +217,7 @@ const locations = makeGlobalNode({
   layer: Layer.effect(
     LocationServiceMap.Service,
     Effect.gen(function* () {
+      const app = yield* App.Service
       const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
       const saved = yield* PermissionSaved.Service
@@ -220,15 +232,13 @@ const locations = makeGlobalNode({
           }
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           return Layer.mergeAll(
-            ref.directory === enabledDirectory || ref.directory === missingDirectory
-              ? enabled
-              : ref.directory === toggleDirectory
-                ? toggled
-                : Layer.empty,
             configureAgent.pipe(
               Layer.provideMerge(
                 LayerNode.compile(
                   LayerNode.group([
+                    App.node,
+                    Config.node,
+                    Flag.node,
                     Location.node,
                     Environment.node,
                     PluginHooks.node,
@@ -240,7 +250,15 @@ const locations = makeGlobalNode({
                   ]),
                   {
                     replacements: [
+                      App.node.replace(Layer.succeed(App.Service, app)),
                       Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+                      Config.node.replace(
+                        ref.directory === enabledDirectory || ref.directory === missingDirectory
+                          ? enabled
+                          : ref.directory === toggleDirectory
+                            ? toggled
+                            : disabled,
+                      ),
                       SessionStore.node.replace(Layer.succeed(SessionStore.Service, store)),
                       PermissionSaved.node.replace(Layer.succeed(PermissionSaved.Service, saved)),
                       Location.node.replace(Layer.succeed(Location.Service, location(ref))),
@@ -269,7 +287,7 @@ const locations = makeGlobalNode({
       )
     }),
   ),
-  deps: [Bus.node, SessionStore.node, PermissionSaved.node],
+  deps: [App.node, Bus.node, SessionStore.node, PermissionSaved.node],
 })
 const it = testEffect(
   AppNodeBuilder.build(
@@ -1463,6 +1481,52 @@ describe("Schedule", () => {
         const { db } = yield* Database.Service
         expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
           payload: { text: expect.stringContaining("[Schedule paused after invalid check:") },
+        })
+      }),
+    )
+
+    it.effect("picks up a schedule created by another process sharing the DB while idle", () =>
+      Effect.gen(function* () {
+        const primary = yield* setup()
+        const { db } = yield* Database.Service
+        const runner = yield* Effect.forkChild(primary.run)
+        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+
+        // Insert directly into SQLite (bypassing primary.create so primary's in-memory doorbell is never opened)
+        // to simulate a short-lived `opencode serve` / `--standalone` writing a schedule and exiting.
+        const now = yield* Clock.currentTimeMillis
+        const externalID = Schedule.ID.create()
+        yield* db
+          .insert(ScheduleTable)
+          .values({
+            id: externalID,
+            session_id: sessionID,
+            name: "external",
+            check: null,
+            state: null,
+            checks: 0,
+            action: { type: "prompt", prompt: "Cross-process wake." },
+            when: { type: "in", in: "10 seconds" },
+            tz: "UTC",
+            status: "active",
+            next_due_at: now + 10_000,
+            ends_at: null,
+            remaining_runs: 1,
+            time_created: now,
+            time_updated: now,
+          })
+          .run()
+          .pipe(Effect.orDie)
+
+        // Bounded MAX_SLEEP (30s) wakes the idle loop, claims leadership, and fires the row.
+        yield* TestClock.adjust("30 seconds")
+        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+        yield* Fiber.interrupt(runner)
+
+        expect(yield* primary.get(externalID)).toMatchObject({
+          status: "done",
+          runCount: 1,
+          lastOutcome: "fired",
         })
       }),
     )

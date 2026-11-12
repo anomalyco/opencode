@@ -4,7 +4,15 @@ import { stat } from "node:fs/promises"
 import path from "node:path"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Added, Handoff, PersistentPty, ReadLines, Removed, type ReadResult } from "@opencode/schema/persistent-pty"
+import {
+  Added,
+  Handoff,
+  PersistentPty,
+  ReadLines,
+  Removed,
+  Updated,
+  type ReadResult,
+} from "@opencode/schema/persistent-pty"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { Bus } from "../bus.js"
@@ -13,15 +21,20 @@ import { Global } from "@opencode/util/global"
 import { ShellSelect } from "../shell/select.js"
 import {
   makeDaemonTransport,
+  type DaemonAttachment,
+  type DaemonError,
   type DaemonTransport,
+  type Exited,
+  type Metadata,
+  type ProcessInfo,
   type Role,
-  type StreamEvent,
+  type Signal,
+  type SubscribeInput,
   type WireResponse,
-  type WireTerminal,
 } from "./daemon.js"
 import { resolveBinary } from "#persistent-pty-binary"
 
-export type { Role, StreamEvent } from "./daemon.js"
+export type { Metadata, Role, Signal, StreamEvent } from "./daemon.js"
 export { Handoff } from "@opencode/schema/persistent-pty"
 export { available } from "#persistent-pty-binary"
 
@@ -40,18 +53,18 @@ export type Attachment = {
   readonly info: Info
   readonly role: Role
   readonly generation: number
-  readonly replay: {
-    readonly requestedOffset: number
-    readonly availableOffset: number
-    readonly endOffset: number
-    readonly truncated: boolean
-    readonly data: Uint8Array
-  }
+  readonly replay: DaemonAttachment["replay"]
   readonly activate: () => void
   readonly detach: () => void
 }
 
+/** The daemon could not be reached or started; the request never ran. */
 export class UnavailableError extends Schema.TaggedError<UnavailableError>()("PersistentPty.UnavailableError", {
+  message: Schema.String,
+}) {}
+
+/** The daemon rejected the request, or its reply was lost after it was sent, so it may have run. */
+export class RequestError extends Schema.TaggedError<RequestError>()("PersistentPty.RequestError", {
   message: Schema.String,
 }) {}
 
@@ -59,10 +72,59 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Persiste
   ptyID: Pty.ID,
 }) {}
 
+export class ProcessNotFoundError extends Schema.TaggedError<ProcessNotFoundError>()(
+  "PersistentPty.ProcessNotFoundError",
+  { processID: Schema.Number },
+) {}
+
 export class InvalidCwdError extends Schema.TaggedError<InvalidCwdError>()("PersistentPty.InvalidCwdError", {
   cwd: Schema.String,
   message: Schema.String,
 }) {}
+
+/** A non-PTY process run by the daemon, its output written to `outputPath`. */
+export type PipeInfo = {
+  readonly id: number
+  readonly pid: number | undefined
+  readonly command: readonly string[]
+  readonly cwd: string
+  readonly groupID: string
+  readonly lifecycle:
+    | { readonly status: "running" }
+    | { readonly status: "exited"; readonly exitCode: number | undefined; readonly signal: string | undefined }
+    | { readonly status: "failed"; readonly message: string }
+  /** Bytes counted so far; the file can hold a little more. Pair only bytes up to here with `outputLines`. */
+  readonly outputTail: number
+  readonly outputLines: number
+  readonly outputPath: string
+  readonly outputError: string | undefined
+  readonly metadata: Metadata
+  readonly startedAt: number
+  readonly exitedAt: number | undefined
+}
+
+export type PipeExit = {
+  readonly exitCode: number | undefined
+  readonly signal: string | undefined
+  /** Runs past the file's size when `outputError` is set; use the file's real size instead. */
+  readonly finalOffset: number
+  readonly outputLines: number
+  readonly outputError: string | undefined
+  readonly exitedAt: number
+}
+
+export type CreatePipeInput = {
+  readonly program: string
+  readonly args: readonly string[]
+  /** Absolute. */
+  readonly cwd: string
+  /** The child's whole environment; the daemon's own is not inherited. */
+  readonly env: Readonly<Record<string, string>>
+  readonly groupID: string
+  /** Absolute; truncated on open, symlinks refused. */
+  readonly outputPath: string
+  readonly metadata: Metadata
+}
 
 export interface Interface {
   readonly list: (sessionID?: Session.ID) => Effect.Effect<Info[], UnavailableError>
@@ -103,22 +165,32 @@ export interface Interface {
     rows: number,
     data: Uint8Array,
   ) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly rename: (id: Pty.ID, title: string | null) => Effect.Effect<Info, NotFoundError | UnavailableError>
   readonly snapshot: (id: Pty.ID) => Effect.Effect<Snapshot, NotFoundError | UnavailableError>
   readonly read: (sessionID: Session.ID, lines?: number) => Effect.Effect<ReadResult | null, UnavailableError>
   readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
   readonly shutdown: () => Effect.Effect<void, UnavailableError>
   readonly handoff: () => Effect.Effect<Handoff | null, UnavailableError>
-  readonly attach: (
-    id: Pty.ID,
-    input: {
-      readonly cursor: number
-      readonly attachmentID: string
-      readonly role: Role
-      readonly takeover?: boolean
-      readonly onEvent: (event: StreamEvent) => void
-      readonly onEnd: () => void
-    },
-  ) => Effect.Effect<Attachment, NotFoundError | UnavailableError>
+  /**
+   * Whether a handoff to the next server is prepared and its ticket still valid: this server is being replaced, so
+   * the daemon's processes should be left running for the next one. A shutdown clears it.
+   */
+  readonly handoffPrepared: () => boolean
+  readonly attach: (id: Pty.ID, input: SubscribeInput) => Effect.Effect<Attachment, NotFoundError | UnavailableError>
+  /** Starts the daemon if needed. Fall back to another spawner only on `UnavailableError`. */
+  readonly createPipe: (input: CreatePipeInput) => Effect.Effect<PipeInfo, UnavailableError | RequestError>
+  /** Resolves when the process exits, on its own connection with no timeout; interrupting closes it. */
+  readonly waitPipe: (id: number) => Effect.Effect<PipeExit, UnavailableError | RequestError>
+  /** `ProcessNotFoundError` for an unknown id, a PTY, or when no daemon is running. */
+  readonly getPipe: (id: number) => Effect.Effect<PipeInfo, ProcessNotFoundError | UnavailableError>
+  /** Signals the process group without forgetting the process; `waitPipe` then reports the signal. */
+  readonly signalPipe: (id: number, signal: Signal) => Effect.Effect<void, UnavailableError | RequestError>
+  /** Replaces the stored metadata. */
+  readonly setPipeMetadata: (id: number, metadata: Metadata) => Effect.Effect<void, UnavailableError | RequestError>
+  /** Kills the process if it still runs and forgets it; the output file is left alone. */
+  readonly terminatePipe: (id: number) => Effect.Effect<void, UnavailableError | RequestError>
+  /** Never starts the daemon; empty when none is running. */
+  readonly listPipes: () => Effect.Effect<PipeInfo[], UnavailableError | RequestError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PersistentPty") {}
@@ -147,18 +219,21 @@ const makeLayer = (options: Options = {}) =>
       const current = new Map<Session.ID, Pty.ID>()
 
       const list = Effect.fn("PersistentPty.list")(function* (sessionID?: Session.ID) {
-        const response = yield* optionalRequest(daemon, { op: "list" })
+        const response = yield* optionalRequest(daemon, { op: "list", mode: "pty" })
         if (!response) return []
-        if (response.type !== "terminals") return yield* unexpected(response)
-        return response.terminals
+        if (response.type !== "processes") return yield* unexpected(response)
+        return response.processes
           .map(toInfo)
           .filter((terminal) => sessionID === undefined || terminal.sessionID === sessionID)
       })
 
       const get = Effect.fn("PersistentPty.get")(function* (id: Pty.ID) {
-        const found = (yield* list()).find((terminal) => terminal.id === id)
-        if (!found) return yield* new NotFoundError({ ptyID: id })
-        return found
+        // Any ID that is not one of ours names no terminal; every other method looks the terminal up here first.
+        const parsed = parseID(id)
+        const found =
+          parsed === undefined ? undefined : yield* lookup(daemon, parsed).pipe(Effect.mapError(unavailable))
+        if (found?.mode !== "pty") return yield* new NotFoundError({ ptyID: id })
+        return toInfo(found)
       })
 
       const create = Effect.fn("PersistentPty.create")(function* (
@@ -177,7 +252,7 @@ const makeLayer = (options: Options = {}) =>
         const response = yield* request(
           daemon,
           {
-            op: "create",
+            op: "create_pty",
             program: input.command ?? ShellSelect.environment(global.bin),
             args: input.args,
             cwd,
@@ -190,80 +265,56 @@ const makeLayer = (options: Options = {}) =>
           true,
         )
         if (response.type !== "created") return yield* unexpected(response)
-        const terminal = toInfo(response.terminal)
+        const terminal = toInfo(response.process)
         yield* bus.publish(Added, { sessionID, terminal })
         return terminal
       })
 
-      const write = Effect.fn("PersistentPty.write")(function* (id: Pty.ID, data: string, attachmentID?: string) {
-        yield* get(id)
-        const response = yield* request(daemon, {
-          op: "write",
-          id: fromID(id),
-          attachment_id: attachmentID ?? null,
-          data_base64: Buffer.from(data).toString("base64"),
+      // Sends a terminal command that answers "ok"; `select` marks the terminal as its session's current one.
+      const command = (id: Pty.ID, op: string, body: object, select: boolean) =>
+        Effect.gen(function* () {
+          const terminal = yield* get(id)
+          const response = yield* request(daemon, { op, id: fromID(id), ...body })
+          if (response.type !== "ok") return yield* unexpected(response)
+          if (select) current.set(terminal.sessionID, id)
         })
-        if (response.type !== "ok") return yield* unexpected(response)
-        return undefined
-      })
 
-      const resize = Effect.fn("PersistentPty.resize")(function* (
-        id: Pty.ID,
-        cols: number,
-        rows: number,
-        attachmentID?: string,
-      ) {
-        const terminal = yield* get(id)
-        const response = yield* request(daemon, {
-          op: "resize",
-          id: fromID(id),
-          attachment_id: attachmentID ?? null,
-          cols,
-          rows,
-        })
-        if (response.type !== "ok") return yield* unexpected(response)
-        current.set(terminal.sessionID, id)
-        return undefined
-      })
+      const write = Effect.fn("PersistentPty.write")((id: Pty.ID, data: string, attachmentID?: string) =>
+        command(
+          id,
+          "write",
+          { attachment_id: attachmentID ?? null, data_base64: Buffer.from(data).toString("base64") },
+          false,
+        ),
+      )
 
-      const control = Effect.fn("PersistentPty.control")(function* (
-        id: Pty.ID,
-        attachmentID: string,
-        cols: number,
-        rows: number,
-      ) {
-        const terminal = yield* get(id)
-        const response = yield* request(daemon, {
-          op: "control",
-          id: fromID(id),
-          attachment_id: attachmentID,
-          cols,
-          rows,
-        })
-        if (response.type !== "ok") return yield* unexpected(response)
-        current.set(terminal.sessionID, id)
-        return undefined
-      })
+      const resize = Effect.fn("PersistentPty.resize")(
+        (id: Pty.ID, cols: number, rows: number, attachmentID?: string) =>
+          command(id, "resize", { attachment_id: attachmentID ?? null, cols, rows }, true),
+      )
 
-      const input = Effect.fn("PersistentPty.input")(function* (
-        id: Pty.ID,
-        attachmentID: string,
-        cols: number,
-        rows: number,
-        data: Uint8Array,
-      ) {
+      const control = Effect.fn("PersistentPty.control")(
+        (id: Pty.ID, attachmentID: string, cols: number, rows: number) =>
+          command(id, "control", { attachment_id: attachmentID, cols, rows }, true),
+      )
+
+      const input = Effect.fn("PersistentPty.input")(
+        (id: Pty.ID, attachmentID: string, cols: number, rows: number, data: Uint8Array) =>
+          command(
+            id,
+            "input",
+            { attachment_id: attachmentID, cols, rows, data_base64: Buffer.from(data).toString("base64") },
+            true,
+          ),
+      )
+
+      const rename = Effect.fn("PersistentPty.rename")(function* (id: Pty.ID, title: string | null) {
         const terminal = yield* get(id)
-        const response = yield* request(daemon, {
-          op: "input",
-          id: fromID(id),
-          attachment_id: attachmentID,
-          cols,
-          rows,
-          data_base64: Buffer.from(data).toString("base64"),
-        })
+        const response = yield* request(daemon, { op: "rename", id: fromID(id), title })
         if (response.type !== "ok") return yield* unexpected(response)
-        current.set(terminal.sessionID, id)
-        return undefined
+        const renamed = yield* get(id)
+        yield* bus.publish(Updated, { sessionID: terminal.sessionID, terminal: renamed })
+        return renamed
       })
 
       const snapshot = Effect.fn("PersistentPty.snapshot")(function* (id: Pty.ID) {
@@ -271,7 +322,7 @@ const makeLayer = (options: Options = {}) =>
         const response = yield* request(daemon, { op: "snapshot", id: fromID(id) })
         if (response.type !== "snapshot") return yield* unexpected(response)
         return {
-          info: toInfo(response.terminal),
+          info: toInfo(response.process),
           text: response.text,
           checkpoint: Buffer.from(response.checkpoint_base64, "base64"),
           cursor: { x: response.cursor_x, y: response.cursor_y },
@@ -291,7 +342,7 @@ const makeLayer = (options: Options = {}) =>
         // Let the daemon choose the live height in the same snapshot when lines is omitted.
         const response = yield* request(daemon, { op: "read_rows", id: fromID(id), rows: lines })
         if (response.type !== "rows") return yield* unexpected(response)
-        const info = toInfo(response.terminal)
+        const info = toInfo(response.process)
         return {
           ptyID: info.id,
           title: info.title,
@@ -315,14 +366,22 @@ const makeLayer = (options: Options = {}) =>
         return undefined
       })
 
+      // When the prepared handoff's ticket expires; 0 when none is prepared.
+      let handoffExpiresAt = 0
+
       const shutdown = Effect.fn("PersistentPty.shutdown")(function* () {
+        handoffExpiresAt = 0
         const response = yield* daemon.shutdown.pipe(Effect.mapError(unavailable))
         current.clear()
         if (!response) return
         if (response.type !== "ok") return yield* unexpected(response)
       })
 
-      const handoff = Effect.fn("PersistentPty.handoff")(() => daemon.handoff.pipe(Effect.mapError(unavailable)))
+      const handoff = Effect.fn("PersistentPty.handoff")(function* () {
+        const prepared = yield* daemon.handoff.pipe(Effect.mapError(unavailable))
+        if (prepared) handoffExpiresAt = prepared.expiresAt
+        return prepared
+      })
 
       const removeVisibleExit = (id: Pty.ID) => {
         if (removing.has(id)) return
@@ -385,15 +444,71 @@ const makeLayer = (options: Options = {}) =>
             },
           })
           .pipe(Effect.mapError(unavailable))
-        if (attachment.role === "controller") current.set(attachment.terminal.group_id, id)
+        const info = toInfo(attachment.terminal)
+        if (attachment.role === "controller") current.set(info.sessionID, id)
         return {
-          info: toInfo(attachment.terminal),
+          info,
           role: attachment.role,
           generation: attachment.generation,
           replay: attachment.replay,
           activate: attachment.activate,
           detach: attachment.detach,
         }
+      })
+
+      const createPipe = Effect.fn("PersistentPty.createPipe")(function* (input: CreatePipeInput) {
+        const response = yield* daemon
+          .request(
+            {
+              op: "create_pipe",
+              program: input.program,
+              args: input.args,
+              cwd: input.cwd,
+              env: input.env,
+              group_id: input.groupID,
+              output_path: input.outputPath,
+              metadata: input.metadata,
+            },
+            true,
+          )
+          .pipe(Effect.mapError(pipeError))
+        if (response.type !== "created") return yield* unexpectedPipe(response)
+        return toPipeInfo(response.process)
+      })
+
+      const waitPipe = Effect.fn("PersistentPty.waitPipe")(function* (id: number) {
+        return toPipeExit(yield* daemon.wait(id).pipe(Effect.mapError(pipeError)))
+      })
+
+      const getPipe = Effect.fn("PersistentPty.getPipe")(function* (id: number) {
+        const found = yield* lookup(daemon, id).pipe(Effect.mapError(unavailable))
+        if (found?.mode !== "pipe") return yield* new ProcessNotFoundError({ processID: id })
+        return toPipeInfo(found)
+      })
+
+      const pipeCommand = (value: object) =>
+        Effect.gen(function* () {
+          const response = yield* daemon.request(value).pipe(Effect.mapError(pipeError))
+          if (response.type !== "ok") return yield* unexpectedPipe(response)
+        })
+
+      const signalPipe = Effect.fn("PersistentPty.signalPipe")((id: number, signal: Signal) =>
+        pipeCommand({ op: "signal", id, signal }),
+      )
+
+      const setPipeMetadata = Effect.fn("PersistentPty.setPipeMetadata")((id: number, metadata: Metadata) =>
+        pipeCommand({ op: "set_metadata", id, metadata }),
+      )
+
+      const terminatePipe = Effect.fn("PersistentPty.terminatePipe")((id: number) =>
+        pipeCommand({ op: "terminate", id }),
+      )
+
+      const listPipes = Effect.fn("PersistentPty.listPipes")(function* () {
+        const response = yield* daemon.requestIfRunning({ op: "list", mode: "pipe" }).pipe(Effect.mapError(pipeError))
+        if (!response) return []
+        if (response.type !== "processes") return yield* unexpectedPipe(response)
+        return response.processes.map(toPipeInfo)
       })
 
       return Service.of({
@@ -404,17 +519,27 @@ const makeLayer = (options: Options = {}) =>
         resize,
         control,
         input,
+        rename,
         snapshot,
         read,
         remove,
         shutdown,
         handoff,
+        handoffPrepared: () => Date.now() < handoffExpiresAt,
         attach,
+        createPipe,
+        waitPipe,
+        getPipe,
+        signalPipe,
+        setPipeMetadata,
+        terminatePipe,
+        listPipes,
       })
     }),
   )
 
 export const layer = makeLayer()
+export const layerWith = (options: Options) => makeLayer(options)
 export const configured = (options?: Options) =>
   makeGlobalNode({
     service: Service,
@@ -429,29 +554,93 @@ const request = (daemon: DaemonTransport, value: object, start = false) =>
 const optionalRequest = (daemon: DaemonTransport, value: object) =>
   daemon.requestIfRunning(value).pipe(Effect.mapError(unavailable))
 
+// `get` fails only for an unknown id, and no running daemon has no processes.
+const lookup = (daemon: DaemonTransport, id: number) =>
+  daemon.requestIfRunning({ op: "get", id }).pipe(
+    Effect.catchIf(
+      (error) => error.kind === "request",
+      () => Effect.succeed(undefined),
+    ),
+    Effect.flatMap((response) => {
+      if (!response) return Effect.succeed(undefined)
+      if (response.type !== "process")
+        return Effect.fail(new Error(`unexpected opencode-pty response: ${response.type}`))
+      return Effect.succeed(response.process)
+    }),
+  )
+
 const unexpected = (response: WireResponse) =>
   Effect.fail(new UnavailableError({ message: `unexpected opencode-pty response: ${response.type}` }))
 
 const unavailable = (error: unknown) =>
   new UnavailableError({ message: error instanceof Error ? error.message : String(error) })
 
-function toInfo(value: WireTerminal): Info {
+// Only a failure before the request was sent is safe to retry somewhere else.
+const pipeError = (error: DaemonError) =>
+  error.kind === "request" || error.kind === "response"
+    ? new RequestError({ message: error.message })
+    : new UnavailableError({ message: error.message })
+
+const unexpectedPipe = (response: WireResponse) =>
+  Effect.fail(new RequestError({ message: `unexpected opencode-pty response: ${response.type}` }))
+
+function toInfo(value: ProcessInfo): Info {
+  if (!value.pty) throw new Error(`opencode-pty process ${value.id} is not a terminal`)
   const status = value.lifecycle.status
   return {
     ...Pty.Info.make({
       id: toID(value.id),
-      title: value.title,
+      title: value.pty.title,
       command: value.command[0] || "",
       args: value.command.slice(1),
       cwd: value.cwd,
       status: status === "running" ? "running" : "exited",
       pid: value.pid ?? 0,
-      ...(status === "exited" ? { exitCode: value.lifecycle.exit_code ?? undefined } : {}),
+      ...(value.lifecycle.status === "exited" ? { exitCode: value.lifecycle.exit_code ?? undefined } : {}),
     }),
-    sessionID: value.group_id,
-    foregroundProcess: value.foreground_process,
-    size: { cols: value.cols, rows: value.rows },
+    // Terminals are always created with a session ID as their group.
+    sessionID: Session.ID.make(value.group_id),
+    userTitle: value.pty.user_title,
+    foregroundProcess: value.pty.foreground_process,
+    size: { cols: value.pty.cols, rows: value.pty.rows },
     output: { head: value.output_head, tail: value.output_tail },
+  }
+}
+
+function toPipeInfo(value: ProcessInfo): PipeInfo {
+  if (!value.pipe) throw new Error(`opencode-pty process ${value.id} is not a pipe process`)
+  return {
+    id: value.id,
+    pid: value.pid ?? undefined,
+    command: value.command,
+    cwd: value.cwd,
+    groupID: value.group_id,
+    lifecycle:
+      value.lifecycle.status === "exited"
+        ? {
+            status: "exited",
+            exitCode: value.lifecycle.exit_code ?? undefined,
+            signal: value.lifecycle.signal ?? undefined,
+          }
+        : value.lifecycle,
+    outputTail: value.output_tail,
+    outputLines: value.pipe.output_lines,
+    outputPath: value.pipe.output_path,
+    outputError: value.pipe.output_error ?? undefined,
+    metadata: value.pipe.metadata,
+    startedAt: value.started_at,
+    exitedAt: value.exited_at ?? undefined,
+  }
+}
+
+function toPipeExit(value: Exited): PipeExit {
+  return {
+    exitCode: value.exit_code ?? undefined,
+    signal: value.signal ?? undefined,
+    finalOffset: value.final_offset,
+    outputLines: value.output_lines ?? 0,
+    outputError: value.output_error ?? undefined,
+    exitedAt: value.exited_at,
   }
 }
 
@@ -459,9 +648,14 @@ function toID(value: number) {
   return Pty.ID.make(`pty_persistent_${value}`)
 }
 
-function fromID(value: Pty.ID) {
-  if (!value.startsWith("pty_persistent_")) throw new Error(`invalid persistent PTY ID: ${value}`)
+function parseID(value: Pty.ID) {
+  if (!value.startsWith("pty_persistent_")) return undefined
   const parsed = Number(value.slice("pty_persistent_".length))
-  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`invalid persistent PTY ID: ${value}`)
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : undefined
+}
+
+function fromID(value: Pty.ID) {
+  const parsed = parseID(value)
+  if (parsed === undefined) throw new Error(`invalid persistent PTY ID: ${value}`)
   return parsed
 }

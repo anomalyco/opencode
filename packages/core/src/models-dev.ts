@@ -1,9 +1,10 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
+import { FreeformFormat } from "@opencode/schema/tool"
 import { App } from "./app.js"
 import { Hash } from "@opencode/util/hash"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -69,6 +70,12 @@ type SourceCost = typeof SourceCost.Type
 // entry this version doesn't understand is skipped instead of failing the model.
 const SourceApi = Schema.Struct({
   base_url: Schema.optional(Schema.String),
+  capabilities: Schema.optional(
+    Schema.Struct({
+      // Format names this version doesn't know are skipped when the route is built.
+      tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.String)) })),
+    }),
+  ),
   sdk: Schema.optional(
     Schema.Struct({ aisdk: Schema.optional(Schema.String), opencodeai: Schema.optional(Schema.String) }),
   ),
@@ -136,6 +143,7 @@ const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
 const decodeContext = Schema.decodeUnknownOption(ContextCondition)
 const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
 const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
+const knownFreeformFormat = Schema.is(FreeformFormat)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
 export type Snapshot = {
@@ -146,6 +154,7 @@ export type Snapshot = {
 
 type Route = {
   readonly package: string
+  readonly freeform?: Model.Capabilities["freeform"]
   readonly baseURL?: string
   readonly compatibility?: Model.Compatibility
 }
@@ -156,6 +165,7 @@ const BUILDS_OWN_URL = new Set([
   "@opencode/ai/providers/amazon-bedrock",
   "@opencode/ai/providers/azure/chat",
   "@opencode/ai/providers/azure/images",
+  "@opencode/ai/providers/azure/messages",
   "@opencode/ai/providers/azure/responses",
   "@opencode/ai/providers/cloudflare-ai-gateway",
   "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
@@ -271,6 +281,7 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
   }
   return {
     package: packageName,
+    freeform: api.capabilities?.tools?.freeform?.filter(knownFreeformFormat),
     // An empty base_url is how models.dev says it has no URL for the API.
     ...(BUILDS_OWN_URL.has(packageName) || !api.base_url ? {} : { baseURL: api.base_url }),
     ...(Object.keys(compatibility).length > 0 ? { compatibility } : {}),
@@ -440,6 +451,7 @@ function modelInfo(
     settings: Object.keys(settings).length === 0 ? undefined : settings,
     capabilities: {
       tools: model.capabilities.tools.supported,
+      ...(source.route.freeform && { freeform: source.route.freeform }),
       input: modalities(model.modalities.input),
       output: modalities(model.modalities.output),
       temperature: model.capabilities.temperature,
@@ -532,16 +544,14 @@ export const layer = (options?: Options) =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const bus = yield* Bus.Service
-      const app = yield* App.Metadata
+      const app = yield* App.Service
       const kv = yield* KV.Service
-      const http = HttpClient.filterStatusOk(
-        (yield* HttpClient.HttpClient).pipe(
-          HttpClient.retryTransient({
-            retryOn: "errors-and-responses",
-            times: 2,
-            schedule: Schedule.exponential(200).pipe(Schedule.jittered),
-          }),
-        ),
+      const http = (yield* HttpClient.HttpClient).pipe(
+        HttpClient.retryTransient({
+          retryOn: "errors-and-responses",
+          times: 2,
+          schedule: Schedule.exponential(200).pipe(Schedule.jittered),
+        }),
       )
 
       const source = options?.url || defaultSource
@@ -574,7 +584,13 @@ export const layer = (options?: Options) =>
           HttpClientRequest.setHeader("User-Agent", userAgent),
           HttpClientRequest.setHeaders(etag ? { "If-None-Match": etag } : {}),
           http.execute,
-          Effect.flatMap((res) => Effect.map(res.text, (text) => ({ text, etag: res.headers.etag }))),
+          Effect.flatMap((res) =>
+            etag && res.status === 304
+              ? Effect.undefined
+              : HttpClientResponse.filterStatusOk(res).pipe(
+                  Effect.flatMap((ok) => Effect.map(ok.text, (text) => ({ text, etag: ok.headers.etag }))),
+                ),
+          ),
           Effect.timeout("10 seconds"),
         )
 
@@ -624,6 +640,7 @@ export const layer = (options?: Options) =>
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const response = yield* fetchApi()
+        if (!response) return {}
         const catalog = yield* decodeCatalog(response.text)
         yield* writeCache(response.text, response.etag)
         return catalog
@@ -659,12 +676,7 @@ export const layer = (options?: Options) =>
                 Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
               )
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
-              const response = yield* fetchApi(force ? undefined : stored?.etag).pipe(
-                Effect.catchIf(
-                  (error) => HttpClientError.isHttpClientError(error) && error.response?.status === 304,
-                  () => Effect.undefined,
-                ),
-              )
+              const response = yield* fetchApi(force ? undefined : stored?.etag)
               const digest = response && bodyDigest(response.text)
               // models.dev rarely changes between polls; skip invalidation and
               // the Refreshed event for a byte-identical body so downstream

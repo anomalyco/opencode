@@ -18,6 +18,7 @@ import { ServerAuth } from "./auth"
 import { isAllowedCorsOrigin } from "./cors"
 import { authorizedRequest, unauthorizedResponse } from "./middleware/authorization"
 import { withoutParentSpan } from "./request-tracing"
+import { RequestSite } from "./request-site"
 import { createRoutes } from "./routes"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
@@ -72,6 +73,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   yield* bound.http
     .serve(
       (transform ? transform(app) : app).pipe(
+        RequestSite.middleware(options),
         HttpMiddleware.compression(),
         HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
@@ -95,6 +97,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     ),
   )
 
+  // Built without the startup span: route handlers and background fibers capture this context, and would
+  // otherwise nest every request and session turn for the life of the process under one trace.
   const boot = Effect.gen(function* () {
     const context = yield* Layer.buildWithScope(
       createRoutes(
@@ -110,9 +114,9 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       yield* installRestartContinuity(Context.get(context, SessionRestart.Service)).pipe(
         Effect.provideService(Scope.Scope, applicationScope),
       )
-      // Schedules fire from one process only; the table holds all their state.
-      yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
     }
+    // Schedules fire from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
+    yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
     const bus = Context.get(context, Bus.Service)
@@ -124,6 +128,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       updated: (version: string) => bus.publish(InstallationEvent.Updated, { version }).pipe(Effect.asVoid),
     }
   }).pipe(
+    withoutParentSpan,
     Effect.catchCause((cause) => {
       if (!lifecycle || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
       return status.fail.pipe(
