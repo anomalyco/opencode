@@ -570,7 +570,9 @@ describe("applyCachePolicy", () => {
   it.effect("keeps message breakpoints before request-local text", () =>
     Effect.gen(function* () {
       const reminder = { ...Message.text("Keep working on the goal"), transient: true }
-      type Body = { messages: Array<{ role: string; content: Array<{ text?: string; cache_control?: unknown }> }> }
+      type Body = {
+        messages: Array<{ role: string; content: Array<{ type?: string; text?: string; cache_control?: unknown }> }>
+      }
       const marked = (body: Body) =>
         body.messages.flatMap((message) =>
           message.content.flatMap((block) => (block.cache_control ? [block.text] : [])),
