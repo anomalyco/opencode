@@ -405,6 +405,7 @@ export function createServerNotificationState(input: {
 
   const unsub = input.sdk.event.listen((event) => {
     if (event.type === "tui.toast.show") {
+      if ((event.data as { source?: string }).source !== "opencode-go-auto-balance") return
       const variant =
         event.data.variant === "info" ? "default" : event.data.variant === "warning" ? "error" : event.data.variant
       showToast({

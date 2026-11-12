@@ -26,8 +26,6 @@ import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
 
-const lastBalanced = new Map<string, string | undefined>()
-
 export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
   {
@@ -475,6 +473,7 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
+    const lastBalanced = new Map<string, string | undefined>()
     const dependencies: Dependencies = {
       loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
       loadAISDK: (model) => aisdk.model(model),
@@ -542,12 +541,13 @@ export const layer = Layer.effect(
                 : "Auto-balanced to another account for this request.",
               variant: "info",
               duration: 5000,
+              source: "opencode-go-auto-balance",
             })
             .pipe(Effect.catch(() => Effect.void))
         }
-      } else if (!toggle || selected.providerID !== "opencode-go") {
+      } else if (!toggle) {
         lastBalanced.delete(integrationID)
-      } else if (balanceKey && activeKey && balanceKey === activeKey) {
+      } else if (selected.providerID === "opencode-go" && balanceKey && activeKey && balanceKey === activeKey) {
         lastBalanced.set(integrationID, balanceKey)
       }
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
