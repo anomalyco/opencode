@@ -4,7 +4,7 @@ use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::location::Location;
-use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
+use crate::state::{Data, Error, State, Task, evict_missing};
 
 /// The owner of global MCP elicitations. They temporarily use "global" instead of a real session
 /// ID, so the server cannot recover their location when settling them; the store keeps the event
@@ -102,21 +102,9 @@ impl State {
         }
     }
 
-    /// Publishes the forms read `ticket` started, with its overlay applied; a global read only
-    /// replaces the forms of `at`, where the server read them. True when the overlay overflowed:
-    /// nothing is published and the read is invalidated, so the caller reads again.
-    fn publish_forms(&mut self, read: &Read, ticket: u64, started: u64, list: Vec<Form>, at: Option<Location>) -> bool {
-        let Some(overlay) = Overlay::take(&mut self.form_reads, read, ticket) else { return false };
-        let owner = &read.0;
-        if self.deleted_since(&SessionID(owner.clone()), started) {
-            return false;
-        }
-        let Some(mut list) = overlay.apply(list, |form| &form.info.id.0) else {
-            let key = sync_key(owner, read.1.as_ref().unwrap_or(&self.default_location));
-            self.syncs.invalidate(&key);
-            return true;
-        };
-        let forms = self.forms.entry(owner.clone()).or_default();
+    /// Publishes a form read; a global read only replaces the forms of `at`, where the server read them.
+    fn publish_forms(&mut self, owner: &str, mut list: Vec<Form>, at: Option<Location>) {
+        let forms = self.forms.entry(owner.to_owned()).or_default();
         match at {
             Some(at) => {
                 // Forms created at another location stay where `on_form_created` put them.
@@ -127,7 +115,6 @@ impl State {
             None => *forms = list,
         }
         self.log.forms(owner);
-        false
     }
 }
 
@@ -138,50 +125,38 @@ impl Data {
     pub fn form_sync(&self, owner: &str, location: Option<&Location>) -> Task<()> {
         let location = location.cloned().unwrap_or_else(|| self.read(|state| state.default_location().clone()));
         let owner = owner.to_owned();
-        let key = sync_key(&owner, &location);
         let read: Read = (owner.clone(), (owner == GLOBAL).then(|| location.clone()));
-        let begin = read.clone();
-        self.sync_start(
-            key,
-            move |state| {
-                let ticket = state.token();
-                state.form_reads.insert(begin, Overlay::new(ticket));
-                (state.deletion_epoch, ticket)
-            },
-            move |data, (started, ticket)| async move {
-                let response = if owner == GLOBAL {
-                    data.client()
+        let again = (owner.clone(), location.clone());
+        self.overlay_sync(
+            sync_key(&owner, &location),
+            SessionID(owner.clone()),
+            |state| &mut state.form_reads,
+            read,
+            |form| &form.info.id.0,
+            move |data| async move {
+                if owner == GLOBAL {
+                    let response = data
+                        .client()
                         .form_list(&FormListInput { location: location.query() })
                         .await
-                        .map_err(Error::new)
-                        .map(|response| {
-                            let at = Location::from(&response.location);
-                            let list = response
-                                .data
-                                .into_iter()
-                                .filter(|form| form.session_id == GLOBAL)
-                                .map(|info| Form { info, location: Some(at.clone()) });
-                            (list.collect(), Some(at))
-                        })
-                } else {
-                    data.client()
-                        .session_form_list(&SessionFormListInput { session_id: owner.clone() })
-                        .await
-                        .map_err(|error| evict_missing(&data, error))
-                        .map(|list| (list.into_iter().map(|info| Form { info, location: None }).collect(), None))
-                };
-                let (list, at) = match response {
-                    Ok(response) => response,
-                    Err(error) => {
-                        data.write(|state| Overlay::take(&mut state.form_reads, &read, ticket));
-                        return Err(error);
-                    }
-                };
-                if data.write(|state| state.publish_forms(&read, ticket, started, list, at)) {
-                    data.refresh(|data| data.form_sync(&owner, Some(&location)));
+                        .map_err(Error::new)?;
+                    let at = Location::from(&response.location);
+                    let list = response
+                        .data
+                        .into_iter()
+                        .filter(|form| form.session_id == GLOBAL)
+                        .map(|info| Form { info, location: Some(at.clone()) });
+                    return Ok((list.collect(), Some(at)));
                 }
-                Ok(())
+                let list = data
+                    .client()
+                    .session_form_list(&SessionFormListInput { session_id: owner.clone() })
+                    .await
+                    .map_err(|error| evict_missing(&data, error))?;
+                Ok((list.into_iter().map(|info| Form { info, location: None }).collect(), None))
             },
+            |state, read, list, at| state.publish_forms(&read.0, list, at),
+            move |data| data.form_sync(&again.0, Some(&again.1)),
         )
     }
 
