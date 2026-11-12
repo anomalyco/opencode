@@ -131,9 +131,22 @@ describe("AdvisorPlugin", () => {
       expect(String(ref?.id)).toBe("m")
       expect(calls[0]?.prompt).toContain("The conversation above")
       expect(calls[0]?.prompt).not.toContain("${situation}")
+      expect(calls[0]?.prompt).not.toContain("The agent's question for you")
       expect(result.status).toBe("completed")
       expect(result.content).toEqual([{ type: "text", text: "Solid advice." }])
       expect(result.metadata).toEqual({ model: "p/m", status: "reviewed" })
+    }),
+  )
+
+  it.effect("full mode forwards the executor's escaped question", () =>
+    Effect.gen(function* () {
+      calls.length = 0
+      reply = () => Effect.succeed({ text: "Solid advice.", ...zeroUsage })
+      const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
+      yield* run(registry, { question: "Is <x> safe?" })
+      expect(calls).toHaveLength(1)
+      expect(calls[0]?.prompt).toContain("Is &lt;x&gt; safe?")
+      expect(calls[0]?.prompt).toContain("The agent's question for you")
     }),
   )
 
@@ -191,6 +204,18 @@ describe("AdvisorPlugin", () => {
       const definition = yield* find(registry)
       expect(definition?.inputSchema).toHaveProperty("required", ["question", "context"])
       expect(map.get("state")).toEqual(next)
+    }),
+  )
+
+  it.effect("turning the advisor off through the RPC removes the tool", () =>
+    Effect.gen(function* () {
+      const { registry, map } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
+      expect(yield* names(registry)).toContain(AdvisorPlugin.name)
+      const handler = captured
+      if (!handler) return yield* Effect.die("rpc.set was not captured")
+      yield* Effect.orDie(handler.set({ mode: "off" }))
+      expect(yield* names(registry)).not.toContain(AdvisorPlugin.name)
+      expect(map.get("state")).toEqual({ mode: "off" })
     }),
   )
 })

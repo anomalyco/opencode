@@ -89,12 +89,12 @@ export default Plugin.define({
                     {
                       title: "Advisor",
                       value: "full" as const,
-                      description: "Sees the whole conversation. Uses more tokens.",
+                      description: "Sees the conversation; uses more tokens",
                     },
                     {
                       title: "Advisor (secure)",
                       value: "secure" as const,
-                      description: "Sees only a brief the agent writes; the conversation is never sent.",
+                      description: "Sees only the agent's brief",
                     },
                   ],
                 })
