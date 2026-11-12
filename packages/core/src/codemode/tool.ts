@@ -86,7 +86,6 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
-  streaming: Effect.Effect<boolean> = Effect.succeed(false),
 ) => {
   return {
     name: "execute",
@@ -103,9 +102,6 @@ export const create = (
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
         const scope = yield* Effect.scope
-        // Readers outlive the fetch call that returned them. Abort their I/O when this program's scope closes.
-        const controller = new AbortController()
-        yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
         const publishedAt = yield* Ref.make(Number.NEGATIVE_INFINITY)
         const trailing = yield* Ref.make(false)
         const publish = Effect.gen(function* () {
@@ -153,11 +149,8 @@ export const create = (
             Effect.onError(() =>
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
-            Effect.provideService(CodeModeExecution.Service, {
-              ...context,
-              signal: controller.signal,
-              streaming: yield* streaming,
-            }),
+            // Readers outlive the fetch call that returned them, up to the end of this program's scope.
+            Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
             Effect.provideService(Permission.Service, permission),
           )
         const toolCalls = yield* Ref.get(calls)

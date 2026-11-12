@@ -16653,9 +16653,6 @@
               "all_flags": {
                 "type": "boolean"
               },
-              "codemode_fetch_stream": {
-                "type": "boolean"
-              },
               "todo": {
                 "type": "boolean"
               },

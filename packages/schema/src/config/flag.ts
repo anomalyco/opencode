@@ -9,8 +9,6 @@ export const wildcard = "all"
  * `experimental.all_flags: true` turn every flag on. Read one with Core's `Flag.enabled("<key>")`.
  */
 export const registry = {
-  codemode_fetch_stream:
-    "Stream Code Mode fetch responses as their bodies arrive. Each response body can be consumed once.",
   todo: "Enable the experimental todowrite tool.",
   background_compaction:
     "Enable experimental background compaction: summarize the conversation in the background as it nears the compaction threshold, so automatic compaction does not wait for the summary. Background summaries that are never used still cost tokens.",

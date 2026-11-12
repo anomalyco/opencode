@@ -10,7 +10,6 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
 import { CodeModeTool } from "./codemode/tool.js"
-import { Flag } from "./flag.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
@@ -90,7 +89,6 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
-    const flags = yield* Flag.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -279,7 +277,6 @@ const layer = Layer.effect(
                 codeModeInventory,
                 (name, tool, input, context) => run(tool, name, input, context),
                 permission,
-                flags.enabled("codemode_fetch_stream"),
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -429,5 +426,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
+  deps: [PluginHooks.node, Image.node, Permission.node],
 })
