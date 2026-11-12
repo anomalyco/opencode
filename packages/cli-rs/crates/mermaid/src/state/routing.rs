@@ -111,10 +111,6 @@ enum Side {
     Top,
 }
 
-fn overlap(a: (i32, i32), b: (i32, i32)) -> bool {
-    a.0 <= b.1 && b.0 <= a.1
-}
-
 fn cross(a: (i32, i32), b: (i32, i32)) -> bool {
     (a.0 < b.0 && b.0 < a.1 && a.1 < b.1) || (b.0 < a.0 && a.0 < b.1 && b.1 < a.1)
 }
@@ -165,7 +161,7 @@ fn feedback_allocations(
             let mut lane = 0;
             while occupied
                 .iter()
-                .any(|(existing, existing_lane)| *existing_lane == lane && overlap(*existing, interval))
+                .any(|(existing, existing_lane)| *existing_lane == lane && existing.0 <= interval.1 && interval.0 <= existing.1)
             {
                 lane += 1;
             }
