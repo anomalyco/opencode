@@ -107,8 +107,10 @@ const HeadersSchema = Schema.Record(Schema.String, Schema.String)
 
 // A tunnel frame the relay sends to the desktop.
 //
-// V2 frames carry a `t` tag and stream the request body as binary frames.
-// V1 frames carry a `type` tag and base64-encode the request body.
+// HTTP request/response frames carry a `t` tag and stream the request body
+// as binary frames. Terminal session frames carry a `type` tag and
+// base64-encode binary data (terminal sessions are bidirectional and use
+// text frames only).
 const V2FrameSchema = Schema.Union([
   Schema.Struct({
     t: Schema.Literal(1),
@@ -120,15 +122,7 @@ const V2FrameSchema = Schema.Union([
   Schema.Struct({ t: Schema.Literal(2), id: Schema.String }),
 ])
 
-const V1FrameSchema = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("req"),
-    id: Schema.String,
-    method: Schema.String,
-    path: Schema.String,
-    headers: HeadersSchema,
-    body: Schema.optionalKey(Schema.String),
-  }),
+const TerminalFrameSchema = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("ws-req"),
     id: Schema.String,
@@ -141,7 +135,7 @@ const V1FrameSchema = Schema.Union([
 
 const decodeV2Frame = Schema.decodeUnknownOption(Schema.fromJsonString(V2FrameSchema))
 
-const decodeV1Frame = Schema.decodeUnknownOption(Schema.fromJsonString(V1FrameSchema))
+const decodeTerminalFrame = Schema.decodeUnknownOption(Schema.fromJsonString(TerminalFrameSchema))
 
 // The relay's login error detail.
 const decodeRelayError = Schema.decodeUnknownOption(RelayErrorSchema)
@@ -383,9 +377,7 @@ export const layer = Layer.effect(
       })
 
     // Forwards one relayed HTTP request to the local opencode server and
-    // streams the response back over the tunnel.
-    // V2 sends the response body as raw binary frames; V1 sends it base64-encoded
-    // inside a JSON text frame.
+    // streams the response back over the tunnel as binary frames.
     const handleRequest = async (message: {
       id: string
       method: string
@@ -517,8 +509,9 @@ export const layer = Layer.effect(
 
     // The relay asks the desktop to forward a request; this is the only
     // inbound direction, so the handler owns the whole message dispatch.
-    // A binary frame carries raw request-body bytes; a text frame carries the
-    // JSON metadata of either the V2 (`t`) or the V1 (`type`) protocol.
+    // A binary frame carries raw request-body bytes; a text frame carries
+    // JSON metadata (`t` for HTTP request/response, `type` for terminal
+    // sessions).
     const v2PendingRequests = new Map<string, { method: string; path: string; headers: Record<string, string>; bodyChunks: Buffer[] }>()
 
     const handleMessage = (raw: Buffer, isBinary: boolean) => {
@@ -536,7 +529,7 @@ export const layer = Layer.effect(
       const v2 = Option.getOrUndefined(decodeV2Frame(text))
 
       if (v2) {
-        // V2 request start: open the request body buffer.
+        // Request start: open the request body buffer.
         if (v2.t === 1) {
           v2PendingRequests.set(v2.id, {
             method: v2.method,
@@ -548,7 +541,7 @@ export const layer = Layer.effect(
           return
         }
 
-        // V2 request end: concatenate the chunks and run the request.
+        // Request end: concatenate the chunks and run the request.
         const entry = v2PendingRequests.get(v2.id)
 
         if (!entry) return
@@ -564,47 +557,36 @@ export const layer = Layer.effect(
         return
       }
 
-      const v1 = Option.getOrUndefined(decodeV1Frame(text))
+      const terminal = Option.getOrUndefined(decodeTerminalFrame(text))
 
-      if (!v1) return
+      if (!terminal) return
 
-      // V1: the older protocol, with the request body base64-encoded.
-      if (v1.type === "req") {
-        void handleRequest({
-          id: v1.id,
-          method: v1.method,
-          path: v1.path,
-          headers: v1.headers,
-          bodyBuffer: v1.body ? Buffer.from(v1.body, "base64") : undefined,
-        })
-
-        return
-      }
-
-      if (v1.type === "ws-req") {
+      // Terminal session: the relay proxies WebSocket upgrades through the
+      // tunnel as JSON text frames with base64-encoded data.
+      if (terminal.type === "ws-req") {
         handleWebSocketRequest({
-          id: v1.id,
-          path: v1.path,
-          headers: v1.headers,
+          id: terminal.id,
+          path: terminal.path,
+          headers: terminal.headers,
         })
 
         return
       }
 
-      if (v1.type === "ws-data") {
-        const entry = sockets.get(v1.id)
+      if (terminal.type === "ws-data") {
+        const entry = sockets.get(terminal.id)
 
         if (!entry) return
-        entry.socket.send(Buffer.from(v1.data, "base64"))
+        entry.socket.send(Buffer.from(terminal.data, "base64"))
 
         return
       }
 
-      if (v1.type === "ws-close") {
-        const entry = sockets.get(v1.id)
+      if (terminal.type === "ws-close") {
+        const entry = sockets.get(terminal.id)
 
         if (!entry) return
-        sockets.delete(v1.id)
+        sockets.delete(terminal.id)
         entry.socket.close()
       }
     }

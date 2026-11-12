@@ -164,15 +164,11 @@ function rateLimitRemaining(ip) {
 // This way relay no longer depends on the opentunnel coordinator tunnel, and the server
 // needs no public ingress or self-signed CA — a single outbound WebSocket is the tunnel.
 //
-// Message protocol (JSON, binary uses base64):
+// Terminal session protocol (JSON text frames, binary data is base64-encoded):
 //   relay -> server:
-//     { type:'req', id, method, path, headers, body? }   HTTP request
 //     { type:'ws-data', id, data }                        terminal session bidirectional data
 //     { type:'ws-close', id }
 //   server -> relay:
-//     { type:'res', id, status, headers }                 response headers
-//     { type:'chunk', id, data }                          response body chunks (can be multiple)
-//     { type:'end', id }                                  response end
 //     { type:'ws-open', id }                              terminal session upgrade success
 //     { type:'ws-data', id, data }
 //     { type:'ws-close', id }
@@ -180,17 +176,6 @@ function rateLimitRemaining(ip) {
 const tunnels = new Map() // envId -> { ws, lastSeenAt }
 const pending = new Map() // reqId -> { res, method, headersSent, status, headers, timer }
 const clientTerminals = new Map() // reqId -> { ws, envId } — client side of a terminal session
-
-async function readRawBody(req, limit = 32 * 1024 * 1024) {
-  const chunks = []
-  let size = 0
-  for await (const chunk of req) {
-    size += chunk.length
-    if (size > limit) throw new Error('payload too large')
-    chunks.push(chunk)
-  }
-  return Buffer.concat(chunks)
-}
 
 // These upstream response headers must not be passed through to the client as-is:
 //   content-encoding/transfer-encoding/content-length — semantics change after tunnel forwarding
@@ -208,8 +193,8 @@ function filterUpstreamHeaders(headers) {
 
 // ── V2 binary frame protocol ────────────────────────────────────────────
 //
-// V1 protocol: all messages are JSON text frames, binary data is base64-encoded.
-// V2 protocol: metadata uses JSON text frames, binary data (request body / response body) uses WebSocket binary frames.
+// Metadata uses JSON text frames; binary data (request body / response body)
+// uses WebSocket binary frames.
 //
 // Text frames (JSON metadata):
 //   relay→desktop: { t:1, id, method, path, headers }    request start
@@ -221,11 +206,7 @@ function filterUpstreamHeaders(headers) {
 //   Format: [idLen:2-byte BE][id string][raw data bytes]
 //   relay→desktop: request body chunks
 //   desktop→relay: response body chunks (SSE per-token passthrough)
-//
-// Protocol negotiation: desktop sends Sec-WebSocket-Protocol: oc-tunnel-v2 during WebSocket handshake.
-// relay checks ws.protocol to determine whether to use V2 or fall back to V1.
 
-const V2_PROTOCOL = 'oc-tunnel-v2'
 const BACKPRESSURE_LIMIT = 2 * 1024 * 1024 // 2MB
 
 function packBinaryFrame(reqId, data) {
@@ -240,10 +221,6 @@ function unpackBinaryFrame(raw) {
   const reqId = raw.subarray(2, 2 + idLen).toString('utf8')
   const data = raw.subarray(2 + idLen)
   return { id: reqId, data }
-}
-
-function isV2Tunnel(tunnel) {
-  return tunnel && tunnel.protocol === V2_PROTOCOL
 }
 
 // Backpressure-aware send: returns false when buffer exceeds threshold, caller should pause reading
@@ -313,46 +290,6 @@ function handleTunnelMessage(ws, raw) {
     clearTimeout(entry.timer)
     return
   }
-
-  // V1 compat: response headers (type:'res')
-  if (msg.type === 'res') {
-    entry.status = msg.status
-    entry.headers = filterUpstreamHeaders(msg.headers)
-    if (entry.method === 'HEAD') {
-      entry.res.writeHead(msg.status, entry.headers)
-      entry.res.end()
-      pending.delete(msg.id)
-      clearTimeout(entry.timer)
-      return
-    }
-    if (!entry.headersSent) {
-      entry.res.writeHead(msg.status, entry.headers)
-      entry.headersSent = true
-    }
-    return
-  }
-
-  // V1 compat: response body chunk (type:'chunk')
-  if (msg.type === 'chunk') {
-    if (!entry.headersSent) {
-      entry.res.writeHead(entry.status || 502, entry.headers || {})
-      entry.headersSent = true
-    }
-    entry.res.write(Buffer.from(msg.data || '', 'base64'))
-    return
-  }
-
-  // V1 compat: response end (type:'end')
-  if (msg.type === 'end') {
-    if (!entry.headersSent) {
-      entry.res.writeHead(entry.status || 502, entry.headers || {})
-      entry.headersSent = true
-    }
-    entry.res.end()
-    pending.delete(msg.id)
-    clearTimeout(entry.timer)
-    return
-  }
 }
 
 // Forward a regular HTTP request through the tunnel (including streaming responses).
@@ -364,7 +301,6 @@ async function tunnelProxy(envId, req, res, pathWithQuery, headers) {
 
   const reqId = id('req')
   const method = req.method
-  const v2 = isV2Tunnel(tunnel)
 
   const entry = {
     res,
@@ -382,56 +318,30 @@ async function tunnelProxy(envId, req, res, pathWithQuery, headers) {
     else res.end()
   }, 30 * 60 * 1000)
 
-  if (v2) {
-    // ── V2: binary frame protocol, request body streamed ──
-    // Metadata as JSON text frames, request body as binary frames (no base64)
-    tunnel.ws.send(JSON.stringify({
-      t: 1, id: reqId, method, path: pathWithQuery, headers,
-    }))
+  // Binary frame protocol: metadata as JSON text frames, request body as
+  // binary frames (no base64).
+  tunnel.ws.send(JSON.stringify({
+    t: 1, id: reqId, method, path: pathWithQuery, headers,
+  }))
 
-    // Stream request body (chunked, no need to wait for complete body)
-    if (!['GET', 'HEAD'].includes(method)) {
-      req.on('data', (chunk) => {
-        safeSend(tunnel.ws, packBinaryFrame(reqId, chunk), true)
-      })
-      req.on('end', () => {
-        tunnel.ws.send(JSON.stringify({ t: 2, id: reqId }))
-      })
-      req.on('error', () => {
-        if (pending.has(reqId)) {
-          pending.delete(reqId)
-          clearTimeout(entry.timer)
-          if (!entry.headersSent) json(res, 502, { error: 'request body read error' })
-          else res.end()
-        }
-      })
-    } else {
+  // Stream request body (chunked, no need to wait for complete body)
+  if (!['GET', 'HEAD'].includes(method)) {
+    req.on('data', (chunk) => {
+      safeSend(tunnel.ws, packBinaryFrame(reqId, chunk), true)
+    })
+    req.on('end', () => {
       tunnel.ws.send(JSON.stringify({ t: 2, id: reqId }))
-    }
-  } else {
-    // ── V1: compatible with older desktop (JSON+base64) ──
-    let body = null
-    if (!['GET', 'HEAD'].includes(method)) {
-      body = await readRawBody(req)
-    }
-
-    tunnel.ws.send(
-      JSON.stringify({
-        type: 'req',
-        id: reqId,
-        method,
-        path: pathWithQuery,
-        headers,
-        ...(body && body.length ? { body: body.toString('base64') } : {}),
-      }),
-      (err) => {
-        if (!err) return
-        if (!pending.has(reqId)) return
+    })
+    req.on('error', () => {
+      if (pending.has(reqId)) {
         pending.delete(reqId)
         clearTimeout(entry.timer)
-        if (!entry.headersSent) json(res, 502, { error: 'tunnel send failed', detail: String(err.message || err) })
-      },
-    )
+        if (!entry.headersSent) json(res, 502, { error: 'request body read error' })
+        else res.end()
+      }
+    })
+  } else {
+    tunnel.ws.send(JSON.stringify({ t: 2, id: reqId }))
   }
 }
 
@@ -495,7 +405,7 @@ function attachTunnelServer(server) {
     if (old && old.ws !== ws && old.ws.readyState === WebSocket.OPEN) {
       old.ws.close(4009, 'superseded by a newer connection')
     }
-    tunnels.set(envId, { ws, lastSeenAt: Date.now(), protocol: ws.protocol || '' })
+    tunnels.set(envId, { ws, lastSeenAt: Date.now() })
 
     ws.on('message', (raw, isBinary) => {
       if (isBinary) {
