@@ -1,19 +1,12 @@
 //! The subagent tool (E.7b): `Subagent` (`routes/session/index.tsx:3289-3348`). One line with the
 //! agent, the description, and the model; a click opens the child session.
 
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-
-use opencode_api::generated::{ModelInfo, SessionID};
+use opencode_api::generated::ModelInfo;
 use opencode_store::SessionStatus;
-use opencode_ui::bind;
 use opencode_ui::tool_info::titlecase;
-use opentui::prelude::*;
-use serde_json::Value;
 
 use super::dispatch::{Inline, InlineTool, Props, Status};
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct Subagent {

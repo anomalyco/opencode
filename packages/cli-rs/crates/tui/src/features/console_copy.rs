@@ -2,11 +2,7 @@
 //! clipboard" toast and clears the selection (`app.tsx:261-263,601-611`). TS binds the key in the console's own
 //! options; here it is a key handler that acts only while the console is visible.
 
-use std::rc::Rc;
-
-use opencode_ui::bind;
-
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// Registers the Ctrl+Y handler. `app::install_keys` calls it before the selection keys, which would clear the
 /// selection first.

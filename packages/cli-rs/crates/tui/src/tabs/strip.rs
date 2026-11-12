@@ -1,21 +1,15 @@
 //! The horizontal tab strip (W01, `HorizontalSessionTabs` in `component/session-tabs.tsx:1275-1790`). One
 //! [`Custom`] widget paints every cell from the TS formulas; it reads the tabs and the store when it paints.
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::Weak;
-
-use opencode_api::generated::SessionID;
-use opencode_ui::bind;
-use opencode_ui::theme::{Theme, tint};
+use opencode_ui::theme::tint;
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
-use opentui::prelude::*;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::model::{self, NEW_SESSION_TAB_TITLE, Tab};
 use super::pulse::{self, Pulse};
 use super::{Attention, Status, Unread};
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// The add button, " + ", at the end of the strip.
 const ADD_TAB_WIDTH: usize = 3;

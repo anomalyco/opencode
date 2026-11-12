@@ -2,9 +2,7 @@
 //! surface. The permission body shows it always, which is a full-height thumb when nothing scrolls; the form body
 //! only while its content overflows.
 
-use opentui::prelude::*;
-
-use crate::theme::FooterTheme;
+use crate::prelude::*;
 
 #[derive(Clone)]
 pub struct Scroller {

@@ -5,11 +5,9 @@ pub mod location_missing;
 pub mod plugin;
 pub mod session;
 
-use opencode_api::generated::SessionID;
-use opencode_store::Changes;
 use opentui::prelude::{AnyWidget, View};
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Route {

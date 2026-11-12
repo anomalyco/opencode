@@ -7,21 +7,11 @@
 //! whether it shows by itself; `session.sidebar.toggle` (`<leader>b`) writes it and opens or closes it. A child
 //! session never shows it. An open panel takes the right pane instead.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
-use opencode_api::generated::SessionID;
 use opencode_local::cli_config::Sidebar as SidebarSetting;
 use opencode_plugin::{SlotInput, SlotMount, slot};
-use opencode_store::Changes;
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-use serde_json::json;
 
-use crate::app::Tui;
 use crate::frame::layout::SESSION_SIDEBAR_WIDTH;
+use crate::prelude::*;
 
 /// The terminal width beside the tab rail above which the sidebar docks (`wide`).
 const WIDE: i64 = 120;

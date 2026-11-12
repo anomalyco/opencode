@@ -9,12 +9,10 @@
 use std::sync::LazyLock;
 
 use indexmap::IndexMap;
-use opencode_api::generated::SessionID;
 use opentui::native::{ProgramKind, ProgramState, ProgramStatus};
 use regex::Regex;
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 use crate::tabs::Attention;
 
 const APP: &str = "opencode";

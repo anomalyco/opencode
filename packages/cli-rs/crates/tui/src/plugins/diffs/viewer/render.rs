@@ -1,20 +1,15 @@
 //! Rendering: the header, the cards, the footer, and the file tree, rebuilt from the viewer state.
 
-use std::rc::Rc;
-
 use base64::Engine;
-use opencode_ui::bind;
-use opencode_ui::theme::Theme;
 use opentui::native::ImageFit;
-use opentui::prelude::*;
 use opentui::style::Attributes;
 use opentui::widget::{DiffView, ImageView};
 
 use super::{Card, File, Load, Mode, Parts, Place, Preview, Viewer, is_image};
-use crate::app::Tui;
 use crate::plugins::diffs::hunks;
 use crate::plugins::diffs::keys::Action;
 use crate::plugins::diffs::tree;
+use crate::prelude::*;
 
 impl Viewer {
     /// Rebuilds what changed: everything when the cards change, else the tree.

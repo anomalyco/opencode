@@ -1,18 +1,13 @@
 //! The subagent inspector (`footer.subagent.tsx`): the selected child's status, title, and transcript, which
 //! sticks to its end as entries arrive, with the hints to go back, interrupt it, scroll, and step to the next.
 
-use std::cell::Cell;
-use std::rc::Rc;
-
 use opencode_ui::motion::{SPINNER_FRAMES, Spinner};
-use opentui::prelude::*;
 use opentui::widget::ScrollEdge;
-use unicode_width::UnicodeWidthStr;
 
+use crate::prelude::*;
 use crate::prompt::menu::fit;
-use crate::scrollback::{Body as Entry, BodyOptions, Commit, entry_body, entry_content, separator_rows};
+use crate::scrollback::{Body as Entry, BodyOptions, entry_body, entry_content, separator_rows};
 use crate::subagents::{Status, Tab};
-use crate::theme::{FooterTheme, RunTheme};
 
 /// `SUBAGENT_INSPECTOR_ROWS`: the inspector's rows above the footer's base.
 pub const INSPECTOR_ROWS: u16 = 14;

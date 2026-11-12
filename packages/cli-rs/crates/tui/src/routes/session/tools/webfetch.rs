@@ -1,8 +1,7 @@
 //! The webfetch tool (E.7b): `WebFetch` (`routes/session/index.tsx:3256-3262`). One line with the URL.
 
-use opentui::prelude::*;
-
 use super::dispatch::{Inline, InlineTool, Props};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct WebFetch(InlineTool);

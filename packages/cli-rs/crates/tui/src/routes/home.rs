@@ -1,13 +1,11 @@
 //! The home route (E.1, row T17): the logo, the prompt, and the footer slot (`routes/home.tsx`,
 //! `component/logo.tsx`). The session list is a dialog (E.11a).
 
-use opencode_store::Changes;
-use opencode_ui::bind;
-use opencode_ui::theme::{Theme, tint};
-use opentui::prelude::*;
+use opencode_ui::theme::tint;
 
 use super::RouteView;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// `logo.ts`: `_` is a shadow-filled space, `^` a `▀` on the shadow, `~` a shadow-colored `▀`, and `,` a
 /// shadow-colored `▄`.

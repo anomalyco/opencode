@@ -1,14 +1,10 @@
 //! The plugin route (T.1): a route a plugin registers, the diff viewer's route, or the missing route screen.
 
-use std::rc::Rc;
-
 use opencode_plugin::RouteMount;
-use opencode_store::Changes;
-use opentui::prelude::*;
 
 use super::RouteView;
-use crate::app::Tui;
 use crate::plugins::diffs::viewer::{self, Viewer};
+use crate::prelude::*;
 
 pub struct Plugin {
     root: View,

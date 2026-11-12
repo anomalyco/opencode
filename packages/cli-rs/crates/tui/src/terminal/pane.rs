@@ -7,20 +7,16 @@
 //! two columns narrower for the terminal's left offset and the scrollbar gutter, is what a controller asks the server
 //! for: a size-only frame claims control and resizes the terminal.
 
-use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
-use std::rc::{Rc, Weak};
 
 use base64::Engine;
 use opencode_api::generated::{ExperimentalPersistentPtySnapshotInput, PtyID};
 use opencode_api::pty::{self, ConnectInput, Incoming, Message, Role, Size};
-use opencode_ui::bind;
 use opentui::input::{KeyEvent, MouseEventKind};
-use opentui::prelude::*;
 use opentui::widget::{TerminalData, TerminalView};
 use tokio::sync::mpsc;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 enum Item {
     Output(Vec<u8>),

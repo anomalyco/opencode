@@ -2,14 +2,13 @@
 //! `prompt.images.view`. The pasted-path rules are shared with mini in [`opencode_ui::prompt_input::attach`].
 
 use opentui::native::ImageFit;
-use opentui::prelude::*;
 use opentui::widget::ImageView;
-use serde_json::Value;
 
 pub use opencode_ui::prompt_input::attach::*;
 
 use super::editor::Inner;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// The most previews shown above the prompt.
 const VISIBLE: usize = 3;

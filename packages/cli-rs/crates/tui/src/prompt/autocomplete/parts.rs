@@ -7,13 +7,11 @@
 //! edit moves the marks; [`sync`] then copies their ranges into the parts and drops the parts whose
 //! marks went.
 
-use std::cell::RefCell;
-
 use opencode_api::generated::{PromptAgentAttachment, PromptInputSkillAttachment};
 use opentui::widget::{ExtmarkId, ExtmarkOptions};
-use serde_json::{Value, json};
 
 use super::parse::measure;
+use crate::prelude::*;
 use crate::prompt::editor::Inner;
 
 /// Which part list a mention belongs to.

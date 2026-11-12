@@ -1,18 +1,14 @@
 //! Free models dialog (E.16): `component/dialog-model-free.tsx`, the model picker while no provider is
 //! connected.
 
-use std::rc::Rc;
-
 use opencode_api::generated::ModelInfoStatus;
 use opencode_local::model_pref::Model;
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
 use opencode_ui::fuzzy;
-use opencode_ui::select::{self, ActionRun, SelectAction, SelectOption, SelectProps};
-use opentui::prelude::*;
+use opencode_ui::select::{ActionRun, SelectAction};
 
 use crate::dialogs::model::{self, is_free};
 use crate::local::Local;
+use crate::prelude::*;
 
 pub fn show(local: &Rc<Local>) {
     let weak = Rc::downgrade(local);

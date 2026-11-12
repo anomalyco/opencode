@@ -9,17 +9,13 @@ use opencode_api::generated::{
     ShellOutputInput,
 };
 use opencode_store::Data;
-use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::prompt_input::paste::strip_ansi;
-use opencode_ui::theme::Theme;
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
 use unicode_width::UnicodeWidthChar;
 
 use super::list::Context;
+
+use crate::prelude::*;
 
 /// `SHELL_DISPLAY_LIMIT`: the most output kept, in characters from the end, and read per request.
 const LIMIT: usize = 1024 * 1024;

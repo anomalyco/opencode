@@ -2,19 +2,13 @@
 //! `SessionSwitchMessageV2` (`routes/session/index.tsx:2073-2169`). Each is one line padded 3 from the left; skills
 //! and plain notices take `InlineToolRow`'s two-cell icon.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
-use opencode_api::generated::{ModelInfo, ModelRef, SessionID, SessionMessageInfo};
-use opencode_ui::bind;
-use opencode_ui::theme::Theme;
-use opentui::prelude::*;
+use opencode_api::generated::{ModelInfo, ModelRef};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::list::Context;
-use crate::app::Tui;
-use crate::routes::Route;
 use opencode_ui::locale::titlecase;
+
+use crate::prelude::*;
 
 pub struct Notice(Rc<Inner>);
 

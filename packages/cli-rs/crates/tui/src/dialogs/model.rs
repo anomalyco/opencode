@@ -1,23 +1,15 @@
 //! The model dialog (E.16: `component/dialog-model.tsx`, `component/model-options.tsx`) and the app commands
 //! that reach [`Local`] (`app.tsx:903-1018`).
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
 use opencode_api::generated::{ModelInfo, ModelInfoStatus, ProviderInfo};
 use opencode_api::js::locale_compare;
 use opencode_local::model_pref::Model;
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
 use opencode_ui::fuzzy;
-use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
-use opencode_ui::select::{self, ActionRun, SelectAction, SelectOption, SelectProps};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
+use opencode_ui::keymap::Slash;
+use opencode_ui::select::{ActionRun, SelectAction};
 
-use crate::app::Tui;
 use crate::local::{Local, is};
+use crate::prelude::*;
 
 /// `isFreeModel`.
 pub fn is_free(model: &ModelInfo) -> bool {

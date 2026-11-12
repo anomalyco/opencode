@@ -1,22 +1,13 @@
 //! The plugins' dialogs ([`abi::Dialog`]): a prompt, a list to pick from, and a live panel, which changes in place while its key is open
 //! (TS `/btw`'s `Answer`: the header, a body that scrolls, at most 60% of the screen high, and footer actions).
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use opencode_plugin::abi;
 use opencode_plugin::node::{self, Act};
-use opencode_ui::dialog::{
-    self, DIALOG_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, MODAL_MODE,
-};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_ui::dialog::{self, DIALOG_INSET, DialogCx, FooterAction, FooterProps, MODAL_MODE};
 use opencode_ui::prompt::{PromptProps, prompt};
-use opencode_ui::select::{SelectOption, SelectProps};
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
 
-use crate::app::Tui;
 use crate::features::session_links::{self, Links};
+use crate::prelude::*;
 
 /// The panel on screen, which a panel of the same key changes in place.
 pub struct Live {

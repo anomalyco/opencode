@@ -5,18 +5,10 @@
 //! The directory comes from the worktrees dialog (E.11b). The session route owns one [`LocationMissing`]
 //! beside its prompt and hides the prompt while [`LocationMissing::active`].
 
-use opencode_api::generated::{AbsolutePath, ProjectID, SessionID, SessionMoveInput, WorktreeCreateInput};
-use opencode_ui::bind;
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
+use opencode_api::generated::{AbsolutePath, ProjectID, SessionMoveInput, WorktreeCreateInput};
 
-use crate::app::Tui;
 use crate::dialogs::worktrees::Selection;
+use crate::prelude::*;
 
 pub struct LocationMissing {
     tui: Weak<Tui>,

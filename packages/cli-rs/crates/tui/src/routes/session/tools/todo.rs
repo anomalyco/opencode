@@ -2,14 +2,10 @@
 //! (`component/todo-item.tsx`). Once written, the list in a block; before that, or for an empty list,
 //! one line.
 
-use std::cell::RefCell;
-
-use opencode_ui::theme::Theme;
 use opencode_ui::tool_info::{Todo as Item, TodoStatus, parse_todos, todo_marker};
-use opentui::prelude::*;
-use serde_json::Value;
 
 use super::dispatch::{Block, BlockTool, Header, Inline, InlineTool, Props, Status, content_width};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct Todo {

@@ -3,12 +3,8 @@
 //! in a large dialog. While answers are pending, a `/btw` spinner shows in `prompt.footer.status`. It is a plugin of
 //! the one API (O-67).
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::Rc;
-
 use opencode_api::client::Client;
-use opencode_api::generated::{SessionGenerateInput, SessionGenerateOutput, SessionID};
+use opencode_api::generated::{SessionGenerateInput, SessionGenerateOutput};
 use opencode_plugin::abi::{
     self, Action, Command, Dialog, Host, Layout, Node, Panel, PanelAction, PanelBind, PanelSize, Placement, Render,
     RequestId, Span, Toast, Variant,
@@ -16,6 +12,8 @@ use opencode_plugin::abi::{
 use opencode_plugin::slot;
 
 use super::fetch::{data, fetch_of};
+
+use crate::prelude::*;
 
 // `session.generate` exposes the session's tools but runs no tool loop, so a tool call would surface as an
 // empty answer.

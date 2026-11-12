@@ -2,21 +2,17 @@
 //!
 //! The limits come from `GET /api/experimental/usage/limits`, which asks OpenCode Console.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
 use opencode_api::generated::{
     ModelInfo, ProviderInfo, UsageLimitsBudget, UsageLimitsBudgetCoverage, UsageLimitsBudgetPer,
     UsageLimitsBudgetScope, UsageLimitsInfo,
 };
 use opencode_api::js::locale_compare;
-use opencode_ui::bind;
-use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogCx, DialogOptions, HeaderProps, header, layout};
-use opencode_ui::select::{self, Select, SelectOption, SelectProps};
+use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogCx, layout};
+use opencode_ui::select::Select;
 use opencode_util::time::{self, Zone};
-use opentui::prelude::*;
 
 use crate::local::Local;
+use crate::prelude::*;
 
 /// One limit on a model (`ModelLimit`).
 #[derive(Clone, Debug, PartialEq)]

@@ -6,16 +6,11 @@
 //! first: an ID the server knows opens that session; any other becomes [`Startup::take_new_session_id`],
 //! the ID of the first session the home prompt creates.
 
-use std::cell::RefCell;
-use std::time::Duration;
-
 use indexmap::IndexMap;
-use opencode_api::generated::{SessionForkInput, SessionID, SessionListInput, SessionListInputOrder};
+use opencode_api::generated::{SessionForkInput, SessionListInput, SessionListInputOrder};
 use opencode_local::model_pref::Model;
-use opencode_ui::toast::{ToastOptions, Variant};
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 /// The TUI's startup arguments (TS `Args` and `TuiInput.app`).
 #[derive(Clone, Debug)]

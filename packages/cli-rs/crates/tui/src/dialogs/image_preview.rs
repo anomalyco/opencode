@@ -6,20 +6,12 @@
 //! (`createMediaSource`).
 
 use opencode_api::generated::{ExperimentalMediaGetInput, MediaHash};
-use opencode_ui::bind;
-use opencode_ui::dialog::{
-    DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, header, layout,
-};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_ui::dialog::{DialogCx, FooterAction, FooterProps, layout};
 use opencode_ui::prompt_input::attach::data_uri;
 use opentui::native::ImageFit;
-use opentui::prelude::*;
 use opentui::widget::ImageView;
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::{Rc, Weak};
 
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::routes::session::messages::images::media_hash;
 
 /// Opens the dialog on `images` (each a URI and its prompt label), at `initial`.

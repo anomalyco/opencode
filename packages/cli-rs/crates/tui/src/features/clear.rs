@@ -2,15 +2,10 @@
 //! new-session location, keeping the agent and model the session had. `session.new` (`app.tsx:775-800`) is the same
 //! without closing the tab.
 
-use std::rc::Rc;
-
 use opencode_local::cli_config::NewLocation;
 use opencode_store::Location;
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 pub fn install(tui: &Rc<Tui>) {
     let command = TuiCommand::new("session.clear", bind!(tui, |tui, _, _| clear(&tui, true)))

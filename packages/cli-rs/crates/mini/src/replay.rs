@@ -9,31 +9,26 @@
 //! [`crate::tools::commits`], and requests through [`crate::footers`]. Events of other sessions and this session's
 //! tool events also go to the subagent tracker ([`crate::subagents`]) through [`Output::subagents`].
 
-use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use futures_util::StreamExt;
-use opencode_api::client::Client;
 use opencode_api::error::Error;
 use opencode_api::generated::{
-    ExperimentalSessionWaitInput, LocationQueryInput, MessageListInput, MessageListInputOrder, ModelDefaultInput,
-    PromptFileAttachment, PromptFileSource, PromptSkillAttachment, SessionID, SessionInboxInfo, SessionInboxItem,
-    SessionInboxListInput, SessionInboxUser, SessionInterruptInput, SessionMessageAssistant,
-    SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantTool, SessionMessageAssistantToolState,
+    ExperimentalSessionWaitInput, MessageListInput, MessageListInputOrder, ModelDefaultInput, PromptFileAttachment,
+    PromptFileSource, PromptSkillAttachment, SessionID, SessionInboxInfo, SessionInboxItem, SessionInboxListInput,
+    SessionInboxUser, SessionInterruptInput, SessionMessageAssistant,
+    SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantToolState,
     SessionMessageAssistantToolState as ToolPartState, SessionMessageAssistantToolTime, SessionMessageCompaction,
-    SessionMessageInfo, SessionMessageShellExit, SessionMessageShellOutput, SessionMessageToolStateCompleted,
-    SessionMessageToolStateError, SessionMessageToolStateRunning, SessionMessageToolStateStreaming,
-    SessionStructuredError, V2Event,
+    SessionMessageShellExit, SessionMessageShellOutput, SessionMessageToolStateCompleted, SessionMessageToolStateError,
+    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, SessionStructuredError,
 };
 use opentui::app::ProxyError;
-use opentui::prelude::*;
 use serde::Deserialize;
-use serde_json::Value;
 use tokio::sync::watch;
 
 use crate::footers::Requests;
-use crate::scrollback::{Commit, EntryKind, Phase, Source, ToolState};
+use crate::prelude::*;
+use crate::scrollback::{EntryKind, Phase, Source, ToolState};
 
 /// The owner of the forms that belong to no session (`sessionID: "global"`).
 pub const GLOBAL: &str = "global";

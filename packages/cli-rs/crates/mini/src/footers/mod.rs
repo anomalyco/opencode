@@ -17,33 +17,25 @@ pub mod permission;
 mod scroll;
 pub mod subagent;
 
-use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
-use std::time::Duration;
-
-use opencode_api::client::Client;
 use opencode_api::generated::{
-    FormID, FormInfo, FormListInput, LocationQueryInput, PermissionAskedData, PermissionListInput,
-    PermissionReplyInput, PermissionRequest, SessionFormCancelInput, SessionFormListInput, SessionFormReplyInput,
-    SessionGetInput, SessionID, SessionInboxListInput, SessionInfo, SessionInterruptInput, SessionListInput,
-    SessionListInputOrder, SessionMessageGetInput, SessionMessageInfo, V2Event,
+    FormID, FormInfo, FormListInput, PermissionAskedData, PermissionListInput, PermissionReplyInput, PermissionRequest,
+    SessionFormCancelInput, SessionFormListInput, SessionFormReplyInput, SessionGetInput, SessionID,
+    SessionInboxListInput, SessionInfo, SessionInterruptInput, SessionListInput, SessionListInputOrder,
+    SessionMessageGetInput,
 };
 use opencode_local::cli_config::Visibility;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::input::KeyEvent;
 use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-use serde_json::Value;
 
 use self::menu::{Item, Tone};
 use self::panel::{Entry, Outcome, Panel, Spec};
+use crate::prelude::*;
 use crate::prompt::status::mono_shortcut;
 use crate::prompt::{Delivery, Prompt};
 use crate::replay::GLOBAL;
 use crate::settings::{Change, Key, MiniSettings};
 use crate::subagents::{Discovery, FAMILY_LIMIT, Fetch, Status, Tab, Tracker};
-use crate::theme::RunTheme;
 use crate::variants::{ModelSelection, Provider};
 
 /// `PERMISSION_ROWS`.

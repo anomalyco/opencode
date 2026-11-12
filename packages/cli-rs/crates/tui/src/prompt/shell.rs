@@ -2,14 +2,11 @@
 //! prompt, and Backspace at the start leave it (`component/prompt/index.tsx:964-1020`). Submitting
 //! in shell mode runs the text with `session.shell` (`submit.rs`).
 
-use std::rc::Rc;
-
-use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opentui::keymap::Condition;
 
 use super::editor::{Inner, Mode};
+
+use crate::prelude::*;
 
 /// The shell-mode layers, each targeting the prompt's textarea.
 pub fn layers(inner: &Rc<Inner>, target: FocusId) -> Vec<KeymapLayer<FocusId>> {

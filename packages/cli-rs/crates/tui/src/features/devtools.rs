@@ -10,19 +10,11 @@ use opencode_api::generated::ExperimentalSessionLogInput;
 use opencode_api::generated::ServerInfo;
 use opencode_api::transport::SseResponse;
 use opencode_local::cli_config::{Info, TurnTokens};
-use opencode_ui::bind;
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::theme::{Theme, ThemeMode};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-use serde_json::{Value, json};
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::{Duration, Instant};
+use opencode_ui::theme::ThemeMode;
+use std::time::Instant;
 
-use crate::app::Tui;
 use crate::dialogs::settings::{self, set_path};
-use crate::routes::Route;
+use crate::prelude::*;
 
 pub const GRAPH_WIDTH: usize = 23;
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);

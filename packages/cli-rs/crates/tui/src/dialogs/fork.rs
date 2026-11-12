@@ -2,19 +2,13 @@
 //! newest first. A pick forks the session before that prompt (`POST /api/session/:id/fork`), opens the fork, and
 //! puts the prompt back in its composer.
 
-use opencode_api::generated::{SessionForkInput, SessionID, SessionMessageID, SessionMessageInfo};
-use opencode_ui::bind;
-use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize, HeaderProps, header, layout_with};
+use opencode_api::generated::{SessionForkInput, SessionMessageID};
+use opencode_ui::dialog::{DIALOG_LIST_INSET, layout_with};
 use opencode_ui::motion::Spinner;
-use opencode_ui::select::{self, SelectOption, SelectProps};
-use opencode_ui::toast::{ToastOptions, Variant};
-use std::rc::Rc;
-use std::time::Duration;
 
-use crate::app::Tui;
 use crate::dialogs::timeline::{prompts, time};
+use crate::prelude::*;
 use crate::prompt::draft::Draft;
-use crate::routes::Route;
 
 /// Called with the highlighted prompt's ID, or `None` for "Full session" (`onMove`).
 pub type OnMove = Rc<dyn Fn(&Tui, Option<String>)>;

@@ -3,14 +3,11 @@
 
 use opencode_api::generated::{LocationQueryInput, SessionMessageShellStatus, ShellRemoveInput};
 use opencode_store::Shell;
-use opencode_ui::bind;
-use opencode_ui::keymap::TuiCommand;
-use opencode_ui::theme::Theme;
 use opentui::prelude::Container;
-use std::rc::Rc;
 
 use super::{Inner, Label, RowState, Tab, empty, row, window};
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 #[derive(Default)]
 pub(super) struct State {

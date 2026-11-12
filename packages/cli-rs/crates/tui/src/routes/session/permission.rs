@@ -8,26 +8,17 @@
 //! `autoaccept` mode (`session.permissions` in `cli.json`, or `--auto`) every request is answered `once`
 //! instead.
 
-use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
-use std::rc::{Rc, Weak};
 
 use opencode_api::generated::{
-    PermissionID, PermissionReply, PermissionReplyInput, PermissionRequest, SessionID,
-    SessionMessageAssistantContentItem, SessionMessageInfo,
+    PermissionID, PermissionReply, PermissionReplyInput, PermissionRequest, SessionMessageAssistantContentItem,
 };
 use opencode_local::cli_config::{DiffView as ConfigDiffView, Permissions};
-use opencode_store::{Changes, State};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
+use opencode_store::State;
 pub use opencode_ui::permission::{Presentation, always_lines, presentation};
-use opencode_ui::theme::Theme;
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
 use opentui::widget::{DiffView, Textarea};
-use serde_json::Value;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 const FULLSCREEN: &str = "permission.prompt.fullscreen";
 

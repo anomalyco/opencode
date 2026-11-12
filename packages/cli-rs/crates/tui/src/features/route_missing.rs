@@ -1,11 +1,7 @@
 //! The missing plugin route screen (E.1, row T26, `component/plugin-route-missing.tsx`): the route's name in
 //! the warning color and a "go home" button, centered.
 
-use opencode_ui::bind;
-use opentui::prelude::*;
-
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 pub fn mount(tui: &Tui, id: &str, name: &str) -> View {
     let app = &tui.app;

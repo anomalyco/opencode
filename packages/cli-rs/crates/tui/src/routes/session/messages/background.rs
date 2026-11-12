@@ -2,17 +2,10 @@
 //! the running step has run for three seconds, the transcript ends with how to move it to the background.
 //! Subagents always run in the background.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::generated::{
-    SessionMessageAssistantContentItem, SessionMessageAssistantToolState, SessionMessageInfo,
-};
-use opencode_ui::bind;
-use opencode_ui::theme::Theme;
+use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageAssistantToolState};
 use opencode_ui::tool_info::canonical_tool_name;
-use opentui::prelude::*;
+
+use crate::prelude::*;
 
 /// `BACKGROUND_TOOL_HINT_DELAY`, in milliseconds.
 const DELAY: f64 = 3_000.0;
