@@ -51,7 +51,8 @@ pub struct Options {
     pub directory: String,
     /// Raw messages of the first transcript read; later pages keep their size.
     pub initial_message_limit: Option<i64>,
-    /// Drops inline `data:` payloads of tool-result files before they enter the store.
+    /// Drops inline `data:` payloads of tool-result files before they enter the store. Change it later with
+    /// [`Data::set_omit_tool_file_data`].
     pub omit_tool_file_data: bool,
 }
 
@@ -514,23 +515,29 @@ impl Data {
         let future = load(self.clone());
         let data = self.clone();
         self.inner.runtime.spawn(async move {
-            let Err(error) = future.await else { return };
-            if !data.live() {
-                return;
-            }
-            if let Some(id) = session_not_found(&error) {
-                data.write(|state| state.mark_deleted(&id));
-                return;
-            }
-            if is_tag(&error, "MessageNotFoundError") {
-                return;
-            }
-            let handler = lock(&data.inner.on_error).clone();
-            match handler {
-                Some(handler) => handler(&error),
-                None => log::error!("failed to refresh client data: {error}"),
+            if let Err(error) = future.await {
+                data.refresh_failed(&error);
             }
         });
+    }
+
+    /// Handles a failed follow-up read (`refreshFailed`).
+    pub(crate) fn refresh_failed(&self, error: &Error) {
+        if !self.live() {
+            return;
+        }
+        if let Some(id) = session_not_found(error) {
+            self.write(|state| state.mark_deleted(&id));
+            return;
+        }
+        if is_tag(error, "MessageNotFoundError") {
+            return;
+        }
+        let handler = lock(&self.inner.on_error).clone();
+        match handler {
+            Some(handler) => handler(error),
+            None => log::error!("failed to refresh client data: {error}"),
+        }
     }
 
     /// Runs `load` once per key until invalidated (`sync.run`).
