@@ -10179,7 +10179,8 @@
                     "installation.update-available",
                     "vcs.branch.updated",
                     "mcp.status.changed",
-                    "mcp.resources.changed"
+                    "mcp.resources.changed",
+                    "experimental.mcp.event"
                   ]
                 },
                 {
@@ -10289,7 +10290,8 @@
                           "installation.update-available",
                           "vcs.branch.updated",
                           "mcp.status.changed",
-                          "mcp.resources.changed"
+                          "mcp.resources.changed",
+                          "experimental.mcp.event"
                         ]
                       },
                       {
@@ -25640,6 +25642,9 @@
             "$ref": "#/components/schemas/mcp.resources.changed"
           },
           {
+            "$ref": "#/components/schemas/experimental.mcp.event"
+          },
+          {
             "$ref": "#/components/schemas/V2Event.rpc"
           },
           {
@@ -26345,6 +26350,72 @@
               }
             },
             "required": ["integrationID", "credentialID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.mcp.event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.mcp.event"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "server": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "data": {},
+              "cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "truncated": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["id", "server", "name", "eventId", "timestamp", "data", "cursor"],
             "additionalProperties": false
           }
         },
