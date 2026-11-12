@@ -71,6 +71,9 @@ export type PtyCase = {
   exits?: boolean
   // Plan 7.5: line masks for checkpoints. Each match becomes `<masked>`; say why in `reason`.
   masks?: { pattern: RegExp; reason: string }[]
+  // Compare the Kitty keyboard sequences the program writes too (`keyboardLog`): all of them, and those written
+  // up to each checkpoint as `<name>:keyboard`.
+  keyboard?: boolean
   // Compare the request log too; `"writes"` leaves the reads out, for screens whose reads belong to later steps.
   requests?: boolean | "writes"
   tsOnly?: boolean
@@ -161,6 +164,7 @@ export async function runPty(side: Side, value: PtyCase) {
       break
     }
     if (step.checkpoint) checkpoints[step.checkpoint] = await screen()
+    if (step.checkpoint && value.keyboard) checkpoints[`${step.checkpoint}:keyboard`] = keyboardLog(output.text)
     if (step.backgrounds) {
       await setup.renderOnce()
       checkpoints[step.backgrounds] = backgrounds(setup.captureSpans().lines.slice(0, terminal.height), terminal.width)
@@ -195,6 +199,7 @@ export async function runPty(side: Side, value: PtyCase) {
         ),
       ]),
     ),
+    ...(value.keyboard ? { keyboard: keyboardLog(output.text) } : {}),
     ...(value.requests === "writes"
       ? { requests: { writes: requestLog(server?.requests ?? [], context).writes } }
       : value.requests
@@ -209,6 +214,12 @@ export function oscLog(text: string) {
     kind: oscKind(match[1]),
     data: match[1],
   }))
+}
+
+// The Kitty keyboard protocol sequences in the order the program wrote them: a query (`CSI ? u`), a push
+// (`CSI > flags u`), a pop (`CSI < count u`) or a set (`CSI = flags ; mode u`).
+export function keyboardLog(text: string) {
+  return [...text.matchAll(/\x1b\[([?<>=][\d;]*)u/g)].map((match) => match[1])
 }
 
 function oscKind(data: string): OscKind {
