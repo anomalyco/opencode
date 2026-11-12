@@ -5,7 +5,7 @@ import "./component/spinner-renderable"
 import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
-import { LocalModelPlugin } from "@opencode/core/plugin/local-model"
+import { LocalModel } from "@opencode/schema/local-model"
 import { Global } from "@opencode/util/global"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
@@ -756,7 +756,7 @@ function App() {
     const directory = (location.ref ?? data.location.default()).directory
     // The server owns the address and the key. A missing server must not stop clear or exit.
     const pending = client.api
-      .rpc(LocalModelPlugin.Definition)
+      .rpc(LocalModel.Definition)
       .unload({ providerID: model.providerID, modelID: model.modelID }, { location: { directory } })
       .then(() => true)
       .catch(() => false)
