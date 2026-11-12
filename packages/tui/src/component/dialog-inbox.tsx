@@ -13,6 +13,7 @@ import { moveSelection } from "../ui/select-controller"
 import { getScrollAcceleration } from "../util/scroll"
 import { type InboxRow, useInbox } from "./inbox-data"
 import { inboxStatus } from "./inbox-status"
+import { Spinner } from "./spinner"
 
 export const DialogInboxKey = Symbol("DialogInbox")
 
@@ -232,6 +233,9 @@ export function DialogInbox() {
                             </Show>
                             {row().title}
                           </text>
+                          <Show when={status().spinner}>
+                            <Spinner color={status().color} />
+                          </Show>
                           <Show when={status().label}>
                             <text flexShrink={0} wrapMode="none" fg={status().color}>
                               {status().label}

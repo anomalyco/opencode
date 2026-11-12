@@ -96,7 +96,7 @@ test("loads root sessions across locations and moves a family as its child reque
   expect(group("Needs attention")[0]).toMatchObject({ id: "root", directory: "/other", title: "root" })
   expect(inbox.sections().map((s) => s.title)).toEqual(["Needs attention", "Working", "Unread", "Recent"])
   expect(group("Recent").map((row) => row.id)).toEqual(recent.toReversed().map((s) => s.id))
-  expect(group("Unread").map((row) => row.detail)).toEqual(["Failed", "Done"])
+  expect(group("Unread").map((row) => row.detail)).toEqual(["Failed", ""])
   expect(inbox.sections().flatMap((s) => s.rows)).toHaveLength(14)
   const index = requests.filter((url) => url.pathname === "/api/session")
   expect(index).toHaveLength(1)

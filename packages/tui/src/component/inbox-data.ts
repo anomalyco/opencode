@@ -11,7 +11,7 @@ export type InboxRow = {
   id: string
   title: string
   directory: string
-  detail: "Review permission" | "Answer question" | "Working" | "Failed" | "Done" | ""
+  detail: "Review permission" | "Answer question" | "Working" | "Failed" | ""
 }
 export type InboxSection = { title: string; rows: InboxRow[] }
 type Group = "Needs attention" | "Working" | "Unread" | "Recent"
@@ -172,10 +172,8 @@ export function useInbox() {
               ? "Answer question"
               : busy
                 ? "Working"
-                : unread
-                  ? info.outcome === "failed"
-                    ? "Failed"
-                    : "Done"
+                : unread && info.outcome === "failed"
+                  ? "Failed"
                   : "",
         },
         since,

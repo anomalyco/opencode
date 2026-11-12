@@ -9,11 +9,9 @@ export function inboxStatus(theme: Pick<ReturnType<typeof useTheme>, "text">, de
     case "Review permission":
       return { marker: "[!]", label: "", color: feedback.warning.base }
     case "Working":
-      return { label: detail, color: feedback.info.base }
+      return { spinner: true, label: "", color: feedback.info.base }
     case "Failed":
       return { label: detail, color: feedback.error.base }
-    case "Done":
-      return { label: detail, color: feedback.success.base }
     case "":
       return { label: detail, color: theme.text.muted }
   }

@@ -20,6 +20,7 @@ import { moveSelection } from "../ui/select-controller"
 import { getScrollAcceleration } from "../util/scroll"
 import { useInbox } from "./inbox-data"
 import { inboxStatus } from "./inbox-status"
+import { Spinner } from "./spinner"
 
 export function InboxSidebar() {
   const inbox = useInbox()
@@ -158,6 +159,7 @@ export function InboxSidebar() {
                     value: row.id,
                     category: section.title,
                     footer: status.label,
+                    gutter: status.spinner ? (color) => <Spinner color={color} /> : undefined,
                     footerColor: status.color,
                     truncateTitle: true,
                     detail: `Location: ${row.directory}`,
@@ -288,6 +290,9 @@ export function InboxSidebar() {
                             </Show>
                             {row().title}
                           </text>
+                          <Show when={status().spinner}>
+                            <Spinner color={status().color} />
+                          </Show>
                           <Show when={status().label}>
                             <text flexShrink={0} marginLeft={1} fg={status().color} selectable={false} wrapMode="none">
                               {status().label}

@@ -149,6 +149,7 @@ test("Focus Inbox traverses headers and sessions with the keyboard and releases 
   }
   await app.ready
   await app.waitForFrame((frame) => frame.includes("▾ Working 1") && frame.includes("▾ Recent 1"))
+  expect(app.captureCharFrame()).toMatch(/Running task +⋯/)
   await focus()
   app.mockInput.pressArrow("left")
   await app.waitForFrame((frame) => frame.includes("▸ Working 1") && !frame.includes("Running task"))
