@@ -537,7 +537,7 @@ context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</t
 context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
 ```
 
-`workspace.rail` is the left side of the full-screen workspace, across routes. The built-in `opencode.inbox` plugin uses it for its sidebar. The slot provides `tabWidth`, the width of the vertical tabs it can replace (zero when absent). Render nothing to leave the workspace unchanged.
+`workspace.rail` is the far left of the full-screen workspace, across routes, beside vertical tabs rather than replacing them. The built-in `opencode.inbox` plugin uses it for its sidebar. The slot provides `tabWidth`, the eligible width of vertical tabs beside the rail (zero when absent). Render nothing to leave the workspace unchanged.
 
 Use `home.footer.status` to add content to the built-in footer row without replacing it. Status contributions appear
 after OpenCode's health indicators and before the version.
