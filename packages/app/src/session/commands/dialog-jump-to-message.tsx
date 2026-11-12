@@ -1,6 +1,6 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
@@ -8,6 +8,15 @@ import { useData } from "@/runtime/server/current"
 import type { SessionCommandContext } from "./use-session-commands"
 import { parseVoiceDelegation } from "../timeline/voice-delegation"
 import { JumpToMessage, type JumpPrompt } from "./jump-to-message"
+import {
+  selectJumpHistory,
+  selectJumpOpening,
+  selectJumpStatus,
+  startJumpToMessage,
+  transitionJumpToMessage,
+  type JumpToMessageEffect,
+  type JumpToMessageEvent,
+} from "./jump-to-message-machine"
 
 function prompt(message: SessionMessageUser, attachment: string): JumpPrompt {
   const presentation = readPromptPresentation(message.metadata)
@@ -33,7 +42,11 @@ function prompt(message: SessionMessageUser, attachment: string): JumpPrompt {
     }),
   ]
 
-  return { id: message.id, text: labels.filter(Boolean).join("\n"), created: message.time.created }
+  return {
+    id: message.id,
+    text: labels.filter(Boolean).join("\n"),
+    created: message.time.created,
+  }
 }
 
 export function DialogJumpToMessage(props: {
@@ -48,21 +61,56 @@ export function DialogJumpToMessage(props: {
   const id = props.session.identity.params.id
 
   if (!id) return void dialog.close()
-  const controller = new AbortController()
-  onCleanup(() => controller.abort())
-  createEffect(() => {
-    if (key !== props.session.identity.sessionKey()) dialog.close()
+  let controller: AbortController | undefined
+  const start = startJumpToMessage()
 
-    if (dialog.closing) controller.abort()
-  })
+  const [state, setState] = createSignal(start.state)
+
+  const dispatch = (event: JumpToMessageEvent) => {
+    const next = transitionJumpToMessage(state(), event)
+
+    if (next.state !== state()) setState(next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: JumpToMessageEffect) => {
+    if (effect.type === "cancel") return controller?.abort()
+
+    if (effect.type === "jump") {
+      dialog.close()
+
+      return props.onJump(effect.id)
+    }
+
+    controller?.abort()
+    const current = new AbortController()
+
+    controller = current
+
+    if (effect.type === "history.load")
+      return void loadHistory(current.signal).then(
+        (history) =>
+          dispatch({
+            type: "history.loaded",
+            attempt: effect.attempt,
+            history,
+          }),
+        () => dispatch({ type: "history.failed", attempt: effect.attempt }),
+      )
+
+    void reveal(effect.target, AbortSignal.any([current.signal, AbortSignal.timeout(60_000)])).then(
+      () => dispatch({ type: "opened", attempt: effect.attempt }),
+      () => dispatch({ type: "open.failed", attempt: effect.attempt }),
+    )
+  }
 
   // Read older prompts into the picker only. Prepending pages to the timeline while browsing would move the reader.
-  const [history] = createResource(async () => {
+  const loadHistory = async (signal: AbortSignal) => {
     const rows: JumpPrompt[] = []
 
     // Join the timeline's initial sync before interpreting a missing cursor as the end of history.
     await data.session.message.sync(id)
-    controller.signal.throwIfAborted()
+    signal.throwIfAborted()
 
     if (!data.session.message.more(id)) return rows
     let cursor: string | undefined
@@ -70,10 +118,10 @@ export function DialogJumpToMessage(props: {
     do {
       const page = await sdk.api.message.list(
         { sessionID: id, type: "user", limit: 200, cursor },
-        { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) },
+        { signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) },
       )
 
-      controller.signal.throwIfAborted()
+      signal.throwIfAborted()
 
       for (const message of page.data) {
         if (message.type === "user") rows.push(prompt(message, language.t("common.attachment")))
@@ -83,10 +131,33 @@ export function DialogJumpToMessage(props: {
     } while (cursor)
 
     return rows
+  }
+
+  // Page back only as far as the prompt, so the rest of a long session stays unloaded.
+  const reveal = async (messageID: string, signal: AbortSignal) => {
+    while (!data.session.message.get(id, messageID)) {
+      if (!data.session.message.more(id)) throw new Error("Message unavailable")
+      await data.session.message.loadMore(id, { signal })
+      signal.throwIfAborted()
+    }
+
+    if (
+      !props.session.history.visibleUserMessages().some((message) => message.id === messageID) ||
+      data.session.input.has(id, messageID)
+    )
+      throw new Error("Message unavailable")
+  }
+
+  start.effects.forEach(run)
+  onCleanup(() => dispatch({ type: "disposed" }))
+  createEffect(() => {
+    if (key !== props.session.identity.sessionKey() || dialog.closing) dispatch({ type: "disposed" })
+
+    if (key !== props.session.identity.sessionKey()) dialog.close()
   })
 
   const prompts = createMemo(() => {
-    const all = new Map((history.state === "ready" ? history() : []).map((row) => [row.id, row]))
+    const all = new Map(selectJumpHistory(state()).map((row) => [row.id, row]))
 
     const reverted = data.session.get(id)?.revert?.messageID
 
@@ -101,56 +172,26 @@ export function DialogJumpToMessage(props: {
     )
   })
 
-  const [selection, setSelection] = createSignal<string>()
-
-  // The store publishes backfill in one batch. Only then ask the virtualizer to land on the selected bubble.
-  const [loaded] = createResource(selection, async (messageID) => {
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)])
-
-    await data.session.message.loadMore(id, { all: true, signal })
-    signal.throwIfAborted()
-
-    if (
-      !props.session.history.visibleUserMessages().some((message) => message.id === messageID) ||
-      data.session.input.has(id, messageID)
-    )
-      throw new Error("Message unavailable")
-
-    return messageID
-  })
-
-  const jump = (messageID: string) => {
-    if (dialog.closing || key !== props.session.identity.sessionKey()) return
-    dialog.close()
-    props.onJump(messageID)
-  }
-
-  createEffect(() => {
-    const messageID = loaded.state === "ready" && loaded()
-
-    if (messageID) jump(messageID)
-  })
-
   const status = () => {
-    if (loaded.loading) return language.t("dialog.jump.opening")
+    const note = selectJumpStatus(state())
 
-    if (loaded.error || history.error) return language.t("dialog.jump.failed")
-
-    if (history.loading) return language.t("dialog.jump.loading")
+    return note && language.t(`dialog.jump.${note}`)
   }
 
   return (
     <JumpToMessage
       prompts={prompts()}
-      opening={loaded.loading}
+      opening={selectJumpOpening(state())}
       status={status()}
+      onRetry={state().status === "failed" ? () => dispatch({ type: "retry" }) : undefined}
       onClose={() => dialog.close()}
-      onJump={(row) => {
-        if (loaded.loading || dialog.closing || key !== props.session.identity.sessionKey()) return
-
-        if (data.session.message.get(id, row.id)) return jump(row.id)
-        setSelection(row.id)
-      }}
+      onJump={(row) =>
+        dispatch({
+          type: "selected",
+          id: row.id,
+          loaded: !!data.session.message.get(id, row.id),
+        })
+      }
     />
   )
 }

@@ -48,7 +48,7 @@ const turns = [
   reply,
 }))
 
-function SessionStory(props: { query?: string; empty?: boolean }) {
+function SessionStory(props: { query?: string; empty?: boolean; failed?: boolean }) {
   const language = useLanguage()
 
   const dialog = useDialog()
@@ -66,6 +66,8 @@ function SessionStory(props: { query?: string; empty?: boolean }) {
       <JumpToMessage
         prompts={prompts()}
         initialQuery={query}
+        status={props.failed ? language.t("dialog.jump.failed") : undefined}
+        onRetry={props.failed ? () => dialog.close() : undefined}
         onClose={() => dialog.close()}
         onJump={(prompt) => {
           dialog.close()
@@ -141,5 +143,7 @@ export const Browse = { render: () => <SessionStory /> }
 export const MultilineMatch = { render: () => <SessionStory query="loading dock" /> }
 
 export const Empty = { render: () => <SessionStory empty /> }
+
+export const HistoryFailed = { render: () => <SessionStory failed /> }
 
 export const NoMatches = { render: () => <SessionStory query="missing bookmark" /> }

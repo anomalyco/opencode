@@ -1,9 +1,10 @@
+import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogTitle, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { SearchHighlight, SearchList, type SearchListHandle } from "@opencode/ui/search-list"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { getRelativeTime } from "@/shell/time"
 import "@/shell/commands/dialog.css"
@@ -18,6 +19,7 @@ export function JumpToMessage(props: {
   status?: string
   opening?: boolean
   onJump: (prompt: JumpPrompt) => void
+  onRetry?: () => void
   onClose: () => void
 }) {
   const language = useLanguage()
@@ -38,7 +40,10 @@ export function JumpToMessage(props: {
   const prompts = createMemo(() =>
     props.prompts
       .toSorted((a, b) => b.created - a.created)
-      .map((prompt) => ({ prompt, text: prompt.text.replace(/\s+/g, " ").trim() })),
+      .map((prompt) => ({
+        prompt,
+        text: prompt.text.replace(/\s+/g, " ").trim(),
+      })),
   )
 
   const rows = createMemo(() => {
@@ -56,7 +61,12 @@ export function JumpToMessage(props: {
 
       const end = Math.min(text.length, Math.max(start + 90, match + needle.length + 16))
 
-      return [{ prompt, snippet: (start ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "") }]
+      return [
+        {
+          prompt,
+          snippet: (start ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : ""),
+        },
+      ]
     })
   })
 
@@ -101,10 +111,17 @@ export function JumpToMessage(props: {
                   }}
                 />
               </div>
-              <div class="fork-dialog-section">
+              <div class="fork-dialog-section flex items-center justify-between gap-2">
                 <DialogTitleGroup
                   description={rows().length && props.status ? props.status : language.t("dialog.jump.description")}
                 />
+                <Show when={props.onRetry}>
+                  {(retry) => (
+                    <Button class="shrink-0" size="small" variant="neutral" onClick={retry()}>
+                      {language.t("common.retry")}
+                    </Button>
+                  )}
+                </Show>
               </div>
             </>
           )}

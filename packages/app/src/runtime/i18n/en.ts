@@ -411,7 +411,8 @@ export const dict = {
   "command.session.jumpToMessage.description": "Search sent prompts in this session",
   "dialog.jump.loading": "Loading older prompts…",
   "dialog.jump.opening": "Opening message…",
-  "dialog.jump.failed": "Couldn’t load the full history. Reopen to try again.",
+  "dialog.jump.failed": "Couldn’t load the full history.",
+  "dialog.jump.openFailed": "Couldn’t open that message. Try again.",
   "dialog.jump.empty": "No sent prompts yet",
   "dialog.jump.noMatches": "No matching prompts",
 
