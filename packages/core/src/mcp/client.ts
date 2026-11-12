@@ -34,6 +34,9 @@ import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
 import { McpStdio } from "./stdio.js"
+import { EventStreamRejectedError, EventStreamTerminatedError } from "./event-errors.js"
+
+export { EventStreamRejectedError, EventStreamTerminatedError }
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -82,7 +85,7 @@ const EventType = Schema.Struct({
   payloadSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 })
 export type EventType = typeof EventType.Type
-const EventError = Schema.Struct({ code: Schema.Number, message: Schema.String, data: Schema.optional(Schema.Unknown) })
+const EventError = Schema.Struct({ code: Schema.Number, message: Schema.String, data: Schema.optional(Schema.Json) })
 export type EventError = typeof EventError.Type
 // An absent cursor means null: the event type has no replay.
 const Cursor = Schema.optional(Schema.NullOr(Schema.String))
@@ -99,7 +102,7 @@ const EventNotification = Schema.toStandardSchemaV1(
     eventId: Schema.String,
     name: Schema.String,
     timestamp: Schema.String,
-    data: Schema.Unknown,
+    data: Schema.Json,
     cursor: Cursor,
     ...Subscribed,
   }),
@@ -119,7 +122,7 @@ export type EventMessage =
       readonly eventId: string
       readonly name: string
       readonly timestamp: string
-      readonly data: unknown
+      readonly data: Schema.Json
       readonly cursor: string | null
     }
   /** Nothing matched; the server has checked up to `cursor`. */
@@ -127,19 +130,9 @@ export type EventMessage =
   /** A recoverable failure, such as one failed upstream fetch; the stream stays open. */
   | { readonly type: "error"; readonly error: EventError }
 
-/**
- * The server ended the subscription, as when access was revoked or the event type was removed or changed.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
- */
-export class EventStreamTerminatedError extends Schema.TaggedError<EventStreamTerminatedError>()(
-  "MCP.EventStreamTerminatedError",
-  {
-    server: Schema.String,
-    code: Schema.Number,
-    message: Schema.String,
-    data: Schema.optional(Schema.Unknown),
-  },
-) {}
+// JSON-RPC errors that mean an `events/stream` request can never succeed as sent: unknown method, bad arguments, and
+// the events extension's NotFound, Forbidden and Unsupported.
+const EVENT_STREAM_REJECTED = new Set([-32601, -32602, -32023, -32024, -32026])
 
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
 export type ResourceTemplate = ResourceTemplateType
@@ -267,8 +260,9 @@ export interface Events {
   readonly list: () => Effect.Effect<ReadonlyArray<EventType>, Error>
   /**
    * Push delivery (`events/stream`) from `cursor`, or from now. Ends when the server closes the stream. Fails with
-   * EventStreamTerminatedError when the server ends the subscription, and with another error when the stream breaks
-   * or falls silent for a minute, after which it can be opened again from the last cursor. Interrupting it cancels it.
+   * EventStreamRejectedError when the server refuses the subscription, EventStreamTerminatedError when it ends it,
+   * and with another error when the stream breaks or falls silent for a minute, after which it can be opened again
+   * from the last cursor. Interrupting it cancels it.
    */
   readonly stream: (input: {
     readonly name: string
@@ -593,15 +587,23 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                       }),
                     )
                     // Interrupting the request cancels the stream; the server closing it resolves the request.
-                    yield* request("stream MCP events", (signal) =>
-                      client.request({ method: "events/stream", params: input }, StreamResult, {
-                        signal,
-                        // Heartbeats, not a request timeout, tell a quiet stream from a dead one; see below.
-                        timeout: Infinity,
-                        // Routes the stream's notifications, which can arrive before the request settles.
-                        onRequestId: (id) => streams.set(String(id), queue),
-                      }),
-                    ).pipe(
+                    yield* Effect.tryPromise({
+                      try: (signal) =>
+                        client.request({ method: "events/stream", params: input }, StreamResult, {
+                          signal,
+                          // Heartbeats, not a request timeout, tell a quiet stream from a dead one; see below.
+                          timeout: Infinity,
+                          // Routes the stream's notifications, which can arrive before the request settles.
+                          onRequestId: (id) => streams.set(String(id), queue),
+                        }),
+                      catch: (error) =>
+                        error instanceof ProtocolError && EVENT_STREAM_REJECTED.has(error.code)
+                          ? new EventStreamRejectedError({ server, code: error.code, message: error.message })
+                          : failure(error),
+                    }).pipe(
+                      Effect.tapError((error) =>
+                        Effect.logWarning("failed to stream MCP events", { server, error: error.message }),
+                      ),
                       Effect.matchEffect({
                         onFailure: (error) => Queue.fail(queue, error),
                         onSuccess: () => Queue.end(queue),
