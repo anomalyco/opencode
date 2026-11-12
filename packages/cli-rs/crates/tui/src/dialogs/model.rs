@@ -77,12 +77,10 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     let favorites_at_open = cx.keep(move || saved.clone()).unwrap_or(favorites);
     let marker = cx.theme.text.formfield.selected;
     let options: select::Options<Model> = {
-        let weak = Rc::downgrade(local);
         let provider = provider.clone();
-        Rc::new(move |query: &str| {
-            weak.upgrade()
-                .map_or_else(Vec::new, |local| options(&local, provider.as_deref(), query, &favorites_at_open, marker))
-        })
+        Rc::new(bind!(local, |local, query: &str| {
+            options(&local, provider.as_deref(), query, &favorites_at_open, marker)
+        }))
     };
     let title = provider
         .as_deref()
@@ -95,19 +93,13 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     props.current = local.current();
     props.search_in_title = true;
     props.title_placeholder = Some("Search models".to_owned());
-    let on_select = { Rc::new(bind!(local, |local, option: &SelectOption<Model>| choose(&local, &option.value))) };
-    props.on_select = Some(on_select);
-    let connect = { Rc::new(bind!(local, |local| connect(&local))) };
+    props.on_select = Some(Rc::new(bind!(local, |local, option: &SelectOption<Model>| choose(&local, &option.value))));
+    let connect = Rc::new(bind!(local, |local| connect(&local)));
     let provider_title = if connected { "connect integration" } else { "view all integrations" };
-    let favorite_title = {
-        let weak = Rc::downgrade(local);
-        move |option: Option<&SelectOption<Model>>| -> String {
-            let favorite = weak
-                .upgrade()
-                .is_some_and(|local| option.is_some_and(|option| local.favorite().contains(&option.value)));
-            if favorite { "unfavorite" } else { "favorite" }.into()
-        }
-    };
+    let favorite_title = bind!(local, |local, option: Option<&SelectOption<Model>>| {
+        let favorite = option.is_some_and(|option| local.favorite().contains(&option.value));
+        String::from(if favorite { "unfavorite" } else { "favorite" })
+    }, else String::from("favorite"));
     props.actions = vec![
         SelectAction {
             run: ActionRun::Dialog(connect),
@@ -466,18 +458,17 @@ pub fn usage_alerts(local: &Local) {
     if !local.warned.borrow_mut().insert(key) {
         return;
     }
-    let weak = local.this.clone();
     let toast = if reached {
         ToastOptions::new(Variant::Error, format!("Resets {}", format_reset(usage.resets_at)))
             .title(format!("{} limit reached", model.name))
-            .action("Switch model", bind!(weak, |local| show(&local, None)))
+            .action("Switch model", bind!(local.this, |local| show(&local, None)))
     } else {
         ToastOptions::new(
             Variant::Warning,
             format!("{} left · resets {}", format_dollars(usage.left), format_reset(usage.resets_at)),
         )
         .title(format!("Running low on {}", model.name))
-        .action("View usage", bind!(weak, |local| crate::dialogs::usage::show(&local)))
+        .action("View usage", bind!(local.this, |local| crate::dialogs::usage::show(&local)))
     };
     local.toasts.show(toast);
 }

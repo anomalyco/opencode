@@ -14,14 +14,15 @@ pub const COMMAND: &str = "session.cd";
 
 /// The `session.cd` command of a prompt.
 pub fn command(prompt: Weak<Inner>) -> TuiCommand {
-    TuiCommand::new(COMMAND, move |input: Option<&str>, _: Option<&KeyEvent>| {
-        if let Some(prompt) = prompt.upgrade()
-            && let Some(tui) = prompt.tui.upgrade()
-        {
+    TuiCommand::new(
+        COMMAND,
+        bind!(prompt, |prompt, input: Option<&str>, _: Option<&KeyEvent>| {
+        if let Some(tui) = prompt.tui.upgrade() {
             run(&tui, &prompt, input.unwrap_or_default());
         }
         true
-    })
+    }, else true),
+    )
     .title("Change working directory")
     .slash(Slash::new("cd").arguments())
 }

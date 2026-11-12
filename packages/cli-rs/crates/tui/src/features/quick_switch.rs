@@ -8,13 +8,7 @@ use crate::prelude::*;
 
 pub fn install(tui: &Rc<Tui>) {
     let weak = tui.weak();
-    let enabled = {
-        let weak = weak.clone();
-        move || {
-            let weak = weak.clone();
-            Condition::when(move || weak.upgrade().is_some_and(|tui| !tui.config().tabs.enabled))
-        }
-    };
+    let enabled = || Condition::when(bind!(weak, |tui| !tui.config().tabs.enabled));
     let commands: Vec<TuiCommand> = (1..=9)
         .map(|slot| {
             TuiCommand::new(format!("session.quick_switch.{slot}"), bind!(weak, |tui, _, _| quick_switch(&tui, slot)))

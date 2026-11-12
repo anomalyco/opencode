@@ -65,12 +65,9 @@ pub fn layer(viewer: &Rc<Viewer>, target: Option<FocusId>, enabled: Condition) -
     let commands = COMMANDS
         .iter()
         .map(|&(id, title, action)| {
-            let weak = Rc::downgrade(viewer);
-            let command = TuiCommand::new(id, bind!(weak, |viewer, _, _| viewer.run(action))).title(title).group("VCS");
-            let when = |test: fn(&Viewer) -> bool| {
-                let weak: Weak<Viewer> = Rc::downgrade(viewer);
-                Condition::when(move || weak.upgrade().is_some_and(|viewer| test(&viewer)))
-            };
+            let command =
+                TuiCommand::new(id, bind!(viewer, |viewer, _, _| viewer.run(action))).title(title).group("VCS");
+            let when = |test: fn(&Viewer) -> bool| Condition::when(bind!(viewer, |viewer| test(&viewer)));
             match action {
                 Action::ToggleFileTree => command.enabled(when(|viewer| !viewer.compact())),
                 Action::ToggleFullscreen => command.enabled(when(Viewer::in_panel)),

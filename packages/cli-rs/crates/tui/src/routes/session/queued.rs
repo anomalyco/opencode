@@ -194,10 +194,7 @@ impl Drop for Queued {
 impl Inner {
     fn register(self: &Rc<Self>, tui: &Tui) {
         // The count of the last update: keymap conditions must not lock the store.
-        let queued = {
-            let weak = Rc::downgrade(self);
-            Condition::when(move || weak.upgrade().is_some_and(|inner| inner.count.get() > 0))
-        };
+        let queued = Condition::when(bind!(self, |inner| inner.count.get() > 0));
         let command = TuiCommand::new("session.queued_prompts", bind!(self, |inner, _, _| inner.open()))
             .title("View queued prompts")
             .group("Prompt")

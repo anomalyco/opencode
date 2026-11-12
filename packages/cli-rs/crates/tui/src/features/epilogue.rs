@@ -40,13 +40,10 @@ pub fn text(tui: &Tui) -> Option<String> {
     };
     let session = session.as_ref().map(|(title, id)| (title.as_str(), id.0.as_str()));
     let updated = tui.epilogue.updated_version.borrow().clone();
-    render(session, updated.as_deref(), &cli_name())
-}
-
-/// The command name in the continue hint. TS prints "opencode"; this client names itself, so the hint
-/// reopens the client the user ran.
-fn cli_name() -> String {
-    std::env::var("OPENCODE_CLI_NAME").unwrap_or_else(|_| "opencode-rs".to_owned())
+    // The command name in the continue hint. TS prints "opencode"; this client names itself, so the hint
+    // reopens the client the user ran.
+    let cli_name = std::env::var("OPENCODE_CLI_NAME").unwrap_or_else(|_| "opencode-rs".to_owned());
+    render(session, updated.as_deref(), &cli_name)
 }
 
 /// `epilogue`.

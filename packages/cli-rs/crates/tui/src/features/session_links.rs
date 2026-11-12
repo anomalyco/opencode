@@ -31,11 +31,7 @@ pub struct Registry {
 pub fn attach(tui: &Tui, markdown: &Markdown) -> Rc<Links> {
     let used: Rc<RefCell<HashMap<SessionID, Option<String>>>> = Rc::default();
     let links = Rc::new(Links { markdown: markdown.clone(), used: used.clone(), pressed: Cell::new(None) });
-    let weak = tui.weak();
-    markdown.inline_hook(move |spans, cx| match weak.upgrade() {
-        Some(tui) => link_spans(&tui, &used, spans, cx),
-        None => spans,
-    });
+    markdown.inline_hook(bind!(tui, |tui, spans, cx| link_spans(&tui, &used, spans, cx), else spans));
     let (weak, this) = (tui.weak(), Rc::downgrade(&links));
     markdown.on_mouse(move |cx, event| {
         let (Some(tui), Some(links)) = (weak.upgrade(), this.upgrade()) else { return };

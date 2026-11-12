@@ -291,8 +291,7 @@ enum Event {
 pub fn start(tui: &Tui, source: Source) {
     let context = &tui.prompt.editor;
     if context.0.borrow().started.is_none() {
-        let weak = Rc::downgrade(&context.0);
-        tui.app.on_message(bind!(weak, |state, _, posted: &Posted| Context(state).apply(posted)));
+        tui.app.on_message(bind!(context.0, |state, _, posted: &Posted| Context(state).apply(posted)));
     }
     let mut state = context.0.borrow_mut();
     if let Some(started) = state.started.take() {
@@ -365,16 +364,14 @@ impl Context {
     pub fn on_mention(&self, listener: impl Fn(&Mention) + 'static) -> Disposer {
         let id = self.listener_id();
         self.0.borrow_mut().mentions.push((id, Rc::new(listener)));
-        let weak = Rc::downgrade(&self.0);
-        Disposer::new(bind!(weak, |state| state.borrow_mut().mentions.retain(|(other, _)| *other != id)))
+        Disposer::new(bind!(self.0, |state| state.borrow_mut().mentions.retain(|(other, _)| *other != id)))
     }
 
     /// Calls `listener` when the selection or its label state changes.
     pub fn subscribe(&self, listener: impl Fn() + 'static) -> Disposer {
         let id = self.listener_id();
         self.0.borrow_mut().watchers.push((id, Rc::new(listener)));
-        let weak: Weak<RefCell<State>> = Rc::downgrade(&self.0);
-        Disposer::new(bind!(weak, |state| state.borrow_mut().watchers.retain(|(other, _)| *other != id)))
+        Disposer::new(bind!(self.0, |state| state.borrow_mut().watchers.retain(|(other, _)| *other != id)))
     }
 
     /// Follows the session's directory (`reconnect`); `None` is the TUI's own directory. The selection is

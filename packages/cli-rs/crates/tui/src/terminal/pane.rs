@@ -145,28 +145,20 @@ impl Pane {
     }
 
     fn wire(self: &Rc<Self>) {
-        let weak = Rc::downgrade(self);
-        self.shown.on_data(move |_, data, source| {
-            if let (Some(pane), TerminalData::Input) = (weak.upgrade(), source) {
-                pane.send_input(data.to_vec());
-            }
-        });
-        let weak = Rc::downgrade(self);
-        self.shown.on_terminal_resize(bind!(weak, |pane, _, cols, rows| {
+        self.shown.on_data(bind!(self, |pane, _, data, source| if let TerminalData::Input = source {
+            pane.send_input(data.to_vec());
+        }));
+        self.shown.on_terminal_resize(bind!(self, |pane, _, cols, rows| {
             pane.state.borrow_mut().terminal_size = Some(Size { cols, rows });
             pane.resume();
             pane.process();
         }));
-        let weak = Rc::downgrade(self);
-        self.shown.on_focus(move |_, focused| {
-            if let (Some(pane), true) = (weak.upgrade(), focused)
-                && let Some(tui) = pane.tui.upgrade()
-            {
+        self.shown.on_focus(bind!(self, |pane, _, focused| {
+            if focused && let Some(tui) = pane.tui.upgrade() {
                 crate::frame::right_focused(&tui);
             }
-        });
-        let weak = Rc::downgrade(self);
-        self.root.on_resize(bind!(weak, |pane, _, rect| {
+        }));
+        self.root.on_resize(bind!(self, |pane, _, rect| {
             let size = Size { cols: (rect.width as u16).saturating_sub(2).max(1), rows: rect.height as u16 };
             let claim = {
                 let mut state = pane.state.borrow_mut();
@@ -178,12 +170,9 @@ impl Pane {
             }
         }));
         // TS composes this with the terminal's own focus handler the same way: a press anywhere claims control.
-        let weak = Rc::downgrade(self);
-        self.root.on_mouse(move |_, event| {
-            if let (Some(pane), MouseEventKind::Down(_)) = (weak.upgrade(), event.kind) {
-                pane.interact();
-            }
-        });
+        self.root.on_mouse(bind!(self, |pane, _, event| if let MouseEventKind::Down(_) = event.kind {
+            pane.interact();
+        }));
     }
 
     fn apply_theme(&self) {

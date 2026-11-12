@@ -174,8 +174,7 @@ impl Local {
             self.state.borrow_mut().ready = true;
             return;
         };
-        let weak = self.this.clone();
-        self.app.on_message(bind!(weak, |local, _, _: &PreferencesChanged| local.load_preferences()));
+        self.app.on_message(bind!(self.this, |local, _, _: &PreferencesChanged| local.load_preferences()));
         let proxy = self.app.proxy();
         *self.watch.borrow_mut() = preferences.watch(move || {
             let _ = proxy.send(PreferencesChanged);
@@ -225,11 +224,10 @@ impl Local {
     }
 
     fn read(&self, catalog: Catalog, location: &Location) {
-        let weak = self.this.clone();
         let task = self.data.catalog_sync(catalog, Some(location));
         self.app.spawn(
             task,
-            bind!(weak, |local, _, result| {
+            bind!(self.this, |local, _, result| {
                 match result {
                     Ok(()) => local.notify(),
                     Err(error) => log::warn!("model catalog: {error}"),
@@ -314,7 +312,6 @@ impl Local {
 
     fn load_preferences(&self) {
         let Some(preferences) = self.preferences.clone() else { return };
-        let weak = self.this.clone();
         let started = self.writes.get();
         let written = self.written.clone();
         self.app.spawn(
@@ -323,7 +320,7 @@ impl Local {
                 let settled = written.load(Ordering::SeqCst) == started;
                 tokio::task::spawn_blocking(move || preferences.load()).await.map(|preference| (preference, settled))
             },
-            bind!(weak, |local, _, result| {
+            bind!(self.this, |local, _, result| {
                 // A read that may predate a write would undo the change the write carries; read again once it lands.
                 if let Ok((_, settled)) = &result
                     && (!settled || local.writes.get() != started)

@@ -73,16 +73,12 @@ impl Inner {
                 && tui.data.read(|state| state.session(session).is_some_and(check))
         };
         let reverted = {
-            let (weak, session) = (tui.weak(), self.session.clone());
-            Condition::when(move || {
-                weak.upgrade().is_some_and(|tui| routed(&tui, &session, |info| info.revert.is_some()))
-            })
+            let session = self.session.clone();
+            Condition::when(bind!(tui, |tui| routed(&tui, &session, |info| info.revert.is_some())))
         };
         let child = {
-            let (weak, session) = (tui.weak(), self.session.clone());
-            Condition::when(move || {
-                weak.upgrade().is_some_and(|tui| routed(&tui, &session, |info| info.parent_id.is_some()))
-            })
+            let session = self.session.clone();
+            Condition::when(bind!(tui, |tui| routed(&tui, &session, |info| info.parent_id.is_some())))
         };
         let commands = vec![
             command("session.rename", "Rename session", Inner::rename).palette().slash(slash("rename", true)),

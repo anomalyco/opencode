@@ -147,8 +147,7 @@ impl Inner {
             }
             cx.set_timeout(Duration::ZERO, bind!(weak, |inner, _| inner.update_away()));
         });
-        let weak = self.this.clone();
-        self.transcript.scroll().content_view().on_resize(bind!(weak, |inner, _, _| inner.update_away()));
+        self.transcript.scroll().content_view().on_resize(bind!(self.this, |inner, _, _| inner.update_away()));
         self.register(tui);
     }
 
@@ -180,10 +179,9 @@ impl Inner {
     pub(super) fn register(&self, tui: &Tui) {
         dispose(tui, std::mem::take(&mut *self.layers.borrow_mut()));
         let command = |id: &str, title: &str, run: fn(&Inner, &Tui)| {
-            let weak = self.this.clone();
             TuiCommand::new(
                 id,
-                bind!(weak, |inner, _, _| {
+                bind!(self.this, |inner, _, _| {
                     let Some(tui) = inner.tui.upgrade() else { return };
                     run(&inner, &tui);
                     tui.dialogs.clear();
@@ -338,10 +336,9 @@ impl Inner {
                 let scroll = inner.transcript.scroll();
                 scroll.sticky(false);
                 scroll.scroll_to(0.0, 0.0);
-                let weak = inner.this.clone();
                 after_layout(
                     &tui.app,
-                    bind!(weak, |inner| {
+                    bind!(inner.this, |inner| {
                         if !inner.first_jump.get() {
                             return;
                         }
@@ -371,10 +368,9 @@ impl Inner {
     /// One step of `restoreScrollPosition` after a layout: puts the anchor's row back at its distance
     /// from the top, mounting newer rows or adding slack below them while the target is past the end.
     fn restore_step(&self, tui: &Tui, anchor: ScrollAnchor) {
-        let weak = self.this.clone();
         after_layout(
             &tui.app,
-            bind!(weak, |inner| {
+            bind!(self.this, |inner| {
                 let Some(tui) = inner.tui.upgrade() else { return };
                 let Some(y) = inner.transcript.row_y(&anchor.row) else {
                     inner.to_bottom(&tui);

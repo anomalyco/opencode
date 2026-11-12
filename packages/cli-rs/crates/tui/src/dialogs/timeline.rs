@@ -27,7 +27,6 @@ pub fn show(tui: &Tui, session: SessionID, on_move: OnMove) {
     tui.dialogs.replace(
         move |cx| {
             let mut props = SelectProps::new("Timeline", options.clone());
-            let weak = weak.clone();
             let on_move = on_move.clone();
 
             props.search_in_title = true;

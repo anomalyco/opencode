@@ -216,10 +216,9 @@ impl Retry {
         }
         self.0.root.visible(retry.is_some());
         if self.0.render() > 0 {
-            let weak = self.0.this.clone();
             self.0.timer.set(Some(self.0.app.set_interval(
                 Duration::from_secs(1),
-                bind!(weak, |inner, _| {
+                bind!(self.0.this, |inner, _| {
                     if inner.render() == 0
                         && let Some(timer) = inner.timer.take()
                     {
