@@ -153,6 +153,12 @@ mod tests {
 
     #[test]
     fn xdg_roots_and_config_dir() {
+        // Node reads `TMPDIR` on POSIX only and `TEMP` first on Windows.
+        let (tmp, expected_tmp) = if cfg!(windows) {
+            (("TEMP", "C:\\Temp\\"), "C:\\Temp\\opencode")
+        } else {
+            (("TMPDIR", "/var/tmp/"), "/var/tmp/opencode")
+        };
         let p = paths(&[
             ("HOME", "/h"),
             ("XDG_DATA_HOME", "/d"),
@@ -161,7 +167,7 @@ mod tests {
             ("XDG_STATE_HOME", ""),
             ("OPENCODE_CONFIG_DIR", "/custom"),
             ("OPENCODE_TEST_HOME", "/t"),
-            ("TMPDIR", "/var/tmp/"),
+            tmp,
         ]);
         assert_eq!(p.data, PathBuf::from("/d/opencode"));
         assert_eq!(p.cache, PathBuf::from("/c/opencode"));
@@ -169,7 +175,7 @@ mod tests {
         // An empty XDG value is unset.
         assert_eq!(p.state, PathBuf::from("/h/.local/state/opencode"));
         assert_eq!(p.home, PathBuf::from("/t"));
-        assert_eq!(p.tmp, PathBuf::from("/var/tmp/opencode"));
+        assert_eq!(p.tmp, PathBuf::from(expected_tmp));
     }
 
     #[test]
