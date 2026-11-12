@@ -3,6 +3,8 @@ export * as ServerAuth from "./auth"
 import { Context, Layer, Option, Redacted } from "effect"
 import { createHmac, timingSafeEqual } from "node:crypto"
 
+import { Flag } from "@opencode/core/flag"
+
 export type DecodedCredentials = {
   readonly username: string
   readonly password: Redacted.Redacted
@@ -11,22 +13,34 @@ export type DecodedCredentials = {
 export type Info = {
   readonly password: Option.Option<string>
   readonly username: string
+  // Local accounts replace the shared password: requests authorize with database sessions only, and the
+  // password stops granting anything beyond what the middleware's skip list lets through.
+  readonly local: boolean
 }
 
 export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 
 export class Config extends Context.Service<Config, Info>()("@opencode/ServerAuthConfig") {
-  static configLayer(input: Pick<Info, "password">) {
+  static configLayer(input: Pick<Info, "password" | "local">) {
     return Layer.succeed(this, this.of({ ...input, username: "opencode" }))
   }
 
   static get layer() {
-    return this.configLayer({ password: Option.none() })
+    return this.configLayer({ password: Option.none(), local: false })
   }
 }
 
+// Local accounts stay opt-in until the sign-in screen ships: the flag's channel default does not apply yet, so
+// the auth server option or `OPENCODE_FLAGS=local_auth` (or `all`) turn the feature on. Entries are empty
+// because the flag resolves at server boot, before any Location's config exists; the channel default replaces
+// the "unknown" placeholder once the screen exists.
+export function localRequested(options: { readonly auth?: { readonly local?: true } } | undefined) {
+  if (options?.auth?.local) return true
+  return Flag.resolve({ entries: [], channel: "unknown", overrides: process.env.OPENCODE_FLAGS }).local_auth.enabled
+}
+
 export function required(config: Info) {
-  return Option.isSome(config.password) && config.password.value !== ""
+  return config.local || (Option.isSome(config.password) && config.password.value !== "")
 }
 
 // Session tokens issued by pairing links are accepted anywhere the password is.

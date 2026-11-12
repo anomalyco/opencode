@@ -9,6 +9,7 @@ import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
+import { isSignInURL } from "@opencode/protocol/groups/auth"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -68,7 +69,15 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   }
   const urls = () => [...localURLs(), ...(remoteURLs?.() ?? [])]
   const application = yield* Ref.make(Option.none<App>())
-  const app = dispatch(password, status, application, options.app?.version ?? "unknown", urls, Global.Path.tmp)
+  const app = dispatch(
+    password,
+    ServerAuth.localRequested(options),
+    status,
+    application,
+    options.app?.version ?? "unknown",
+    urls,
+    Global.Path.tmp,
+  )
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
@@ -181,13 +190,14 @@ function addressInUse(error: unknown) {
 
 function dispatch(
   password: string,
+  local: boolean,
   status: Status.Interface,
   application: Ref.Ref<Option.Option<App>>,
   version: string,
   urls: () => ReadonlyArray<string>,
   tmp: string,
 ): App {
-  const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode" })
+  const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode", local })
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
@@ -195,16 +205,23 @@ function dispatch(
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
     if (request.method === "GET" && url.pathname === "/api/info" && !ready) {
-      if (!(yield* authorizedRequest(request, auth))) return unauthorizedResponse(request)
+      // The application is not built yet, so database sessions cannot verify here: local-mode clients
+      // holding one retry until ready, while the shared password keeps boot-window polling working.
+      if (!(yield* authorizedRequest(request, auth, undefined)))
+        return unauthorizedResponse(request, authMethods(auth))
       return yield* infoResponse(status, version, urls, tmp)
     }
-    if (
+    // Pre-boot, database sessions cannot verify, so the shared password gates the boot window (local-mode
+    // clients holding one retry until ready). Once ready in local mode, the application's middleware owns
+    // authorization: it verifies database sessions, which this pre-router gate cannot.
+    const gated =
       !isPairingConnectURL(url) &&
-      (!ready ||
-        (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url) && !hasMcpClientTicketURL(url))) &&
-      !(yield* authorizedRequest(request, auth))
-    )
-      return unauthorizedResponse(request)
+      !isSignInURL(url) &&
+      !hasPtyConnectTicketURL(url) &&
+      !hasPersistentPtyConnectTicketURL(url) &&
+      !hasMcpClientTicketURL(url)
+    if ((!ready || !local) && gated && !(yield* authorizedRequest(request, auth, undefined)))
+      return unauthorizedResponse(request, authMethods(auth))
     if (ready) return yield* app.value
     return unavailable(state)
   })
@@ -250,3 +267,7 @@ function unavailable(status: Status.State) {
 const installRestartContinuity = Effect.fnUntraced(function* (restart: SessionRestart.Interface) {
   yield* Effect.forkScoped(restart.resumeSuspendedSessions)
 })
+
+function authMethods(auth: ServerAuth.Info): Array<"password" | "local"> {
+  return auth.local ? ["local"] : ServerAuth.required(auth) ? ["password"] : []
+}

@@ -6,7 +6,9 @@ export type ServerInfo = {
   hostname?: string | undefined
   urls: Array<string>
   paths: { tmp: string }
-  capabilities?: { persistentPty?: boolean | undefined } | undefined
+  capabilities?:
+    | { persistentPty?: boolean | undefined; auth?: { methods?: Array<"password" | "local"> | undefined } | undefined }
+    | undefined
 }
 
 export type PairingCode = { code: string; expires_in: number }
@@ -346,6 +348,8 @@ export type ArtifactTime = { created: number; updated: number }
 export type JobStatus = "running" | "completed" | "error" | "cancelled"
 
 export type JobTime = { started: number; completed?: number }
+
+export type AuthSession = { token: string }
 
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
@@ -2552,6 +2556,7 @@ export type ConfigEntry =
           schedules?: boolean
           artifacts?: boolean
           codemode_vm?: boolean
+          local_auth?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -2953,7 +2958,11 @@ export type InvalidRequestError = {
 export const isInvalidRequestError = (value: unknown): value is InvalidRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidRequestError"
 
-export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly message: string }
+export type UnauthorizedError = {
+  readonly _tag: "UnauthorizedError"
+  readonly message: string
+  readonly methods?: ReadonlyArray<"password" | "local"> | undefined
+}
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
@@ -4708,6 +4717,14 @@ export type ExperimentalJobListInput = {
 }
 
 export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
+
+export type ExperimentalAuthRegisterInput = { readonly username: string; readonly password: string }
+
+export type ExperimentalAuthRegisterOutput = AuthSession
+
+export type ExperimentalAuthLoginInput = { readonly username: string; readonly password: string }
+
+export type ExperimentalAuthLoginOutput = AuthSession
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

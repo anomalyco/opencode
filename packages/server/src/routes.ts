@@ -14,6 +14,7 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
+import { ServerIdentity } from "@opencode/core/server-identity"
 import { Worktree } from "@opencode/core/worktree"
 import { Session } from "@opencode/core/session"
 import { Instance } from "@opencode/core/instance/service"
@@ -76,6 +77,7 @@ const applicationServiceNodes = [
   PtyTicket.node,
   PersistentPty.node,
   Credential.node,
+  ServerIdentity.node,
   WellKnown.node,
   ServerPairing.node,
   LocationServiceMap.node,
@@ -93,9 +95,10 @@ export function createRoutes(
   overrides: LayerNode.Replacements = [],
 ) {
   return makeRoutes(
-    options.password
-      ? ServerAuth.Config.configLayer({ password: Option.some(options.password) })
-      : ServerAuth.Config.layer,
+    ServerAuth.Config.configLayer({
+      password: passwordOption(options),
+      local: ServerAuth.localRequested(options),
+    }),
     options,
     serviceURLs,
     overrides,
@@ -111,7 +114,20 @@ export function createEmbeddedRoutes(
   overrides: LayerNode.Replacements = [],
   instances?: InstanceNode,
 ) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
+  return makeRoutes(
+    ServerAuth.Config.configLayer({
+      password: passwordOption(options),
+      local: ServerAuth.localRequested(options),
+    }),
+    options,
+    () => [],
+    overrides,
+    instances,
+  )
+}
+
+function passwordOption(options: ServerOptions) {
+  return options.password ? Option.some(options.password) : Option.none()
 }
 
 function makeRoutes<AuthError, AuthServices>(

@@ -269,6 +269,10 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalAuthRegisterInput,
+  ExperimentalAuthRegisterOutput,
+  ExperimentalAuthLoginInput,
+  ExperimentalAuthLoginOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1715,6 +1719,21 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalAuthRegister =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalAuthRegisterInput) =>
+    preserveEffect<ExperimentalAuthRegisterOutput>()(
+      raw["auth.register"]({ payload: { username: input["username"], password: input["password"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalAuthLogin = (raw: RawClient["server.experimental"]) => (input: ExperimentalAuthLoginInput) =>
+  preserveEffect<ExperimentalAuthLoginOutput>()(
+    raw["auth.login"]({ payload: { username: input["username"], password: input["password"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1745,6 +1764,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
   job: { list: EndpointExperimentalJobList(raw) },
+  auth: { register: EndpointExperimentalAuthRegister(raw), login: EndpointExperimentalAuthLogin(raw) },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>
