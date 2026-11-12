@@ -421,7 +421,12 @@ fn parse_levels(tokens: Vec<Token>, trailing: Vec<String>, program: &str) -> Tre
                 if spec.arguments().next().is_none() && !spec.commands.is_empty() {
                     let keys: Vec<&str> =
                         spec.commands.iter().flat_map(|sub| std::iter::once(sub.name).chain(sub.alias)).collect();
-                    errors.push(unknown_subcommand(value, &names, &suggest(value, &keys)));
+                    let suggestions: Vec<String> = suggest(value, &keys).iter().map(|name| name.to_string()).collect();
+                    errors.push(format!(
+                        "Unknown subcommand \"{value}\" for \"{}\"{}",
+                        names.join(" "),
+                        did_you_mean(&suggestions)
+                    ));
                 }
                 awaiting = false;
             }
@@ -808,11 +813,6 @@ fn unrecognized_flag(token: &Token, flags: &[&Flag], command: &[String]) -> Stri
 
 fn unrecognized(option: &str, command: &[String], suggestions: &[String]) -> String {
     format!("Unrecognized flag: {option} in command {}{}", command.join(" "), did_you_mean(suggestions))
-}
-
-fn unknown_subcommand(name: &str, parent: &[String], suggestions: &[&str]) -> String {
-    let suggestions: Vec<String> = suggestions.iter().map(|name| name.to_string()).collect();
-    format!("Unknown subcommand \"{name}\" for \"{}\"{}", parent.join(" "), did_you_mean(&suggestions))
 }
 
 fn did_you_mean(suggestions: &[String]) -> String {

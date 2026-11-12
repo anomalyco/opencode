@@ -70,7 +70,15 @@ async fn pair(local: &Local, args: &PairArgs) -> error::Result<()> {
 
 /// The links, and a QR code of the reachable ones, as TS prints them to stdout.
 fn links(urls: &[String], code: &str, expires_in: i64) -> String {
-    let links: Vec<String> = urls.iter().map(|url| connect_link(url, code)).collect();
+    let links: Vec<String> = urls
+        .iter()
+        .map(|url| {
+            // `new URL(`/auth/connect/${code}`, url).href`.
+            opencode_api::js::parse_url(url)
+                .and_then(|base| opencode_api::js::join_url(&base, &format!("/auth/connect/{code}")))
+                .map_or_else(|_| format!("{url}/auth/connect/{code}"), String::from)
+        })
+        .collect();
     // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
     let remote: Vec<&String> = urls
         .iter()
@@ -101,13 +109,6 @@ fn links(urls: &[String], code: &str, expires_in: i64) -> String {
     }
     lines.push(String::new());
     lines.join("\n") + "\n"
-}
-
-// `new URL(`/auth/connect/${code}`, url).href`.
-fn connect_link(url: &str, code: &str) -> String {
-    opencode_api::js::parse_url(url)
-        .and_then(|base| opencode_api::js::join_url(&base, &format!("/auth/connect/{code}")))
-        .map_or_else(|_| format!("{url}/auth/connect/{code}"), String::from)
 }
 
 /// The SSH port-forwarding hint for a service on a loopback address, for stderr.

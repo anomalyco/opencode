@@ -57,7 +57,10 @@ pub fn run(context: &Context, args: &ApiArgs) -> error::Result<()> {
             let Some((name, value)) = header.split_once(':').filter(|(name, _)| !name.is_empty()) else {
                 bail!("Invalid header, expected name:value: {header}");
             };
-            set(&mut headers, name.trim().to_ascii_lowercase(), value.trim());
+            // `headers.set`: a later value replaces an earlier one of the same name.
+            let name = name.trim().to_ascii_lowercase();
+            headers.retain(|(existing, _)| *existing != name);
+            headers.push((name, value.trim().to_owned()));
         }
         if args.data.is_some() && !headers.iter().any(|(name, _)| name == "content-type") {
             headers.push(("content-type".to_owned(), "application/json".to_owned()));
@@ -95,12 +98,6 @@ pub fn run(context: &Context, args: &ApiArgs) -> error::Result<()> {
 
 fn method(name: &str) -> Option<&'static str> {
     METHODS.iter().find(|(lower, _)| *lower == name).map(|(_, upper)| *upper)
-}
-
-// `headers.set`: a later value replaces an earlier one of the same name.
-fn set(headers: &mut Vec<(String, String)>, name: String, value: &str) {
-    headers.retain(|(existing, _)| *existing != name);
-    headers.push((name, value.to_owned()));
 }
 
 /// `--param` pairs as the JavaScript record holds them: a repeated key keeps its first position and
