@@ -136,6 +136,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | Setting                 | Values                      | Description                                                                  |
 | ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
 | `session.sidebar`       | `auto` or `hide`            | Shows the sidebar when space permits or always hides it.                     |
+| `session.inbox`         | boolean                     | Shows the left Inbox across locations on the connected server. Off by default. |
 | `session.scrollbar`     | boolean                     | Shows the transcript scrollbar.                                              |
 | `session.submit_scroll` | `bottom` or `keep`          | Jumps to the latest message when you send a prompt, or keeps your position.  |
 | `session.thinking`      | `show` or `hide`            | Shows or hides model reasoning by default.                                   |
@@ -147,6 +148,8 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | `session.permissions`   | `prompt` or `autoaccept`    | Prompts for permission requests or accepts every request automatically.      |
 
 </div>
+
+Press `<leader>o` (by default, `Ctrl+X` then `O`) or choose **Show Inbox sidebar** from the command palette (`Ctrl+P`). The Inbox takes the place of vertical tabs when visible. It stays hidden below 76 columns without changing your preference.
 
 ## Tabs
 

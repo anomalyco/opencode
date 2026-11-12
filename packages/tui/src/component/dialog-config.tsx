@@ -57,6 +57,15 @@ export const settings: Setting[] = [
     keywords: ["motion", "effects"],
   },
   {
+    title: "Inbox sidebar",
+    category: "Session",
+    path: ["session", "inbox"],
+    description: "Show sessions across locations on the connected server",
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+  },
+  {
     title: "Sidebar",
     category: "Session",
     path: ["session", "sidebar"],

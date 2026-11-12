@@ -151,6 +151,9 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Prompt input behavior" }),
   session: Schema.optional(
     Schema.Struct({
+      inbox: Schema.optional(Schema.Boolean).annotate({
+        description: "Show the left Inbox sidebar for sessions on the connected server (default: false)",
+      }),
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),

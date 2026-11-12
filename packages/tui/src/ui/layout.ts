@@ -4,9 +4,15 @@ export const SESSION_TABS_COMPACT_BREAKPOINT = 12
 export const SESSION_SIDEBAR_MAX_WIDTH = 72
 const SESSION_CONTENT_MIN_WIDTH = 44
 const SESSION_CONTENT_PREFERRED_WIDTH = 64
+const INBOX_WIDTH = 32
+
 // Like vertical tabs, a docked panel fits when the session keeps its preferred width beside a minimum-width pane.
 // Narrower, panels take over the screen.
 export const SESSION_PANEL_SPLIT_MIN_WIDTH = SESSION_CONTENT_PREFERRED_WIDTH + SESSION_CONTENT_MIN_WIDTH
+
+export function sessionInboxWidth(total: number) {
+  return total >= INBOX_WIDTH + SESSION_CONTENT_MIN_WIDTH ? INBOX_WIDTH : 0
+}
 
 export function sessionTabsFitVertically(total: number, width = SESSION_SIDEBAR_WIDTH) {
   return total >= width + SESSION_CONTENT_PREFERRED_WIDTH

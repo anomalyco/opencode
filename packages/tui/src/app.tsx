@@ -76,9 +76,10 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { InboxSidebar } from "./component/inbox-sidebar"
 import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
-import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
+import { clampSessionTabsWidth, sessionInboxWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
 import { createPaneResize } from "./ui/pane-resize"
 import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { clickedLink } from "./ui/link"
@@ -163,6 +164,7 @@ const appBindingCommands = [
   "variant.list",
   "provider.connect",
   "opencode.settings",
+  "session.inbox.toggle",
   "opencode.status",
   "opencode.update",
   "server.pair",
@@ -618,10 +620,16 @@ function App() {
     panels.current()?.sessionID === route.data.sessionID &&
     panels.presentation() === "fullscreen"
   const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
-  const verticalTabsVisible = () => tabsVisible() && tabsVertical()
+  const inboxWidth = () => {
+    if (!config.data.session.inbox || !plugins.ready() || route.data.type === "plugin") return 0
+    const width = sessionInboxWidth(dimensions().width)
+    return width && tabsAvailable() && tabsVertical() ? Math.max(width, tabsResize.size()) : width
+  }
+  const leftPaneWidth = () => inboxWidth() || (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)
+  const verticalTabsVisible = () => tabsVisible() && tabsVertical() && !inboxWidth()
 
   // Measure the prospective split layout, even while full-screen hides the tabs.
-  createEffect(() => panels.setWidth(dimensions().width - (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)))
+  createEffect(() => panels.setWidth(dimensions().width - leftPaneWidth()))
   createEffect(() => {
     const current = panels.current()
     if (!current || (route.data.type === "session" && route.data.sessionID === current.sessionID)) return
@@ -758,6 +766,19 @@ function App() {
         palette: undefined,
         run: () => {
           dialog.replace(() => <CommandPaletteDialog />)
+        },
+      },
+      {
+        name: "session.inbox.toggle",
+        title: config.data.session.inbox ? "Hide Inbox sidebar" : "Show Inbox sidebar",
+        category: "Session",
+        run: () => {
+          void config
+            .update((draft) => {
+              draft.session = { ...draft.session, inbox: !config.data.session.inbox }
+            })
+            .catch(toast.error)
+          dialog.clear()
         },
       },
       {
@@ -1430,6 +1451,11 @@ function App() {
         onMouseDragEnd={tabsResize.onMouseDragEnd}
         onMouseUp={tabsResize.onMouseUp}
       >
+        <Show when={inboxWidth() > 0 && !fullscreenPanel()}>
+          <box width={inboxWidth()} flexShrink={0}>
+            <InboxSidebar />
+          </box>
+        </Show>
         <Show when={verticalTabsVisible()}>
           <SessionTabs orientation="vertical" width={tabsResize.size()} />
         </Show>
@@ -1437,7 +1463,7 @@ function App() {
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
               <Show when={tabsVisible() && !tabsVertical()}>
-                <SessionTabs />
+                <SessionTabs width={dimensions().width - inboxWidth()} />
               </Show>
               <Switch>
                 <Match when={route.data.type === "home"}>
@@ -1448,7 +1474,7 @@ function App() {
                     {(sessionID) => (
                       <SessionFrame
                         sessionID={sessionID}
-                        verticalTabsWidth={verticalTabsVisible() ? tabsResize.size() : 0}
+                        leftPaneWidth={fullscreenPanel() ? 0 : leftPaneWidth()}
                       />
                     )}
                   </Show>

@@ -150,7 +150,7 @@ const TRANSCRIPT_BACKFILL_CHUNK = 60
 
 export function Session(props: {
   scrollRef?: (scroll: ScrollBoxRenderable | undefined) => void
-  verticalTabsWidth: number
+  leftPaneWidth: number
   promptMuted?: boolean
   sidebarVisible: boolean
   onToggleSidebar: () => void
@@ -257,10 +257,10 @@ export function Session(props: {
 
   Keymap.createLayer(() => ({
     priority: 10,
-    enabled: () => props.sidebarVisible && dimensions().width - props.verticalTabsWidth <= 120 && !disabled(),
+    enabled: () => props.sidebarVisible && dimensions().width - props.leftPaneWidth <= 120 && !disabled(),
     commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: props.onToggleSidebar }],
   }))
-  const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.verticalTabsWidth) - 4)
+  const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.leftPaneWidth) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -320,7 +320,7 @@ export function Session(props: {
 
   createEffect(
     on(
-      () => [dimensions().width, dimensions().height, props.verticalTabsWidth] as const,
+      () => [dimensions().width, dimensions().height, props.leftPaneWidth] as const,
       (_, previous) => {
         if (!previous) return
         clearMessageNavigation()
