@@ -78,7 +78,8 @@ pub struct State {
     pub(crate) permission: HashMap<SessionID, Vec<PermissionRequest>>,
     /// Pending forms by owner: a session ID or [`crate::forms::GLOBAL`].
     pub(crate) forms: HashMap<String, Vec<Form>>,
-    pub(crate) projects: HashMap<ProjectID, Project>,
+    /// In insertion order, as the TS store's keys: projects that sort equal keep it.
+    pub(crate) projects: IndexMap<ProjectID, Project>,
     pub(crate) locations: HashMap<Location, LocationData>,
     pub(crate) default_location: Location,
     pub(crate) omit_file_data: bool,
