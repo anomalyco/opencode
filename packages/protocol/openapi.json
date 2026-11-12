@@ -26400,8 +26400,7 @@
           }
         },
         "required": ["id", "created", "type", "data"],
-        "additionalProperties": false,
-        "description": "An event from an MCP Events subscription. Experimental: MCP Events is a draft extension; may change without compatibility guarantees."
+        "additionalProperties": false
       },
       "filesystem.changed": {
         "type": "object",

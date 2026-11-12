@@ -26,12 +26,11 @@ export const StatusChanged = Event.ephemeral({
   },
 })
 
-const experimental = "Experimental: MCP Events is a draft extension; may change without compatibility guarantees."
+// Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
 
 /** One event from an MCP Events subscription. Delivery is at least once: dedupe on `id` and `eventId`. */
 export const ExperimentalEvent = Event.ephemeral({
   type: "experimental.mcp.event",
-  description: `An event from an MCP Events subscription. ${experimental}`,
   schema: {
     /** The subscription that received it. */
     id: Schema.String,
@@ -50,7 +49,6 @@ export const ExperimentalEvent = Event.ephemeral({
 /** A subscription's status changed; read it with the MCP service's `subscriptions`. */
 export const ExperimentalSubscriptionChanged = Event.ephemeral({
   type: "experimental.mcp.subscription.changed",
-  description: `An MCP Events subscription's status changed. ${experimental}`,
   schema: {
     id: Schema.String,
   },
