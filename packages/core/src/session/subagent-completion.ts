@@ -18,7 +18,6 @@ export interface SyntheticSession<E = never> {
     readonly text: string
     readonly description?: string
     readonly metadata?: SessionSchema.Metadata
-    readonly resume?: boolean
   }) => Effect.Effect<unknown, E>
 }
 
@@ -56,7 +55,6 @@ export const deliver = Effect.fnUntraced(function* <E>(
   jobs: Pick<Job.Interface, "completeBackground">,
   input: Pick<Job.Info, "status" | "output" | "error" | "notificationID"> & {
     recovery: Extract<Job.Recovery, { kind: "subagent" }>
-    resume?: boolean
   },
 ) {
   if (input.status === "running") return
@@ -70,7 +68,6 @@ export const deliver = Effect.fnUntraced(function* <E>(
   yield* sessions.synthetic({
     ...(input.notificationID ? { id: input.notificationID } : {}),
     sessionID: recovery.parentSessionID,
-    ...(input.resume === false ? { resume: false } : {}),
     description: recovery.description,
     text: `<subagent sessionID="${recovery.childSessionID}" state="${input.status}" description="${recovery.description}">\n${body}\n</subagent>`,
     metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },

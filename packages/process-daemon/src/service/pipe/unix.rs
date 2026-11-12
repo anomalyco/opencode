@@ -20,14 +20,13 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
-use std::thread;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 use nix::errno::Errno;
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
-use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, exit_message, start_pipe};
+use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, start_pipe};
 use crate::service::{CreatePipe, ProcessSignal, TerminalHandle, TerminalId};
 
 /// Serializes pipe creation against `spawn`. macOS has no `pipe2`, so std
@@ -127,32 +126,18 @@ impl TerminalHandle {
         // Dropping `Child` neither waits nor kills; `Process` reaps it.
         drop(child);
 
-        let reader_id = id;
-        let waiter_id = id;
+        let pid = process.pid;
         start_pipe(
             id,
             order,
             request,
             Arc::clone(&process),
-            sink,
             Box::new(cancel_writer),
-            super::Threads {
-                reader: Box::new(move |sink| {
-                    thread::Builder::new()
-                        .name(format!("opencode-pty-reader-{reader_id}"))
-                        .spawn(move || read_output(output, sink, cancel, exited))
-                }),
-                waiter: Box::new(move |actor| {
-                    let pid = process.pid;
-                    // Spawned last: the waiter must be joined before `reap`.
-                    thread::Builder::new()
-                        .name(format!("opencode-pty-wait-{waiter_id}"))
-                        .spawn(move || {
-                            let _ = actor.send(exit_message(wait_exit(pid)));
-                            // Starts the reader's drain deadline.
-                            drop(exited_writer);
-                        })
-                }),
+            move |actor| read_output(output, OutputSink::new(sink, actor), cancel, exited),
+            move || super::Waiter {
+                exit: wait_exit(pid),
+                // Starts the reader's drain deadline, after the exit message.
+                after: Box::new(exited_writer),
             },
         )
     }

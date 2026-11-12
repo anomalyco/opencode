@@ -82,12 +82,11 @@ describe("SubagentReport settlement", () => {
       const parent = sessionID("ses_bgreport_parent")
       const child = sessionID("ses_bgreport_child")
       const active = sessionID("ses_bgreport_active")
-      const foreground = sessionID("ses_bgreport_foreground")
       const cancelled = sessionID("ses_bgreport_cancelled")
       const stopping = sessionID("ses_bgreport_stopping")
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent, agent: "explore", title: "Background audit" })
-      yield* seedSessions(database, [active, foreground, cancelled, stopping], { parent_id: child })
+      yield* seedSessions(database, [active, cancelled, stopping], { parent_id: child })
 
       const shell = yield* jobs.start({
         id: "sh_bgreport_shell",
@@ -101,18 +100,6 @@ describe("SubagentReport settlement", () => {
         type: "experimental_image_generate",
         recovery: { kind: "image", sessionID: child, path: "/tmp/chart.png", model: "test/painter" },
         background: true,
-        run: Effect.never,
-      })
-      yield* jobs.start({
-        id: foreground,
-        type: "subagent",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: child,
-          childSessionID: foreground,
-          agent: "explore",
-          description: "Foreground descendant",
-        },
         run: Effect.never,
       })
       yield* jobs.start({
@@ -138,7 +125,7 @@ describe("SubagentReport settlement", () => {
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const context = yield* buildExecution(scope, ({ sessionID }) => {
-        if (sessionID === active || sessionID === foreground || sessionID === cancelled) return gate
+        if (sessionID === active || sessionID === cancelled) return gate
         if (sessionID === stopping)
           return Deferred.succeed(stoppingStarted, undefined).pipe(
             Effect.andThen(Effect.never),
@@ -148,7 +135,6 @@ describe("SubagentReport settlement", () => {
       })
       const execution = Context.get(context, SessionExecution.Service)
       yield* execution.resume(active).pipe(Effect.forkIn(scope))
-      yield* execution.resume(foreground).pipe(Effect.forkIn(scope))
       yield* execution.resume(cancelled).pipe(Effect.forkIn(scope))
       yield* execution.resume(stopping).pipe(Effect.forkIn(scope))
       yield* Deferred.await(started)
@@ -445,122 +431,6 @@ describe("SubagentReport settlement", () => {
       if (marker) yield* jobs.completeBackground(marker.notificationID)
     }),
   )
-
-  it.effect("suppresses reports for a silent child and clears its background marker", () =>
-    Effect.gen(function* () {
-      const database = yield* Database.Service
-      const jobs = yield* Job.Service
-      const parent = sessionID("ses_silent_parent")
-      const child = sessionID("ses_silent_child")
-      yield* seedSessions(database, [parent])
-      yield* seedSessions(database, [child], {
-        parent_id: parent,
-        metadata: { "subagent.notify": false },
-      })
-
-      const scope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const context = yield* buildExecution(scope, () => Effect.void)
-      const execution = Context.get(context, SessionExecution.Service)
-
-      yield* seedAssistant(database, child, 100, "Silent work")
-      yield* execution.wake(child)
-      yield* execution.awaitIdle(child)
-      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
-
-      const job = yield* jobs.start({
-        id: child,
-        type: "subagent",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent,
-          childSessionID: child,
-          agent: "explore",
-          description: "Silent job",
-        },
-        background: true,
-        run: execution.resume(child).pipe(Effect.as("")),
-      })
-      yield* jobs.wait({ id: job.id })
-      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
-      expect(yield* jobs.pendingBackground).toEqual([])
-      expect(yield* jobs.backgroundJobs).toEqual([])
-      expect(yield* jobs.get(child)).toBeUndefined()
-    }),
-  )
-
-  it.effect("suppresses foreground job reports and still reports a later non-job period", () =>
-    Effect.gen(function* () {
-      const database = yield* Database.Service
-      const jobs = yield* Job.Service
-      const parent = sessionID("ses_foreground_parent")
-      const child = sessionID("ses_foreground_child")
-      const cancelled = sessionID("ses_foreground_cancelled")
-      yield* seedSessions(database, [parent])
-      yield* seedSessions(database, [child, cancelled], { parent_id: parent, agent: "explore" })
-
-      const started = yield* Deferred.make<void>()
-      const released = yield* Deferred.make<void>()
-      const cancelStarted = yield* Deferred.make<void>()
-      const cancelReleased = yield* Deferred.make<void>()
-      const scope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const context = yield* buildExecution(scope, ({ sessionID }) => {
-        if (sessionID === child)
-          return Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(released)))
-        if (sessionID === cancelled)
-          return Deferred.succeed(cancelStarted, undefined).pipe(Effect.andThen(Deferred.await(cancelReleased)))
-        return Effect.void
-      })
-      const execution = Context.get(context, SessionExecution.Service)
-
-      // Normal foreground completion returns to the inline caller, not the parent's inbox.
-      const job = yield* jobs.start({
-        id: child,
-        type: "subagent",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent,
-          childSessionID: child,
-          agent: "explore",
-          description: "Foreground audit",
-        },
-        run: execution.resume(child).pipe(Effect.as("inline")),
-      })
-      yield* Deferred.await(started)
-      yield* seedAssistant(database, child, 100, "Inline answer")
-      yield* Deferred.succeed(released, undefined)
-      yield* jobs.wait({ id: job.id })
-      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
-
-      // The next non-job period is a fresh busy period and reports normally.
-      yield* seedAssistant(database, child, 200, "Follow-up after foreground")
-      yield* execution.wake(child)
-      yield* execution.awaitIdle(child)
-      const reports = yield* SessionInbox.list(database.db, parent)
-      expect(reports).toHaveLength(1)
-      expect(text(reports[0])).toContain("Follow-up after foreground")
-
-      // A cancelled foreground generation is still the inline caller's to report.
-      yield* jobs.start({
-        id: cancelled,
-        type: "subagent",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent,
-          childSessionID: cancelled,
-          agent: "explore",
-          description: "Foreground cancellation",
-        },
-        run: execution.resume(cancelled).pipe(Effect.as("")),
-      })
-      yield* Deferred.await(cancelStarted)
-      expect(yield* jobs.cancel(cancelled)).toMatchObject({ status: "cancelled" })
-      expect(yield* execution.interrupt(cancelled)).toBe(true)
-      yield* execution.awaitIdle(cancelled)
-      expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
-    }),
-  )
 })
 
 describe("SubagentReport outbox", () => {
@@ -828,10 +698,7 @@ function buildExecution(scope: Scope.Scope, drain: Drain) {
 }
 
 type SeedValues = Partial<
-  Pick<
-    typeof SessionTable.$inferInsert,
-    "time_suspended" | "resume_attempts" | "parent_id" | "metadata" | "title" | "revert"
-  >
+  Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id" | "title" | "revert">
 > & { readonly agent?: string }
 
 function seedSessions(

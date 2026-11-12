@@ -122,7 +122,7 @@ const backgroundResult = (info: ShellResult.Result["info"], timeout?: number) =>
 
 // Tells the session how a background command ended, once its job settles.
 const notify = Effect.fnUntraced(function* (
-  sessions: Session.Interface,
+  sessions: Pick<Session.Interface, "synthetic">,
   jobs: Job.Interface,
   input: {
     readonly sessionID: SessionSchema.ID
@@ -130,15 +130,12 @@ const notify = Effect.fnUntraced(function* (
     readonly shellID: string
     readonly command: string
     readonly settled: Deferred.Deferred<Output>
-    // Read at delivery; `false` admits the notice without waking the session.
-    readonly resume?: () => false | undefined
   },
 ) {
   const info = (yield* jobs.wait({ id: input.id })).info
   if (!info || info.status === "running") return
   const output = info.status === "completed" ? yield* Deferred.await(input.settled) : undefined
   const text = output ? (info.output ?? "") : info.status === "error" ? (info.error ?? "Command failed") : "Cancelled"
-  const resume = input.resume?.()
   // A session deleted while its command ran has no one left to tell.
   yield* sessions
     .synthetic({
@@ -153,7 +150,6 @@ const notify = Effect.fnUntraced(function* (
         text,
         output,
       }),
-      ...(resume === false ? { resume } : {}),
     })
     .pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
   if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
@@ -166,6 +162,7 @@ const startJob = Effect.fnUntraced(function* (
   input: {
     readonly sessionID: SessionSchema.ID
     readonly info: ShellSchema.Info
+    readonly background?: boolean
     readonly notificationID?: SessionMessage.ID
     readonly timeout?: () => number
   },
@@ -185,6 +182,7 @@ const startJob = Effect.fnUntraced(function* (
       command: info.command,
     },
     ...(input.notificationID ? { notificationID: input.notificationID } : {}),
+    background: input.background,
     run: Effect.gen(function* () {
       const result = yield* shell.result(info)
       if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
@@ -225,22 +223,19 @@ export const backgroundToolResult = (info: ShellSchema.Info) => {
 export const reattach = Effect.fnUntraced(function* (input: {
   readonly shell: Shell.Interface
   readonly jobs: Job.Interface
-  readonly sessions: Session.Interface
+  readonly sessions: Pick<Session.Interface, "synthetic">
   readonly sessionID: SessionSchema.ID
   readonly info: ShellSchema.Info
   // The job's existing durable row, if the previous server had backgrounded it.
   readonly notificationID?: SessionMessage.ID
-  readonly resume?: () => false | undefined
 }) {
-  const { job, settled } = yield* startJob(input.jobs, input.shell, input)
-  yield* input.jobs.background(job.id)
+  const { job, settled } = yield* startJob(input.jobs, input.shell, { ...input, background: true })
   const notifying = notify(input.sessions, input.jobs, {
     sessionID: input.sessionID,
     id: job.id,
     shellID: input.info.id,
     command: input.info.command,
     settled,
-    resume: input.resume,
   })
   const current = yield* input.shell.get(input.info.id).pipe(Effect.option)
   if (Option.isSome(current) && current.value.status !== "running")

@@ -6,7 +6,12 @@ import type {
 } from "@opencode/client/promise"
 import { createTwoFilesPatch, diffLines } from "diff"
 import type { SessionDocument } from "../../document"
-import { CURRENT_SESSION_ID, STORY_MODEL } from "../../storybook/current-session-fixtures"
+import {
+  CURRENT_SESSION_ID,
+  STORY_MODEL,
+  subagentReport,
+  type SubagentReport,
+} from "../../storybook/current-session-fixtures"
 
 /**
  * A scripted session is a list of beats. Each beat takes one or more steps of the playhead: a tool call starts and then
@@ -18,15 +23,13 @@ export type Beat =
   | { kind: "shell"; command: string; output: string; exit: number }
   | { kind: "goal"; objective: string }
   /** A background subagent or shell reporting back, as the server delivers it. */
+  | ({ kind: "report"; source: "subagent" } & SubagentReport)
   | {
       kind: "report"
-      source: "subagent" | "shell"
+      source: "shell"
       state: "completed" | "error" | "cancelled"
       description: string
-      agent?: string
-      /** The subagent's session or the shell that reports, which the timeline links to. */
-      childID?: string
-      shellID?: string
+      shellID: string
     }
   | { kind: "model"; id: string }
   | { kind: "step" }
@@ -463,8 +466,17 @@ const featureWork: Beat[] = [
     kind: "tool",
     name: "subagent",
     input: { agent: "review", description: "Review the dark mode change", prompt: "Review the diff." },
-    output: "Looks good. One nit: name the store setter `setScheme`.",
-    metadata: { sessionID: "session_child_review", status: "completed" },
+    output: "The subagent is working in the background.",
+    metadata: { sessionID: "session_child_review", status: "running" },
+  },
+  {
+    kind: "report",
+    source: "subagent",
+    state: "completed",
+    description: "Review the dark mode change",
+    agent: "review",
+    childID: "session_child_review",
+    body: "Looks good. One nit: name the store setter `setScheme`.",
   },
   { kind: "tool", name: "shell", input: { command: "bun run build", description: "Build the app" }, hold: true },
   { kind: "interrupt" },
@@ -614,10 +626,18 @@ const everyTool: Beat[] = [
     kind: "tool",
     name: "subagent",
     input: { agent: "review", description: "Review the scheme fix", prompt: "Review the diff." },
-    error: "The subagent stopped: the model is overloaded",
-    metadata: { sessionID: "session_child_review_failed" },
+    output: "The subagent is working in the background.",
+    metadata: { sessionID: "session_child_review_failed", status: "running" },
   },
-  { kind: "step" },
+  {
+    kind: "report",
+    source: "subagent",
+    state: "error",
+    description: "Review the scheme fix",
+    agent: "review",
+    childID: "session_child_review_failed",
+    body: "The model is overloaded.",
+  },
   {
     kind: "say",
     text: "Filed **DES-418** and fixed the flash: the scheme now applies before the first paint. Tests pass; lint flags one stray `console` call.",
@@ -625,20 +645,20 @@ const everyTool: Beat[] = [
   { kind: "idle" },
 ]
 
-// Subagents and shells the agent starts in the background, how they report back, and subagents it waits on.
+// Subagents and shells the agent starts in the background, and how they report back.
 const backgroundWork: Beat[] = [
   { kind: "user", text: "Review the theme code and check the docs while you keep the dev server running." },
   {
     kind: "tool",
     name: "subagent",
-    input: { agent: "review", description: "Review the theme store", prompt: "Review it.", background: true },
+    input: { agent: "review", description: "Review the theme store", prompt: "Review it." },
     output: "The subagent is working in the background.",
     metadata: { sessionID: "session_child_store", status: "running" },
   },
   {
     kind: "tool",
     name: "subagent",
-    input: { agent: "explore", description: "Check the theme docs", prompt: "Check them.", background: true },
+    input: { agent: "explore", description: "Check the theme docs", prompt: "Check them." },
     output: "The subagent is working in the background.",
     metadata: { sessionID: "session_child_docs", status: "running" },
   },
@@ -663,6 +683,7 @@ const backgroundWork: Beat[] = [
     description: "Review the theme store",
     agent: "review",
     childID: "session_child_store",
+    body: "Nothing to change in the theme store.",
   },
   {
     kind: "report",
@@ -671,26 +692,45 @@ const backgroundWork: Beat[] = [
     description: "Check the theme docs",
     agent: "explore",
     childID: "session_child_docs",
+    body: "The docs check failed.",
   },
   {
     kind: "say",
-    text: "The store review found nothing to change. The docs check failed, so I'll run both checks again and wait for them.",
+    text: "The store review found nothing to change. I'll retry the docs check and ask for a review of the toggle.",
   },
   {
     kind: "tool",
     name: "subagent",
     input: { agent: "explore", description: "Check the theme docs", prompt: "Check them." },
-    output: "The docs describe the scheme setting correctly.",
-    metadata: { sessionID: "session_child_docs_again", status: "completed" },
+    output: "The subagent is working in the background.",
+    metadata: { sessionID: "session_child_docs_again", status: "running" },
   },
   {
     kind: "tool",
     name: "subagent",
     input: { agent: "review", description: "Review the toggle", prompt: "Review it." },
-    output: "The toggle reads the scheme in an effect, which is right.",
-    metadata: { sessionID: "session_child_toggle", status: "completed" },
+    output: "The subagent is working in the background.",
+    metadata: { sessionID: "session_child_toggle", status: "running" },
   },
-  { kind: "step" },
+  { kind: "idle" },
+  {
+    kind: "report",
+    source: "subagent",
+    state: "completed",
+    description: "Check the theme docs",
+    agent: "explore",
+    childID: "session_child_docs_again",
+    body: "The docs describe the scheme setting correctly.",
+  },
+  {
+    kind: "report",
+    source: "subagent",
+    state: "completed",
+    description: "Review the toggle",
+    agent: "review",
+    childID: "session_child_toggle",
+    body: "The toggle reads the scheme in an effect, which is right.",
+  },
   { kind: "say", text: "Both checks pass: the docs are accurate and the toggle reads the scheme correctly." },
   { kind: "idle" },
   { kind: "report", source: "shell", state: "cancelled", description: "bun run dev", shellID: "shell_dev" },
@@ -833,25 +873,20 @@ export function replayScript(script: Beat[], limit: number, start: number) {
       state.busy = true
     }
 
-    if (beat.kind === "report") {
+    if (beat.kind === "report" && beat.source === "subagent") {
+      closeStep()
+      messages.push(subagentReport(id("msg_report"), at(), beat))
+      state.busy = true
+    }
+
+    if (beat.kind === "report" && beat.source === "shell") {
       closeStep()
       messages.push({
         id: id("msg_report"),
         type: "synthetic",
         text: `${beat.source} ${beat.state}: ${beat.description}`,
         description: beat.description,
-        metadata: {
-          source: beat.source,
-          state: beat.state,
-          // Only the fields the report carries, as core writes them.
-          ...Object.fromEntries(
-            [
-              ["agent", beat.agent],
-              ["childID", beat.childID],
-              ["shellID", beat.shellID],
-            ].flatMap(([key, value]) => (value ? [[key, value]] : [])),
-          ),
-        },
+        metadata: { source: beat.source, state: beat.state, shellID: beat.shellID },
         time: { created: at() },
       })
     }

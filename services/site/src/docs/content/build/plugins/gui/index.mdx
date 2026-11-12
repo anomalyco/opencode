@@ -1716,7 +1716,7 @@ if (session && file) void file.sync("README.md")
 - `directory` is the session's workspace directory, and `local` is `true` when that is the project root.
 - `listedProject` is the sidebar project the session belongs to.
 - `visit` is a new object each time the session is routed.
-- `background` lists the shell commands and subagents the session moved to the background.
+- `background` lists the session's running subagents and shell commands.
 - `ctx.sessions.list()` returns the sessions of the open shell tabs.
 - The screen's `file` reads the workspace's files, and `comment` holds the line comments of the next prompt.
   `composer` is the next prompt: its text, attached parts, and model; see

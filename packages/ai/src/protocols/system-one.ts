@@ -94,7 +94,7 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     if (new Set(keys).size !== keys.length)
       return Effect.fail(
         ProviderShared.invalidRequest(
-          `System One choice options are strings; "${question.name}" has a boolean and a string with the same text`,
+          `Decision choice options are sent as string keys; "${question.name}" has a boolean and a string with the same text`,
         ),
       )
     return Effect.succeed([
@@ -294,4 +294,13 @@ export const route = DecisionRoute.make({
   endpoint: Endpoint.path("/systemone", { baseURL: DEFAULT_BASE_URL }),
 })
 
-export const SystemOne = { Response, encodeBody, toResponse, protocol, route } as const
+export const SystemOne = {
+  Answer,
+  Response,
+  encodeBody,
+  encodeQuestions,
+  toAnswer,
+  toResponse,
+  protocol,
+  route,
+} as const

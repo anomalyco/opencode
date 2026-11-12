@@ -14,13 +14,12 @@ import { ShellTool } from "../../tool/plugin/shell.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionHistory } from "../history.js"
-import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
-import { SubagentMetadata } from "../subagent-metadata.js"
+import { SubagentJob } from "../subagent-job.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
@@ -41,6 +40,8 @@ export interface Options {
 }
 
 const DEFAULT_MAX_ATTEMPTS = 10
+
+type Notices = Pick<Session.Interface, "synthetic">
 
 export interface Interface {
   /**
@@ -85,6 +86,11 @@ export const layer = (options?: Options) =>
       const db = (yield* Database.Service).db
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+
+      const wake = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+        const owner = yield* store.get(sessionID)
+        if (owner && !owner.revert) yield* execution.wake(sessionID)
+      })
 
       const prepareResume = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
         // Durable before the resume runs, so a crash inside the resumed turn is
@@ -205,29 +211,12 @@ export const layer = (options?: Options) =>
         )
       })
 
-      const reattach = (
-        shell: Shell.Interface,
-        sessionID: SessionSchema.ID,
-        info: ShellSchema.Info,
-        suspended: ReadonlySet<SessionSchema.ID>,
-        notificationID?: SessionMessage.ID,
-      ) =>
-        ShellTool.reattach({
-          shell,
-          jobs,
-          sessions,
-          sessionID,
-          info,
-          notificationID,
-          resume: () => (suspended.has(sessionID) ? false : undefined),
-        })
-
       // A shell job the previous server left running is watched again if its command is still known (running or
       // finished during the restart); otherwise it is reported as lost.
       const recoverShellJob = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "shell" }>,
-        suspended: ReadonlySet<SessionSchema.ID>,
+        notices: Notices,
         reattached: Set<string>,
       ) {
         const shell = background.status === "running" ? yield* shellOf(recovery.sessionID) : undefined
@@ -237,14 +226,21 @@ export const layer = (options?: Options) =>
             : Option.none()
         if (!shell || Option.isNone(info)) return yield* recoverToolJob(background, recovery)
         reattached.add(info.value.id)
-        yield* reattach(shell, recovery.sessionID, info.value, suspended, background.notificationID)
+        yield* ShellTool.reattach({
+          shell,
+          jobs,
+          sessions: notices,
+          sessionID: recovery.sessionID,
+          info: info.value,
+          notificationID: background.notificationID,
+        })
       })
 
       // A server that stopped (shut down or killed) during a foreground shell call leaves the call unsettled, its
       // command still running in the daemon. Settle the call as moved to the background and watch the command.
       const settleBackgroundedCalls = Effect.fnUntraced(function* (
         sessionID: SessionSchema.ID,
-        suspended: ReadonlySet<SessionSchema.ID>,
+        notices: Notices,
         reattached: ReadonlySet<string>,
       ) {
         const calls = (yield* SessionHistory.incompleteAssistants(db, sessionID)).flatMap((message) =>
@@ -281,23 +277,22 @@ export const layer = (options?: Options) =>
             // Backgrounded but stopped before the call was settled: its job row was already reattached (and, for a
             // command that already finished, may even be done).
             if (reattached.has(info.id)) return
-            yield* reattach(shell, sessionID, info, suspended)
+            yield* ShellTool.reattach({ shell, jobs, sessions: notices, sessionID, info })
           }),
           { discard: true },
         )
       })
 
       const deliverSubagentSafe = Effect.fnUntraced(function* (
+        notices: Notices,
         notificationID: Job.Background["notificationID"],
         recovery: Extract<Job.Recovery, { kind: "subagent" }>,
         result: Pick<Job.Background, "status" | "output" | "error">,
-        resume: boolean | undefined,
       ) {
-        yield* SubagentCompletion.deliver(sessions, jobs, {
+        yield* SubagentCompletion.deliver(notices, jobs, {
           ...result,
           recovery,
           notificationID,
-          resume,
         }).pipe(
           // A deleted parent owes nothing to the report; clear its row.
           Effect.catchTag("Session.NotFoundError", () => jobs.completeBackground(notificationID)),
@@ -335,26 +330,17 @@ export const layer = (options?: Options) =>
       const recoverSubagent = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "subagent" }>,
-        suspended: ReadonlySet<SessionSchema.ID>,
+        notices: Notices,
       ): Effect.fn.Return<boolean> {
         const child = yield* store.get(recovery.childSessionID)
         if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
           yield* jobs.completeBackground(background.notificationID)
           return false
         }
-        const silent = !SubagentMetadata.notify(child.metadata)
-        // A suspended owner must receive the notice after its own restart accounting,
-        // otherwise admission would wake it before prepareResume can charge the attempt.
-        const resumeParent = suspended.has(recovery.parentSessionID) ? false : undefined
 
         if (background.status !== "running") {
-          // The outbox row already holds the formatted result; replay it without touching
-          // the child. A silent link owes no report, so only the marker needs clearing.
-          if (silent) {
-            yield* jobs.completeBackground(background.notificationID)
-            return false
-          }
-          yield* deliverSubagentSafe(background.notificationID, recovery, background, resumeParent)
+          // The outbox row already holds the formatted result; replay it without touching the child.
+          yield* deliverSubagentSafe(notices, background.notificationID, recovery, background)
           return false
         }
 
@@ -362,16 +348,10 @@ export const layer = (options?: Options) =>
         // prepareResume publishes Execution.Failed directly on the bus outside the
         // coordinator, so the settle hook never reports an exhausted child.
         if (!(yield* prepareResume(recovery.childSessionID))) {
-          if (silent) {
-            yield* jobs.completeBackground(background.notificationID)
-            return false
-          }
-          yield* deliverSubagentSafe(
-            background.notificationID,
-            recovery,
-            { status: "error", error: RESUME_EXHAUSTED.message },
-            resumeParent,
-          )
+          yield* deliverSubagentSafe(notices, background.notificationID, recovery, {
+            status: "error",
+            error: RESUME_EXHAUSTED.message,
+          })
           return false
         }
         // Defer the start until every suspended root has counted its attempt; a fast
@@ -397,6 +377,29 @@ export const layer = (options?: Options) =>
           const suspended = new Set(
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
+          const state = { defer: true }
+          const wakes = new Set<SessionSchema.ID>()
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              state.defer = false
+              yield* Effect.forEach(wakes, (sessionID) => Effect.ignoreCause(wake(sessionID)), { discard: true })
+              suspended.clear()
+            }),
+          )
+          // Hold notice wakes until every suspended root has counted its attempt, so a woken
+          // child cannot settle mid-sweep and wake its parent past that budget.
+          const notices: Notices = {
+            synthetic: (input) =>
+              sessions.synthetic({ ...input, resume: false }).pipe(
+                Effect.tap(() => {
+                  if (suspended.has(input.sessionID)) return Effect.void
+                  if (!state.defer) return wake(input.sessionID)
+                  wakes.add(input.sessionID)
+                  return Effect.void
+                }),
+                Effect.uninterruptible,
+              ),
+          }
           yield* store.releaseChildClaims(children)
           const recoverable = Effect.fnUntraced(function* (background: Job.Background) {
             return (yield* jobs.get(background.id))?.status !== "running"
@@ -409,7 +412,7 @@ export const layer = (options?: Options) =>
             Effect.fnUntraced(function* (background) {
               const recovery = background.recovery
               if (recovery.kind === "subagent" || !(yield* recoverable(background))) return
-              if (recovery.kind === "shell") return yield* recoverShellJob(background, recovery, suspended, reattached)
+              if (recovery.kind === "shell") return yield* recoverShellJob(background, recovery, notices, reattached)
               yield* recoverToolJob(background, recovery)
             }),
             { discard: true },
@@ -417,7 +420,7 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(
             suspended,
             (sessionID) =>
-              settleBackgroundedCalls(sessionID, suspended, reattached).pipe(
+              settleBackgroundedCalls(sessionID, notices, reattached).pipe(
                 Effect.catch((error) =>
                   Effect.logWarning("failed to settle backgrounded shell calls", { sessionID, error }),
                 ),
@@ -430,7 +433,7 @@ export const layer = (options?: Options) =>
             Effect.fnUntraced(function* (background) {
               const recovery = background.recovery
               if (recovery.kind !== "subagent" || !(yield* recoverable(background))) return
-              if (yield* recoverSubagent(background, recovery, suspended)) resumable.push({ background, recovery })
+              if (yield* recoverSubagent(background, recovery, notices)) resumable.push({ background, recovery })
             }),
             { discard: true },
           )
@@ -439,10 +442,11 @@ export const layer = (options?: Options) =>
           const resumed = yield* execution.active
           yield* Effect.forEach(
             (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID)),
-            (sessionID) =>
-              execution
-                .resume(sessionID)
-                .pipe(Effect.ignore, Effect.forkIn(scope), Effect.when(prepareResume(sessionID))),
+            Effect.fnUntraced(function* (sessionID) {
+              if (!(yield* prepareResume(sessionID))) return
+              suspended.delete(sessionID)
+              yield* execution.resume(sessionID).pipe(Effect.ignore, Effect.forkIn(scope))
+            }),
             { concurrency: "unbounded", discard: true },
           )
 
@@ -451,31 +455,13 @@ export const layer = (options?: Options) =>
           // report, so no jobs.wait observer is needed.
           yield* Effect.forEach(
             resumable,
-            ({ background, recovery }) =>
-              jobs.start({
-                id: background.id,
-                type: "subagent",
-                title: recovery.description,
-                notificationID: background.notificationID,
-                recovery,
-                background: true,
-                run: execution.resume(recovery.childSessionID).pipe(
-                  Effect.onInterrupt(() =>
-                    jobs
-                      .isCancelled(background.id)
-                      .pipe(
-                        Effect.flatMap((cancelled) =>
-                          cancelled ? execution.interrupt(recovery.childSessionID) : Effect.void,
-                        ),
-                      ),
-                  ),
-                  Effect.as(""),
-                ),
-              }),
+            Effect.fnUntraced(function* ({ background, recovery }) {
+              yield* SubagentJob.start(jobs, execution, recovery, background.notificationID)
+              suspended.delete(recovery.childSessionID)
+            }),
             { discard: true },
           )
-          suspended.clear()
-        }),
+        }).pipe(Effect.scoped),
       })
     }),
   )
