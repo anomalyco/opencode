@@ -277,6 +277,33 @@ describe("browser pane machine", () => {
     expect(attachment(connected.state)?.browser).toEqual(inventory(tab(tabA)))
   })
 
+  // A location can restart after attachment; its restored session must also survive a cold plugin registration.
+  test("an evicted session retries an unavailable browser RPC when it wakes", () => {
+    const start = ready()
+    const tabs = inventory(tab(tabA))
+    const suspended = transition(start, paneState(start, tabs, "browser.pane.suspended"))
+    const woken = transition(suspended.state, { type: "session.wake", sessionKey: key })
+
+    expect(woken.effects).toContainEqual(expect.objectContaining({ type: "open-registration", restore: tabs }))
+
+    const unavailable = transition(woken.state, paneState(woken.state, null, "browser.pane.rpc-unavailable"))
+
+    expect(phase(unavailable.state)).toMatchObject({ status: "backoff", attempts: 1 })
+
+    const retry = transition(unavailable.state, {
+      type: "retry.due",
+      sessionKey: key,
+      attempt: attempt(unavailable.state),
+    })
+
+    expect(retry.effects).toContainEqual(expect.objectContaining({ type: "open-registration", restore: tabs }))
+
+    const connected = transition(retry.state, paneState(retry.state, tabs))
+    expect(phase(connected.state)).toMatchObject({ status: "ready" })
+    expect(attachment(connected.state)?.browser).toEqual(tabs)
+    expect(serverSupported(connected.state, server)).toBe(true)
+  })
+
   test("a browser RPC that remains unavailable stops retrying", () => {
     let state = replay(attach()).state
 
