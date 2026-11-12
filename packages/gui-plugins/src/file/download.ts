@@ -25,6 +25,7 @@ export async function downloadFile(ctx: Context, screen: SessionScreen, path: st
 
   if (content.type === "text") {
     await ctx.system.save({ name, content: content.content })
+
     return true
   }
 
@@ -34,19 +35,23 @@ export async function downloadFile(ctx: Context, screen: SessionScreen, path: st
     link.href = content.url
     link.download = name
     link.click()
+
     return true
   }
 
   if (content.bytes) {
-    const blob = new Blob([content.bytes as unknown as ArrayBuffer], {
+    // Copy into a fresh array so the blob owns an `ArrayBuffer` rather than a possibly shared one.
+    const blob = new Blob([new Uint8Array(content.bytes)], {
       type: content.mimeType ?? "application/octet-stream",
     })
+
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
     link.download = name
     link.click()
     URL.revokeObjectURL(url)
+
     return true
   }
 
