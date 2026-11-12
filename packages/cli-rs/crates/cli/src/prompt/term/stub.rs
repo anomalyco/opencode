@@ -1,4 +1,4 @@
-//! The prompt terminal where there is no console backend yet (Windows until step W7): never interactive, so prompts
+//! The prompt terminal where there is no backend (neither Unix nor Windows): never interactive, so prompts
 //! fail as they do without a terminal, and the input ends at once. Sizes come from OpenTUI's console.
 
 use std::io::IsTerminal;
