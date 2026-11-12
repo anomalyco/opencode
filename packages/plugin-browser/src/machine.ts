@@ -647,7 +647,7 @@ export function selectTarget(
       ok: false,
       error: new Tool.Error({
         message:
-          "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
+          "[browser.disconnected] No OpenCode desktop app is connected to this session, so no browser action ran. The browser runs inside the desktop app and works only while the user has this session open there. Tell the user, and continue without the browser until they open it; calling again before then fails the same way.",
       }),
     }
 
@@ -661,29 +661,43 @@ export function selectTarget(
     }
   const tab = "tabID" in action ? entry.browserState.tabs.find((tab) => tab.id === action.tabID) : undefined
 
-  if ("tabID" in action && !tab)
-    return {
-      ok: false,
-      error: new Tool.Error({
-        message:
-          "[browser.tab_unavailable] This tab is closed or does not belong to the connected session. Call browser.tabs.list({}) and use an exact returned tabID. If no tabs exist, use browser.tabs.open({}). Never substitute a request ID, file ID, or element ref for tabID.",
-      }),
-    }
+  if ("tabID" in action && !tab) return { ok: false, error: tabUnavailable(action.tabID, entry.browserState.tabs) }
 
   return { ok: true, connectionID: entry.connectionID, tab }
+}
+
+/** Whether a desktop is attached to the session or attaching to it. */
+export function hasAttachment(state: ConnectionState, sessionID: Session.ID) {
+  const entry = state.status === "active" ? state.sessions.get(sessionID) : undefined
+  return entry !== undefined && entry.status !== "revoking"
+}
+
+// Lists the session's open tabs, bounded, so the next call can use one directly.
+function tabUnavailable(tabID: Browser.TabID, tabs: readonly Browser.Tab[]) {
+  const listed = tabs
+    .slice(0, 10)
+    .map((tab) => `${tab.id} (${tab.url.length > 100 ? `${tab.url.slice(0, 100)}…` : tab.url})`)
+  const more = tabs.length > listed.length ? `, and ${tabs.length - listed.length} more from browser.tabs.list({})` : ""
+  return new Tool.Error({
+    message: `[browser.tab_unavailable] No open tab in this session has the ID ${tabID}; it was closed or came from another session. ${
+      listed.length
+        ? `Open tabs: ${listed.join(", ")}${more}. Use one of these IDs`
+        : "This session has no open tabs. Open one with browser.tabs.open({ url })"
+    }. Never use a request ID, file ID, or element ref as a tabID.`,
+  })
 }
 
 function disconnectedBeforeDispatch() {
   return new Tool.Error({
     message:
-      "[browser.disconnected] The desktop browser disconnected before this action was sent; no action ran. Reconnect this session in the desktop app, then call browser.tabs.list({}).",
+      "[browser.disconnected] The desktop app disconnected before this action was sent; no action ran. Call browser.tabs.list({}) to check whether it has reconnected before you try again.",
   })
 }
 
 function disconnectedAfterDispatch() {
   return new Tool.Error({
     message:
-      "[browser.disconnected] Browser connection closed; the action may already have run. Reconnect this session in the desktop app, call browser.tabs.list({}), and inspect the target tab with browser.snapshot({tabID}). Do not repeat clicks, submissions, uploads, or evaluations until their outcome is known.",
+      "[browser.disconnected] The desktop app disconnected while this action ran; the action may already have run. Once browser.tabs.list({}) succeeds again, inspect the tab with browser.snapshot({tabID}) before you repeat a click, submission, upload, or evaluation.",
   })
 }
 

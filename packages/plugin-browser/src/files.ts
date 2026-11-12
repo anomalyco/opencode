@@ -42,6 +42,68 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], di
   }),
 )
 
+/**
+ * Where a preview path points on this server, and whether a file is there. The Review pane resolves a relative path
+ * against the workspace, or failing that to the one workspace file whose path ends with it, and it accepts file://
+ * URLs and line suffixes (`:12`, `#L12`). `found` is undefined when that suffix search was too large to finish here,
+ * and the whole result is undefined for addresses that are not server files, such as https: or skill: links.
+ */
+export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string) {
+  const value = path.trim()
+  if (/^[a-z][a-z\d+.-]+:/i.test(value) && !/^file:/i.test(value) && !/^[a-z]:[\\/]/i.test(value)) return undefined
+  return yield* Effect.tryPromise(async (): Promise<Located> => {
+    const { stat } = await import("node:fs/promises")
+    const { isAbsolute, resolve } = await import("node:path")
+    const { fileURLToPath } = await import("node:url")
+    const local = /^file:/i.test(value) ? (URL.canParse(value) ? fileURLToPath(new URL(value)) : value) : value
+    const plain = local.replace(/(?:#L\d+(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:\d+(?::\d+)?(?:-\d+(?::\d+)?)?:?)$/i, "")
+    const kinds = await Promise.all(
+      [local, plain].map((candidate) =>
+        stat(resolve(directory, candidate)).then(
+          (info) => (info.isFile() ? "file" : info.isDirectory() ? "directory" : "other"),
+          () => undefined,
+        ),
+      ),
+    )
+    const absolute = resolve(directory, kinds[0] ? local : plain)
+    if (kinds.includes("file")) return { absolute, found: true, directory: false }
+    if (kinds.includes("directory")) return { absolute, found: false, directory: true }
+    if (isAbsolute(plain)) return { absolute, found: false, directory: false }
+    return { absolute, found: await findBySuffix(directory, plain), directory: false }
+  }).pipe(
+    // A path this server cannot even parse is left for the pane to judge, as before.
+    Effect.orElseSucceed(() => undefined),
+  )
+})
+
+type Located = { readonly absolute: string; readonly found: boolean | undefined; readonly directory: boolean }
+
+// The pane's search index skips ignored files; skipping dependency and VCS folders keeps this walk small too.
+async function findBySuffix(directory: string, relative: string) {
+  const { readdir } = await import("node:fs/promises")
+  const { join } = await import("node:path")
+  const target = relative.replaceAll("\\", "/").replace(/^(?:\.\/)+/, "")
+  const queue = [""]
+  const budget = { entries: 20_000 }
+  while (queue.length > 0) {
+    const folder = queue.shift() ?? ""
+    const entries = await readdir(join(directory, folder), { withFileTypes: true }).catch(() => [])
+    budget.entries -= entries.length
+    if (budget.entries < 0) return undefined
+    const files = entries.map((entry) => ({ entry, path: folder ? `${folder}/${entry.name}` : entry.name }))
+    if (files.some((file) => file.entry.isFile() && (file.path === target || file.path.endsWith(`/${target}`))))
+      return true
+    queue.push(
+      ...files
+        .filter(
+          (file) => file.entry.isDirectory() && !file.entry.name.startsWith(".") && file.entry.name !== "node_modules",
+        )
+        .map((file) => file.path),
+    )
+  }
+  return false
+}
+
 const types: Record<string, string> = {
   ".txt": "text/plain",
   ".csv": "text/csv",

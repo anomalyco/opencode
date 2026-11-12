@@ -358,6 +358,8 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         source: { type: "tool", messageID: tool.messageID, id: tool.id },
       })
     }),
+    /** Whether a desktop is attached to the session or attaching to it. */
+    attached: (sessionID: Session.ID) => Effect.sync(() => BrowserMachine.hasAttachment(machine.state, sessionID)),
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
       if (!selected.ok) return yield* selected.error

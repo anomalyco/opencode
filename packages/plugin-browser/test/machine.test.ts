@@ -399,6 +399,36 @@ describe("browser state", () => {
     const next = run(state, { type: "state.updated", sessionID, connectionID: "conn_1", browserState })
     expect(BrowserMachine.selectTarget(next.state, sessionID, { type: "back", tabID })).toMatchObject({ ok: true, tab })
   })
+
+  test("a closed or foreign tab ID fails with the open tabs, at most ten", () => {
+    const closed = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+    const target = (tabs: Browser.Tab[]) =>
+      BrowserMachine.selectTarget(
+        run(attached(), {
+          type: "state.updated",
+          sessionID,
+          connectionID: "conn_1",
+          browserState: { tabs, focusedTabID: null },
+        }).state,
+        sessionID,
+        { type: "reload", tabID: closed },
+      )
+    expect(target([])).toMatchObject({
+      ok: false,
+      error: {
+        message: `[browser.tab_unavailable] No open tab in this session has the ID ${closed}; it was closed or came from another session. This session has no open tabs. Open one with browser.tabs.open({ url }). Never use a request ID, file ID, or element ref as a tabID.`,
+      },
+    })
+    expect(target([tab])).toMatchObject({
+      error: { message: expect.stringContaining(`Open tabs: ${tabID} (${tab.url}). Use one of these IDs.`) },
+    })
+    const many = Array.from({ length: 12 }, () => ({ ...tab, id: Browser.TabID.make(`tab_${crypto.randomUUID()}`) }))
+    const message = (target(many) as { readonly error: { readonly message: string } }).error.message
+    expect(message).toContain(
+      `${many[9]!.id} (${tab.url}), and 2 more from browser.tabs.list({}). Use one of these IDs.`,
+    )
+    expect(message).not.toContain(many[10]!.id)
+  })
 })
 
 describe("session lifecycle", () => {
