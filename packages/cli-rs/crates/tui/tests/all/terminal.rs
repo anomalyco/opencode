@@ -57,6 +57,8 @@ struct Terminal {
     harness: Harness,
     memory: Memory,
     remotes: Arc<Mutex<Vec<Remote>>>,
+    /// The `attachment_id` each socket opened with.
+    attachments: Arc<Mutex<Vec<String>>>,
     state: PathBuf,
     _home: opencode_util::temp::TempDir,
 }
@@ -85,13 +87,16 @@ fn mount_at(width: u16, persistent_pty: bool, selection: Option<Value>) -> Termi
     };
     let harness = support::mount(width, 30, deps);
     let remotes: Arc<Mutex<Vec<Remote>>> = Arc::default();
-    let opened = remotes.clone();
-    harness.tui.terminals.set_connector(Arc::new(move |_| {
+    let attachments: Arc<Mutex<Vec<String>>> = Arc::default();
+    let (opened, attached) = (remotes.clone(), attachments.clone());
+    harness.tui.terminals.set_connector(Arc::new(move |url: url::Url| {
         let (socket, remote) = pty::pair();
         opened.lock().unwrap().push(remote);
+        let id = url.query_pairs().find(|(name, _)| name == "attachment_id").map(|(_, id)| id.into_owned());
+        attached.lock().unwrap().push(id.unwrap_or_default());
         Ok(socket)
     }));
-    let harness = Terminal { harness, memory, remotes, state, _home: home };
+    let harness = Terminal { harness, memory, remotes, attachments, state, _home: home };
     harness.wait(|harness| harness.app.text().contains("Fix the parser"));
     harness
 }
@@ -255,8 +260,16 @@ fn the_wheel_scrolls_the_terminal_history_across_output() {
     let wheel = |down: bool| harness.app.scroll(70, 12, down);
     wheel(false);
     assert_eq!(last(&harness), "line 36");
+    // Nothing on a scrolled-back view shows the output land. Control moving away and back after it does: the pane
+    // handles its messages in order, and taking control back sends a size frame.
+    harness.frames(0);
     output(40..42);
-    harness.app.wait_until(Duration::from_millis(100), || false);
+    let attachment = harness.attachments.lock().unwrap()[0].clone();
+    for id in ["other", attachment.as_str()] {
+        let changed = json!({ "type": "controller_changed", "attachmentID": id });
+        deliver.try_send(Incoming::Text(changed.to_string())).unwrap();
+    }
+    assert_eq!(harness.frames(1), [vec![0, 0, 48, 0, 29]], "control came back after the output");
     assert_eq!(last(&harness), "line 36", "output keeps a scrolled-back view on its rows");
     assert_eq!(row(&harness, 1), "line 13");
     wheel(true);
