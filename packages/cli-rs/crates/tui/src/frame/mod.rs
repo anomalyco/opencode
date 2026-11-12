@@ -36,6 +36,8 @@ pub struct Frame {
     layout: RefCell<Value>,
     session: RefCell<Option<Weak<SessionState>>>,
     ticking: Cell<bool>,
+    /// Whether a repaint for a fading unread marker is due.
+    markers: Cell<bool>,
 }
 
 impl Frame {
@@ -83,6 +85,7 @@ impl Frame {
             layout: RefCell::new(json!({})),
             session: RefCell::default(),
             ticking: Cell::new(false),
+            markers: Cell::new(false),
         }
     }
 
@@ -238,6 +241,29 @@ pub(crate) fn wake(tui: &Tui) {
     if !tui.frame.ticking.get() {
         tui.app.defer(bind!(tui.weak(), |tui, _| tick(&tui)));
     }
+}
+
+/// Brings the tabs' unread markers up to the store after a flush.
+pub(crate) fn observe_markers(tui: &Tui) {
+    strip::observe(&tui.frame.strip, tui);
+    rail::observe(&tui.frame.rail, tui);
+}
+
+/// Repaints the tabs after 16 ms, the TS animation clock's tick, while an unread marker fades out.
+pub(crate) fn wake_markers(tui: &Tui) {
+    if tui.frame.markers.replace(true) {
+        return;
+    }
+    // Deferred like `wake`: a timer set while painting would wait for the loop's next wake-up.
+    tui.app.defer(bind!(tui.weak(), |tui, _| {
+        tui.app.set_timeout(
+            std::time::Duration::from_millis(16),
+            bind!(tui.weak(), |tui, _| {
+                tui.frame.markers.set(false);
+                tui.app.request_redraw();
+            }),
+        );
+    }));
 }
 
 /// Runs the pulses at 20 fps while any moves.
