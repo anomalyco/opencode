@@ -195,9 +195,11 @@ fn with_lock<T>(state: &Path, file: &Path, f: impl FnOnce() -> io::Result<T>) ->
 const REWRITE_ATTEMPTS: usize = 5;
 
 // Rewrites `file` atomically with `change(text)` when that gives a new text. The TypeScript TUI writes
-// without the lock (deviation O89-jsonl-writes), so the replace happens only while the file is still
-// the one read: same inode, size, and modification time. Otherwise the change is made again against a
-// new read. The new text is synced before the rename, so a crash leaves the old file or the new one.
+// without the lock (deviation O89-jsonl-writes), so the replace happens only while the file still holds
+// what was read. Otherwise the change is made again against a new read. Contents, not metadata: a
+// TypeScript rewrite truncates in place and may keep the length, and on Windows the modification time
+// can stay within one clock tick. The new text is synced before the rename, so a crash leaves the old
+// file or the new one.
 // A client that appends to the old file between the check and the rename writes to the open old file;
 // the lines it gained are carried over to the end of the new one.
 fn rewrite(file: &Path, mut change: impl FnMut(&str) -> Option<String>) -> io::Result<()> {
@@ -207,7 +209,6 @@ fn rewrite(file: &Path, mut change: impl FnMut(&str) -> Option<String>) -> io::R
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
             Err(error) => return Err(error),
         };
-        let read = old.as_ref().map(fs::File::metadata).transpose()?;
         let mut bytes = Vec::new();
         if let Some(old) = old.as_mut() {
             old.read_to_end(&mut bytes)?;
@@ -215,7 +216,7 @@ fn rewrite(file: &Path, mut change: impl FnMut(&str) -> Option<String>) -> io::R
         let Some(next) = change(&String::from_utf8_lossy(&bytes)) else { return Ok(()) };
         let temp = PathBuf::from(format!("{}.{}.{}.tmp", file.display(), std::process::id(), crate::id::v4()));
         let replaced = write_synced(&temp, &next).and_then(|()| {
-            if !unchanged(file, read.as_ref(), bytes.len())? {
+            if !unchanged(file, old.is_some().then_some(&bytes))? {
                 return Ok(false);
             }
             fs::rename(&temp, file).map(|()| true)
@@ -244,29 +245,13 @@ fn write_synced(file: &Path, text: &str) -> io::Result<()> {
     new.sync_all()
 }
 
-// Whether `file` is still the file whose metadata `read` was taken before `len` bytes were read.
-fn unchanged(file: &Path, read: Option<&fs::Metadata>, len: usize) -> io::Result<bool> {
-    let current = match fs::metadata(file) {
-        Ok(current) => Some(current),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error),
-    };
-    Ok(match (read, current) {
-        (Some(read), Some(current)) => read.len() == len as u64 && same_file(read, &current),
-        (None, None) => true,
-        _ => false,
-    })
-}
-
-fn same_file(a: &fs::Metadata, b: &fs::Metadata) -> bool {
-    #[cfg(unix)]
-    let inode = {
-        use std::os::unix::fs::MetadataExt;
-        a.dev() == b.dev() && a.ino() == b.ino()
-    };
-    #[cfg(not(unix))]
-    let inode = true;
-    inode && a.len() == b.len() && a.modified().ok() == b.modified().ok()
+// Whether `file` still holds `read`, the bytes read before, or is still missing (`None`).
+fn unchanged(file: &Path, read: Option<&Vec<u8>>) -> io::Result<bool> {
+    match fs::read(file) {
+        Ok(current) => Ok(read == Some(&current)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(read.is_none()),
+        Err(error) => Err(error),
+    }
 }
 
 // `Array.prototype.at`.
