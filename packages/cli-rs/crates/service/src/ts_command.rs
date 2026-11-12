@@ -83,11 +83,18 @@ pub fn search(
     let extensions: Vec<&str> = std::iter::once(".exe")
         .chain(pathext.split(';').filter(|ext| !ext.is_empty() && !ext.eq_ignore_ascii_case(".exe")))
         .collect();
-    let found = path
-        .to_string_lossy()
-        .split(';')
-        // `cmd.exe` drops quotes around a directory.
-        .map(|dir| dir.trim_matches('"'))
+    // `std::env::split_paths` on Windows: a `;` inside double quotes is part of the directory, and quotes are dropped.
+    let mut dirs = vec![String::new()];
+    let mut quoted = false;
+    for c in path.to_string_lossy().chars() {
+        match c {
+            '"' => quoted = !quoted,
+            ';' if !quoted => dirs.push(String::new()),
+            _ => dirs.last_mut().expect("one directory at least").push(c),
+        }
+    }
+    let found = dirs
+        .iter()
         .filter(|dir| !dir.is_empty())
         .flat_map(|dir| {
             extensions.iter().map(move |ext| Path::new(dir).join(format!("{name}{}", ext.to_ascii_lowercase())))
@@ -199,5 +206,13 @@ mod tests {
         for (pathext, files, shim, expected) in cases {
             assert_eq!(find(pathext, &files, shim), expected, "{pathext:?} {files:?}");
         }
+    }
+
+    #[test]
+    fn a_quoted_directory_keeps_its_semicolon() {
+        let shim = Path::new("tool;cache").join("opencode.cmd");
+        let found =
+            search(std::ffi::OsStr::new("C:\\x;\"tool;cache\";D:\\y"), None, "opencode", |path| path == shim, |_| None);
+        assert_eq!(found, Some(shim));
     }
 }
