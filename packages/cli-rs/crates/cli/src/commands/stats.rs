@@ -117,7 +117,12 @@ fn columns() -> Option<usize> {
     if !stdout.is_terminal() {
         return None;
     }
-    rustix::termios::tcgetwinsize(&stdout).ok().map(|size| usize::from(size.ws_col)).filter(|columns| *columns > 0)
+    #[cfg(unix)]
+    let columns = rustix::termios::tcgetwinsize(&stdout).ok().map(|size| size.ws_col);
+    // The console window's width; OpenTUI reports 80 for a zero width.
+    #[cfg(not(unix))]
+    let columns = opentui::term::size().ok().map(|size| size.0);
+    columns.map(usize::from).filter(|columns| *columns > 0)
 }
 
 /// `statsRange`: the requested window in epoch milliseconds, end exclusive, and its label.

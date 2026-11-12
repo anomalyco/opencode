@@ -127,6 +127,7 @@ mod tests {
 
     // A standalone server: it prints its ready line, answers `/api/info`, and exits when its stdin
     // lease closes.
+    #[cfg(unix)]
     const STANDALONE: &str = r#"
 const server = Bun.serve({ port: 0, fetch: () => Response.json({ version: "test", pid: process.pid, urls: [], paths: { tmp: "/tmp" } }) })
 console.log(JSON.stringify({ url: server.url.toString() }))
@@ -188,6 +189,7 @@ process.exit(0)
         assert!(transport.0.lock().unwrap().last().unwrap().starts_with("http://127.0.0.1:5000/"));
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn a_standalone_server_lives_as_long_as_the_connection() {
         if std::process::Command::new("bun").arg("--version").output().is_err() {

@@ -3,6 +3,7 @@
 //! where TS replaces a service assert the Rust policy instead (docs/F.9.md): the service is used,
 //! or left running. Every file lives in a temporary directory, and every process a test starts is
 //! killed when its fixture drops. Without `bun` the tests pass with a note.
+#![cfg(unix)]
 
 use opencode_api::transport::{Reqwest, Transport};
 use opencode_local::paths::Paths;

@@ -22,6 +22,7 @@ impl TempDir {
     fn new_in(base: &Path) -> io::Result<Self> {
         let base = std::path::absolute(base)?;
         static COUNT: AtomicU64 = AtomicU64::new(0);
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);

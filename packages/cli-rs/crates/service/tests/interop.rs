@@ -8,6 +8,7 @@
 //!
 //! Needs `bun` and a TypeScript checkout with `node_modules`: `OPENCODE_TS_ROOT`, else this
 //! repository. Without them the test passes with a note.
+#![cfg(unix)]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

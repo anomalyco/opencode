@@ -304,6 +304,7 @@ mod tests {
         assert!(pool.should_recruit(false, ms(now, 250)));
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_real_contender_reports_its_exit_code_and_stderr() {
         let contender = Contender::spawn(&["sh".into(), "-c".into(), "echo denied >&2; exit 23".into()], &[]).unwrap();

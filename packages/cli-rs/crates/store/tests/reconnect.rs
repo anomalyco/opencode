@@ -2,6 +2,7 @@
 //! service leaves its registration behind, so `ensure` waits the spawn delay (5 s) before it starts a
 //! replacement: longer than the connect timeout (2 s) a stream attempt may take. The connection loop
 //! must find the service between attempts, as TS `createClientConnection` runs `reconnect`.
+#![cfg(unix)]
 
 use std::ffi::OsString;
 use std::path::PathBuf;
