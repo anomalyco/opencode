@@ -70,9 +70,11 @@ fn list(context: &Context, args: &SessionListArgs) -> error::Result<()> {
     page(&output)
 }
 
-// `less -R -S` reads the list on stdin and draws on the terminal; without `less`, the list is printed.
+// `less -R -S` (`cmd /c more` on Windows) reads the list on stdin and draws on the terminal; without it, the list
+// is printed.
 fn page(output: &str) -> error::Result<()> {
-    let Ok(mut pager) = Command::new("less").args(["-R", "-S"]).stdin(Stdio::piped()).spawn() else {
+    let (program, args) = if cfg!(windows) { ("cmd", ["/c", "more"]) } else { ("less", ["-R", "-S"]) };
+    let Ok(mut pager) = Command::new(program).args(args).stdin(Stdio::piped()).spawn() else {
         return print(output);
     };
     // Quitting `less` before it read everything closes the pipe; that is not an error.
