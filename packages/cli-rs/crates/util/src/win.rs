@@ -1,6 +1,6 @@
 //! Win32 calls that std does not cover: whether a process is alive, ending one, pointing stdin at the console, and
 //! ignoring Ctrl+C while a child runs; the executable, times and memory of a process, and the OS release; shared
-//! libraries; stderr on a pipe; console modes and waits.
+//! libraries; stderr on a pipe; console modes and waits; time zones of Windows' ICU.
 //! Windows only.
 
 #![allow(unsafe_code)]
@@ -24,7 +24,9 @@ use windows_sys::Win32::System::Console::{
     ENABLE_VIRTUAL_TERMINAL_PROCESSING, ENABLE_WINDOW_INPUT, GetConsoleMode, GetConsoleScreenBufferInfo, GetStdHandle,
     STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler, SetConsoleMode, SetStdHandle,
 };
-use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use windows_sys::Win32::System::LibraryLoader::{
+    GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW, LoadLibraryW,
+};
 use windows_sys::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
 use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows_sys::Win32::System::SystemInformation::{GetSystemTimeAsFileTime, OSVERSIONINFOW};
@@ -300,6 +302,67 @@ pub fn wait_handle(handle: impl AsHandle, timeout: Option<Duration>) -> io::Resu
     }
 }
 
+/// A time zone of the ICU that Windows ships (`icu.dll` since Windows 10 1903, `icuin.dll` since 1703), where Node
+/// and Bun take local times from: `TZ` as an IANA name, else the Windows zone with its whole rule history. The
+/// library is loaded from the system directory at first use, not imported, so a Windows without it still starts.
+pub struct IcuZone {
+    calendar: NonNull<c_void>,
+    set_millis: SetMillis,
+    get: Get,
+}
+
+// The entries of `ucal.h` it calls, and what `GetProcAddress` returns.
+type Open = unsafe extern "C" fn(*const u16, i32, *const std::ffi::c_char, i32, *mut i32) -> *mut c_void;
+type SetMillis = unsafe extern "C" fn(*mut c_void, f64, *mut i32);
+type Get = unsafe extern "C" fn(*const c_void, i32, *mut i32) -> i32;
+type Proc = unsafe extern "system" fn() -> isize;
+
+// SAFETY: an ICU calendar may move between threads; `&mut self` keeps it to one at a time.
+unsafe impl Send for IcuZone {}
+
+impl IcuZone {
+    /// The zone named `name`, or ICU's default zone with `None`; `None` without ICU. ICU reads an unknown name as
+    /// `Etc/Unknown`, which is UTC.
+    pub fn open(name: Option<&str>) -> Option<Self> {
+        const GREGORIAN: i32 = 1;
+        let module = [c"icu.dll", c"icuin.dll"].iter().find_map(|library| {
+            let wide: Vec<u16> = library.to_bytes().iter().map(|&byte| u16::from(byte)).chain([0]).collect();
+            // SAFETY: `wide` is NUL-terminated; Windows' own ICU initializes only itself.
+            NonNull::new(unsafe { LoadLibraryExW(wide.as_ptr(), std::ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32) })
+        })?;
+        // SAFETY: `module` is loaded and `name` is a C string.
+        let symbol = |name: &CStr| unsafe { GetProcAddress(module.as_ptr(), name.as_ptr().cast()) };
+        // SAFETY: `module` stays loaded (it is never freed), and these are the signatures of `ucal.h`.
+        let (open, set_millis, get) = unsafe {
+            (
+                std::mem::transmute::<Proc, Open>(symbol(c"ucal_open")?),
+                std::mem::transmute::<Proc, SetMillis>(symbol(c"ucal_setMillis")?),
+                std::mem::transmute::<Proc, Get>(symbol(c"ucal_get")?),
+            )
+        };
+        let zone: Vec<u16> = name.map_or_else(Vec::new, |name| name.encode_utf16().collect());
+        let (id, len) = if name.is_some() { (zone.as_ptr(), zone.len() as i32) } else { (std::ptr::null(), 0) };
+        let mut status = 0;
+        // SAFETY: `id` holds `len` units, or is null for the default zone; a null locale is the default one.
+        let calendar = unsafe { open(id, len, std::ptr::null(), GREGORIAN, &mut status) };
+        NonNull::new(calendar).filter(|_| status <= 0).map(|calendar| Self { calendar, set_millis, get })
+    }
+
+    /// Milliseconds east of UTC at `ms` since the epoch: the zone's raw offset plus its daylight saving.
+    pub fn offset_ms(&mut self, ms: i64) -> Option<i32> {
+        const ZONE_OFFSET: i32 = 15;
+        const DST_OFFSET: i32 = 16;
+        let mut status = 0;
+        let calendar = self.calendar.as_ptr();
+        // SAFETY: `calendar` is open and only this `&mut self` uses it; `status` outlives each call.
+        let offset = unsafe {
+            (self.set_millis)(calendar, ms as f64, &mut status);
+            (self.get)(calendar, ZONE_OFFSET, &mut status) + (self.get)(calendar, DST_OFFSET, &mut status)
+        };
+        (status <= 0).then_some(offset)
+    }
+}
+
 fn open(pid: u32, access: PROCESS_ACCESS_RIGHTS) -> io::Result<OwnedHandle> {
     // SAFETY: plain call; a null result is an error.
     let handle = unsafe { OpenProcess(access, 0, pid) };
@@ -397,6 +460,18 @@ mod tests {
         if console_mode(std::io::stderr()).is_some() {
             assert!(console_size(std::io::stderr()).is_some_and(|(columns, rows)| columns > 0 && rows > 0));
         }
+    }
+
+    #[test]
+    fn icu_zones_read_iana_names_with_their_history() {
+        let offset = |name: &str, ms: i64| IcuZone::open(Some(name)).unwrap().offset_ms(ms).unwrap();
+        assert_eq!(offset("America/New_York", 0), -18_000_000);
+        // Summer time, and the 1986 change of Kathmandu's offset.
+        assert_eq!(offset("America/New_York", 1_719_792_000_000), -14_400_000);
+        assert_eq!(offset("Asia/Kathmandu", 0), 19_800_000);
+        assert_eq!(offset("Asia/Kathmandu", 1_719_792_000_000), 20_700_000);
+        assert_eq!(offset("No/Such_Zone", 0), 0);
+        assert!(IcuZone::open(None).is_some());
     }
 
     #[test]
