@@ -686,8 +686,8 @@ const actions = new Map<string, (target: string) => string>([
  * The member's own words read as theirs, so a reply from their phone steers the agent. Anyone else's, and anything a
  * bot wrote, are information for the task, never a source of new actions. So is a new message in a channel the session
  * posted in, the member's own included: it may be meant for anyone. A status change is only its target, status and
- * link. An MCP server's own event is its title, its link and its data, always as information. Only the body is free
- * text, fenced once.
+ * link. An MCP server's own event is its title, its link and its data, as information unless Console says the member
+ * made it. Only the body is free text, fenced once.
  */
 function describe(event: WatchEvent) {
   const url = line(event.url)
@@ -695,7 +695,10 @@ function describe(event: WatchEvent) {
   const action = actions.get(event.kind)
   const ownWords = event.actor.bot !== true && event.actor.self === true
   const body = event.body.trim() ? [fence(event.body)] : []
-  if (event.kind === "event") return [`${title(event)}${url ? ` (${url})` : ""}. ${notFromUser}`, ...body].join("\n")
+  if (event.kind === "event")
+    return [`${title(event)}${url ? ` (${url})` : ""}${ownWords ? ", from you:" : `. ${notFromUser}`}`, ...body].join(
+      "\n",
+    )
   if (event.kind === "channel_post")
     return [
       `${line(event.actor.login)}${event.actor.bot ? " (a bot)" : ""} posted in ${title(event)} (${url}) after your post (may be unrelated). ${notForYou}`,
