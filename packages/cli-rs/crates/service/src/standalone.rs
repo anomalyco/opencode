@@ -148,30 +148,42 @@ fn taskkill(pid: u32) -> std::process::Command {
 mod tests {
     use super::*;
 
-    // Whether a `waitfor.exe` runs; no other test starts one.
-    fn waiting() -> bool {
-        let output = std::process::Command::new("tasklist")
-            .args(["/fo", "csv", "/nh", "/fi", "IMAGENAME eq waitfor.exe"])
+    // The PID of the `ping` that process `parent` started, once it runs. Other tests run `ping` too, so it is found
+    // by its parent.
+    fn child_ping(parent: u32) -> Option<u32> {
+        let script = format!(
+            "Get-CimInstance Win32_Process | Where-Object {{ $_.ParentProcessId -eq {parent} -and $_.Name -eq 'ping.exe' }} | ForEach-Object ProcessId"
+        );
+        let output = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
             .output()
             .unwrap();
-        String::from_utf8_lossy(&output.stdout).contains("waitfor.exe")
+        String::from_utf8_lossy(&output.stdout).trim().parse().ok()
     }
 
     #[tokio::test]
     async fn shutdown_ends_the_server_and_its_children() {
-        let signal = format!("opencode-standalone-{}", std::process::id());
-        let script = format!("Write-Output '{{\"url\":\"http://127.0.0.1:1\"}}'; waitfor /t 60 {signal}");
-        let command = ["powershell", "-NoProfile", "-NonInteractive", "-Command", &script].map(OsString::from);
+        // `ping` waits a second between echoes; `timeout` needs a console on stdin.
+        let script = "Write-Output '{\"url\":\"http://127.0.0.1:1\"}'; ping -n 60 127.0.0.1 | Out-Null";
+        let command = ["powershell", "-NoProfile", "-NonInteractive", "-Command", script].map(OsString::from);
         let server = start(&command, &std::env::temp_dir(), false).await.unwrap();
         assert_eq!(server.endpoint.url, "http://127.0.0.1:1");
         let deadline = std::time::Instant::now() + Duration::from_secs(20);
-        while !waiting() {
-            assert!(std::time::Instant::now() < deadline, "waitfor did not start");
+        let ping = loop {
+            if let Some(ping) = child_ping(server.pid) {
+                break ping;
+            }
+            assert!(std::time::Instant::now() < deadline, "the server's ping did not start");
             tokio::time::sleep(Duration::from_millis(50)).await;
-        }
+        };
         let started = std::time::Instant::now();
         server.shutdown().await;
         assert!(started.elapsed() < FORCE_KILL_AFTER, "taskkill did not end the server");
-        assert!(!waiting(), "the server's child survived");
+        // `TerminateProcess` returns before the process has exited.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while opencode_util::win::process_alive(ping) {
+            assert!(std::time::Instant::now() < deadline, "the server's child survived");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
     }
 }
