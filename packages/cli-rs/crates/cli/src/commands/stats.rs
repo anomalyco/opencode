@@ -205,7 +205,9 @@ pub fn render_stats(stats: &SessionStatsInfo, options: &RenderOptions, palette: 
     let color = options.color;
     let style = |value: &str, code: &str| style(value, code, color);
     let primary = format!("1;{}", palette.primary);
-    let count = |value: f64, noun: &str| metric_count(value, noun, &primary, color);
+    let count = |value: f64, noun: &str| {
+        format!("{} {noun}{}", style(&format_number(value), &primary), if value == 1.0 { "" } else { "s" })
+    };
     let total_tokens = total(&stats.tokens);
     let totals = match &stats.tools {
         SessionStatsTools::Summary(tools) => Some(&tools.totals),
@@ -563,10 +565,6 @@ fn to_fixed(value: f64, digits: usize) -> String {
         return format!("-{text}");
     }
     text
-}
-
-fn metric_count(value: f64, noun: &str, primary: &str, color: bool) -> String {
-    format!("{} {noun}{}", style(&format_number(value), primary, color), if value == 1.0 { "" } else { "s" })
 }
 
 fn style(value: &str, code: &str, color: bool) -> String {
