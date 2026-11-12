@@ -57,6 +57,7 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginPromise } from "@opencode/core/plugin/promise"
 import { OptimizePlugin } from "@opencode/core/plugin/optimize"
 import { IdentityPlugin } from "@opencode/core/plugin/identity"
+import { ToolInputRepairPlugin } from "@opencode/core/plugin/tool-input-repair"
 import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
@@ -1174,6 +1175,97 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("renamed_echo")
     expect(s.requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
     expect(s.executions).toEqual(["renamed"])
+  })
+
+  scenario("repairs direct calls against the tools advertised by the session", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const registry = yield* Tool.Service
+    const previews: unknown[] = []
+    const commands: string[] = []
+    yield* registry.transform((tools) => {
+      tools.add({
+        name: "preview",
+        options: { codemode: false },
+        description: "Preview a count",
+        input: Schema.Struct({ count: Schema.Unknown }),
+        execute: ({ count }) => Effect.sync(() => previews.push(count)).pipe(Effect.as({ content: "previewed" })),
+      })
+      tools.add({
+        name: "shell",
+        options: { codemode: false },
+        description: "Record a command",
+        input: Schema.Struct({ command: Schema.String }),
+        execute: ({ command }) => Effect.sync(() => commands.push(command)).pipe(Effect.as({ content: "recorded" })),
+      })
+    })
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.tools.bash = event.tools.preview!
+        event.tools.bash.input = { type: "object", properties: { count: { type: "integer" } } }
+        delete event.tools.preview
+      }),
+    )
+    yield* hooks.register("tool", "execute.before", (event) =>
+      Effect.sync(() => {
+        if (event.tool === "typo") event.tool = "bash"
+        if (event.tool === "preview" && event.id === "call-hidden-redirect") event.tool = "bash"
+      }),
+    )
+    yield* ToolInputRepairPlugin.Plugin.effect(
+      host({ tool: { ...host().tool, hook: (name, callback) => hooks.register("tool", name, callback) } }),
+    )
+    yield* hooks.register("tool", "execute.before", (event) =>
+      Effect.sync(() => {
+        if (event.tool === "bash" && event.id === "call-redirect") {
+          event.tool = "shell"
+          event.input = { command: "redirected" }
+        }
+      }),
+    )
+    yield* s.admit("Use the advertised tools")
+    yield* s.llm.push(
+      TestLLM.toolCalls(
+        LLMEvent.toolCall({ id: "call-exact", name: "bash", input: { count: "2" } }),
+        LLMEvent.toolCall({ id: "call-typo", name: "typo", input: { count: "3" } }),
+        LLMEvent.toolCall({ id: "call-redirect", name: "bash", input: {} }),
+        LLMEvent.toolCall({ id: "call-hidden", name: "preview", input: { count: "4" } }),
+        LLMEvent.toolCall({ id: "call-hidden-redirect", name: "preview", input: { count: "5" } }),
+      ),
+      TestLLM.stop(),
+    )
+    yield* s.resume
+    expect(previews.sort()).toEqual([2, 3, 5])
+    expect(commands).toEqual(["redirected"])
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Use the advertised tools"),
+      Expected.assistant({}, [
+        Expected.completedTool({ id: "call-exact" }, { content: [Expected.text("previewed")] }),
+        Expected.completedTool(
+          { id: "call-typo" },
+          {
+            content: [
+              Expected.text("previewed"),
+              Expected.text('There is no "typo" tool, so this ran as "bash". Call "bash" directly.'),
+            ],
+          },
+        ),
+        Expected.completedTool({ id: "call-redirect" }, { content: [Expected.text("recorded")] }),
+        Expected.failedTool(
+          { id: "call-hidden" },
+          { error: { message: "Tool is not available for this request: preview" } },
+        ),
+        Expected.completedTool(
+          { id: "call-hidden-redirect" },
+          {
+            content: [
+              Expected.text("previewed"),
+              Expected.text('There is no "preview" tool, so this ran as "bash". Call "bash" directly.'),
+            ],
+          },
+        ),
+      ]),
+      Expected.assistant({ finish: "stop" }, []),
+    ])
   })
 
   for (const resume of [false, true]) {
