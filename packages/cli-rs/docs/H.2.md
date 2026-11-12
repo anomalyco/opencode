@@ -82,7 +82,8 @@ Scenario data uses fixed IDs and times, so no ID or time normalizer is needed in
 
 ## The recording
 
-`parity/fixtures/<step>/<name>.app.json`, pretty JSON:
+`parity/fixtures/<step>/<name>.app.json`, written by `recordingText` in `parity/lib/app.ts` with one config
+key, route, step, socket message, write and read per line. Its value, shown pretty:
 
 ```json
 {

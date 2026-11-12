@@ -10,7 +10,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { createAppFixture } from "../../../tui/test/fixture/app"
 import { createFetch, directory } from "../../../tui/test/fixture/tui-client"
-import { applyMasks, withNewDesigns, type AppScenario, type Route, type Step } from "../lib/app"
+import { applyMasks, recordingText, withNewDesigns, type AppScenario, type Route, type Step } from "../lib/app"
 import { readCells, writeFixture, type Fixture } from "../lib/cells"
 import { installFakePty } from "../lib/pty-socket"
 
@@ -146,7 +146,7 @@ async function record(name: string, file: string) {
       reads: dedupe(log.filter(isRead)),
     },
   }
-  await Bun.write(`${parity}fixtures/${name}.app.json`, JSON.stringify(recording, null, 2) + "\n")
+  await Bun.write(`${parity}fixtures/${name}.app.json`, recordingText(recording))
 }
 
 // A fake IDE MCP server (E.5): it answers `initialize`, keeps every message a client sends, and pushes
