@@ -232,6 +232,16 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           // Split parents' envelopes carry no content, so only unsplit parents' inline media moves here.
           data: media ? yield* SessionBlob.externalizeRow(db, row.data) : row.data,
         }
+        // Keep message IDs available as fork/revert boundaries while the inherited baseline supersedes their updates.
+        if (
+          event.data.instructions !== undefined &&
+          row.type === "system" &&
+          row.data.metadata?.notice === "instructions"
+        )
+          return {
+            ...copy,
+            data: { ...copy.data, metadata: { ...copy.data.metadata, instructionSuperseded: true } },
+          }
         // A summary references the first message it kept, which the fork copied under a new ID.
         const keepID = row.type === "compaction" ? row.data.metadata?.keepID : undefined
         if (!Schema.is(SessionMessage.ID)(keepID)) return copy
