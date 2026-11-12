@@ -26,13 +26,14 @@ export const Plugin = define({
 })
 
 // Resolve `provider` and `providers` independently: a higher-priority document that only selects a
-// provider must not drop endpoints or keys shipped by a lower-priority managed document.
+// provider must not drop endpoints or keys shipped by a lower-priority managed document, and one
+// that only adds endpoints or keys must not drop a lower-priority selection or disable.
 function resolveProviderSettings(entries: readonly Entry[]) {
   const values = entries.flatMap((entry) =>
     entry.type === "document" && entry.info.websearch !== undefined ? [entry.info.websearch] : [],
   )
-  const latest = values.at(-1)
-  const disabled = latest === false
+  const selection = values.findLast((value) => value === false || value.provider !== undefined)
+  const disabled = selection === false
   const providers = new Map<string, WebSearch.Settings>()
   if (!disabled)
     values.forEach((value) => {
@@ -43,7 +44,7 @@ function resolveProviderSettings(entries: readonly Entry[]) {
     })
   return {
     disabled,
-    provider: latest === false || latest === undefined ? undefined : latest.provider,
+    provider: selection === false || selection === undefined ? undefined : selection.provider,
     providers,
   }
 }

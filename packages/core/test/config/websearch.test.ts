@@ -124,6 +124,70 @@ describe("ConfigWebSearchPlugin.Plugin", () => {
       expect(seen.at(-1)).toEqual({ endpoint: "https://managed.example.com/exa" })
     }).pipe(Effect.provide(Config.testLayer([configured(false)]))),
   )
+
+  it.live("keeps a lower-priority selection when a higher-priority document only adds settings", () =>
+    Effect.gen(function* () {
+      const websearch = yield* WebSearch.Service
+      const bus = yield* Bus.Service
+      const config = yield* Config.Test
+      const plugins = yield* Plugin.Service
+      const seen: (WebSearch.Settings | undefined)[] = []
+      yield* websearch.transform((editor) =>
+        editor.add({
+          id: WebSearch.ID.make("exa"),
+          name: "Exa",
+          execute: (_input, settings) =>
+            Effect.sync(() => {
+              seen.push(settings)
+              return []
+            }),
+        }),
+      )
+      yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
+
+      yield* config.setEntries([
+        configured(new ConfigWebSearch.Info({ provider: WebSearch.ID.make("exa") })),
+        configured(new ConfigWebSearch.Info({ providers: { [WebSearch.ID.make("exa")]: { apiKey: "user-key" } } })),
+      ])
+      yield* bus.publish(Event.Updated, {})
+      yield* waitUntil(
+        Effect.gen(function* () {
+          yield* websearch.query({ query: "merge", providerID: WebSearch.ID.make("exa") })
+          const provider = yield* websearch.default()
+          return provider?.id === WebSearch.ID.make("exa") && seen.at(-1)?.apiKey === "user-key"
+        }).pipe(Effect.orElseSucceed(() => false)),
+      )
+      expect(seen.at(-1)).toEqual({ apiKey: "user-key" })
+      expect((yield* websearch.default())?.id).toBe(WebSearch.ID.make("exa"))
+    }).pipe(Effect.provide(Config.testLayer([]))),
+  )
+
+  it.live("keeps a lower-priority disable when a higher-priority document only adds settings", () =>
+    Effect.gen(function* () {
+      const websearch = yield* WebSearch.Service
+      const bus = yield* Bus.Service
+      const config = yield* Config.Test
+      const plugins = yield* Plugin.Service
+      yield* ConfigWebSearchPlugin.Plugin.effect(yield* PluginHost.make(plugins, "test"))
+
+      yield* config.setEntries([
+        configured(false),
+        configured(
+          new ConfigWebSearch.Info({
+            providers: { [WebSearch.ID.make("exa")]: { endpoint: "https://user.example.com/exa" } },
+          }),
+        ),
+      ])
+      yield* bus.publish(Event.Updated, {})
+      yield* waitUntil(
+        websearch.default().pipe(
+          Effect.as(false),
+          Effect.orElseSucceed(() => true),
+        ),
+      )
+      expect((yield* websearch.default().pipe(Effect.flip))._tag).toBe("WebSearch.Disabled")
+    }).pipe(Effect.provide(Config.testLayer([]))),
+  )
 })
 
 function configured(websearch: ConfigWebSearch.Selection): Document {
