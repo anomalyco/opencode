@@ -151,7 +151,7 @@ describe("Permission", () => {
       )
       const service = yield* Permission.Service
 
-      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow", matchedRules: [{ resource: "src/index.ts", rule: { action: "*", resource: "*", effect: "allow" } }] })
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow", matchedRules: [{ resource: "src/index.ts", rule: { action: "read", resource: "*", effect: "allow" } }] })
       expect(yield* service.ask(assertion({ agent: Agent.ID.make("reviewer") }))).toMatchObject({ effect: "deny" })
       yield* agents.transform((editor) =>
         editor.update(Agent.ID.make("reviewer"), (agent) => {
@@ -243,6 +243,7 @@ describe("Permission", () => {
       expect(yield* service.ask(assertion({ action: "custom", resources: ["*"] }))).toEqual({
         id: Permission.ID.create("per_test"),
         effect: "allow",
+        matchedRules: [{ resource: "*", rule: { action: "custom", resource: "*", effect: "allow" } }],
       })
       expect(yield* service.list()).toEqual([])
     }),
@@ -265,7 +266,11 @@ describe("Permission", () => {
       })
 
       const service = yield* Permission.Service
-      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "deny" })
+      expect(yield* service.ask(assertion())).toEqual({
+        id: Permission.ID.create("per_test"),
+        effect: "deny",
+        matchedRules: [{ resource: "src/index.ts", rule: { action: "*", resource: "*", effect: "deny" } }],
+      })
       expect(yield* service.list()).toEqual([])
     }),
   )
@@ -275,10 +280,18 @@ describe("Permission", () => {
       yield* setup([{ action: "*", resource: "*", effect: "allow" }])
       const service = yield* Permission.Service
       const bash = assertion({ action: "bash", resources: ["pwd"] })
-      expect(yield* service.ask(bash)).toEqual({ id: Permission.ID.create("per_test"), effect: "allow" })
+      expect(yield* service.ask(bash)).toEqual({
+        id: Permission.ID.create("per_test"),
+        effect: "allow",
+        matchedRules: [{ resource: "pwd", rule: { action: "*", resource: "*", effect: "allow" } }],
+      })
 
       yield* setRules([])
-      expect(yield* service.ask(bash)).toEqual({ id: Permission.ID.create("per_test"), effect: "ask" })
+      expect(yield* service.ask(bash)).toEqual({
+        id: Permission.ID.create("per_test"),
+        effect: "ask",
+        matchedRules: [{ resource: "pwd", rule: { action: "bash", resource: "*", effect: "ask" } }],
+      })
       expect(yield* service.get(Permission.ID.create("per_test"))).toBeDefined()
     }),
   )
@@ -321,6 +334,7 @@ describe("Permission", () => {
       expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
         id: Permission.ID.create("per_test"),
         effect: "allow",
+        matchedRules: [{ resource: "pwd", rule: { action: "bash", resource: "pwd", effect: "allow" } }],
       })
       expect(yield* service.list()).toEqual([])
 
@@ -328,6 +342,7 @@ describe("Permission", () => {
       expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
         id: Permission.ID.create("per_test"),
         effect: "deny",
+        matchedRules: [{ resource: "pwd", rule: { action: "bash", resource: "pwd", effect: "allow" } }],
       })
     }),
   )

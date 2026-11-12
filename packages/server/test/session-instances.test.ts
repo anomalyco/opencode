@@ -253,7 +253,11 @@ it.live(
               action: "instance-test",
               resources: [config.tool],
             }
-            expect(yield* permissions.ask(permission)).toEqual({ id: permission.id, effect: "ask" })
+            expect(yield* permissions.ask(permission)).toEqual({
+              id: permission.id,
+              effect: "ask",
+              matchedRules: [{ resource: config.tool, rule: { action: "*", resource: "*", effect: "allow" } }],
+            })
             const foreignID = config.id === first.id ? second.id : first.id
             const foreignForm = yield* forms.create({
               sessionID: foreignID,

@@ -650,7 +650,11 @@ it.live("routes pending requests through the Session's instance", () =>
     )
     expect(createdPermission.status).toBe(200)
     expect(yield* Effect.promise(() => createdPermission.json())).toEqual({
-      data: { id: "per_pending_read", effect: "ask" },
+      data: {
+        id: "per_pending_read",
+        effect: "ask",
+        matchedRules: [{ resource: "pwd", rule: { action: "shell", resource: "*", effect: "ask" } }],
+      },
     })
 
     const permissions = yield* Effect.promise(() =>
