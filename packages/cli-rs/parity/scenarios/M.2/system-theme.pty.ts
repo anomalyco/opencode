@@ -35,11 +35,12 @@ export default definePty({
     events: (id) => answer(id, "Read it."),
     after: (id) => [user(id, "hello", 100), assistant("msg_a4", [{ type: "text", text: "Read it." }], 101)],
   }),
-  setup: (root) =>
-    Bun.write(
+  setup: async (root) => {
+    await Bun.write(
       `${root}/home/.config/opencode/cli.json`,
       JSON.stringify({ theme: { name: "system", mode: "system" }, mini: { splash: "hide" } }),
-    ),
+    )
+  },
   steps: [
     { ...opened, checkpoint: "idle", backgrounds: "idle:backgrounds" },
     {
