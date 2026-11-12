@@ -45,6 +45,7 @@ import { ServerSDKProvider } from "@/context/server-sdk"
 import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
+import { MajorUpdateProvider } from "@/context/major-update"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
@@ -316,7 +317,9 @@ function SharedProviders(props: ParentProps) {
       <BodyDesignClass />
       <CommandProvider>
         <DesktopCommands />
-        <HighlightsProvider>{props.children}</HighlightsProvider>
+        <HighlightsProvider>
+          <MajorUpdateProvider>{props.children}</MajorUpdateProvider>
+        </HighlightsProvider>
       </CommandProvider>
     </>
   )

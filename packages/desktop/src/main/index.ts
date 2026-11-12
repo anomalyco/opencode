@@ -272,12 +272,14 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
+  const trigger = (id: string) => {
+    const win = getLastFocusedWindow()
+    if (win) sendMenuCommand(win, id)
+  }
+  const showUpdater = () => showUpdaterDialog(updater, true, () => trigger("update.open"))
   const menuDeps = {
-    trigger: (id: string) => {
-      const win = getLastFocusedWindow()
-      if (win) sendMenuCommand(win, id)
-    },
-    checkForUpdates: () => void showUpdaterDialog(updater, true),
+    trigger,
+    checkForUpdates: () => void showUpdater(),
     relaunch,
   }
   registerIpcHandlers({
@@ -303,7 +305,7 @@ const main = Effect.gen(function* () {
     checkAppExists: (appName) => checkAppExists(appName),
     resolveAppPath: async (appName) => resolveAppPath(appName),
     updater,
-    showUpdater: () => showUpdaterDialog(updater, true),
+    showUpdater,
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),

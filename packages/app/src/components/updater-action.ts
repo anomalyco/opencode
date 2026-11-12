@@ -2,6 +2,7 @@ import { createMemo } from "solid-js"
 import type { UpdaterState } from "@/updater"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
+import { useMajorUpdate } from "@/context/major-update"
 import { showToast } from "@/utils/toast"
 
 export function updaterAction(state: UpdaterState | undefined) {
@@ -25,6 +26,7 @@ export function updaterAction(state: UpdaterState | undefined) {
 export function useUpdaterAction() {
   const platform = usePlatform()
   const language = useLanguage()
+  const major = useMajorUpdate()
   const action = createMemo(() => updaterAction(platform.updater?.state()))
 
   return {
@@ -35,6 +37,8 @@ export function useUpdaterAction() {
       if (run !== "check") return
 
       const state = await platform.updater?.check()
+      // With no OpenCode 1 release left to install, checking for updates opens the OpenCode 2.0 offer instead.
+      if (state?.status !== "ready" && major.status() !== "unavailable") return major.open()
       if (state?.status === "up-to-date") {
         showToast({
           variant: "success",

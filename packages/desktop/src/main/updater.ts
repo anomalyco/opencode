@@ -1,7 +1,7 @@
 import { app, dialog } from "electron"
-import pkg from "electron-updater"
-import { UPDATER_ENABLED } from "./constants"
-import { createUpdaterController, type UpdaterReadyRecord } from "./updater-controller"
+import pkg, { type AppUpdater } from "electron-updater"
+import { CHANNEL, UPDATER_ENABLED } from "./constants"
+import { createUpdaterController, type UpdaterBackend, type UpdaterReadyRecord } from "./updater-controller"
 import { getLogger } from "./logging"
 import { getStore } from "./store"
 import { setAppQuitting } from "./windows"
@@ -9,6 +9,28 @@ import { nativeT } from "./native-translations"
 
 const { autoUpdater } = pkg
 const key = "ready"
+
+// OpenCode 2 desktop keeps each channel's app ID, so its installer replaces OpenCode 1 in place.
+// OpenCode 1 reads GitHub releases; these are the feeds OpenCode 2 publishes to.
+const MAJOR_FEEDS = {
+  beta: "https://opencode.ai/update/api/beta/desktop/opencode/",
+  prod: "https://opencode.ai/update/api/latest/desktop/opencode/",
+}
+
+// A second updater, so switching feeds can never make the OpenCode 1 updater download OpenCode 2.
+function majorUpdater(url: string) {
+  // autoUpdater is already the right updater for this platform and package type, so build another of the same class.
+  const Updater = autoUpdater.constructor as new (options: { provider: "generic"; url: string }) => AppUpdater
+  const updater = new Updater({ provider: "generic", url })
+  updater.logger = getLogger()
+  updater.channel = "latest"
+  updater.allowPrerelease = false
+  // OpenCode 2 beta versions (0.0.0-beta-N) sort below every OpenCode 1 version.
+  updater.allowDowngrade = true
+  updater.autoDownload = false
+  updater.autoInstallOnAppQuit = false
+  return updater
+}
 
 export function setupAutoUpdater(stop: () => Promise<void>) {
   const logger = getLogger()
@@ -25,27 +47,30 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
     currentVersion: app.getVersion(),
   })
 
+  const backend = (updater: AppUpdater): UpdaterBackend => ({
+    checkForUpdates: () => updater.checkForUpdates(),
+    downloadUpdate: () => updater.downloadUpdate(),
+    quitAndInstall: () => {
+      // quitAndInstall closes all windows before emitting before-quit, so
+      // flag the quit first to keep window ids persisted for restore.
+      setAppQuitting()
+      try {
+        updater.quitAndInstall()
+      } catch (error) {
+        // The install failed and the app keeps running; clear the flag so
+        // deliberate window closes prune ids again.
+        setAppQuitting(false)
+        throw error
+      }
+    },
+  })
+
   const store = getStore("opencode.updater")
   return createUpdaterController({
     enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),
-    backend: {
-      checkForUpdates: () => autoUpdater.checkForUpdates(),
-      downloadUpdate: () => autoUpdater.downloadUpdate(),
-      quitAndInstall: () => {
-        // quitAndInstall closes all windows before emitting before-quit, so
-        // flag the quit first to keep window ids persisted for restore.
-        setAppQuitting()
-        try {
-          autoUpdater.quitAndInstall()
-        } catch (error) {
-          // The install failed and the app keeps running; clear the flag so
-          // deliberate window closes prune ids again.
-          setAppQuitting(false)
-          throw error
-        }
-      },
-    },
+    backend: backend(autoUpdater),
+    major: UPDATER_ENABLED && CHANNEL !== "dev" ? backend(majorUpdater(MAJOR_FEEDS[CHANNEL])) : undefined,
     persistence: {
       get() {
         const value = store.get(key)
@@ -60,8 +85,15 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
   })
 }
 
-export async function showUpdaterDialog(controller: ReturnType<typeof setupAutoUpdater>, alertOnFail: boolean) {
+export async function showUpdaterDialog(
+  controller: ReturnType<typeof setupAutoUpdater>,
+  alertOnFail: boolean,
+  offerMajor: () => void,
+) {
   const state = await controller.check()
+  // With no OpenCode 1 release left to install, checking for updates opens the OpenCode 2 offer instead.
+  if (alertOnFail && state.status !== "ready" && controller.major.getState().status !== "unavailable")
+    return offerMajor()
   if (state.status === "error") {
     if (!alertOnFail) return
     await dialog.showMessageBox({
