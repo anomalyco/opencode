@@ -2630,6 +2630,9 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       <Match when={display() === "subagent"}>
         <Subagent {...toolprops} />
       </Match>
+      <Match when={display() === "advisor"}>
+        <AdvisorTool {...toolprops} />
+      </Match>
       <Match when={display() === "execute"}>
         <Execute {...toolprops} />
       </Match>
@@ -3357,6 +3360,48 @@ export function subagentModelLabel(
   const modelID = separator === -1 ? reference : reference.slice(separator + 1)
   const name = models?.find((item) => item.providerID === providerID && item.id === modelID)?.name
   return `${name ?? reference}${variant ? ` (${variant})` : ""}`
+}
+
+function AdvisorTool(props: ToolProps) {
+  const theme = useTheme()
+  const data = useData()
+  const [expanded, setExpanded] = createSignal(false)
+  const running = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
+  const model = createMemo(
+    () => subagentModelLabel(stringValue(props.metadata.model), data.location.model.list()) ?? "advisor",
+  )
+  const advice = createMemo(() =>
+    props.metadata.status === "reviewed"
+      ? collapseToolOutput(stripAnsi(props.output?.trim() ?? ""), 30, 4000).output
+      : "",
+  )
+  const label = createMemo(() => {
+    if (running()) return `Advising ${model()}…`
+    if (props.part.state.status === "error") return "Advisor unavailable"
+    if (props.metadata.status === "declined") return "Advisor declined"
+    return "Advisor reviewed"
+  })
+  return (
+    <>
+      <InlineTool
+        icon={props.part.state.status === "error" ? "✗" : "✓"}
+        complete={props.part.state.status === "completed"}
+        pending={label()}
+        spinner={running()}
+        part={props.part}
+        onClick={advice() ? () => setExpanded((value) => !value) : undefined}
+      >
+        {label()}
+      </InlineTool>
+      <Show when={expanded() && advice()}>
+        <box paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}>
+          <text fg={theme.text.base} wrapMode="word">
+            {advice()}
+          </text>
+        </box>
+      </Show>
+    </>
+  )
 }
 
 export { executeCallSummary }
