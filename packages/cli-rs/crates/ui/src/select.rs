@@ -15,7 +15,7 @@ use crate::theme::Surface;
 use opentui::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 /// How a long title is cut (`truncateTitle`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -490,16 +490,11 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
     handle.focus_initial();
     handle.register_layer();
     let weak = Rc::downgrade(&handle.0);
-    handle.0.scroll.content_view().on_resize({
-        let weak = weak.clone();
-        move |_, _| {
-            if let Some(inner) = weak.upgrade()
-                && inner.scroll_after_layout.replace(false)
-            {
-                Select(inner).scroll_to_selection(false);
-            }
+    handle.0.scroll.content_view().on_resize(bind!(weak, |inner, _, _| {
+        if inner.scroll_after_layout.replace(false) {
+            Select(inner).scroll_to_selection(false);
         }
-    });
+    }));
     // TS reads the terminal size reactively: the list height, the details' width and the footer follow a resize.
     let resized = app.on_resize(bind!(weak, |inner, _cx, _, _| {
         let select = Select(inner);
@@ -545,16 +540,14 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
         }
     }
     if let Some(input) = &input {
-        let weak = Rc::downgrade(&handle.0);
-        input.on_change(bind!(weak, |inner, _cx, value| {
+        input.on_change(bind!(handle.0, |inner, _cx, value| {
             let select = Select(inner);
             if select.0.props.locked {
                 return;
             }
             select.filter_changed(value.to_owned());
         }));
-        let weak = Rc::downgrade(&handle.0);
-        cx.editor(bind!(weak, |inner| {
+        cx.editor(bind!(handle.0, |inner| {
             let select = Select(inner);
             let focused = select.0.input.as_ref().is_some_and(|input| input.is_focused());
             if !focused || select.filter().is_empty() {
@@ -566,8 +559,7 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
         cx.focus(input);
     }
     handle.render();
-    let weak = Rc::downgrade(&handle.0);
-    let kept = cx.keep(move || weak.upgrade().map(|inner| Kept::of(&Select(inner))));
+    let kept = cx.keep(bind!(handle.0, |inner| Some(Kept::of(&Select(inner)))));
     if let Some(kept) = kept.flatten() {
         handle.reapply(kept);
     }
@@ -988,7 +980,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     fn register_layer(&self) {
         let weak = Rc::downgrade(&self.0);
         let command = |id: &str, title: &str, run: fn(&Select<T>)| {
-            let weak: Weak<Inner<T>> = weak.clone();
             TuiCommand::new(id, bind!(weak, |inner, _, _| run(&Select(inner)))).title(title).group("Dialog")
         };
         let mut commands = vec![
@@ -1009,7 +1000,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             command("dialog.select.submit", "Select item", Select::submit),
         ];
         for action in self.props().actions.iter().filter(|action| !action.hidden) {
-            let weak = weak.clone();
             let run = action.clone();
             let mut item =
                 TuiCommand::new(action.command.clone(), bind!(weak, |inner, _, _| Select(inner).trigger(&run)))
@@ -1020,9 +1010,9 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 item = item.bind(Bind::Key(bind.clone()));
             }
             if action.hidden_when.is_some() {
-                let (weak, action) = (Rc::downgrade(&self.0), action.clone());
-                item = item.enabled(opentui::keymap::Condition::When(Rc::new(move || {
-                    weak.upgrade().is_some_and(|inner| !Select(inner).action_hidden(&action))
+                let action = action.clone();
+                item = item.enabled(opentui::keymap::Condition::when(bind!(weak, |inner| {
+                    !Select(inner).action_hidden(&action)
                 })));
             }
             commands.push(item);
@@ -1383,8 +1373,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
     }
 
     fn row_mouse(&self, row: &View, value: T) {
-        let weak = Rc::downgrade(&self.0);
-        row.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(weak, |inner, _cx, event| {
+        row.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(self.0, |inner, _cx, event| {
             let select = Select(inner);
             if select.props().locked {
                 return;
@@ -1437,14 +1426,13 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 ActionRun::Dialog(_) => Group::Secondary,
                 ActionRun::Selected(_) => Group::Primary,
             });
-            let weak = Rc::downgrade(&self.0);
             let run = action.clone();
             items.push((
                 group,
                 FooterAction::new((action.title)(selected.as_ref()))
                     .key(label)
                     .disabled(self.action_disabled(action))
-                    .on_trigger(bind!(weak, |inner| Select(inner).trigger(&run))),
+                    .on_trigger(bind!(self.0, |inner| Select(inner).trigger(&run))),
             ));
         }
         let dynamic = props.dynamic_hints.as_ref().map(|hints| hints());
