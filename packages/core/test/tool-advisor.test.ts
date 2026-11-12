@@ -134,7 +134,7 @@ describe("AdvisorPlugin", () => {
       expect(calls[0]?.prompt).not.toContain("The agent's question for you")
       expect(result.status).toBe("completed")
       expect(result.content).toEqual([{ type: "text", text: "Solid advice." }])
-      expect(result.metadata).toEqual({ model: "p/m", status: "reviewed" })
+      expect(result.metadata).toEqual({ model: "p/m", mode: "full", status: "reviewed" })
     }),
   )
 
@@ -171,7 +171,7 @@ describe("AdvisorPlugin", () => {
       reply = () => Effect.succeed({ text: "DECLINE", ...zeroUsage })
       const { registry } = yield* setup(new ConfigExperimental.Info({ advisor: true }), full)
       const result = yield* run(registry, {})
-      expect(result.metadata).toEqual({ model: "p/m", status: "declined" })
+      expect(result.metadata).toEqual({ model: "p/m", mode: "full", status: "declined" })
       expect(result.content).toEqual([{ type: "text", text: "The advisor had nothing to add." }])
     }),
   )

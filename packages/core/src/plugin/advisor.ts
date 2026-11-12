@@ -77,7 +77,7 @@ export const Plugin = {
         yield* permission
           .assert({ action: name, resources: ["*"], save: ["*"], ...Permission.invocation(context) })
           .pipe(Effect.mapError((error) => new ToolFailure({ message: "Unable to consult the advisor", error })))
-        yield* context.progress({ model })
+        yield* context.progress({ model, mode: full ? "full" : "secure" })
         const result = yield* sessions
           .generate({
             sessionID: context.sessionID,
@@ -97,7 +97,7 @@ export const Plugin = {
         const declined = text === "" || text.startsWith("DECLINE")
         return {
           content: declined ? "The advisor had nothing to add." : text,
-          metadata: { model, status: declined ? "declined" : "reviewed" },
+          metadata: { model, mode: full ? "full" : "secure", status: declined ? "declined" : "reviewed" },
         }
       })
 

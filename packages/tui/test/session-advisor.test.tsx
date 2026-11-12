@@ -33,16 +33,18 @@ const messages = [
     finish: "stop",
     time: { created: 1, completed: 3 },
     content: [
-      advisor("call-running", { status: "running", metadata: { model: "fixture/advisor" } }),
+      advisor("call-running", { status: "running", metadata: { model: "fixture/advisor", mode: "full" } }),
       advisor("call-reviewed", {
         status: "completed",
         content: [{ type: "text", text: "Use the existing helper" }],
-        metadata: { model: "fixture/advisor", status: "reviewed" },
+        input: { question: "Recursion or iteration?" },
+        metadata: { model: "fixture/advisor", mode: "full", status: "reviewed" },
       }),
       advisor("call-declined", {
         status: "completed",
         content: [{ type: "text", text: "The advisor had nothing to add." }],
-        metadata: { model: "fixture/advisor", status: "declined" },
+        input: { question: "Q", context: "C" },
+        metadata: { model: "fixture/advisor", mode: "secure", status: "declined" },
       }),
       advisor("call-error", {
         status: "error",
@@ -86,9 +88,26 @@ test("advisor tool rows show running, reviewed, declined and unavailable states"
     await setup.waitForVisualIdle({ quietFrames: 3 })
     const frame = setup.captureCharFrame()
     expect(frame).toContain("Advising")
-    expect(frame).toContain("Advisor reviewed")
-    expect(frame).toContain("Advisor declined")
+    expect(frame).toContain("Advisor reviewed · ")
+    expect(frame).toContain("Advisor declined · ")
     expect(frame).toContain("Advisor unavailable")
+
+    // Each row opens a dropdown of the exchange: what the advisor was shown and what came back.
+    const click = async (text: string) => {
+      const row = setup.captureCharFrame().split("\n").findIndex((line) => line.includes(text))
+      expect(row).toBeGreaterThan(0)
+      await setup.mockMouse.click(8, row)
+      await setup.waitForVisualIdle({ quietFrames: 3 })
+    }
+    await click("Advisor reviewed · ")
+    expect(setup.captureCharFrame()).toContain("Shared the whole conversation.")
+    expect(setup.captureCharFrame()).toContain("Recursion or iteration?")
+    expect(setup.captureCharFrame()).toContain("Use the existing helper")
+    await click("Advisor declined · ")
+    expect(setup.captureCharFrame()).toContain("Shared only this brief, not the conversation:")
+    expect(setup.captureCharFrame()).toContain("The advisor had nothing to add.")
+    await click("Advisor unavailable")
+    expect(setup.captureCharFrame()).toContain("model not found. Continue without advice.")
   } finally {
     setup.renderer.destroy()
     await task
