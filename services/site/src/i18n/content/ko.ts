@@ -18,11 +18,6 @@ export const content = {
       action: "설치",
     },
     sdk: { name: "SDK", body: "직접 만든 스크립트, CI 작업, 도구에서 OpenCode를 제어하세요.", action: "문서 읽기" },
-    ide: {
-      name: "IDE 확장 프로그램",
-      body: "VS Code, Cursor, Windsurf에서 OpenCode를 열거나, ACP로 Zed와 JetBrains IDE에서 사용하세요.",
-      action: "설치",
-    },
     mini: {
       name: "Mini",
       body: "미니멀한 터미널 인터페이스입니다. 답변은 스크롤백에 출력되고, 아래에는 프롬프트 하나만 남습니다.",
@@ -161,23 +156,6 @@ export const content = {
           title: "나만의 도구 만들기",
           body: "몇 줄의 코드로 OpenCode를 봇, 대시보드, 워크플로에 연결하세요.",
         },
-      },
-    },
-    ide: {
-      title: "OpenCode | VS Code, Cursor, Zed 등을 위한 IDE 확장 프로그램",
-      description:
-        "에디터 안에서 OpenCode를 사용하세요. VS Code, Cursor, Windsurf, VSCodium에는 확장 프로그램이, Zed, JetBrains IDE 등 ACP 에디터에는 opencode acp가 있습니다.",
-      intro:
-        "에디터 안에서 OpenCode를 사용하세요. VS Code, Cursor, Windsurf, VSCodium에서는 통합 터미널에서 opencode를 실행하면 확장 프로그램이 자동으로 설치됩니다. Zed, JetBrains IDE 등 Agent Client Protocol을 지원하는 에디터에서는 opencode acp로 OpenCode를 실행합니다.",
-      features: {
-        "quick-launch": { title: "빠른 실행", body: "Cmd+Esc 또는 Ctrl+Esc로 분할 터미널에서 OpenCode를 엽니다." },
-        "new-session": { title: "새 세션", body: "Cmd+Shift+Esc 또는 Ctrl+Shift+Esc로 새 세션을 시작합니다." },
-        context: { title: "컨텍스트", body: "현재 선택 영역이나 탭을 OpenCode와 공유합니다." },
-        "file-references": { title: "파일 참조", body: "Cmd+Option+K 또는 Alt+Ctrl+K로 @File#L37-42를 삽입합니다." },
-        "installs-itself": { title: "자동 설치", body: "통합 터미널에서 opencode를 실행하면 추가됩니다." },
-        "acp-editors": { title: "ACP 에디터", body: "Zed, JetBrains IDE, Avante.nvim, CodeCompanion.nvim." },
-        "open-vsx": { title: "Open VSX", body: "Cursor, Windsurf, VSCodium용으로 Open VSX에도 있습니다." },
-        "same-agent": { title: "같은 에이전트", body: "터미널에서 쓰던 그 OpenCode를 코드 바로 옆에서." },
       },
     },
     mini: {
@@ -653,14 +631,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "스크립트" } } },
     sdk: { more: { label: "SDK 문서 읽기" } },
-    ide: {
-      links: {
-        "vs-code-marketplace": { label: "VS Code 마켓플레이스" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      lead: "에디터의 통합 터미널에서 opencode를 실행하면 확장 프로그램이 자동으로 설치됩니다. 직접 설치할 수도 있습니다.",
-      more: { label: "Zed, JetBrains IDE 등 ACP 에디터 설정" },
-    },
     mini: {
       commands: { curl: { name: "스크립트" } },
       lead: "Mini는 OpenCode CLI에 포함되어 있습니다. 아래 방법 중 하나로 설치한 뒤 opencode mini를 실행하세요.",

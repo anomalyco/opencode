@@ -17,7 +17,6 @@ Vm.prototype.capture = function (this: Vm, options) {
 const result = await Effect.runPromise(
   CodeMode.execute({
     tools: {},
-    engine: "vm",
     code: `
       const groups = Object.groupBy([1, 2, 3, 4, 5, 6], (x) => (x % 2 ? "odd" : "even"))
       const union = new Set([1, 2, 3]).union({ size: 2, has: () => true, keys: () => [7, 8][Symbol.iterator]() })

@@ -14,6 +14,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@opencode/ui/project-avatar"
 import { projectForSession } from "@/shell/layout/helpers"
+import { mergeRootSessionIndex } from "@/runtime/server/session-index"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { looksLikeSessionID } from "@/session/search"
@@ -292,15 +293,11 @@ export function createServerSessionEntries(props: {
     }
   >()
 
-  // Let the newest metadata win duplicates before ranking the merged sessions newest-first.
+  // The server's list carries each step's `time.updated` bump. Like Home, keep the cached time until a run ends.
   const known = createMemo(() => {
-    const merged = [
-      ...new Map(
-        [...(props.known?.() ?? []), ...sourceState().loaded]
-          .toSorted((a, b) => a.time.updated - b.time.updated)
-          .map((session) => [session.id, session] as const),
-      ).values(),
-    ].toSorted((a, b) => b.time.updated - a.time.updated)
+    const merged = mergeRootSessionIndex(props.known?.() ?? [], sourceState().loaded).toSorted(
+      (a, b) => b.time.updated - a.time.updated,
+    )
 
     return props.apply?.(merged) ?? merged
   })

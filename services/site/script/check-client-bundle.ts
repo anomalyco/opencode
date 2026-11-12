@@ -5,9 +5,8 @@
 // Also fails when server-only code reaches it: the Worker's cache, GitHub calls and the build-time
 // GitHub snapshot. Pages may import their modules for the queries, whose "use server" bodies the
 // browser build drops along with everything only those bodies read.
-// Last, it fails when a page's initial JavaScript (the entry and every chunk the page's route imports
-// statically, which the server modulepreloads) passes its budget below, gzipped. Code a page needs
-// only later belongs behind a dynamic import.
+// Last, it fails when the app's own scripts ship, or the one script every page loads passes its budget
+// below. Code a page needs only later belongs behind a dynamic import.
 // Run after `vite build`, optionally with the output directory: `bun script/check-client-bundle.ts .output`.
 import path from "node:path"
 import { Glob } from "bun"
@@ -61,68 +60,45 @@ console.log(
   `check-client-bundle: ${files.length} client files, no Settings, Design mode, device preview or server-only code`,
 )
 
-// Each page's budget in kB, gzipped: what it was when last measured, plus a kB of room. Lower a
-// budget when a page gets lighter; a page without one fails until it has one.
-const budgets: Record<string, number> = {
-  "[...404].tsx": 104,
-  "brand/index.tsx": 107,
-  "changelog/[tag].tsx": 113,
-  "changelog/index.tsx": 112,
-  "desktop.tsx": 127.6,
-  "devices.tsx": 51,
-  "product/browse.tsx": 106,
-  "font/index.tsx": 121,
-  "ide.tsx": 127.6,
-  "index.tsx": 118,
-  "legal/index.tsx": 150,
-  "legal/privacy-policy/index.tsx": 140,
-  "legal/terms-of-service/index.tsx": 135,
-  "mini.tsx": 127.6,
-  "mobile.tsx": 127.6,
-  "press/index.tsx": 112,
-  "product/index.tsx": 114.7,
-  "sdk.tsx": 127.6,
-  "terminal.tsx": 127.6,
-  "video-editor/index.tsx": 49,
-}
+// Production hydrates no page (src/static/render.tsx): every page loads the static pages' one script
+// (src/client/entry.ts, script/static-client.ts), whose islands and overlays load later. The app's
+// browser build is there for its stylesheets only, so none of its scripts may ship, and the script
+// may bring no router, no serialized data (seroval) and no hydration. Its budget in kB, gzipped, is
+// what it was when last measured, plus a kB of room; lower it when the script gets lighter.
+const budget = 11.5
 type Chunk = { file: string; imports?: string[] }
-const manifest: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
-const sizes = new Map<string, number>()
-const gzipped = async (file: string) => {
-  const known = sizes.get(file)
-  if (known !== undefined) return known
-  const size = Bun.gzipSync(await Bun.file(path.join(root, file)).bytes(), { level: 9 }).length
-  sizes.set(file, size)
-  return size
-}
-const closure = (key: string, seen = new Set<string>()): Set<string> => {
-  if (seen.has(key)) return seen
-  seen.add(key)
-  manifest[key].imports?.forEach((next) => closure(next, seen))
-  return seen
-}
-const entry = closure("src/entry-client.tsx")
-const pages = await Promise.all(
-  Object.keys(manifest)
-    .filter((key) => key.startsWith("src/routes/") && key.includes("?pick=default"))
-    .map(async (key) => {
-      const chunks = [...new Set([...entry, ...closure(key)])].map((chunk) => manifest[chunk].file)
-      const bytes = (await Promise.all(chunks.map(gzipped))).reduce((sum, size) => sum + size, 0)
-      return { route: key.slice("src/routes/".length).split("?")[0], kB: Math.round(bytes / 100) / 10 }
-    }),
-)
-const over = pages.filter((page) => !(page.kB <= budgets[page.route]))
-if (over.length) {
-  console.error(
-    "check-client-bundle: initial JavaScript (gzipped) over its page's budget:\n  " +
-      over.map((page) => `${page.route}: ${page.kB} kB, budget ${budgets[page.route] ?? "none"}`).join("\n  "),
+const app: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
+const statics: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/static-manifest.json")).json()
+const own = new Set(Object.values(statics).map((chunk) => chunk.file))
+const shipped = (
+  await Promise.all(
+    Object.values(app)
+      .filter((chunk) => /\.m?js$/.test(chunk.file) && !own.has(chunk.file))
+      .map(async (chunk) => ((await Bun.file(path.join(root, chunk.file)).exists()) ? [chunk.file] : [])),
   )
+).flat()
+if (shipped.length) {
+  console.error(`check-client-bundle: the app's scripts ship, though no page loads them:\n  ${shipped.join("\n  ")}`)
+  process.exit(1)
+}
+const script = statics["src/client/entry.ts"]
+if (script.imports?.length) {
+  console.error(`check-client-bundle: the static pages' script imports ${script.imports.join(", ")}; keep it one file`)
+  process.exit(1)
+}
+const bytes = await Bun.file(path.join(root, script.file)).bytes()
+const text = new TextDecoder().decode(bytes)
+// As they survive minification: the router's scroll key, seroval's errors, hydration's global.
+const brought = ["solid-router", "Seroval", "_$HY"].filter((marker) => text.includes(marker))
+if (brought.length) {
+  console.error(`check-client-bundle: the static pages' script brings ${brought.join(", ")}`)
+  process.exit(1)
+}
+const kB = Math.round(Bun.gzipSync(bytes, { level: 9 }).length / 100) / 10
+if (!(kB <= budget)) {
+  console.error(`check-client-bundle: the static pages' script is ${kB} kB gzipped, over its budget of ${budget} kB`)
   process.exit(1)
 }
 console.log(
-  "check-client-bundle: initial JavaScript within budget (kB gzipped): " +
-    pages
-      .toSorted((a, b) => b.kB - a.kB)
-      .map((page) => `${page.route} ${page.kB}`)
-      .join(", "),
+  `check-client-bundle: the app ships no scripts; the static pages' script is ${kB} kB gzipped (budget ${budget})`,
 )

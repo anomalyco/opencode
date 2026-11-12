@@ -343,7 +343,6 @@ export const dict = {
   "session.new.project.search": "Layihələri axtarın",
   "session.new.project.add": "Layihə əlavə edin",
   "session.new.workspace.runIn": "Sessiyanı burada işə sal",
-  "session.new.workspace.triggerLocal": "Yerli",
   "session.new.workspace.local": "Yerli depo",
   "session.new.git.none": "Git yoxdur",
   "session.header.open.finder": "Finder",

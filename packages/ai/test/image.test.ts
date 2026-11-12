@@ -73,14 +73,14 @@ describe("Image", () => {
       })
 
       expect(response.images).toHaveLength(2)
-      expect(response.image.mediaType).toBe("image/webp")
-      expect(response.image.source).toEqual({
+      expect(response.images[0].mediaType).toBe("image/webp")
+      expect(response.images[0].source).toEqual({
         type: "bytes",
         data: Uint8Array.from([1, 2, 3]),
         mediaType: "image/webp",
       })
-      expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
-      expect(response.image.info).toEqual({ format: "webp", width: 2048, height: 2048 })
+      expect(yield* response.images[0].bytes()).toEqual(Uint8Array.from([1, 2, 3]))
+      expect(response.images[0].info).toEqual({ format: "webp", width: 2048, height: 2048 })
       expect(response.usage).toMatchObject({ type: "tokens", total: 12 })
       expect(response.providerMetadata).toEqual({
         openai: { outputFormat: "webp", size: "2048x2048", quality: "high", background: "opaque" },
@@ -151,7 +151,7 @@ describe("Image", () => {
           ),
         ),
       )
-      expect(response.image.source).toEqual({
+      expect(response.images[0].source).toEqual({
         type: "bytes",
         data: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
         mediaType: "image/jpeg",
@@ -208,22 +208,22 @@ describe("Image", () => {
     it.effect("keeps an http url as a URL asset", () =>
       Effect.gen(function* () {
         const response = yield* generate([{ url: "https://cdn.image.test/result.png" }])
-        expect(response.image.source).toEqual({ type: "url", url: "https://cdn.image.test/result.png" })
+        expect(response.images[0].source).toEqual({ type: "url", url: "https://cdn.image.test/result.png" })
       }),
     )
 
     it.effect("decodes a data url inline with its media type", () =>
       Effect.gen(function* () {
         const response = yield* generate([{ url: "data:image/png;base64,iVBORw==" }])
-        expect(response.image.source).toEqual({ type: "base64", data: "iVBORw==", mediaType: "image/png" })
-        expect(response.image.mediaType).toBe("image/png")
+        expect(response.images[0].source).toEqual({ type: "base64", data: "iVBORw==", mediaType: "image/png" })
+        expect(response.images[0].mediaType).toBe("image/png")
       }),
     )
 
     it.effect("prefers b64_json when url is null", () =>
       Effect.gen(function* () {
         const response = yield* generate([{ b64_json: "/9j/4AAQ", url: null }])
-        expect(response.image.source).toEqual({
+        expect(response.images[0].source).toEqual({
           type: "bytes",
           data: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
           mediaType: "image/jpeg",
@@ -449,7 +449,7 @@ describe("Image", () => {
       .pipe(
         Effect.tap((response) =>
           Effect.sync(() => {
-            expect(response.image.mediaType).toBe("image/avif")
+            expect(response.images[0].mediaType).toBe("image/avif")
           }),
         ),
         Effect.provide(

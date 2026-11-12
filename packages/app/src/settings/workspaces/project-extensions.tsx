@@ -1,3 +1,4 @@
+import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { Switch } from "@opencode/ui/switch"
 import { Tabs } from "@opencode/ui/tabs"
@@ -21,13 +22,17 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
 import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
+import { usePlatform } from "@/runtime/platform/platform"
+import { ConsoleName, ConsoleReplaced, createConsoleSources } from "@/settings/providers/console-link"
 import { ProjectFolderMissing } from "./project-folder-missing"
 import { configuredLanguageServers } from "./project-lsp"
 import { SettingsList } from "@/settings/list"
 import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
+import "@/shell/search-list.css"
 import "./project.css"
 
 type SkillItem = {
+  id: string
   name: string
   path: string
 }
@@ -38,17 +43,49 @@ const ExtensionCard: Component<{ children: JSX.Element }> = (props) => (
   <SettingsList variant="catalog">{props.children}</SettingsList>
 )
 
+const statusLabels = {
+  connected: "mcp.status.connected",
+  failed: "mcp.status.failed",
+  needs_auth: "mcp.status.needs_auth",
+  disabled: "mcp.status.disabled",
+} as const
+
 const ExtensionRow: Component<{
-  icon: "mcp" | "cube" | "post-skill" | "code"
+  icon?: "cube" | "post-skill" | "code"
+  /** An MCP server's status, shown as a dot in the icon's place, as on the server-wide page. */
+  status?: string
   name: string
+  /** Where OpenCode Console manages it; the name links there. */
+  console?: string
+  /** Console's server of the same name, which the user's config replaces. */
+  replaces?: string
   description?: JSX.Element
   children?: JSX.Element
 }> = (props) => (
   <div class="settings-extension-row project-settings-extension-row">
     <div class="settings-extension-lead">
-      <Icon name={props.icon} class="project-settings-extension-row-icon" />
+      <Show
+        when={props.status}
+        fallback={
+          <Show when={props.icon}>{(icon) => <Icon name={icon()} class="project-settings-extension-row-icon" />}</Show>
+        }
+      >
+        {(status) => (
+          <span class="settings-mcp-status">
+            <span class="mcp-status-dot" data-status={status()} aria-hidden="true" />
+          </span>
+        )}
+      </Show>
       <div class="project-settings-extension-row-copy">
-        <span class="project-settings-extension-row-name settings-extension-name">{props.name}</span>
+        <span class="project-settings-extension-row-title">
+          <Show
+            when={props.console}
+            fallback={<span class="project-settings-extension-row-name settings-extension-name">{props.name}</span>}
+          >
+            {(href) => <ConsoleName name={props.name} href={href()} class="project-settings-extension-row-name" />}
+          </Show>
+          <Show when={props.replaces}>{(href) => <ConsoleReplaced name={props.name} href={href()} />}</Show>
+        </span>
         <Show when={props.description}>
           <span class="project-settings-extension-row-description">{props.description}</span>
         </Show>
@@ -222,6 +259,10 @@ export const ProjectSettingsExtensions: Component<{
   const data = useData()
   const mcp = useMcpController(() => directorySDK().directory)
 
+  const platform = usePlatform()
+
+  const sources = createConsoleSources(() => directorySDK().directory)
+
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
     const ref = { directory: directorySDK().directory }
@@ -246,9 +287,17 @@ export const ProjectSettingsExtensions: Component<{
       .sort()
   })
 
-  const mcpStatus = (name: string) =>
+  const mcpServer = (name: string) =>
     data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)
-      ?.status.status
+
+  const mcpStatus = (name: string) => mcpServer(name)?.status.status
+
+  // A server that needs a sign-in it can start asks for it in the switch's place, as on the server-wide page.
+  const needsSignIn = (name: string) => {
+    const server = mcpServer(name)
+
+    return server?.status.status === "needs_auth" && !!server.integrationID
+  }
 
   // Both lists load as one, so a project list that answers first never shows shared plugins as the project's own. A
   // deleted project folder has no plugins of its own; `ProjectFolderMissing` explains why.
@@ -298,20 +347,75 @@ export const ProjectSettingsExtensions: Component<{
     )
   })
 
+  // A Console server whose account isn't connected answers but can't run its tools, so its dot asks for the connection.
+  const mcpDot = (name: string) => {
+    const status = mcpStatus(name) ?? "pending"
+
+    return sources.managed(name)?.needsConnection && status === "connected" ? "needs_auth" : status
+  }
+
+  // The dot shows the status, as in the MCPs dialog; the words stay for assistive technology.
+  const mcpLabel = (name: string) => {
+    const status = mcpStatus(name)
+
+    return status && status !== "pending" ? language.t(statusLabels[status]) : undefined
+  }
+
   const mcpRows = (items: string[]) => (
     <For each={items}>
       {(name) => (
-        <ExtensionRow icon="mcp" name={name}>
-          <Switch
-            checked={mcpStatus(name) === "connected"}
-            disabled={mcpRowView(mcp.state(), name, undefined).busy}
-            hideLabel
-            onChange={(enabled) =>
-              mcp.dispatch({ type: "toggle.requested", name, enabled, status: untrack(() => mcpStatus(name)) })
+        <ExtensionRow
+          status={mcpDot(name)}
+          name={name}
+          console={sources.managed(name) && sources.links(name)?.manage}
+          replaces={sources.mcp(name)?.overridden ? sources.links(name)?.manage : undefined}
+        >
+          <Show
+            when={sources.connect(name)}
+            fallback={
+              <Show
+                when={needsSignIn(name)}
+                fallback={
+                  <Switch
+                    checked={mcpStatus(name) === "connected"}
+                    disabled={mcpRowView(mcp.state(), name, undefined).busy}
+                    description={mcpLabel(name)}
+                    class="[&_[data-slot=switch-description]]:sr-only"
+                    hideLabel
+                    onChange={(enabled) =>
+                      mcp.dispatch({ type: "toggle.requested", name, enabled, status: untrack(() => mcpStatus(name)) })
+                    }
+                  >
+                    {name}
+                  </Switch>
+                }
+              >
+                <Button
+                  size="small"
+                  variant="ghost-muted"
+                  disabled={mcpRowView(mcp.state(), name, "needs_auth").busy}
+                  aria-busy={mcpRowView(mcp.state(), name, "needs_auth").busy}
+                  aria-label={language.t("dialog.mcp.signIn.open", { name })}
+                  onClick={() => mcp.dispatch({ type: "toggle.requested", name, enabled: true, status: "needs_auth" })}
+                >
+                  {language.t(
+                    mcpRowView(mcp.state(), name, "needs_auth").busy ? "dialog.mcp.signingIn" : "dialog.mcp.signIn",
+                  )}
+                </Button>
+              </Show>
             }
           >
-            {name}
-          </Switch>
+            {(href) => (
+              <Button
+                size="small"
+                variant="ghost-muted"
+                aria-label={language.t("settings.extensions.console.connect", { name })}
+                onClick={() => platform.openExternal(href())}
+              >
+                {language.t("common.connect")}
+              </Button>
+            )}
+          </Show>
         </ExtensionRow>
       )}
     </For>
@@ -320,7 +424,9 @@ export const ProjectSettingsExtensions: Component<{
   const pluginRows = (items: string[]) => <For each={items}>{(name) => <ExtensionRow icon="cube" name={name} />}</For>
 
   const skillRows = (items: SkillItem[]) => (
-    <For each={items}>{(item) => <ExtensionRow icon="post-skill" name={item.name} />}</For>
+    <For each={items}>
+      {(item) => <ExtensionRow icon="post-skill" name={item.name} console={sources.skill(item)} />}
+    </For>
   )
 
   return (
@@ -364,6 +470,13 @@ export const ProjectSettingsExtensions: Component<{
                 <ExtensionCard>{mcpRows(projectMcpNames())}</ExtensionCard>
               </Show>
               <SharedSection count={globalMcpNames().length}>{mcpRows(globalMcpNames())}</SharedSection>
+              <Show when={sources.view().status === "error"}>
+                <ExtensionLoadFailed
+                  message={language.t("settings.extensions.sources.loadFailed")}
+                  retry={language.t("common.retry")}
+                  onRetry={sources.retry}
+                />
+              </Show>
             </div>
           </Tabs.Content>
 
@@ -406,6 +519,13 @@ export const ProjectSettingsExtensions: Component<{
                 <ExtensionCard>{skillRows(projectSkills())}</ExtensionCard>
               </Show>
               <SharedSection count={serverSkills().length}>{skillRows(serverSkills())}</SharedSection>
+              <Show when={sources.view().status === "error"}>
+                <ExtensionLoadFailed
+                  message={language.t("settings.extensions.sources.loadFailed")}
+                  retry={language.t("common.retry")}
+                  onRetry={sources.retry}
+                />
+              </Show>
             </div>
           </Tabs.Content>
           <Tabs.Content value="lsps">

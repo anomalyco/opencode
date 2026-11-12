@@ -75,7 +75,7 @@ export type ComposerEditorView = {
       delivery: Accessor<ComposerDelivery | undefined>
       onSubmit: (key: string, comment: string) => Promise<boolean>
     }
-    onSubmit: (options?: { alternate?: boolean }) => void
+    onSubmit: (options?: { alternate?: boolean; first?: boolean }) => void
     onStop: () => void
   }
   shell?: {
@@ -748,7 +748,7 @@ export function createComposerEditor(input: {
     openShell() {
       dispatch({ type: "mode.shell" })
     },
-    submit(options?: { alternate?: boolean }) {
+    submit(options?: { alternate?: boolean; first?: boolean }) {
       if (input.view.submit.available?.() === false) return
 
       if (input.view.draftOnly) return

@@ -8,8 +8,9 @@
   "env": {
     "dev": {
       "name": "opencode-dev-files",
+      "account_id": "d8e944f537ceef3f06a5bd3aec1d7a53",
       "vars": { "STAGE": "dev" },
-      "routes": [{ "pattern": "dev.opencode.ai/files/*", "zone_name": "opencode.ai" }],
+      "routes": [{ "pattern": "dev.opencode.ai/files/*", "zone_name": "dev.opencode.ai" }],
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "opencode-dev-files" }],
     },
     "production": {
