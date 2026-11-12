@@ -516,6 +516,48 @@ fn an_experiment_change_while_saving_is_ignored_also_after_a_theme_change() {
     assert!(app.wait_until(WAIT, || !tui.settings.experiment("client-mcp")), "the guard ends with the write");
 }
 
+// Expected (bigboi-fixes-2): a write that lands while the UI queue is full still ends `saving`, so the dialog takes
+// the next change, as TS resets it when the update settles.
+#[test]
+fn an_experiment_write_that_lands_on_a_full_ui_queue_ends_saving() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::xdg_paths(home.path());
+    std::fs::create_dir_all(&paths.config).unwrap();
+    let config = CliConfig::new(&paths);
+    std::fs::write(config.path(), "{}\n").unwrap();
+    let app = TestApp::new(80, 24);
+    let tui = support::mount_empty(
+        &app,
+        config.get().unwrap(),
+        Some(Roots { paths: paths.clone(), storage_channel: "test".into() }),
+    );
+    experiments::show(&tui);
+    wait_for(&app, "TUI tools");
+    let lock = opencode_local::lock::acquire(
+        &paths.state.join("locks"),
+        &config.path().to_string_lossy(),
+        &opencode_local::lock::Options::default(),
+    )
+    .unwrap();
+    app.press("right");
+    assert_eq!(tui.settings.pending_writes(), 1);
+    let proxy = tui.app.proxy();
+    while proxy.post(|_| {}).is_ok() {}
+    lock.release().unwrap();
+    let written = || config.get().is_ok_and(|info| info.experiment("client-mcp"));
+    let start = std::time::Instant::now();
+    while !written() && start.elapsed() < WAIT {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(written(), "the write lands");
+    // The worker tries to deliver its result while the queue is still full.
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert!(app.wait_until(WAIT, || tui.settings.pending_writes() == 0), "the write's result is delivered");
+    assert!(tui.settings.experiment("client-mcp"));
+    app.press("right");
+    assert!(app.wait_until(WAIT, || !tui.settings.experiment("client-mcp")), "the guard ends with the write");
+}
+
 // Expected (O-89): a theme change from outside an open dialog restyles it in place, as TS `useTheme()` does. Each kind
 // (a select, a prompt, Settings), open with a filter or typed text and a moved selection or cursor, draws what it
 // draws when opened in the new theme after the same keys, and goes on from there. The change comes from the terminal
