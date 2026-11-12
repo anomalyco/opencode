@@ -395,7 +395,7 @@ fn palette_scrolls_as_typescript_at_80x20() {
     for (fixture, moves) in [("U.3/palette-20", 0), ("U.3/palette-20-end", 5)] {
         let kit = kit(80, 20);
         palette_commands(&kit);
-        palette::show(&kit.dialogs, Vec::new());
+        palette::show(&kit.dialogs, Vec::new(), None);
         kit.app.render();
         press(&kit, "down", moves, false);
         assert_fixture(&kit.app.render(), fixture);
@@ -462,7 +462,7 @@ fn palette_commands(kit: &Kit) -> Rc<RefCell<Vec<String>>> {
 fn palette_matches_typescript_and_runs_the_chosen_command() {
     let kit = kit(80, 36);
     let ran = palette_commands(&kit);
-    palette::show(&kit.dialogs, Vec::new());
+    palette::show(&kit.dialogs, Vec::new(), None);
     assert_fixture(&kit.app.render(), "U.3/palette");
     kit.app.type_text("rename");
     assert!(kit.app.render().text().contains("Rename session"));
