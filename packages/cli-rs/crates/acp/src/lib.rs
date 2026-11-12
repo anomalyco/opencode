@@ -130,11 +130,14 @@ async fn serve_stdio(
 }
 
 fn exit_reason(status: std::process::ExitStatus) -> String {
-    use std::os::unix::process::ExitStatusExt as _;
     if let Some(code) = status.code() {
         return format!("code {code}");
     }
-    let signal = status.signal().unwrap_or_default();
+    // Only Unix ends a process without a code, by a signal.
+    #[cfg(unix)]
+    let signal = std::os::unix::process::ExitStatusExt::signal(&status).unwrap_or_default();
+    #[cfg(not(unix))]
+    let signal = 0;
     let name = match signal {
         1 => "SIGHUP",
         2 => "SIGINT",

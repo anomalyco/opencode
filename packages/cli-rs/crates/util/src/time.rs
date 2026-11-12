@@ -1,6 +1,6 @@
 //! Civil dates and times on the C library: days to dates and back (Howard Hinnant's algorithms), the few formats the
 //! client prints, RFC 3339 and `%Y-%m-%d` parsing as `chrono` parses them, and local offsets from `localtime_r`,
-//! which reads `TZ` and `/etc/localtime`. Instants are milliseconds since the Unix epoch.
+//! which reads `TZ` and `/etc/localtime` (`localtime_s` on Windows). Instants are milliseconds since the Unix epoch.
 
 use std::fmt;
 use std::sync::{LazyLock, Once};
@@ -375,6 +375,7 @@ fn offset(s: &str) -> Option<i64> {
     (hours < 24).then_some(sign * (hours * 3600 + minutes * 60))
 }
 
+#[cfg(unix)]
 #[allow(unsafe_code)]
 fn local_offset(seconds: i64) -> i32 {
     // `localtime_r`, unlike `localtime`, need not read `TZ` and `/etc/localtime`; read them once.
@@ -391,6 +392,34 @@ fn local_offset(seconds: i64) -> i32 {
         return 0;
     }
     tm.tm_gmtoff as i32
+}
+
+/// Windows' C runtime has no `tm_gmtoff`: the offset is the local civil time `localtime_s` gives, minus `seconds`.
+/// Without `TZ` the runtime uses the Windows zone, as Node does; a `TZ` it reads in POSIX syntax, not as an IANA name.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn local_offset(seconds: i64) -> i32 {
+    static TZSET: Once = Once::new();
+    unsafe extern "C" {
+        fn _tzset();
+    }
+    // SAFETY: `_tzset` takes no arguments; `Once` keeps it from racing itself.
+    TZSET.call_once(|| unsafe { _tzset() });
+    let time = seconds as libc::time_t;
+    // SAFETY: `tm` is plain data, valid zeroed, and `localtime_s` writes only into it.
+    let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
+    if unsafe { libc::localtime_s(&mut tm, &time) } != 0 {
+        return 0;
+    }
+    civil_offset(&tm, seconds)
+}
+
+/// The offset of local civil time `tm` from UTC at instant `seconds`.
+#[cfg(any(windows, test))]
+fn civil_offset(tm: &libc::tm, seconds: i64) -> i32 {
+    let date = Date { year: tm.tm_year + 1900, month: (tm.tm_mon + 1) as u32, day: tm.tm_mday as u32 };
+    let local = date.days() * 86_400 + i64::from(tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec);
+    (local - seconds) as i32
 }
 
 #[cfg(test)]
@@ -594,5 +623,27 @@ mod tests {
         }
         assert_eq!(Date::new(2000, 2, 29).map(|date| date.to_string()).as_deref(), Some("2000-02-29"));
         assert_eq!(Date::default().days(), 0);
+    }
+
+    #[test]
+    #[allow(unsafe_code)]
+    fn civil_offsets() {
+        // The instant, the local civil time `localtime_s` gives for it, and the offset.
+        let cases = [
+            (0, (1970, 1, 1, 0, 0, 0), 0),
+            (0, (1969, 12, 31, 19, 0, 0), -18_000),
+            (1_704_067_200, (2023, 12, 31, 19, 0, 0), -18_000),
+            (1_709_164_800, (2024, 2, 29, 5, 45, 0), 20_700),
+            (1_709_164_800, (2024, 2, 28, 20, 30, 0), -12_600),
+            (1_719_792_000, (2024, 7, 1, 10, 30, 0), 37_800),
+            (1_719_792_059, (2024, 7, 1, 14, 0, 59), 50_400),
+        ];
+        for (seconds, (year, month, day, hour, minute, second), offset) in cases {
+            // SAFETY: `tm` is plain data, valid zeroed.
+            let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
+            (tm.tm_year, tm.tm_mon, tm.tm_mday) = (year - 1900, month - 1, day);
+            (tm.tm_hour, tm.tm_min, tm.tm_sec) = (hour, minute, second);
+            assert_eq!(civil_offset(&tm, seconds), offset, "{seconds} {year}-{month}-{day} {hour}:{minute}:{second}");
+        }
     }
 }

@@ -290,15 +290,18 @@ mod tests {
     }
 
     // Every process runs some other binary.
+    #[cfg(unix)]
     fn fake_proc(_: u32) -> Option<PathBuf> {
         Some(PathBuf::from("/other/opencode2"))
     }
 
+    #[cfg(unix)]
     fn versioned(port: u16, version: &'static str) -> (String, Reply) {
         let body = format!(r#"{{"version":"{version}","pid":{port}}}"#).leak();
         (format!("http://127.0.0.1:{port}/api/info"), Reply::json(200, body))
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn prefers_the_service_the_typescript_binary_runs() {
         let dir = opencode_util::temp::tempdir().unwrap();
@@ -322,6 +325,7 @@ mod tests {
         assert_eq!(discover_with(&live, &paths, None, &owner).await.unwrap().channel, "latest");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn no_match_takes_the_newest_and_a_version_match_decides_without_an_executable() {
         let dir = opencode_util::temp::tempdir().unwrap();

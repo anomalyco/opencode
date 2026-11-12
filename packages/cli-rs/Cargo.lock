@@ -682,6 +682,7 @@ dependencies = [
  "opencode-tui",
  "opencode-ui",
  "opencode-util",
+ "opentui",
  "regex",
  "reqwest",
  "rustix",
