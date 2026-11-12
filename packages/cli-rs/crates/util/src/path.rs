@@ -65,37 +65,23 @@ impl Flavor {
             let root = if path.starts_with('/') { "/" } else { "" };
             return (root.to_owned(), segments(path));
         }
-        let bytes = path.as_bytes();
-        if bytes.len() >= 2 && is_sep(char::from(bytes[0])) && is_sep(char::from(bytes[1])) {
-            let parts = segments(path);
-            if parts.len() >= 2 {
-                return (format!("\\\\{}\\{}\\", parts[0], parts[1]), parts[2..].to_vec());
-            }
-        }
-        if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-            let rooted = bytes.get(2).is_some_and(|&b| is_sep(char::from(b)));
-            let drive = &path[..2];
-            let root = if rooted { format!("{drive}\\") } else { drive.to_owned() };
-            return (root, segments(&path[2..]));
-        }
-        let root = if bytes.first().is_some_and(|&b| is_sep(char::from(b))) { "\\" } else { "" };
-        (root.to_owned(), segments(path))
+        let (device, rest, absolute) = windows_root(path);
+        let root = if absolute { format!("{device}\\") } else { device };
+        (root, segments(rest))
     }
 
     /// `path.resolve` over an absolute base: the last rooted path wins, `.` and `..` fold. Without a rooted path
     /// the result stays relative (`.` when empty), where Node would start from the working directory.
     pub fn resolve(self, paths: &[&str]) -> String {
+        if self == Self::Windows {
+            return resolve_windows(paths);
+        }
         let mut root = String::new();
         let mut segments: Vec<String> = Vec::new();
         for path in paths {
             let (path_root, parts) = self.split(path);
             if !path_root.is_empty() {
-                // A rooted Windows path without a drive keeps the drive it is resolved against.
-                root = if path_root == "\\" && root.len() >= 2 && root.as_bytes()[1] == b':' {
-                    format!("{}\\", &root[..2])
-                } else {
-                    path_root
-                };
+                root = path_root;
                 segments.clear();
             }
             for part in parts {
@@ -152,6 +138,71 @@ impl Flavor {
         };
         path.trim_end_matches(|c| self.is_sep(c)).rsplit(|c| self.is_sep(c)).next().unwrap_or_default()
     }
+}
+
+/// `path.win32.resolve`: from the last path back, collect segments until a rooted path with a device (a drive or a
+/// UNC share). A path on another device than the one found first is skipped, and a rooted path without a device takes
+/// the device of an earlier path. `..` stops at the root of an absolute result.
+fn resolve_windows(paths: &[&str]) -> String {
+    let mut device = String::new();
+    let mut absolute = false;
+    let mut rests = Vec::new();
+    for path in paths.iter().rev().filter(|path| !path.is_empty()) {
+        let (path_device, rest, path_absolute) = windows_root(path);
+        if !path_device.is_empty() {
+            if device.is_empty() {
+                device = path_device;
+            } else if !device.eq_ignore_ascii_case(&path_device) {
+                continue;
+            }
+        }
+        if !absolute {
+            rests.push(rest);
+            absolute = path_absolute;
+        }
+        if absolute && !device.is_empty() {
+            break;
+        }
+    }
+    let mut segments: Vec<&str> = Vec::new();
+    for part in rests.iter().rev().flat_map(|rest| rest.split(['/', '\\'])) {
+        match part {
+            "" | "." => {}
+            ".." if segments.last().is_some_and(|last| *last != "..") => {
+                segments.pop();
+            }
+            ".." if absolute => {}
+            _ => segments.push(part),
+        }
+    }
+    let joined = segments.join("\\");
+    if absolute {
+        return format!("{device}\\{joined}");
+    }
+    let relative = format!("{device}{joined}");
+    if relative.is_empty() { ".".to_owned() } else { relative }
+}
+
+/// The device (`C:`, `\\server\share`, or empty) of a Windows path, the rest after it, and whether the path is
+/// rooted. As in Node, `\\` starts a UNC device only when a server and a share follow.
+fn windows_root(path: &str) -> (String, &str, bool) {
+    let is_sep = |c: char| c == '/' || c == '\\';
+    let bytes = path.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return (path[..2].to_owned(), &path[2..], bytes.get(2).is_some_and(|&b| is_sep(char::from(b))));
+    }
+    if !path.starts_with(is_sep) {
+        return (String::new(), path, false);
+    }
+    let unc = path[1..].strip_prefix(is_sep).and_then(|rest| {
+        let (server, rest) = rest.split_once(is_sep)?;
+        let rest = rest.trim_start_matches(is_sep);
+        let share_end = rest.find(is_sep).unwrap_or(rest.len());
+        (!server.is_empty() && share_end > 0)
+            .then(|| (format!("\\\\{server}\\{}", &rest[..share_end]), &rest[share_end..]))
+    });
+    let (device, rest) = unc.unwrap_or((String::new(), path));
+    (device, rest, true)
 }
 
 /// `FSUtil.windowsPath`: on Windows, the MSYS and WSL spellings `/c:/x`, `/c/x`, `/cygdrive/c/x` and `/mnt/c/x`
@@ -213,6 +264,15 @@ mod tests {
         assert_eq!(w.resolve(&["C:\\p\\q", "\\r"]), "C:\\r");
         assert_eq!(w.resolve(&["C:\\", ".."]), "C:\\");
         assert_eq!(w.resolve(&["\\\\srv\\share\\x", ".."]), "\\\\srv\\share\\");
+        // From `path.win32.resolve`: a later path keeps the device of an earlier one.
+        assert_eq!(w.resolve(&["C:\\repo\\base", "C:child"]), "C:\\repo\\base\\child");
+        assert_eq!(w.resolve(&["\\\\srv\\share\\repo", "/docs"]), "\\\\srv\\share\\docs");
+        assert_eq!(w.resolve(&["C:\\repo", "///a/b"]), "C:\\a\\b");
+        assert_eq!(w.resolve(&["c:\\p", "C:q", "..\\r"]), "C:\\p\\r");
+        // Where Node would read the working directory, the result stays relative.
+        assert_eq!(w.resolve(&["C:\\p", "D:q"]), "D:q");
+        assert_eq!(w.resolve(&["a", "..\\..\\b"]), "..\\b");
+        assert_eq!(w.root("///a/b"), "\\");
         assert_eq!(w.relative("C:\\Users\\U", "c:\\users\\u\\src/x"), "src\\x");
         assert_eq!(w.relative("C:\\a\\b", "C:\\a\\c"), "..\\c");
         assert_eq!(w.relative("C:\\a", "D:\\a"), "D:\\a");
