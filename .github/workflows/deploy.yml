@@ -1,54 +1,79 @@
 name: deploy
-
 on:
   push:
-    branches:
-      - v1
+    branches: [v1]
   workflow_dispatch:
-
-concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: read
 
+concurrency: deploy-v1
+
 jobs:
-  deploy:
-    if: github.repository == 'anomalyco/opencode' && github.ref_name == 'v1'
+  build:
+    if: github.repository == 'anomalyco/opencode' && github.ref == 'refs/heads/v1'
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun services/app/build.ts
+        env:
+          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: production
+          VITE_SENTRY_RELEASE: web@${{ github.sha }}
+      - uses: ./.github/release/upload
+        id: upload
+        with:
+          name: app-v1
+          path: services/app/.cloudflare/output
+          include-hidden-files: true
+          retention-days: 7
+
+  deploy:
+    needs: build
     environment: v1
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-
-      - uses: ./.github/actions/setup-bun
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          node-version: "24"
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - working-directory: .github/release/cf
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./.github/release/download
+        with:
+          pattern: app-v1
+          require-digests: true
+          digests: app-v1=${{ needs.build.outputs.digest }}
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        id: aws
         with:
           role-to-assume: arn:aws:iam::604439173067:role/github/opencode-v1
-          role-session-name: opencode-${{ github.run_id }}
           aws-region: us-east-1
-
-      - name: Read deploy secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
-        with:
-          secret-ids: |
-            CLOUDFLARE_API_TOKEN,opencode/v1/CLOUDFLARE_API_TOKEN
-            SENTRY_AUTH_TOKEN,opencode/v1/SENTRY_AUTH_TOKEN
-          parse-json-secrets: false
-
-      # Only the V1 web app (app.opencode.ai) deploys from v1.
-      - run: bun sst deploy --stage=v1
+          role-session-name: opencode-${{ github.run_id }}
+          output-env-credentials: false
+          output-credentials: true
+      - id: token
+        run: bash .github/release/cloudflare-token.sh
         env:
-          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
-          SENTRY_RELEASE: web@${{ github.sha }}
-          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
-          VITE_SENTRY_ENVIRONMENT: production
-          VITE_SENTRY_RELEASE: web@${{ github.sha }}
+          AWS_ACCESS_KEY_ID: ${{ steps.aws.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.aws.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.aws.outputs.aws-session-token }}
+      - run: bash .github/release/deploy-app.sh "$RUNNER_TEMP/in/app-v1"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ steps.token.outputs.token }}
