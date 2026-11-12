@@ -561,7 +561,7 @@ impl Otlp {
         let mut request = client
             .post(self.url.clone())
             .header("content-type", "application/json")
-            .header("user-agent", format!("opencode-rs/{}", crate::help::VERSION))
+            .header("user-agent", format!("opencode-native/{}", crate::help::VERSION))
             .timeout(OTLP_SHUTDOWN)
             .body(body.to_string());
         for (key, value) in &self.headers {
@@ -737,7 +737,7 @@ mod tests {
     fn the_resource_names_the_client_channel_and_run() {
         let attributes = |vars: &[(&str, &str)]| {
             let vars: Vec<(String, String)> = vars.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
-            let resource = resource("opencode-rs", "1.2.3", "local", "abcd1234", |name| {
+            let resource = resource("opencode-native", "1.2.3", "local", "abcd1234", |name| {
                 vars.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone())
             });
             resource["attributes"]
@@ -753,7 +753,7 @@ mod tests {
             attributes(&[]),
             [
                 "deployment.environment.name=local",
-                "opencode.client=opencode-rs",
+                "opencode.client=opencode-native",
                 "opencode.run=abcd1234",
                 "service.instance.id=abcd1234",
                 "service.name=opencode",
@@ -768,7 +768,7 @@ mod tests {
             [
                 "team=a%20b",
                 "deployment.environment.name=local",
-                "opencode.client=opencode-rs",
+                "opencode.client=opencode-native",
                 "opencode.run=abcd1234",
                 "service.instance.id=abcd1234",
                 "service.name=custom",
@@ -846,7 +846,7 @@ mod tests {
             print: false,
             endpoint: Some(format!("http://127.0.0.1:{port}")),
             headers: Some("x-team=core".into()),
-            resource: resource("opencode-rs", "local", "local", "r", |_| None),
+            resource: resource("opencode-native", "local", "local", "r", |_| None),
         });
         logger.log(&Record::builder().level(Level::Info).target("opencode_cli").args(format_args!("exported")).build());
         logger.export();

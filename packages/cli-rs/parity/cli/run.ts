@@ -1,4 +1,4 @@
-// P-CLI (plan 7.1): runs one command with the TS CLI and with `opencode-rs`, each against its own fake
+// P-CLI (plan 7.1): runs one command with the TS CLI and with `opencode-native`, each against its own fake
 // server, and compares exit code, stdout, stderr, and the requests after normalization.
 //
 //   bun run parity/cli/run.ts [--sides ts,rs] [scenario.cli.ts ...]

@@ -2,12 +2,12 @@
 
 TypeScript: `opencode upgrade` (alias `update`) updates the TypeScript CLI.
 
-Rust: `opencode-rs upgrade` delegates to `opencode upgrade` (D.1), which updates the TypeScript CLI, not
-`opencode-rs`. In a preview build (version `0.0.0-rs-<run>`, `crates/cli/src/commands/upgrade.rs`) it does
-not delegate; it prints this to stderr and exits 1:
+Rust: `opencode-native upgrade` delegates to `opencode upgrade` (D.1), which updates the TypeScript CLI, not
+`opencode-native`. In a preview build (version `0.0.0-native-<run>`, `crates/cli/src/commands/upgrade.rs`) it
+does not delegate; it prints this to stderr and exits 1:
 
 ```
-This is an opencode-rs preview build; re-run the install script to update it.
+This is an OpenCode native CLI preview build; re-run the install script to update it.
 `opencode upgrade` updates the TypeScript CLI.
 ```
 

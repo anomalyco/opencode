@@ -4,7 +4,7 @@ use crate::args::{Command, LogLevel, McpCommand, ServerFlags, SessionCommand, Sh
 use crate::parse::{self, Invocation, Outcome};
 
 fn outcome(line: &[&str]) -> Outcome {
-    parse::parse(&line.iter().map(|arg| arg.to_string()).collect::<Vec<_>>(), "opencode-rs")
+    parse::parse(&line.iter().map(|arg| arg.to_string()).collect::<Vec<_>>(), "opencode-native")
 }
 
 fn parse(line: &[&str]) -> Result<Invocation, String> {
@@ -129,7 +129,7 @@ fn hidden_flags_parse_but_stay_out_of_help() {
             && !help(&["run"]).contains("dangerously")
     );
     assert!(help(&["mini"]).contains("--replay") && !help(&["mini"]).contains("--demo"));
-    assert!(error(&["run", "--yol"]).ends_with("in command opencode-rs run"), "no suggestion of a hidden flag");
+    assert!(error(&["run", "--yol"]).ends_with("in command opencode-native run"), "no suggestion of a hidden flag");
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn server_flags_apply_where_declared() {
 
 #[test]
 fn root_flags_do_not_pass_to_subcommands() {
-    assert!(error(&["-c", "upgrade"]).contains("Unrecognized flag: --continue in command opencode-rs upgrade"));
+    assert!(error(&["-c", "upgrade"]).contains("Unrecognized flag: --continue in command opencode-native upgrade"));
     assert!(error(&["--prompt", "hi", "run"]).contains("Unrecognized flag: --prompt"));
     assert!(error(&["--auto", "session", "list"]).contains("Unrecognized flag: --auto"));
 }
@@ -243,7 +243,7 @@ fn only_the_first_word_names_a_subcommand() {
         args.command,
         Some(SessionCommand::List(list)) if list.max_count == Some(3)
     )));
-    assert!(error(&["debug", "nope"]).contains("Unknown subcommand \"nope\" for \"opencode-rs debug\""));
+    assert!(error(&["debug", "nope"]).contains("Unknown subcommand \"nope\" for \"opencode-native debug\""));
     assert!(error(&["api", "a", "b", "c"]).contains("Unexpected positional argument: \"c\""));
     assert!(error(&["api"]).contains("Missing required argument"));
 }

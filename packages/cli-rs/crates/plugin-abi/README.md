@@ -1,6 +1,6 @@
 # opencode-plugin-abi
 
-The SDK of native TUI plugins for `opencode-rs`. A plugin is a shared library that depends on this crate alone and
+The SDK of native TUI plugins for `opencode-native`. A plugin is a shared library that depends on this crate alone and
 exports itself with `export_plugin!`. The host loads it at startup and again when it changes. The design, the
 lifecycle and the callback rules are in [`docs/P.4.md`](../../docs/P.4.md). Every type is documented in the rustdoc
 (`cargo doc -p opencode-plugin-abi --open`).
@@ -33,7 +33,7 @@ name = "opencode_hello"
 crate-type = ["cdylib"]
 
 [dependencies]
-opencode-plugin-abi = { git = "https://github.com/anomalyco/opencode", rev = "<commit of your opencode-rs>" }
+opencode-plugin-abi = { git = "https://github.com/anomalyco/opencode", rev = "<commit of your opencode-native build>" }
 ```
 
 The crate is not on crates.io. Cargo finds it inside the repository by its name. A path to a checkout also works:
@@ -98,7 +98,7 @@ The library is `target/release/libopencode_hello.so` (`.dylib` on macOS). Instal
   }
   ```
 
-Start `opencode-rs`. The home screen's footer ends in `hello`, and `/hello` or the palette's "Say hello" shows the
+Start `opencode-native`. The home screen's footer ends in `hello`, and `/hello` or the palette's "Say hello" shows the
 toast. While the TUI runs, a new build copied over the installed one replaces the running plugin.
 
 Open `/plugins` to see the plugin's state. External plugins are listed under TUI, built-ins only after `ctrl+a`.

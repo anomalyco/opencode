@@ -770,7 +770,7 @@ pub struct Entry {
 }
 
 /// Why a configured TypeScript TUI plugin is listed but not loaded (deviation of F16 until P.4).
-pub const SKIPPED: &str = "TypeScript TUI plugins do not run in opencode-rs yet";
+pub const SKIPPED: &str = "TypeScript TUI plugins do not run in opencode-native yet";
 
 struct Plugin {
     definition: Definition,

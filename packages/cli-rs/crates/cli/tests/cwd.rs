@@ -7,7 +7,7 @@ use std::process::Command;
 #[test]
 fn the_root_command_ignores_a_stale_pwd() {
     let home = opencode_util::temp::tempdir().unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
+    let output = Command::new(env!("CARGO_BIN_EXE_opencode-native"))
         .args(["--server", "http://127.0.0.1:1"])
         .current_dir(home.path())
         .env("PWD", home.path().join("missing"))

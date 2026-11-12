@@ -163,7 +163,7 @@ impl Library {
         let library = library.map_err(|error| format!("cannot load the library: {error}"))?;
         // SAFETY: `ENTRY` has type `EntryFn` in every plugin of this major version.
         let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }
-            .map_err(|_| format!("not an opencode-rs plugin: no `{}` symbol", abi::ENTRY))?;
+            .map_err(|_| format!("not an opencode-native plugin: no `{}` symbol", abi::ENTRY))?;
         // SAFETY: as above; the table it returns lives as long as the library.
         let opened = Self::from_table(unsafe { entry() }, host_minor)?;
         library.leak();
@@ -188,7 +188,7 @@ impl Library {
             unsafe { (std::ptr::addr_of!((*api).major).read(), std::ptr::addr_of!((*api).minor).read()) };
         if major != ABI_MAJOR {
             return Err(format!(
-                "plugin ABI {major}.{minor} is not supported: this opencode-rs loads ABI {ABI_MAJOR}.x plugins \
+                "plugin ABI {major}.{minor} is not supported: this opencode-native loads ABI {ABI_MAJOR}.x plugins \
                  (up to {ABI_MAJOR}.{host_minor}); rebuild the plugin against opencode-plugin-abi {ABI_MAJOR}"
             ));
         }
@@ -199,8 +199,8 @@ impl Library {
         let core = unsafe { &*api.cast::<PluginApiV1_0>() };
         if core.requires_minor > host_minor {
             return Err(format!(
-                "plugin needs host ABI {ABI_MAJOR}.{} or newer, this opencode-rs has {ABI_MAJOR}.{host_minor}; \
-                 update opencode-rs",
+                "plugin needs host ABI {ABI_MAJOR}.{} or newer, this opencode-native has {ABI_MAJOR}.{host_minor}; \
+                 update opencode-native",
                 core.requires_minor
             ));
         }

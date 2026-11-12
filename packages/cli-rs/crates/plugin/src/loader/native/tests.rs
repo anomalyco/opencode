@@ -207,7 +207,7 @@ fn versions_follow_the_abi_rules() {
     // A 1.3 host refuses a plugin of this crate, which needs the 1.4 render requests.
     assert_eq!(
         Library::open(&current, 3).err().unwrap(),
-        "plugin needs host ABI 1.4 or newer, this opencode-rs has 1.3; update opencode-rs"
+        "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update opencode-native"
     );
 
     // A plugin built against a newer minor version loads and uses what this host offers.
@@ -220,12 +220,12 @@ fn versions_follow_the_abi_rules() {
     // Only a major mismatch, or a plugin that needs a newer host, is refused, with a clear reason.
     assert_eq!(
         load(&build("major-2"), None).unwrap(),
-        "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.4); rebuild the \
+        "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.4); rebuild the \
          plugin against opencode-plugin-abi 1"
     );
     assert_eq!(
         load(&build("requires-future"), None).unwrap(),
-        "plugin needs host ABI 1.99 or newer, this opencode-rs has 1.4; update opencode-rs"
+        "plugin needs host ABI 1.99 or newer, this opencode-native has 1.4; update opencode-native"
     );
     assert!(load(b"not a library", None).unwrap().starts_with("cannot load the library"));
     // Setup runs on activation, so a setup that fails fails the plugin there.
@@ -1276,7 +1276,7 @@ fn configured(options: &str, directives: &[&str]) -> (opencode_util::temp::TempD
     (root, target, registry, loader)
 }
 
-const MAJOR_2: &str = "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.4); rebuild \
+const MAJOR_2: &str = "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.4); rebuild \
                        the plugin against opencode-plugin-abi 1";
 
 // Expected (carbon-2): an external plugin whose setup fails says so in a toast that opens the plugin manager, as a

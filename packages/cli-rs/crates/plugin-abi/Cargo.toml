@@ -1,6 +1,6 @@
 [package]
 name = "opencode-plugin-abi"
-description = "The C ABI of native opencode-rs TUI plugins (P.4), and export_plugin! for plugins written in Rust."
+description = "The C ABI of native TUI plugins for opencode-native (P.4), and export_plugin! for plugins written in Rust."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

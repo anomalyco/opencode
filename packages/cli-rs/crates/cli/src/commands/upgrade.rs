@@ -18,10 +18,10 @@ pub fn run(_context: &Context, _args: &UpgradeArgs) -> error::Result<()> {
     Err(delegate::forward().into())
 }
 
-/// What `upgrade` prints instead of delegating, for a preview build (`0.0.0-rs-<run>`).
+/// What `upgrade` prints instead of delegating, for a preview build (`0.0.0-native-<run>`).
 pub(crate) fn preview_message(version: &str) -> Option<&'static str> {
-    version.starts_with("0.0.0-rs-").then_some(
-        "This is an opencode-rs preview build; re-run the install script to update it.\n\
+    version.starts_with("0.0.0-native-").then_some(
+        "This is an OpenCode native CLI preview build; re-run the install script to update it.\n\
          `opencode upgrade` updates the TypeScript CLI.\n",
     )
 }
@@ -33,13 +33,13 @@ mod tests {
     #[test]
     fn preview_builds_do_not_delegate() {
         assert_eq!(
-            preview_message("0.0.0-rs-12"),
+            preview_message("0.0.0-native-12"),
             Some(
-                "This is an opencode-rs preview build; re-run the install script to update it.\n\
+                "This is an OpenCode native CLI preview build; re-run the install script to update it.\n\
                  `opencode upgrade` updates the TypeScript CLI.\n"
             )
         );
-        for version in ["local", "2.2.7", "0.0.0-dev-1229", "0.0.0-rs"] {
+        for version in ["local", "2.2.7", "0.0.0-dev-1229", "0.0.0-native"] {
             assert_eq!(preview_message(version), None, "{version}");
         }
     }

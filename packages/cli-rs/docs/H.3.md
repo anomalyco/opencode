@@ -1,7 +1,7 @@
 # H.3: P-CLI and P-PTY
 
-Both runners start the TS CLI from source (`bun packages/cli/src/index.ts`) and `opencode-rs`
-(`target/debug/opencode-rs`, built by the runner, or `OPENCODE_RS_BIN`) with the same arguments. Each
+Both runners start the TS CLI from source (`bun packages/cli/src/index.ts`) and `opencode-native`
+(`target/debug/opencode-native`, built by the runner, or `OPENCODE_RS_BIN`) with the same arguments. Each
 run gets a fresh home with its own XDG roots and `TMPDIR`, an environment without the caller's
 `OPENCODE_*` variables, `OPENCODE_CLI_NAME=opencode`, and its own fake server. `--server <url>` is
 appended to the arguments, or replaces a `$SERVER` argument. Neither client touches the user's

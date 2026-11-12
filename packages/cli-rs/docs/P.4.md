@@ -36,15 +36,15 @@ Versions only grow by appending:
 - JSON payloads only gain optional fields; readers ignore fields they do not know.
 - A plugin built against a newer minor version loads on an older host and uses what the host offers: the host
   answers a request it does not know with an error. A plugin that cannot work without a newer host sets
-  `requires_minor`, and the host refuses it: "plugin needs host ABI 1.4 or newer, this opencode-rs has 1.3; update
-  opencode-rs". `export_plugin!` sets `requires_minor` to 4, because only a 1.4 host sends the render requests the
+  `requires_minor`, and the host refuses it: "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update
+  opencode-native". `export_plugin!` sets `requires_minor` to 4, because only a 1.4 host sends the render requests the
   SDK answers.
 - 1.4 renders are opt-in on the wire. `Setup` sets `Manifest::render` to 2 (`RENDER`), and a 1.4 claim sets
   `SlotClaim::render`. The host sends `RenderFence`, `Render` and `RenderRoute` only to such a plugin and claim; every
   other plugin, and a `slot_lines` claim or `route_lines` route, gets the 1.3 requests `Fence`, `Slot` and `Route`,
   and answers with rows.
 - Only a deliberate major-version break refuses a plugin. The host reads `major` before anything else, and the
-  plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins (up to 1.4);
+  plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.4);
   rebuild the plugin against opencode-plugin-abi 1".
 
 A Rust-ABI `dylib` was rejected because it breaks with every compiler or crate version.

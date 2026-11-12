@@ -1,4 +1,4 @@
-// The environment of the D.1 scenarios: `opencode-rs` delegates to the TS CLI from source (`bin/opencode`),
+// The environment of the D.1 scenarios: `opencode-native` delegates to the TS CLI from source (`bin/opencode`),
 // so both sides run the same TypeScript and must print the same thing. The TS side ignores these variables.
 import path from "node:path"
 
