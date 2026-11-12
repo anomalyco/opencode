@@ -756,6 +756,39 @@ fn a_theme_change_restyles_the_open_dialog_in_place() {
     }
 }
 
+// Expected: TS keeps `busy` through a theme change, so a prompt built again in a new theme while it saves stays busy
+// and does not submit twice.
+#[test]
+fn a_prompt_rebuilt_while_saving_stays_busy() {
+    let light = Catalog::default().load("opencode", ThemeMode::Light).unwrap().theme;
+    let kit = kit(72, 30);
+    let submitted = Rc::new(RefCell::new(0));
+    let count = submitted.clone();
+    let handle = open_prompt(
+        &kit,
+        prompt::PromptProps {
+            title: "Rename".into(),
+            value: Some("name".into()),
+            busy_text: Some("Saving…".into()),
+            on_confirm: Some(Rc::new(move |_| *count.borrow_mut() += 1)),
+            ..Default::default()
+        },
+    );
+    kit.app.press("return");
+    assert_eq!(*submitted.borrow(), 1);
+    handle.borrow().as_ref().unwrap().set_busy(true);
+    kit.dialogs.set_theme(light);
+    let screen = kit.app.render().text();
+    assert!(screen.contains("Saving…"), "{screen}");
+    let rebuilt = handle.borrow().clone().unwrap();
+    assert!(rebuilt.busy());
+    kit.app.press("return");
+    assert_eq!(*submitted.borrow(), 1);
+    rebuilt.set_busy(false);
+    kit.app.press("return");
+    assert_eq!(*submitted.borrow(), 2);
+}
+
 // Expected (r2 review, carbon-ui-7): a toast queued behind a hovered one updates `+N more` in the same surface (TS
 // keeps `ToastSurface` mounted), so a selection made on it stays; and the toast's width follows a resize, as TS
 // `useTerminalDimensions()` does.

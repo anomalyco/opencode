@@ -536,6 +536,12 @@ impl Live {
         self.listeners.borrow().len()
     }
 
+    /// How many writes have not landed yet, for the tests that check a step is not written twice.
+    #[doc(hidden)]
+    pub fn pending_writes(&self) -> usize {
+        self.done.borrow().len()
+    }
+
     fn resolve(&self, info: Info) -> Resolved {
         let mut resolved = self.resolved.borrow().with_info(info);
         if self.auto {
@@ -747,10 +753,11 @@ pub fn palette_options(tui: &Tui) -> Vec<SelectOption<String>> {
 pub fn show(tui: &Tui, current: Option<&str>) {
     let current = current.and_then(|id| SETTINGS.iter().position(|setting| setting.id() == id)).unwrap_or(0);
     let weak = tui.weak();
+    // Outside the build: a build in a new theme, as a theme step makes, keeps ignoring steps until the write ends.
+    let saving = Rc::new(Cell::new(false));
     tui.dialogs.replace(
         bind!(weak, |tui, cx| {
             let selected = Rc::new(Cell::new(current));
-            let saving = Rc::new(Cell::new(false));
             let step = |direction: i32| {
                 let (weak, selected, saving) = (weak.clone(), selected.clone(), saving.clone());
                 bind!(weak, |tui, _: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| change(&tui, &saving, selected.get(), direction))
