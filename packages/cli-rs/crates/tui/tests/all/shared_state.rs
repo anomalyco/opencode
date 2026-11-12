@@ -17,6 +17,7 @@ use opencode_local::model_pref::Model;
 use opencode_tui::dialogs::session_list::pins;
 use opencode_tui::prompt::history::History;
 use opencode_tui::{Deps, Route};
+use opencode_ui::path::Flavor;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
@@ -24,11 +25,11 @@ use serde_json::{Value, json};
 /// lacks, and the prompt writes.
 fn fake() -> Fake {
     Fake::new(|seen| {
-        // `/cd /project-b` resolves to `\project-b` on Windows.
-        let directory = Some(seen.param("location[directory]").replace('\\', "/")).filter(|value| !value.is_empty());
+        let directory = Some(seen.param("location[directory]")).filter(|value| !value.is_empty());
         let directory = directory.as_deref().unwrap_or("/project");
         let agent = |id| support::agent(id, "primary", false);
-        let agents = if directory == "/project-b" {
+        // `/cd /project-b` resolves to `D:\project-b` on Windows.
+        let agents = if directory == "/project-b" || directory == Flavor::NATIVE.resolve(&["/project-b"]) {
             json!([agent("build"), agent("reviewer")])
         } else {
             json!([agent("build"), agent("plan")])
