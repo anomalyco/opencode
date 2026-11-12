@@ -4,7 +4,7 @@
 use indexmap::IndexMap;
 use opencode_api::generated::{FormAnswer, FormField, FormInfo, FormValue};
 use opencode_ui::form::{
-    custom, display_value, initial_values, key, label, rows, selected_row, set_multiselect_custom, textual,
+    custom, display_value, initial_values, key, label, required, rows, selected_row, set_multiselect_custom, textual,
     toggle_multiselect, validate,
 };
 
@@ -228,23 +228,15 @@ pub fn unsupported(form: &FormInfo) -> Option<String> {
         return Some("This form has no supported fields.".to_owned());
     }
     for field in form.fields.iter() {
-        let when = match field {
-            FormField::String(field) => field.when.as_ref(),
-            FormField::Number(field) => field.when.as_ref(),
-            FormField::Integer(field) => field.when.as_ref(),
-            FormField::Boolean(field) => field.when.as_ref(),
-            FormField::Multiselect(field) => field.when.as_ref(),
-            FormField::External(_) => None,
-            FormField::Unknown(value) => {
-                let kind = value.get("type").and_then(|kind| kind.as_str());
-                let Some(kind) = kind else { return Some("This form uses an unknown field.".to_owned()) };
-                if !value.get("key").is_some_and(serde_json::Value::is_string) {
-                    return Some("This form uses an invalid field.".to_owned());
-                }
-                return Some(format!("Field type {kind} is not supported in Mini yet."));
+        if let FormField::Unknown(value) = field {
+            let kind = value.get("type").and_then(|kind| kind.as_str());
+            let Some(kind) = kind else { return Some("This form uses an unknown field.".to_owned()) };
+            if !value.get("key").is_some_and(serde_json::Value::is_string) {
+                return Some("This form uses an invalid field.".to_owned());
             }
-        };
-        if when.is_some_and(|when| !when.is_empty()) {
+            return Some(format!("Field type {kind} is not supported in Mini yet."));
+        }
+        if field.when().is_some_and(|when| !when.is_empty()) {
             return Some("Conditional forms are not supported in Mini yet.".to_owned());
         }
         if let FormField::String(field) = field
@@ -417,7 +409,7 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
         );
     }
     if let (None, Some(field), false) = (&unsupported, answering, confirm) {
-        let question = description(field).map_or_else(|| label(field), str::to_owned);
+        let question = field.description().map_or_else(|| label(field), str::to_owned);
         let block = View::new(app).column().width(Length::percent(100.0)).shrink(0.0).gap(gap).child(&line(
             format!(
                 "{question}{}{}",
@@ -658,19 +650,11 @@ fn content_rows(form: &FormInfo, state: &State, width: u16) -> usize {
         rows.push(wrapped(message));
     }
     if let Some(field) = current(form, state) {
-        let question = description(field).map_or_else(|| label(field), str::to_owned);
+        let question = field.description().map_or_else(|| label(field), str::to_owned);
         let suffix = if required(field) { " (required)" } else { "" };
         rows.push(wrapped(&format!("{question}{suffix}")));
     }
     rows.iter().sum::<usize>() + rows.len().saturating_sub(1)
-}
-
-fn description(field: &FormField) -> Option<&str> {
-    opencode_ui::form::description(field)
-}
-
-fn required(field: &FormField) -> bool {
-    opencode_ui::form::required(field)
 }
 
 #[cfg(test)]

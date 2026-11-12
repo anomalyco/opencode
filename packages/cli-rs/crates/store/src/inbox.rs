@@ -11,7 +11,6 @@ use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
-use serde_json::Value;
 
 use crate::messages::{MessageExt, from_event};
 use crate::state::{Compacting, Data, Error, SessionStatus, State, Task, evict_missing};
@@ -39,33 +38,11 @@ pub(crate) enum PendingUpdate {
 
 /// Fields every inbox member has.
 pub trait InboxExt {
-    fn id(&self) -> &str;
-    fn delivery(&self) -> Option<&SessionInboxDelivery>;
     fn set_delivery(&mut self, delivery: SessionInboxDelivery);
     fn created(&self) -> f64;
 }
 
 impl InboxExt for SessionInboxInfo {
-    fn id(&self) -> &str {
-        match self {
-            Self::User(item) => item.id.as_str(),
-            Self::Synthetic(item) => item.id.as_str(),
-            Self::Compaction(item) => item.id.as_str(),
-            Self::Move(item) => item.id.as_str(),
-            Self::Unknown(value) => value.get("id").and_then(Value::as_str).unwrap_or_default(),
-        }
-    }
-
-    fn delivery(&self) -> Option<&SessionInboxDelivery> {
-        match self {
-            Self::User(item) => Some(&item.delivery),
-            Self::Synthetic(item) => Some(&item.delivery),
-            Self::Compaction(item) => Some(&item.delivery),
-            Self::Move(item) => Some(&item.delivery),
-            Self::Unknown(_) => None,
-        }
-    }
-
     fn set_delivery(&mut self, delivery: SessionInboxDelivery) {
         match self {
             Self::User(item) => item.delivery = delivery,
@@ -81,13 +58,7 @@ impl InboxExt for SessionInboxInfo {
     }
 
     fn created(&self) -> f64 {
-        match self {
-            Self::User(item) => item.time.created,
-            Self::Synthetic(item) => item.time.created,
-            Self::Compaction(item) => item.time.created,
-            Self::Move(item) => item.time.created,
-            Self::Unknown(value) => value.pointer("/time/created").and_then(Value::as_f64).unwrap_or_default(),
-        }
+        self.time_created()
     }
 }
 
@@ -117,7 +88,7 @@ impl State {
 
     /// Pending user and synthetic inputs (`input.list`); compactions are control items.
     pub fn inputs(&self, session: &SessionID) -> Vec<&str> {
-        self.pending(session).iter().filter(|item| item.tag() != "compaction").map(InboxExt::id).collect()
+        self.pending(session).iter().filter(|item| item.tag() != "compaction").map(SessionInboxInfo::id).collect()
     }
 
     pub fn has_input(&self, session: &SessionID, inbox: &str) -> bool {
@@ -148,7 +119,7 @@ impl State {
     /// Upserts an admitted item into pending and, for user and synthetic items, the transcript
     /// (`admitLocal`). This reconciles a durable echo with its optimistic placeholder.
     pub(crate) fn admit_local(&mut self, item: SessionInboxInfo) {
-        let session = inbox_session(&item);
+        let session = SessionID::from(item.session_id());
         let pending = self.pending.entry(session.clone()).or_default();
         match pending.iter().position(|entry| entry.id() == item.id()) {
             Some(at) => pending[at] = item.clone(),
@@ -183,7 +154,7 @@ impl State {
             }),
             _ => return,
         };
-        self.upsert_message(&inbox_session(item), row);
+        self.upsert_message(&SessionID::from(item.session_id()), row);
     }
 
     /// Removes an item from pending and the transcript (`retractLocal`).
@@ -313,18 +284,6 @@ impl State {
         self.on_compaction_failed(event);
         if let Some(input) = &data.input_id {
             self.observe(&data.session_id, input.as_str());
-        }
-    }
-}
-
-fn inbox_session(item: &SessionInboxInfo) -> SessionID {
-    match item {
-        SessionInboxInfo::User(item) => item.session_id.clone(),
-        SessionInboxInfo::Synthetic(item) => item.session_id.clone(),
-        SessionInboxInfo::Compaction(item) => item.session_id.clone(),
-        SessionInboxInfo::Move(item) => item.session_id.clone(),
-        SessionInboxInfo::Unknown(value) => {
-            SessionID(value.get("sessionID").and_then(Value::as_str).unwrap_or_default().to_owned())
         }
     }
 }

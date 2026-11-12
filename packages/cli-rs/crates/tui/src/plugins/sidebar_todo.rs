@@ -5,7 +5,6 @@
 use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageAssistantToolState};
 use opencode_plugin::abi::{self, Changed, Click, Command, Layout, Node, Placement, Render, Span};
 use opencode_plugin::slot;
-use opencode_store::MessageExt;
 use opencode_ui::tool_info::{Todo, TodoStatus, parse_todos, todo_marker};
 
 use crate::prelude::*;
