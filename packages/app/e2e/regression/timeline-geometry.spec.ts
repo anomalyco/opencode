@@ -770,11 +770,20 @@ async function scrollsBehindComposerRegion(
             id: "call_running_subagent",
             name: "subagent",
             state: {
-              status: "running",
+              status: "completed",
               input: { description: "Trace frame budget", agent: "explore" },
-              metadata: { sessionID: "ses_running_subagent" },
+              content: [{ type: "text", text: "The subagent is working in the background." }],
+              metadata: { sessionID: "ses_running_subagent", status: "running" },
             },
-            time: { created: 2 },
+            time: { created: 2, completed: 2 },
+          },
+          // Subagents always run in the background, so a running shell is what shows the background hint.
+          {
+            type: "tool",
+            id: "call_running_shell",
+            name: "shell",
+            state: { status: "running", input: { command: "sleep 60" }, metadata: {} },
+            time: { created: 2, ran: 2 },
           },
           { type: "text", id: "prt_timeline_end", text: "The last answer ends above the composer region." },
         ],
