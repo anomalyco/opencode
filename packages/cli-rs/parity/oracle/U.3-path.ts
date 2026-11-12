@@ -2,6 +2,7 @@
 // over POSIX and Windows paths. Writes parity/fixtures/U.3/path.json; crates/ui/tests/all/dialogs.rs expects the same
 // strings.
 import { abbreviateHome, formatPath } from "../../../tui/src/util/path-format"
+import { records } from "../lib/records"
 
 const posix = {
   base: ["/home/ada/src/app", "/", "/home/ada", "/tmp/x/"],
@@ -60,5 +61,5 @@ const cases = [posix, windows].flatMap((set) =>
 )
 
 const path = new URL("../fixtures/U.3/path.json", import.meta.url).pathname
-await Bun.write(path, JSON.stringify(cases, null, 1) + "\n")
+await Bun.write(path, records(cases, ["[]"]))
 console.log(`oracle: U.3/path ${cases.length} cases`)

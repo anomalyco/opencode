@@ -3,6 +3,7 @@
 // The raw generated client: the exported `OpenCode.make` wraps it (one shared event subscription without
 // input), and the Rust generated client corresponds to the raw one. The package exports do not expose it.
 import { make } from "../../../client/src/promise/generated/client.ts"
+import { records } from "../lib/records"
 
 type Recorded = {
   name: string
@@ -110,5 +111,5 @@ const query = values.map((value) => {
 
 await Bun.write(
   new URL("../fixtures/F.2/requests.json", import.meta.url),
-  JSON.stringify({ requests, query }, null, 2) + "\n",
+  records({ requests, query }, ["requests[]", "query[]"]),
 )
