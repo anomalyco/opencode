@@ -1,7 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 // P-COMP fixtures for the model, agent, variant, usage, model usage, and Go upsell dialogs (E.16):
 // crates/tui/tests/all/models.rs. Each dialog opens over the real TUI providers, LocalProvider included, against
-// the routes in parity/fixtures/E.16/server.json and the model.json below, which the Rust test serves too.
+// the routes in parity/fixtures/E.16/server.json and the model.json below, which the Rust test serves too. Times
+// render in UTC here; the Rust test shifts each `resetsAt` by its local offset.
+process.env.TZ = "UTC"
+
 import { testRender } from "@opentui/solid"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -32,7 +35,7 @@ import { withNewDesigns } from "../lib/app"
 import { readCells, writeFixture } from "../lib/cells"
 
 const location = { directory }
-// Noon UTC, far from today, so the reset reads as a date with a time in any time zone.
+// Noon UTC, far from today, so the reset reads as a date with a time.
 const resetsAt = Date.UTC(2030, 0, 15, 12, 0)
 
 const model = (
