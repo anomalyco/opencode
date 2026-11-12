@@ -123,7 +123,7 @@ fn stale_locks_are_broken_across_clients() {
     fs::write(lock_dir.join("meta.json"), r#"{"token":"gone"}"#).unwrap();
     let old = SystemTime::now() - Duration::from_secs(5);
     for file in ["heartbeat", "meta.json"] {
-        fs::File::open(lock_dir.join(file)).unwrap().set_modified(old).unwrap();
+        fs::File::options().write(true).open(lock_dir.join(file)).unwrap().set_modified(old).unwrap();
     }
     assert_eq!(lock_try(dir.path(), "k", 200).unwrap(), "acquired");
 }
