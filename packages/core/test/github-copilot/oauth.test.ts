@@ -44,7 +44,7 @@ function fixture(expiring = false) {
     requests,
     replies,
     auth: CopilotOAuth.method(App.make({ name: "test" }), http, Effect.succeed(expiring)),
-    login: (token: object) =>
+    login: (token: object, status = 200) =>
       replies.push(
         Response.json({
           device_code: "device-code",
@@ -52,13 +52,57 @@ function fixture(expiring = false) {
           verification_uri: "https://github.com/login/device",
           interval: 5,
         }),
-        Response.json(token),
+        Response.json(token, { status }),
         Response.json({ endpoints: { api: "https://api.business.githubcopilot.com/" } }),
       ),
   }
 }
 
 describe("Copilot OAuth", () => {
+  for (const input of [
+    {
+      status: 200,
+      error: "access_denied",
+      message: "GitHub device authorization failed: access_denied. Try signing in again.",
+    },
+    {
+      status: 200,
+      error: "expired_token",
+      message: "GitHub device authorization failed: expired_token. Try signing in again.",
+    },
+    {
+      status: 400,
+      error: "expired_token",
+      message: "GitHub device authorization failed: expired_token (HTTP 400). Try signing in again.",
+    },
+    {
+      status: 503,
+      error: undefined,
+      message: "GitHub device authorization failed (HTTP 503). Try signing in again.",
+    },
+  ])
+    it.effect(`reports device authorization errors: ${input.error ?? "unknown"} (${input.status})`, () =>
+      Effect.gen(function* () {
+        const test = fixture()
+        test.login(
+          input.error
+            ? {
+                error: input.error,
+                error_description: "private-description",
+                access_token: "private-access",
+                refresh_token: "private-refresh",
+              }
+            : {},
+          input.status,
+        )
+        const authorization = yield* test.auth.authorize({ deploymentType: "github.com" })
+        const failure = yield* authorization.callback.pipe(Effect.flip)
+        expect(failure).toBeInstanceOf(Error)
+        expect(String(failure)).toBe(`Error: ${input.message}`)
+        expect(test.requests).toHaveLength(2)
+      }),
+    )
+
   for (const expiring of [false, true])
     it.effect(`stores issued token pairs with the request flag ${expiring}`, () =>
       Effect.gen(function* () {

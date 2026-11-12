@@ -145,7 +145,11 @@ export const method = (app: App.Info, http: HttpClient.HttpClient, preferExpirin
                 response.token.interval && response.token.interval > 0 ? response.token.interval * 1000 : wait + 5000
               return yield* Effect.sleep(next + 3000).pipe(Effect.andThen(poll(next)))
             }
-            return yield* Effect.fail(new Error("GitHub device authorization failed. Try signing in again."))
+            return yield* Effect.fail(
+              new Error(
+                `GitHub device authorization failed${response.token.error ? `: ${response.token.error}` : ""}${response.status !== 200 ? ` (HTTP ${response.status})` : ""}. Try signing in again.`,
+              ),
+            )
           })
         return {
           mode: "auto" as const,
