@@ -155,9 +155,7 @@ impl Inner {
 
     /// `DELETE /api/session/{id}/revert`; a failure shows as a toast.
     fn clear(&self) {
-        let (Some(tui), Some(session)) = (self.tui.upgrade(), self.session.borrow().clone()) else {
-            return;
-        };
+        let (Some(tui), Some(session)) = (self.tui.upgrade(), self.session.borrow().clone()) else { return };
         let client = tui.data.client().clone();
         tui.request(
             async move { client.session_revert_clear(&SessionRevertClearInput { session_id: session }).await },

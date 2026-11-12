@@ -274,9 +274,7 @@ impl pty::Connector for Sockets {
             tokio::spawn(async move {
                 for received in recorded.received {
                     while sent.lock().unwrap().len() < received.after {
-                        let Some(frame) = remote.sent.recv().await else {
-                            return;
-                        };
+                        let Some(frame) = remote.sent.recv().await else { return };
                         sent.lock().unwrap().push(frame);
                     }
                     while step.load(Ordering::SeqCst) < received.step {

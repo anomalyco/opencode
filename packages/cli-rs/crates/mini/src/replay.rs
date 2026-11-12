@@ -667,9 +667,7 @@ impl Transcript {
 
     /// `flushQuietText`: the buffered text of a message whose step ended.
     fn flush_quiet(&mut self, message: &str) -> Vec<Commit> {
-        let Some(index) = self.quiet.iter().position(|(id, _)| id == message) else {
-            return Vec::new();
-        };
+        let Some(index) = self.quiet.iter().position(|(id, _)| id == message) else { return Vec::new() };
         let (_, parts) = self.quiet.remove(index);
         if self.tool_messages.contains(message) {
             return Vec::new();
@@ -940,9 +938,7 @@ impl Transcript {
             self.lost = true;
             return Output { relist: Some(self.relists), ..Output::default() };
         }
-        let Some(session) = session_of(event) else {
-            return Output::default();
-        };
+        let Some(session) = session_of(event) else { return Output::default() };
         let form = matches!(event, V2Event::FormCreated(_) | V2Event::FormReplied(_) | V2Event::FormCancelled(_));
         if session == GLOBAL && form {
             return Output { footer: vec![event.clone()], ..Output::default() };
@@ -963,9 +959,7 @@ impl Transcript {
         match event {
             V2Event::SessionRenamed(renamed) => Output { title: Some(renamed.data.title.clone()), ..Output::default() },
             V2Event::SessionInboxEnqueued(enqueued) => {
-                let SessionInboxItem::User(item) = &enqueued.data.item else {
-                    return Output::default();
-                };
+                let SessionInboxItem::User(item) = &enqueued.data.item else { return Output::default() };
                 let files = item.payload.files.as_deref().unwrap_or_default();
                 let skills = item.payload.skills.as_deref().unwrap_or_default();
                 let mut output = self.admitted(enqueued.data.inbox_id.as_str(), &item.payload.text, files, skills);

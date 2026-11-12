@@ -243,9 +243,7 @@ impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
                 Some(Err(error)) => break Some(SubscribeError::Source(Arc::new(error))),
                 Some(Ok(event)) => {
                     let mut hub = lock(&self.hub);
-                    let Some(upstream) = hub.upstreams.get_mut(&id) else {
-                        break None;
-                    };
+                    let Some(upstream) = hub.upstreams.get_mut(&id) else { break None };
                     if event.kind() == CONNECTED {
                         upstream.connected = Some(event.clone());
                     }
@@ -278,9 +276,7 @@ impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
 
     fn leave(&self, id: u64, subscriber: &Arc<Subscriber<E, X>>) {
         let mut hub = lock(&self.hub);
-        let Some(upstream) = hub.upstreams.get_mut(&id) else {
-            return;
-        };
+        let Some(upstream) = hub.upstreams.get_mut(&id) else { return };
         let before = upstream.subscribers.len();
         upstream.subscribers.retain(|other| !Arc::ptr_eq(other, subscriber));
         if before != upstream.subscribers.len() && upstream.subscribers.is_empty() {
@@ -508,9 +504,7 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
                 state.status = if attempt == 0 { Status::Connecting } else { Status::Reconnecting };
                 state.attempt = attempt;
             });
-            let End::Failed { error, connected_at, forced } = self.stream(attempt).await else {
-                return;
-            };
+            let End::Failed { error, connected_at, forced } = self.stream(attempt).await else { return };
             if connected_at.is_some_and(|at| at.elapsed() >= self.options.reconnect_delay) {
                 attempt = 0;
             }
@@ -1412,9 +1406,7 @@ mod tests {
         let mut kinds = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(20);
         while kinds.len() < 5 {
-            let Ok(Some(batch)) = tokio::time::timeout_at(deadline, batches.recv()).await else {
-                break;
-            };
+            let Ok(Some(batch)) = tokio::time::timeout_at(deadline, batches.recv()).await else { break };
             kinds.extend(batch.iter().map(|event| event.kind().to_owned()));
         }
         println!("live: {server} state {:?}", connection.state());

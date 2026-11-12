@@ -69,9 +69,7 @@ impl Inner {
             TuiCommand::new(
                 id,
                 bind!(this, |inner, input, _| {
-                    let Some(tui) = inner.tui.upgrade() else {
-                        return;
-                    };
+                    let Some(tui) = inner.tui.upgrade() else { return };
                     run(&inner, &tui, input);
                 }),
             )
@@ -375,9 +373,7 @@ impl Inner {
 /// `messagesBeforeRevert`: the messages before the staged revert, if any.
 fn before_revert<'a>(state: &'a State, session: &SessionID) -> &'a [SessionMessageInfo] {
     let messages = state.messages(session);
-    let Some(revert) = state.session(session).and_then(|info| info.revert.as_ref()) else {
-        return messages;
-    };
+    let Some(revert) = state.session(session).and_then(|info| info.revert.as_ref()) else { return messages };
     match messages.iter().position(|message| message.id() == revert.message_id.as_str()) {
         Some(index) => &messages[..index],
         None => messages,

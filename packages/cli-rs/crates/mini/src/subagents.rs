@@ -526,12 +526,8 @@ impl Tracker {
             Some(_) => self.calls.remove(&key).flatten(),
             None => self.calls.get(&key).cloned().flatten(),
         };
-        let Some((session, running)) = child_session(metadata) else {
-            return Vec::new();
-        };
-        let Some(child) = self.admit(&session) else {
-            return Vec::new();
-        };
+        let Some((session, running)) = child_session(metadata) else { return Vec::new() };
+        let Some(child) = self.admit(&session) else { return Vec::new() };
         child.apply_meta(call.as_ref());
         if success == Some(true) && running {
             child.status = Status::Running;
@@ -555,9 +551,7 @@ impl Tracker {
     /// `foreign`: an event of another session. A child takes it; an unknown session is discovered, its events
     /// waiting meanwhile.
     pub fn foreign(&mut self, event: &V2Event) -> Vec<Fetch> {
-        let Some(session) = session_of(event).map(str::to_owned) else {
-            return Vec::new();
-        };
+        let Some(session) = session_of(event).map(str::to_owned) else { return Vec::new() };
         if session == self.parent {
             return Vec::new();
         }
@@ -637,16 +631,10 @@ impl Tracker {
         session: &str,
         result: Result<(Vec<SessionMessageInfo>, Vec<SessionInboxInfo>), String>,
     ) -> Vec<Fetch> {
-        let Some(hydration) = self.hydrations.remove(session) else {
-            return Vec::new();
-        };
+        let Some(hydration) = self.hydrations.remove(session) else { return Vec::new() };
         let (thinking, directory, selected) = (self.thinking, self.directory.clone(), self.selected.clone());
-        let Some(child) = self.children.get_mut(session) else {
-            return Vec::new();
-        };
-        let Ok((messages, inbox)) = result else {
-            return Vec::new();
-        };
+        let Some(child) = self.children.get_mut(session) else { return Vec::new() };
+        let Ok((messages, inbox)) = result else { return Vec::new() };
         if hydration.overflow {
             // Too many events arrived meanwhile to replay them; list again.
             child.hydrated = false;
@@ -808,9 +796,7 @@ impl Tracker {
         if self.hydrations.contains_key(session) {
             return Vec::new();
         }
-        let Some(child) = self.children.get(session) else {
-            return Vec::new();
-        };
+        let Some(child) = self.children.get(session) else { return Vec::new() };
         let hydration = Hydration {
             events: Vec::new(),
             overflow: false,

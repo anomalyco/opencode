@@ -156,9 +156,7 @@ impl<V> Overlay<V> {
     }
 
     pub(crate) fn record(&mut self, id: &str, change: Option<V>) {
-        let Some(changes) = &mut self.changes else {
-            return;
-        };
+        let Some(changes) = &mut self.changes else { return };
         changes.insert(id.to_owned(), change);
         if changes.len() > OVERLAY_LIMIT {
             self.changes = None;
@@ -322,9 +320,7 @@ impl Syncs {
 
     /// Settles the load `token` of `key`: done when it succeeded and was not invalidated.
     fn settle(&mut self, key: &str, token: u64, ok: bool) {
-        let Some(Entry::Pending { token: current, invalidated, .. }) = self.entries.get(key) else {
-            return;
-        };
+        let Some(Entry::Pending { token: current, invalidated, .. }) = self.entries.get(key) else { return };
         if *current != token {
             return;
         }
@@ -517,9 +513,7 @@ impl Data {
         let future = load(self.clone());
         let data = self.clone();
         self.inner.runtime.spawn(async move {
-            let Err(error) = future.await else {
-                return;
-            };
+            let Err(error) = future.await else { return };
             if !data.live() {
                 return;
             }
@@ -667,9 +661,7 @@ pub struct Listening {
 
 impl Drop for Listening {
     fn drop(&mut self) {
-        let Some(inner) = self.inner.upgrade() else {
-            return;
-        };
+        let Some(inner) = self.inner.upgrade() else { return };
         let mut listened = lock(&inner.listened);
         for tag in &self.tags {
             if let Some(count) = listened.get_mut(tag) {

@@ -93,9 +93,7 @@ fn contains(bounds: &Bounds, point: Point) -> bool {
 }
 
 fn clear_title_port(endpoint: Endpoint, port: Point, role: Role) -> Point {
-    let Endpoint::Subgraph(frame) = endpoint else {
-        return port;
-    };
+    let Endpoint::Subgraph(frame) = endpoint else { return port };
     if role != Role::Source || frame.label.is_empty() {
         return port;
     }
@@ -536,17 +534,13 @@ impl Router<'_> {
     }
 
     fn horizontal_subgraph_exit_fan_in(&mut self, diagram: &Diagram, frames: Option<&Frames>) {
-        let Some(frames) = frames else {
-            return;
-        };
+        let Some(frames) = frames else { return };
         let mut groups: IndexMap<String, Vec<ExitRecord>> = IndexMap::new();
         for edge in &diagram.edges {
             if self.handled.contains(&edge.id) {
                 continue;
             }
-            let Some(subgraph) = horizontal_subgraph(diagram, edge, true) else {
-                continue;
-            };
+            let Some(subgraph) = horizontal_subgraph(diagram, edge, true) else { continue };
             let (Some(source), Some(_)) = (self.endpoints.get(&edge.from), self.endpoints.get(&edge.to)) else {
                 continue;
             };
@@ -598,16 +592,12 @@ impl Router<'_> {
     }
 
     fn horizontal_subgraph_entries(&mut self, diagram: &Diagram, frames: Option<&Frames>) {
-        let Some(frames) = frames else {
-            return;
-        };
+        let Some(frames) = frames else { return };
         for edge in &diagram.edges {
             if self.handled.contains(&edge.id) {
                 continue;
             }
-            let Some(subgraph) = horizontal_subgraph(diagram, edge, false) else {
-                continue;
-            };
+            let Some(subgraph) = horizontal_subgraph(diagram, edge, false) else { continue };
             let (Some(frame), Some(from), Some(to)) =
                 (frames.get(&subgraph.id), self.endpoints.get(&edge.from), self.endpoints.get(&edge.to))
             else {
@@ -652,9 +642,7 @@ fn path_intersects_bounds(points: &[Point], bounds: &Bounds, contact: Option<Con
     let bottom = bounds.top + bounds.height - 1;
     let allows_source = matches!(contact, Some(Contact::Source | Contact::Both));
     let allows_target = matches!(contact, Some(Contact::Target | Contact::Both));
-    let (Some(&first), Some(&last)) = (points.first(), points.last()) else {
-        return false;
-    };
+    let (Some(&first), Some(&last)) = (points.first(), points.last()) else { return false };
     for index in 1..points.len() {
         let (from, to) = (points[index - 1], points[index]);
         if from.x == to.x {
@@ -766,9 +754,7 @@ fn endpoint_disjoint(left: &Edge, right: &Edge) -> bool {
 }
 
 fn endpoint_conflicts<'a>(route: &Route, others: impl Iterator<Item = &'a Route>) -> bool {
-    let (Some(&source), Some(&target)) = (route.points.first(), route.points.last()) else {
-        return false;
-    };
+    let (Some(&source), Some(&target)) = (route.points.first(), route.points.last()) else { return false };
     others.into_iter().any(|other| other.points.first() == Some(&target) || other.points.last() == Some(&source))
 }
 
@@ -776,9 +762,7 @@ fn path_runs_along_frame(points: &[Point], bounds: &Bounds) -> bool {
     let right = bounds.left + bounds.width - 1;
     let bottom = bounds.top + bounds.height - 1;
     points.windows(2).any(|pair| {
-        let Some(segment) = segment_between(pair[0], pair[1]) else {
-            return false;
-        };
+        let Some(segment) = segment_between(pair[0], pair[1]) else { return false };
         let span = segment_span(&segment);
         (segment.axis == Axis::X
             && (segment.from.y == bounds.top || segment.from.y == bottom)
@@ -893,12 +877,8 @@ fn avoid_node_obstacles(context: &ObstacleContext, endpoints: &Endpoints, routes
         context.frames.and_then(|frames| frames.get(&route.edge.from))
     };
     let intersects_source_title = |candidate: &Route| {
-        let Some(frame) = source_frame else {
-            return false;
-        };
-        let Some(&first) = candidate.points.first() else {
-            return false;
-        };
+        let Some(frame) = source_frame else { return false };
+        let Some(&first) = candidate.points.first() else { return false };
         if frame.label.is_empty() {
             return false;
         }
@@ -1398,9 +1378,7 @@ pub fn avoid_frame_borders(routes: &mut [Route], nodes: &Nodes, frames: &Frames)
             let mut points = vec![route.points[0]];
             for pair in route.points.windows(2) {
                 let (from, to) = (pair[0], pair[1]);
-                let Some(segment) = segment_between(from, to) else {
-                    continue;
-                };
+                let Some(segment) = segment_between(from, to) else { continue };
                 let span = segment_span(&segment);
                 let horizontal = if segment.axis == Axis::X && span.end.min(right) > span.start.max(b.left) {
                     if segment.from.y == b.top {

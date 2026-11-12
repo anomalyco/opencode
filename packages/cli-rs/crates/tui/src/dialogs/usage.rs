@@ -134,9 +134,7 @@ pub fn format_reset(at: f64) -> String {
 }
 
 fn format_reset_at(at: f64, now: i64) -> String {
-    let Some(date) = Zone::Local.at(at as i64) else {
-        return "Invalid Date".into();
-    };
+    let Some(date) = Zone::Local.at(at as i64) else { return "Invalid Date".into() };
     let time = date.short_time();
     if Zone::Local.at(now).is_some_and(|now| now.date == date.date) {
         return format!("{time} today");
@@ -264,9 +262,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
             handle.set_options(options(&local, &selected.borrow(), error));
         }
     })));
-    let Some(info) = state else {
-        return message(cx, "Usage", "Loading…", false);
-    };
+    let Some(info) = state else { return message(cx, "Usage", "Loading…", false) };
     let Some(info) = info else {
         return message(
             cx,
@@ -315,9 +311,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
             return;
         }
         *active.borrow_mut() = Some(option.value.clone());
-        let (Some(local), Some(handle)) = (weak.upgrade(), refresh.borrow().clone()) else {
-            return;
-        };
+        let (Some(local), Some(handle)) = (weak.upgrade(), refresh.borrow().clone()) else { return };
         let active = active.clone();
         let app = local.app.clone();
         // The footer follows the selection; set the rows after the move finishes.

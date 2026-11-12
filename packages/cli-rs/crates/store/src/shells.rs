@@ -83,9 +83,7 @@ impl State {
     fn publish_shells(&mut self, location: &Location, ticket: u64, response: ShellListOutput) -> bool {
         let read =
             self.locations.get_mut(location).and_then(|data| data.shell_read.take_if(|read| read.ticket() == ticket));
-        let Some(read) = read else {
-            return false;
-        };
+        let Some(read) = read else { return false };
         let at = Location::from(&response.location);
         let mut shells: IndexMap<ShellID, Shell> = response
             .data

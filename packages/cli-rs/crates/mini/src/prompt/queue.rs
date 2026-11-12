@@ -427,9 +427,7 @@ mod tests {
 
             /// `Mini::finish`: a turn ends in the session it started in.
             fn finish(&mut self) -> Result<(), String> {
-                let Some((running, session)) = self.running.take() else {
-                    return Err("finished without work".into());
-                };
+                let Some((running, session)) = self.running.take() else { return Err("finished without work".into()) };
                 if matches!(running, Running::Turn { .. }) && session != self.session {
                     return Err(format!("a turn of session {session} ended in session {}", self.session));
                 }

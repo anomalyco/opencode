@@ -87,9 +87,7 @@ impl Status {
     }
 
     fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let status = self.clone();
         tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
             let (Some(tui), Some(cx), Some(revisions)) = (status.tui.upgrade(), status.cx.upgrade(), revisions) else {

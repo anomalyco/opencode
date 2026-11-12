@@ -186,9 +186,7 @@ fn dismissed(tui: &Tui) -> Vec<String> {
 
 /// Hides the notice and remembers it; only the automatic notice's interactions update the history.
 pub fn dismiss(tui: &Tui) {
-    let Some(current) = tui.updates.notification.borrow_mut().take() else {
-        return;
-    };
+    let Some(current) = tui.updates.notification.borrow_mut().take() else { return };
     render(tui);
     let Some(storage) = tui.storage() else { return };
     let key = current.key();
@@ -207,12 +205,8 @@ pub fn dismiss(tui: &Tui) {
 
 /// Installs the available version.
 pub(crate) fn install(tui: &Tui) {
-    let Some(source) = tui.updates.source() else {
-        return;
-    };
-    let Some(UpdateState::Available(version)) = tui.updates.state.borrow().clone() else {
-        return;
-    };
+    let Some(source) = tui.updates.source() else { return };
+    let Some(UpdateState::Available(version)) = tui.updates.state.borrow().clone() else { return };
     set_state(tui, Some(UpdateState::Installing(version.clone())));
     source.apply(
         &version.clone(),
@@ -231,9 +225,7 @@ pub(crate) fn install(tui: &Tui) {
 /// `check`: the result, or the unavailable message for the dialog, through `done`. A check of a dialog that
 /// closed is dropped.
 pub(crate) fn check(tui: &Tui, done: Box<dyn FnOnce(Result<Option<String>, String>)>) {
-    let Some(source) = tui.updates.source() else {
-        return done(Ok(None));
-    };
+    let Some(source) = tui.updates.source() else { return done(Ok(None)) };
     if matches!(*tui.updates.state.borrow(), Some(UpdateState::Installing(_))) {
         return done(Ok(None));
     }
@@ -330,14 +322,10 @@ pub fn mount(tui: &Tui, home: &View) {
 }
 
 fn render(tui: &Tui) {
-    let Some(slot) = tui.updates.slot.borrow().clone() else {
-        return;
-    };
+    let Some(slot) = tui.updates.slot.borrow().clone() else { return };
     slot.clear();
     tui.updates.row.take();
-    let Some(notice) = tui.updates.notification.borrow().clone() else {
-        return;
-    };
+    let Some(notice) = tui.updates.notification.borrow().clone() else { return };
     let remote = notice.remote();
     if remote && notice.kind != Kind::Available {
         return;

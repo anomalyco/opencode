@@ -23,9 +23,7 @@ use crate::output::{Exit, print};
 
 pub fn run(context: &Context, args: &StatsArgs) -> error::Result<()> {
     // The handler catches every failure and prints its bare message with exit 1.
-    let Err(error) = stats(context, args) else {
-        return Ok(());
-    };
+    let Err(error) = stats(context, args) else { return Ok(()) };
     eprintln!("{}", opencode_ui::terminal_text(&message(&error)));
     Err(Exit(1).into())
 }

@@ -142,9 +142,7 @@ fn numbers(text: &str) -> Option<(i64, i64, &str)> {
     let first = digits(text);
     let start = text[..first].parse().ok()?;
     let rest = &text[first..];
-    let Some(after) = rest.strip_prefix(',') else {
-        return Some((start, 1, rest));
-    };
+    let Some(after) = rest.strip_prefix(',') else { return Some((start, 1, rest)) };
     let second = digits(after);
     match after[..second].parse() {
         Ok(count) => Some((start, count, &after[second..])),
@@ -192,9 +190,7 @@ pub fn apply(source: &str, hunks: &[Hunk]) -> Option<String> {
         hunks
     };
     let mut lines: Vec<&str> = source.split('\n').collect();
-    let Some(last) = hunks.last() else {
-        return Some(source.to_owned());
-    };
+    let Some(last) = hunks.last() else { return Some(source.to_owned()) };
     let (mut remove_eofnl, mut add_eofnl) = (false, false);
     let mut previous = "";
     for line in &last.lines {
@@ -234,9 +230,7 @@ pub fn apply(source: &str, hunks: &[Hunk]) -> Option<String> {
         let mut positions = DistanceIterator::new(start, min_line, max_line);
         let mut to_pos = Some(start);
         let fitted = loop {
-            let Some(position) = to_pos else {
-                break None;
-            };
+            let Some(position) = to_pos else { break None };
             if let Some(fitted) = apply_hunk(&lines, &hunk.lines, position) {
                 break Some((position, fitted));
             }

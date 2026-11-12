@@ -17,9 +17,7 @@ use prompt::{
 /// Runs the wizard for the command at `path` (from the root), started with `argv`, then the command line it built,
 /// unless the user cancelled or declined.
 pub fn run(path: &[&'static Spec], argv: &[OsString]) -> error::Result<()> {
-    let Some(line) = build(path, argv)? else {
-        return Ok(());
-    };
+    let Some(line) = build(path, argv)? else { return Ok(()) };
     // Effect CLI runs the command line as if it had been typed. Running this binary again with it lets
     // everything that reads the process arguments (delegation to TypeScript, `run`'s words after `--`) see it.
     let mut process = std::process::Command::new(std::env::current_exe()?);
@@ -221,9 +219,7 @@ fn label(param: &Prompted) -> String {
 
 fn humanize(name: &str) -> String {
     let words: Vec<&str> = name.split(['-', '_']).filter(|word| !word.is_empty()).collect();
-    let Some((first, rest)) = words.split_first() else {
-        return name.to_string();
-    };
+    let Some((first, rest)) = words.split_first() else { return name.to_string() };
     let mut chars = first.chars();
     let head: String = chars.next().map(|char| char.to_uppercase().collect()).unwrap_or_default();
     std::iter::once(head + chars.as_str()).chain(rest.iter().map(|word| word.to_string())).collect::<Vec<_>>().join(" ")

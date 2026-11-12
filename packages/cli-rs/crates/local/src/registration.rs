@@ -100,12 +100,8 @@ impl Files {
     /// unless the file exists. The TypeScript CLI does this before every service operation.
     pub fn migrate(&self, channel: &str, installed_version: &str) {
         for legacy in &self.legacy {
-            let Ok(text) = fs::read_to_string(legacy) else {
-                continue;
-            };
-            let Some(info) = Registration::parse(&text) else {
-                continue;
-            };
+            let Ok(text) = fs::read_to_string(legacy) else { continue };
+            let Some(info) = Registration::parse(&text) else { continue };
             if !channel::version_belongs_to_channel(info.version.as_deref(), channel, installed_version) {
                 continue;
             }

@@ -78,9 +78,7 @@ impl State {
 
     /// A child's own cost, or a root's cost with every known descendant.
     pub fn cost(&self, id: &SessionID) -> f64 {
-        let Some(session) = self.info.get(id) else {
-            return 0.0;
-        };
+        let Some(session) = self.info.get(id) else { return 0.0 };
         if session.parent_id.is_some() {
             return session.cost;
         }
@@ -311,9 +309,7 @@ impl State {
 
     pub(crate) fn on_moved(&mut self, event: &SessionMoved) {
         let data = &event.data;
-        let Some(current) = self.info.get(&data.session_id) else {
-            return;
-        };
+        let Some(current) = self.info.get(&data.session_id) else { return };
         let previous = SessionMessageLocationSwitchedPrevious {
             location: current.location.clone(),
             project_id: Some(current.project_id.clone()),
@@ -579,9 +575,7 @@ async fn list_children(data: &Data, parent: &SessionID) -> Result<Vec<SessionInf
         let page = data.client().session_list(&input).await.map_err(Error::new)?;
         let full = page.data.len() as i64 >= CHILD_PAGE;
         children.extend(page.data);
-        let Some(next) = page.cursor.next.flatten().filter(|_| full) else {
-            return Ok(children);
-        };
+        let Some(next) = page.cursor.next.flatten().filter(|_| full) else { return Ok(children) };
         // Later pages carry only the cursor and the size, as in TS.
         input = SessionListInput { cursor: Some(next), limit: Some(CHILD_PAGE), ..Default::default() };
     }

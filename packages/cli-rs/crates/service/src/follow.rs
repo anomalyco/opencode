@@ -27,9 +27,7 @@ pub fn client(
     paths: &Paths,
     env: &Env,
 ) -> Result<Client, ApiError> {
-    let Source::Service { .. } = connection.source else {
-        return connection.endpoint.client(transport);
-    };
+    let Source::Service { .. } = connection.source else { return connection.endpoint.client(transport) };
     let origin = opencode_api::js::parse_url(&connection.endpoint.url).map_err(|error| match error {
         opencode_api::js::UrlError::NonAsciiHost(_) => ApiError::Transport(error.to_string()),
         error => ApiError::Transport(format!("{}: {error}", connection.endpoint.url)),
@@ -97,9 +95,7 @@ impl Transport for Follow {
     // The terminal socket's `ws:` URL has another origin than the client's `http:` one, so this compares host and
     // port only.
     fn endpoint(&self, mut url: url::Url, auth: Option<&Auth>) -> (url::Url, Option<Auth>) {
-        let url::Origin::Tuple(_, host, port) = &self.origin else {
-            return (url, auth.cloned());
-        };
+        let url::Origin::Tuple(_, host, port) = &self.origin else { return (url, auth.cloned()) };
         if url.host_str() != Some(&host.to_string()) || url.port_or_known_default() != Some(*port) {
             return (url, auth.cloned());
         }

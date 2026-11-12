@@ -439,9 +439,7 @@ pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
             if !local.ready() || !local.catalog_ready() || local.agents().is_empty() {
                 return;
             }
-            let Some((agent, model)) = pending.borrow_mut().take() else {
-                return;
-            };
+            let Some((agent, model)) = pending.borrow_mut().take() else { return };
             drop(listener.borrow_mut().take());
             if let Some(agent) = agent {
                 local.set_agent(&agent);
@@ -466,9 +464,7 @@ pub fn usage_alerts(local: &Local) {
     if local.route().is_none() {
         return;
     }
-    let Some((model, usage)) = local.current_usage() else {
-        return;
-    };
+    let Some((model, usage)) = local.current_usage() else { return };
     let level = level(&usage, &model);
     if level == Level::Plenty {
         return;

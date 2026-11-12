@@ -65,9 +65,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
         tui.app.spawn(
             async move { client.location_get(&input).await },
             bind!(weak, |prompt, _, result| {
-                let Some(tui) = prompt.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = prompt.tui.upgrade() else { return };
                 match result {
                     Err(error) => failed(&tui, error.to_string()),
                     Ok(info) => {
@@ -87,9 +85,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
     tui.app.spawn(
         async move { client.session_move(&request).await },
         bind!(weak, |prompt, _, result| {
-            let Some(tui) = prompt.tui.upgrade() else {
-                return;
-            };
+            let Some(tui) = prompt.tui.upgrade() else { return };
             match result {
                 Err(error) => failed(&tui, error.to_string()),
                 Ok(()) => {

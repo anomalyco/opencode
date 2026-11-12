@@ -90,9 +90,7 @@ pub fn version_belongs_to_channel(version: Option<&str>, channel: &str, installe
     if version == installed {
         return true;
     }
-    let Some(rest) = version.strip_prefix(&format!("0.0.0-{channel}-")) else {
-        return false;
-    };
+    let Some(rest) = version.strip_prefix(&format!("0.0.0-{channel}-")) else { return false };
     let digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
     match rest.split_once('.') {
         Some((major, minor)) => digits(major) && digits(minor),

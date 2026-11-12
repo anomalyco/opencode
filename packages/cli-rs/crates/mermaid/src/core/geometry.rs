@@ -274,9 +274,7 @@ pub fn segment_between(from: Point, to: Point) -> Option<Segment> {
 
 /// Visits the cells from `from` toward `to`, `to` excluded; `visit` returns false to stop.
 pub fn walk_orthogonal_segment(from: Point, to: Point, include_start: bool, mut visit: impl FnMut(Point) -> bool) {
-    let Some(direction) = direction_between(from, to) else {
-        return;
-    };
+    let Some(direction) = direction_between(from, to) else { return };
     let (dx, dy) = step(direction);
     let mut cursor = if include_start { from } else { point(from.x + dx, from.y + dy) };
     while cursor != to {
@@ -300,9 +298,7 @@ pub fn orthogonal_path_points(points: &[Point]) -> Vec<Point> {
     let mut path: Vec<Point> = Vec::new();
     for pair in points.windows(2) {
         let (from, to) = (pair[0], pair[1]);
-        let Some(direction) = direction_between(from, to) else {
-            continue;
-        };
+        let Some(direction) = direction_between(from, to) else { continue };
         let (dx, dy) = step(direction);
         let mut cursor = if path.is_empty() { from } else { point(from.x + dx, from.y + dy) };
         loop {

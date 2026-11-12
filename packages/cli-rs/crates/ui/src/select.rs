@@ -950,9 +950,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         if self.props().locked {
             return;
         }
-        let Some(option) = self.selected() else {
-            return;
-        };
+        let Some(option) = self.selected() else { return };
         if let Some(run) = &option.on_select {
             run(&self.0.cx.dialogs);
         }

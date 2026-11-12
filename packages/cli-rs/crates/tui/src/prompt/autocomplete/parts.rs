@@ -92,9 +92,7 @@ pub fn insert(prompt: &Inner, start: u32, text: &str, kind: Kind, part: Value) {
     let id = textarea.add_extmark(start..end, options(prompt, kind));
     let mut parts = prompt.prompt.borrow_mut();
     let list = parts.as_object_mut().map(|prompt| prompt.entry(kind.key()).or_insert_with(|| json!([])));
-    let Some(Value::Array(list)) = list else {
-        return;
-    };
+    let Some(Value::Array(list)) = list else { return };
     let range = json!({ "start": start, "end": end, "text": mention });
     if kind == Kind::File
         && let Some(existing) = list.iter_mut().find(|file| file["uri"] == part["uri"])
@@ -126,9 +124,7 @@ pub fn insert_skill(prompt: &Inner, id: &str) {
     if !info["skills"].is_array() {
         info["skills"] = json!([]);
     }
-    let Some(skills) = info["skills"].as_array_mut() else {
-        return;
-    };
+    let Some(skills) = info["skills"].as_array_mut() else { return };
     skills.push(json!({ "id": id, "mention": { "start": start, "end": end, "text": mention } }));
     prompt.parts.0.borrow_mut().push((mark, Kind::Skill, skills.len() - 1));
 }
@@ -162,12 +158,8 @@ pub fn sync(prompt: &Inner) {
     let mut info = prompt.prompt.borrow_mut();
     let mut lists: [Vec<(Option<ExtmarkId>, Value)>; 4] = Default::default();
     for mark in &marks {
-        let Some(&(_, kind, index)) = mapped.iter().find(|(id, _, _)| *id == mark.id) else {
-            continue;
-        };
-        let Some(mut part) = info[kind.key()].get(index).cloned() else {
-            continue;
-        };
+        let Some(&(_, kind, index)) = mapped.iter().find(|(id, _, _)| *id == mark.id) else { continue };
+        let Some(mut part) = info[kind.key()].get(index).cloned() else { continue };
         if !part.get(kind.range()).is_some_and(Value::is_object) {
             continue;
         }
@@ -233,9 +225,7 @@ fn options(prompt: &Inner, kind: Kind) -> ExtmarkOptions {
 /// An atomic mark in the style of `scope`: pasted attachments are files in the `extmark.paste` style.
 pub(crate) fn styled(prompt: &Inner, scope: &str) -> ExtmarkOptions {
     let options = ExtmarkOptions::default().atomic();
-    let Some(tui) = prompt.tui.upgrade() else {
-        return options;
-    };
+    let Some(tui) = prompt.tui.upgrade() else { return options };
     match opencode_ui::code::syntax_theme(&tui.page()).get(scope) {
         Some(style) => options.style(style),
         None => options,

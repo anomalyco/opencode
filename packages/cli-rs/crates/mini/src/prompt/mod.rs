@@ -262,9 +262,7 @@ impl Prompt {
             if let Some(previous) = timer.take() {
                 cx.cancel_timer(previous);
             }
-            let Some(deadline) = keys.leader_deadline() else {
-                return;
-            };
+            let Some(deadline) = keys.leader_deadline() else { return };
             let keymap = Rc::downgrade(&keys);
             timer.set(Some(cx.set_timeout(deadline.saturating_duration_since(cx.now()), move |cx| {
                 if let Some(keys) = keymap.upgrade() {
@@ -390,9 +388,7 @@ impl Prompt {
         if !resume {
             return;
         }
-        let Some(target) = self.0.target.borrow().clone() else {
-            return;
-        };
+        let Some(target) = self.0.target.borrow().clone() else { return };
         let weak = Rc::downgrade(&self.0);
         self.0.app.spawn(async move { api::history(&target.client, &target.session).await }, move |_, history| {
             if let Some(inner) = weak.upgrade() {
@@ -479,9 +475,7 @@ impl Prompt {
         let id = id.to_owned();
         let queued =
             inner.state.borrow().queued.iter().find(|queued| queued.id == id).map(|queued| queued.prompt.clone());
-        let Some(prompt) = queued else {
-            return done(false);
-        };
+        let Some(prompt) = queued else { return done(false) };
         inner.queued_action(
             &id,
             None,
@@ -624,9 +618,7 @@ impl Inner {
     /// The options for the open trigger.
     fn options(&self) -> Vec<Choice> {
         let state = self.state.borrow();
-        let Some(mode) = state.mode else {
-            return Vec::new();
-        };
+        let Some(mode) = state.mode else { return Vec::new() };
         let directory = self.target.borrow().as_ref().map(|target| target.directory.clone()).unwrap_or_default();
         let files = if mode == Mode::Mention {
             complete::files(&state.files, parse::file_line_range(&state.query).1, &directory, self.width())
@@ -726,12 +718,8 @@ impl Inner {
         let mut current = self.textarea.extmarks();
         current.sort_by_key(|mark| mark.id);
         for mark in current {
-            let Some(&(_, index)) = marks.iter().find(|(id, _)| *id == mark.id) else {
-                continue;
-            };
-            let Some(part) = parts.get(index) else {
-                continue;
-            };
+            let Some(&(_, index)) = marks.iter().find(|(id, _)| *id == mark.id) else { continue };
+            let Some(part) = parts.get(index) else { continue };
             let text = self.range(mark.start, mark.end);
             if part.mention().map(|mention| mention.text.as_str()) != Some(text.as_str()) {
                 continue;
@@ -922,9 +910,7 @@ impl Inner {
             }
             state.query.clone()
         };
-        let Some(target) = self.target.borrow().clone() else {
-            return;
-        };
+        let Some(target) = self.target.borrow().clone() else { return };
         let base = parse::file_line_range(&query).0.to_owned();
         let weak = Rc::downgrade(self);
         self.app.spawn(
@@ -978,9 +964,7 @@ impl Inner {
     fn select(self: &Rc<Self>, delivery: Delivery) {
         let options = self.options();
         let selected = self.state.borrow().selection.selected;
-        let Some(choice) = options.get(selected).cloned() else {
-            return;
-        };
+        let Some(choice) = options.get(selected).cloned() else { return };
         let shell = self.state.borrow().shell;
         match choice {
             Choice::Slash { action: Some(Action::Editor), .. } => {
@@ -1069,9 +1053,7 @@ impl Inner {
     fn expand(self: &Rc<Self>) {
         let options = self.options();
         let selected = self.state.borrow().selection.selected;
-        let Some(Choice::Mention { value, directory: true, .. }) = options.get(selected) else {
-            return;
-        };
+        let Some(Choice::Mention { value, directory: true, .. }) = options.get(selected) else { return };
         let (at, cursor) = (self.state.borrow().at, self.cursor());
         self.edit(|| replace(&self.textarea, at, cursor, &format!("@{value}")));
         self.sync_parts();
@@ -1194,9 +1176,7 @@ impl Inner {
         label: Option<&str>,
         done: Box<dyn FnOnce(bool)>,
     ) {
-        let Some(target) = self.target.borrow().clone() else {
-            return done(false);
-        };
+        let Some(target) = self.target.borrow().clone() else { return done(false) };
         if !self.state.borrow_mut().flights.insert(id.to_owned()) {
             return done(false);
         }
@@ -1677,9 +1657,7 @@ fn parse_slash_command(text: &str, commands: Option<&[complete::Command]>) -> Sl
     let Some((name, arguments, _)) = parse::slash_head(text).filter(|(name, _, _)| !name.is_empty()) else {
         return Slash::None;
     };
-    let Some(commands) = commands else {
-        return Slash::Pending;
-    };
+    let Some(commands) = commands else { return Slash::Pending };
     match commands.iter().find(|command| command.name == name) {
         Some(command) => Slash::Command(Command {
             name: name.to_owned(),

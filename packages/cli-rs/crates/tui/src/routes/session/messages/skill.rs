@@ -120,9 +120,7 @@ impl Notice {
 
 impl Inner {
     fn paint(&self) {
-        let Some(Line::Completion { heading, suffix, state, child }) = &*self.rendered.borrow() else {
-            return;
-        };
+        let Some(Line::Completion { heading, suffix, state, child }) = &*self.rendered.borrow() else { return };
         let theme = &self.theme;
         let color = match state.as_deref() {
             Some("error") => theme.text.feedback.error.base,

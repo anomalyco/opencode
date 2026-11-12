@@ -84,9 +84,7 @@ fn content_block_to_parts(block: &Value) -> Vec<PromptPart> {
                 let suffix = line.map(|line| format!(":{line}")).unwrap_or_default();
                 return vec![PromptPart::text(format!("[{filepath}{suffix}]\n{body}"))];
             }
-            let Some(mime) = field("mimeType").filter(|mime| !mime.is_empty()) else {
-                return Vec::new();
-            };
+            let Some(mime) = field("mimeType").filter(|mime| !mime.is_empty()) else { return Vec::new() };
             let url = if uri.starts_with("data:") {
                 uri.to_owned()
             } else {

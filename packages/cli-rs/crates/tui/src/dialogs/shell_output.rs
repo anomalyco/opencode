@@ -199,9 +199,7 @@ impl Poll {
     /// Reads once, then schedules the next read: at once while pages remain, after a second once caught up, and never
     /// after the shell is gone.
     fn poll(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let client = tui.data.client().clone();
         let running = self.info.borrow().status == SessionMessageShellStatus::Running;
         let future = load(client, self.id.clone(), self.location.directory.clone(), running, self.cursor.get());
@@ -290,9 +288,7 @@ impl Poll {
     }
 
     fn copy(self: &Rc<Self>, kind: Copied) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let value = match kind {
             Copied::Command => self.command.clone(),
             Copied::Output => self.shown(),
@@ -313,9 +309,7 @@ impl Poll {
     /// The new-designs footer: follow, then a copy action for the command and the output that reads `✓ copied`
     /// once it copied.
     fn draw_footer(self: &Rc<Self>) {
-        let Some(cx) = self.cx.upgrade() else {
-            return;
-        };
+        let Some(cx) = self.cx.upgrade() else { return };
         let scroll = self.scroll.clone();
         let mut follow = FooterAction::new("follow").key("end");
         follow.on_trigger = Some(Rc::new(move || {

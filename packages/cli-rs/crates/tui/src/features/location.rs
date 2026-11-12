@@ -184,9 +184,7 @@ fn not_found(error: &Error) -> bool {
 
 /// `session.environment` with the terminal's variables, once per session and connection.
 fn upload_environment(tui: &Tui, id: &SessionID) {
-    let Some(variables) = tui.startup.args.environment.clone() else {
-        return;
-    };
+    let Some(variables) = tui.startup.args.environment.clone() else { return };
     if tui.location.uploaded.borrow().as_ref() == Some(id) {
         return;
     }

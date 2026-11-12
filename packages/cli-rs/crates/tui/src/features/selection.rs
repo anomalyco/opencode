@@ -57,9 +57,7 @@ pub fn copy_on_select(tui: &Tui) -> bool {
 /// Copies the mouse selection (`Selection.copy`). The selection stays: clearing it would also reset the
 /// double- and triple-click count.
 pub fn copy_selection(tui: &Tui) -> bool {
-    let Some(text) = tui.app.selected_text() else {
-        return false;
-    };
+    let Some(text) = tui.app.selected_text() else { return false };
     copy(tui, &crate::prompt::paste::clipboard_text(tui, &text), "Copied to clipboard");
     true
 }
@@ -99,9 +97,7 @@ pub fn put(app: &App, text: &str) -> bool {
 
 /// `Selection.handleSelectionKey`.
 fn handle_key(tui: &Tui, cx: &mut Cx<'_>, key: &KeyEvent) {
-    let Some(text) = tui.app.selected_text() else {
-        return;
-    };
+    let Some(text) = tui.app.selected_text() else { return };
     // TS checks that the focused editor is part of the mouse selection; a keyboard selection in the prompt
     // ends the mouse selection here, so the prompt's own selection is the one that counts.
     let editing = tui.textarea.borrow().as_ref().is_some_and(|textarea| {

@@ -437,9 +437,7 @@ pub fn paint(
         return None;
     }
     let cells = inner.colors(width, inner_colors);
-    let Some((outer, colors, above)) = outer else {
-        return Some(cells.into_iter().map(|bg| (None, bg, bg)).collect());
-    };
+    let Some((outer, colors, above)) = outer else { return Some(cells.into_iter().map(|bg| (None, bg, bg)).collect()) };
     let outer = outer.colors(width, colors);
     let glyph = if above { '▄' } else { '▀' };
     Some(cells.into_iter().zip(outer).map(|(fg, bg)| (Some(glyph), fg, bg)).collect())

@@ -158,9 +158,7 @@ fn draw_plan(grid: &mut Grid, plan: &RenderPlan, ramp: bool) {
 /// narrower.
 pub fn draw(source: &Diagram, max_width: Option<i32>) -> Result<Grid, DrawError> {
     let direction = source.direction;
-    let (Some(max_width), true) = (max_width, direction.horizontal()) else {
-        return draw_with(source, direction);
-    };
+    let (Some(max_width), true) = (max_width, direction.horizontal()) else { return draw_with(source, direction) };
     let fallback = if direction == StateDirection::RL { StateDirection::BT } else { StateDirection::TB };
     let drawing = match draw_with(source, direction) {
         Ok(grid) => grid,
@@ -279,9 +277,7 @@ fn draw_with(source: &Diagram, direction: StateDirection) -> Result<Grid, DrawEr
         }
     }
     for state in &diagram.states {
-        let (Some(b), Some(size)) = (layout.get(&state.id), layout.sizes.get(&state.id)) else {
-            continue;
-        };
+        let (Some(b), Some(size)) = (layout.get(&state.id), layout.sizes.get(&state.id)) else { continue };
         if is_hidden_composite_marker(Some(state)) {
             continue;
         }

@@ -78,13 +78,9 @@ pub fn watch(viewer: &Rc<Viewer>) {
 }
 
 fn next(viewer: Weak<Viewer>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else {
-        return;
-    };
+    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else { return };
     tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-        let (Some(live), Some(revisions)) = (viewer.upgrade(), revisions) else {
-            return;
-        };
+        let (Some(live), Some(revisions)) = (viewer.upgrade(), revisions) else { return };
         observe(&live);
         next(viewer, revisions);
     });
@@ -92,9 +88,7 @@ fn next(viewer: Weak<Viewer>, mut revisions: tokio::sync::watch::Receiver<u64>) 
 
 /// Reads the session's status in `turn` mode and loads again on running to idle; other modes forget it.
 fn observe(viewer: &Viewer) {
-    let (Some(tui), Some(session)) = (viewer.tui(), viewer.session().cloned()) else {
-        return;
-    };
+    let (Some(tui), Some(session)) = (viewer.tui(), viewer.session().cloned()) else { return };
     if viewer.mode() != Mode::Turn {
         viewer.turn_status.set(None);
         return;

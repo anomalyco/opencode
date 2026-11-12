@@ -83,9 +83,7 @@ impl Inner {
         self.ensure_all_rows(
             tui,
             bind!(weak, |inner, tui| {
-                let Some(session) = inner.transcript.session() else {
-                    return;
-                };
+                let Some(session) = inner.transcript.session() else { return };
                 let (_, top) = inner.transcript.scroll().scroll_position();
                 let anchors = inner.transcript.anchors();
                 let current = inner.navigation.borrow().clone();
@@ -104,9 +102,7 @@ impl Inner {
                 tui.app.spawn(
                     async move { data.message_load_more(&session, LoadMore::default()).await },
                     bind!(weak, |inner, _, result| {
-                        let Some(tui) = inner.tui.upgrade() else {
-                            return;
-                        };
+                        let Some(tui) = inner.tui.upgrade() else { return };
                         match result {
                             Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
                             Err(error) => tui.toasts.error(error.to_string()),
@@ -119,9 +115,7 @@ impl Inner {
 
     /// `session.messages_last_user`: the newest user message with text.
     pub(super) fn last_user(&self, tui: &Tui) {
-        let Some(session) = self.transcript.session() else {
-            return;
-        };
+        let Some(session) = self.transcript.session() else { return };
         let id = tui.data.read(|state| {
             state.messages(&session).iter().rev().find_map(|message| match message {
                 SessionMessageInfo::User(user) if !user.text.trim().is_empty() => Some(user.id.0.clone()),
@@ -140,9 +134,7 @@ impl Inner {
         self.ensure_all_rows(
             tui,
             bind!(weak, |inner, tui| {
-                let Some(session) = inner.transcript.session() else {
-                    return;
-                };
+                let Some(session) = inner.transcript.session() else { return };
                 let Some(&(_, y)) = inner.transcript.anchors().iter().find(|(message, _)| *message == id) else {
                     return;
                 };

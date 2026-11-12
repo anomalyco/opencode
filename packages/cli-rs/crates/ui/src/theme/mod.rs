@@ -188,9 +188,7 @@ impl Theme {
         }
         // `Color` is `Copy`, so callers copy tokens without noticing; TypeScript keeps the token object.
         let tiers = self.tones(color);
-        let Some(tier) = tiers.iter().find(|tier| !tier.is_empty()) else {
-            return *color;
-        };
+        let Some(tier) = tiers.iter().find(|tier| !tier.is_empty()) else { return *color };
         let first = shifted(tier[0]);
         if tier.iter().all(|tone| shifted(*tone) == first) {
             return first;

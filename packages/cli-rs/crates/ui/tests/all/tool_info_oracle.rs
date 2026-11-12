@@ -45,9 +45,7 @@ fn tool_inline_info_matches_typescript() {
 /// Opt-in: `OPENCODE_TOOL_PARTS=<file>` compares parts recorded the same way from real sessions.
 #[test]
 fn recorded_tool_parts_match_typescript() {
-    let Some(path) = std::env::var_os("OPENCODE_TOOL_PARTS") else {
-        return;
-    };
+    let Some(path) = std::env::var_os("OPENCODE_TOOL_PARTS") else { return };
     let recorded: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     let parts = recorded["parts"].as_array().unwrap();
     compare(parts);

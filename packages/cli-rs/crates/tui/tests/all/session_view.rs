@@ -63,9 +63,7 @@ fn location_routes(directory: &str, query: Option<&str>, spent: f64) -> Vec<Memo
         MemoryRoute::json("GET", "/api/integration", 200, &list(json!([]))),
         MemoryRoute::json("GET", LIMITS, 200, &list(limits(spent))),
     ];
-    let Some(query) = query else {
-        return routes.into();
-    };
+    let Some(query) = query else { return routes.into() };
     routes
         .into_iter()
         .map(|route| route.with_query([("location[directory]".to_owned(), vec![query.to_owned()])].into()))

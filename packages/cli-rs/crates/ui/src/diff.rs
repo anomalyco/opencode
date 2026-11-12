@@ -53,21 +53,13 @@ fn is_hunk_header(line: &str) -> bool {
         if start == 0 {
             return None;
         }
-        let Some(count) = rest[start..].strip_prefix(',') else {
-            return Some(1 + start);
-        };
+        let Some(count) = rest[start..].strip_prefix(',') else { return Some(1 + start) };
         let length = digits(count);
         (length > 0).then_some(1 + start + 1 + length)
     };
-    let Some(rest) = line.strip_prefix("@@ ") else {
-        return false;
-    };
-    let Some(old) = range(rest, '-') else {
-        return false;
-    };
-    let Some(rest) = rest[old..].strip_prefix(' ') else {
-        return false;
-    };
+    let Some(rest) = line.strip_prefix("@@ ") else { return false };
+    let Some(old) = range(rest, '-') else { return false };
+    let Some(rest) = rest[old..].strip_prefix(' ') else { return false };
     range(rest, '+').is_some_and(|new| rest[new..].starts_with(" @@"))
 }
 

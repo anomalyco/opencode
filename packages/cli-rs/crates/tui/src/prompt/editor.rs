@@ -179,9 +179,7 @@ impl Prompt {
         crate::plugins::host::changed(tui, changes, |changed| {
             self.inner.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
         });
-        let Some(session) = &self.inner.session else {
-            return;
-        };
+        let Some(session) = &self.inner.session else { return };
         if changes.session(session) {
             self.inner.follow_directory(tui);
         }
@@ -212,9 +210,7 @@ impl Prompt {
 impl Drop for Prompt {
     fn drop(&mut self) {
         let inner = &self.inner;
-        let Some(tui) = inner.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = inner.tui.upgrade() else { return };
         let text = inner.textarea.text();
         if !text.is_empty() {
             let mut prompt = inner.prompt.borrow().clone();
@@ -352,13 +348,9 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     // active, the session frame takes the release instead.
     let weak = Rc::downgrade(&inner);
     inner.textarea.on_mouse(move |cx, event| {
-        let MouseEventKind::Down(button) = event.kind else {
-            return;
-        };
+        let MouseEventKind::Down(button) = event.kind else { return };
         let Some(prompt) = weak.upgrade() else { return };
-        let Some(tui) = prompt.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = prompt.tui.upgrade() else { return };
         if prompt.disabled.get() || !crate::frame::session_interactive(&tui) {
             cx.prevent_default();
             return;
@@ -601,9 +593,7 @@ impl Inner {
         if !ready {
             return;
         }
-        let Some((text, delivery)) = self.startup.take() else {
-            return;
-        };
+        let Some((text, delivery)) = self.startup.take() else { return };
         if self.textarea.text() != text {
             return;
         }
@@ -797,9 +787,7 @@ impl Inner {
             self.set_mode(Mode::Normal);
             return;
         }
-        let Some(session) = self.session.clone() else {
-            return;
-        };
+        let Some(session) = self.session.clone() else { return };
         self.interrupt.set(self.interrupt.get() + 1);
         if let Some(timer) = self.interrupt_timer.take() {
             self.app.cancel_timer(timer);
@@ -827,9 +815,7 @@ impl Inner {
 
     /// `session.background`.
     fn background(&self, tui: &Tui) {
-        let Some(session) = self.session.clone() else {
-            return;
-        };
+        let Some(session) = self.session.clone() else { return };
         let client = tui.data.client().clone();
         tui.app.runtime().spawn(async move {
             let input = SessionBackgroundInput { session_id: session };
@@ -895,9 +881,7 @@ fn connect_location(inner: &Rc<Inner>) {
             return;
         }
         let Some(prompt) = weak.upgrade() else { return };
-        let Some(tui) = prompt.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = prompt.tui.upgrade() else { return };
         if !prompt.running(&tui) {
             crate::dialogs::working_directory::show(&tui, &prompt.location(&tui).directory);
         }
@@ -911,9 +895,7 @@ pub(crate) fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
         tui.app.spawn(
             task,
             bind!(inner, |prompt, _, result| {
-                let Some(tui) = prompt.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = prompt.tui.upgrade() else { return };
                 match result {
                     Ok(()) => prompt.read_catalog(&tui),
                     Err(error) => log::warn!("prompt catalog: {error}"),

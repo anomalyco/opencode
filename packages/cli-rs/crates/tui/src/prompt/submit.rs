@@ -28,9 +28,7 @@ use crate::routes::Route;
 /// Submits the prompt with `delivery`. Returns whether it was handled (the caller then closes
 /// dialogs).
 pub fn submit(prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
-    let Some(tui) = prompt.tui.upgrade() else {
-        return false;
-    };
+    let Some(tui) = prompt.tui.upgrade() else { return false };
     // A second Enter while one submit runs must not send the cleared prompt.
     if prompt.submitting.replace(true) {
         return false;
@@ -92,9 +90,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     };
     prompt.startup.take();
     let session = prompt.session_info(tui);
-    let Some(selection) = crate::dialogs::model::prompt_selection(tui) else {
-        return false;
-    };
+    let Some(selection) = crate::dialogs::model::prompt_selection(tui) else { return false };
     let Some(model) = selection.model.clone() else {
         tui.toasts.show(
             ToastOptions::new(Variant::Warning, "Connect an integration to send prompts")
@@ -304,9 +300,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 tui.app.spawn(
                     async move { client.session_revert_commit(&input).await.map_err(Error::new) },
                     move |_, result| {
-                        let Some(tui) = owner.upgrade() else {
-                            return;
-                        };
+                        let Some(tui) = owner.upgrade() else { return };
                         match result {
                             Ok(()) => send(&tui),
                             Err(error) => fail(&owner, &weak, "Failed to commit revert", &error, &entry),
@@ -382,9 +376,7 @@ impl Failure {
             return;
         };
         // A failed new session goes back home (`recover`, `prompt/index.tsx:1258-1277`).
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let exists = tui.data.read(|state| state.session(&session).is_some());
         let title = if exists { "Failed to set up session" } else { "Creating a session failed" };
         if let Some(id) = self.startup_id.filter(|_| !exists) {
@@ -414,13 +406,9 @@ impl Failure {
 
 /// Shows the error, also after the composer unmounted, and restores the prompt unless something new was typed.
 fn fail(tui: &std::rc::Weak<Tui>, prompt: &std::rc::Weak<Inner>, title: &str, error: &Error, entry: &Value) {
-    let Some(tui) = tui.upgrade() else {
-        return;
-    };
+    let Some(tui) = tui.upgrade() else { return };
     tui.toasts.show(ToastOptions::new(Variant::Error, error.to_string()).title(title));
-    let Some(prompt) = prompt.upgrade() else {
-        return;
-    };
+    let Some(prompt) = prompt.upgrade() else { return };
     if prompt.textarea.text().is_empty() {
         prompt.restore(entry.clone());
         prompt.textarea.set_cursor_offset(prompt.text_end());
@@ -435,9 +423,7 @@ fn steer_first_queued(tui: &Tui, session: &SessionID) -> bool {
             _ => None,
         })
     });
-    let Some(inbox) = queued else {
-        return false;
-    };
+    let Some(inbox) = queued else { return false };
     crate::routes::session::queued::mutate(
         tui,
         session,

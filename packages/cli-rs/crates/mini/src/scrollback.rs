@@ -664,9 +664,7 @@ impl Writer {
     /// Markdown widget does not expose its block positions, so a streaming Markdown entry renders only its complete
     /// blocks (up to the last blank line outside a fence) and commits those.
     fn flush_active(&mut self, done: bool, trailing_newline: bool) -> Result<bool> {
-        let Some(active) = self.active.as_mut() else {
-            return Ok(false);
-        };
+        let Some(active) = self.active.as_mut() else { return Ok(false) };
         let target = match &active.widget {
             Stream::Text(text) => {
                 text.set_text(active.content.clone());

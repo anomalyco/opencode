@@ -62,9 +62,7 @@ pub fn encode(text: &str) -> Option<Grid> {
 /// `renderUnicodeCompact(text, { border })`: two modules per character with half blocks. Light modules draw as
 /// blocks and dark ones as the terminal background; rows are joined with "\n".
 pub fn render_unicode_compact(text: &str, border: usize) -> String {
-    let Some(modules) = encode(text) else {
-        return String::new();
-    };
+    let Some(modules) = encode(text) else { return String::new() };
     let size = modules.len() + border * 2;
     let dark = |x: usize, y: usize| {
         (border..border + modules.len()).contains(&x)

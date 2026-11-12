@@ -139,9 +139,7 @@ fn scan<T, const N: usize>(
         let mut results = [NEG; N];
         for (key, target) in prepared.iter().enumerate() {
             let Some(target) = *target else { continue };
-            let Some(result) = algorithm(&search, target, false, search.contains_space, &mut partial) else {
-                continue;
-            };
+            let Some(result) = algorithm(&search, target, false, search.contains_space, &mut partial) else { continue };
             results[key] = result;
             if search.contains_space {
                 for i in 0..search.spaces.len() {

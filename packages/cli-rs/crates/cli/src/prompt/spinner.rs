@@ -123,9 +123,7 @@ impl Spinner {
 
     /// Stops with a success (0), cancel (1), or error (2 and above) line.
     pub fn stop_with(&mut self, message: &str, code: i32) {
-        let Some(threads) = self.threads.take() else {
-            return;
-        };
+        let Some(threads) = self.threads.take() else { return };
         drop(threads.frames);
         let _ = threads.frame_thread.join();
         threads.stop_input.store(true, Ordering::Relaxed);
@@ -159,9 +157,7 @@ fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
 }
 
 fn clear_previous(shared: &Shared, output: Output, ci: bool) {
-    let Some(previous) = &shared.previous else {
-        return;
-    };
+    let Some(previous) = &shared.previous else { return };
     if ci {
         output.write("\n");
     }

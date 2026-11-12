@@ -395,9 +395,7 @@ pub fn turn_duration(
     index: Option<usize>,
     legacy: bool,
 ) -> f64 {
-    let Some(completed) = message.time.completed else {
-        return 0.0;
-    };
+    let Some(completed) = message.time.completed else { return 0.0 };
     let input = input_index(messages, index.unwrap_or(messages.len()), legacy);
     let start = input.and_then(|input| messages.get(input)).map_or(message.time.created, created);
     (completed - start).max(0.0)

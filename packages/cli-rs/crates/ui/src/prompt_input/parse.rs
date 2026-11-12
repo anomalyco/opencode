@@ -62,9 +62,7 @@ pub struct LineRange {
 
 /// `parseFileLineRange`: the query without its line range, and the range.
 pub fn file_line_range(input: &str) -> (&str, Option<LineRange>) {
-    let Some(hash) = input.rfind('#').filter(|&hash| hash > 0) else {
-        return (input, None);
-    };
+    let Some(hash) = input.rfind('#').filter(|&hash| hash > 0) else { return (input, None) };
     let suffix = &input[hash + 1..];
     let (start, end) = suffix.split_once('-').unwrap_or((suffix, ""));
     let digits = |text: &str| text.chars().all(|c| c.is_ascii_digit());
@@ -81,9 +79,7 @@ pub fn file_line_range(input: &str) -> (&str, Option<LineRange>) {
 /// byte index of that whitespace (the text's length without one).
 pub fn slash_head(text: &str) -> Option<(&str, &str, usize)> {
     let rest = text.strip_prefix('/')?;
-    let Some(end) = rest.find(char::is_whitespace) else {
-        return Some((rest, "", text.len()));
-    };
+    let Some(end) = rest.find(char::is_whitespace) else { return Some((rest, "", text.len())) };
     let separator = rest[end..].chars().next().map_or(1, char::len_utf8);
     Some((&rest[..end], &rest[end + separator..], end + 1))
 }
@@ -156,9 +152,7 @@ pub fn directory_matches(directory: &str, query: &str) -> bool {
 /// `directoryRecentValue`: `~`-relative inside the home directory, else absolute.
 pub fn directory_recent_value(directory: &str, home: &str) -> String {
     let (directory, home) = (resolve(directory, ""), resolve(home, ""));
-    let Ok(relative) = Path::new(&directory).strip_prefix(&home) else {
-        return directory.to_owned();
-    };
+    let Ok(relative) = Path::new(&directory).strip_prefix(&home) else { return directory.to_owned() };
     let relative = relative.to_string_lossy();
     if relative.is_empty() {
         return "~".to_owned();

@@ -55,9 +55,7 @@ pub enum Rendered {
 
 /// Renders `source` for a terminal `width` columns wide.
 pub fn render(source: &str, width: u16, palette: &Palette) -> Rendered {
-    let Some(kind) = detect(source) else {
-        return Rendered::Code;
-    };
+    let Some(kind) = detect(source) else { return Rendered::Code };
     let max_width = LAYOUT_MAX_WIDTH.min(i32::from(width).max(1));
     let error = match prepare(kind, source, palette, max_width) {
         Ok(diagram) => return Rendered::Diagram(diagram),

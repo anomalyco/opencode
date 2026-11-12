@@ -102,9 +102,7 @@ impl Data {
                 }
             };
             let unknown = data.write(|state| {
-                let Some((current, updates)) = state.active_updates.take() else {
-                    return Vec::new();
-                };
+                let Some((current, updates)) = state.active_updates.take() else { return Vec::new() };
                 if current != token {
                     state.active_updates = Some((current, updates));
                     return Vec::new();
@@ -330,9 +328,7 @@ pub async fn run(data: Data, mut state: watch::Receiver<events::State>, mut batc
                 data.set_online(online);
             }
             batch = batches.recv() => {
-                let Some(batch) = batch else {
-                    return;
-                };
+                let Some(batch) = batch else { return };
                 data.set_online(state.borrow().status == Status::Connected);
                 data.apply(&batch);
             }

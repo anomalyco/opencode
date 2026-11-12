@@ -252,9 +252,7 @@ impl Pane {
 
     /// Writes queued output while the embedded terminal is at the server's size.
     fn process(&self) {
-        let Some(view) = self.view.borrow().clone() else {
-            return;
-        };
+        let Some(view) = self.view.borrow().clone() else { return };
         if self.disposed.get() {
             return;
         }
@@ -264,9 +262,7 @@ impl Pane {
                 if state.canonical.is_none() || state.canonical != state.terminal_size {
                     return;
                 }
-                let Some(item) = state.stream.pop_front() else {
-                    return;
-                };
+                let Some(item) = state.stream.pop_front() else { return };
                 if let Item::Output(first) = item {
                     let mut output = first;
                     while let Some(Item::Output(_)) = state.stream.front() {
@@ -319,9 +315,7 @@ impl Pane {
         let input = ExperimentalPersistentPtySnapshotInput { pty_id: PtyID(self.pty.clone()) };
         let weak = Rc::downgrade(self);
         tui.app.spawn(async move { client.experimental_persistent_pty_snapshot(&input).await }, move |_, result| {
-            let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else {
-                return;
-            };
+            let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else { return };
             let snapshot = match result {
                 Ok(snapshot) => snapshot,
                 Err(error) => return pane.fail(&error.to_string()),
@@ -343,12 +337,8 @@ impl Pane {
                 _ => None,
             }
         };
-        let Some((_, checkpoint, cursor)) = ready else {
-            return;
-        };
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some((_, checkpoint, cursor)) = ready else { return };
+        let Some(tui) = self.tui.upgrade() else { return };
         let view = self.view.borrow().clone();
         if let Some(view) = view {
             view.write(&checkpoint);
@@ -364,9 +354,7 @@ impl Pane {
         };
         let weak = Rc::downgrade(self);
         tui.app.spawn(async move { pty::connect(&client, connector.as_ref(), &input).await }, move |cx, result| {
-            let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else {
-                return;
-            };
+            let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else { return };
             match result {
                 Ok((_, socket)) => {
                     *pane.socket.borrow_mut() = Some(socket.outgoing);
@@ -386,9 +374,7 @@ impl Pane {
                 (incoming, first)
             },
             move |cx, (mut incoming, first)| {
-                let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else {
-                    return;
-                };
+                let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else { return };
                 let mut items = vec![first.unwrap_or(Incoming::Closed)];
                 while let Ok(item) = incoming.try_recv() {
                     items.push(item);
@@ -422,9 +408,7 @@ impl Pane {
                 return false;
             }
         };
-        let Some(message) = pty::decode(&text) else {
-            return true;
-        };
+        let Some(message) = pty::decode(&text) else { return true };
         match message {
             Message::Exited { .. } => self.state.borrow_mut().exited = true,
             Message::Resized { size, checkpoint } => self.enqueue(Item::Resize {

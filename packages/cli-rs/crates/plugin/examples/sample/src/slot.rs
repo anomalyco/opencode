@@ -14,9 +14,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         host.storage_set("clicks", json!({ "count": count, "input": input }));
     });
     setup.slot(Placement::append("sidebar.content"), |read, input, changed| {
-        let Some(session) = input.session_id.as_deref() else {
-            return Render::Hide;
-        };
+        let Some(session) = input.session_id.as_deref() else { return Render::Hide };
         if !(changed.all || changed.local || changed.session(session) || changed.list(session)) {
             return Render::Keep;
         }

@@ -223,9 +223,7 @@ fn config_value(params: &Value) -> Result<Value, RpcError> {
 /// `parseSteering`: `{ sessionId: string, prompt: unknown[] }`, failing with Effect Schema's message as `details`.
 fn steering(params: &Value) -> Result<(String, Vec<Value>), RpcError> {
     let fail = |message: &str| RpcError::invalid_params(json!({ "details": message }), "");
-    let Some(object) = params.as_object() else {
-        return Err(fail("Expected object"));
-    };
+    let Some(object) = params.as_object() else { return Err(fail("Expected object")) };
     let id = match object.get("sessionId") {
         None => return Err(fail("Missing key\n  at [\"sessionId\"]")),
         Some(Value::String(id)) => id.clone(),
@@ -240,9 +238,7 @@ fn steering(params: &Value) -> Result<(String, Vec<Value>), RpcError> {
 
 fn content_blocks(params: &Value) -> Result<Vec<Value>, RpcError> {
     let value = params.get("prompt");
-    let Some(blocks) = value.and_then(Value::as_array) else {
-        return Err(expected("prompt", "array", value));
-    };
+    let Some(blocks) = value.and_then(Value::as_array) else { return Err(expected("prompt", "array", value)) };
     if let Some(index) = blocks.iter().position(|block| !content_block(block)) {
         return Err(RpcError::invalid_params(
             json!({ "_errors": [], "prompt": { "_errors": [], (index.to_string()): { "_errors": ["Invalid input"] } } }),

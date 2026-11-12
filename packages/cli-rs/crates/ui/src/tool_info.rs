@@ -93,9 +93,7 @@ pub struct ExecuteCall {
 }
 
 pub fn execute_calls(value: &Value) -> Vec<ExecuteCall> {
-    let Some(calls) = value.as_array() else {
-        return Vec::new();
-    };
+    let Some(calls) = value.as_array() else { return Vec::new() };
     calls
         .iter()
         .filter_map(|call| {
@@ -126,9 +124,7 @@ pub fn execute_call_summary(call: &ExecuteCall) -> String {
 }
 
 pub fn web_search_provider_name(provider: &Value) -> String {
-    let Some(provider) = provider.as_str().filter(|provider| !provider.is_empty()) else {
-        return String::new();
-    };
+    let Some(provider) = provider.as_str().filter(|provider| !provider.is_empty()) else { return String::new() };
     if provider == "opencode" {
         return "OpenCode".to_owned();
     }
@@ -246,9 +242,7 @@ pub struct Todo {
 
 /// The items of a `todowrite` input; an unknown status reads as pending.
 pub fn parse_todos(value: &Value) -> Vec<Todo> {
-    let Some(items) = value.as_array() else {
-        return Vec::new();
-    };
+    let Some(items) = value.as_array() else { return Vec::new() };
     items
         .iter()
         .filter_map(|item| {

@@ -110,9 +110,7 @@ impl Output {
                     cursor: Some(cursor),
                     limit: Some(LIMIT as i64),
                 };
-                let Ok(response) = client.shell_output(&input).await else {
-                    break;
-                };
+                let Ok(response) = client.shell_output(&input).await else { break };
                 let data = response.data;
                 if !data.output.is_empty() {
                     chunks.push(data.output);
@@ -286,9 +284,7 @@ impl Inner {
     }
 
     fn load(&self, drain: bool) {
-        let Some(props) = self.props.borrow().clone() else {
-            return;
-        };
+        let Some(props) = self.props.borrow().clone() else { return };
         if !props.running && props.output.is_some() {
             return;
         }
@@ -308,9 +304,7 @@ impl Inner {
     }
 
     fn render(&self) {
-        let Some(props) = self.props.borrow().clone() else {
-            return;
-        };
+        let Some(props) = self.props.borrow().clone() else { return };
         let theme = &self.theme;
         let running = props.running || props.background;
         let expanded = self.expanded.get();

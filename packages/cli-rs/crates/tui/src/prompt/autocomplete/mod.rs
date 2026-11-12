@@ -75,9 +75,7 @@ impl Shared {
         if self.loaded.replace(true) {
             return;
         }
-        let Some(state) = tui.state_dir() else {
-            return;
-        };
+        let Some(state) = tui.state_dir() else { return };
         let (frecency, recents, storage) = (self.frecency.clone(), self.recents.clone(), tui.storage());
         // `paths.cwd`: the directory the TUI started in.
         let cwd = PathBuf::from(&tui.directory);
@@ -106,9 +104,7 @@ impl Shared {
     /// `updateFrecency(path)`, written on the worker under the file's lock. A pick can run before the
     /// load does, so whichever runs first loads the file.
     fn visit(&self, tui: &Tui, path: String) {
-        let Some(state) = tui.state_dir() else {
-            return;
-        };
+        let Some(state) = tui.state_dir() else { return };
         let frecency = self.frecency.clone();
         let cwd = PathBuf::from(&tui.directory);
         self.writer().run(move || {
@@ -172,9 +168,7 @@ impl Shared {
             let value = slot.get_or_insert_with(recents_initial);
             apply(value, &change);
         }
-        let Some(storage): Option<Storage> = tui.storage() else {
-            return;
-        };
+        let Some(storage): Option<Storage> = tui.storage() else { return };
         let (recents, writes) = (self.recents.clone(), self.recents_writes.clone());
         let revision = writes.fetch_add(1, atomic::Ordering::SeqCst) + 1;
         self.writer().run(move || {
@@ -404,9 +398,7 @@ impl State {
             return;
         }
         self.dismissed.replace(None);
-        let (Some(tui), Some(prompt)) = (self.tui.upgrade(), self.prompt.upgrade()) else {
-            return;
-        };
+        let (Some(tui), Some(prompt)) = (self.tui.upgrade(), self.prompt.upgrade()) else { return };
         let offset = prompt.textarea.cursor_offset();
         let before = &value[..parse::index_at(value, offset)];
         if let Some(index) = directory_argument(&tui, before) {
@@ -436,9 +428,7 @@ impl State {
     }
 
     fn show(&self, mode: Mode, index: u32) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         self.visible.set(Some(mode));
         self.index.set(index);
         if self.mode.borrow().is_none() {
@@ -562,9 +552,7 @@ impl State {
         let width = self.content_width(tui);
         let weak = self.prompt.clone();
         let finish = bind!(weak, |prompt, results: Option<Results>| {
-            let Some(complete) = prompt.autocomplete.get() else {
-                return;
-            };
+            let Some(complete) = prompt.autocomplete.get() else { return };
             let state = &complete.0;
             if state.generation.get() != generation {
                 return;
@@ -732,12 +720,8 @@ impl State {
 
     /// `select`: hides, then runs the pick.
     fn select(&self) {
-        let Some(item) = self.options.borrow().get(self.selected.get()).cloned() else {
-            return;
-        };
-        let Some(prompt) = self.prompt.upgrade() else {
-            return;
-        };
+        let Some(item) = self.options.borrow().get(self.selected.get()).cloned() else { return };
+        let Some(prompt) = self.prompt.upgrade() else { return };
         let mode = self.visible.get();
         self.editing.set(true);
         if mode != Some(Mode::Directory) {
@@ -754,9 +738,7 @@ impl State {
     }
 
     fn run(&self, prompt: &Inner, action: &Action) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let textarea = &prompt.textarea;
         match action {
             Action::Part { text, kind, part, visit } => {
@@ -781,16 +763,12 @@ impl State {
 
     /// `prompt.autocomplete.complete` (Tab): a directory opens; anything else is picked.
     fn complete(&self) {
-        let Some(item) = self.options.borrow().get(self.selected.get()).cloned() else {
-            return;
-        };
+        let Some(item) = self.options.borrow().get(self.selected.get()).cloned() else { return };
         if !item.is_directory {
             self.select();
             return;
         }
-        let Some(prompt) = self.prompt.upgrade() else {
-            return;
-        };
+        let Some(prompt) = self.prompt.upgrade() else { return };
         let textarea = &prompt.textarea;
         let shown = item.value.as_deref().unwrap_or(&item.display).trim_end();
         let path = shown.strip_prefix('@').unwrap_or(shown);
@@ -814,9 +792,7 @@ impl State {
         else {
             return;
         };
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         if self.confirming.borrow().as_deref() != Some(action.id.as_str()) {
             self.confirming.replace(Some(action.id));
             self.render(&tui);
@@ -924,9 +900,7 @@ impl State {
             }
             let weak = self.prompt.clone();
             row.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(weak, |prompt, _, event| {
-                let Some(complete) = prompt.autocomplete.get() else {
-                    return;
-                };
+                let Some(complete) = prompt.autocomplete.get() else { return };
                 match event.kind {
                     MouseEventKind::Down(_) | MouseEventKind::Moved => {
                         if complete.0.selected.get() != index {
@@ -1060,9 +1034,7 @@ fn command_items(tui: &Tui, location: &Location) -> Vec<Item> {
         .commands()
         .into_iter()
         .flat_map(|command| {
-            let Some(slash) = command.slash.clone() else {
-                return Vec::new();
-            };
+            let Some(slash) = command.slash.clone() else { return Vec::new() };
             let description = command.description.clone().or(command.title.clone());
             std::iter::once(slash.name.clone())
                 .chain(slash.aliases.clone())
@@ -1246,9 +1218,7 @@ fn directory_items(
 
 /// The project's recent directories, for an empty `/cd` argument (`directoryOptions`).
 fn recent_items(tui: &Tui, prompt: &Inner, width: usize) -> Vec<Item> {
-    let Some(project) = cd::project(tui, prompt) else {
-        return Vec::new();
-    };
+    let Some(project) = cd::project(tui, prompt) else { return Vec::new() };
     let home = home();
     tui.prompt
         .complete

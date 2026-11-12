@@ -26,12 +26,8 @@ pub struct Migration {
 pub fn run(file: &Path, config: &Path, state: &Path) -> io::Result<Option<Migration>> {
     if file.exists() {
         let text = fs::read_to_string(file)?;
-        let Some(updated) = rewrite(&text) else {
-            return Ok(None);
-        };
-        let Some(info) = cli_config::decode_text(&updated) else {
-            return Ok(None);
-        };
+        let Some(updated) = rewrite(&text) else { return Ok(None) };
+        let Some(info) = cli_config::decode_text(&updated) else { return Ok(None) };
         return Ok(Some(persist(file, &updated, info.to_value())));
     }
     let legacy = read_json(&config.join("tui.json")).and_then(|value| V1::decode(&Value::Object(value)));
@@ -107,9 +103,7 @@ fn rename_keybind(text: &str, name: &str, keybinds: &Map<String, Value>) -> Stri
     let target = v1_target(name).or_else(|| {
         (KEYBIND_NAMES.contains(&name) || V1_COMMAND_MAP.iter().any(|(_, to)| *to == name)).then_some(name)
     });
-    let Some(target) = target else {
-        return text.to_string();
-    };
+    let Some(target) = target else { return text.to_string() };
     let tree = jsonc::parse_tree(text);
     let properties = keybind_properties(&tree, name);
     if properties.is_empty() {
@@ -152,9 +146,7 @@ fn property_key(tree: &Tree, property: usize) -> Option<&str> {
 }
 
 fn keybind_objects(tree: &Tree) -> Vec<usize> {
-    let Some(root) = tree.root() else {
-        return Vec::new();
-    };
+    let Some(root) = tree.root() else { return Vec::new() };
     tree.node(root)
         .children
         .iter()
@@ -174,9 +166,7 @@ fn keybind_properties(tree: &Tree, name: &str) -> Vec<usize> {
 // `removeProperty`: cuts the property and one neighboring comma, keeping everything else.
 fn remove_property(text: &str, tree: &Tree, property: usize) -> String {
     let node = tree.node(property);
-    let Some(parent) = node.parent.map(|p| tree.node(p)) else {
-        return text.to_string();
-    };
+    let Some(parent) = node.parent.map(|p| tree.node(p)) else { return text.to_string() };
     let siblings = &parent.children;
     let index = siblings.iter().position(|&s| s == property).unwrap_or(0);
     let end = node.offset + node.length;

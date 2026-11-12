@@ -27,9 +27,7 @@ use crate::args::{ServiceArgs, ServiceCommand};
 use crate::output::{Exit, print};
 
 pub fn run(_context: &Context, args: &ServiceArgs) -> error::Result<()> {
-    let Some(command) = &args.command else {
-        return crate::help::print(&["service"]);
-    };
+    let Some(command) = &args.command else { return crate::help::print(&["service"]) };
     let local = Local::from_env()?;
     match command {
         ServiceCommand::Start => print(&(block_on(local.ensure())??.service.endpoint.url + "\n")),

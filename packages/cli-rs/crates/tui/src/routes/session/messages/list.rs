@@ -401,9 +401,7 @@ impl Transcript {
                 (start, (end < specs.len()).then_some(end))
             })
         };
-        let Some((start, end)) = window else {
-            return false;
-        };
+        let Some((start, end)) = window else { return false };
         *self.0.start.borrow_mut() = start;
         self.0.end.set(end);
         self.0.render(tui, |_| false);
@@ -412,9 +410,7 @@ impl Transcript {
 
     /// Mounts [`BACKFILL_CHUNK`] more rows below the window. Returns whether there were any.
     pub fn mount_newer(&self, tui: &Tui) -> bool {
-        let Some(end) = self.0.end.get() else {
-            return false;
-        };
+        let Some(end) = self.0.end.get() else { return false };
         self.0.mount_newer(tui, end);
         true
     }
@@ -422,17 +418,13 @@ impl Transcript {
     /// Loads every older page in one publication (`session.first`). The window stays until `done`
     /// mounts the head.
     pub fn load_all(&self, tui: &Tui, done: impl FnOnce(&Tui, Result<(), String>) + 'static) {
-        let Some(session) = self.session() else {
-            return;
-        };
+        let Some(session) = self.session() else { return };
         let data = tui.data.clone();
         let weak = self.0.this.clone();
         tui.app.spawn(
             async move { data.message_load_more(&session, LoadMore { all: true, ..LoadMore::default() }).await },
             bind!(weak, |inner, _, result| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 done(&tui, result.map_err(|error| error.to_string()));
             }),
         );
@@ -463,9 +455,7 @@ impl Inner {
         // A group header click re-renders the rows; a config change of the grouping settings too.
         let weak = self.this.clone();
         *self.groups.refresh.borrow_mut() = Some(Rc::new(bind!(weak, |inner| {
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
+            let Some(tui) = inner.tui.upgrade() else { return };
             if let Some(session) = inner.session.borrow().as_ref() {
                 tui.tabs.set_expanded_groups(&session.0, inner.groups.expanded.borrow().clone());
             }
@@ -524,9 +514,7 @@ impl Inner {
             cx.set_timeout(
                 Duration::ZERO,
                 bind!(weak, |inner, _| {
-                    let Some(tui) = inner.tui.upgrade() else {
-                        return;
-                    };
+                    let Some(tui) = inner.tui.upgrade() else { return };
                     if up && inner.reveal_older(&tui) || !up && inner.reveal_newer(&tui) {
                         return;
                     }
@@ -544,9 +532,7 @@ impl Inner {
         let toggle = TuiCommand::new(
             "session.toggle.thinking",
             bind!(weak, |inner, _, _| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 let next = if inner.view.get().hide_thinking { Visibility::Show } else { Visibility::Hide };
                 crate::dialogs::settings::update(&tui, move |draft| {
                     crate::dialogs::settings::set_path(draft, &["session", "thinking"], next.as_str().into());
@@ -566,9 +552,7 @@ impl Inner {
     /// Rebuilds the row list, mounts the window, and updates the rows `changed` names (by message
     /// ID) plus every new row.
     fn render(&self, tui: &Tui, changed: impl Fn(&str) -> bool) {
-        let Some(session) = self.session.borrow().clone() else {
-            return;
-        };
+        let Some(session) = self.session.borrow().clone() else { return };
         let keys = Keys::read(tui);
         let stops = tui.data.read(|state| {
             let visible = Visible::of(state, &session);
@@ -728,17 +712,13 @@ impl Inner {
     /// `completeGroupBoundary`: a page boundary can cut the oldest group in half, so while the oldest row is a
     /// group, older pages load until something precedes it. The footer's turn duration needs that turn's prompt.
     fn complete_group_boundary(&self, tui: &Tui) {
-        let Some(session) = self.session.borrow().clone() else {
-            return;
-        };
+        let Some(session) = self.session.borrow().clone() else { return };
         if self.loading.get() || !matches!(self.specs.borrow().first(), Some(Spec::Group(_))) {
             return;
         }
         let count = tui.data.read(|state| state.has_more_messages(&session).then(|| state.messages(&session).len()));
         // A page that adds nothing would otherwise load again forever.
-        let Some(count) = count.filter(|count| self.boundary.get() != Some(*count)) else {
-            return;
-        };
+        let Some(count) = count.filter(|count| self.boundary.get() != Some(*count)) else { return };
         self.boundary.set(Some(count));
         self.loading.set(true);
         let data = tui.data.clone();
@@ -842,9 +822,7 @@ impl Inner {
                 None
             }
         };
-        let Some(start) = start else {
-            return self.load_older(tui);
-        };
+        let Some(start) = start else { return self.load_older(tui) };
         self.scroll.sticky(false);
         *self.start.borrow_mut() = start;
         self.render(tui, |_| false);
@@ -858,9 +836,7 @@ impl Inner {
 
     /// `revealNewerRows`: near the end of a head window, mount [`BACKFILL_CHUNK`] more rows below it.
     fn reveal_newer(&self, tui: &Tui) -> bool {
-        let Some(end) = self.end.get() else {
-            return false;
-        };
+        let Some(end) = self.end.get() else { return false };
         let rows = self.specs.borrow().len();
         let (_, top) = self.scroll.scroll_position();
         let viewport = f64::from(self.scroll.rect().height);
@@ -881,9 +857,7 @@ impl Inner {
 
     /// `prependHistory`: loads the next older page; the store's flush mounts it.
     fn load_older(&self, tui: &Tui) -> bool {
-        let Some(session) = self.session.borrow().clone() else {
-            return false;
-        };
+        let Some(session) = self.session.borrow().clone() else { return false };
         if self.loading.get() || !tui.data.read(|state| state.has_more_messages(&session)) {
             return false;
         }
@@ -897,9 +871,7 @@ impl Inner {
             bind!(weak, |inner, _, result| {
                 inner.loading.set(false);
                 inner.hint.visible(false);
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 match result {
                     Ok(_) => inner.complete_group_boundary(&tui),
                     Err(error) => tui.toasts.error(error.to_string()),
@@ -1132,9 +1104,7 @@ impl Context<'_> {
                 colors.push(color);
             }
         }
-        let Some(index) = self.agents.iter().position(|item| item.id.as_str() == agent) else {
-            return colors[0];
-        };
+        let Some(index) = self.agents.iter().position(|item| item.id.as_str() == agent) else { return colors[0] };
         self.agents[index].color.as_ref().and_then(|color| hex(color.as_str())).unwrap_or(colors[index % colors.len()])
     }
 

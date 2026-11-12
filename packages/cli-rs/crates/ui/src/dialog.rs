@@ -286,9 +286,7 @@ impl Dialogs {
         self.0.rebuilding.set(false);
         let previous = {
             let mut stack = self.0.stack.borrow_mut();
-            let Some(entry) = stack.last_mut() else {
-                return;
-            };
+            let Some(entry) = stack.last_mut() else { return };
             entry.cx = cx.clone();
             std::mem::replace(&mut entry.content, content.clone())
         };

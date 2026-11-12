@@ -79,9 +79,7 @@ pub fn open(viewer: &Viewer) {
                 picker.debounce();
             })));
             props.on_select = Some(Rc::new(bind!(weak, |picker, option: &SelectOption<String>| {
-                let Some(tui) = picker.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = picker.tui.upgrade() else { return };
                 let reference = option.value.clone();
                 let weak = picker.viewer.clone();
                 let key = picker.key.clone();
@@ -137,9 +135,7 @@ impl Picker {
     }
 
     fn debounce(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         if let Some(timer) = self.timer.take() {
             tui.app.cancel_timer(timer);
         }
@@ -159,9 +155,7 @@ impl Picker {
             return;
         }
         *self.search.borrow_mut() = Some(search.clone());
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let request = self.request.get() + 1;
         self.request.set(request);
         *self.branches.borrow_mut() = Branches::Loading;

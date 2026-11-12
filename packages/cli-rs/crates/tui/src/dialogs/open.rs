@@ -42,12 +42,8 @@ thread_local! {
 
 /// `worktree.updated` of the project whose worktrees show reads them again (`dialog-open.tsx:135-139`).
 pub(crate) fn event(event: &Handled) {
-    let Handled::WorktreeUpdated(event) = event else {
-        return;
-    };
-    let Some(open) = OPEN.with(|open| open.borrow().upgrade()) else {
-        return;
-    };
+    let Handled::WorktreeUpdated(event) = event else { return };
+    let Some(open) = OPEN.with(|open| open.borrow().upgrade()) else { return };
     // The select goes when the dialog closes.
     if open.select.borrow().is_some() && open.worktree_project().as_ref() == Some(&event.data.project_id) {
         open.load_worktrees(event.data.project_id.clone());
@@ -266,9 +262,7 @@ impl Open {
     }
 
     fn project_title(&self, id: &ProjectID) -> String {
-        let Some(tui) = self.tui() else {
-            return "Project".into();
-        };
+        let Some(tui) = self.tui() else { return "Project".into() };
         tui.data.read(|store| project_name(store.project(id))).unwrap_or_else(|| "Project".into())
     }
 
@@ -320,9 +314,7 @@ impl Open {
         let Some(tui) = self.tui() else { return };
         let weak = Rc::downgrade(self);
         tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-            let (Some(open), Some(revisions)) = (weak.upgrade(), revisions) else {
-                return;
-            };
+            let (Some(open), Some(revisions)) = (weak.upgrade(), revisions) else { return };
             let Some(tui) = open.tui() else { return };
             if tui.dialogs.key().as_deref() != Some(KEY) {
                 return;
@@ -484,9 +476,7 @@ impl Open {
     }
 
     fn no_match(&self) -> String {
-        let Some(tui) = self.tui() else {
-            return String::new();
-        };
+        let Some(tui) = self.tui() else { return String::new() };
         let state = self.state.borrow();
         if let OpenView::Worktrees(_) = state.view {
             return if state.worktrees.is_none() { "Loading worktrees…" } else { "No matching worktrees" }.into();
@@ -509,9 +499,7 @@ impl Open {
 
     /// `options()`: sessions, then projects.
     fn project_view_options(&self) -> Vec<SelectOption<Target>> {
-        let Some(tui) = self.tui() else {
-            return Vec::new();
-        };
+        let Some(tui) = self.tui() else { return Vec::new() };
         let theme = dialog_theme(&tui);
         let state = self.state.borrow();
         let home = home();
@@ -639,14 +627,10 @@ impl Open {
 
     /// `worktreeOptions()`.
     fn worktree_options(&self, id: &ProjectID) -> Vec<SelectOption<Target>> {
-        let Some(tui) = self.tui() else {
-            return Vec::new();
-        };
+        let Some(tui) = self.tui() else { return Vec::new() };
         let theme = dialog_theme(&tui);
         let state = self.state.borrow();
-        let Some(project) = tui.data.read(|store| store.project(id).cloned()) else {
-            return Vec::new();
-        };
+        let Some(project) = tui.data.read(|store| store.project(id).cloned()) else { return Vec::new() };
         let canonical = project.canonical.as_str();
         let current = crate::features::location::active(&tui).directory;
         let current = current.as_str();
@@ -705,9 +689,7 @@ impl Open {
     /// `right`: the worktrees of the selected Git project.
     fn show_worktrees(self: &Rc<Self>) {
         let selected = self.select.borrow().as_ref().and_then(Select::selected).map(|option| option.value);
-        let Some(Target::Project { directory, project_id: Some(id) }) = selected else {
-            return;
-        };
+        let Some(Target::Project { directory, project_id: Some(id) }) = selected else { return };
         let back = self.snapshot();
         self.state.borrow_mut().back = Some(back);
         let open = self.clone();
@@ -722,18 +704,14 @@ impl Open {
 
     /// `left` and Escape in the worktrees: back to the projects as they were.
     fn back(self: &Rc<Self>) {
-        let Some(selection) = self.state.borrow_mut().back.clone() else {
-            return;
-        };
+        let Some(selection) = self.state.borrow_mut().back.clone() else { return };
         let open = self.clone();
         self.defer(move || open.build(selection));
     }
 
     /// `ctrl+n`: the new worktree prompt.
     fn new_worktree(self: &Rc<Self>) {
-        let Some(id) = self.worktree_project() else {
-            return;
-        };
+        let Some(id) = self.worktree_project() else { return };
         let previous = self.snapshot();
         let title = format!("{} / New worktree", self.project_title(&id));
         let open = self.clone();
@@ -784,9 +762,7 @@ impl Open {
 
     fn create_worktree(self: &Rc<Self>, id: ProjectID, name: String) {
         let Some(tui) = self.tui() else { return };
-        let Some(prompt) = self.prompt.borrow().clone() else {
-            return;
-        };
+        let Some(prompt) = self.prompt.borrow().clone() else { return };
         prompt.set_busy(true);
         let client = tui.data.client().clone();
         let input = WorktreeCreateInput {
@@ -799,9 +775,7 @@ impl Open {
             bind!(self, |open, _, result| {
                 let Some(tui) = open.tui() else { return };
                 // The prompt closed or was replaced while the request ran.
-                let Some(current) = open.prompt.borrow().clone() else {
-                    return;
-                };
+                let Some(current) = open.prompt.borrow().clone() else { return };
                 match result {
                     Ok(created) => {
                         tui.dialogs.clear();

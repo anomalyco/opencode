@@ -85,9 +85,7 @@ impl Host {
         self.current.take();
         self.region.clear();
         self.region.visible(form.is_some());
-        let (Some(tui), Some(form)) = (self.tui.upgrade(), form) else {
-            return;
-        };
+        let (Some(tui), Some(form)) = (self.tui.upgrade(), form) else { return };
         let prompt = FormPrompt::new(&tui, form.clone());
         self.region.add(&prompt.0.root);
         *self.current.borrow_mut() = Some(prompt);
@@ -258,9 +256,7 @@ impl Drop for FormPrompt {
         let inner = &self.0;
         let keys: Vec<Disposer> =
             inner.layers.take().into_iter().chain(inner.intercept.take()).chain(inner.mode.take()).collect();
-        let Some(tui) = inner.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = inner.tui.upgrade() else { return };
         dispose_later(&tui.app, keys);
         for id in inner.handlers.take() {
             tui.app.remove_handler(id);
@@ -330,9 +326,7 @@ impl Inner {
     }
 
     fn rows(&self) -> Vec<Row> {
-        let Some(field) = self.answer_field() else {
-            return Vec::new();
-        };
+        let Some(field) = self.answer_field() else { return Vec::new() };
         let mut configured = rows(Some(&field));
         let draft = self.draft.borrow();
         if let (FormField::Multiselect(_), Some(FormValue::Array(items))) = (&field, draft.answers.get(key(&field))) {
@@ -441,9 +435,7 @@ impl Inner {
 
     fn completed(&self, field: &FormField) -> bool {
         let draft = self.draft.borrow();
-        let Some(value) = draft.answers.get(key(field)) else {
-            return false;
-        };
+        let Some(value) = draft.answers.get(key(field)) else { return false };
         if matches!(field, FormField::External(_)) {
             return *value == FormValue::Bool(true);
         }
@@ -479,9 +471,7 @@ impl Inner {
     }
 
     fn reply(self: &Rc<Self>, answer: IndexMap<String, FormValue>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let data = tui.data.clone();
         let location = self.form.location.clone();
         let input = SessionFormReplyInput {
@@ -499,9 +489,7 @@ impl Inner {
     }
 
     fn cancel(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let data = tui.data.clone();
         let location = self.form.location.clone();
         let input = SessionFormCancelInput {
@@ -519,9 +507,7 @@ impl Inner {
     }
 
     fn pick(self: &Rc<Self>, value: FormValue) {
-        let Some(field) = self.answer_field() else {
-            return;
-        };
+        let Some(field) = self.answer_field() else { return };
         if let Some(invalid) = validate(&field, Some(&value)) {
             self.set_error(invalid);
             return;
@@ -536,9 +522,7 @@ impl Inner {
     }
 
     fn toggle(&self, value: &str) {
-        let Some(field) = self.answer_field() else {
-            return;
-        };
+        let Some(field) = self.answer_field() else { return };
         let next = toggle_multiselect(self.draft.borrow().answers.get(key(&field)), value);
         self.answer(key(&field), Some(FormValue::Array(next)));
     }
@@ -599,9 +583,7 @@ impl Inner {
             return;
         }
         let selected = self.draft.borrow().selected;
-        let Some(row) = self.rows().into_iter().nth(selected) else {
-            return;
-        };
+        let Some(row) = self.rows().into_iter().nth(selected) else { return };
         if self.multi() {
             self.toggle(&value_text(&row.value));
             return;
@@ -610,9 +592,7 @@ impl Inner {
     }
 
     fn paste_custom(&self, value: &str) -> bool {
-        let Some(field) = self.answer_field() else {
-            return false;
-        };
+        let Some(field) = self.answer_field() else { return false };
         if self.is_textual() || !self.has_custom() || self.confirm() {
             return false;
         }
@@ -623,9 +603,7 @@ impl Inner {
     }
 
     fn commit_input(&self, text: &str) -> bool {
-        let Some(field) = self.answer_field() else {
-            return false;
-        };
+        let Some(field) = self.answer_field() else { return false };
         let key = key(&field);
         let is_textual = self.is_textual();
         let is_multi = self.multi();
@@ -710,13 +688,9 @@ impl Inner {
     }
 
     fn open_external(self: &Rc<Self>) {
-        let Some(FormField::External(field)) = self.field() else {
-            return;
-        };
+        let Some(FormField::External(field)) = self.field() else { return };
         self.set_error("");
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let url = field.url.clone();
         tui.app.spawn(
             async move { tokio::task::spawn_blocking(move || open_url(&url)).await.unwrap_or(false) },
@@ -732,9 +706,7 @@ impl Inner {
     }
 
     fn copy_external(self: &Rc<Self>) {
-        let (Some(FormField::External(field)), Some(tui)) = (self.field(), self.tui.upgrade()) else {
-            return;
-        };
+        let (Some(FormField::External(field)), Some(tui)) = (self.field(), self.tui.upgrade()) else { return };
         if !tui.app.copy_to_clipboard(&field.url) {
             tui.toasts.error("Failed to copy to clipboard");
             return;
@@ -744,9 +716,7 @@ impl Inner {
     }
 
     fn acknowledge_external(self: &Rc<Self>) {
-        let Some(key) = self.external_key() else {
-            return;
-        };
+        let Some(key) = self.external_key() else { return };
         let tab = self.draft.borrow().tab;
         if self.draft.borrow().answers.get(&key) == Some(&FormValue::Bool(true)) {
             self.select_tab(tab + 1);
@@ -786,14 +756,10 @@ impl Inner {
     }
 
     fn paste_clipboard(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let weak = Rc::downgrade(self);
         tui.app.read_clipboard(move |_, content| {
-            let (Some(inner), Some(content)) = (weak.upgrade(), content) else {
-                return;
-            };
+            let (Some(inner), Some(content)) = (weak.upgrade(), content) else { return };
             let value = content.replace("\r\n", "\n").replace('\r', "\n");
             if inner.draft.borrow().editing || inner.is_textual() {
                 if let Some((_, textarea)) = inner.editor.borrow().as_ref() {
@@ -830,9 +796,7 @@ impl Inner {
                 if modified || (!editing && c == ' ') || c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
                     return;
                 }
-                let Some(field) = inner.answer_field() else {
-                    return;
-                };
+                let Some(field) = inner.answer_field() else { return };
                 inner.update_custom(&field, &format!("{}{c}", inner.input()));
                 inner.draft.borrow_mut().editing = true;
                 context.consume();
@@ -858,9 +822,7 @@ impl Inner {
     }
 
     fn editor_focused(&self) -> bool {
-        let Some(tui) = self.tui.upgrade() else {
-            return false;
-        };
+        let Some(tui) = self.tui.upgrade() else { return false };
         let focused = tui.app.focused().map(|widget| widget.id());
         self.editor.borrow().as_ref().is_some_and(|(_, textarea)| Some(textarea.id()) == focused)
     }
@@ -960,9 +922,7 @@ impl Inner {
                     self.command("return", "Submit answer edit", |inner| {
                         let text = inner.editor_text().unwrap_or_default();
                         let text = text.trim();
-                        let Some(field) = inner.answer_field() else {
-                            return;
-                        };
+                        let Some(field) = inner.answer_field() else { return };
                         if inner.is_textual() {
                             inner.submit_input(text, 1);
                             return;
@@ -1057,9 +1017,7 @@ impl Inner {
         if self.render_queued.replace(true) {
             return;
         }
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         tui.app.defer(bind!(self, |inner, _| {
             inner.render_queued.set(false);
             inner.render();
@@ -1067,9 +1025,7 @@ impl Inner {
     }
 
     fn render(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         // Keys follow the state.
         dispose_later(&tui.app, self.layers.take());
         for layer in self.layers() {
@@ -1147,9 +1103,7 @@ impl Inner {
         textarea.perform(EditorAction::BufferEnd);
         if matches!(kind, Editor::Custom(_)) {
             textarea.on_change(bind!(self, |inner, _, text| {
-                let Some(field) = inner.answer_field() else {
-                    return;
-                };
+                let Some(field) = inner.answer_field() else { return };
                 inner.update_custom(&field, text);
                 inner.render_soon();
             }));

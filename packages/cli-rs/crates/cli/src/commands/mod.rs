@@ -32,9 +32,7 @@ pub struct Context {
 }
 
 pub fn run(context: &Context, cli: &Cli) -> error::Result<()> {
-    let Some(command) = &cli.command else {
-        return default::run(context, &cli.root);
-    };
+    let Some(command) = &cli.command else { return default::run(context, &cli.root) };
     match command {
         Command::Upgrade(args) => upgrade::run(context, args),
         Command::Uninstall(args) => uninstall::run(context, args),

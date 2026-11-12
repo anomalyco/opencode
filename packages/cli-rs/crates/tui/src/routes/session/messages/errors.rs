@@ -249,9 +249,7 @@ impl Drop for Retry {
 impl RetryInner {
     /// Draws the line and returns the seconds left.
     fn render(&self) -> u64 {
-        let Some(retry) = self.retry.borrow().clone() else {
-            return 0;
-        };
+        let Some(retry) = self.retry.borrow().clone() else { return 0 };
         let seconds = ((retry.at - now()) / 1000.0).ceil().max(0.0) as u64;
         let when = if seconds > 0 { format!("Retrying in {seconds}s") } else { "Retry due".to_owned() };
         self.text.set_text(format!("⚠ {when} · attempt {} · {}", retry.attempt, retry.error.message));
@@ -361,12 +359,8 @@ fn json_string<'a>(body: &'a str, key: &str) -> Option<&'a str> {
     while let Some(at) = rest.find(&needle) {
         rest = &rest[at + needle.len()..];
         let value = rest.trim_start();
-        let Some(value) = value.strip_prefix(':') else {
-            continue;
-        };
-        let Some(value) = value.trim_start().strip_prefix('"') else {
-            continue;
-        };
+        let Some(value) = value.strip_prefix(':') else { continue };
+        let Some(value) = value.trim_start().strip_prefix('"') else { continue };
         let end = value.find('"')?;
         if end > 0 {
             return Some(&value[..end]);
@@ -408,9 +402,7 @@ impl LimitWatch {
     pub fn check(&self, messages: &[SessionMessageInfo], pending: &dyn Fn(&str) -> bool) -> Vec<Stop> {
         let mut stops = Vec::new();
         for (index, message) in messages.iter().enumerate() {
-            let SessionMessageInfo::Assistant(assistant) = message else {
-                continue;
-            };
+            let SessionMessageInfo::Assistant(assistant) = message else { continue };
             let Some(error) = &assistant.error else {
                 self.live.borrow_mut().insert(assistant.id.0.clone());
                 continue;
@@ -444,9 +436,7 @@ impl LimitWatch {
 
 /// Puts `recalled` back into an empty prompt, then offers OpenCode Go when `offer` is set.
 fn stopped(tui: &Tui, recalled: Option<String>, offer: Option<Option<String>>) {
-    let Some(textarea) = tui.textarea.borrow().clone() else {
-        return;
-    };
+    let Some(textarea) = tui.textarea.borrow().clone() else { return };
     if !textarea.text().trim().is_empty() {
         return;
     }

@@ -204,14 +204,10 @@ fn fade_source_path(
     database: bool,
     occupancy: &HashMap<Point, i32>,
 ) {
-    let (Some(&from), Some(&to)) = (points.first(), points.get(1)) else {
-        return;
-    };
+    let (Some(&from), Some(&to)) = (points.first(), points.get(1)) else { return };
     let mut private = vec![connector];
     walk_orthogonal_segment(from, to, true, |point| {
-        let Some(cell) = grid.cell(point.x, point.y) else {
-            return false;
-        };
+        let Some(cell) = grid.cell(point.x, point.y) else { return false };
         if occupancy.get(&point) != Some(&1) || !"─━│┃".contains(cell.ch.as_str()) || cell.style == Some(Style::Label)
         {
             return false;
@@ -234,9 +230,7 @@ fn draw_source_connectors(grid: &mut Grid, layout: &Layout) {
     let occupancy = route_cell_occupancy(&layout.routes);
     let mut junctions: IndexMap<String, (Directions, bool)> = IndexMap::new();
     for route in &layout.routes {
-        let (Some(&source), Some(&next)) = (route.points.first(), route.points.get(1)) else {
-            continue;
-        };
+        let (Some(&source), Some(&next)) = (route.points.first(), route.points.get(1)) else { continue };
         let junction = junctions
             .entry(format!("{}:{}:{}", route.edge.from, source.x, source.y))
             .or_insert((Directions::default(), true));
@@ -251,9 +245,7 @@ fn draw_source_connectors(grid: &mut Grid, layout: &Layout) {
             .get(&route.edge.from)
             .map(Endpoint::Node)
             .or_else(|| layout.subgraph_bounds.get(&route.edge.from).map(Endpoint::Subgraph));
-        let (Some(from), Some(&source)) = (from, route.points.first()) else {
-            continue;
-        };
+        let (Some(from), Some(&source)) = (from, route.points.first()) else { continue };
         let database = nodes.get(route.edge.from.as_str()).is_some_and(|node| node.shape == Shape::Database);
         let connector = source_connector(from.bounds(), source);
         grid.set(connector.x, connector.y, connector.ch, Some(Style::Edge));

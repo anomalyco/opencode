@@ -208,9 +208,7 @@ pub fn create_staged(
     prompt: &Rc<Inner>,
     then: impl FnOnce(&Tui, &Rc<Inner>, Option<String>) + 'static,
 ) -> bool {
-    let Some(name) = prompt.staging.pending_new() else {
-        return false;
-    };
+    let Some(name) = prompt.staging.pending_new() else { return false };
     create(tui, prompt, name, then);
     true
 }
@@ -231,9 +229,7 @@ fn open(tui: &Tui, prompt: &Rc<Inner>) {
     tui.app.spawn(
         task,
         bind!(weak, |prompt, _, _| {
-            let Some(tui) = prompt.tui.upgrade() else {
-                return;
-            };
+            let Some(tui) = prompt.tui.upgrade() else { return };
             let session = prompt.session_info(&tui);
             show(&tui, &prompt, session.as_ref().map(|s| s.project_id.clone()), session);
         }),
@@ -253,9 +249,7 @@ fn resolve_home(tui: &Tui, prompt: &Rc<Inner>) {
     tui.app.spawn(
         async move { client.location_get(&input).await.ok().map(|info| info.project.id) },
         bind!(weak, |prompt, _, project| {
-            let Some(tui) = prompt.tui.upgrade() else {
-                return;
-            };
+            let Some(tui) = prompt.tui.upgrade() else { return };
             show(&tui, &prompt, project, None);
         }),
     );
@@ -362,9 +356,7 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
             Ok(directory)
         },
         bind!(weak, |prompt, _, result| {
-            let Some(tui) = prompt.tui.upgrade() else {
-                return;
-            };
+            let Some(tui) = prompt.tui.upgrade() else { return };
             match result {
                 Ok(directory) => {
                     prompt

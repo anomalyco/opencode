@@ -184,9 +184,7 @@ pub fn fold(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded {
     if let Some(id) = settled.filter(|id| !id.is_empty() && state.asks.remove(*id)) {
         return Folded::new(vec![Output::AskSettled { id: id.to_owned() }]);
     }
-    let Some(session_id) = session_id else {
-        return Folded::default();
-    };
+    let Some(session_id) = session_id else { return Folded::default() };
     if session_id != ctx.session_id && child.is_none() {
         return Folded::default();
     }
@@ -310,9 +308,7 @@ fn js_string(value: &Value) -> String {
 
 fn child_created(state: &mut TurnState, event: &Value, ctx: &TurnContext) -> Folded {
     let data = data(event);
-    let Some(parent_id) = text(data, "parentID").filter(|id| !id.is_empty()) else {
-        return Folded::default();
-    };
+    let Some(parent_id) = text(data, "parentID").filter(|id| !id.is_empty()) else { return Folded::default() };
     let parent = (parent_id != ctx.session_id).then(|| state.children.get(parent_id)).flatten();
     if parent.is_none() && parent_id != ctx.session_id {
         return Folded::default();
@@ -384,9 +380,7 @@ fn child_event(state: &mut TurnState, event: &Value, ctx: &TurnContext, child: &
 }
 
 fn tag(update: &mut Value, session_update: &str) {
-    let Some(object) = update.as_object_mut() else {
-        return;
-    };
+    let Some(object) = update.as_object_mut() else { return };
     let mut tagged = Map::new();
     tagged.insert("sessionUpdate".to_owned(), json!(session_update));
     tagged.extend(std::mem::take(object));
@@ -529,9 +523,7 @@ fn new_tool(session_id: &str, id: &str, name: Option<&str>) -> Tool {
 }
 
 fn route(ctx: &TurnContext, child: Option<&child::Session>, update: Value) -> Vec<Output> {
-    let Some(child) = child else {
-        return vec![Output::SessionUpdate { update, diff: None }];
-    };
+    let Some(child) = child else { return vec![Output::SessionUpdate { update, diff: None }] };
     let projected = child::project(update, child);
     if ctx.child_updates {
         return child_status(ctx, child, child::update_event(projected));

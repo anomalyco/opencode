@@ -197,9 +197,7 @@ impl Drop for Permission {
         let inner = &self.0;
         inner.overlay.detach();
         inner.prompt.take();
-        let Some(tui) = inner.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = inner.tui.upgrade() else { return };
         if let Some(id) = inner.resize.take() {
             tui.app.remove_handler(id);
         }
@@ -393,12 +391,8 @@ impl Inner {
     }
 
     fn select(self: &Rc<Self>, choice: Choice) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
-        let Some(request) = self.prompt.borrow().request().cloned() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
+        let Some(request) = self.prompt.borrow().request().cloned() else { return };
         let decision = match choice {
             Choice::Once => PermissionReply::Once,
             Choice::Always => PermissionReply::Always,
@@ -419,17 +413,13 @@ impl Inner {
 
     /// Back to the question, which starts over as TS remounts it.
     fn cancel_reject(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let request = self.prompt.borrow().request().cloned();
         self.ask(&tui, request);
     }
 
     fn confirm_reject(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let (request, message) = match &*self.prompt.borrow() {
             Prompt::Rejecting { request, field, .. } => {
                 (request.clone(), Some(field.text()).filter(|text| !text.is_empty()))
@@ -443,9 +433,7 @@ impl Inner {
         self.region.clear();
         self.overlay.clear();
         self.overlay.visible(false);
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let (request, selected, expanded) = match &*self.prompt.borrow() {
             Prompt::Hidden => return,
             Prompt::Rejecting { view, .. } => {

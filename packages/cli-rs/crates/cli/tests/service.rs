@@ -139,9 +139,7 @@ impl Drop for Sandbox {
     fn drop(&mut self) {
         let needle = self.root.path().as_os_str().as_encoded_bytes().to_vec();
         for entry in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
-            let Some(pid) = entry.file_name().to_str().and_then(|pid| pid.parse::<i32>().ok()) else {
-                continue;
-            };
+            let Some(pid) = entry.file_name().to_str().and_then(|pid| pid.parse::<i32>().ok()) else { continue };
             let named = std::fs::read(entry.path().join("cmdline"))
                 .is_ok_and(|cmdline| cmdline.windows(needle.len()).any(|window| window == needle.as_slice()));
             if named && let Some(pid) = rustix::process::Pid::from_raw(pid) {
@@ -161,9 +159,7 @@ fn pid(registration: &serde_json::Value) -> u64 {
 
 #[test]
 fn start_status_stop_and_restart() {
-    let Some(sandbox) = Sandbox::new() else {
-        return;
-    };
+    let Some(sandbox) = Sandbox::new() else { return };
     let status = sandbox.run(&["service", "status"], &[]);
     assert_eq!(text(&status.stdout), "stopped\n");
 
@@ -195,9 +191,7 @@ fn start_status_stop_and_restart() {
 
 #[test]
 fn set_stops_the_service_without_ending_terminals() {
-    let Some(sandbox) = Sandbox::new() else {
-        return;
-    };
+    let Some(sandbox) = Sandbox::new() else { return };
     assert!(sandbox.run(&["service", "start"], &[]).status.success());
     let first = sandbox.registration().unwrap();
     // `set disabled false` does not stop the service.
@@ -212,9 +206,7 @@ fn set_stops_the_service_without_ending_terminals() {
 
 #[test]
 fn set_remote_true_runs_the_typescript_command() {
-    let Some(sandbox) = Sandbox::new() else {
-        return;
-    };
+    let Some(sandbox) = Sandbox::new() else { return };
     let set = sandbox.run(&["service", "set", "remote", "true"], &[]);
     assert!(set.status.success(), "{}", text(&set.stderr));
     assert_eq!(sandbox.log(), "service set remote true\n");
@@ -228,9 +220,7 @@ fn set_remote_true_runs_the_typescript_command() {
 
 #[test]
 fn pair_remote_enables_remote_access_and_waits_for_the_tunnel() {
-    let Some(sandbox) = Sandbox::new() else {
-        return;
-    };
+    let Some(sandbox) = Sandbox::new() else { return };
     let pair = sandbox.run(&["pair", "--remote", "--yes"], &[("FAKE_URLS", "https://r0ute.t1.tunnel.test")]);
     assert!(pair.status.success(), "{}", text(&pair.stderr));
     let stdout = text(&pair.stdout);
@@ -255,9 +245,7 @@ fn pair_remote_enables_remote_access_and_waits_for_the_tunnel() {
 
 #[test]
 fn pair_prints_links_and_the_ssh_hint() {
-    let Some(sandbox) = Sandbox::new() else {
-        return;
-    };
+    let Some(sandbox) = Sandbox::new() else { return };
     let pair = sandbox.run(&["pair"], &[]);
     assert!(pair.status.success(), "{}", text(&pair.stderr));
     let url = sandbox.registration().unwrap()["url"].as_str().unwrap().to_owned();
@@ -294,9 +282,7 @@ fn interop_with_a_typescript_service() {
         eprintln!("skipped: no TypeScript checkout with node_modules; set OPENCODE_TS_ROOT");
         return;
     }
-    let Some(sandbox) = Sandbox::new() else {
-        return;
-    };
+    let Some(sandbox) = Sandbox::new() else { return };
     let vars = [
         ("HOME", "home"),
         ("XDG_STATE_HOME", "state"),
