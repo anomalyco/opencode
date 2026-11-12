@@ -17,6 +17,9 @@ import { SkillScan } from "./skill-scan.js"
 
 type Source = Skill.DirectorySource | Skill.UrlSource
 
+// Below this many skills linked from one folder, a watch each costs under 70 ms on macOS.
+const SHARED_WATCH_MIN = 10
+
 export const Plugin = define({
   id: "opencode.config.skill",
   effect: Effect.fn(function* (ctx) {
@@ -56,15 +59,21 @@ export const Plugin = define({
     })
 
     // macOS and Windows watch a folder tree with one native watch, while a file watch costs one each (about 7 ms apiece
-    // on macOS, so 2000 linked skills took 14 s). There, skills linked from the same folder share a watch on it. Linux
-    // keeps a watch per file: a folder tree there takes a watch per directory, and /nix/store holds over a million.
+    // on macOS, so 2000 linked skills took 14 s). There, a folder many skills are linked from gets one watch shared by
+    // them. Fewer links keep a watch each, so a lone skill linked from its own repo never watches the folder above it.
+    // Linux keeps a watch per file: a folder tree there takes a watch per directory, and /nix/store holds over a million.
     const watchLinked = Effect.fn("ConfigSkillPlugin.watchLinked")(function* (files: readonly string[]) {
-      if (process.platform === "linux")
-        return yield* Effect.forEach(files, (file) => watch(file, "file"), { discard: true })
       const folders = Map.groupBy(files, (file) =>
         path.dirname(path.basename(file) === "SKILL.md" ? path.dirname(file) : file),
       )
-      yield* Effect.forEach(folders, ([folder, linked]) => watch(folder, "directory", linked), { discard: true })
+      yield* Effect.forEach(
+        folders,
+        ([folder, linked]) =>
+          process.platform === "linux" || linked.length < SHARED_WATCH_MIN
+            ? Effect.forEach(linked, (file) => watch(file, "file"), { discard: true })
+            : watch(folder, "directory", linked),
+        { discard: true },
+      )
     })
 
     function firstMissing(target: string): Effect.Effect<string | undefined> {
@@ -158,24 +167,30 @@ export const Plugin = define({
           skills.push(parsed.skill)
         }
       }
-      yield* watchLinked(linked)
       yield* Effect.logDebug("skill source loaded", {
         source: Skill.Source.key(source),
         type: source.type,
         directories,
         skills: skills.map((skill) => skill.id),
       })
-      return skills
+      return { skills, roots, linked }
     })
 
     const refresh = Effect.fn("ConfigSkillPlugin.refresh")(
       function* (file?: string) {
         yield* FiberMap.clear(watches)
         const skills = new Map<Skill.ID, Skill.Info>()
+        const roots: string[] = []
+        const linked: string[] = []
         const current = sources()
         for (const source of current) {
-          for (const skill of yield* load(source)) skills.set(skill.id, skill)
+          const result = yield* load(source)
+          for (const skill of result.skills) skills.set(skill.id, skill)
+          roots.push(...result.roots)
+          linked.push(...result.linked)
         }
+        // Linked skills are watched once every source is, so a skill inside another source keeps that source's watch.
+        yield* watchLinked([...new Set(linked)].filter((file) => !roots.some((root) => FSUtil.contains(root, file))))
         loaded.skills = Array.from(skills.values())
         if (file) {
           yield* Effect.logInfo("skills rescanned", {
