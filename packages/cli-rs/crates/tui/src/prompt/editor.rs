@@ -646,7 +646,12 @@ impl Inner {
             selection.as_ref().and_then(|selection| catalog.as_ref()?.color(&theme, selection.agent.id.as_str()));
         let mode = self.mode.get();
         let highlight = match mode {
-            Mode::Shell => theme.text.action.primary.selected,
+            // The new designs' interactive color matches the first agent's, so shell takes the second categorical
+            // color (#63605).
+            Mode::Shell => match theme.categorical() {
+                [_, second, ..] | [second] => second.step(400),
+                [] => theme.text.action.primary.selected,
+            },
             Mode::Normal => agent_color.unwrap_or(theme.border.base),
         };
         let display = match (&catalog, &selection) {
