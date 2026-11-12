@@ -1121,7 +1121,13 @@ export function createPluginAttachment(apis: HostApis) {
     if (session) {
       await global.sessionPreferences.ready.promise
 
-      if (global.sessionPreferences.muted(session.server, session.id)) return result
+      const root = global.serverCtx(ServerConnection.Key.make(session.server))?.data.session.root(session.id) ?? session.id
+
+      if (
+        global.sessionPreferences.muted(session.server, session.id) ||
+        global.sessionPreferences.muted(session.server, root)
+      )
+        return result
     }
 
     await Promise.allSettled([
