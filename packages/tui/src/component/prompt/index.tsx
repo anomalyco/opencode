@@ -1822,7 +1822,18 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => {
                 input = r
                 Object.assign(r, {
-                  getClipboardText: (text: string) => expandPastedTextPlaceholders(text, store.prompt.pasted),
+                  getClipboardText: (text: string) => {
+                    const range = r.getSelection()
+                    // A selection spanning other renderables is not indexed relative to this textarea.
+                    if (!range || text !== r.getSelectedText()) {
+                      return expandPastedTextPlaceholders(text, store.prompt.pasted)
+                    }
+                    const parts = store.prompt.pasted.flatMap(({ source, text }) => {
+                      if (source.start < range.start || source.end > range.end) return []
+                      return [{ start: source.start - range.start, end: source.end - range.start, text }]
+                    })
+                    return expandTrackedPastedText(text, parts, renderer.widthMethod)
+                  },
                 })
                 setInputTarget(r)
                 if (promptPartTypeId === 0) {
