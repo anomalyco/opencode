@@ -112,5 +112,5 @@ const builtins = [...GlobalFlag.BuiltIns, PrintLogs].map((global) => flag(global
 const tree = { builtins, root }
 
 const output = new URL("../../crates/cli/tests/fixtures/commands.json", import.meta.url).pathname
-await Bun.write(output, records(tree, ["builtins[]", "**.flags[]", "**.arguments[]", "**.commands[]"]))
+await Bun.write(output, records(tree, ["builtins[]", "**.commands[]"]))
 console.log(`commands: wrote ${output}`)
