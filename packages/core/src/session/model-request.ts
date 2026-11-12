@@ -124,7 +124,15 @@ export const baseTranscript = (input: {
         metadata: { experimental: { instructions: input.initial } },
       },
     ].filter((part) => part.text.length > 0),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    // Hooks read each stored message's metadata on the messages built from it; `prepare` strips it before the request.
+    messages: input.messages.flatMap((message) =>
+      toLLMMessages([message], input.model.ref, providerMetadataKey).map(
+        (item): SessionRequestMessage =>
+          message.metadata === undefined || item.id !== message.id
+            ? item
+            : Object.assign(item, { metadata: message.metadata }),
+      ),
+    ),
   }
 }
 

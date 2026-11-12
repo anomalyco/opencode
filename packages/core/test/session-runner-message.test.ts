@@ -48,9 +48,7 @@ describe("toLLMMessages", () => {
     })
     expect(toLLMMessages([completed], model)).toEqual([])
     expect(toLLMMessages([completed, notification], model)).toEqual([
-      Object.assign(Message.make({ id: notification.id, role: "user", content: notification.text }), {
-        metadata: notification.metadata,
-      }),
+      Message.make({ id: notification.id, role: "user", content: notification.text }),
     ])
   })
 
