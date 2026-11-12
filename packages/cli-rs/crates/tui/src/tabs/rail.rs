@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::model::{self, NEW_SESSION_TAB_TITLE, Tab};
 use super::pulse::{self, Pulse};
-use super::strip::{FADE_WIDTH, draw_chars, fade, feedback, indicator, paint_pulse, take_width};
+use super::strip::{FADE_WIDTH, MarkerFade, draw_chars, fade, feedback, indicator, paint_pulse, take_width};
 use super::{Status, Unread};
 use crate::frame::layout::SESSION_TABS_COMPACT_BREAKPOINT;
 use crate::prelude::*;
@@ -29,6 +29,7 @@ pub struct Rail {
     /// The last painted rows, for hit tests: `(y, height, session)`; the add row is `None`.
     rows: RefCell<Vec<(i32, i32, Option<String>)>>,
     pulses: RefCell<HashMap<(String, u8), Pulse>>,
+    fades: RefCell<HashMap<String, MarkerFade>>,
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
@@ -48,6 +49,7 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
             scroll: Cell::new(0),
             rows: RefCell::default(),
             pulses: RefCell::default(),
+            fades: RefCell::default(),
         },
     )
     .shrink(0.0)
@@ -80,7 +82,15 @@ pub fn animating(rail: &Custom<Rail>) -> bool {
 
 /// Drops the pulses while the rail is hidden, as its tabs unmount.
 pub fn forget(rail: &Custom<Rail>) {
-    rail.with(|rail| rail.pulses.borrow_mut().clear());
+    rail.with(|rail| {
+        rail.pulses.borrow_mut().clear();
+        rail.fades.borrow_mut().clear();
+    });
+}
+
+/// Feeds each painted tab's status to its unread marker at a store flush.
+pub fn observe(rail: &Custom<Rail>, tui: &Tui) {
+    rail.with(|rail| super::strip::observe_markers(&rail.fades, tui));
 }
 
 /// Turns the pulses' motion on or off (`TabPulse`'s `enabled`).
@@ -231,6 +241,7 @@ impl Component for Rail {
         let add_highlighted = new_tab || self.add_hovered;
         let mut rows = Vec::new();
         let mut pulses = self.pulses.borrow_mut();
+        let mut markers = self.fades.borrow_mut();
         let now = tui.app.now();
 
         if compact {
@@ -289,7 +300,13 @@ impl Component for Rail {
                 if runs { active_number } else { color }
             };
             let label = (index + 1).to_string();
-            let glyph_text = |idle: &str| indicator(&status, &label, idle, numbers, animations, now, tui.tabs.epoch());
+            let unread_glyph = feedback.unwrap_or(unread_color);
+            let marker = markers.entry(session.to_owned()).or_insert_with(|| MarkerFade::new(&status, unread_glyph));
+            marker.set(&status, unread_glyph, animations, now);
+            let faded = marker.color(&status, pulse_bg, theme.text.base, now);
+            let glyph_text = |idle: &str| {
+                indicator(&status, &label, idle, numbers, animations, faded.is_some(), now, tui.tabs.epoch())
+            };
             let unread = glyph_text("").1;
             rows.push((y, if compact { 1 } else { 2 }, Some(session.to_owned())));
             if compact {
@@ -320,10 +337,15 @@ impl Component for Rail {
                 painter.fill(0, y, width, 1, pulse_bg);
                 let idle = item.title.trim_start().chars().next().map_or("U".to_owned(), String::from);
                 let (glyph, _) = glyph_text(&idle);
+                // The compact `TabIndicator` takes `selected`, which keeps its marker in the selected color.
                 let color = if item.selected {
                     theme.text.base
                 } else if numbers {
                     number
+                } else if unread {
+                    unread_glyph
+                } else if let Some(color) = faded {
+                    color
                 } else {
                     feedback.unwrap_or(if runs { active_number } else { foreground })
                 };
@@ -433,10 +455,15 @@ impl Component for Rail {
             let sweep = title_pulse.level(width as usize);
             let number = if sweep == 0.0 { number } else { tint(number, theme.text.base, 0.35 * sweep) };
             let (glyph, _) = glyph_text("");
-            let indicator_color = if numbers || item.selected {
+            // The full rail's `TabIndicator` takes no `selected`, so a selected tab's marker fades too.
+            let indicator_color = if numbers {
+                number
+            } else if let Some(color) = faded {
+                color
+            } else if item.selected {
                 number
             } else if unread {
-                feedback.unwrap_or(unread_color)
+                unread_glyph
             } else {
                 number
             };
@@ -501,6 +528,11 @@ impl Component for Rail {
             crate::frame::wake(&tui);
         }
         drop(pulses);
+        markers.retain(|session, _| items.iter().any(|item| item.tab.session_id == *session));
+        if markers.values().any(|marker| marker.moving(now)) {
+            crate::frame::wake_markers(&tui);
+        }
+        drop(markers);
 
         // One slot, two states: a muted "+ New session" that becomes the active new-session tab.
         let y = offset + items.len() as i32 * stride;
