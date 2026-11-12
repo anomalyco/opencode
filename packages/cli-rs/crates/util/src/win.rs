@@ -1,6 +1,6 @@
 //! Win32 calls that std does not cover: whether a process is alive, ending one, pointing stdin at the console, and
 //! ignoring Ctrl+C while a child runs; the executable, times and memory of a process, and the OS release; shared
-//! libraries; stderr on a pipe.
+//! libraries; stderr on a pipe; console modes and waits.
 //! Windows only.
 
 #![allow(unsafe_code)]
@@ -8,13 +8,20 @@
 use std::ffi::{CStr, OsStr, OsString, c_void};
 use std::io;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
-use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, IntoRawHandle, OwnedHandle, RawHandle};
+use std::os::windows::io::{
+    AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, IntoRawHandle, OwnedHandle, RawHandle,
+};
 use std::path::PathBuf;
 use std::ptr::NonNull;
+use std::time::Duration;
 use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
-use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, FILETIME, FreeLibrary, STILL_ACTIVE};
+use windows_sys::Win32::Foundation::{
+    ERROR_ACCESS_DENIED, FILETIME, FreeLibrary, STILL_ACTIVE, WAIT_FAILED, WAIT_OBJECT_0,
+};
 use windows_sys::Win32::System::Console::{
-    CTRL_BREAK_EVENT, CTRL_C_EVENT, GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler,
+    CTRL_BREAK_EVENT, CTRL_C_EVENT, ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT, ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT,
+    ENABLE_PROCESSED_OUTPUT, ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING, ENABLE_WINDOW_INPUT,
+    GetConsoleMode, GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler, SetConsoleMode,
     SetStdHandle,
 };
 use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
@@ -22,8 +29,9 @@ use windows_sys::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
 use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows_sys::Win32::System::SystemInformation::{GetSystemTimeAsFileTime, OSVERSIONINFOW};
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_ACCESS_RIGHTS, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, QueryFullProcessImageNameW, TerminateProcess,
+    GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, INFINITE, OpenProcess, PROCESS_ACCESS_RIGHTS,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, QueryFullProcessImageNameW,
+    TerminateProcess, WaitForSingleObject,
 };
 use windows_sys::core::BOOL;
 
@@ -235,6 +243,48 @@ unsafe extern "system" fn interrupted(event: u32) -> BOOL {
     BOOL::from(event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT)
 }
 
+/// The console mode of `handle`, or `None` when it is not a console (libuv's test for a TTY).
+pub fn console_mode(handle: impl AsHandle) -> Option<u32> {
+    let mut mode = 0;
+    // SAFETY: plain call; an invalid or non-console handle makes it fail.
+    (unsafe { GetConsoleMode(handle.as_handle().as_raw_handle(), &mut mode) } != 0).then_some(mode)
+}
+
+pub fn set_console_mode(handle: impl AsHandle, mode: u32) -> io::Result<()> {
+    // SAFETY: plain call; an invalid or non-console handle makes it fail.
+    if unsafe { SetConsoleMode(handle.as_handle().as_raw_handle(), mode) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// The raw input mode from a saved one, as libuv's `UV_TTY_MODE_RAW` takes it but with the console turning keys
+/// into escape sequences: no line editing, echo, Ctrl+C handling or mouse records; window size records on. Quick
+/// Edit and insert mode stay as they were.
+pub fn raw_input_mode(saved: u32) -> u32 {
+    (saved & !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_MOUSE_INPUT))
+        | ENABLE_WINDOW_INPUT
+        | ENABLE_VIRTUAL_TERMINAL_INPUT
+}
+
+/// The output mode with escape sequences interpreted, as libuv sets it on a console it writes to. `\n` keeps its
+/// carriage return: there is no `DISABLE_NEWLINE_AUTO_RETURN`.
+pub fn vt_output_mode(saved: u32) -> u32 {
+    saved | ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING
+}
+
+/// Waits up to `timeout` (forever with `None`) for `handle` to be signaled, as console input is while it holds
+/// records. Consumes nothing.
+pub fn wait_handle(handle: impl AsHandle, timeout: Option<Duration>) -> io::Result<bool> {
+    let millis =
+        timeout.map_or(INFINITE, |timeout| timeout.as_nanos().div_ceil(1_000_000).min(u128::from(INFINITE - 1)) as u32);
+    // SAFETY: plain call; an invalid handle makes it fail.
+    match unsafe { WaitForSingleObject(handle.as_handle().as_raw_handle(), millis) } {
+        WAIT_FAILED => Err(io::Error::last_os_error()),
+        result => Ok(result == WAIT_OBJECT_0),
+    }
+}
+
 fn open(pid: u32, access: PROCESS_ACCESS_RIGHTS) -> io::Result<OwnedHandle> {
     // SAFETY: plain call; a null result is an error.
     let handle = unsafe { OpenProcess(access, 0, pid) };
@@ -268,6 +318,27 @@ mod tests {
         let handled = |event| unsafe { interrupted(event) };
         assert_eq!([CTRL_C_EVENT, CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT].map(handled), [1, 1, 0]);
         ignore_interrupts().unwrap();
+    }
+
+    #[test]
+    fn console_modes() {
+        let cooked = ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_MOUSE_INPUT | 0x40 | 0x80;
+        // Quick Edit (0x40) and extended flags (0x80) stay as they were.
+        assert_eq!(raw_input_mode(cooked), ENABLE_WINDOW_INPUT | ENABLE_VIRTUAL_TERMINAL_INPUT | 0x40 | 0x80);
+        assert_eq!(vt_output_mode(0), ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+        let file = std::fs::File::open(std::env::current_exe().unwrap()).unwrap();
+        assert_eq!(console_mode(&file), None);
+        assert!(set_console_mode(&file, 0).is_err());
+    }
+
+    #[test]
+    fn wait_handle_times_out_and_sees_a_signal() {
+        let mut child = Command::new("ping").args(["-n", "60", "127.0.0.1"]).stdout(Stdio::null()).spawn().unwrap();
+        // A process handle is signaled once the process exits.
+        assert!(!wait_handle(&child, Some(Duration::from_millis(10))).unwrap());
+        child.kill().unwrap();
+        assert!(wait_handle(&child, None).unwrap());
+        child.wait().unwrap();
     }
 
     #[test]
