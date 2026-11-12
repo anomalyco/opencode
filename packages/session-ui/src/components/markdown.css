@@ -45,7 +45,6 @@
 
 [data-component="markdown"] {
   --markdown-inline-code-path-color: var(--v2-text-text-code-path);
-  --markdown-inline-code-color: var(--v2-text-text-code-accent);
   --markdown-inline-code-bg-mix: 8%;
   --markdown-shell-code-background: var(--v2-background-bg-layer-02);
   --markdown-shell-code-border: var(--v2-border-border-muted);
@@ -450,11 +449,17 @@
       background-color 200ms ease-out;
   }
 
-  a.external-link > code[data-inline-code-kind="url"] {
-    color: var(--markdown-inline-code-color);
+  /* Code inside a link reads as part of its label, so it takes the link's colour and hover. */
+  a code {
+    color: inherit;
+    padding: 0;
+    border-radius: 0;
     background: none;
+  }
+
+  a.external-link > code[data-inline-code-kind="url"] {
     text-decoration: underline;
-    text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-color) 25%, transparent);
+    text-decoration-color: color-mix(in oklch, currentColor 25%, transparent);
     text-underline-offset: 2px;
   }
 
