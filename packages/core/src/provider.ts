@@ -88,6 +88,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/fireworks", () => import("@opencode/ai/providers/fireworks")],
   ["@opencode/ai/providers/fireworks/embeddings", () => import("@opencode/ai/providers/fireworks/embeddings")],
   ["@opencode/ai/providers/google", () => import("@opencode/ai/providers/google")],
+  ["@opencode/ai/providers/google/decisions", () => import("@opencode/ai/providers/google/decisions")],
   ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
   ["@opencode/ai/providers/google/embeddings", () => import("@opencode/ai/providers/google/embeddings")],
   ["@opencode/ai/providers/google/images", () => import("@opencode/ai/providers/google/images")],

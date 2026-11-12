@@ -1,7 +1,8 @@
 // The stage's resources, read from the environment. Deployed Workers (services/data) get them as bindings, which
 // nodejs_compat copies into process.env; scripts on your machine read your exported variables. Each value is read
 // when used, so importing this module never touches the environment.
-const ACCOUNT_ID = "15d29c8639fd3733b1b5486a2acfd968"
+const PRODUCTION_ACCOUNT_ID = "15d29c8639fd3733b1b5486a2acfd968"
+const DEV_ACCOUNT_ID = "d8e944f537ceef3f06a5bd3aec1d7a53"
 
 function required(name: string) {
   const value = process.env[name]
@@ -36,7 +37,9 @@ export const Resource = {
     },
   },
   R2Sql: {
-    accountId: ACCOUNT_ID,
+    get accountId() {
+      return stage() === "dev" ? (process.env.R2_SQL_ACCOUNT_ID ?? DEV_ACCOUNT_ID) : PRODUCTION_ACCOUNT_ID
+    },
     namespace: "inference",
     table: "generation",
     get bucket() {

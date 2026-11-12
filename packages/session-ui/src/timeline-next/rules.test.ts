@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets, type TimelineDetail } from "../timeline/detail"
+import { toolEvent } from "./events"
 import {
   contentGroup,
   contentOpens,
@@ -12,16 +13,21 @@ import {
   toolStopped,
   userShellOpens,
 } from "./rules"
+import { timelineStatus } from "./status"
 
 const preset = (id: string) => timelinePresets.find((item) => item.id === id)!.value
 
 const custom = (overrides: Partial<TimelineDetail>): TimelineDetail => ({ ...preset("compact"), ...overrides })
 
-const tool = (name: string, input: { [key: string]: string | boolean } = {}): SessionMessageAssistantTool => ({
+const tool = (
+  name: string,
+  input: { [key: string]: string | boolean } = {},
+  metadata: { [key: string]: string } = {},
+): SessionMessageAssistantTool => ({
   id: name,
   type: "tool",
   name,
-  state: { status: "completed", input, content: [{ type: "text", text: "" }], metadata: {} },
+  state: { status: "completed", input, content: [{ type: "text", text: "" }], metadata },
   time: { created: 0 },
 })
 
@@ -47,6 +53,21 @@ const report = (source: "shell" | "subagent", state = "completed") =>
   }) satisfies SessionMessageInfo
 
 describe("starting work that runs on follows its own setting", () => {
+  test("a subagent launch leaves the parent working unless approval is pending", () => {
+    const content = [{ ...tool("subagent"), state: { status: "running" as const, input: {}, metadata: {} } }]
+
+    expect(timelineStatus({ content })).toBe("working")
+    expect(timelineStatus({ content, blocked: "approval" })).toBe("waitingApproval")
+  })
+
+  test("a failed subagent launch says Started; a stored foreground result says Ran", () => {
+    expect(
+      toolEvent(errored("subagent", { type: "ToolExecutionError", message: "Failed to prompt subagent" })),
+    ).toMatchObject({ verb: "started", failed: true })
+    expect(toolEvent(tool("subagent", { background: true }))).toMatchObject({ verb: "started" })
+    expect(toolEvent(tool("subagent", {}, { status: "completed" }))).toMatchObject({ verb: "ran", failed: false })
+  })
+
   test("a background shell joins the activity group where shells are grouped, and stands alone where separate", () => {
     expect(contentGroup(preset("compact"), backgroundShell, new Set())).toBe("context")
     expect(contentGroup(preset("everything"), backgroundShell, new Set())).toBe("events")

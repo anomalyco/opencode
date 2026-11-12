@@ -96,9 +96,9 @@ export function newSessionLocation(page: Page) {
   return page.locator('[data-component="new-session"] [data-action="prompt-project"]')
 }
 
-// The new-session trigger that shows the draft's worktree or branch, and opens the project's worktree step.
-export function newSessionWorktree(page: Page) {
-  return page.locator('[data-component="new-session"] [data-action="prompt-worktree"]')
+// The new-session branch chip for the selected branch. It opens the project's worktree step.
+export function newSessionBranch(page: Page) {
+  return page.locator('[data-component="new-session"] [data-action="prompt-branch"]')
 }
 
 export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
@@ -148,10 +148,9 @@ export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { dr
   await page.goto(draftHref(draftID))
   const editor = page.locator('[data-component="composer-editor"]')
   await expect(editor).toBeVisible({ timeout: APP_READY_TIMEOUT })
-  await newSessionWorktree(page).click()
+  await newSessionBranch(page).click()
   await expect(page.getByRole("combobox", { name: "Search worktrees", exact: true })).toBeFocused()
   await page.getByRole("option", { name: /^New worktree/ }).click()
-  await expect(newSessionWorktree(page)).toContainText("New worktree")
   await expect(editor).toBeEditable()
 
   return { ...workspace, draftID, editor, worktree, calls, worktreeRequests, creates, prompts }
