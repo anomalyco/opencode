@@ -14,7 +14,7 @@ import {
   writeWorkerConfig,
 } from "@cloudflare/build-output-utils"
 import { resolveAndParseConfig } from "@cloudflare/config"
-import { mediaFile } from "../src/lib/media"
+import { inBucket } from "../src/lib/media"
 import { stageHeaders } from "../src/lib/noindex"
 import { retainAssets } from "./retain-assets"
 
@@ -55,15 +55,13 @@ await writeRootConfig(
   { isPreview: false, mode },
 )
 
-// Heavy media is never a Worker asset; it is served from the files bucket (src/lib/media.ts). The link
-// videos script/og.ts writes to og/ (og:video, under 100 kB each) are the exception: they ship with the
-// cards that name them.
+// Heavy media is never a Worker asset; it is served from the files bucket (src/lib/media.ts).
 const assets = path.join(root, "dist", "assets")
 const output = path.join(root, ".output", "public")
 await rm(assets, { recursive: true, force: true })
 await cp(output, assets, {
   recursive: true,
-  filter: (file) => !mediaFile.test(file) || path.relative(output, file).startsWith(`og${path.sep}`),
+  filter: (file) => !inBucket(path.relative(output, file)),
 })
 const shipped = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: assets, dot: true }))
 // Every opencode.json and V1 TUI config names these as its $schema; /openapi.json is the protocol's.
