@@ -225,9 +225,12 @@ function createSync() {
     return entry.promise
   }
   return {
-    run(key: string, load: () => Promise<void>) {
+    run(key: string, load: () => Promise<void>, onCacheHit?: () => void) {
       const active = state.get(key)
-      if (active === true) return Promise.resolve()
+      if (active === true) {
+        onCacheHit?.()
+        return Promise.resolve()
+      }
       if (!active) return start(key, load)
       if (!active.invalidated) return active.promise
       return start(key, load, active.promise)
@@ -1823,43 +1826,47 @@ export function createData(config: CreateDataInput) {
           const position = messageIndex.get(sessionID)?.get(messageID)
           return position === undefined ? undefined : messages?.[position]
         },
-        sync(sessionID: string) {
-          return sync.run(`session.message:${sessionID}`, async () => {
-            const started = deletionEpoch
-            const response = await api()
-              .message.list({
-                sessionID,
-                limit: config.initialMessageLimit?.() ?? messagePageLimit,
-                order: "desc",
+        sync(sessionID: string, onCacheHit?: () => void) {
+          return sync.run(
+            `session.message:${sessionID}`,
+            async () => {
+              const started = deletionEpoch
+              const response = await api()
+                .message.list({
+                  sessionID,
+                  limit: config.initialMessageLimit?.() ?? messagePageLimit,
+                  order: "desc",
+                })
+                .catch(evictMissing)
+              if ((deletedAt.get(sessionID) ?? 0) > started) return
+              const fetched = response.data.toReversed().map(stored)
+              // Same protection as the pending sync: a re-fetch racing an
+              // admission must not wipe its local transcript row.
+              const ids = new Set(fetched.map((item) => item.id))
+              const admitted = new Set(
+                (store.session.pending[sessionID] ?? []).flatMap((item) =>
+                  item.type === "user" || item.type === "synthetic" ? [item.id] : [],
+                ),
+              )
+              const local = (store.session.message[sessionID] ?? []).filter(
+                (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
+              )
+              const messages = local.length === 0 ? fetched : [...fetched, ...local]
+              // The transcript only holds delivered input, so a pending row it contains missed its
+              // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
+              const delivered = [...admitted].filter((id) => ids.has(id))
+              batch(() => {
+                delivered.forEach((id) => {
+                  outbox.delete(id)
+                  removePending(sessionID, id)
+                })
+                messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
+                setStore("session", "message", sessionID, reconcile(messages))
+                setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
               })
-              .catch(evictMissing)
-            if ((deletedAt.get(sessionID) ?? 0) > started) return
-            const fetched = response.data.toReversed().map(stored)
-            // Same protection as the pending sync: a re-fetch racing an
-            // admission must not wipe its local transcript row.
-            const ids = new Set(fetched.map((item) => item.id))
-            const admitted = new Set(
-              (store.session.pending[sessionID] ?? []).flatMap((item) =>
-                item.type === "user" || item.type === "synthetic" ? [item.id] : [],
-              ),
-            )
-            const local = (store.session.message[sessionID] ?? []).filter(
-              (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
-            )
-            const messages = local.length === 0 ? fetched : [...fetched, ...local]
-            // The transcript only holds delivered input, so a pending row it contains missed its
-            // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
-            const delivered = [...admitted].filter((id) => ids.has(id))
-            batch(() => {
-              delivered.forEach((id) => {
-                outbox.delete(id)
-                removePending(sessionID, id)
-              })
-              messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
-              setStore("session", "message", sessionID, reconcile(messages))
-              setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
-            })
-          })
+            },
+            onCacheHit,
+          )
         },
         more(sessionID: string) {
           return store.session.messageCursor[sessionID] !== undefined
