@@ -10,9 +10,9 @@ export async function renderMermaidSvg(source: string) {
     // Pele sizes boxes from measured label widths, so it must measure the font the CSS applies.
     fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans"),
     fontSize: 14,
-    // Only scheme-less and file: paths survive, so remote images stay off and local ones load from disk.
+    // https images load directly; scheme-less and file: paths load from disk like Markdown images.
     images: true,
-    imageSchemes: ["file"],
+    imageSchemes: ["https", "file"],
     linkRel: "noopener noreferrer",
   })
 

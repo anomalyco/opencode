@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from "bun:test"
-import { createMarkdownImages, localImagePath, localLinkPath, markLocalSvgImages } from "./markdown-image"
+import { createMarkdownImages, localImagePath, localLinkPath, prepareSvgImages } from "./markdown-image"
 import { renderMermaidSvg } from "./markdown-mermaid"
 
 test.each([
@@ -107,7 +107,7 @@ describe("createMarkdownImages", () => {
     await expect(nativeFetch(url!)).rejects.toThrow()
   })
 
-  test("loads local mermaid image nodes from disk and leaves remote ones out", async () => {
+  test("loads local mermaid images from disk, keeps https ones and strips other hrefs", async () => {
     const reads: string[] = []
 
     const images = createMarkdownImages(async (path) => {
@@ -123,18 +123,19 @@ describe("createMarkdownImages", () => {
           "flowchart TB",
           '  a@{ img: "assets/image.png", label: "local", w: 90, h: 53 }',
           '  b@{ img: "https://example.com/remote.png", label: "remote", w: 60, h: 60 }',
-          "  a --> b",
+          '  c@{ img: "file://evil-host/share/a.png", label: "unc", w: 60, h: 60 }',
+          "  a --> b --> c",
         ].join("\n"),
       )) ?? ""
     document.body.replaceChildren(root)
 
-    markLocalSvgImages(root)
+    prepareSvgImages(root)
     images.update(root)
     await settle()
 
-    const nodes = Array.from(root.querySelectorAll("image"))
+    const hrefs = Array.from(root.querySelectorAll("image"), (node) => node.getAttribute("href"))
     expect(reads).toEqual(["assets/image.png"])
-    expect(nodes.map((node) => node.getAttribute("href")?.slice(0, 5))).toEqual(["blob:"])
+    expect(hrefs).toEqual([expect.stringMatching(/^blob:/), "https://example.com/remote.png", null])
     images.dispose()
   })
 })

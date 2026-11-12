@@ -70,11 +70,14 @@ function decodePath(value: string) {
   }
 }
 
-// Mermaid SVG skips the sanitizer: strip <image> hrefs and load local ones like Markdown images.
-export function markLocalSvgImages(root: Element) {
+// Mermaid SVG skips the sanitizer: only https hrefs stay live, local paths load like Markdown images.
+export function prepareSvgImages(root: Element) {
   root.querySelectorAll("image").forEach((image) => {
-    const path = localImagePath(image.getAttribute("href") ?? "")
+    const href = image.getAttribute("href") ?? ""
+
+    if (/^https:\/\//i.test(href)) return
     image.removeAttribute("href")
+    const path = localImagePath(href)
 
     if (path) image.setAttribute("data-local-image", path)
   })

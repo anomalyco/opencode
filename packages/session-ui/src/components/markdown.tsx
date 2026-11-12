@@ -67,7 +67,7 @@ import {
   type ReadMarkdownImage,
   type MarkdownLocalFileExists,
 } from "../context/markdown"
-import { createMarkdownImages, markLocalSvgImages } from "./markdown-image"
+import { createMarkdownImages, prepareSvgImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, sessionReferenceClipboardText, setupSessionLinks } from "./markdown-session-links"
@@ -395,7 +395,7 @@ function showCodeDecoration(
 
   if (existing && view.svg === previous.svg) return
   diagram.innerHTML = view.svg ?? ""
-  markLocalSvgImages(diagram)
+  prepareSvgImages(diagram)
 
   // The diagram arrives after the render pass that loads images, so the component loads its images now.
   if (diagram.querySelector("[data-local-image]"))
