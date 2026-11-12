@@ -6,6 +6,7 @@ import type { useKeymap } from "@opentui/keymap/solid"
 import { resolve } from "../../../../tui/src/config"
 import { TuiKeybind } from "../../../../tui/src/config/keybind"
 import { Keymap } from "../../../../tui/src/context/keymap"
+import { records } from "../../lib/records"
 
 type Stroke = { name: string; ctrl: boolean; shift: boolean; meta: boolean; super: boolean; hyper: boolean }
 type Step = string | number
@@ -188,7 +189,7 @@ const results = []
 for (const scenario of scenarios) results.push({ ...scenario, cases: await run(scenario) })
 
 const file = new URL("../../fixtures/U.2/keymap.json", import.meta.url).pathname
-await Bun.write(file, JSON.stringify({ scenarios: results, errors }, null, 1) + "\n")
+await Bun.write(file, records({ scenarios: results, errors }, ["scenarios[].cases[]", "errors[]"]))
 console.log(
   `keymap: ${results.reduce((total, scenario) => total + scenario.cases.length, 0)} cases, ${errors.length} errors`,
 )

@@ -10,6 +10,7 @@ import {
   webSearchProviderLabel,
 } from "../../../tui/src/util/tool-display.ts"
 import { canonicalToolPart } from "../../../tui/test/mini/fixture/tool-part.ts"
+import { records } from "../lib/records"
 
 type State = Parameters<typeof canonicalToolPart>[1]
 
@@ -217,5 +218,5 @@ const helpers = {
   })),
 }
 
-await Bun.write(output, JSON.stringify({ parts, helpers }, null, 2) + "\n")
+await Bun.write(output, records({ parts, helpers }, ["parts[]", "helpers.*[]"]))
 console.log(`U.5: wrote ${parts.length} parts to ${output}`)

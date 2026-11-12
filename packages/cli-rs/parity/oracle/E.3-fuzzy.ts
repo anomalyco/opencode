@@ -6,6 +6,7 @@
 import fuzzysort from "../../../tui/node_modules/fuzzysort"
 import { Definitions } from "../../../tui/src/config/keybind"
 import { stripFileLineRange } from "../../../tui/src/prompt/parse"
+import { records } from "../lib/records"
 
 type Option = { display: string; description?: string }
 const names = Object.entries(Definitions)
@@ -41,5 +42,5 @@ const cases = (["command", "reference"] as const).flatMap((mode) =>
   queries.map((query) => ({ mode, query, results: go(mode, query) })),
 )
 const path = new URL("../fixtures/E.3/fuzzy.json", import.meta.url).pathname
-await Bun.write(path, JSON.stringify({ corpus, cases }, null, 1) + "\n")
+await Bun.write(path, records({ corpus, cases }, ["corpus.*[]", "cases[]"]))
 console.log(`oracle: E.3/fuzzy ${cases.length} cases`)
