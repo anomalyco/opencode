@@ -558,7 +558,7 @@ pub fn update(tui: &Tui, change: impl FnOnce(&mut Value) + Send + 'static) {
 }
 
 /// [`update`], then `done` once the write landed or failed.
-fn write(tui: &Tui, change: impl FnOnce(&mut Value) + Send + 'static, done: impl FnOnce(&Tui) + 'static) {
+pub(super) fn write(tui: &Tui, change: impl FnOnce(&mut Value) + Send + 'static, done: impl FnOnce(&Tui) + 'static) {
     let live = &tui.settings;
     let (Some(config), Some(serial)) = (live.config.clone(), live.serial.as_ref()) else {
         let mut value = live.info().to_value();

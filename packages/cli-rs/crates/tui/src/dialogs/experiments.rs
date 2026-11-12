@@ -38,15 +38,27 @@ fn options(tui: &Tui) -> Vec<SelectOption<&'static str>> {
         .collect()
 }
 
-/// Flips experiment `id`. All experiments are booleans, so either direction toggles.
-pub fn toggle(tui: &Tui, id: &'static str) {
+/// Flips experiment `id`. All experiments are booleans, so either direction toggles. While `saving` holds, the
+/// previous change is still being written and this one is ignored, as in TS.
+fn toggle(tui: &Tui, saving: &Rc<Cell<bool>>, id: &'static str) {
+    if saving.get() {
+        return;
+    }
     let next = !tui.settings.experiment(id);
-    settings::update(tui, move |draft| set_path(draft, &["experimental", id], Value::Bool(next)));
+    saving.set(true);
+    let saving = saving.clone();
+    settings::write(
+        tui,
+        move |draft| set_path(draft, &["experimental", id], Value::Bool(next)),
+        move |_| saving.set(false),
+    );
 }
 
 /// `DialogExperiments`, in place of any open dialog.
 pub fn show(tui: &Tui) {
     let weak = tui.weak();
+    // Outside the build: a build in a new theme keeps ignoring changes until the write ends.
+    let saving = Rc::new(Cell::new(false));
     tui.dialogs.replace(
         bind!(weak, |tui, cx| {
             let any = !EXPERIMENTS.is_empty();
@@ -57,14 +69,17 @@ pub fn show(tui: &Tui) {
                 let selected = selected.clone();
                 move |option| *selected.borrow_mut() = Some(option.value)
             }));
-            props.on_select = Some(Rc::new(bind!(weak, |tui, option| toggle(&tui, option.value))));
+            props.on_select = Some(Rc::new({
+                let saving = saving.clone();
+                bind!(weak, |tui, option| toggle(&tui, &saving, option.value))
+            }));
             if any {
                 let bind = |key: &str, title: &str| {
-                    let (weak, selected) = (weak.clone(), selected.clone());
+                    let (weak, selected, saving) = (weak.clone(), selected.clone(), saving.clone());
                     TuiCommand::inline(key, move |_, _| {
                         let id = *selected.borrow();
                         if let (Some(tui), Some(id)) = (weak.upgrade(), id) {
-                            toggle(&tui, id);
+                            toggle(&tui, &saving, id);
                         }
                     })
                     .title(title)
