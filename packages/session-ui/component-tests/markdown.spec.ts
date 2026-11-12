@@ -330,6 +330,51 @@ story("shows a stable GitHub mark without changing link text or other sites", as
   }
 })
 
+for (const mode of ["cached", "streamed"] as const) {
+  story(`keeps the whole label of a link that contains inline code (${mode})`, async ({ page }) => {
+    await page.evaluate(
+      async ({ fixture, mode }) => {
+        const { mountMarkdown } = await import(fixture)
+        await mountMarkdown({
+          text: [
+            "Console [removes `providerCost` from managed standard and Go events](https://github.com/anomalyco/opencode/pull/1) **before** [writing them to the log queue](https://github.com/anomalyco/opencode/pull/2).",
+            "[`providerCost`](https://github.com/anomalyco/opencode/pull/3) and [`https://example.com/code`](https://example.com/target)",
+          ].join("\n\n"),
+          cached: mode === "cached",
+          streaming: mode === "streamed",
+        })
+      },
+      { fixture, mode },
+    )
+
+    const harness = page.getByTestId("markdown-fixture")
+    const markdown = harness.locator('[data-component="markdown"]')
+
+    if (mode === "streamed") await harness.getByLabel("Streaming").uncheck()
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+
+    const mixed = markdown.getByRole("link", { name: "removes providerCost from managed standard and Go events" })
+    await expect(mixed).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/1")
+    await expect(mixed.locator("code")).toHaveText("providerCost")
+    await expect(mixed.locator(".markdown-link-favicon[data-github]")).toHaveCount(1)
+    await expect(markdown.getByRole("link", { name: "writing them to the log queue" })).toHaveAttribute(
+      "href",
+      "https://github.com/anomalyco/opencode/pull/2",
+    )
+    await expect(markdown.locator("p").first()).toHaveText(
+      "Console removes providerCost from managed standard and Go events before writing them to the log queue.",
+    )
+
+    const code = markdown.getByRole("link", { name: "providerCost", exact: true })
+    await expect(code).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/3")
+    await expect(code.locator("code")).toHaveText("providerCost")
+    await expect(markdown.getByRole("link", { name: "https://example.com/code" })).toHaveAttribute(
+      "href",
+      "https://example.com/target",
+    )
+  })
+}
+
 story("keeps favicon space stable across loading and failure without fetching private hosts", async ({ page }) => {
   const requested: string[] = []
   let release: () => void = () => undefined
