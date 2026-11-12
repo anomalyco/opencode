@@ -173,7 +173,9 @@ pub fn tool_images(tool: &SessionMessageAssistantTool) -> Vec<String> {
         .filter_map(|item| match item {
             ToolContent::File(file)
                 if file.mime.starts_with("image/")
-                    && (file.uri.starts_with("data:image/") || media_hash(&file.uri).is_some()) =>
+                    // An emptied `data:` URI is a payload the store dropped while previews were off.
+                    && ((file.uri.starts_with("data:image/") && !file.uri.ends_with(','))
+                        || media_hash(&file.uri).is_some()) =>
             {
                 Some(file.uri.clone())
             }

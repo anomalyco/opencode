@@ -105,15 +105,30 @@ pub fn cursor(config: &Resolved) -> (opentui::native::CursorStyle, bool) {
     (style, config.cursor_blinking)
 }
 
-/// What TS effects redo when the config changes: `renderer.useMouse = config.data.mouse`, and the title effect,
-/// which sets the route's title again once `terminal.title` is back on.
+/// Tool-result images stay in the store only while the transcript can show them (`omitToolFileData` in
+/// `context/data.tsx`): live tool events carry screenshots as inline base64.
+pub(crate) fn image_preview(info: &Info) -> bool {
+    info.session.as_ref().and_then(|session| session.image_preview) == Some(true)
+}
+
+/// What TS effects redo when the config changes: `renderer.useMouse = config.data.mouse`, the title effect,
+/// which sets the route's title again once `terminal.title` is back on, and the data context's image previews.
 fn install_effects(tui: &Rc<Tui>) {
     let mouse = Rc::new(Cell::new(tui.config().mouse));
     let title = Rc::new(Cell::new(title_enabled(&tui.config().info)));
+    let preview = Rc::new(Cell::new(image_preview(&tui.config().info)));
     tui.settings.on_change(move |tui| {
         let info = tui.settings.info();
         if !title.replace(title_enabled(&info)) && title.get() {
             crate::features::title::route_changed(tui);
+        }
+        let next = image_preview(&info);
+        if preview.replace(next) != next {
+            tui.data.set_omit_tool_file_data(!next);
+            // Turning previews on brings back the screenshots dropped while they were off.
+            if next {
+                tui.data.restore_files();
+            }
         }
         let next = info.mouse.unwrap_or(true);
         if mouse.replace(next) == next {

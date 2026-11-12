@@ -155,6 +155,33 @@ pub(crate) fn omit_file_data(content: &mut [ToolContent]) {
     }
 }
 
+/// A tool file whose `data:` payload [`omit_file_data`] emptied (`isDroppedFile`).
+fn is_dropped_file(item: &ToolContent) -> bool {
+    let ToolContent::File(file) = item else { return false };
+    file.uri.strip_prefix("data:").and_then(|rest| rest.strip_suffix(";base64,")) == Some(file.mime.as_str())
+}
+
+fn tool_content(tool: &SessionMessageAssistantTool) -> Option<&[ToolContent]> {
+    match &tool.state {
+        SessionMessageAssistantToolState::Completed(state) => Some(&state.content),
+        SessionMessageAssistantToolState::Error(state) => state.content.as_deref(),
+        _ => None,
+    }
+}
+
+fn has_dropped_file(tool: &SessionMessageAssistantTool) -> bool {
+    tool_content(tool).is_some_and(|content| content.iter().any(is_dropped_file))
+}
+
+/// `hasDroppedFileData`.
+fn has_dropped_file_data(message: &SessionMessageInfo) -> bool {
+    let SessionMessageInfo::Assistant(assistant) = message else { return false };
+    assistant
+        .content
+        .iter()
+        .any(|part| matches!(part, SessionMessageAssistantContentItem::Tool(tool) if has_dropped_file(tool)))
+}
+
 fn omit_message_file_data(message: &mut SessionMessageInfo) {
     let SessionMessageInfo::Assistant(assistant) = message else { return };
     for part in &mut assistant.content {
@@ -980,6 +1007,77 @@ impl Data {
 
     pub fn message_invalidate(&self, session: &SessionID) {
         self.write(|state| state.syncs.invalidate(&format!("session.message:{}", session.0)));
+    }
+
+    /// Follows a setting that changes while the client runs (`omitToolFileData` as a function): it applies to messages
+    /// and events stored from now on. Turning it off does not bring back dropped payloads; see [`Data::restore_files`].
+    pub fn set_omit_tool_file_data(&self, omit: bool) {
+        self.lock().omit_file_data = omit;
+    }
+
+    /// Re-reads every loaded message whose tool file data was dropped, for a client that starts showing tool files
+    /// (`message.restoreFiles`). Each session's messages are re-read one at a time, so many screenshots don't fan out
+    /// at once.
+    pub fn restore_files(&self) {
+        let sessions: Vec<(SessionID, Vec<SessionMessageID>)> = self.read(|state| {
+            state
+                .messages
+                .iter()
+                .filter_map(|(session, transcript)| {
+                    let ids: Vec<_> = transcript
+                        .items()
+                        .iter()
+                        .filter(|message| has_dropped_file_data(message))
+                        .map(|message| SessionMessageID(message.id().to_owned()))
+                        .collect();
+                    (!ids.is_empty()).then(|| (session.clone(), ids))
+                })
+                .collect()
+        });
+        for (session, ids) in sessions {
+            let data = self.clone();
+            self.runtime().spawn(async move {
+                for message in ids {
+                    if let Err(error) = data.restore_message_files(&session, message).await {
+                        data.refresh_failed(&error);
+                    }
+                }
+            });
+        }
+    }
+
+    /// Copies back only the emptied tool files: live events may have moved the message on since the server read it.
+    async fn restore_message_files(&self, session: &SessionID, message: SessionMessageID) -> Result<(), Error> {
+        let item = self
+            .client()
+            .session_message_get(&SessionMessageGetInput { session_id: session.clone(), message_id: message.clone() })
+            .await
+            .map_err(Error::new)?;
+        self.write(|state| {
+            let SessionMessageInfo::Assistant(fetched) = item else { return };
+            if state.omit_file_data {
+                return;
+            }
+            state.edit_assistant(session, &message, |assistant| {
+                for part in &mut assistant.content {
+                    let SessionMessageAssistantContentItem::Tool(tool) = part else { continue };
+                    if !has_dropped_file(tool) {
+                        continue;
+                    }
+                    let content = fetched.content.iter().rev().find_map(|other| match other {
+                        SessionMessageAssistantContentItem::Tool(other) if other.id == tool.id => Some(other),
+                        _ => None,
+                    });
+                    let Some(content) = content.and_then(tool_content) else { continue };
+                    match &mut tool.state {
+                        SessionMessageAssistantToolState::Completed(state) => state.content = content.to_vec(),
+                        SessionMessageAssistantToolState::Error(state) => state.content = Some(content.to_vec()),
+                        _ => {}
+                    }
+                }
+            });
+        });
+        Ok(())
     }
 
     /// Loads older pages (`message.loadMore`). Joins a load in flight; with `all`, it then
