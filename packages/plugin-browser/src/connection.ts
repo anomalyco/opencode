@@ -383,6 +383,8 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         agent: tool.agent,
         action: "browser",
         resources: [operation],
+        // "Always" approves this operation only, in core's saved approvals, never in the session rules the grant uses.
+        save: [operation],
         source: { type: "tool", messageID: tool.messageID, id: tool.id },
       })
     }),

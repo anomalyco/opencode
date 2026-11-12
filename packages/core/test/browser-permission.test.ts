@@ -14,6 +14,7 @@ import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Permission } from "@opencode/core/permission"
+import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Rpc } from "@opencode/core/rpc"
@@ -29,10 +30,10 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, KV.node, Session.node, LocationServiceMap.node]), [
-    Global.node.replace(tempGlobalLayer),
-    offlineModels,
-  ]),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, KV.node, PermissionSaved.node, Session.node, LocationServiceMap.node]),
+    [Global.node.replace(tempGlobalLayer), offlineModels],
+  ),
 )
 
 const grant = [
@@ -85,12 +86,13 @@ const setup = (config: object) =>
       const connectionID = crypto.randomUUID()
       const attached = Deferred.makeUnsafe<void>()
       attachments.set(connectionID, { sessionID, attached })
-      yield* rpc.attach({ sessionID, connectionID, version: 4 }).pipe(Effect.forkScoped)
+      const call = yield* rpc.attach({ sessionID, connectionID, version: 4 }).pipe(Effect.forkScoped)
       yield* Deferred.await(attached).pipe(Effect.timeout("10 seconds"))
       // One open tab, so operations that target a tab get past tab selection to the permission check.
       yield* rpc.state({ sessionID, connectionID, state: { tabs: [tab], focusedTabID: tab.id } })
+      return call
     })
-    yield* attach(session.id)
+    const attachment = yield* attach(session.id)
     const tools = yield* Context.get(context, Tool.Service).list()
     // Runs browser.<operation> as `agent` would, through the plugin's executor and the real permission service.
     const run = (operation: string, input: object, agent = "build", sessionID = session.id) => {
@@ -114,6 +116,8 @@ const setup = (config: object) =>
       session,
       commands,
       attach,
+      // The desktop closes the session's first attachment.
+      detach: Fiber.interrupt(attachment),
       run,
       permissions: (sessionID = session.id) => Effect.map(sessions.get(sessionID), (info) => info.permissions ?? []),
       call: (agent = "build", sessionID = session.id) => run("tabs.list", {}, agent, sessionID),
@@ -334,3 +338,86 @@ test("the plugin picks the same browser rule as core's permission evaluation", (
       expect(BrowserMachine.selectBrowserRule(slice, operation)).toBe(slice.includes(picked) ? picked : undefined)
     }
 })
+
+// The pending permission request for `operation`, once the call has asked.
+const asked = (permissions: Permission.Interface, operation: string) =>
+  permissions.list().pipe(
+    Effect.flatMap((requests) => {
+      const request = requests.find((item) => item.resources.includes(operation))
+      return request ? Effect.succeed(request) : Effect.fail("not asked yet")
+    }),
+    Effect.retry(Schedule.spaced("10 millis")),
+    Effect.timeout("5 seconds"),
+  )
+
+// Answers the prompt the call of `operation` raises with `reply` and returns the call's result.
+const answer = Effect.fnUntraced(function* (
+  browser: Effect.Success<ReturnType<typeof setup>>,
+  operation: string,
+  input: object,
+  reply: Permission.Reply,
+) {
+  const permissions = Context.get(browser.context, Permission.Service)
+  const call = yield* browser.run(operation, input).pipe(Effect.forkScoped)
+  const request = yield* asked(permissions, operation)
+  yield* permissions.reply({ requestID: request.id, reply })
+  // A plain rejection ends the step, so it surfaces as a defect.
+  return { request, exit: yield* Fiber.await(call) }
+})
+
+it.live("always for one browser operation stops its prompts, while other operations still prompt", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("*", "ask")] })
+    const permissions = Context.get(browser.context, Permission.Service)
+    const approved = yield* answer(browser, "tabs.list", {}, "always")
+    expect(approved.request.save).toEqual(["tabs.list"])
+    expect(browser.commands.count).toBe(1)
+
+    expect((yield* browser.call().pipe(Effect.timeout("5 seconds"))).output).toEqual({ tabs: [], focusedTabID: null })
+    expect(yield* permissions.list()).toEqual([])
+    expect(browser.commands.count).toBe(2)
+    const other = yield* answer(browser, "tabs.open", {}, "reject")
+    expect(other.request.resources).toEqual(["tabs.open"])
+    expect(browser.commands.count).toBe(2)
+  }),
+)
+
+it.live("a saved browser approval outlives detach and re-attach, and only covers its operation", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("*", "ask")] })
+    const permissions = Context.get(browser.context, Permission.Service)
+    yield* answer(browser, "tabs.list", {}, "always")
+
+    yield* browser.detach
+    yield* browser.permissions().pipe(
+      Effect.flatMap((rules) => (rules.length ? Effect.fail("grant not revoked yet") : Effect.void)),
+      Effect.retry(Schedule.spaced("10 millis")),
+      Effect.timeout("5 seconds"),
+    )
+    yield* browser.attach(browser.session.id)
+    expect(yield* browser.permissions()).toEqual([...grant])
+
+    expect((yield* browser.call().pipe(Effect.timeout("5 seconds"))).output).toEqual({ tabs: [], focusedTabID: null })
+    expect(yield* permissions.list()).toEqual([])
+    const other = yield* answer(browser, "tabs.open", {}, "reject")
+    expect(other.request.resources).toEqual(["tabs.open"])
+  }),
+)
+
+it.live("a configured deny that matches last refuses the call despite a saved approval", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({ permissions: [rule("*", "ask"), rule("tabs.open", "deny")] })
+    yield* answer(browser, "tabs.list", {}, "always")
+    const saved = yield* PermissionSaved.Service
+    const projectID = Context.get(browser.context, Location.Service).project.id
+    expect((yield* saved.list({ projectID })).map((item) => [item.action, item.resource])).toEqual([
+      ["browser", "tabs.list"],
+    ])
+    yield* saved.add({ projectID, action: "browser", resources: ["tabs.open"] })
+
+    expect((yield* browser.run("tabs.open", {}).pipe(Effect.flip)).message).toStartWith(
+      "[browser.denied] browser.tabs.open",
+    )
+    expect(browser.commands.count).toBe(1)
+  }),
+)
