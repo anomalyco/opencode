@@ -17,6 +17,7 @@ import {
 import { openFileLauncher, reviewTabs } from "../utils/side-panel"
 import { mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
+import { installSseTransport } from "../utils/sse-transport"
 import { fileNode, mockWorkspace, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 import { openWithDirection } from "../utils/direction"
@@ -2522,8 +2523,13 @@ test("the inbox waits for initial requests and orders attention by waiting age r
   await expect(inbox.getByRole("status")).toHaveCount(1)
 })
 
-test("the inbox shows requests already pending on idle child sessions before the app opened", async ({ page }) => {
+test("the inbox shows requests already pending on idle sessions before the app opened or reconnected", async ({
+  page,
+}) => {
   const permission = { id: "perm_idle_child", sessionID: "ses_idle_child_a", action: "shell", resources: ["build"] }
+  const permissions: unknown[] = [permission]
+  const sessionPermissions: Record<string, unknown[]> = { ses_idle_child_a: [permission] }
+  const transport = await installSseTransport(page, { server: SERVER })
 
   await mockWorkspace(page, {
     name: "InboxIdleRequests",
@@ -2532,15 +2538,22 @@ test("the inbox shows requests already pending on idle child sessions before the
       { id: "ses_idle_child_a", title: "Idle approval child", parentID: "ses_idle_root_a" },
       { id: "ses_idle_root_b", title: "Idle question root" },
       { id: "ses_idle_child_b", title: "Idle question child", parentID: "ses_idle_root_b" },
+      { id: "ses_idle_grandchild_b", title: "Idle question grandchild", parentID: "ses_idle_child_b" },
+      { id: "ses_idle_root_c", title: "Reconnected approval root" },
     ],
-    sessionStatus: { ses_idle_child_a: { type: "idle" }, ses_idle_child_b: { type: "idle" } },
+    sessionStatus: {
+      ses_idle_child_a: { type: "idle" },
+      ses_idle_child_b: { type: "idle" },
+      ses_idle_grandchild_b: { type: "idle" },
+      ses_idle_root_c: { type: "idle" },
+    },
     // The server lists a request both for its location and for its own session.
-    permissions: [permission],
-    sessionPermissions: { ses_idle_child_a: [permission] },
+    permissions,
+    sessionPermissions,
     forms: [
       {
         id: "form_idle_child",
-        sessionID: "ses_idle_child_b",
+        sessionID: "ses_idle_grandchild_b",
         title: "Choose a library",
         metadata: { kind: "question" },
         fields: [{ key: "library", type: "string", title: "Library" }],
@@ -2549,16 +2562,32 @@ test("the inbox shows requests already pending on idle child sessions before the
     seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
   })
 
-  await page.goto("/")
+  const requests = await holdRoute(page, /\/api\/permission\/request\?/)
 
-  const needs = page
-    .locator('[data-slot="sidebar-inbox"]')
+  await page.goto("/")
+  await requests.arrived
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+  await expect(inbox).toHaveAttribute("aria-busy", "true")
+  requests.release()
+
+  const needs = inbox
     .getByRole("group", { name: "Needs attention", exact: true })
     .locator('[data-slot="sidebar-inbox-item"]')
 
   await expect(needs.filter({ hasText: "Idle approval root" })).toHaveAttribute("data-status", "approval")
   await expect(needs.filter({ hasText: "Idle question root" })).toHaveAttribute("data-status", "input")
   await expect(needs).toHaveCount(2)
+  await expect(inbox).toHaveAttribute("aria-busy", "false")
+
+  const connection = await transport.waitForConnection()
+  const reconnected = { id: "perm_reconnected", sessionID: "ses_idle_root_c", action: "shell", resources: ["test"] }
+  await transport.close()
+  permissions.push(reconnected)
+  sessionPermissions.ses_idle_root_c = [reconnected]
+  await transport.waitForConnection({ after: connection.id })
+
+  await expect(needs.filter({ hasText: "Reconnected approval root" })).toHaveAttribute("data-status", "approval")
+  await expect(needs).toHaveCount(3)
 })
 
 test("an inactive tab shows attention once auto-accept gives up on its permission", async ({ page }) => {
