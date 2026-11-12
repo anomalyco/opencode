@@ -1,7 +1,7 @@
 //! External native plugins (P.4) in the real TUI: the sample plugin found in a `plugins` directory renders its
 //! fence in a transcript and its slot on the home screen, reloads when it is rebuilt, a panic shows as failed in
 //! the plugin manager while the TUI keeps running, and a major ABI mismatch is refused there with its reason.
-//! Config and state live in temp directories. The real TUI calls `external` from `opencode-rs` (`commands/default.rs`).
+//! Config and state live in temp directories. The real TUI calls `external` from `opencode-native` (`commands/default.rs`).
 
 use crate::support::{self, Fake, Harness, deref_harness};
 

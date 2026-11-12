@@ -123,7 +123,7 @@ the app until Ctrl+C.
 
 ## Root command
 
-`opencode-rs [directory] [-s id] [-c] [--server url]`:
+`opencode-native [directory] [-s id] [-c] [--server url]`:
 
 1. Enter `directory`, else stay in the inherited working directory (TS ignores `PWD` here).
 2. Resolve the server with `connect::resolve` (F.6, F.9), passing `on_start` for "Starting background

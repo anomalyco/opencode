@@ -1,4 +1,4 @@
-//! The opencode-rs binary.
+//! The opencode-native binary.
 
 mod args;
 mod askpass;

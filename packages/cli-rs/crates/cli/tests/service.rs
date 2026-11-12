@@ -1,4 +1,4 @@
-//! `service` and `pair` (C.8, C.9) against a fake TypeScript binary, run as the real `opencode-rs` in a temporary
+//! `service` and `pair` (C.8, C.9) against a fake TypeScript binary, run as the real `opencode-native` in a temporary
 //! `HOME` and XDG roots with `OPENCODE_CHANNEL=local`.
 //!
 //! The fake binary (`OPENCODE_TS_BIN`) answers the two commands the Rust client runs: `serve --service` starts a
@@ -89,7 +89,7 @@ esac
     }
 
     fn run(&self, args: &[&str], env: &[(&str, &str)]) -> Output {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_opencode-rs"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_opencode-native"));
         command
             .args(args)
             .env_clear()
@@ -107,7 +107,7 @@ esac
         for (name, value) in env {
             command.env(name, value);
         }
-        command.output().unwrap_or_else(|error| panic!("opencode-rs {args:?}: {error}"))
+        command.output().unwrap_or_else(|error| panic!("opencode-native {args:?}: {error}"))
     }
 
     fn log(&self) -> String {

@@ -3,7 +3,7 @@
 TypeScript: `opencode pair --remote` turns remote access on and then reads the route from the service config
 of its own build channel, so it always finds the route it just wrote.
 
-Rust: `opencode-rs pair --remote` turns remote access on by running the TS `opencode service set remote true`
+Rust: `opencode-native pair --remote` turns remote access on by running the TS `opencode service set remote true`
 (`opencode_service::delegate::enable_remote`). The TS binary writes the route into its own build channel's
 config. The Rust client then reads the config of its own channel (`OPENCODE_CHANNEL`, else `latest`). When the
 two channels differ, that config has no route, and the command polls until it fails after 3 minutes:

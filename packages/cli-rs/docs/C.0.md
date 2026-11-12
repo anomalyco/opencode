@@ -1,6 +1,6 @@
 # C.0: command tree
 
-The `opencode-rs` command line matches the TypeScript CLI's command tree (`packages/cli/src/commands/commands.ts`):
+The `opencode-native` command line matches the TypeScript CLI's command tree (`packages/cli/src/commands/commands.ts`):
 the same commands, aliases, arguments, flags, and descriptions, parsed with the same rules, and the same help,
 completion scripts, and usage errors, byte for byte.
 
@@ -51,7 +51,7 @@ The goldens in `crates/cli/tests/fixtures/cli` come from the TypeScript CLI (`sc
 - `--help` prints Effect CLI's help (`DESCRIPTION`, `USAGE`, `ARGUMENTS`, `FLAGS`, `GLOBAL FLAGS`,
   `SUBCOMMANDS`) in its colors, which show when stdout is a terminal or with `FORCE_COLOR`, and never with
   `NO_COLOR` or `TERM=dumb`.
-- `--version` prints `<name> v<version>`. The name is `OPENCODE_CLI_NAME`, else `opencode-rs`.
+- `--version` prints `<name> v<version>`. The name is `OPENCODE_CLI_NAME`, else `opencode-native`.
 - `--completions bash|zsh|fish|powershell` prints Effect CLI's static script (`src/completions.rs`); `sh` means
   bash and `pwsh` PowerShell.
 - A usage error prints the command's help to stdout and the `ERROR` section to stderr, and exits 1. Like Bun's

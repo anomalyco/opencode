@@ -1,6 +1,7 @@
 # cli-rs
 
-The Rust client, `opencode-rs`, on OpenTUI's Rust crates. The plan and decisions live outside this repository, in
+The OpenCode native CLI (command `opencode-native`), on OpenTUI's Rust crates. Rename only user-facing names
+(decision O-114); crates, this directory and `OPENCODE_RS_*` test variables keep their names. The plan and decisions live outside this repository, in
 `/home/simon/src/opendocs/oc-rust/plan.md` and `decisions.md`. The root `AGENTS.md` applies too.
 
 ## Running cargo

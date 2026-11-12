@@ -1,6 +1,6 @@
 # H.5: P-TUI, the simulation harness
 
-P-TUI runs the TS server in simulation mode and drives the TS TUI and `opencode-rs` through the same steps over
+P-TUI runs the TS server in simulation mode and drives the TS TUI and `opencode-native` through the same steps over
 their `OPENCODE_DRIVE` UI endpoints (H.4). The simulated provider answers every model call from a backend driver
 in the harness. At each checkpoint the runner captures both screens with `ui.capture` and compares them cell by
 cell with H.2's rules: the same cell format, the same masks, and the same deviation files. Writes to the server
@@ -10,7 +10,7 @@ are compared as H.2 compares them (P-REQ).
 bun run --cwd packages/cli-rs parity:sim [--sides ts,rs] [parity/scenarios/<step>/<name>.sim.ts ...]
 ```
 
-`--sides ts,ts` proves that a scenario is deterministic. The Rust binary is `target/debug/opencode-rs` (the runner
+`--sides ts,ts` proves that a scenario is deterministic. The Rust binary is `target/debug/opencode-native` (the runner
 builds it) or `OPENCODE_RS_BIN`.
 
 ## One side of a run
@@ -35,7 +35,7 @@ Each side runs alone, one after the other, so the two clients never share a serv
 4. **Recording proxy** (`parity/sim/proxy.ts`). The client talks to a proxy on a private port that forwards to
    the server, streams responses (the event stream included), and logs each request: method, path, decoded
    query, and JSON body.
-5. **Client.** The TS CLI from source or `opencode-rs`, with `--server <proxy>`, `OPENCODE_DRIVE=<side>`,
+5. **Client.** The TS CLI from source or `opencode-native`, with `--server <proxy>`, `OPENCODE_DRIVE=<side>`,
    `OPENCODE_DRIVE_RENDERER=headless`, and its own manifest with the scenario's viewport. `cli.json` sets
    `experimental["new-designs"]`, `animations: false`, and `debug.devtools: false` (the TS CLI from source is the
    `local` channel, which shows the DevTools bar).

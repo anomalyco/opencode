@@ -30,7 +30,7 @@ impl Fake {
     }
 
     fn run(&self, args: &[&str], stdin: &str, exit: u8) -> (Output, u32) {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-native"))
             .args(args)
             .env("OPENCODE_TS_BIN", self.dir.path().join("opencode"))
             .env("XDG_DATA_HOME", self.dir.path())
@@ -102,7 +102,7 @@ fn usage_errors_and_bare_plugin_never_start_the_binary() {
 #[test]
 fn a_missing_binary_says_how_to_fix_it() {
     let data = opencode_util::temp::tempdir().unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
+    let output = Command::new(env!("CARGO_BIN_EXE_opencode-native"))
         .args(["uninstall", "--dry-run"])
         .env("OPENCODE_TS_BIN", "/nonexistent/opencode")
         .env("XDG_DATA_HOME", data.path())
@@ -128,7 +128,7 @@ fn an_interrupt_waits_for_the_remote_access_command() {
         &bin,
         "#!/bin/sh\ntrap 'sleep 0.5; echo done > \"$DELEGATE_DIR/teardown\"; exit 130' INT\necho > \"$DELEGATE_DIR/started\"\nwhile :; do sleep 0.05; done\n",
     );
-    let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-native"))
         .args(["service", "set", "remote", "true"])
         .env("OPENCODE_TS_BIN", &bin)
         .env("HOME", dir.path())

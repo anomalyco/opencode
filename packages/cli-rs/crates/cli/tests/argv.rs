@@ -9,7 +9,7 @@ use std::process::Command;
 #[test]
 fn a_command_runs_with_an_argument_that_is_not_utf8() {
     let home = opencode_util::temp::tempdir().unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
+    let output = Command::new(env!("CARGO_BIN_EXE_opencode-native"))
         .args(["auth", "login"])
         .arg(OsStr::from_bytes(b"a\xff"))
         .args(["--server", "http://127.0.0.1:1"])

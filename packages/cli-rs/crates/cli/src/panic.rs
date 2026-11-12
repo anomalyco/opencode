@@ -24,8 +24,8 @@ pub fn install() {
             return;
         }
         match crate::telemetry::file() {
-            Some(path) => eprintln!("opencode-rs {info}\nThe backtrace is in {}", path.display()),
-            None => eprintln!("opencode-rs {info}\n{backtrace}"),
+            Some(path) => eprintln!("opencode-native {info}\nThe backtrace is in {}", path.display()),
+            None => eprintln!("opencode-native {info}\n{backtrace}"),
         }
         crate::telemetry::flush();
         std::process::exit(101);

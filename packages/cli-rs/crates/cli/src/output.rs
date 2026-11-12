@@ -3,7 +3,7 @@
 use opencode_util::error;
 use std::io::{ErrorKind, Write};
 
-/// Writes `text` to stdout. A closed pipe (`opencode-rs ... | head`) is not an error, as in
+/// Writes `text` to stdout. A closed pipe (`opencode-native ... | head`) is not an error, as in
 /// `packages/cli/src/node/index.ts:4-7`; `print!` would panic instead.
 pub fn print(text: &str) -> error::Result<()> {
     let mut stdout = std::io::stdout().lock();

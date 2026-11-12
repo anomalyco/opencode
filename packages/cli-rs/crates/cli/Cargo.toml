@@ -1,13 +1,13 @@
 [package]
 name = "opencode-cli"
-description = "The opencode-rs binary."
+description = "The opencode-native binary."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "opencode-rs"
+name = "opencode-native"
 path = "src/main.rs"
 
 # Runs the prompt kit's parity scripts (parity/oracle/C.p-prompts.ts); not shipped.

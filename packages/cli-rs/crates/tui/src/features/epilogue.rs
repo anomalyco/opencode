@@ -42,7 +42,7 @@ pub fn text(tui: &Tui) -> Option<String> {
     let updated = tui.epilogue.updated_version.borrow().clone();
     // The command name in the continue hint. TS prints "opencode"; this client names itself, so the hint
     // reopens the client the user ran.
-    let cli_name = std::env::var("OPENCODE_CLI_NAME").unwrap_or_else(|_| "opencode-rs".to_owned());
+    let cli_name = std::env::var("OPENCODE_CLI_NAME").unwrap_or_else(|_| "opencode-native".to_owned());
     render(session, updated.as_deref(), &cli_name)
 }
 
