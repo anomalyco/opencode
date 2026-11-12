@@ -3,6 +3,27 @@
 A Rust client for OpenCode, built on OpenTUI's Rust crates. It talks to an OpenCode server over HTTP and
 lives next to the TypeScript CLI in `packages/cli` and TUI in `packages/tui`; it does not replace them.
 
+## Try a preview build
+
+Nightly preview builds come from [`simonklee/cli-rs-preview`](https://github.com/simonklee/cli-rs-preview).
+Install or update to the newest one with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/simonklee/cli-rs-preview/main/install.sh | bash
+```
+
+This puts `opencode-rs` in `~/.local/bin`. It needs the TypeScript `opencode` 2.2.7 or later on `PATH` (or
+`OPENCODE_TS_BIN` set to it): `opencode-rs` starts and uses its background service, and delegates `serve`,
+`upgrade`, `plugin` and remote access to it. `opencode-rs upgrade` in a preview build only tells you to re-run the
+install script.
+
+`opencode-rs` uses your real sessions, service and `cli.json`. To keep its TUI state (tabs and other client-local
+state) apart from the TypeScript TUI's, set `OPENCODE_TUI_CHANNEL=rs-preview`.
+
+To report a crash or bug, include the output of `opencode-rs --version` and the end of
+`~/.local/share/opencode/log/opencode.log` (`opencode-rs debug paths` prints the `log` directory). Each start logs
+a `cli starting` line with the version and the source commit of the build.
+
 ## Build
 
 The client takes OpenTUI's Rust crates from `packages/rust` of
