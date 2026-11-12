@@ -275,6 +275,8 @@ pub struct Viewer {
     /// Image previews by file, read once per file list.
     previews: RefCell<HashMap<String, Preview>>,
     layer: RefCell<Option<Disposer>>,
+    /// The store watch of `turn` mode (`sources::watch`).
+    follow: RefCell<Option<Disposer>>,
     /// The open file menu (`fileMenu`); new files close it.
     pub(super) menu: RefCell<Option<super::file_menu::Menu>>,
     /// The session's status last seen in `turn` mode, for the refetch when a turn ends.
@@ -357,6 +359,7 @@ impl Viewer {
             parts: RefCell::default(),
             previews: RefCell::default(),
             layer: RefCell::default(),
+            follow: RefCell::default(),
             menu: RefCell::default(),
             turn_status: Cell::new(None),
             was_focused: Cell::new(false),
@@ -366,7 +369,7 @@ impl Viewer {
         });
         viewer.install(tui);
         viewer.load();
-        super::sources::watch(&viewer);
+        *viewer.follow.borrow_mut() = super::sources::watch(&viewer);
         viewer
     }
 

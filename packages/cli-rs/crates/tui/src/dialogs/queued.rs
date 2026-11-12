@@ -9,12 +9,7 @@ use crate::routes::session::queued::{self, Action};
 
 /// Opens the dialog for the session view `view`, with `dialog.replace`.
 pub(crate) fn show(tui: &Tui, view: &Rc<queued::Inner>) {
-    let list = Rc::new(List {
-        tui: tui.weak(),
-        view: Rc::downgrade(view),
-        select: RefCell::default(),
-        seen: Cell::new(tui.data.revision()),
-    });
+    let list = Rc::new(List { tui: tui.weak(), view: Rc::downgrade(view), select: RefCell::default() });
     let options = list.options();
     let this = list.clone();
     tui.dialogs.replace(
@@ -44,20 +39,20 @@ pub(crate) fn show(tui: &Tui, view: &Rc<queued::Inner>) {
             cx.on_close(opentui::keymap::Disposer::new(move || {
                 list.select.borrow_mut().take();
             }));
+            if let Some(tui) = this.tui.upgrade() {
+                cx.on_close(tui.follow(&this, |list, _, changes| list.sync(changes)));
+            }
             view
         },
         None,
         DialogOptions::default(),
     );
-    list.watch(tui.data.subscribe());
 }
 
 struct List {
     tui: Weak<Tui>,
     view: Weak<queued::Inner>,
     select: RefCell<Option<Select<String>>>,
-    /// The store revision the list last saw.
-    seen: Cell<u64>,
 }
 
 impl List {
@@ -73,22 +68,14 @@ impl List {
     }
 
     /// Refreshes the options after each store flush that touched the inbox, while the dialog is open.
-    fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-        let Some(tui) = self.tui.upgrade() else { return };
-        let weak = Rc::downgrade(self);
-        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-            let (Some(list), Some(revisions)) = (weak.upgrade(), revisions) else { return };
-            let (Some(tui), Some(view)) = (list.tui.upgrade(), list.view.upgrade()) else { return };
-            let (revision, changes) = tui.data.changes_since(list.seen.get());
-            list.seen.set(revision);
-            if changes.pending(&view.session) {
-                let select = list.select.borrow().clone();
-                if let Some(select) = select {
-                    select.set_options(list.options());
-                }
+    fn sync(&self, changes: &Changes) {
+        let Some(view) = self.view.upgrade() else { return };
+        if changes.pending(&view.session) {
+            let select = self.select.borrow().clone();
+            if let Some(select) = select {
+                select.set_options(self.options());
             }
-            list.watch(revisions);
-        });
+        }
     }
 
     /// Enter: steers the prompt and closes the dialog once the server took it.

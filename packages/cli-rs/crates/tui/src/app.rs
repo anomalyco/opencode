@@ -110,10 +110,15 @@ pub struct Tui {
     /// A theme change arrived while a key sequence was pending; remount once it ends.
     restyle: Cell<bool>,
     seen: Cell<u64>,
+    /// The open dialogs and viewers that follow the store: [`Tui::follow`].
+    followers: RefCell<Vec<Follower>>,
     connection: RefCell<Option<Connection>>,
     layers: RefCell<Vec<Disposer>>,
     this: Weak<Tui>,
 }
+
+/// A [`Tui::follow`] registration; false once its target is gone.
+type Follower = Rc<dyn Fn(&Tui, &Changes) -> bool>;
 
 #[derive(Clone)]
 struct Files {
@@ -238,6 +243,14 @@ impl Tui {
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &changes);
         }
+        let followers = self.followers.borrow().clone();
+        for follower in followers {
+            // One closed by an earlier one is skipped; one whose target is gone is dropped.
+            let open = self.followers.borrow().iter().any(|open| Rc::ptr_eq(open, &follower));
+            if open && !follower(self, &changes) {
+                self.followers.borrow_mut().retain(|open| !Rc::ptr_eq(open, &follower));
+            }
+        }
         // After the view, whose new text records the labels it draws.
         crate::features::session_links::sync(self, &changes);
         crate::frame::sync_app(self, &changes);
@@ -248,6 +261,22 @@ impl Tui {
         crate::tabs::sync(self, &changes);
         crate::frame::refresh(self);
         crate::features::attention::program_status::sync(self);
+    }
+
+    /// Calls `sync` with `target` and the store's changes at each flush, after the route view, until the returned
+    /// disposer runs or `target` is gone. An open dialog or viewer follows the store this way, on the route view's
+    /// update path (O-104).
+    pub(crate) fn follow<T: 'static>(&self, target: &Rc<T>, sync: impl Fn(&T, &Tui, &Changes) + 'static) -> Disposer {
+        let target = Rc::downgrade(target);
+        let follower: Follower =
+            Rc::new(move |tui, changes| target.upgrade().map(|target| sync(&target, tui, changes)).is_some());
+        self.followers.borrow_mut().push(follower.clone());
+        let (tui, follower) = (self.weak(), Rc::downgrade(&follower));
+        Disposer::new(move || {
+            if let (Some(tui), Some(follower)) = (tui.upgrade(), follower.upgrade()) {
+                tui.followers.borrow_mut().retain(|open| !Rc::ptr_eq(open, &follower));
+            }
+        })
     }
 
     /// Syncs the route view with everything, after state outside the store changed.
@@ -423,6 +452,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         painted: RefCell::new(page),
         restyle: Cell::new(false),
         seen: Cell::new(0),
+        followers: RefCell::default(),
         connection: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
         this: this.clone(),
