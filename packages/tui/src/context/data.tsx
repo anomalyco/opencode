@@ -21,7 +21,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       connection: client.connection,
       directory: props.directory,
       // Live tool events carry screenshots as inline base64, which open tabs would otherwise hold for the whole run.
-      omitToolFileData: !config.data.session?.image_preview,
+      // Read per event, so toggling previews applies to new results without a restart.
+      omitToolFileData: () => !config.data.session?.image_preview,
     })
     data satisfies Plugin.Context["data"]
     const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})

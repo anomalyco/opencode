@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
 
@@ -323,6 +323,82 @@ test("omits inline tool-result file payloads from read and live tool results whe
         {
           state: { status: "completed", content: [{ type: "file", uri: "data:image/png;base64,", mime: "image/png" }] },
         },
+      ],
+    })
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("reads a function omitToolFileData for each live tool result", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
+  const running = (id: string) => ({
+    type: "tool",
+    id,
+    name: "execute",
+    time: { created: 1, ran: 1 },
+    state: { status: "running", input: {}, metadata: {} },
+  })
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "provider", id: "model" },
+            time: { created: 1 },
+            content: [running("call_off"), running("call_on")],
+          },
+        ],
+        cursor: {},
+      }),
+  })
+  const [omit, setOmit] = createSignal(true)
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      omitToolFileData: omit,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  const succeed = (id: string, seq: number) => {
+    const event: OpenCodeEvent = {
+      id: `evt_${id}`,
+      created: 2,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_toggle", seq, version: 2 },
+      data: {
+        sessionID: "ses_toggle",
+        assistantMessageID: "msg_assistant",
+        id,
+        executed: true,
+        content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+  }
+  try {
+    await setup.data.session.message.sync("ses_toggle")
+    succeed("call_off", 1)
+    setOmit(false)
+    succeed("call_on", 2)
+
+    expect(setup.data.session.message.get("ses_toggle", "msg_assistant")).toMatchObject({
+      content: [
+        { state: { content: [{ type: "file", uri: "data:image/png;base64,", mime: "image/png" }] } },
+        { state: { content: [{ type: "file", uri: screenshot, mime: "image/png" }] } },
       ],
     })
   } finally {
