@@ -109,15 +109,18 @@ export function redeemPairingLink(link: { urls: ReadonlyArray<string>; code: str
 // Servers before POST redemption answer it with 404 and redeem the code on GET instead.
 function redeem(url: string, code: string) {
   const signal = AbortSignal.timeout(5_000)
+
   return OpenCode.make({ baseUrl: url })
     .server.connect({ code }, { signal })
     .catch((error) => {
       if (errorStatus(error) !== 404) throw error
+
       const fetch = Object.assign(
         (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, { ...init, method: "GET" }),
         // Bun's fetch type carries preconnect; the browser never calls it.
         { preconnect: () => {} },
       )
+
       return OpenCode.make({ baseUrl: url, fetch }).server.connect({ code }, { signal })
     })
 }

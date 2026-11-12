@@ -58,8 +58,10 @@ describe("pairing link", () => {
 
 test("redeems codes on servers that predate POST redemption", async () => {
   const methods: string[] = []
+
   const reply = (status: string, body = "") =>
     `HTTP/1.1 ${status}\r\ncontent-type: application/json\r\ncontent-length: ${body.length}\r\naccess-control-allow-origin: *\r\naccess-control-allow-methods: GET, POST\r\nconnection: close\r\n\r\n${body}`
+
   // Servers before POST redemption have no POST route for pairing links and redeem the code on GET.
   const server = Bun.listen({
     hostname: "127.0.0.1",
@@ -68,12 +70,16 @@ test("redeems codes on servers that predate POST redemption", async () => {
       data(socket, chunk) {
         const method = String(chunk).split(" ")[0] ?? ""
         methods.push(method)
+
         if (method === "OPTIONS") return void socket.end(reply("204 No Content"))
+
         if (method !== "GET") return void socket.end(reply("404 Not Found"))
+
         socket.end(reply("200 OK", JSON.stringify({ token: "session-token" })))
       },
     },
   })
+
   const url = `http://127.0.0.1:${server.port}`
 
   try {
