@@ -127,6 +127,13 @@ export function integrationRoutes(data: unknown[] = integrations): Route[] {
   ]
 }
 
+// An OAuth integration whose form has one field of a type neither client knows (a newer server's).
+export function futureRoutes(field: Record<string, unknown>): Route[] {
+  const form = [{ key: "region", type: "future-choice", ...field }]
+  const methods = [{ id: "oauth", type: "oauth", label: "OAuth", form }]
+  return [...integrationRoutes([{ id: "future", name: "Future", methods, connections: [] }]), ...oauthRoutes("future")]
+}
+
 export function credentialRoute(data: unknown[] = credentials): Route {
   return { path: "/api/credential", json: { data } }
 }

@@ -14,7 +14,7 @@ use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::{
     ConnectionInfo, CredentialActivateInput, CredentialCreateInput, CredentialRemoveInput, CredentialValue,
-    ExperimentalIntegrationWellknownAddInput, FormAnswer, FormField, FormValue, FormWhenOp, FormWhenValue,
+    ExperimentalIntegrationWellknownAddInput, FormAnswer, FormField, FormValue, FormWhen, FormWhenOp, FormWhenValue,
     IntegrationAttemptMode, IntegrationAttemptStatus, IntegrationCommandAttemptStatus, IntegrationCommandCancelInput,
     IntegrationCommandConnectInput, IntegrationCommandStatusInput, IntegrationConnectExternalInput,
     IntegrationConnectKeyInput, IntegrationInfo, IntegrationListInput, IntegrationMethod, IntegrationOAuthMethod,
@@ -1098,23 +1098,12 @@ pub(super) fn answer_form(fields: Option<&[FormField]>, input: &[String]) -> err
     for field in fields {
         let key = form::key(field);
         if let FormField::Unknown(raw) = field {
-            // TS has no unknown variant: an unfamiliar type is decoded like any non-string answer and checked by
-            // `formValidateValue`'s last (multiselect) branch. That branch throws on a field without `options`
-            // when a selection must be among them; this reports what it means to check.
-            let Some(provided) = supplied.get(key) else { continue };
-            let value = supplied_answer(field, provided)?;
-            let FormValue::Array(items) = &value else { bail!("{key}: Expected selections") };
-            let flag = |name: &str| raw.get(name) == Some(&Value::Bool(true));
-            if items.is_empty() && flag("required") {
-                bail!("{key}: Answer required");
+            if let Some(value) = unknown_answer(field, raw, supplied.get(key), &answer)? {
+                answer.insert(key.to_owned(), value);
             }
-            if !items.is_empty() && !flag("custom") {
-                bail!("{key}: Select only available options");
-            }
-            answer.insert(key.to_owned(), value);
             continue;
         }
-        if !active(field, &answer) {
+        if !active(form::conditions(field), &answer) {
             if supplied.contains_key(key) {
                 bail!("Form field is not active: {key}");
             }
@@ -1142,21 +1131,83 @@ fn supplied_answer(field: &FormField, input: &str) -> error::Result<FormValue> {
             bail!("External form field requires interactive confirmation: {}", form::key(field))
         }
         FormField::String(_) => Ok(FormValue::String(input.to_owned())),
-        _ => {
-            let value = serde_json::from_str::<Value>(input).ok().and_then(|value| match value {
-                Value::String(text) => Some(FormValue::String(text)),
-                Value::Bool(value) => Some(FormValue::Bool(value)),
-                Value::Number(number) => number.as_f64().map(FormValue::Number),
-                Value::Array(items) => items
-                    .into_iter()
-                    .map(|item| item.as_str().map(str::to_owned))
-                    .collect::<Option<Vec<_>>>()
-                    .map(FormValue::Array),
-                _ => None,
-            });
-            value.ok_or_else(|| err!("Expected a JSON value for form field: {}", form::key(field)))
-        }
+        _ => serde_json::from_str(input)
+            .ok()
+            .and_then(form_value)
+            .ok_or_else(|| err!("Expected a JSON value for form field: {}", form::key(field))),
     }
+}
+
+/// A JSON value as a `Form.Value`; `None` for one it does not accept.
+fn form_value(value: Value) -> Option<FormValue> {
+    match value {
+        Value::String(text) => Some(FormValue::String(text)),
+        Value::Bool(value) => Some(FormValue::Bool(value)),
+        Value::Number(number) => number.as_f64().map(FormValue::Number),
+        Value::Array(items) => items
+            .into_iter()
+            .map(|item| item.as_str().map(str::to_owned))
+            .collect::<Option<Vec<_>>>()
+            .map(FormValue::Array),
+        _ => None,
+    }
+}
+
+/// The answer to a field of a type this client does not know (a newer server's). TS has no such variant and
+/// answers it as any field (`auth/form.ts:28-47`), reading its members from the JSON: it is skipped when its
+/// `when` does not hold, takes its `default` when hidden, and is otherwise prompted for as text
+/// (`form.ts:139-149`). `formValidateValue` then checks it with its last, multiselect branch
+/// (`tui/util/form.ts:73-75,105-109`), so only a selection passes. TS's text prompt returns a number, which never
+/// passes, and the branch throws for a non-empty selection on a field without `options`. Here the prompt takes a
+/// JSON value as `--answer` does, and a selection must be custom
+/// (`parity/deviations/V26-login-unfamiliar-field-answer.md`).
+fn unknown_answer(
+    field: &FormField,
+    raw: &Value,
+    provided: Option<&String>,
+    answer: &FormAnswer,
+) -> error::Result<Option<FormValue>> {
+    let key = form::key(field);
+    let flag = |name: &str| raw.get(name) == Some(&Value::Bool(true));
+    let when: Vec<FormWhen> =
+        raw.get("when").and_then(|when| serde_json::from_value(when.clone()).ok()).unwrap_or_default();
+    if !active(&when, answer) {
+        if provided.is_some() {
+            bail!("Form field is not active: {key}");
+        }
+        return Ok(None);
+    }
+    let value = match provided {
+        Some(provided) => Some(supplied_answer(field, provided)?),
+        None if flag("hidden") => raw.get("default").cloned().and_then(form_value),
+        None => {
+            require_interactive("Authentication form input requires an interactive terminal")?;
+            let text = |name: &str| raw.get(name).and_then(Value::as_str).filter(|text| !text.is_empty());
+            if let Some(description) = text("description") {
+                prompt::log::info(description);
+            }
+            let mut question = prompt::text(raw.get("title").and_then(Value::as_str).unwrap_or(key))
+                .validate(|input| (input.is_empty() && flag("required")).then(|| "Required".to_owned()));
+            if let Some(default) = raw.get("default") {
+                question = question.initial_value(default.to_string());
+            }
+            let input = question.prompt()?;
+            if input.is_empty() { None } else { Some(supplied_answer(field, &input)?) }
+        }
+    };
+    let Some(value) = value else {
+        return if flag("required") { Err(err!("{key}: Answer required")) } else { Ok(None) };
+    };
+    let empty = matches!(&value, FormValue::String(text) if text.is_empty())
+        || matches!(&value, FormValue::Array(items) if items.is_empty());
+    if empty && flag("required") {
+        bail!("{key}: Answer required");
+    }
+    let FormValue::Array(items) = &value else { bail!("{key}: Expected selections") };
+    if !items.is_empty() && !flag("custom") {
+        bail!("{key}: Select only available options");
+    }
+    Ok(Some(value))
 }
 
 // The answer kinds of a select: an option's value, Yes or No, "Type your own answer", and Skip.
@@ -1376,8 +1427,8 @@ fn default(field: &FormField) -> Option<FormValue> {
 
 /// `active` in `auth/form.ts`: every `when` condition holds on the answers so far. An array answer matches
 /// when it includes the condition's value as a string.
-fn active(field: &FormField, answer: &FormAnswer) -> bool {
-    form::conditions(field).iter().all(|condition| {
+fn active(conditions: &[FormWhen], answer: &FormAnswer) -> bool {
+    conditions.iter().all(|condition| {
         let Some(value) = answer.get(&condition.key) else { return false };
         let matches = match (value, &condition.value) {
             (FormValue::Array(items), want) => {
@@ -1564,7 +1615,7 @@ mod tests {
     #[test]
     fn answers_for_unfamiliar_field_types_are_validated_and_sent() {
         let fields: Vec<FormField> = serde_json::from_str(
-            r#"[{"type":"future-choice","key":"region"},{"type":"future-choice","key":"tags","custom":true}]"#,
+            r#"[{"type":"future-choice","key":"region","hidden":true},{"type":"future-choice","key":"tags","hidden":true,"custom":true}]"#,
         )
         .unwrap();
         let answer = |input: &str| answer_form(Some(&fields), &[input.to_owned()]).map_err(|error| error.to_string());
@@ -1575,7 +1626,25 @@ mod tests {
         assert_eq!(sent.get("region"), Some(&FormValue::Array(Vec::new())));
         let sent = answer(r#"tags=["a"]"#).unwrap().unwrap();
         assert_eq!(sent.get("tags"), Some(&FormValue::Array(vec!["a".to_owned()])));
-        assert_eq!(answer_form(Some(&fields), &[]).unwrap(), Some(FormAnswer::new()));
+    }
+
+    #[test]
+    fn unfamiliar_field_types_take_hidden_defaults_and_conditions_from_their_json() {
+        let answer = |fields: &str, input: &[&str]| {
+            let fields: Vec<FormField> = serde_json::from_str(fields).unwrap();
+            let input: Vec<String> = input.iter().map(|item| item.to_string()).collect();
+            answer_form(Some(&fields), &input).map(Option::unwrap).map_err(|error| error.to_string())
+        };
+        let sent = answer(r#"[{"type":"x","key":"a","hidden":true,"custom":true,"default":["b"]}]"#, &[]).unwrap();
+        assert_eq!(sent.get("a"), Some(&FormValue::Array(vec!["b".to_owned()])));
+        let error = answer(r#"[{"type":"x","key":"a","hidden":true,"default":"b"}]"#, &[]).unwrap_err();
+        assert_eq!(error, "a: Expected selections");
+        assert!(answer(r#"[{"type":"x","key":"a","hidden":true}]"#, &[]).unwrap().is_empty());
+        let error = answer(r#"[{"type":"x","key":"a","hidden":true,"required":true}]"#, &[]).unwrap_err();
+        assert_eq!(error, "a: Answer required");
+        let when = r#"[{"type":"x","key":"a","when":[{"key":"b","op":"eq","value":"c"}]}]"#;
+        assert!(answer(when, &[]).unwrap().is_empty());
+        assert_eq!(answer(when, &["a=[]"]).unwrap_err(), "Form field is not active: a");
     }
 
     #[test]
