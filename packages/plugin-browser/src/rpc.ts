@@ -14,9 +14,12 @@ const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 const limit = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 500 }))).annotate({
   description: "Maximum entries, 1–500. Default 100.",
 })
-const timeoutMs = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30_000 }))).annotate({
+/** The longest wait or pause; longer requests are shortened to it. */
+export const MAX_WAIT_MS = 30_000
+const timeoutMs = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_WAIT_MS }))).annotate({
   description: "Timeout in milliseconds, 1–30000. Default 10000.",
 })
+const waitMs = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 export const TabID = Schema.String.check(Schema.isPattern(/^tab_[a-f0-9-]{36}$/u))
   .pipe(Schema.brand("Browser.TabID"))
   .annotate({ identifier: "Browser.TabID" })
@@ -141,6 +144,13 @@ const node = Schema.Struct({ id: Schema.Finite, name: text, type: short, selfByt
 const metrics = Schema.Array(Schema.Struct({ name: short, value: Schema.Finite, unit: short }))
 const profiled = Schema.Struct({ ...page, ...files, durationMs: Schema.Finite })
 const recording = Schema.Struct({ ...page, recording: Schema.Boolean })
+export const Waited = Schema.Struct({
+  ...Tab.fields,
+  met: Schema.Boolean.annotate({ description: "False when the condition did not hold before the timeout." }),
+  elapsedMs: count,
+  observed: optional(text.annotate({ description: "What the page showed when an unmet wait ended." })),
+}).annotate({ identifier: "Browser.Waited" })
+export type Waited = typeof Waited.Type
 
 /**
  * `fields` are what the desktop receives. `parameters`, when given, are what the model may pass instead, such as
@@ -336,9 +346,36 @@ export const Operations = [
   ),
   operation(
     "wait",
-    "Wait for document loading or literal text to appear/disappear in this tab/frame. No fixed sleeps or network-idle assumption.",
+    'Wait until a condition holds in this tab, or pause. Pass one of: text (visible text appears), textGone, selector or ref (a matching element is visible; with state: "hidden", until none is), url (a substring or * glob of the address), delayMs (a plain pause; Code Mode has no timers), or nothing (the page finishes loading). For example wait({ tabID, text: "Saved", timeout: 5000 }). A timeout is a result, not an error: it returns met: false with what the page showed. timeoutMs defaults to 10000; values above 30000 count as 30000.',
     { ...tab, ...frame, condition: Schema.Literals(["load", "text", "textGone"]), text: optional(short), timeoutMs },
-    Tab,
+    Waited,
+    {
+      ...tab,
+      ...frame,
+      condition: optional(
+        Schema.Literals(["load", "text", "textGone", "element", "elementGone", "url", "delay"]).annotate({
+          description: "Usually omitted: the other parameters imply it.",
+        }),
+      ),
+      text: optional(short.annotate({ description: "Wait until this literal text is on the page." })),
+      textGone: optional(short.annotate({ description: "Wait until this literal text is no longer on the page." })),
+      selector: optional(short.annotate({ description: "CSS selector: wait until a matching element is visible." })),
+      ref: optional(Ref),
+      state: optional(
+        Schema.Literals(["visible", "attached", "hidden", "detached", "load", "domcontentloaded", "networkidle"]).annotate(
+          {
+            description:
+              "With text, selector or ref: hidden or detached waits for it to go away. Alone: any load state waits for loading.",
+          },
+        ),
+      ),
+      url: optional(short.annotate({ description: "Wait until the tab's address contains this text or matches this * glob." })),
+      delayMs: optional(waitMs.annotate({ description: "Pause this many milliseconds, then return met: true." })),
+      time: optional(waitMs.annotate({ description: "Same as delayMs. Values up to 60 count as seconds." })),
+      ms: optional(waitMs.annotate({ description: "Same as delayMs." })),
+      timeoutMs: optional(waitMs.annotate({ description: "Default 10000. Values above 30000 count as 30000." })),
+      timeout: optional(waitMs.annotate({ description: "Same as timeoutMs." })),
+    },
   ),
   operation(
     "screenshot",

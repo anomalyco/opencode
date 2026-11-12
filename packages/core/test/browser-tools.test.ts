@@ -132,3 +132,77 @@ it.live("evaluate takes expression or code and runs a top-level return or await"
     ])
   }),
 )
+
+const failure = (message: string): Browser.Outcome => ({ type: "failure", code: "operation_failed", message })
+const waited = (code: string) => `return await tools.browser.wait({ tabID: "${tabID}", ${code} })`
+
+it.live("wait infers its condition and reports an unmet one as met: false", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup((action) =>
+      action.type === "wait" && action.text === "Never"
+        ? // The message the desktop sends when its wait times out.
+          failure(
+            `browser.wait failed. browser.wait failed for condition "text" (timeoutMs: ${action.timeoutMs}). Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: Condition was not met within ${action.timeoutMs} ms.`,
+          )
+        : action.type === "wait" && action.text === "Broken"
+          ? failure("browser.wait failed. Frame context is unavailable. Call browser.frames({tabID}).")
+          : success(tab),
+    )
+    // The most common failing shape: text with timeout, no condition.
+    expect(JSON.parse(yield* browser.run(waited(`text: "Done", timeout: 1000`)))).toMatchObject({ ...tab, met: true })
+    expect(JSON.parse(yield* browser.run(waited(`text: "Never", timeout: 60000`)))).toMatchObject({
+      ...tab,
+      met: false,
+      observed: 'Text "Never" did not appear within 30000 ms.',
+    })
+    expect(JSON.parse(yield* browser.run(waited(`text: "Spinner", state: "hidden"`)))).toMatchObject({ met: true })
+    expect(JSON.parse(yield* browser.run(waited(`state: "load"`)))).toMatchObject({ met: true })
+    expect(browser.commands).toEqual([
+      { type: "wait", tabID, condition: "text", text: "Done", timeoutMs: 1000 },
+      { type: "wait", tabID, condition: "text", text: "Never", timeoutMs: 30000 },
+      { type: "wait", tabID, condition: "textGone", text: "Spinner", timeoutMs: 10000 },
+      { type: "wait", tabID, condition: "load", timeoutMs: 10000 },
+    ])
+    // Other failures still fail.
+    expect(
+      yield* browser.run(
+        `return await tools.browser.wait({ tabID: "${tabID}", text: "Broken" }).then(() => "resolved", (error) => error.message)`,
+      ),
+    ).toContain("Frame context is unavailable")
+    // Keys no condition maps to fail with the valid ones.
+    expect(
+      yield* browser.run(
+        `return await tools.browser.wait({ tabID: "${tabID}", loading: true }).catch((error) => error.message)`,
+      ),
+    ).toContain(
+      "loading: Not a parameter of browser.wait. Valid parameters: tabID, frameID, condition, text, textGone, selector, ref, state, url, delayMs, time, ms, timeoutMs, timeout.",
+    )
+  }),
+)
+
+it.live("wait pauses, and polls for an element or an address", () =>
+  Effect.gen(function* () {
+    const seen = { checks: 0 }
+    const browser = yield* setup((action) => {
+      if (action.type !== "evaluate") return success(tab)
+      seen.checks++
+      return evaluated(seen.checks < 2 ? { count: 0, visible: 0 } : { count: 1, visible: 1 })
+    })
+    expect(JSON.parse(yield* browser.run(waited(`delayMs: 20`)))).toMatchObject({ ...tab, met: true })
+    expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true })
+    expect(browser.commands).toEqual([])
+
+    expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", timeout: 5000`)))).toMatchObject({ met: true })
+    expect(browser.commands).toHaveLength(2)
+    expect(browser.commands[0]).toMatchObject({ type: "evaluate", tabID })
+    expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", state: "hidden", timeout: 150`)))).toMatchObject(
+      { met: false, observed: '1 element(s) matched "#ready", 1 visible, after 150 ms.' },
+    )
+
+    expect(JSON.parse(yield* browser.run(waited(`url: "example.test"`)))).toMatchObject({ met: true })
+    expect(JSON.parse(yield* browser.run(waited(`url: "**/done", timeout: 150`)))).toMatchObject({
+      met: false,
+      observed: "The address was https://example.test/ after 150 ms.",
+    })
+  }),
+)

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { rm } from "node:fs/promises"
 import { basename, dirname } from "node:path"
 import { Effect } from "effect"
@@ -101,4 +101,101 @@ test("saved capture names never escape their directory or name a Windows device"
   } finally {
     await rm(dirname(dirname(saved[0]!.path)), { recursive: true, force: true })
   }
+})
+
+// Every browser.wait key shape seen across four devices (15,000 calls), with how often it failed and what it means now.
+// 2,138 of 3,099 browser errors were "condition: Missing key" from these shapes.
+describe("wait reads the condition from the keys models write", () => {
+  const plan = (input: Omit<Parameters<typeof BrowserTools.waitPlan>[0], "type" | "tabID">) =>
+    BrowserTools.waitPlan({ type: "wait", tabID, ...input })
+  const desktop = (
+    condition: "load" | "text" | "textGone",
+    timeoutMs: number,
+    text?: string,
+  ): BrowserTools.WaitPlan => ({
+    kind: "desktop",
+    timeoutMs,
+    action: { type: "wait", tabID, condition, ...(text === undefined ? {} : { text }), timeoutMs },
+  })
+
+  test.each([
+    // 1,449 calls: { tabID, text, timeout }, with timeouts from 300 ms to 120 s.
+    [{ text: "Done", timeout: 1_000 }, desktop("text", 1_000, "Done")],
+    [{ text: "Done", timeout: 120_000 }, desktop("text", 30_000, "Done")],
+    // 351: Playwright's state with text.
+    [{ text: "Done", state: "visible" }, desktop("text", 10_000, "Done")],
+    [{ text: "Spinner", state: "hidden" }, desktop("textGone", 10_000, "Spinner")],
+    [{ text: "Spinner", state: "detached", timeout: 30_000 }, desktop("textGone", 30_000, "Spinner")],
+    // 190: timeoutMs without condition, up to 180 s.
+    [{ text: "Done", timeoutMs: 250 }, desktop("text", 250, "Done")],
+    [{ text: "Done", timeoutMs: 180_000 }, desktop("text", 30_000, "Done")],
+    // 33: text alone; 27: load state alone; 12: no keys; 13: timeout alone.
+    [{ text: "Done" }, desktop("text", 10_000, "Done")],
+    [{ state: "load" }, desktop("load", 10_000)],
+    [{ state: "networkidle" }, desktop("load", 10_000)],
+    [{}, desktop("load", 10_000)],
+    [{ timeout: 5_000 }, desktop("load", 5_000)],
+    // Playwright MCP's textGone.
+    [{ textGone: "Loading" }, desktop("textGone", 10_000, "Loading")],
+    // Shapes that worked before keep their meaning.
+    [{ condition: "load" }, desktop("load", 10_000)],
+    [{ condition: "text", text: "Done", timeoutMs: 30_000 }, desktop("text", 30_000, "Done")],
+    [{ condition: "textGone", text: "Done", timeoutMs: 15_000 }, desktop("textGone", 15_000, "Done")],
+    [{ condition: "load", timeout: 30_000 }, desktop("load", 30_000)],
+  ] as const)("%j", (input, expected) => {
+    expect(plan(input)).toEqual(expected)
+  })
+
+  test("selector, ref and state wait for an element; url waits for the address", () => {
+    // 24 calls: { selector, timeout }.
+    expect(plan({ selector: "#app .ready", timeout: 8_000 })).toEqual({
+      kind: "element",
+      element: { selector: "#app .ready" },
+      gone: false,
+      timeoutMs: 8_000,
+    })
+    expect(plan({ selector: ".spinner", state: "hidden", frameID: "frame" })).toEqual({
+      kind: "element",
+      element: { selector: ".spinner" },
+      gone: true,
+      frameID: "frame",
+      timeoutMs: 10_000,
+    })
+    const ref = Browser.Ref.make("e4")
+    expect(plan({ ref })).toEqual({ kind: "element", element: { ref }, gone: false, timeoutMs: 10_000 })
+    expect(plan({ url: "**/dashboard" })).toEqual({ kind: "url", url: "**/dashboard", timeoutMs: 10_000 })
+  })
+
+  test("time, ms and delayMs pause", () => {
+    // 29 calls { time } in milliseconds and 3 in seconds (Playwright MCP); 4 { ms }.
+    expect(plan({ time: 3_000 })).toEqual({ kind: "delay", timeoutMs: 3_000 })
+    expect(plan({ time: 6 })).toEqual({ kind: "delay", timeoutMs: 6_000 })
+    expect(plan({ ms: 1_200 })).toEqual({ kind: "delay", timeoutMs: 1_200 })
+    expect(plan({ delayMs: 500 })).toEqual({ kind: "delay", timeoutMs: 500 })
+    expect(plan({ delayMs: 90_000 })).toEqual({ kind: "delay", timeoutMs: 30_000 })
+    expect(plan({ condition: "delay", timeout: 2_000 })).toEqual({ kind: "delay", timeoutMs: 2_000 })
+  })
+
+  test("an ambiguous or incomplete wait fails with one corrective example", () => {
+    expect(() => plan({ text: "Done", selector: "#done" })).toThrow(
+      'browser.wait takes one condition, but got text and selector. Wait for each in its own call, for example browser.wait({ tabID, text: "Saved" }).',
+    )
+    expect(() => plan({ condition: "text" })).toThrow(
+      'browser.wait needs the text to look for, for example browser.wait({ tabID, text: "Saved" }).',
+    )
+    expect(() => plan({ condition: "element" })).toThrow(
+      'browser.wait needs selector or ref, for example browser.wait({ tabID, selector: "#save" }).',
+    )
+    expect(() => plan({ condition: "delay" })).toThrow(
+      "browser.wait needs a duration to pause, for example browser.wait({ tabID, delayMs: 500 }).",
+    )
+  })
+
+  test("url matches a substring or a * glob of the whole address", () => {
+    expect(BrowserTools.matchesURL("https://app.test/dashboard?tab=1", "/dashboard")).toBe(true)
+    expect(BrowserTools.matchesURL("https://app.test/dashboard", "**/dashboard")).toBe(true)
+    expect(BrowserTools.matchesURL("https://app.test/dashboard/settings", "**/dashboard")).toBe(false)
+    expect(BrowserTools.matchesURL("https://app.test/a.b", "*/a.b")).toBe(true)
+    expect(BrowserTools.matchesURL("https://app.test/axb", "*/a.b")).toBe(false)
+  })
 })

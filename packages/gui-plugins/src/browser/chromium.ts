@@ -55,9 +55,11 @@ type Element = { backendID: number; frameID: string; sessionID?: string }
 /** State every page of the pane shares: the element ref allocator and the owner of the app-wide trace. */
 export type Shared = { ref: () => string; trace?: SharedTrace }
 
-// Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
+// Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway. A wait
+// reads whichever document is current, often the one a click just navigated to.
 const retainedOperations: readonly Browser.Method[] = [
   "navigate",
+  "wait",
   "files.list",
   "files.get",
   "trace.stop",
