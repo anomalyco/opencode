@@ -95,7 +95,7 @@ fn open_with(
 ) -> Plugins {
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    let plugin = config.join("plugins/sample");
+    let plugin = config.join("plugins").join("sample");
     std::fs::create_dir_all(&plugin).unwrap();
     std::fs::write(plugin.join(entry_file()), build).unwrap();
     let deps = Deps { route, roots: roots(root.path()), ..support::deps(Arc::new(fake(text.to_owned()))) };
