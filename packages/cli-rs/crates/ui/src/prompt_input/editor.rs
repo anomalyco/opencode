@@ -120,7 +120,7 @@ pub fn realign_mentions(content: &str, mentions: &[Option<Mention>]) -> Vec<Opti
         let available: Vec<Candidate> = candidates
             .iter()
             .copied()
-            .filter(|candidate| !protected.iter().any(|range| overlaps(candidate, range)))
+            .filter(|candidate| !protected.iter().any(|range| candidate.start < range.end && candidate.end > range.start))
             .collect();
         for (index, candidate) in assign(items, &available) {
             aligned[index] =
@@ -140,10 +140,6 @@ fn occurrences(content: &str, text: &str) -> Vec<Candidate> {
         from = start + text.len();
     }
     found
-}
-
-fn overlaps(left: &Candidate, right: &Candidate) -> bool {
-    left.start < right.end && left.end > right.start
 }
 
 /// Pairs mentions with occurrences in order: the most pairs, then the least total distance from the old offsets

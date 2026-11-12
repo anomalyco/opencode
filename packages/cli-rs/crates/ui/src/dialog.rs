@@ -142,10 +142,7 @@ impl Dialogs {
 
     fn install(&self) {
         let weak = Rc::downgrade(&self.0);
-        let open = {
-            let weak = weak.clone();
-            Condition::When(Rc::new(move || weak.upgrade().is_some_and(|inner| !inner.stack.borrow().is_empty())))
-        };
+        let open = Condition::when(bind!(weak, |inner| !inner.stack.borrow().is_empty()));
         let close = |ctrl_c: bool, weak: Weak<Inner>| {
             bind!(weak, |inner, _: Option<&str>, _: Option<&KeyEvent>| {
                 let dialogs = Dialogs(inner);
@@ -173,8 +170,7 @@ impl Dialogs {
         );
         *self.0.layer.borrow_mut() = layer.ok();
 
-        let backdrop_weak = weak.clone();
-        self.0.backdrop.on_mouse(bind!(backdrop_weak, |inner, _cx, event| {
+        self.0.backdrop.on_mouse(bind!(weak, |inner, _cx, event| {
             match event.kind {
                 // TS asks whether a selection exists. A press on text has started a drag by now, so a drag that
                 // starts inside the panel keeps the dialog open.
@@ -201,8 +197,7 @@ impl Dialogs {
             inner.dismiss.set(false);
             cx.stop_propagation();
         }));
-        let resize = Rc::downgrade(&self.0);
-        self.0.app.on_resize(bind!(resize, |inner, _cx, _, _| Dialogs(inner).layout_frame()));
+        self.0.app.on_resize(bind!(self.0, |inner, _cx, _, _| Dialogs(inner).layout_frame()));
     }
 
     /// Replaces the stack with one dialog, closing the ones open before (TS `replace`).
@@ -409,12 +404,7 @@ impl Dialogs {
     pub fn set_theme(&self, theme: Theme) {
         *self.0.theme.borrow_mut() = theme;
         if self.is_open() && !self.0.restyle.replace(true) {
-            let weak = Rc::downgrade(&self.0);
-            self.0.app.defer(move |_| {
-                if let Some(inner) = weak.upgrade() {
-                    Dialogs(inner).restyle();
-                }
-            });
+            self.0.app.defer(bind!(self.0, |inner, _| Dialogs(inner).restyle()));
         }
     }
 
@@ -798,26 +788,19 @@ impl DialogButtons {
             })
             .collect();
         let state = Rc::new(ButtonsState { buttons, active: Cell::new(active), theme: cx.theme.clone() });
-        let weak = Rc::downgrade(&state);
-        if let Some(active) = cx.keep(move || weak.upgrade().map(|state| state.active.get())).flatten() {
+        if let Some(active) = cx.keep(bind!(state, |state| Some(state.active.get()))).flatten() {
             state.active.set(active);
         }
         // The handlers hold the state weakly: it holds the views that hold them.
         for (index, (_, item, _)) in state.buttons.iter().enumerate() {
-            let weak = Rc::downgrade(&state);
-            item.on_hover(move |_cx, over| {
-                if over && let Some(state) = weak.upgrade() {
-                    state.set_active(index);
-                }
-            });
-            let weak = Rc::downgrade(&state);
-            item.mouse_pointer(MousePointer::POINTER).on_mouse(move |_cx, event| {
-                if matches!(event.kind, MouseEventKind::Up(_))
-                    && let Some(state) = weak.upgrade()
-                {
+            item.on_hover(bind!(state, |state, _cx, over| if over {
+                state.set_active(index);
+            }));
+            item.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(state, |state, _cx, event| {
+                if matches!(event.kind, MouseEventKind::Up(_)) {
                     (state.buttons[index].0.run)();
                 }
-            });
+            }));
         }
         state.paint();
         Self { view, state }

@@ -159,10 +159,9 @@ fn feedback_allocations(
         by_width.sort_by_key(|(_, interval)| interval.1 - interval.0);
         for (index, interval) in by_width {
             let mut lane = 0;
-            while occupied
-                .iter()
-                .any(|(existing, existing_lane)| *existing_lane == lane && existing.0 <= interval.1 && interval.0 <= existing.1)
-            {
+            while occupied.iter().any(|(existing, existing_lane)| {
+                *existing_lane == lane && existing.0 <= interval.1 && interval.0 <= existing.1
+            }) {
                 lane += 1;
             }
             let rail_y = if side == Side::Bottom { lane_y + lane * gap } else { top_lane - lane * gap };

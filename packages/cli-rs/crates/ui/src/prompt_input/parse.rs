@@ -100,7 +100,8 @@ pub fn directory_search(flavor: Flavor, query: &str, directory: &str, home: &str
     if let Some(rest) = query.strip_prefix("~/") {
         return search_in(flavor, rest, home, "~/");
     }
-    if is_parent_chain(query) {
+    // `/^(?:\.\.\/)*\.\.$/`.
+    if query.split('/').all(|part| part == "..") {
         return DirectorySearch {
             directory: resolve(flavor, directory, query),
             prefix: format!("{query}/"),
@@ -111,11 +112,6 @@ pub fn directory_search(flavor: Flavor, query: &str, directory: &str, home: &str
         return search_in(flavor, rest, &flavor.root(directory), "/");
     }
     search_in(flavor, query, directory, "")
-}
-
-/// `/^(?:\.\.\/)*\.\.$/`.
-fn is_parent_chain(query: &str) -> bool {
-    query.split('/').all(|part| part == "..")
 }
 
 fn search_in(flavor: Flavor, query: &str, root: &str, prefix: &str) -> DirectorySearch {

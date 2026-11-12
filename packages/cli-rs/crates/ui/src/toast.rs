@@ -205,10 +205,9 @@ impl Toasts {
         self.clear_timer();
         self.0.remaining.set(duration);
         self.0.started.set(self.0.app.now());
-        let weak = Rc::downgrade(&self.0);
         let timer = self.0.app.set_timeout(
             duration,
-            bind!(weak, |inner, _cx| {
+            bind!(self.0, |inner, _cx| {
                 inner.timer.set(None);
                 Toasts(inner).dismiss();
             }),

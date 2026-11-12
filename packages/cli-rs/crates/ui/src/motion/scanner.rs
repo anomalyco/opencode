@@ -49,16 +49,12 @@ impl ScannerOptions {
             min_alpha: 0.0,
         }
     }
-
-    fn total_frames(&self) -> usize {
-        self.width + self.hold_end + (self.width - 1) + self.hold_start
-    }
 }
 
 /// One string per frame: lit cells and unlit dots.
 pub fn scanner_frames(options: &ScannerOptions) -> Vec<String> {
     let trail = options.trail_steps as i64;
-    (0..options.total_frames())
+    (0..options.width + options.hold_end + (options.width - 1) + options.hold_start)
         .map(|frame| {
             let state = State::at(frame as i64, options);
             (0..options.width as i64)
