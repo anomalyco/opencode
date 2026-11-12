@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 // Interpreter benchmarks: median and fastest wall-clock milliseconds per program over several runs.
-// Usage: bun run script/bench.ts [--engine vm|legacy] [--iterations N] [--filter name] [--mixed] [--jsc]
+// Usage: bun run script/bench.ts [--iterations N] [--filter name] [--mixed] [--jsc]
 
 import { numberOfDFGCompiles, reoptimizationRetryCount } from "bun:jsc"
 import { Effect, Schema } from "effect"
@@ -80,13 +80,11 @@ const argument = (flag: string) => {
 }
 const iterations = Number(argument("--iterations") ?? 7)
 const filter = argument("--filter")
-const engine = (argument("--engine") as CodeMode.Engine | undefined) ?? "vm"
 const mixed = process.argv.includes("--mixed")
 const jsc = mixed || process.argv.includes("--jsc")
 const exec = Vm.prototype["exec"]
 
 const runtime = CodeMode.make({
-  engine,
   tools: {
     echo: Tool.make({
       description: "Echo an id",

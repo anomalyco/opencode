@@ -1,13 +1,12 @@
 export * as SubagentJob from "./subagent-job.js"
 
-import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Layer } from "effect"
 import { Node } from "@opencode/util/effect/app-node"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
 import type { Document, Entry } from "@opencode/schema/config"
 import { Job } from "../job.js"
-import { Session } from "../session.js"
+import { SessionExecution } from "./execution.js"
 import { SessionSchema } from "./schema.js"
-import { SubagentCompletion } from "./subagent-completion.js"
 
 type Recovery = Extract<Job.Recovery, { kind: "subagent" }>
 
@@ -62,15 +61,13 @@ function configured<K extends "subagent_concurrency" | "subagent_over_limit">(
 }
 
 export interface Interface {
-  start: (recovery: Recovery) => Effect.Effect<Job.Info>
-  background: (recovery: Recovery) => Effect.Effect<void>
-  notify: (recovery: Recovery, startedAt: number) => Effect.Effect<void>
+  readonly start: (recovery: Recovery) => Effect.Effect<Job.Info>
   /**
    * Takes one of the parent's slots for one child execution. Idempotent per child, so a follow-up on a
    * running child keeps its existing slot. False when no slot is free and the mode is `"fail"`, or when a
    * `"wait"` call is cancelled while queued.
    */
-  acquire: (input: {
+  readonly acquire: (input: {
     readonly parentSessionID: SessionSchema.ID
     readonly childSessionID: SessionSchema.ID
     readonly limit: number
@@ -78,7 +75,7 @@ export interface Interface {
     readonly cancel?: Effect.Effect<void>
   }) => Effect.Effect<boolean>
   /** Frees a child's slot and wakes one queued call. Idempotent, so release paths may overlap. */
-  release: (parentSessionID: SessionSchema.ID, childSessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly release: (parentSessionID: SessionSchema.ID, childSessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SubagentJob") {}
@@ -89,15 +86,41 @@ type Slots = {
   waiting: Deferred.Deferred<void> | undefined
 }
 
-const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scope.Scope> = Effect.gen(function* () {
-  const sessions = yield* Session.Service
+export function start(
+  jobs: Job.Interface,
+  execution: SessionExecution.Interface,
+  recovery: Recovery,
+  notificationID?: Job.Background["notificationID"],
+  release?: Effect.Effect<void>,
+) {
+  const id = recovery.childSessionID
+  return jobs.start({
+    id,
+    type: "subagent",
+    title: recovery.description,
+    metadata: notificationID === undefined ? {} : undefined,
+    recovery,
+    notificationID,
+    background: true,
+    run: execution.resume(id).pipe(
+      // Only an explicit caller cancel releases the child's claim. A server shutdown
+      // interrupts this job but must leave the child resumable on the next start.
+      Effect.onInterrupt(() =>
+        jobs.isCancelled(id).pipe(Effect.flatMap((cancelled) => (cancelled ? execution.interrupt(id) : Effect.void))),
+      ),
+      // The slot belongs to the run holding it; a follow-up that joins a running job skips this effect.
+      Effect.ensuring(release ?? Effect.void),
+      Effect.as(""),
+    ),
+  })
+}
+
+const make = Effect.gen(function* () {
+  const execution = yield* SessionExecution.Service
   const jobs = yield* Job.Service
-  const scope = yield* Scope.Scope
-  // Jobs and their completion observers outlive the plugin that launched them.
-  // Fork with the global context too, rather than retaining the caller's location.
+  // Jobs outlive the plugin that launched them. Fork with the global context too, rather
+  // than retaining the caller's location.
   const context = yield* Effect.context<never>()
-  // One observer per job generation, including continuations of the same child.
-  const notifications = new Set<string>()
   // Process-local, like the Job registry this mirrors: a restart re-registers recovered work.
   const slots = new Map<SessionSchema.ID, Slots>()
 
@@ -133,57 +156,20 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
     return yield* acquire(input)
   })
 
-  const notify = Effect.fn("SubagentJob.notify")(function* (recovery: Recovery, startedAt: number) {
-    const key = `${recovery.childSessionID}:${startedAt}`
-    if (notifications.has(key)) return
-    notifications.add(key)
-    yield* Effect.gen(function* () {
-      const info = (yield* jobs.wait({ id: recovery.childSessionID })).info
-      if (info) yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
-    }).pipe(
-      // A backgrounded child's slot belongs to this observer, not to the call that launched it.
-      Effect.ensuring(release(recovery.parentSessionID, recovery.childSessionID)),
-      Effect.ensuring(Effect.sync(() => notifications.delete(key))),
-      // The global context drops the caller's span annotations; delivery is the parent session's work.
-      Effect.annotateSpans("session.id", recovery.parentSessionID),
-      Effect.forkIn(scope, { startImmediately: true }),
-      Effect.setContext(context),
-    )
-  })
-
   return Service.of({
-    start: (recovery: Recovery) =>
-      jobs
-        .start({
-          id: recovery.childSessionID,
-          type: "subagent",
-          title: recovery.description,
-          metadata: {},
-          recovery,
-          run: Effect.gen(function* () {
-            yield* sessions.resume(recovery.childSessionID)
-            const messages = yield* sessions.messages({ sessionID: recovery.childSessionID, order: "desc", limit: 20 })
-            const assistant = messages.find(
-              (message) =>
-                message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-            )
-            return SubagentCompletion.text(assistant)
-          }),
-        })
-        .pipe(Effect.setContext(context)),
-    background: Effect.fn("SubagentJob.background")(function* (recovery: Recovery) {
-      const info = yield* jobs.background(recovery.childSessionID)
-      if (!info) return yield* release(recovery.parentSessionID, recovery.childSessionID)
-      yield* notify(recovery, info.started_at)
-    }),
-    notify,
+    start: (recovery) =>
+      start(jobs, execution, recovery, undefined, release(recovery.parentSessionID, recovery.childSessionID)).pipe(
+        Effect.setContext(context),
+      ),
     acquire,
     release,
   })
 })
 
+export const layer = Layer.effect(Service, make)
+
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
   service: Service,
-  layer: Layer.effect(Service, make),
-  deps: [Session.node, Job.node],
+  layer,
+  deps: [SessionExecution.node, Job.node],
 })

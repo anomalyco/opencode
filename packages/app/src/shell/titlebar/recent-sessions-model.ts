@@ -101,6 +101,30 @@ export function sortRecentSessions(items: readonly RecentSession[]) {
   return [...items].sort(compareRecentSessions)
 }
 
+export const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Rows Recent shows at first, and how many more each Show more reveals. */
+export const RECENT_VISIBLE_LIMIT = 30
+
+/**
+ * Recent shows the sessions active in the last 7 days, at most 30. Each Show more reveals `RECENT_VISIBLE_LIMIT`
+ * more regardless of age. `serversHaveMore` says whether any server still has pages that were not fetched.
+ */
+export function windowRecentSessions(input: {
+  items: readonly RecentSession[]
+  now: number
+  revealed: number
+  serversHaveMore: boolean
+}) {
+  const cutoff = input.now - RECENT_WINDOW_MS
+  const older = input.items.findIndex((item) => sessionTime(item.session) < cutoff)
+  const inWindow = older === -1 ? input.items.length : older
+  const limit = Math.min(inWindow, RECENT_VISIBLE_LIMIT) + input.revealed
+  const visible = input.items.slice(0, limit)
+
+  return { visible, limit, hasMore: input.items.length > visible.length || input.serversHaveMore }
+}
+
 type RecentPageBase = {
   readonly sessions: readonly SessionInfo[]
   readonly cursor: string | undefined

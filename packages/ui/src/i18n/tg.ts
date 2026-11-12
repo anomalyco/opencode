@@ -160,6 +160,7 @@ export const dict = {
   "ui.common.dismiss": "Рад кардан",
   "ui.common.close": "Пӯшед",
   "ui.common.next": "Баъдӣ",
+  "ui.common.continue": "Давом додан",
   "ui.common.submit": "Пешниҳод кунед",
   "ui.common.showMore": "Бештар нишон диҳед",
   "ui.permission.deny": "Инкор кардан",

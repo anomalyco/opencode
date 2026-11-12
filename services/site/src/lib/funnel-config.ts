@@ -9,7 +9,6 @@ const pages = new Set([
   "terminal",
   "mobile",
   "sdk",
-  "ide",
   "mini",
   "extensions",
   "changelog",

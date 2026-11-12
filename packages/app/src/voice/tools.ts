@@ -195,7 +195,7 @@ export class VoiceTools {
       const explained = this.explained.get(sessionID)
       const full = explained === undefined || Date.now() - explained > headerLapse
 
-      // Like a typed steer, move blocking shells and subagents to the background so the agent reads it next. Tried
+      // Like a typed steer, move blocking shells to the background so the agent reads it next. Tried
       // once and briefly: the steer goes either way, and an idle session makes it a no-op.
       if (delivery === "steer")
         await api.session

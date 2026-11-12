@@ -1040,7 +1040,7 @@ test("grows a streaming row without a ResizeObserver loop error", async ({ page 
 })
 
 test.describe("background shortcut", () => {
-  test("offers a standalone running subagent to the background with Ctrl+B", async ({ page }) => {
+  test("does not offer a running subagent to the background", async ({ page }) => {
     await setupTimeline(page, {
       settings: { timelineDetail: { ...detailed, subagents: { placement: "separate" } } },
       sessionMessages: [user, runningSubagent()],
@@ -1050,19 +1050,8 @@ test.describe("background shortcut", () => {
     await expect(card).not.toContainText("(background)")
     await expect(page.getByText("Called `subagent`", { exact: false })).toHaveCount(0)
     await expect(page.locator('[data-component="background-tool-control"]')).toHaveCount(0)
-    const hint = backgroundHint(page)
-    await expect(hint).toBeVisible()
+    await expect(backgroundHint(page)).toHaveCount(0)
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-    await expect
-      .poll(async () => {
-        const [cardBox, hintBox] = await Promise.all([card.boundingBox(), hint.boundingBox()])
-
-        if (!cardBox || !hintBox) return undefined
-
-        return { aligned: Math.abs(cardBox.x - hintBox.x) < 2, ordered: cardBox.y < hintBox.y }
-      })
-      .toEqual({ aligned: true, ordered: true })
-    await expectBackgroundRequest(page)
   })
 
   for (const name of ["read", "shell"] as const) {

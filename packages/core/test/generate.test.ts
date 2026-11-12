@@ -417,6 +417,14 @@ describe("image and decision generation", () => {
             request,
             Response.json({ model: "clef", answers: { photo: { type: "noul", noul: 0.9 } } }),
           )
+        if (request.url === "https://gemini.test/v1beta/decisions")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              answers: { photo: { type: "noul", noul: 0.8, confidence: 0.8 } },
+              usage: { total_input_tokens: 12, total_output_tokens: 0, total_tokens: 12 },
+            }),
+          )
         if (request.url === "https://openrouter.ai/api/v1/systemone")
           return HttpClientResponse.fromWeb(
             request,
@@ -606,6 +614,34 @@ describe("image and decision generation", () => {
     }),
   )
 
+  mediaIt.effect("routes a gemini-decisions catalog entry to the Google decisions entrypoint", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      const result = yield* generate.decisions({
+        model: ref("decide-host", "decide-gemini"),
+        input: [
+          { type: "text", text: "Is this a photo?" },
+          { type: "file", data: "aW1hZ2U=", mime: "image/png" },
+        ],
+        questions: [{ type: "predicate", name: "photo", instructions: "Is this a photo?" }],
+      })
+      expect(requests[0]).toMatchObject({
+        url: "https://gemini.test/v1beta/decisions",
+        body: {
+          model: "decide-gemini",
+          input: [
+            { type: "text", text: "Is this a photo?" },
+            { type: "image", mime_type: "image/png", data: "aW1hZ2U=" },
+          ],
+          questions: { photo: { type: "noul", instructions: "Is this a photo?" } },
+        },
+      })
+      expect(result.answers).toEqual([{ type: "predicate", name: "photo", probability: 0.8 }])
+      expect(result.tokens).toEqual({ input: 12, output: 0 })
+    }),
+  )
+
   mediaIt.effect("sends a variant's reasoning setting and maps provider rejections", () =>
     Effect.gen(function* () {
       requests.length = 0
@@ -684,6 +720,15 @@ function decisionCatalog() {
             "decide-state": model("decide-state", { media_input: "state" }),
             "decide-unknown": model("decide-unknown", { media_input: "somewhere_new" }),
             "decide-override": model("decide-override", { media_input: "state" }),
+            "decide-gemini": {
+              ...model("decide-gemini"),
+              api: {
+                "gemini-decisions": {
+                  base_url: "https://gemini.test/v1beta",
+                  sdk: { opencodeai: "@opencode/ai/providers/google/decisions" },
+                },
+              },
+            },
           },
         },
       }),

@@ -85,7 +85,7 @@ import {
 } from "./run-machine"
 import { LinkedText } from "../components/linked-text"
 
-function ShellSubmessage(props: { text: string; animate?: boolean }) {
+export function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
   let valueRef: HTMLSpanElement | undefined
 
@@ -133,7 +133,7 @@ function optional<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S)
   return Schema.catchDecoding<typeof field>(() => Effect.succeed(Option.none()))(field)
 }
 
-const toolInput = Schema.decodeUnknownSync(
+export const toolInput = Schema.decodeUnknownSync(
   Schema.Struct({
     path: optional(Schema.String),
     pattern: optional(Schema.String),
@@ -155,7 +155,7 @@ const toolInput = Schema.decodeUnknownSync(
   }).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some({})))),
 )
 
-const toolMetadata = Schema.decodeUnknownSync(
+export const toolMetadata = Schema.decodeUnknownSync(
   Schema.Struct({
     name: optional(Schema.String),
     provider: optional(Schema.String),
@@ -163,7 +163,6 @@ const toolMetadata = Schema.decodeUnknownSync(
     command: optional(Schema.String),
     shellID: optional(Schema.String),
     status: optional(Schema.String),
-    background: optional(Schema.Boolean),
     interrupted: optional(Schema.Boolean),
     notice: optional(Schema.String),
     count: optional(Schema.Finite),
@@ -248,7 +247,7 @@ function relativizeProjectPath(path: string, directory?: string) {
   return path.slice(prefix.length)
 }
 
-function displayDirectory(path: string | undefined) {
+export function displayDirectory(path: string | undefined) {
   const data = useData()
 
   return relativizeProjectPath(getDirectory(path), data.directory)
@@ -289,7 +288,7 @@ function skillToolName(input: ToolInput, metadata: ToolMetadata) {
   return metadata.name ?? input.id ?? input.name
 }
 
-function currentSkillName(tool: SessionMessageAssistantTool) {
+export function currentSkillName(tool: SessionMessageAssistantTool) {
   return skillToolName(toolInput(currentToolInput(tool)), toolMetadata(currentToolMetadata(tool)))
 }
 
@@ -331,7 +330,7 @@ function toolTitle(tool: SessionMessageAssistantTool, i18n: UiI18n) {
   }
 }
 
-function urls(text: string | undefined) {
+export function urls(text: string | undefined) {
   if (!text) return []
 
   return [
@@ -339,7 +338,7 @@ function urls(text: string | undefined) {
   ]
 }
 
-function sessionLink(id: string | undefined, href?: (id: string) => string | undefined) {
+export function sessionLink(id: string | undefined, href?: (id: string) => string | undefined) {
   if (!id) return undefined
 
   return href?.(id)
@@ -358,7 +357,7 @@ function taskSession(
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 
-function ExaOutput(props: { output?: string }) {
+export function ExaOutput(props: { output?: string }) {
   const i18n = useI18n()
   const [showAll, setShowAll] = createSignal(false)
   let firstRevealedRef: HTMLAnchorElement | undefined
@@ -1078,7 +1077,7 @@ export function CurrentFileToolGroup(props: {
   )
 }
 
-function scrollParent(element: HTMLElement): HTMLElement | undefined {
+export function scrollParent(element: HTMLElement): HTMLElement | undefined {
   const parent = element.parentElement
 
   if (!parent) return
@@ -1092,7 +1091,7 @@ function isFileChangeTool(tool: SessionMessageAssistantTool) {
   return tool.state.status !== "error" && (tool.name === "edit" || tool.name === "write" || tool.name === "patch")
 }
 
-function samePatchFile(a: FileDiffInfo, b: FileDiffInfo) {
+export function samePatchFile(a: FileDiffInfo, b: FileDiffInfo) {
   return (
     a === b ||
     (a.file === b.file &&
@@ -1184,7 +1183,7 @@ export const ToolRegistry = {
   render: getTool,
 }
 
-function FileTool(props: ToolProps & { title: string; count: number; children?: JSX.Element }) {
+export function FileTool(props: ToolProps & { title: string; count: number; children?: JSX.Element }) {
   const i18n = useI18n()
 
   return (
@@ -1207,7 +1206,7 @@ function FileTool(props: ToolProps & { title: string; count: number; children?: 
   )
 }
 
-function FileAccordionGroup(props: { children: JSX.Element }) {
+export function FileAccordionGroup(props: { children: JSX.Element }) {
   return (
     <div
       data-component="accordion"
@@ -1436,7 +1435,7 @@ export function ToolDisplay(
 
 // Each branch must stay in sync with its tool trigger's subtitle expression so
 // failed rows read like their non-error counterparts ("Shell sleep 30").
-function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
+export function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   const input = toolInput(props.input)
   const metadata = toolMetadata(props.metadata)
 
@@ -1472,7 +1471,7 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   return undefined
 }
 
-function toolDisplayError(props: ToolProps & { error?: string }) {
+export function toolDisplayError(props: ToolProps & { error?: string }) {
   // Code Mode failures render inline in the execution's call list.
   if (props.tool === "execute") return undefined
 
@@ -1771,15 +1770,7 @@ ToolRegistry.register({
 
     const view = createMemo(() => viewSubagentRun(run()))
 
-    const subtitle = createMemo(() => {
-      const value = input().description || childSessionId()
-
-      if (!value) return value
-
-      if (view().background) return `${value} (background)`
-
-      return value
-    })
+    const subtitle = createMemo(() => input().description || childSessionId())
 
     const href = createMemo(() => sessionLink(childSessionId(), data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
@@ -1859,7 +1850,7 @@ ToolRegistry.register({
   },
 })
 
-function ConsoleOutput(props: { command?: string; output: string }) {
+export function ConsoleOutput(props: { command?: string; output: string }) {
   const i18n = useI18n()
 
   return (
@@ -1899,7 +1890,7 @@ function ConsoleOutput(props: { command?: string; output: string }) {
 }
 
 // The button sits beside its section's <pre>, not inside it, so selecting and copying text never picks it up.
-function ConsoleCopy(props: { text: string; label: string }) {
+export function ConsoleCopy(props: { text: string; label: string }) {
   const i18n = useI18n()
   const copy = createCopyFeedback()
   const label = () => (copy.copied() ? i18n.t("ui.message.copied") : props.label)

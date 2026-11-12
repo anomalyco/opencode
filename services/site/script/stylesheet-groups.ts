@@ -2,7 +2,7 @@ import type { PluginOption } from "vite"
 
 // Pages that share a layout share a stylesheet: the product pages with the changelog (both show
 // release notes), and otherwise each section of the site (the route's first path segment).
-const productPages = /^(product|desktop|terminal|mobile|sdk|ide|mini|changelog)(\/|$)/
+const productPages = /^(product|desktop|terminal|mobile|sdk|mini|changelog)(\/|$)/
 const shell = /[\\/]src[\\/](app|component[\\/]site[\\/]site)\.tsx$/
 
 /**
