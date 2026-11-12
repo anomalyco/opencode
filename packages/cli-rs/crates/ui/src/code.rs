@@ -5,7 +5,7 @@ use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::{Code, LineNumbers};
 
-use crate::theme::Theme;
+use crate::theme::{Theme, contrast};
 
 /// The capture styles for code, Markdown, and the prompt, from the TUI theme: a port of `generateSyntax`
 /// (`packages/theme/src/tui/syntax.ts`). Rules apply in order, so a scope listed twice keeps its last style.
@@ -17,16 +17,13 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
     let feedback = &theme.text.feedback;
     let fg = |color: Color| Style::new().fg(color);
     let categorical = theme.categorical();
-    // The page color: dark in dark mode, light in light mode. A transparent page (the system theme) falls back
-    // to the selected-row text.
-    let paste = if theme.background.base.a == 255 { theme.background.base } else { theme.text.action.primary.focused };
     let rules = [
         (&["default"][..], fg(theme.text.base)),
         (&["prompt"], fg(theme.accent().step(200))),
         (&["extmark.file"], fg(feedback.warning.base).bold()),
         (&["extmark.agent"], fg(categorical[0].step(200)).bold()),
         (&["extmark.skill"], fg(categorical.get(1).unwrap_or(&categorical[0]).step(200)).bold()),
-        (&["extmark.paste"], fg(paste).bg(feedback.warning.base).bold()),
+        (&["extmark.paste"], fg(paste_text(theme)).bg(feedback.warning.base).bold()),
         (&["comment", "comment.documentation"], fg(syntax.comment).italic()),
         (&["string", "symbol", "character.special", "character"], fg(syntax.string)),
         (&["number", "boolean", "constant", "float"], fg(syntax.number)),
@@ -115,6 +112,26 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
         }
     }
     styles
+}
+
+/// The paste chip's text: the page color, dark in dark mode and light in light mode (#62930). A transparent page (the
+/// system theme) still holds the terminal's background in its channels, so the chip takes that. A transparent page
+/// without one takes the end of the neutral scale that reads better on the chip.
+///
+/// TypeScript takes the selected-row text instead, which is the light foreground on the system theme in dark mode
+/// (`parity/deviations/O89-paste-chip-contrast.md`).
+fn paste_text(theme: &Theme) -> Color {
+    let page = theme.background.base;
+    if page.a == 255 {
+        return page;
+    }
+    if (page.r, page.g, page.b) != (0, 0, 0) {
+        return Color::rgb(page.r, page.g, page.b);
+    }
+    let chip = theme.text.feedback.warning.base;
+    // The best contrast against one color is always at the darkest or the lightest step.
+    let neutral = theme.neutral().0.into_iter().filter(|step| step.a == 255);
+    neutral.max_by(|a, b| contrast(*a, chip).total_cmp(&contrast(*b, chip))).unwrap_or(theme.text.base)
 }
 
 /// Read-only code in the theme's text color, highlighted as `filetype` (`<code conceal={false} fg={text.base}>`).
