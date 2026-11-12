@@ -29,8 +29,9 @@ pub struct StartError {
 /// Runs `command` with `args` in place of this process and returns only when it cannot start.
 ///
 /// On Unix the TypeScript binary replaces this process, so it keeps the pid, the terminal, signal
-/// handling, and the exit status (`serve --service` registers the pid it runs as). Elsewhere this
-/// process waits for the child and exits with its code.
+/// handling, and the exit status (`serve --service` registers the pid it runs as). On Windows this
+/// process waits for the child and exits with its code. Ctrl+C and Ctrl+Break reach the child, which
+/// shares the console, so this process ignores them rather than exit before it.
 pub fn exec(command: &TsCommand, args: impl IntoIterator<Item = OsString>) -> StartError {
     let mut process = build(command, args);
     #[cfg(unix)]
@@ -39,10 +40,14 @@ pub fn exec(command: &TsCommand, args: impl IntoIterator<Item = OsString>) -> St
         let source = process.exec();
         start_error(command, source)
     }
-    #[cfg(not(unix))]
-    match process.status() {
-        Ok(status) => std::process::exit(exit_code(status)),
-        Err(source) => start_error(command, source),
+    #[cfg(windows)]
+    {
+        // Children do not inherit the handler, so it can go first and leave no gap before the wait.
+        let _ = opencode_util::win::ignore_interrupts();
+        match process.status() {
+            Ok(status) => std::process::exit(exit_code(status)),
+            Err(source) => start_error(command, source),
+        }
     }
 }
 
