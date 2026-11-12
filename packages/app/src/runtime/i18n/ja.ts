@@ -343,7 +343,6 @@ export const dict = {
   "session.new.project.search": "プロジェクトを検索",
   "session.new.project.add": "プロジェクトを追加",
   "session.new.workspace.runIn": "セッションの実行先",
-  "session.new.workspace.triggerLocal": "ローカル",
   "session.new.workspace.local": "ローカルリポジトリ",
   "session.new.workspace.local.tooltip": "現在のチェックアウトを使用",
   "session.new.workspace.new.tooltip": "独立したチェックアウトを作成",

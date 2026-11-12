@@ -70,7 +70,14 @@ export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (request: 
 const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
   Effect.forEach(questions, (question): Effect.Effect<readonly [string, unknown], AIError> => {
     if (question.type === "predicate")
-      return Effect.succeed([question.name, { type: "noul", instructions: question.instructions }] as const)
+      return Effect.succeed([
+        question.name,
+        {
+          type: "noul",
+          instructions: question.instructions,
+          ...(question.criteria === undefined ? {} : { criteria: question.criteria }),
+        },
+      ] as const)
     if (question.type === "score")
       return Effect.succeed([
         question.name,
@@ -87,7 +94,7 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     if (new Set(keys).size !== keys.length)
       return Effect.fail(
         ProviderShared.invalidRequest(
-          `System One choice options are strings; "${question.name}" has a boolean and a string with the same text`,
+          `Decision choice options are sent as string keys; "${question.name}" has a boolean and a string with the same text`,
         ),
       )
     return Effect.succeed([
@@ -287,4 +294,13 @@ export const route = DecisionRoute.make({
   endpoint: Endpoint.path("/systemone", { baseURL: DEFAULT_BASE_URL }),
 })
 
-export const SystemOne = { Response, encodeBody, toResponse, protocol, route } as const
+export const SystemOne = {
+  Answer,
+  Response,
+  encodeBody,
+  encodeQuestions,
+  toAnswer,
+  toResponse,
+  protocol,
+  route,
+} as const

@@ -178,6 +178,7 @@ export const dict = {
   "ui.common.dismiss": "Kapat",
   "ui.common.close": "Kapat",
   "ui.common.next": "İleri",
+  "ui.common.continue": "Devam et",
   "ui.common.submit": "Gönder",
   "ui.common.showMore": "Daha fazla göster",
   "ui.common.moreCount.one": "+{{count}} daha",

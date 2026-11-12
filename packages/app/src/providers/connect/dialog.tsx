@@ -7,6 +7,7 @@ import { Checkbox } from "@opencode/ui/checkbox"
 import { Loader } from "@opencode/ui/loader"
 import { TextField } from "@opencode/ui/text-field"
 import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
+import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { TextInput } from "@opencode/ui/text-input"
 import { type Component, createMemo, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -443,11 +444,10 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
     const userCode = new URL(authorization.url).searchParams.get("user_code")
 
     if (userCode) return userCode
+    // Device sign-ins put the code after a colon ("Enter code: ABCD-1234"); other instructions are not a code.
     const instructions = authorization.instructions
 
     if (instructions?.includes(":")) return instructions.split(":").pop()?.trim()
-
-    return instructions
   })
 
   // Asks one visible field at a time, like the TUI, so `when` conditions see every earlier answer.
@@ -913,7 +913,14 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
   function OAuthAutoView() {
     return (
       <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <div>{language.t("provider.connect.oauth.auto.description", { provider: name() })}</div>
+        <div>
+          {language.t(
+            connect().paste
+              ? "provider.connect.oauth.auto.paste.description"
+              : "provider.connect.oauth.auto.description",
+            { provider: name() },
+          )}
+        </div>
         <StatusRow>{language.t("provider.connect.status.waiting")}</StatusRow>
         <div class="flex flex-wrap items-center gap-2">
           <Button
@@ -933,6 +940,18 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
               value={value()}
               readOnly
               copyable
+            />
+          )}
+        </Show>
+        <Show when={connect().paste}>
+          {(paste) => (
+            <RedirectPasteForm
+              value={paste().value}
+              error={paste().error}
+              locked={paste().locked}
+              submitting={paste().submitting}
+              onInput={(value) => props.controller.input({ type: "paste.changed", value })}
+              onSubmit={() => props.controller.input({ type: "paste.submitted" })}
             />
           )}
         </Show>

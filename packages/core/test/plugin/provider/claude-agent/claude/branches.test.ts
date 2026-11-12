@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber } from "effect"
+import { Effect } from "effect"
 import { SessionRecord } from "@opencode/core/plugin/provider/claude-agent/sync/record"
 import { RequestKind } from "@opencode/core/plugin/provider/claude-agent/language-model/request-kind"
 import { it } from "../../../../lib/effect"
@@ -15,11 +15,9 @@ describe("Claude history branches", () => {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
-        FakeClaude.expectInterrupt(),
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn({ recording: "billing-error" }),
         FakeClaude.expectInterrupt(),
-        FakeClaude.expectStartup(),
         FakeClaude.expectTurn({ index: 1 }),
         FakeClaude.expectInterrupt(),
       ])
@@ -34,7 +32,7 @@ describe("Claude history branches", () => {
       expect(TestSessions.text(yield* TestSessions.reply(test.model, TestSessions.followup())).trim()).toBe(
         "COPPER-OTTER",
       )
-      expect(claude.runs[2]!.args).toContain(`--resume=${before!.claudeSessionID}`)
+      expect(claude.runs).toHaveLength(2)
       yield* test.registry.close()
       claude.check()
     }),
@@ -235,42 +233,33 @@ describe("Claude history branches", () => {
       }),
   )
 
-  it.effect("compaction drains a parked tool turn and the next primary request starts from the summary alone", () =>
+  it.effect("compaction leaves a parked tool turn running and the next primary request starts from the summary", () =>
     Effect.gen(function* () {
-      const cancel = FakeClaude.replay("tools-waiting-cancel")
-      const nextUser = cancel.findIndex((step, i) => i > 1 && step.type === "exchange" && step.input.type === "user")
-      const steps = cancel.slice(0, nextUser)
-      const terminal = steps.findIndex(
-        (step) => step.type === "exchange" && step.replies.some((message) => message.type === "result"),
+      const tools = FakeClaude.replay("tools")
+      // The first tool result is the first input after the step that parks.
+      const parked = tools.findIndex(
+        (step) => step.type === "exchange" && step.input.response?.response?.mcp_response !== undefined,
       )
-      const ending = steps[terminal]!
-      if (ending.type !== "exchange") throw new Error("Missing recorded terminal result")
-      const drain = Promise.withResolvers<void>()
-      steps[terminal] = { ...ending, beforeResult: drain.promise }
       const claude = FakeClaude.make([
-        ...steps,
+        ...tools.slice(0, parked),
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn({ recording: "utility" }),
         FakeClaude.expectInterrupt(),
+        ...tools.slice(parked),
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
         FakeClaude.expectInterrupt(),
       ])
       const test = yield* TestSessions.start(claude)
-      yield* Effect.addFinalizer(() => Effect.sync(() => drain.resolve()))
       const prompt = TestTools.prompt()
-      TestTools.append(prompt, yield* TestTools.step(test.model, prompt), () => ({
-        type: "execution-denied",
-        reason: "Compacted",
-      }))
-      const summary = yield* TestSessions.reply(test.model, prompt, "session-a", "compaction").pipe(Effect.forkChild)
-      yield* Effect.promise(() => claude.started(steps[terminal]!))
-      expect(claude.forks).toHaveLength(0)
-      expect(claude.runs).toHaveLength(1)
-      drain.resolve()
-      yield* Fiber.join(summary)
+      TestTools.append(prompt, yield* TestTools.step(test.model, prompt), TestTools.output)
+      yield* TestSessions.reply(test.model, [...prompt], "session-a", "compaction")
       expect(claude.forks).toHaveLength(1)
       expect(claude.removed).toEqual([claude.forks[0]!.sessionID])
+      TestTools.append(prompt, yield* TestTools.step(test.model, prompt), TestTools.output)
+      expect(TestSessions.text(yield* TestTools.step(test.model, prompt))).toBe("COPPER-OTTER")
+      expect(claude.runs).toHaveLength(2)
+      expect(claude.runs[0]!.received.some((message) => message.request?.subtype === "interrupt")).toBe(false)
       const compacted = TestSessions.prompt(
         "<conversation-checkpoint>Only SUMMARY-HERON remains.</conversation-checkpoint>",
       )

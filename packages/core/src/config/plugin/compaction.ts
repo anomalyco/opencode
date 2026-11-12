@@ -12,10 +12,10 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const compaction = yield* SessionCompaction.Service
-    const flags = yield* Flag.resolver
+    const flags = yield* Flag.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, compaction.reload())
     yield* compaction.transform((editor) => {
-      editor.configure({ precompute: flags(loaded.entries).background_compaction.enabled })
+      editor.configure({ precompute: flags.resolve(loaded.entries).background_compaction.enabled })
       for (const entry of loaded.entries) {
         if (entry.type !== "document" || !entry.info.compaction) continue
         editor.configure({

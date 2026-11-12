@@ -622,7 +622,7 @@ function diagnoseSelectionMap(value: unknown, path: string[], diagnostics: Diagn
 }
 
 function diagnoseSelection(value: Record<string, unknown>, path: string[], diagnostics: Diagnostic[]) {
-  const modelValid = typeof value.model === "string" && /^[^/#]+\/[^#]+$/.test(value.model)
+  const modelValid = typeof value.model === "string" && ConfigMigrateV1.modelSelection(value.model) !== undefined
   if (own(value, "model") && typeof value.model === "string" && !modelValid)
     diagnostics.push({
       kind: "unsupported",

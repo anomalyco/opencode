@@ -25,6 +25,10 @@ function ToastRegion(props: ToastRegionProps) {
   // The Portal's container holds the toast region whenever it exists. Watching the container, not the whole body,
   // keeps every DOM change elsewhere in the page (each streamed delta, each mounted row) from scanning the document.
   const observe = (container: HTMLDivElement) => {
+    // A modal dialog hides what's outside it from assistive tech. The region is in the Portal's own div, so that div,
+    // rather than the toaster, is what the dialog would hide.
+    container.setAttribute("data-kb-top-layer", "")
+
     const sync = () => {
       container.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
         const hidden = element.dataset.visible === "false"

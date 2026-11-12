@@ -338,11 +338,11 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    // Submitting reads past the automatic unread marker. Keep a reader's own scroll or revealed tool in place.
+    // A reader far enough up to see the jump-to-latest button stays put; anyone closer is taken to the new prompt.
     onResponseSubmit: () => {
-      const anchor = input.timeline.follow.anchor()
+      const scroll = input.timeline.scroll
 
-      if (input.timeline.follow.following() || (anchor && !anchor.partID)) input.timeline.actions.resume()
+      if (input.timeline.follow.following() || !(scroll.overflow && scroll.jump)) input.timeline.actions.resume()
     },
     openParent,
     focusPrompt: () => focusPrompt(),
@@ -420,7 +420,6 @@ export function ActiveSessionComposerRegion(props: {
   screen: SessionScreen
   model: SessionComposerController
   suggestionBoundary: () => HTMLElement | undefined
-  onReveal: (target: string) => void
 }) {
   const location = useWorkspaceLocation()
   const data = useData()
@@ -448,14 +447,16 @@ export function ActiveSessionComposerRegion(props: {
     },
   )
 
-  // Subagents count while their session runs, or while their blocking call waits for its child session.
   const subagents = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background.subagents().map((task) => ({
-      ...task,
-      agent: task.agent ?? (task.sessionID ? data.session.get(task.sessionID)?.agent : undefined),
-      key: task.id,
-      target: task.partID ?? task.id,
-    })),
+    props.model.region.state.background
+      .tasks()
+      .filter((task) => task.type === "subagent")
+      .map((task) => ({
+        ...task,
+        agent: task.agent ?? data.session.get(task.sessionID)?.agent,
+        key: task.id,
+        target: task.id,
+      })),
   )
 
   const shells = createMemo<SessionActivityItem[]>(() =>
@@ -479,24 +480,14 @@ export function ActiveSessionComposerRegion(props: {
       ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
       .at(-1)?.todo === true
 
-  const open = (item: SessionActivityItem) => {
-    const current = props.session.identity.params.id
-
-    if (!current) return
-
-    if (item.sessionID) return openRoute(current, item.sessionID)
-
-    // A starting subagent call has no session yet, so it lives in this timeline.
-    props.onReveal(item.target)
-  }
-
   const stop = (item: SessionActivityItem) => {
-    const request = item.sessionID
-      ? server.api.session.interrupt({ sessionID: item.sessionID })
-      : server.api.shell.remove({
-          id: item.target,
-          location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
-        })
+    const request =
+      item.type === "subagent"
+        ? server.api.session.interrupt({ sessionID: item.sessionID })
+        : server.api.shell.remove({
+            id: item.target,
+            location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
+          })
 
     return request.then(
       () => true,
@@ -587,7 +578,11 @@ export function ActiveSessionComposerRegion(props: {
               subagents={subagents()}
               shells={shells()}
               shell={shell}
-              onOpen={open}
+              onOpen={(item) => {
+                const current = props.session.identity.params.id
+
+                if (current) openRoute(current, item.sessionID)
+              }}
               onStop={stop}
               onEmpty={props.model.region.focusPrompt}
             />

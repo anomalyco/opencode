@@ -13,13 +13,14 @@ import {
   type Accessor,
 } from "solid-js"
 import path from "node:path"
-import { EOL, tmpdir } from "node:os"
+import { EOL } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
-import { useTuiTerminalEnvironment } from "../../context/runtime"
+import { useSessionLinks } from "../../ui/session-link"
+import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
@@ -160,6 +161,7 @@ export function Session(props: {
 }) {
   const epilogue = useEpilogue()
   const clipboard = useClipboard()
+  const paths = useTuiPaths()
   const writeExport = async (file: string, content: string) => {
     await mkdir(path.dirname(file), { recursive: true })
     await writeFile(file, content)
@@ -1375,7 +1377,7 @@ export function Session(props: {
           }
 
           const filepath = path.join(
-            tmpdir(),
+            paths.cwd,
             `session-${crypto.randomUUID()}.${options.format === "markdown" ? "md" : "json"}`,
           )
           await writeExport(filepath, content)
@@ -1400,8 +1402,9 @@ export function Session(props: {
       title: "Toggle subagent picker",
       id: "session.child.first",
       group: "Session",
-      run: () => {
-        if (composer.open || session()?.parentID) setComposer("open", false)
+      run: (tab?: string) => {
+        if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
+        else if (composer.open || session()?.parentID) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
         dialog.clear()
       },
@@ -1450,6 +1453,7 @@ export function Session(props: {
   }))
 
   Keymap.createLayer(() => ({
+    mode: "composer",
     enabled: () => renderer.currentFocusedEditor === null,
     bindings: baseAndUnfocusedCommands.map((command) => command.id),
   }))
@@ -1904,8 +1908,7 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
     )
     const part = current?.content.find((part): part is SessionMessageAssistantTool => {
       if (part.type !== "tool" || part.state.status !== "running") return false
-      const name = canonicalToolName(part.name)
-      return name === "shell" || name === "subagent"
+      return canonicalToolName(part.name) === "shell"
     })
     if (!current || !part) return
     return { key: `${current.id}:${part.id}`, started: part.time.ran ?? part.time.created }
@@ -2027,6 +2030,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const turn = () => ({ index: ctx.messageIndex(props.message.id), legacy: ctx.legacyTurns() })
   const duration = createMemo(() => SessionTurn.duration(messages(), props.message, turn()))
   const tokensPerSecond = createMemo(() => SessionTurn.tokensPerSecond(messages(), props.message, turn()))
+  const timeToFirstToken = createMemo(() => SessionTurn.timeToFirstToken(messages(), props.message, turn()))
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   const freeLimit = createMemo(() => props.message.error?.type === "provider.free-limit")
   const limitNotice = useLimitNotice(() => props.message)
@@ -2060,6 +2064,9 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           </Show>
           <Show when={config.data.session.tps && tokensPerSecond()}>
             {(value) => <span style={{ fg: theme.text.muted }}> · {value().toFixed(1)} tok/s</span>}
+          </Show>
+          <Show when={config.data.session.tps && ctx.terminal.width >= 36 && timeToFirstToken()}>
+            {(value) => <span style={{ fg: theme.text.muted }}> · {Locale.duration(value())} ttft</span>}
           </Show>
           <Show when={interrupted()}>
             <span style={{ fg: theme.text.muted }}> · interrupted</span>
@@ -2220,6 +2227,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
       <Show when={content()}>
         <box paddingTop={1} paddingLeft={3}>
           <markdown
+            ref={useSessionLinks()}
             syntaxStyle={syntax()}
             renderNode={plugins.markdown()}
             streaming={true}
@@ -2983,6 +2991,7 @@ function BlockTool(props: BlockToolProps) {
 const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
 function Shell(props: ToolProps) {
+  const stopped = createMemo(() => stoppedShell(props.part, props.metadata))
   return (
     <ShellDisplay
       part={props.part}
@@ -2991,9 +3000,20 @@ function Shell(props: ToolProps) {
       workdir={stringValue(props.input.workdir)}
       status={props.part.state.status}
       background={props.part.state.status === "completed" && props.metadata.status === "running"}
-      output={stringValue(props.metadata.shellID) ? undefined : props.output}
+      output={stopped()?.output ?? (stringValue(props.metadata.shellID) ? undefined : props.output)}
+      error={stopped()?.notice}
     />
   )
+}
+
+// A call the user stopped fails with its output followed by a notice, which its metadata names. Its output shows like
+// a finished call's and only the notice as the error. A plugin that rewrote the error gets it shown as is.
+function stoppedShell(part: SessionMessageAssistantTool, metadata: Record<string, unknown>) {
+  if (part.state.status !== "error" || metadata.interrupted !== true) return
+  const notice = stringValue(metadata.notice)
+  const message = part.state.error.message
+  if (!notice || !message.endsWith(notice)) return
+  return { output: message.slice(0, -notice.length).replace(/\n+$/, ""), notice }
 }
 
 function ShellDisplay(props: {
@@ -3319,11 +3339,6 @@ function Subagent(props: ToolProps) {
         const id = sessionID()
         if (id) navigate({ type: "session", sessionID: id })
       }}
-      status={
-        isBackgroundSubagent(props.metadata, props.part.state.status) ? (
-          <StatusBadge>Background</StatusBadge>
-        ) : undefined
-      }
     >
       {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}
     </InlineTool>
@@ -3341,13 +3356,6 @@ export function subagentModelLabel(
   const modelID = separator === -1 ? reference : reference.slice(separator + 1)
   const name = models?.find((item) => item.providerID === providerID && item.id === modelID)?.name
   return `${name ?? reference}${variant ? ` (${variant})` : ""}`
-}
-
-export function isBackgroundSubagent(
-  metadata: Record<string, unknown>,
-  status: SessionMessageAssistantTool["state"]["status"],
-) {
-  return status === "completed" && metadata.status === "running"
 }
 
 export { executeCallSummary }

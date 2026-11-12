@@ -44,8 +44,6 @@ Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes a
 
 Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributing guide`, `chore(sdk): regenerate types`.
 
-For user-facing `feat`, `fix` and `perf` PRs, add a small looping animated SVG of the change under `### Visual` in the PR body (a `svg` code block, 240×72, for example a dock growing out of the composer or spinners turning in step). Draw with `currentColor` and opacity so it works in light and dark, make the unanimated state a good still (it is shown under reduced motion), animate with CSS or SMIL only, and keep it under 8 KB with no scripts or external references. The desktop beta's "What's new" dialog shows it.
-
 ## Style Guide
 
 ### General Principles
@@ -201,6 +199,14 @@ const table = sqliteTable("session", {
 - During focused iteration, run `bun typecheck` from the affected package directory (for example, `packages/core`). Never run `tsc` directly.
 - Local `typecheck` scripts use `bun check`. CI and package publishing run `typecheck:tsc`, which uses the official TypeScript compiler (`@typescript/native`). When the two disagree, `tsc` is the source of truth; reproduce with `bun run typecheck:tsc` from the package directory.
 - `bun check` aims to match TypeScript 7.1, not the `7.0.2` that `process.versions.typescript` reports (oven-sh/bun#46536). When `bun check` and `tsc` from the pinned `@typescript/native` report different errors, file a minimal, dependency-free repro at https://github.com/oven-sh/bun/issues, with the output of both. `bun check` writes no declaration files, so declaration-emit errors such as TS5088 or TS2883 are expected to appear only in `tsc`; do not report those.
+
+## Plugin Loading
+
+- Plugins load asynchronously. Server handlers never wait for them (`Plugin.awaitActivation`), never retry until something appears, and never turn slow plugins into a timeout or 503. This applies to reads and to actions such as `rpc.call` and `vcs.init`.
+- Temporary exception: endpoints that list or use providers managed policy can deny (`model.list`, `model.default`, `provider.list`, `generate.*`, `voice.*` and `websearch.query`) wait through `awaitPlugins` in `packages/server/src/location.ts`, because policy is applied by the last plugin to activate and is missing until then. Don't add new waits; this goes away once a plugin batch becomes visible only when it ends.
+- The server answers with what is loaded now: lists may be empty or partial on a cold Location, and an action whose model, provider or RPC hasn't loaded yet fails with not-found. That is expected, not a bug to fix on the server.
+- Clients are responsible for making sure what they need is loaded before they call. Long-lived clients refresh on the matching `*.updated` event (`model.updated`, `agent.updated`, `skill.updated`, `integration.updated`, `plugin.updated`, ...). One-shot clients (CLI commands, ACP, SDK callers) wait on their side, for example by polling `plugin.list` or the entry they need. See `packages/cli/src/services/plugin-startup.ts`.
+- Running the hooks that are registered and waiting for their result is fine (for example `hooks.trigger("session", "http.request", ...)`). What is not allowed is waiting for plugins to load first: if the plugin that adds a hook hasn't loaded yet, the call runs without that hook.
 
 ## Session Core
 
