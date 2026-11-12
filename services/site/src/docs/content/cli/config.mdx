@@ -136,7 +136,8 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | Setting                 | Values                      | Description                                                                  |
 | ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
 | `session.sidebar`       | `auto` or `hide`            | Shows the sidebar when space permits or always hides it.                     |
-| `session.inbox`         | boolean                     | Shows the left Inbox across locations on the connected server. Off by default. |
+| `session.inbox`         | boolean                     | Opens the Inbox on launch. Off by default.                                   |
+| `session.inbox_layout`  | `sidebar` or `side-overlay` | Docks the Inbox beside the session or opens it over the transcript. Defaults to `sidebar`. |
 | `session.scrollbar`     | boolean                     | Shows the transcript scrollbar.                                              |
 | `session.submit_scroll` | `bottom` or `keep`          | Jumps to the latest message when you send a prompt, or keeps your position.  |
 | `session.thinking`      | `show` or `hide`            | Shows or hides model reasoning by default.                                   |
@@ -149,12 +150,15 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 
 </div>
 
-Press `<leader>o` (by default, `Ctrl+X` then `O`) or choose **Show Inbox sidebar** from the command palette (`Ctrl+P`). The Inbox takes the place of vertical tabs when visible. It stays hidden below 76 columns without changing your preference.
+Press `<leader>o` (by default, `Ctrl+X` then `o`) to toggle the Inbox across locations on the connected server. Choose its layout in **Open settings → Session → Inbox layout**.
+
+- **Sidebar** replaces vertical tabs when visible and remembers whether you left it open. It stays hidden below 76 columns without changing your preference.
+- **Side-overlay** opens over the session without resizing it and fills narrow terminals. Dismissing it leaves **Show Inbox on launch** unchanged.
 
 Click a section heading to fold or unfold it, or point at the section and press Left or Right. Click a session to open it.
 
-- Choose **Focus Inbox** from the command palette to navigate the sidebar. Up and Down move between headings and sessions. Left folds a section, Right unfolds it, Enter opens a session, and Escape returns to the prompt.
-- Choose **Open inbox session** to search by title, status or directory, including sessions in folded sections.
+- In the sidebar, choose **Focus Inbox** from the command palette to navigate with the keyboard. The overlay receives focus when it opens. Up and Down move between headings and sessions. Left folds a section, Right unfolds it, Enter opens a session, and Escape returns to the prompt.
+- Type in the overlay, or choose **Open inbox session** in sidebar mode, to search by title, status or directory.
 
 ## Tabs
 

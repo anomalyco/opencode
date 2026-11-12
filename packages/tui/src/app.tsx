@@ -77,6 +77,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { InboxSidebar } from "./component/inbox-sidebar"
+import { DialogInbox, DialogInboxKey } from "./component/dialog-inbox"
 import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionInboxWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
@@ -620,8 +621,9 @@ function App() {
     panels.current()?.sessionID === route.data.sessionID &&
     panels.presentation() === "fullscreen"
   const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
+  const overlayInbox = () => config.data.session.inbox_layout === "side-overlay"
   const inboxWidth = () => {
-    if (!config.data.session.inbox || !plugins.ready() || route.data.type === "plugin") return 0
+    if (overlayInbox() || !config.data.session.inbox || !plugins.ready() || route.data.type === "plugin") return 0
     const width = sessionInboxWidth(dimensions().width)
     return width && tabsAvailable() && tabsVertical() ? Math.max(width, tabsResize.size()) : width
   }
@@ -732,6 +734,17 @@ function App() {
       .catch(toast.error)
   })
 
+  function openInbox() {
+    dialog.replace(() => <DialogInbox />, undefined, { key: DialogInboxKey, drawer: true })
+  }
+
+  let checkedInbox = false
+  createEffect(() => {
+    if (checkedInbox || !plugins.ready()) return
+    checkedInbox = true
+    if (overlayInbox() && config.data.session.inbox && !dialog.stack.length && route.data.type !== "plugin") openInbox()
+  })
+
   // Opens the release highlights once after an update, but only into an idle home screen during startup.
   const storage = useStorage()
   const paths = useTuiPaths()
@@ -770,9 +783,10 @@ function App() {
       },
       {
         name: "session.inbox.toggle",
-        title: config.data.session.inbox ? "Hide Inbox sidebar" : "Show Inbox sidebar",
+        title: overlayInbox() ? "Open Inbox" : config.data.session.inbox ? "Hide Inbox sidebar" : "Show Inbox sidebar",
         category: "Session",
         run: () => {
+          if (overlayInbox()) return dialog.key === DialogInboxKey ? dialog.clear() : openInbox()
           void config
             .update((draft) => {
               draft.session = { ...draft.session, inbox: !config.data.session.inbox }

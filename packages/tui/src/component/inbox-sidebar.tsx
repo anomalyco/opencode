@@ -18,7 +18,8 @@ import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { moveSelection } from "../ui/select-controller"
 import { getScrollAcceleration } from "../util/scroll"
-import { useInbox, type InboxRow } from "./inbox-data"
+import { useInbox } from "./inbox-data"
+import { inboxStatus } from "./inbox-status"
 
 export function InboxSidebar() {
   const inbox = useInbox()
@@ -78,13 +79,13 @@ export function InboxSidebar() {
     target: () => pane,
     priority: 10,
     commands: [
-      { bind: "up", run: () => move(-1) },
-      { bind: "down", run: () => move(1) },
-      { bind: "left", run: () => fold(true) },
-      { bind: "right", run: () => fold(false) },
+      { id: "dialog.select.prev", run: () => move(-1) },
+      { id: "dialog.select.next", run: () => move(1) },
+      { id: "inbox.section.collapse", run: () => fold(true) },
+      { id: "inbox.section.expand", run: () => fold(false) },
       { bind: "escape", run: leave },
       {
-        bind: "return",
+        id: "dialog.select.submit",
         run: () => {
           const entry = active()
           if (!entry) return
@@ -96,21 +97,13 @@ export function InboxSidebar() {
     ],
   }))
 
-  function color(detail: InboxRow["detail"], surface = theme) {
-    if (detail === "Review permission") return surface.text.feedback.warning.base
-    if (detail === "Answer question" || detail === "Working") return surface.text.feedback.info.base
-    if (detail === "Failed") return surface.text.feedback.error.base
-    if (detail === "Done") return surface.text.feedback.success.base
-    return surface.text.muted
-  }
-
   Keymap.createLayer(() => ({
     // Folding a row under the pointer destroys the mouse target without a mouse-out event.
     enabled: () => !focused() && hovered()?.target.isDestroyed === false,
     priority: 10,
     commands: [
-      { bind: "left", title: "Collapse section", run: () => setCollapsed(hovered()!.section(), true) },
-      { bind: "right", title: "Expand section", run: () => setCollapsed(hovered()!.section(), false) },
+      { id: "inbox.section.collapse", run: () => setCollapsed(hovered()!.section(), true) },
+      { id: "inbox.section.expand", run: () => setCollapsed(hovered()!.section(), false) },
     ],
   }))
 
@@ -125,7 +118,7 @@ export function InboxSidebar() {
       {
         id: "inbox.focus",
         title: "Focus Inbox",
-        description: "↑↓ move · ←→ fold · enter open · esc return",
+        description: "Navigate Inbox sections and sessions",
         group: "Session",
         palette: true,
         run: () => {
@@ -156,15 +149,14 @@ export function InboxSidebar() {
                   title: row.title,
                   value: row.id,
                   category: section.title,
-                  footer: row.detail,
-                  footerColor: color(row.detail, theme.surface("dialog")),
+                  footer: inboxStatus(theme.surface("dialog"), row.detail).label,
+                  footerColor: inboxStatus(theme.surface("dialog"), row.detail).color,
                   truncateTitle: true,
                   detail: `Location: ${row.directory}`,
                   searchText: `${row.directory} ${row.detail}`,
                 })),
               )}
               current={tabs.current()}
-              footer={<text fg={theme.text.muted}>↑↓ move · enter open · esc close</text>}
               onSelect={(option) => {
                 open(option.value)
                 dialog.clear()
@@ -248,6 +240,7 @@ export function InboxSidebar() {
                     {(row) => {
                       const [hover, setHover] = createSignal(false)
                       const current = () => tabs.current() === row().id
+                      const status = createMemo(() => inboxStatus(theme, row().detail))
                       return (
                         <box
                           id={`inbox-${row().id}`}
@@ -284,14 +277,8 @@ export function InboxSidebar() {
                             {row().title}
                           </text>
                           <Show when={row().detail}>
-                            <text
-                              flexShrink={0}
-                              marginLeft={1}
-                              fg={color(row().detail)}
-                              selectable={false}
-                              wrapMode="none"
-                            >
-                              {row().detail}
+                            <text flexShrink={0} marginLeft={1} fg={status().color} selectable={false} wrapMode="none">
+                              {status().label}
                             </text>
                           </Show>
                         </box>
