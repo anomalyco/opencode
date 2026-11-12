@@ -142,7 +142,8 @@ impl Flavor {
 
 /// `path.win32.resolve`: from the last path back, collect segments until a rooted path with a device (a drive or a
 /// UNC share). A path on another device than the one found first is skipped, and a rooted path without a device takes
-/// the device of an earlier path. `..` stops at the root of an absolute result.
+/// the device of an earlier path. `..` stops at the root of an absolute result. Only a result without a device stays
+/// relative, where Node would start from the working directory.
 fn resolve_windows(paths: &[&str]) -> String {
     let mut device = String::new();
     let mut absolute = false;
@@ -164,6 +165,8 @@ fn resolve_windows(paths: &[&str]) -> String {
             break;
         }
     }
+    // A drive no path is rooted on: Node takes its directory from `=C:`, which only `cmd` sets, else its root.
+    absolute |= !device.is_empty();
     let mut segments: Vec<&str> = Vec::new();
     for part in rests.iter().rev().flat_map(|rest| rest.split(['/', '\\'])) {
         match part {
@@ -269,8 +272,14 @@ mod tests {
         assert_eq!(w.resolve(&["\\\\srv\\share\\repo", "/docs"]), "\\\\srv\\share\\docs");
         assert_eq!(w.resolve(&["C:\\repo", "///a/b"]), "C:\\a\\b");
         assert_eq!(w.resolve(&["c:\\p", "C:q", "..\\r"]), "C:\\p\\r");
+        assert_eq!(w.resolve(&["\\\\srv\\share\\proj", "/foo"]), "\\\\srv\\share\\foo");
+        assert_eq!(w.resolve(&["C:\\p", "C:sub\\x"]), "C:\\p\\sub\\x");
+        assert_eq!(w.resolve(&["C:\\Users\\me\\proj", "C:sub\\file.txt"]), "C:\\Users\\me\\proj\\sub\\file.txt");
+        // A drive no path is rooted on: Node reads that drive's directory from `=C:`, which a process started
+        // outside `cmd` lacks, and then starts at the drive's root.
+        assert_eq!(w.resolve(&["D:\\p", "C:sub\\file.txt"]), "C:\\sub\\file.txt");
+        assert_eq!(w.resolve(&["C:\\p", "D:q"]), "D:\\q");
         // Where Node would read the working directory, the result stays relative.
-        assert_eq!(w.resolve(&["C:\\p", "D:q"]), "D:q");
         assert_eq!(w.resolve(&["a", "..\\..\\b"]), "..\\b");
         assert_eq!(w.root("///a/b"), "\\");
         assert_eq!(w.relative("C:\\Users\\U", "c:\\users\\u\\src/x"), "src\\x");
