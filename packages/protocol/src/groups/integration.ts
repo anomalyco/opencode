@@ -1,3 +1,4 @@
+import { Credential } from "@opencode/schema/credential"
 import { Integration } from "@opencode/schema/integration"
 import { Location } from "@opencode/schema/location"
 import { Form } from "@opencode/schema/form"
@@ -108,6 +109,13 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         methodID: Integration.MethodID,
         answer: Schema.optional(Form.Answer),
         label: Schema.optional(Schema.String),
+        experimental: Schema.optional(
+          Schema.Struct({
+            credentialID: Schema.optional(Credential.ID).annotate({
+              description: "Stored OAuth connection to reauthorize. Omit to add an independent account.",
+            }),
+          }).annotate({ description: "Experimental: may change without compatibility guarantees." }),
+        ),
       }),
       success: Location.response(Integration.Attempt),
       error: InvalidRequestError,

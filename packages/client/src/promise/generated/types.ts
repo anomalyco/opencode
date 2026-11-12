@@ -4079,6 +4079,7 @@ export type IntegrationOauthConnectInput = {
   readonly methodID: string
   readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
   readonly label?: string | undefined
+  readonly experimental?: { readonly credentialID?: string | undefined } | undefined
 }
 
 export type IntegrationOauthConnectOutput = { location: LocationPublicRef; data: IntegrationAttempt }

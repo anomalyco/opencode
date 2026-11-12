@@ -6572,6 +6572,31 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "experimental": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "credentialID": {
+                            "anyOf": [
+                              {
+                                "$ref": "#/components/schemas/Credential.ID"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Stored OAuth connection to reauthorize. Omit to add an independent account."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "Experimental: may change without compatibility guarantees."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["methodID"],

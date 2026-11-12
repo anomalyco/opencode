@@ -227,7 +227,14 @@ function manageConnections(
                 onSelect: () => {
                   if (connection.status?.url) return void openUrl(connection.status.url).catch(toast.error)
                   if (connection.status)
-                    return selectMethod(current() ?? integration, methods, location, dialog, onConnected)
+                    return selectMethod(
+                      current() ?? integration,
+                      methods,
+                      location,
+                      dialog,
+                      onConnected,
+                      connection.method === "oauth" ? connection.id : undefined,
+                    )
                   if (credentialConnections(current() ?? integration)[0]?.id === connection.id) return
                   void client.api.credential.activate({ credentialID: connection.id }).catch(toast.error)
                 },
@@ -294,8 +301,9 @@ function selectMethod(
   location: LocationRef,
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
+  credentialID?: string,
 ) {
-  if (methods.length === 1) return openMethod(integration, methods[0], location, dialog, onConnected)
+  if (methods.length === 1) return openMethod(integration, methods[0], location, dialog, onConnected, credentialID)
   dialog.replace(() => {
     const newDesigns = useNewDesigns()
     return (
@@ -305,7 +313,7 @@ function selectMethod(
         options={methods.map((method) => ({
           title: method.type === "key" ? (method.label ?? "API key") : method.label,
           value: method.type === "key" ? "key" : method.id,
-          onSelect: () => openMethod(integration, method, location, dialog, onConnected),
+          onSelect: () => openMethod(integration, method, location, dialog, onConnected, credentialID),
         }))}
       />
     )
@@ -318,6 +326,7 @@ function openMethod(
   location: LocationRef,
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
+  credentialID?: string,
 ) {
   if (method.type === "key") {
     void beginKey(integration, method, location, dialog, onConnected)
@@ -333,7 +342,7 @@ function openMethod(
     void beginExternal(integration, method, location, dialog, onConnected)
     return
   }
-  void beginOAuth(integration, method, location, dialog, onConnected)
+  void beginOAuth(integration, method, location, dialog, onConnected, credentialID)
 }
 
 async function beginExternal(
@@ -588,11 +597,13 @@ async function beginOAuth(
   location: LocationRef,
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
+  credentialID?: string,
 ) {
   const answer = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
   if (answer === null) return
   dialog.replace(() => (
     <OAuthStarting
+      credentialID={credentialID}
       integration={integration}
       method={method}
       location={location}
@@ -603,6 +614,7 @@ async function beginOAuth(
 }
 
 function OAuthStarting(props: {
+  credentialID?: string
   integration: IntegrationInfo
   method: IntegrationOAuthMethod
   location: LocationRef
@@ -616,6 +628,7 @@ function OAuthStarting(props: {
   onMount(() => {
     void client.api.integration.oauth
       .connect({
+        ...(props.credentialID ? { experimental: { credentialID: props.credentialID } } : {}),
         integrationID: props.integration.id,
         location: locationQuery(props.location),
         methodID: props.method.id,

@@ -601,6 +601,53 @@ test("a lone method waits on the accounts list and starts once Add account is ch
   expect(selectProviderDialogView(replay([{ type: "back" }], added.state).state).frame).toBe("accounts")
 })
 
+test("reauthorization keeps the selected account across retries and clears it before Add account", () => {
+  const picked = replay([selected("openai", true, accounts(2))])
+  const listed = replay([loaded(picked.state, [oauth])], picked.state)
+  const started = replay([{ type: "account.reauthorize", accountID: "cred_2" }], listed.state)
+
+  expect(started.effects).toContainEqual(
+    expect.objectContaining({
+      type: "connect.effect",
+      credentialID: "cred_2",
+      effect: expect.objectContaining({ type: "start" }),
+    }),
+  )
+
+  const failed = replay(
+    [
+      result(started.state, {
+        type: "start.failed",
+        attempt: connectEffect(started.effects, "start").attempt,
+        error: "Try again",
+      }),
+    ],
+    started.state,
+  )
+
+  const retried = replay([{ type: "connect.input", event: { type: "retry" } }], failed.state)
+
+  expect(retried.effects).toContainEqual(
+    expect.objectContaining({ credentialID: "cred_2", effect: expect.objectContaining({ type: "start" }) }),
+  )
+  const backed = replay([{ type: "back" }], retried.state)
+  const added = replay([{ type: "account.add" }], backed.state)
+  expect(connectEffect(added.effects, "start").type).toBe("start")
+  expect(added.effects.find((effect) => effect.type === "connect.effect")).not.toHaveProperty("credentialID")
+})
+
+test("reauthorization retains the selected account when returning to the method picker", () => {
+  const picked = replay([selected("openai", true, accounts(2))])
+  const listed = replay([loaded(picked.state, [oauth, key])], picked.state)
+  const chosen = replay([{ type: "account.reauthorize", accountID: "cred_2" }], listed.state)
+  const started = replay([{ type: "connect.input", event: { type: "method.selected", index: 0 } }], chosen.state)
+  const backed = replay([{ type: "back" }], started.state)
+  const restarted = replay([{ type: "connect.input", event: { type: "method.selected", index: 0 } }], backed.state)
+  expect(restarted.effects).toContainEqual(
+    expect.objectContaining({ credentialID: "cred_2", effect: expect.objectContaining({ type: "start" }) }),
+  )
+})
+
 test("a standalone dialog has no way back to the provider list", () => {
   const opened = replay([selected("opencode-go", false)], createProviderDialogState({ standalone: true }))
   const entering = replay([loaded(opened.state, [key])], opened.state)

@@ -304,7 +304,7 @@ export function createProviderDialogController(options: {
       return
     }
 
-    if (effect.type === "start") return start(effect, integrationID, result)
+    if (effect.type === "start") return start(effect, integrationID, result, input.credentialID)
 
     if (effect.type === "open.browser") {
       void Promise.resolve()
@@ -418,6 +418,7 @@ export function createProviderDialogController(options: {
     effect: Extract<ProviderConnectEffect, { type: "start" }>,
     integrationID: string,
     result: (event: ProviderConnectEvent) => void,
+    credentialID?: string,
   ) => {
     const isConsole = integrationID === CONSOLE_INTEGRATION
     const failed = (error: string) => result({ type: "start.failed", attempt: effect.attempt, error })
@@ -442,19 +443,21 @@ export function createProviderDialogController(options: {
       return
     }
 
-    void serverSDK.api.integration.oauth.connect(input).then(
-      (response) => {
-        if (!isConsole || platform.platform !== "desktop")
-          return result({ type: "oauth.started", attempt: effect.attempt, authorization: response.data })
-        const url = new URL(response.data.url)
-        url.searchParams.set("client_id", "opencode-desktop")
-        // Lets the Console return link focus the window that started the sign-in.
-        url.searchParams.set("return_window", platform.windowID)
-        result({ type: "oauth.started", attempt: effect.attempt, authorization: { ...response.data, url: url.href } })
-      },
-      (error) =>
-        failed(isConsole ? language.t("provider.connect.console.startFailed") : formatServerError(error, language.t)),
-    )
+    void serverSDK.api.integration.oauth
+      .connect({ ...input, experimental: credentialID ? { credentialID } : undefined })
+      .then(
+        (response) => {
+          if (!isConsole || platform.platform !== "desktop")
+            return result({ type: "oauth.started", attempt: effect.attempt, authorization: response.data })
+          const url = new URL(response.data.url)
+          url.searchParams.set("client_id", "opencode-desktop")
+          // Lets the Console return link focus the window that started the sign-in.
+          url.searchParams.set("return_window", platform.windowID)
+          result({ type: "oauth.started", attempt: effect.attempt, authorization: { ...response.data, url: url.href } })
+        },
+        (error) =>
+          failed(isConsole ? language.t("provider.connect.console.startFailed") : formatServerError(error, language.t)),
+      )
   }
 
   const poll = (
@@ -645,7 +648,10 @@ export function createProviderDialogController(options: {
     chooseAccount: (account: ProviderAccount) => {
       if (account.status?.url) return void platform.openExternal(account.status.url)
 
-      if (account.status) return dispatch({ type: "account.add" })
+      if (account.status)
+        return dispatch(
+          account.method === "oauth" ? { type: "account.reauthorize", accountID: account.id } : { type: "account.add" },
+        )
       dispatch({ type: "account.activate.requested", accountID: account.id })
     },
     copyLink: async () => {

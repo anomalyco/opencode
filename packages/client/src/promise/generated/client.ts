@@ -1872,7 +1872,12 @@ export function make(options: ClientOptions) {
               method: "POST",
               path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/oauth`,
               query: { location: input["location"] },
-              body: { methodID: input["methodID"], answer: input["answer"], label: input["label"] },
+              body: {
+                methodID: input["methodID"],
+                answer: input["answer"],
+                label: input["label"],
+                experimental: input["experimental"],
+              },
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
               empty: false,

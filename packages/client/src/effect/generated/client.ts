@@ -1045,7 +1045,12 @@ const EndpointIntegrationOauthConnect =
       raw["integration.oauth.connect"]({
         params: { integrationID: input["integrationID"] },
         query: { location: input["location"] },
-        payload: { methodID: input["methodID"], answer: input["answer"], label: input["label"] },
+        payload: {
+          methodID: input["methodID"],
+          answer: input["answer"],
+          label: input["label"],
+          experimental: input["experimental"],
+        },
       }).pipe(Effect.mapError(mapClientError)),
     )
 

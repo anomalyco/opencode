@@ -257,6 +257,39 @@ describe("Integration", () => {
     }),
   )
 
+  it.effect("rejects missing, foreign, and non-OAuth reauthorization targets before authorization", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("chatgpt")
+      const foreign = yield* credentials.create({
+        integrationID: Integration.ID.make("other"),
+        value: Credential.OAuth.make({ type: "oauth", methodID, access: "access", refresh: "refresh", expires: 1 }),
+      })
+      const key = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "test-key" }),
+      })
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "ChatGPT" },
+          authorize: () => Effect.die("Invalid target reached authorization"),
+        }),
+      )
+      for (const [credentialID, message] of [
+        [Credential.ID.make("cred_missing"), "OAuth credential not found"],
+        [foreign.id, "OAuth credential belongs to another integration"],
+        [key.id, "Credential is not an OAuth connection"],
+      ] as const) {
+        const error = yield* integrations.oauth.connect({ integrationID, methodID, credentialID }).pipe(Effect.flip)
+        expect(error).toBeInstanceOf(Integration.AuthorizationError)
+        expect(error.message).toBe(message)
+      }
+    }),
+  )
+
   it.effect("completes code OAuth once and stores the credential", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

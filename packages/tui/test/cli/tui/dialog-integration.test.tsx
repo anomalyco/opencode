@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
-import type { FormFields, LocationRef } from "@opencode/client"
+import type { ConnectionInfo, FormFields, LocationRef } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onMount } from "solid-js"
@@ -325,15 +325,49 @@ async function renderMenu(integrationID?: string) {
   }
 }
 
-async function renderIntegration(activeLocation?: LocationRef, form?: FormFields) {
+test.each(["add", "oauth", "key"] as const)(
+  "targets only OAuth reauthorization from the %s account row",
+  async (action) => {
+    const fixture = await renderIntegration(undefined, undefined, { reauthorize: action === "key" ? "key" : "oauth" })
+    try {
+      if (action !== "add") await fixture.app.mockInput.typeText("Work")
+      fixture.app.mockInput.pressEnter()
+      await fixture.app.waitFor(() => fixture.requests.length === 1)
+      expect(fixture.requests).toEqual([
+        {
+          method: "POST",
+          path: "/api/integration/openai/connect/oauth",
+          body: {
+            methodID: "chatgpt-token-sharing",
+            ...(action === "oauth" ? { experimental: { credentialID: "cred_work" } } : {}),
+          },
+        },
+      ])
+    } finally {
+      fixture.app.renderer.destroy()
+    }
+  },
+)
+
+async function renderIntegration(
+  activeLocation?: LocationRef,
+  form?: FormFields,
+  oauth?: { reauthorize: "key" | "oauth" },
+) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
   const locations: LocationRef[] = []
   const credentialQueries: string[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
-  let accounts = [
+  let accounts: Array<Extract<ConnectionInfo, { type: "credential" }>> = [
     { type: "credential" as const, method: "key" as const, id: "cred_personal", label: "Personal" },
-    { type: "credential" as const, method: "key" as const, id: "cred_work", label: "Work" },
+    {
+      type: "credential",
+      method: oauth?.reauthorize ?? "key",
+      id: "cred_work",
+      label: "Work",
+      ...(oauth ? { status: { status: "needs_auth" as const, message: "Sign in again" } } : {}),
+    },
   ]
 
   const calls = createFetch(async (url, request) => {
@@ -355,11 +389,31 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
           {
             id: "openai",
             name: "OpenAI",
-            methods: [{ type: "key", label: "API key", form }],
+            methods: oauth
+              ? [{ type: "oauth", id: "chatgpt-token-sharing", label: "Sign in with ChatGPT" }]
+              : [{ type: "key", label: "API key", form }],
             connections: [...accounts, { type: "env", name: "OPENAI_API_KEY" }],
           },
         ],
       })
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/integration/openai/connect/oauth") {
+      requests.push({ method: request.method, path: url.pathname, body: await request.json() })
+      return json({
+        location,
+        data: {
+          attemptID: "att_test",
+          url: "https://auth.example.com",
+          instructions: "Sign in",
+          mode: "auto",
+          time: { created: 0, expires: Date.now() + 60_000 },
+        },
+      })
+    }
+    if (url.pathname === "/api/integration/openai/connect/oauth/att_test") {
+      if (request.method === "DELETE") return new Response(null, { status: 204 })
+      return json({ location, data: { status: "pending" } })
     }
 
     if (request.method === "POST" && url.pathname === "/api/integration/openai/connect/key") {

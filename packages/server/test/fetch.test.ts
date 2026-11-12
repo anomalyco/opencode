@@ -173,7 +173,7 @@ const isolated = Effect.gen(function* () {
   return yield* ServerFetch.make({ ...options, config: { ...options.config, directory: config.path } })
 })
 
-const connectOpenAI = (handler: Handler) =>
+const connectOpenAI = (handler: Handler, experimental?: { credentialID: string }) =>
   Effect.gen(function* () {
     // Catalog endpoints no longer wait for plugin initialization.
     yield* Effect.gen(function* () {
@@ -197,11 +197,20 @@ const connectOpenAI = (handler: Handler) =>
         new Request("http://opencode.local/api/integration/openai/connect/oauth", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ methodID: "chatgpt-browser" }),
+          body: JSON.stringify({ methodID: "chatgpt-browser", ...(experimental ? { experimental } : {}) }),
         }),
       ),
     )
   })
+
+it.live("forwards the selected OAuth credential through the HttpApi", () =>
+  Effect.gen(function* () {
+    const handler = yield* isolated
+    const response = yield* connectOpenAI(handler, { credentialID: "cred_missing" })
+    expect(response.status).toBe(400)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({ message: "OAuth credential not found" })
+  }),
+)
 
 it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
   Effect.gen(function* () {

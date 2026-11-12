@@ -94,7 +94,7 @@ const decodeMetadata = Schema.decodeUnknownOption(
   }),
 )
 
-const signIn = (app: App.Info, savedClientID: () => string | undefined, storage: Context["storage"]) =>
+const signIn = (app: App.Info, storage: Context["storage"]) =>
   ({
     integrationID,
     method: {
@@ -102,7 +102,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
       type: "oauth",
       label: "Sign in with ChatGPT",
     },
-    authorize: () =>
+    authorize: (_answer, context) =>
       Effect.gen(function* () {
         const storedHostID = yield* storage.get("chatgpt-agent-host-id")
         const hostID = typeof storedHostID === "string" ? storedHostID : `urn:uuid:${crypto.randomUUID()}`
@@ -110,7 +110,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         const pkce = yield* Effect.promise(generatePKCE)
         const state = randomValue()
         const nonce = randomValue()
-        const savedID = savedClientID()
+        const savedID = Option.getOrUndefined(decodeMetadata(context?.credential?.metadata))?.clientID
         // `response` is the browser's pending callback request; a pasted redirect has none.
         const received = yield* Deferred.make<{ code: string; clientID?: string; response?: ServerResponse }, Error>()
         // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
@@ -240,9 +240,7 @@ export const ChatGPTPlugin = define({
     })
 
     yield* ctx.integration.transform((editor) => {
-      editor.method.update(
-        signIn(ctx.app, () => Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID, ctx.storage),
-      )
+      editor.method.update(signIn(ctx.app, ctx.storage))
     })
     yield* Effect.forEach(
       yield* credentials.list(Integration.ID.make("openai")),

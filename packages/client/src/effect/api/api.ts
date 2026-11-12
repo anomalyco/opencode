@@ -29,9 +29,9 @@ import type { Shell } from "@opencode/schema/shell"
 import type { Generate } from "@opencode/schema/generate"
 import type { Provider } from "@opencode/schema/provider"
 import type { Integration } from "@opencode/schema/integration"
+import type { Credential } from "@opencode/schema/credential"
 import type { Mcp } from "@opencode/schema/mcp"
 import type { PtyTicket } from "@opencode/schema/pty-ticket"
-import type { Credential } from "@opencode/schema/credential"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
 import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
@@ -1630,6 +1630,7 @@ export type IntegrationOauthConnectInput = {
   readonly methodID: Integration.MethodID
   readonly answer?: Form.Answer | undefined
   readonly label?: string | undefined
+  readonly experimental?: { readonly credentialID?: Credential.ID | undefined } | undefined
 }
 export type IntegrationOauthConnectOutput = {
   readonly location: Location.PublicRef

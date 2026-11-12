@@ -77,7 +77,10 @@ export type OAuthAuthorization = {
 export interface OAuthImplementation {
   readonly integrationID: ID
   readonly method: OAuthMethod
-  readonly authorize: (answer: Form.Answer) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (
+    answer: Form.Answer,
+    context?: { readonly credential?: Credential.OAuth },
+  ) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
@@ -227,6 +230,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly connect: (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
+      readonly credentialID?: Credential.ID
       readonly answer?: Form.Answer
       readonly label?: string
     }) => Effect.Effect<Attempt, AuthorizationError>
@@ -564,6 +568,7 @@ const layer = Layer.effect(
     const connectOAuth = Effect.fn("Integration.oauth.connect")(function* (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
+      readonly credentialID?: Credential.ID
       readonly answer?: Form.Answer
       readonly label?: string
     }) {
@@ -574,8 +579,17 @@ const layer = Layer.effect(
       const answer = input.answer ?? {}
       const invalid = answerError(method.method.form, answer)
       if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
+      const saved = input.credentialID === undefined ? undefined : yield* credentials.get(input.credentialID)
+      if (input.credentialID !== undefined && !saved)
+        return yield* new AuthorizationError({ cause: new Error("OAuth credential not found") })
+      if (saved && saved.integrationID !== input.integrationID)
+        return yield* new AuthorizationError({ cause: new Error("OAuth credential belongs to another integration") })
+      if (saved && saved.value.type !== "oauth")
+        return yield* new AuthorizationError({ cause: new Error("Credential is not an OAuth connection") })
+      const credential =
+        saved?.value.type === "oauth" && saved.value.methodID === input.methodID ? saved.value : undefined
       const attemptScope = yield* Scope.fork(scope)
-      const authorization = yield* authorize(method.authorize(answer)).pipe(
+      const authorization = yield* authorize(method.authorize(answer, { credential })).pipe(
         Scope.provide(attemptScope),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attemptScope, exit) : Effect.void)),
       )
