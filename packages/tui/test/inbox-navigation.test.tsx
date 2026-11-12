@@ -149,7 +149,7 @@ test("Focus Inbox traverses headers and sessions with the keyboard and releases 
   }
   await app.ready
   await app.waitForFrame((frame) => frame.includes("▾ Working 1") && frame.includes("▾ Recent 1"))
-  expect(app.captureCharFrame()).toMatch(/Running task +⋯/)
+  expect(app.captureCharFrame()).toMatch(/⋯ +Running task/)
   await focus()
   app.mockInput.pressArrow("left")
   await app.waitForFrame((frame) => frame.includes("▸ Working 1") && !frame.includes("Running task"))
@@ -168,5 +168,5 @@ test("Focus Inbox traverses headers and sessions with the keyboard and releases 
   await focus()
   app.mockInput.pressArrow("down")
   app.mockInput.pressEnter()
-  await app.waitForFrame((frame) => frame.includes("▸ Running task"))
+  await app.waitForFrame((frame) => frame.includes("▸ ⋯ Running task"))
 })

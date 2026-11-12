@@ -216,8 +216,13 @@ export function DialogInbox() {
                       const status = createMemo(() => inboxStatus(theme, row().detail))
                       return (
                         <>
+                          <Show when={status().spinner}>
+                            <box marginLeft={2} flexShrink={0}>
+                              <Spinner color={status().color} />
+                            </box>
+                          </Show>
                           <text
-                            marginLeft={2}
+                            marginLeft={status().spinner ? 0 : 2}
                             minWidth={0}
                             flexBasis={0}
                             flexShrink={1}
@@ -233,9 +238,6 @@ export function DialogInbox() {
                             </Show>
                             {row().title}
                           </text>
-                          <Show when={status().spinner}>
-                            <Spinner color={status().color} />
-                          </Show>
                           <Show when={status().label}>
                             <text flexShrink={0} wrapMode="none" fg={status().color}>
                               {status().label}

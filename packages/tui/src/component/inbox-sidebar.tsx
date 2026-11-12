@@ -275,6 +275,14 @@ export function InboxSidebar() {
                             open(row().id)
                           }}
                         >
+                          <text width={2} fg={theme.text.formfield.selected} selectable={false}>
+                            {current() ? "▸" : ""}
+                          </text>
+                          <Show when={status().spinner}>
+                            <box marginRight={1} flexShrink={0}>
+                              <Spinner color={status().color} />
+                            </box>
+                          </Show>
                           <text
                             flexGrow={1}
                             flexBasis={0}
@@ -284,15 +292,11 @@ export function InboxSidebar() {
                             wrapMode="none"
                             truncate
                           >
-                            <span style={{ fg: theme.text.formfield.selected }}>{current() ? "▸ " : "  "}</span>
                             <Show when={status().marker}>
                               {(marker) => <span style={{ fg: status().color }}>{marker() + " "}</span>}
                             </Show>
                             {row().title}
                           </text>
-                          <Show when={status().spinner}>
-                            <Spinner color={status().color} />
-                          </Show>
                           <Show when={status().label}>
                             <text flexShrink={0} marginLeft={1} fg={status().color} selectable={false} wrapMode="none">
                               {status().label}
