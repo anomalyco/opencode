@@ -1,0 +1,95 @@
+/* The live game (game-frame.tsx). It fills its container and sizes its own text to it. */
+
+[data-component="arcade-game-frame"] {
+  --phosphor: var(--tone-phosphor);
+  --phosphor-hot: var(--tone-phosphor-hot);
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  font-family:
+    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier", ui-monospace, monospace;
+
+  iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #000;
+  }
+
+  [data-slot="loading"],
+  [data-slot="focus"],
+  [data-slot="message"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 3cqh;
+    padding: 8cqh 10cqw;
+    text-align: center;
+    color: var(--phosphor-hot);
+  }
+
+  [data-slot="loading"],
+  [data-slot="message"] {
+    background: var(--tone-screen-black);
+  }
+
+  [data-slot="focus"] {
+    border: 0;
+    background: color-mix(in srgb, var(--tone-screen-black) 72%, transparent);
+    font: inherit;
+    font-size: 3cqh;
+    color: var(--phosphor);
+    cursor: pointer;
+    outline: none;
+
+    &:focus-visible {
+      box-shadow: inset 0 0 0 0.6cqh var(--phosphor);
+    }
+  }
+
+  [data-slot="message"] {
+    font-size: 3.2cqh;
+    line-height: 1.5;
+    color: var(--phosphor);
+    text-shadow:
+      0 0 0.35em color-mix(in srgb, var(--tone-glow-near) 85%, transparent),
+      0 0 1.2em color-mix(in srgb, var(--tone-glow-far) 55%, transparent);
+
+    a {
+      color: var(--phosphor-hot);
+    }
+  }
+
+  [data-component="pixel-text"] {
+    display: block;
+    fill: currentColor;
+    overflow: visible;
+    filter: drop-shadow(0 0 0.06em color-mix(in srgb, var(--tone-glow-line) 90%, transparent))
+      drop-shadow(0 0 0.35em color-mix(in srgb, var(--tone-glow-far) 60%, transparent));
+  }
+
+  /* The screen's base type size (arcade.css --type), so it reads like the rest of the tube. */
+  .arcade-frame-title {
+    height: 3.2cqh;
+  }
+
+  .arcade-frame-blink {
+    animation: arcade-frame-blink 1.1s steps(2, jump-none) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .arcade-frame-blink {
+      animation: none;
+    }
+  }
+}
+
+@keyframes arcade-frame-blink {
+  to {
+    opacity: 0.15;
+  }
+}

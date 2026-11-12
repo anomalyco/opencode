@@ -1,4 +1,5 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { uuid } from "@opencode/util/uuid"
 import { Schema } from "effect"
 import type { ComposerNote } from "@opencode/plugin/gui"
 import type { PaneElement } from "./ipc"
@@ -9,6 +10,7 @@ export type ElementComment = {
   tabID: Browser.TabID
   url: string
   element: Omit<PaneElement, "rect" | "ref"> & { ref?: Browser.Ref }
+  subtitle?: string
   comment: string
 }
 
@@ -29,8 +31,10 @@ export function commentNote(input: ElementComment): ComposerNote {
   const note: ComposerNote = {
     type: "note",
     origin: input.origin,
-    commentID: crypto.randomUUID(),
+    commentID: uuid(),
     label: input.element.label,
+    title: input.element.selector || input.element.label,
+    subtitle: input.subtitle,
     icon: "select-element",
     subject: subject(input),
     comment: input.comment,
@@ -55,7 +59,7 @@ export function pageNote(input: {
   return {
     type: "note",
     origin: input.origin,
-    commentID: crypto.randomUUID(),
+    commentID: uuid(),
     label: input.label,
     icon: "outline-globe",
     subject: `the page in browser tab ${input.tabID} at ${input.url}${title}`,

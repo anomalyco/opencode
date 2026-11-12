@@ -373,7 +373,6 @@ export const dict = {
   "session.new.project.search": "Pretraži projekte",
   "session.new.project.add": "Dodaj projekat",
   "session.new.workspace.runIn": "Pokreni sesiju u",
-  "session.new.workspace.triggerLocal": "Lokalno",
   "session.new.workspace.local": "Lokalni repozitorij",
   "session.new.git.none": "Nema Gita",
 
@@ -813,6 +812,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Migracija podataka {{current}}/{{total}}",
   "home.workspaceTip": "Pokrenite sljedeću sesiju u novom radnom prostoru kako bi promjene ostale izolovane",
   "session.tab.add": "Dodaj karticu",
+  "session.tab.closeOthers": "Zatvori ostale kartice",
   "session.queue.attachments.one": "Još {{count}} prilog",
   "session.queue.attachments.few": "Još {{count}} priloga",
   "session.queue.attachments.other": "Još {{count}} priloga",

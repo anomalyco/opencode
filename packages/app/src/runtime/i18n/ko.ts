@@ -474,7 +474,6 @@ export const dict = {
   "session.new.project.search": "프로젝트 검색",
   "session.new.project.add": "프로젝트 추가",
   "session.new.workspace.runIn": "세션 실행 위치",
-  "session.new.workspace.triggerLocal": "로컬",
   "session.new.workspace.local": "로컬 저장소",
   "session.new.git.none": "Git 없음",
 
@@ -757,6 +756,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "데이터 마이그레이션 중 {{current}}/{{total}}",
   "home.workspaceTip": "변경 사항을 격리하려면 새 워크스페이스에서 다음 세션 시작",
   "session.tab.add": "탭 추가",
+  "session.tab.closeOthers": "다른 탭 닫기",
   "session.queue.attachments.one": "첨부파일 {{count}}개 추가",
   "session.queue.attachments.other": "첨부파일 {{count}}개 추가",
   "settings.backToSettings": "설정으로 돌아가기",

@@ -72,10 +72,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "တစ်လလျှင် $10 ဖြင့် အကောင်းဆုံးသော open-source မော်ဒယ်များသို့ ယုံကြည်စိတ်ချရသောဝင်ရောက်ခွင့်အတွက် OpenCode Go ကို စာရင်းသွင်းပါ။",
   "dialog.usageExceeded.freeTier.actionLabel": "စာရင်းသွင်းပါ။",
-  "dialog.usageExceeded.accountRateLimit.title": "Go ကန့်သတ်ချက် ပြည့်သွားပါပြီ။",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "အသုံးပြုမှု ကန့်သတ်ချက် ပြည့်သွားပါပြီ။ ဤမော်ဒယ်ကို ယခုဆက်လက်အသုံးပြုရန် သင့်လက်ကျန်ငွေမှ အသုံးပြုမှုကို ဖွင့်ပါ။",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "ဆက်တင်များကိုဖွင့်ပါ။",
   "ui.sessionTurn.status.delegating": "အလုပ်လွှဲအပ်ခြင်း။",
   "ui.sessionTurn.status.planning": "နောက်အဆင့်များကို စီစဉ်ခြင်း။",
   "ui.sessionTurn.status.gatheringContext": "စူးစမ်းလေ့လာခြင်း။",
@@ -170,6 +166,7 @@ export const dict = {
   "ui.common.dismiss": "ပယ်ရန်",
   "ui.common.close": "ပိတ်ပါ။",
   "ui.common.next": "နောက်တစ်ခု",
+  "ui.common.continue": "ဆက်ရန်",
   "ui.common.submit": "တင်ပြပါ။",
   "ui.common.showMore": "နောက်ထပ်ပြပါ။",
   "ui.permission.deny": "ငြင်းဆို",

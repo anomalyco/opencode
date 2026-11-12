@@ -373,7 +373,6 @@ export const dict = {
   "session.new.project.search": "Поиск проектов",
   "session.new.project.add": "Добавить проект",
   "session.new.workspace.runIn": "Запустить сессию в",
-  "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальный репозиторий",
   "session.new.git.none": "Нет Git",
 
@@ -827,6 +826,7 @@ export const dict = {
   "home.workspaceTip":
     "Начните следующую сессию в новом рабочем пространстве, чтобы изменения оставались изолированными",
   "session.tab.add": "Добавить вкладку",
+  "session.tab.closeOthers": "Закрыть другие вкладки",
   "session.queue.attachments.one": "Плюс {{count}} вложение",
   "session.queue.attachments.other": "Плюс {{count}} вложения",
   "settings.backToSettings": "Назад к настройкам",

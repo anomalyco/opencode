@@ -94,20 +94,7 @@ export const apply = Effect.fn("InstructionState.apply")(function* (
 ) {
   const stored = yield* find(db, sessionID)
   const current = Instructions.applyHashDelta(stored?.current_values ?? {}, delta)
-  if (!stored) {
-    yield* db
-      .insert(InstructionStateTable)
-      .values({
-        session_id: sessionID,
-        epoch_start: seq,
-        through_seq: seq,
-        initial_values: current,
-        current_values: current,
-      })
-      .run()
-      .pipe(Effect.orDie)
-    return
-  }
+  if (!stored) return yield* initialize(db, sessionID, seq, current)
   yield* db
     .update(InstructionStateTable)
     .set({ through_seq: seq, current_values: current })

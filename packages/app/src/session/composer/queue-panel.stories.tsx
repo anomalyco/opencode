@@ -45,3 +45,21 @@ export default {
 export const Short = { args: { count: 3 } }
 
 export const Scrolling = { args: { count: 6 } }
+
+export const WithContext = {
+  render: () => (
+    <div class="w-full max-w-[560px]">
+      <SessionQueuePanel
+        queue={{
+          ...view(() => 0),
+          rows: () => [
+            { id: "quote", text: "Update the queue context", attachments: 1 },
+            { id: "notes", text: "Compare the reference notes", attachments: 2 },
+            { id: "file", text: "Keep the queue compact", attachments: 1 },
+            { id: "context-only", text: "", attachments: 2 },
+          ],
+        }}
+      />
+    </div>
+  ),
+}

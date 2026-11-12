@@ -38,6 +38,7 @@ export const dict = {
   "dialog.server.menu.remove": "Quitar",
   "home.workspaceTip": "Inicie la próxima sesión en un nuevo espacio de trabajo para mantener los cambios aislados",
   "session.tab.add": "Agregar pestaña",
+  "session.tab.closeOthers": "Cerrar otras pestañas",
   "session.queue.attachments.one": "Más accesorio {{count}}",
   "session.queue.attachments.other": "Más accesorios {{count}}",
   "settings.backToSettings": "Volver a la configuración",
@@ -589,7 +590,6 @@ export const dict = {
   "session.new.project.search": "Buscar proyectos",
   "session.new.project.add": "Añadir proyecto",
   "session.new.workspace.runIn": "Ejecutar sesión en",
-  "session.new.workspace.triggerLocal": "Local",
   "session.new.workspace.local": "Repositorio local",
   "session.new.git.none": "Sin Git",
 

@@ -1,14 +1,21 @@
-import type { PositionedTextRun, PresentationHandle, SlideDisplayList, SlidePrimitive } from "@betteroffice/pptx"
+import type { PresentationHandle, SlideDisplayList } from "@betteroffice/pptx"
+import type { BundledFontFace } from "@betteroffice/fonts"
 import { loadFace, presentationFace, scriptFace } from "./fonts"
-import type { DeckText, FallbackScript, FontStyle } from "./slide-text"
-
-/** A face the deck asks for: a family it names, or the fallback for a script the Latin faces lack. */
-type Want =
-  | { readonly family: string; readonly script?: undefined }
-  | { readonly script: FallbackScript; readonly family?: undefined }
-
-/** A face registered with both the engine and the browser. */
-type Face = { readonly want: Want; readonly style: FontStyle; readonly css: string }
+import {
+  faceKey,
+  initialSlideFontsState,
+  MAX_SLIDE_LAYOUT_PASSES,
+  nextSlideFontBatch,
+  renameSlideFrame,
+  selectDeckFontRequests,
+  selectMissingSlideFonts,
+  transitionSlideFonts,
+  type SlideFontRequest,
+  type SlideFontResolver,
+  type SlideFontsEffect,
+  type SlideFontsEvent,
+} from "./slide-fonts-machine"
+import type { DeckText } from "./slide-text"
 
 /**
  * The faces one open deck draws with, added to `fonts`: the font set of the deck's own worker, which paints it. The
@@ -17,98 +24,97 @@ type Face = { readonly want: Want; readonly style: FontStyle; readonly css: stri
  * Segoe UI) never replace a font the painter itself needs.
  */
 export function slideFonts(deck: PresentationHandle, fonts: FontFaceSet) {
-  const faces = new Map<number, Face>()
-  const names = new Map<string, string>()
-  const registered = new Set<string>()
-  const loads = new Map<string, Promise<void>>()
-  const settled = new Set<string>()
+  let machine = initialSlideFontsState()
+  // What the driver holds beside the machine: each face's bundled source, each running load's timeout and loaded
+  // faces, and each waiting batch's resolver.
+  const sources = new Map<string, BundledFontFace>()
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
+  const loaded = new Map<number, { buffer: ArrayBuffer; browser: FontFace }>()
+  const batches = new Map<number, (registered: number) => void>()
 
-  /** Loads a face's bytes and browser face; the returned function registers both, so callers choose the order. */
-  const prepare = async (want: Want, requested: FontStyle) => {
-    const source = want.script
-      ? scriptFace(want.script, requested.bold, requested.italic)
-      : presentationFace(want.family, requested.bold, requested.italic)
+  const dispatch = (event: SlideFontsEvent) => {
+    const next = transitionSlideFonts(machine, event)
 
-    if (!source) return
+    machine = next.state
+    next.effects.forEach(run)
+  }
 
-    // A family without the requested style gets the face it has, which the browser then slants or emboldens.
-    const style = { bold: source.weight === 700, italic: source.style === "italic" }
-    // The worker holds this deck's faces alone, so the names only need to differ from each other.
-    const css = names.get(wantKey(want)) ?? `slide-${names.size}`
-    const key = faceKey(want, style)
+  const run = (effect: SlideFontsEffect) => {
+    if (effect.type === "load-face") {
+      const attempt = effect.attempt
+      const key = effect.key
+      const source = sources.get(key)
 
-    names.set(wantKey(want), css)
+      timers.set(
+        attempt,
+        setTimeout(() => dispatch({ type: "face.timed-out", attempt, key }), effect.timeoutMs),
+      )
+      void Promise.try(async () => {
+        if (!source) throw new Error(`No source for ${key}`)
+        const buffer = await loadFace(source)
 
-    if (registered.has(key)) return
+        const browser = await new FontFace(effect.css, buffer, {
+          weight: effect.style.bold ? "700" : "400",
+          style: effect.style.italic ? "italic" : "normal",
+        }).load()
 
-    const buffer = await loadFace(source).catch(() => undefined)
+        return { buffer, browser }
+      }).then(
+        (face) => {
+          // A load that timed out stays out.
+          if (!timers.has(attempt)) return
+          loaded.set(attempt, face)
+          dispatch({ type: "face.loaded", attempt, key })
+        },
+        () => dispatch({ type: "face.failed", attempt, key }),
+      )
 
-    if (!buffer) return
-
-    const browser = await new FontFace(css, buffer, {
-      weight: style.bold ? "700" : "400",
-      style: style.italic ? "italic" : "normal",
-    })
-      .load()
-      .catch(() => undefined)
-
-    if (!browser) return
-
-    return () => {
-      if (registered.has(key)) return
-
-      registered.add(key)
-      fonts.add(browser)
-
-      const face = { family: want.script ? css : want.family, ...style, bytes: new Uint8Array(buffer) }
-
-      faces.set(want.script ? deck.registerFallbackFont(face) : deck.registerFont(face), { want, style, css })
+      return
     }
-  }
 
-  /** Loads and registers one face once; later requests share the first. */
-  const request = (want: Want, style: FontStyle) => {
-    const key = faceKey(want, style)
-    const existing = loads.get(key)
+    if (effect.type === "clear-load") {
+      clearTimeout(timers.get(effect.attempt))
+      timers.delete(effect.attempt)
 
-    if (existing) return existing
+      return
+    }
 
-    const load = prepare(want, style).then((register) => {
-      register?.()
-      settled.add(key)
-    })
+    if (effect.type === "register-face") {
+      const face = loaded.get(effect.attempt)
+      loaded.delete(effect.attempt)
 
-    loads.set(key, load)
+      if (!face) return
+      fonts.add(face.browser)
 
-    return load
-  }
+      const want = effect.want
 
-  /** The faces a frame drew in a substitute style whose own face has not loaded or failed yet. */
-  const missing = (primitives: readonly SlidePrimitive[]) =>
-    textRuns(primitives).flatMap((run) => {
-      const face = faces.get(run.fontId)
-      const style = { bold: run.bold, italic: run.italic }
-
-      if (!face || sameStyle(face.style, style) || settled.has(faceKey(face.want, style))) return []
-
-      return [{ want: face.want, style }]
-    })
-
-  const rename = (primitive: SlidePrimitive): SlidePrimitive => {
-    if (primitive.kind === "textBox")
-      return {
-        ...primitive,
-        lines: primitive.lines.map((line) => ({
-          ...line,
-          runs: line.runs.map((run) => ({ ...run, fontFamily: faces.get(run.fontId)?.css ?? run.fontFamily })),
-        })),
+      const registration = {
+        family: want.script ? effect.css : want.family,
+        ...effect.style,
+        bytes: new Uint8Array(face.buffer),
       }
 
-    if (primitive.kind === "table" || primitive.kind === "chart")
-      return { ...primitive, primitives: primitive.primitives.map(rename) }
+      dispatch({
+        type: "face.registered",
+        key: effect.key,
+        fontId: want.script ? deck.registerFallbackFont(registration) : deck.registerFont(registration),
+      })
 
-    return primitive
+      return
+    }
+
+    batches.get(effect.id)?.(effect.registered)
+    batches.delete(effect.id)
   }
+
+  /** Loads and registers the faces, joining loads that run; resolves with how many it registered. */
+  const request = (faces: readonly (SlideFontRequest & { source: BundledFontFace })[]) =>
+    new Promise<number>((resolve) => {
+      faces.forEach((face) => sources.set(faceKey(face.want, face.style), face.source))
+      // A batch with nothing to load resolves inside the dispatch, so its resolver is in place first.
+      batches.set(nextSlideFontBatch(machine), resolve)
+      dispatch({ type: "batch.requested", requests: faces })
+    })
 
   return {
     /**
@@ -116,65 +122,36 @@ export function slideFonts(deck: PresentationHandle, fonts: FontFaceSet) {
      * cannot find with the first. Resolves once each face has loaded or failed.
      */
     load: async (text: DeckText) => {
-      const regular = { bold: false, italic: false }
-      // The engine lays no text out without a face, so a deck that names none gets PowerPoint's own default.
-      const families = text.families.length > 0 ? text.families : [{ name: "Calibri", styles: [regular] }]
-
-      const wants: { want: Want; style: FontStyle }[] = [
-        ...families.flatMap((family) => family.styles.map((style) => ({ want: { family: family.name }, style }))),
-        ...text.scripts.map((script) => ({ want: { script }, style: regular })),
-      ]
-
-      const registers = await Promise.all(wants.map((entry) => prepare(entry.want, entry.style)))
-
-      registers.forEach((register) => register?.())
-      wants.forEach((entry) => {
-        const key = faceKey(entry.want, entry.style)
-
-        loads.set(key, Promise.resolve())
-        settled.add(key)
-      })
+      await request(selectDeckFontRequests(text, resolveFont))
     },
 
     /**
      * Lays a slide out. When its text asks for a style a registered face lacks, such as a bold the title style
-     * inherits, that face loads and the slide lays out again. The frame names the browser's faces, ready to paint.
+     * inherits, that face loads and the slide lays out again, for as long as each layout registers new faces. The
+     * frame names the browser's faces, ready to paint.
      */
     layout: async (index: number) => {
-      const settle = async (rounds: number): Promise<SlideDisplayList> => {
+      const settle = async (passes: number): Promise<SlideDisplayList> => {
         const frame = deck.layoutSlide(index)
-        const wanted = rounds === 0 ? [] : missing(frame.primitives)
+        const wanted = passes > 1 ? selectMissingSlideFonts(machine, frame.primitives, resolveFont) : []
 
-        if (wanted.length === 0) return { ...frame, primitives: frame.primitives.map(rename) }
+        if (wanted.length === 0 || (await request(wanted)) === 0) return renameSlideFrame(machine, frame)
 
-        await Promise.all(wanted.map((entry) => request(entry.want, entry.style)))
-
-        return settle(rounds - 1)
+        return settle(passes - 1)
       }
 
-      return settle(2)
+      return settle(MAX_SLIDE_LAYOUT_PASSES)
     },
   }
 }
 
-function textRuns(primitives: readonly SlidePrimitive[]): PositionedTextRun[] {
-  return primitives.flatMap((primitive) => {
-    if (primitive.kind === "textBox") return primitive.lines.flatMap((line) => line.runs)
+/** The face the app ships for a wanted face and style. A family without the style gets the face it has. */
+const resolveFont: SlideFontResolver<BundledFontFace> = (want, requested) => {
+  const source = want.script
+    ? scriptFace(want.script, requested.bold, requested.italic)
+    : presentationFace(want.family, requested.bold, requested.italic)
 
-    if (primitive.kind === "table" || primitive.kind === "chart") return textRuns(primitive.primitives)
+  if (!source) return
 
-    return []
-  })
-}
-
-function wantKey(want: Want) {
-  return want.script ? `script:${want.script}` : `family:${want.family.toLowerCase()}`
-}
-
-function faceKey(want: Want, style: FontStyle) {
-  return `${wantKey(want)}|${style.bold}|${style.italic}`
-}
-
-function sameStyle(left: FontStyle, right: FontStyle) {
-  return left.bold === right.bold && left.italic === right.italic
+  return { want, style: { bold: source.weight === 700, italic: source.style === "italic" }, source }
 }

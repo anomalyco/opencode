@@ -24,8 +24,10 @@ export interface TextInputProps extends Omit<ComponentProps<"input">, "type"> {
   numeric?: boolean
   /** Error styling for the field and value text. */
   invalid?: boolean
-  /** `base` is 28px tall; `large` is 32px tall. */
-  appearance?: "base" | "large"
+  /** `small` is 24px tall; `base` is 28px tall; `large` is 32px tall. */
+  appearance?: "small" | "base" | "large"
+  /** Background surface; invisible gains a fill on hover. */
+  surface?: "base" | "layer-1" | "invisible"
   type?: ComponentProps<"input">["type"]
 }
 
@@ -47,6 +49,7 @@ export function TextInput(props: TextInputProps) {
     "numeric",
     "invalid",
     "appearance",
+    "surface",
     "disabled",
   ])
 
@@ -57,6 +60,7 @@ export function TextInput(props: TextInputProps) {
       data-invalid={local.invalid ? "" : undefined}
       data-numeric={local.numeric ? "" : undefined}
       data-appearance={local.appearance ?? "base"}
+      data-surface={local.surface ?? "base"}
       data-leading-icon={local.leadingIcon ? "" : undefined}
       classList={{
         ...local.classList,

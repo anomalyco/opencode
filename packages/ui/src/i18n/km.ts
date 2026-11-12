@@ -72,10 +72,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "ជាវ OpenCode Go ក្នុងតម្លៃ $10/ខែ សម្រាប់ការចូលប្រើដែលអាចទុកចិត្តបានចំពោះម៉ូដែលប្រភពបើកចំហល្អបំផុត។",
   "dialog.usageExceeded.freeTier.actionLabel": "ជាវ",
-  "dialog.usageExceeded.accountRateLimit.title": "ឈានដល់កម្រិតកំណត់",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "ឈានដល់ដែនកំណត់នៃការប្រើប្រាស់។ ដើម្បីបន្តប្រើម៉ូដែលនេះឥឡូវនេះ សូមបើកការប្រើប្រាស់ពីសមតុល្យដែលមានរបស់អ្នក។",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "បើកការកំណត់",
   "ui.sessionTurn.status.delegating": "ការផ្ទេរការងារ",
   "ui.sessionTurn.status.planning": "ការធ្វើផែនការជំហានបន្ទាប់",
   "ui.sessionTurn.status.gatheringContext": "ការរុករក",
@@ -170,6 +166,7 @@ export const dict = {
   "ui.common.dismiss": "ច្រានចោល",
   "ui.common.close": "បិទ",
   "ui.common.next": "បន្ទាប់",
+  "ui.common.continue": "បន្ត",
   "ui.common.submit": "ដាក់ស្នើ",
   "ui.common.showMore": "មើលច្រើនទៀត",
   "ui.permission.deny": "បដិសេធ",

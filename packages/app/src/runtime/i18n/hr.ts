@@ -72,7 +72,7 @@ const desktop = [
 ]
 
 export const dict = {
-  ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
+  ...Object.fromEntries(desktop.map((value, index) => [DESKTOP_NATIVE_KEYS[index], value])),
   "command.category.suggested": "Predloženo",
   "command.category.view": "Prikaz",
   "command.category.project": "Projekt",
@@ -352,7 +352,6 @@ export const dict = {
   "session.new.project.search": "Pretražite projekte",
   "session.new.project.add": "Dodaj projekt",
   "session.new.workspace.runIn": "Pokrenite sesiju",
-  "session.new.workspace.triggerLocal": "Lokalni",
   "session.new.workspace.local": "Lokalno spremište",
   "session.new.git.none": "Ne Git",
   "session.header.open.finder": "Finder",
@@ -757,6 +756,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Migracija podataka {{current}}/{{total}}",
   "home.workspaceTip": "Pokrenite sljedeću sesiju u novom radnom prostoru kako bi promjene ostale izolovane",
   "session.tab.add": "Dodaj karticu",
+  "session.tab.closeOthers": "Zatvori ostale kartice",
   "session.queue.attachments.one": "Još {{count}} prilog",
   "session.queue.attachments.few": "Još {{count}} priloga",
   "session.queue.attachments.other": "Još {{count}} priloga",

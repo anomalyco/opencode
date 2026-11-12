@@ -39,6 +39,7 @@ export const dict = {
   "dialog.server.menu.remove": "Fjern",
   "home.workspaceTip": "Start neste økt i et nytt arbeidsområde for å holde endringer isolert",
   "session.tab.add": "Legg til fane",
+  "session.tab.closeOthers": "Lukk andre faner",
   "session.queue.attachments.one": "Pluss {{count}} vedlegg",
   "session.queue.attachments.other": "Pluss {{count}} vedlegg",
   "settings.backToSettings": "Tilbake til innstillinger",
@@ -792,7 +793,6 @@ export const dict = {
   "session.new.project.search": "Søk etter prosjekter",
   "session.new.project.add": "Legg til prosjekt",
   "session.new.workspace.runIn": "Kjør sesjonen i",
-  "session.new.workspace.triggerLocal": "Lokalt",
   "session.new.workspace.local": "Lokalt depot",
   "session.new.git.none": "Ingen Git",
 

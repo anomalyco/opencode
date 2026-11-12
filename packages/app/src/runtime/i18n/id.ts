@@ -396,7 +396,6 @@ export const dict = {
   "session.new.project.search": "Cari proyek",
   "session.new.project.add": "Tambah proyek",
   "session.new.workspace.runIn": "Jalankan sesi dalam",
-  "session.new.workspace.triggerLocal": "Lokal",
   "session.new.workspace.local": "Repositori lokal",
   "session.new.git.none": "Tanpa Git",
 
@@ -815,6 +814,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Memigrasikan data {{current}}/{{total}}",
   "home.workspaceTip": "Mulai sesi berikutnya di ruang kerja baru untuk menjaga perubahan tetap terisolasi",
   "session.tab.add": "Tambah tab",
+  "session.tab.closeOthers": "Tutup tab lain",
   "session.queue.attachments.one": "Tambahkan {{count}} lampiran",
   "session.queue.attachments.other": "Tambahkan {{count}} lampiran",
   "settings.backToSettings": "Kembali ke pengaturan",

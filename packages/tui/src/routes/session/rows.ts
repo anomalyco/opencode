@@ -44,7 +44,11 @@ export async function completeGroupBoundary(input: {
   }
 }
 
-export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
+export function createSessionRows(
+  sessionID: Accessor<string>,
+  onSynced?: (sessionID: string) => void,
+  beforePublish?: () => void,
+) {
   const data = useData()
   const client = useClient()
   const config = useConfig()
@@ -131,7 +135,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
             rows,
             messages: () => data.session.message.list(id).length,
             more: () => data.session.message.more(id),
-            loadMore: () => data.session.message.loadMore(id),
+            loadMore: () => data.session.message.loadMore(id, { beforePublish }),
             active: () => sessionID() === id,
           }).catch(() => undefined)
           if (sessionID() === id) onSynced?.(id)
@@ -370,6 +374,8 @@ export function reduceSessionRows(
     })
     usage.previousTurnCache = { read: last.tokens.cache.read, model: last.model }
   }
+  // An execution failure that repeats the error of the turn's last step or compaction is already on screen.
+  let shownError: SessionMessageAssistant["error"]
   const entries = [
     ...messages.filter((message) => !pending.has(message.id)),
     ...pendingCompactions,
@@ -377,10 +383,15 @@ export function reduceSessionRows(
   ].reduce<ProjectionEntry[]>((rows, message) => {
     if (message.type !== "assistant") {
       if (message.type === "idle") {
+        if (message.error && (message.error.type !== shownError?.type || message.error.message !== shownError.message))
+          rows.push({ entry: { type: "message", messageID: message.id }, path: [], closesPrevious: true })
+        shownError = undefined
         flushTurn(rows)
         return rows
       }
       if (message.type === "synthetic" && !message.description?.trim()) return rows
+      if (message.type === "compaction" && message.status !== "running")
+        shownError = message.status === "failed" ? message.error : undefined
       if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
       rows.push({
         entry: { type: "message", messageID: message.id },
@@ -390,6 +401,7 @@ export function reduceSessionRows(
       return rows
     }
     usage?.steps.push(message)
+    shownError = message.error
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`

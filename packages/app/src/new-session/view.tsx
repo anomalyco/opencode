@@ -1,13 +1,11 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
-import { Slash } from "@opencode/ui/slash"
 import { Keybind } from "@opencode/ui/keybind"
 import { useCommand } from "@/shell/commands/command"
-import { Show, createMemo, createSignal, type JSX } from "solid-js"
+import { Show, createComputed, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { getFilename } from "@opencode/util/path"
 import {
   displayName,
   getProjectAvatarGenerated,
@@ -34,10 +32,24 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useSettings } from "@/settings/model"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
+import {
+  CHECKOUT_PLACEHOLDER_DELAY_MS,
+  INITIAL_CHECKOUT_LABEL_STATE,
+  selectCheckoutSkeleton,
+  transitionCheckoutLabel,
+  type CheckoutLabelEvent,
+} from "./workspace/checkout-machine"
 import { NewSessionBranch } from "./workspace/selector"
 import { NewSessionBrickBreaker } from "./brick-breaker"
-import { NewSessionPinBoard, type PinBoardHandle } from "./pin-board"
-import { NewSessionWordmark, type LodgerBall } from "./wordmark"
+import { NewSessionPinBoard } from "./pin-board"
+import { NewSessionWordmark } from "./wordmark"
+import {
+  createWordmarkState,
+  selectBrickBreaker,
+  selectPinBoard,
+  transitionWordmark,
+  type WordmarkEvent,
+} from "./wordmark-machine"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
@@ -48,17 +60,6 @@ export const WorkspaceOnboardingSchema = Persistence.struct({
 export const ProviderTipSchema = Persistence.struct({
   dismissedAt: Schema.Finite,
 })
-
-type WordmarkState = {
-  box?: HTMLDivElement
-  mode: "flat" | "open" | "closing"
-  game: boolean
-}
-
-type BrickBreakerHandles = {
-  board?: PinBoardHandle
-  ball?: LodgerBall
-}
 
 export function NewSessionView(props: {
   composer: ComposerModel
@@ -74,10 +75,30 @@ export function NewSessionView(props: {
 
   const settings = useSettings()
 
-  const [wordmark, setWordmark] = createStore<WordmarkState>({ mode: "flat", game: false })
+  const [wordmark, setWordmark] = createSignal(createWordmarkState(false))
+  const [logo, setLogo] = createSignal<HTMLDivElement>()
 
-  // Imperative handles for the brick breaker; they are not reactive state.
-  const handles: BrickBreakerHandles = {}
+  const dispatchWordmark = (event: WordmarkEvent) =>
+    untrack(() => {
+      const next = transitionWordmark(wordmark(), event)
+      setWordmark(next.state)
+
+      if (next.effects.some((effect) => effect.type === "focus.composer")) props.composer.restoreFocus()
+    })
+
+  const location = (project?: PromptProject, step?: "worktrees" | "branches") =>
+    props.location({
+      project,
+      step,
+      // Only a selected base survives into the dialog; otherwise it starts from the drilled project's own branch.
+      base: project && props.workspace.selection.value() === "create" ? props.workspace.bar.branch() : undefined,
+      onWorkspace: (value) => {
+        if (value !== "main") setOnboarding("used", true)
+      },
+    })
+
+  const onboardingVisible = () => onboardingReady() && !onboarding.used && props.workspace.bar.visible()
+
   let panel!: HTMLDivElement
 
   return (
@@ -94,15 +115,11 @@ export function NewSessionView(props: {
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <NewSessionWordmark
-              ref={(box) => setWordmark("box", box)}
+              ref={setLogo}
+              state={wordmark}
+              onEvent={dispatchWordmark}
+              play
               sound={settings.sounds.interfaceEnabled}
-              onOpen={() => setWordmark("mode", "open")}
-              onClose={() => setWordmark("mode", "closing")}
-              onFlat={() => setWordmark("mode", "flat")}
-              onPlay={(ball) => {
-                handles.ball = ball
-                setWordmark("game", true)
-              }}
             />
             <div class="mt-8 flex flex-col gap-3">
               <div data-slot="new-session-composer" class="flex flex-col gap-1">
@@ -115,14 +132,15 @@ export function NewSessionView(props: {
                       project={project()}
                       workspace={props.workspace.bar.visible() ? props.workspace.selection.value() : "main"}
                       root={props.workspace.project.root()}
-                      branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
-                      onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
-                      onClick={() =>
-                        props.location({
-                          onWorkspace: (value) => {
-                            if (value !== "main") setOnboarding("used", true)
-                          },
-                        })
+                      checkout={props.workspace.bar.checkout()}
+                      branch={props.workspace.bar.branch()}
+                      onboarding={onboardingVisible()}
+                      onClick={() => location()}
+                      onOpen={
+                        project().id && project().vcs === "git" ? () => location(project(), "worktrees") : undefined
+                      }
+                      onBase={
+                        project().id && project().vcs === "git" ? () => location(project(), "branches") : undefined
                       }
                     />
                   )}
@@ -134,28 +152,25 @@ export function NewSessionView(props: {
             </div>
           </div>
         </div>
-        <Show when={wordmark.mode !== "flat" && wordmark.box}>
-          {(logo) => (
+        <Show when={selectPinBoard(wordmark(), logo())}>
+          {(board) => (
             <NewSessionPinBoard
-              logo={logo()}
+              logo={board().logo}
               sound={settings.sounds.interfaceEnabled}
-              entrance="chain"
-              closing={wordmark.mode === "closing"}
-              ref={(board) => (handles.board = board)}
+              entrance={board().entrance}
+              closing={board().closing}
+              ref={(handle) => dispatchWordmark({ type: "board.mounted", board: handle })}
             />
           )}
         </Show>
-        <Show when={wordmark.game && handles.board && handles.ball && { board: handles.board, ball: handles.ball }}>
+        <Show when={selectBrickBreaker(wordmark())}>
           {(game) => (
             <NewSessionBrickBreaker
               panel={panel}
               board={game().board}
               ball={game().ball}
               sound={settings.sounds.interfaceEnabled}
-              onDone={() => {
-                setWordmark("game", false)
-                props.composer.restoreFocus()
-              }}
+              onDone={() => dispatchWordmark({ type: "game.done" })}
             />
           )}
         </Show>
@@ -272,101 +287,140 @@ function fitPath(value: string, width: number, font: string) {
   }
 }
 
-/** The composer tray: combined location picker, Git context, and the session's directory. */
+const TRIGGER =
+  "flex h-7 items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
+
+/** The composer tray: the project picker, the checkout branch, and the session's directory. */
 function NewSessionLocation(props: {
   project: PromptProject
   /** "main", "create", or a worktree directory. */
   workspace: string
   root: string
-  branch?: JSX.Element
+  /** Missing while the main checkout's Git info loads. */
+  checkout?: { branch?: string }
+  branch?: string
   onboarding: boolean
   onClick: () => void
+  /** Opens the project's worktree step; without it the project has no worktrees to choose. */
+  onOpen?: () => void
+  /** Opens the project's base-branch step; without it the project has no branches to choose. */
+  onBase?: () => void
 }) {
   const language = useLanguage()
   const command = useCommand()
   const [layout, setLayout] = createStore({ width: 0, font: "" })
 
-  const worktree = () => {
-    if (props.workspace === "main") return
+  command.register("new-session-worktree", () => [
+    {
+      id: "session.location.select",
+      title: language.t("session.location.worktree"),
+      category: language.t("command.category.workspace"),
+      keybind: "mod+alt+o",
+      disabled: !props.onOpen,
+      onSelect: props.onOpen,
+    },
+    {
+      id: "session.branch.choose",
+      title: language.t("command.session.branch.choose"),
+      category: language.t("command.category.workspace"),
+      keybind: "mod+alt+b",
+      disabled: !props.onBase,
+      onSelect: props.onBase,
+    },
+  ])
 
-    if (props.workspace === "create") return language.t("workspace.new")
+  const [checkoutLabel, setCheckoutLabel] = createSignal(INITIAL_CHECKOUT_LABEL_STATE)
 
-    return getFilename(props.workspace)
-  }
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
 
-  const path = () => {
-    if (props.workspace === "create") return
+  const dispatchCheckout = (event: CheckoutLabelEvent) =>
+    untrack(() => {
+      const next = transitionCheckoutLabel(checkoutLabel(), event)
+      setCheckoutLabel(next.state)
+      next.effects.forEach((effect) => {
+        if (effect.type === "delay.stop") {
+          clearTimeout(timers.get(effect.attempt))
+          timers.delete(effect.attempt)
 
-    return props.workspace === "main" ? props.root : props.workspace
-  }
+          return
+        }
 
-  const fitted = createMemo(() => fitPath(path() ?? "", layout.width, layout.font))
+        timers.set(
+          effect.attempt,
+          setTimeout(
+            () => dispatchCheckout({ type: "delay.elapsed", attempt: effect.attempt }),
+            CHECKOUT_PLACEHOLDER_DELAY_MS,
+          ),
+        )
+      })
+    })
+
+  createComputed(() =>
+    dispatchCheckout({ type: "checkout.changed", directory: props.root, loaded: props.checkout !== undefined }),
+  )
+
+  onCleanup(() => dispatchCheckout({ type: "disposed" }))
+
+  // The checkout placeholder only covers a branch that is still loading; a loaded checkout without one says "No branch".
+  const branchLoading = () => !props.branch && selectCheckoutSkeleton(checkoutLabel())
+
+  const path = () => (props.workspace === "main" || props.workspace === "create" ? props.root : props.workspace)
+
+  const fitted = createMemo(() => fitPath(path(), layout.width, layout.font))
 
   return (
     <div class="relative flex min-h-9 min-w-0 items-center gap-3 ps-2 pe-1.5 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
-      <div class="flex min-w-0 max-w-full flex-wrap items-center gap-1 py-1.5">
-        <Tooltip
-          appearance={props.onboarding ? "large" : undefined}
-          placement="top"
-          openDelay={800}
-          value={
-            props.onboarding ? (
-              <div class="flex flex-col gap-1 text-start">
-                <div class="flex items-center gap-1.5 font-[530] text-v2-text-text-base">
-                  <Icon name="outline-worktree" size="small" class="shrink-0 text-v2-text-text-accent" />
-                  <span>{language.t("workspace.onboarding.title")}</span>
-                </div>
-                <span class="font-[440] text-v2-text-text-muted">{language.t("workspace.onboarding.description")}</span>
-              </div>
-            ) : (
-              language.t("session.new.workspace.trigger.tooltip")
-            )
-          }
-          contentClass={props.onboarding ? "max-w-[280px]" : undefined}
-          class="flex min-w-0 max-w-full"
-        >
-          <button
-            type="button"
-            data-action="prompt-project"
-            aria-haspopup="dialog"
-            aria-description={language.t("session.new.workspace.trigger.tooltip")}
-            class="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
-            onClick={props.onClick}
+      <div class="flex min-w-0 max-w-full flex-wrap items-center gap-x-0 gap-y-1 py-1.5">
+        <div class="flex min-w-0 max-w-full items-center">
+          <Tooltip
+            placement="top"
+            openDelay={800}
+            value={
+              <span class="flex items-center gap-2">
+                {language.t("session.new.project.trigger.tooltip")}
+                <Show when={command.keybindParts("project.select").length}>
+                  <Keybind keys={command.keybindParts("project.select")} variant="neutral" />
+                </Show>
+              </span>
+            }
+            class="flex min-w-0"
           >
-            <ProjectAvatar
-              class="shrink-0"
-              fallback={displayName(props.project)}
-              src={getProjectAvatarSource(props.project.id, props.project.icon)}
-              variant={getProjectAvatarVariant(props.project.icon?.color)}
-              generated={getProjectAvatarGenerated(props.project)}
-            />
-            <span class="min-w-0 truncate">{displayName(props.project)}</span>
-            <Show when={worktree()}>
-              {(name) => (
-                <>
-                  <Slash gap={0} />
-                  <span class="sr-only">{" / "}</span>
-                  <span class="min-w-12 shrink-[1000] truncate">{name()}</span>
-                </>
-              )}
-            </Show>
-            <Show when={props.onboarding}>
-              <span
-                data-slot="workspace-onboarding-dot"
-                aria-hidden="true"
-                class="size-1.5 shrink-0 rounded-full bg-v2-text-text-accent"
+            <button
+              type="button"
+              data-action="prompt-project"
+              aria-haspopup="dialog"
+              aria-description={language.t("session.new.project.trigger.tooltip")}
+              class={`${TRIGGER} min-w-0`}
+              onClick={props.onClick}
+            >
+              <ProjectAvatar
+                class="shrink-0"
+                fallback={displayName(props.project)}
+                src={getProjectAvatarSource(props.project.id, props.project.icon)}
+                variant={getProjectAvatarVariant(props.project.icon?.color)}
+                generated={getProjectAvatarGenerated(props.project)}
               />
-            </Show>
-          </button>
-        </Tooltip>
-        {props.branch}
+              <span class="min-w-0 truncate">{displayName(props.project)}</span>
+            </button>
+          </Tooltip>
+          <Show when={props.onOpen}>
+            {(onOpen) => (
+              <NewSessionBranch
+                branch={props.branch}
+                loading={branchLoading()}
+                onboarding={props.onboarding}
+                onOpen={onOpen()}
+              />
+            )}
+          </Show>
+        </div>
       </div>
       {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
       <Show when={path()} keyed>
         {(directory) => (
           <div
             class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden"
-            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 26}px)` }}
+            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 6}px)` }}
           >
             <Tooltip
               placement="top"
@@ -377,40 +431,24 @@ function NewSessionLocation(props: {
             >
               <span
                 ref={(row) =>
-                  createResizeObserver(row, () => {
-                    const icon = row.querySelector("[data-slot=new-session-location-icon]")
-                    const style = getComputedStyle(row)
-
+                  createResizeObserver(row, () =>
                     setLayout({
-                      width: row.clientWidth - (icon?.clientWidth ?? 0) - parseFloat(style.columnGap),
-                      font: style.font,
-                    })
-                  })
+                      width: row.clientWidth,
+                      font: getComputedStyle(row).font,
+                    }),
+                  )
                 }
-                class="flex min-w-0 flex-1 items-center justify-end gap-1.5"
+                class="flex min-w-0 flex-1 items-center justify-end"
                 dir="ltr"
               >
-                <Tooltip
-                  placement="top"
-                  openDelay={800}
-                  value={
-                    <span class="flex items-center gap-2">
-                      {language.t("session.location.toggle")}
-                      <Keybind keys={command.keybindParts("session.location.cycle")} variant="neutral" />
-                    </span>
-                  }
-                >
-                  <span class="flex shrink-0" data-slot="new-session-location-icon">
-                    <Icon
-                      name={worktree() ? "outline-worktree" : "monitor"}
-                      size="small"
-                      class="text-v2-icon-icon-muted"
-                    />
-                  </span>
-                </Tooltip>
                 <span
                   data-slot="new-session-location-path"
-                  class="min-w-0 overflow-hidden whitespace-nowrap text-v2-text-text-faint [direction:rtl] [text-align:end]"
+                  class="min-w-0 cursor-text select-text overflow-hidden whitespace-nowrap text-v2-text-text-faint [direction:rtl] [text-align:end]"
+                  onCopy={(event) => {
+                    if (!event.clipboardData || window.getSelection()?.toString() !== fitted().text) return
+                    event.clipboardData.setData("text/plain", directory)
+                    event.preventDefault()
+                  }}
                 >
                   <bdi dir="ltr">{fitted().text}</bdi>
                 </span>

@@ -342,7 +342,6 @@ export const dict = {
   "session.new.project.search": "Αναζήτηση έργων",
   "session.new.project.add": "Προσθήκη έργου",
   "session.new.workspace.runIn": "Εκτέλεση συνεδρίας σε",
-  "session.new.workspace.triggerLocal": "Τοπική",
   "session.new.workspace.local": "Τοπικό αποθετήριο",
   "session.new.git.none": "Χωρίς Git",
   "session.header.open.finder": "Finder",
@@ -743,6 +742,7 @@ export const dict = {
   "home.workspaceTip":
     "Ξεκινήστε την επόμενη συνεδρία σε νέο χώρο εργασίας για να διατηρήσετε τις αλλαγές απομονωμένες",
   "session.tab.add": "Προσθήκη καρτέλας",
+  "session.tab.closeOthers": "Κλείσιμο των άλλων καρτελών",
   "session.queue.attachments.one": "Συν {{count}} συνημμένο",
   "session.queue.attachments.other": "Συν {{count}} συνημμένα",
   "settings.backToSettings": "Επιστροφή στις ρυθμίσεις",

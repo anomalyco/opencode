@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Αλλαγές συνεδρίας",
   "ui.sessionReview.title.git": "Git αλλαγές",
   "ui.sessionReview.title.branch": "Αλλαγές κλάδου",
@@ -71,10 +71,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Εγγραφείτε στο OpenCode Go για 10 $/μήνα και αποκτήστε αξιόπιστη πρόσβαση στα καλύτερα μοντέλα ανοιχτού κώδικα.",
   "dialog.usageExceeded.freeTier.actionLabel": "Εγγραφή",
-  "dialog.usageExceeded.accountRateLimit.title": "Συμπληρώθηκε το όριο μετάβασης",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Συμπληρώθηκε το όριο χρήσης. Για να συνεχίσετε να χρησιμοποιείτε αυτό το μοντέλο τώρα, ενεργοποιήστε τη χρήση από το διαθέσιμο υπόλοιπό σας",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Άνοιγμα ρυθμίσεων",
   "ui.sessionTurn.status.delegating": "Ανάθεση εργασίας",
   "ui.sessionTurn.status.planning": "Σχεδιασμός επόμενων βημάτων",
   "ui.sessionTurn.status.gatheringContext": "Εξερεύνηση",
@@ -167,6 +163,7 @@ export const dict: Record<string, string> = {
   "ui.common.dismiss": "Παράβλεψη",
   "ui.common.close": "Κλείσιμο",
   "ui.common.next": "Επόμενο",
+  "ui.common.continue": "Συνέχεια",
   "ui.common.submit": "Υποβολή",
   "ui.common.showMore": "Εμφάνιση περισσότερων",
   "ui.permission.deny": "Απόρριψη",

@@ -1,63 +1,59 @@
-import type { Eval } from "../interpreter/runner.js"
-import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
-import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
-import { IteratorSymbol, rangeError, syntaxError, typeError } from "../interpreter/model.js"
+import { Invoke } from "../runtime/signals.js"
+import { checkArrayLength, checkStringLength } from "../runtime/limits.js"
+import { constructor, methods, prototypeFrom, receiver, requiresNew, iteratorMethods } from "../runtime/native.js"
+import { IteratorSymbol, rangeError, syntaxError, typeError } from "../runtime/model.js"
 import {
   define,
   defineAccessor,
   get,
   hidden,
-  Arr,
   Bytes,
-  hostIterator,
   Obj,
   coerceToInteger,
   coerceToNumber,
   coerceToString,
   type Value,
-} from "../interpreter/objects.js"
-import { describeValue } from "../interpreter/references.js"
-import { applyCollectionCallback } from "../interpreter/callback.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
-import { callbackMethods, sortArray } from "./array.js"
+} from "../runtime/objects.js"
+import { describeValue } from "../runtime/references.js"
+import { requireCallback } from "../runtime/callback.js"
+import type { Interpreter } from "../runtime/interpreter.js"
+import { sortArray } from "./array.js"
 
 /**
- * The bytes a Uint8Array, array, or other iterable of numbers describes; the host array clamps each value. As in
- * TypedArray.from, a mapper sees the original values, after the source is consumed in full.
+ * The bytes a Uint8Array, array, or other iterable of numbers describes, read in the prelude: a new Uint8Array with
+ * prototype `into`, or set into the Uint8Array `into` at `offset`. The host array clamps each value.
  */
-function* collectBytes<R>(
+const collectBytes = <R>(
   ctx: Interpreter<R>,
   source: Value,
   name: string,
+  into: Obj,
+  offset: number,
   mapper?: Value,
   thisArg?: Value,
-): Eval<Uint8Array> {
-  const apply = mapper === undefined ? undefined : applyCollectionCallback(ctx, mapper, name)
-  if (source instanceof Bytes && apply === undefined) return new Uint8Array(source.bytes)
-  const cursor = yield* ctx.iterate(source)
-  if (cursor === undefined) {
-    throw typeError(
-      `${name} expects a Uint8Array, an array, or an iterable of numbers, received ${describeValue(source)}.`,
-    )
-  }
-  const values: Array<Value> = []
-  while (true) {
-    const step = yield* cursor.next()
-    if (step.done) break
-    values.push(step.value)
-    checkArrayLength(values.length)
-  }
-  if (apply === undefined) return Uint8Array.from(values, coerceToNumber)
-  const mapped: Array<Value> = []
-  for (const [index, value] of values.entries()) mapped.push(yield* apply([value, index], thisArg))
-  return Uint8Array.from(mapped, coerceToNumber)
+) => {
+  const callback = mapper === undefined ? undefined : requireCallback(mapper, name)
+  if (source instanceof Bytes && callback === undefined) return finishBytes(new Uint8Array(source.bytes), into, offset)
+  return new Invoke(
+    ctx.prelude.fn("collectBytes"),
+    undefined,
+    [source, name, callback, thisArg, into, offset],
+    undefined,
+  )
 }
 
-function* constructBytes<R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj): Eval<Bytes> {
-  const source = args[0]
-  if (source !== null && typeof source === "object") {
-    return new Bytes(proto, yield* collectBytes(ctx, source, "new Uint8Array(...)"))
+export const finishBytes = (bytes: Uint8Array, into: Obj, offset: number): Value => {
+  if (!(into instanceof Bytes)) return new Bytes(into, bytes)
+  if (!Number.isInteger(offset) || offset < 0 || bytes.length + offset > into.bytes.length) {
+    throw rangeError("Uint8Array.set: the source does not fit at that offset.")
   }
+  into.bytes.set(bytes, offset)
+  return undefined
+}
+
+const constructBytes = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) => {
+  const source = args[0]
+  if (source !== null && typeof source === "object") return collectBytes(ctx, source, "new Uint8Array(...)", proto, 0)
   const length = source === undefined ? 0 : coerceToNumber(source)
   if (!Number.isInteger(length) || length < 0) throw rangeError(`Invalid typed array length: ${coerceToString(source)}`)
   checkArrayLength(length)
@@ -83,13 +79,7 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     }
   }
   methods(builtins, uint8Array, [
-    [
-      "from",
-      1,
-      function* (_, args) {
-        return wrap(yield* collectBytes(ctx, args[0], "Uint8Array.from", args[1], args[2]))
-      },
-    ],
+    ["from", 1, (_, args) => collectBytes(ctx, args[0], "Uint8Array.from", proto, 0, args[1], args[2])],
     ["of", 0, (_, args) => wrap(Uint8Array.from(args, coerceToNumber))],
     ["fromBase64", 1, (_, args) => decode("fromBase64", args, (text) => Uint8Array.fromBase64(text))],
     ["fromHex", 1, (_, args) => decode("fromHex", args, (text) => Uint8Array.fromHex(text))],
@@ -99,7 +89,6 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
   const optNumber = (value: Value): number | undefined => (value === undefined ? undefined : coerceToInteger(value))
   // Uint8Array cannot contain NaN, so non-number search values never match a byte.
   const search = (value: Value) => (typeof value === "number" ? value : NaN)
-  const wrapAll = (items: Array<Value>) => new Arr(builtins.Array, items)
   defineAccessor(proto, "length", (thisValue) => self(thisValue, "length").bytes.length)
   methods(builtins, proto, [
     ["at", 1, (thisValue, args) => self(thisValue, "at").bytes.at(optNumber(args[0]) ?? 0)],
@@ -117,15 +106,9 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "set",
       1,
-      function* (thisValue, args) {
+      (thisValue, args) => {
         const target = self(thisValue, "set")
-        const offset = optNumber(args[1]) ?? 0
-        const source = yield* collectBytes(ctx, args[0], "Uint8Array.set")
-        if (!Number.isInteger(offset) || offset < 0 || source.length + offset > target.bytes.length) {
-          throw rangeError("Uint8Array.set: the source does not fit at that offset.")
-        }
-        target.bytes.set(source, offset)
-        return undefined
+        return collectBytes(ctx, args[0], "Uint8Array.set", target, optNumber(args[1]) ?? 0)
       },
     ],
     [
@@ -149,16 +132,14 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "sort",
       1,
-      function* (thisValue, args) {
+      (thisValue, args) => {
         const target = self(thisValue, "sort")
         // Without a comparator, typed arrays sort numerically rather than by string.
         if (args[0] === undefined) {
           target.bytes.sort()
           return target
         }
-        const sorted = yield* sortArray(ctx, [...target.bytes], args[0], "Uint8Array.sort")
-        target.bytes.set(Uint8Array.from(sorted, coerceToNumber))
-        return target
+        return sortArray(ctx, target, args[0], "Uint8Array.sort")
       },
     ],
     ["indexOf", 1, (thisValue, args) => self(thisValue, "indexOf").bytes.indexOf(search(args[0]), optNumber(args[1]))],
@@ -189,26 +170,8 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     ["toString", 0, (thisValue) => self(thisValue, "toString").bytes.join(",")],
     ["toBase64", 0, (thisValue) => self(thisValue, "toBase64").bytes.toBase64()],
     ["toHex", 0, (thisValue) => self(thisValue, "toHex").bytes.toHex()],
-    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").bytes.keys())],
-    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").bytes.values())],
-    [
-      "entries",
-      0,
-      (thisValue) =>
-        hostIterator(
-          builtins,
-          self(thisValue, "entries")
-            .bytes.entries()
-            .map(([index, byte]) => wrapAll([index, byte])),
-        ),
-    ],
-    ...callbackMethods(
-      ctx,
-      "Uint8Array",
-      self,
-      (target) => target.bytes,
-      (values) => wrap(Uint8Array.from(values, coerceToNumber)),
-    ),
+    ...iteratorMethods(builtins, self),
+    // The callback methods are the prelude's.
   ])
   define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return uint8Array
@@ -220,7 +183,11 @@ export const textEncoderGlobal = <R>(ctx: Interpreter<R>) => {
   const encoder = new TextEncoder()
   defineAccessor(proto, "encoding", () => "utf-8")
   methods(builtins, proto, [
-    ["encode", 0, (_, args) => new Bytes(builtins.Uint8Array, encoder.encode(coerceToString(args[0] ?? "")))],
+    [
+      "encode",
+      0,
+      (_, args) => new Bytes(builtins.Uint8Array, encoder.encode(coerceToString(args[0] === undefined ? "" : args[0]))),
+    ],
   ])
   return constructor(builtins, proto, {
     name: "TextEncoder",

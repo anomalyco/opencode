@@ -412,7 +412,6 @@ export const dict = {
   "session.new.project.search": "Пошук проєктів",
   "session.new.project.add": "Додати проєкт",
   "session.new.workspace.runIn": "Запустити сесію в",
-  "session.new.workspace.triggerLocal": "Локально",
   "session.new.workspace.local": "Локальний репозиторій",
   "session.new.git.none": "Немає Git",
 
@@ -836,6 +835,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Перенесення даних {{current}}/{{total}}",
   "home.workspaceTip": "Розпочніть наступну сесію в новому робочому просторі, щоб ізолювати зміни",
   "session.tab.add": "Додати вкладку",
+  "session.tab.closeOthers": "Закрити інші вкладки",
   "session.queue.attachments.one": "Ще {{count}} вкладення",
   "session.queue.attachments.other": "Ще {{count}} вкладення",
   "settings.backToSettings": "Назад до налаштувань",

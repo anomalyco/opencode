@@ -117,10 +117,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "OpenCode Go für 10 $ pro Monat abonnieren und zuverlässigen Zugriff auf die besten Open-Source-Modelle erhalten.",
   "dialog.usageExceeded.freeTier.actionLabel": "Abonnieren",
-  "dialog.usageExceeded.accountRateLimit.title": "Go-Limit erreicht",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Nutzungslimit erreicht. Um dieses Modell jetzt weiter zu nutzen, die Nutzung über das verfügbare Guthaben aktivieren",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Einstellungen öffnen",
 
   "ui.sessionTurn.status.delegating": "Arbeit wird delegiert",
   "ui.sessionTurn.status.planning": "Nächste Schritte werden geplant",
@@ -193,6 +189,7 @@ export const dict = {
   "ui.common.dismiss": "Verwerfen",
   "ui.common.close": "Schließen",
   "ui.common.next": "Weiter",
+  "ui.common.continue": "Weiter",
   "ui.common.submit": "Absenden",
   "ui.common.showMore": "Mehr anzeigen",
 

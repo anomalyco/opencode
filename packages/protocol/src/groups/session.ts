@@ -3,6 +3,8 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Session } from "@opencode/schema/session"
 import { SessionStats } from "@opencode/schema/session-stats"
+import { TokenUsage } from "@opencode/schema/token-usage"
+import { Money } from "@opencode/schema/money"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Project } from "@opencode/schema/project"
 import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
@@ -407,15 +409,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         }),
         success: Schema.Struct({ data: SessionInbox.Synthetic }),
         error: [ConflictError, SessionNotFoundError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.synthetic",
-            summary: "Add synthetic message",
-            description: "Durably admit synthetic session input and schedule execution unless resume is false.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.synthetic",
+          summary: "Add synthetic message",
+          description: "Durably admit synthetic session input and schedule execution unless resume is false.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.shell", "/api/session/:sessionID/shell", {
@@ -446,16 +446,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         }),
         success: Schema.Struct({ data: SessionInbox.Compaction }),
         error: [ConflictError, SessionNotFoundError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.compact",
-            summary: "Compact session",
-            description:
-              "Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.compact",
+          summary: "Compact session",
+          description:
+            "Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.wait", "/api/experimental/session/:sessionID/wait", {
@@ -639,7 +637,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ prompt: Schema.String }),
         success: Schema.Struct({
-          data: Schema.Struct({ text: Schema.String }),
+          // Same `tokens` and `cost` an assistant message reports for a step.
+          data: Schema.Struct({ text: Schema.String, tokens: TokenUsage.Info, cost: Money.USD }),
         }).annotate({ identifier: "SessionGenerateResponse" }),
         error: [SessionNotFoundError, ServiceUnavailableError],
       })
@@ -648,7 +647,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.generate",
             summary: "Generate text from session context",
-            description: "Generate transient text from the current session context without mutating session history.",
+            description:
+              "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
           }),
         ),
     )
@@ -665,7 +665,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         error: SessionNotFoundError,
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "session.log",
+          identifier: "experimental.session.log",
           summary: "Read the session log",
           description:
             "Experimental durable session event log. Reads events after an exclusive aggregate sequence and continues with live events when follow=true.",

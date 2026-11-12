@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
+import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "xai-video", name: "xAI Video", provider: "xai" })
@@ -28,7 +28,7 @@ export type XAIVideoOptions = {
   readonly reference_audios?: ReadonlyArray<{ readonly voice_id: string }>
 } & Record<string, unknown>
 
-export type Request = VideoRequestFor<XAIVideoOptions>
+export type Request = VideoRequest<VideoModel<XAIVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -132,7 +132,7 @@ const decodeStatus = Effect.fn("XAIVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeVideoStatus(response)
-  const status = yield* MediaProtocol.status(STATUS, output.value.status, output)
+  const status = MediaProtocol.status(STATUS, output.value.status)
   return { id: context.token.requestID, status, progress: fraction(output.value.progress) }
 })
 
@@ -142,7 +142,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeVideoStatus(response)
   const decoded = output.value
-  const status = yield* MediaProtocol.status(STATUS, decoded.status, output)
+  const status = MediaProtocol.status(STATUS, decoded.status)
   if (status === "running") return yield* output.pending(context.token.requestID)
   if (status === "failed") {
     const code = decoded.error?.code ?? undefined
