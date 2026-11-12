@@ -60,6 +60,8 @@ export type CallResult =
 
 /** Hooks around every call the program makes into the host. A failing `before` denies the call. */
 export type Hooks<R = never> = {
+  /** Resolve a plain tool call in the host before looking up its final path. A host attempt consumes one call. */
+  readonly "tool.resolve"?: (call: ToolInvocation) => Effect.Effect<Pick<ToolInvocation, "name" | "input">, unknown, R>
   readonly "tool.before"?: ((call: ToolInvocation) => Effect.Effect<void, unknown, R>) | undefined
   readonly "tool.after"?: ((call: ToolInvocation, result: CallResult) => Effect.Effect<void, never, R>) | undefined
   readonly "extension.before"?: ((call: ExtensionInvocation) => Effect.Effect<void, unknown, R>) | undefined
@@ -630,22 +632,26 @@ export const make = <R>(
     calls.push(call)
   }
 
-  const decode = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
-    Effect.gen(function* () {
-      const normalized = args.length === 0 ? [{}] : args
-      if (normalized.length !== 1)
-        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
-      const input = normalized[0]
-      const field = typeof input === "string" ? stringParameter(tool)?.name : undefined
-      return yield* Effect.try({
-        try: () => decodeToolInput(tool, field === undefined ? input : { [field]: input }),
-        catch: (cause) =>
-          new ToolRuntimeError(
-            "InvalidToolInput",
-            `Invalid input for tool '${name}': ${String(cause)}`,
-            name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
-          ),
-      })
+  const argument = (name: string, args: Array<Json | undefined>) => {
+    if (args.length > 1)
+      throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
+    return args.length === 0 ? {} : args[0]
+  }
+
+  const wrap = (tool: Tool<R> | undefined, input: unknown) => {
+    const field = tool && typeof input === "string" ? stringParameter(tool)?.name : undefined
+    return field === undefined ? input : { [field]: input }
+  }
+
+  const decode = (name: string, tool: Tool<R>, input: unknown) =>
+    Effect.try({
+      try: () => decodeToolInput(tool, wrap(tool, input)),
+      catch: (cause) =>
+        new ToolRuntimeError(
+          "InvalidToolInput",
+          `Invalid input for tool '${name}': ${String(cause)}`,
+          name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
+        ),
     })
 
   // A tool's own failure becomes a ToolError; interruption passes through.
@@ -673,15 +679,15 @@ export const make = <R>(
       catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
     })
 
-  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>, options: ExecuteCallOptions) =>
+  const executeTool = (name: string, tool: Tool<R>, argument: unknown, options: ExecuteCallOptions, admitted = false) =>
     Effect.gen(function* () {
       if ("_tag" in tool.execute && tool.execute._tag === "CodeModeDurable") {
         throw new TypeError(`Tool '${name}' is a durable tool; start it with ToolRuntime.start.`)
       }
       const run = "_tag" in tool.execute ? tool.execute.execute : tool.execute
       const key = options.key
-      const input = yield* decode(name, tool, args)
-      yield* Effect.sync(() => options.admit(name))
+      const input = yield* decode(name, tool, argument)
+      if (!admitted) options.admit(name)
       return yield* hooked(
         { name, input, key },
         hooks["tool.before"],
@@ -717,14 +723,28 @@ export const make = <R>(
     record: (name) => recordCall({ name }),
     keys: (path) => namespaceKeys(root, path),
     search: (args, options) =>
-      Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args, options)),
+      Effect.suspend(() =>
+        executeTool("search", makeSearchTool(prepared.searchIndex), argument("search", args), options),
+      ),
     execute: (path, args, options) =>
-      Effect.suspend(() => {
+      Effect.gen(function* () {
         const segments = canonicalSegments(path)
+        const name = segments.join(".")
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
-          return executeTool("search", makeSearchTool(prepared.searchIndex), args, options)
-        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, options)
+          return yield* executeTool("search", makeSearchTool(prepared.searchIndex), argument("search", args), options)
+        const rewrite = hooks["tool.resolve"]
+        const original = lookup(root, segments)?.tool
+        if (!rewrite || (original && "_tag" in original.execute))
+          return yield* executeTool(name, resolve(root, path, prepared.searchIndex), argument(name, args), options)
+        const input = wrap(original, argument(name, args))
+        // Admission is synchronous: parallel attempts cannot all enter an asynchronous host hook on one slot.
+        options.admit(name)
+        const target = yield* rewrite({ name, input, key: options.key })
+        const tool = resolve(root, target.name === name ? path : [target.name], prepared.searchIndex)
+        if ("_tag" in tool.execute)
+          throw new ToolRuntimeError("InvalidToolInput", `Cannot redirect a call to resumable tool '${target.name}'.`)
+        return yield* executeTool(target.name, tool, target.input, options, true)
       }),
     mode: (path) => {
       const segments = canonicalSegments(path)
@@ -736,7 +756,7 @@ export const make = <R>(
       Effect.suspend(() => {
         const found = durableTool(path)
         return Effect.gen(function* () {
-          const input = yield* decode(found.name, found.tool, args)
+          const input = yield* decode(found.name, found.tool, argument(found.name, args))
           yield* Effect.sync(() => admit(found.name))
           const invocation: ToolInvocation = { name: found.name, input, key }
           invocations.set(key, invocation)
@@ -780,7 +800,7 @@ export const make = <R>(
           known !== undefined
             ? Effect.succeed(known)
             : Effect.map(
-                decode(found.name, found.tool, args),
+                decode(found.name, found.tool, argument(found.name, args)),
                 (input): ToolInvocation => ({
                   name: found.name,
                   input,

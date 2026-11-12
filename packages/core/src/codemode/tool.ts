@@ -5,15 +5,15 @@ import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import type {
   Content,
   Context as ToolContext,
-  Error,
   Info,
   Metadata,
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
+import { Error } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
-import { definition, normalizedName } from "../tool/runtime.js"
+import { aliasNote, definition, normalizedName } from "../tool/runtime.js"
 import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
@@ -57,11 +57,15 @@ type Tools = {
   [name: string]: Tool.Tool<Run> | Namespace.Namespace<Run> | Tools
 }
 
+type Before<C> = (name: string, input: unknown, context: C) => Effect.Effect<{ tool: string; input: unknown }, Error>
+
 // Per-execution parts of a runtime shared by every execution against the same inventory.
 class Run extends Context.Service<
   Run,
   {
-    readonly executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>
+    readonly executeTool: (name: string, tool: Info, input: unknown, key: string) => Effect.Effect<unknown, unknown>
+    readonly before?: Before<string>
+    readonly alias?: (key: string, note: string) => void
     readonly hooks: CodeMode.Hooks
   }
 >()("@opencode/CodeModeTool/Run") {}
@@ -86,6 +90,7 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  before?: Before<ToolContext>,
 ) => {
   return {
     name: "execute",
@@ -98,6 +103,8 @@ export const create = (
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        const pendingNotes = new Map<string, string>()
+        const notes = new Set<string>()
         const lock = Semaphore.makeUnsafe(1)
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
@@ -124,8 +131,16 @@ export const create = (
           .execute(code)
           .pipe(
             Effect.provideService(Run, {
-              executeTool: (name, tool, input) =>
+              before: before && ((name, input) => before(name, input, context)),
+              alias: (key, note) => pendingNotes.set(key, note),
+              executeTool: (name, tool, input, key) =>
                 Effect.gen(function* () {
+                  // Resolution or validation can still reject a repair before the target runs.
+                  const note = pendingNotes.get(key)
+                  if (note !== undefined) {
+                    pendingNotes.delete(key)
+                    notes.add(note)
+                  }
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
                   // The program sees the same failure text the model gets for a direct call.
                   const executed = yield* executeTool(name, tool, input, {
@@ -156,15 +171,15 @@ export const create = (
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
-        const output = formatResult(result)
         const value: typeof ExecuteOutput.Type = {
-          output,
+          output: formatResult(result),
           toolCalls,
           files: collected,
           ...(result.ok ? {} : { error: true }),
         }
         const content: Array<Content> = [
           { type: "text", text: value.output },
+          ...Array.from(notes, (text) => ({ type: "text" as const, text })),
           ...value.files.map((file) => ({
             type: "file" as const,
             uri: `data:${file.mime};base64,${file.data}`,
@@ -278,7 +293,7 @@ function runtime(inventory: Inventory) {
   const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
     tools,
     extensions: [CodeModeFetch.extension],
-    hooks: runHooks,
+    hooks: runHooks(inventory),
   })
   runtimes.set(inventory, created)
   return created
@@ -292,17 +307,19 @@ export const check = (
   code: string,
   bindings: Readonly<Record<string, CodeMode.DataValue>>,
   limits: CodeMode.ExecutionLimits,
-  executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
+  executeTool: (name: string, tool: Info, input: unknown, key: string) => Effect.Effect<Result, Error>,
+  before?: Before<string>,
 ) =>
   CodeMode.make({
     tools: inventoryTools(inventory),
-    hooks: runHooks,
+    hooks: runHooks(inventory),
     limits,
   })
     .execute(code, bindings)
     .pipe(
       Effect.provideService(Run, {
-        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
+        before,
+        executeTool: (name, tool, input, key) => executeTool(name, tool, input, key).pipe(Effect.map(resultValue)),
         hooks: {},
       }),
     )
@@ -318,7 +335,7 @@ function inventoryTools(inventory: Inventory) {
       input: child.inputSchema,
       freeform: registration.freeform !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
-      execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
+      execute: (input, { key }) => Run.use((run) => run.executeTool(name, registration, input, key)),
     })
   }
   return renderTools(root)
@@ -338,12 +355,32 @@ function resultValue(executed: Result) {
   return text === "" ? null : text
 }
 
-const runHooks = {
-  "tool.before": (call) => Run.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
-  "tool.after": (call, result) => Run.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
-  "extension.before": (call) => Run.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
-  "extension.after": (call, result) => Run.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
-} satisfies CodeMode.Hooks<Run>
+function runHooks(inventory: Inventory): CodeMode.Hooks<Run> {
+  const ids = new Map(Array.from(inventory.tools, ([id, tool]) => [qualifiedName(tool), id]))
+  return {
+    "tool.resolve": (call) =>
+      Run.use((run) =>
+        Effect.gen(function* () {
+          if (!run.before) return call
+          const id = ids.get(call.name)
+          const requested = id ?? call.name
+          const event = yield* run.before(requested, call.input, call.key)
+          // An unchanged unknown spelling goes back to the VM for its catalog diagnostic.
+          if (event.tool === requested) return { name: call.name, input: event.input }
+          const target = inventory.tools.get(event.tool)
+          const name = target ? qualifiedName(target) : ids.has(event.tool) ? event.tool : undefined
+          if (name === undefined)
+            return yield* new Error({ message: `Tool is not available for this request: ${event.tool}` })
+          if (id === undefined) run.alias?.(call.key, aliasNote(call.name, name))
+          return { name, input: event.input }
+        }),
+      ),
+    "tool.before": (call) => Run.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
+    "tool.after": (call, result) => Run.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
+    "extension.before": (call) => Run.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
+    "extension.after": (call, result) => Run.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
+  }
+}
 
 function getNode<T>(root: Node<T>, path: string) {
   return path.split(".").reduce((parent, name) => {

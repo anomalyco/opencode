@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Deferred, Effect, Schema } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Plugin } from "@opencode/core/plugin"
 import { ToolInputRepairPlugin } from "@opencode/core/plugin/tool-input-repair"
@@ -151,5 +151,168 @@ it.effect("repairs namespaced inner tool input called from Code Mode", () =>
       },
     })
     expect(executed).toEqual([{ count: 3 }])
+  }),
+)
+
+it.effect("passes JSON-looking freeform text through repair as a string field", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* registry.transform((draft) =>
+      draft.add({
+        name: "send",
+        description: "Echo text",
+        freeform: { type: "text" },
+        input: Schema.Struct({ text: Schema.String }),
+        execute: ({ text }) => Effect.succeed({ content: text }),
+      }),
+    )
+    const result = yield* program(yield* registry.snapshot(), `return await tools.send('{"count":"3"}')`)
+    expect(result.output).toMatchObject({ output: '{"count":"3"}' })
+  }),
+)
+
+function program(snapshot: Tool.Snapshot, code: string) {
+  return snapshot.execute({
+    ...identity,
+    call: { type: "tool-call", id: "call-program", name: "execute", input: { code } },
+  })
+}
+
+const redirected = Effect.gen(function* () {
+  const plugins = yield* Plugin.Service
+  const registry = yield* Tool.Service
+  const before: string[] = []
+  const executed: string[] = []
+  yield* plugins.activate([
+    {
+      id: "redirect-tool",
+      revision: "1",
+      effect: (ctx) =>
+        ctx.tool.hook("execute.before", (event) =>
+          Effect.sync(() => {
+            if (event.tool === "execute") return
+            before.push(event.tool)
+            if (event.tool !== "example.missing" && event.tool !== "example_original") return
+            event.tool = "example_target"
+            event.input = { count: 7 }
+          }),
+        ),
+    },
+  ])
+  yield* registry.transform((draft) => {
+    for (const name of ["original", "target"]) {
+      draft.add({
+        name,
+        options: { namespace: "example" },
+        description: name,
+        input: Schema.Struct({ count: Schema.Int }),
+        execute: ({ count }, ctx) =>
+          Effect.sync(() => {
+            executed.push(name)
+            return { content: `${ctx.id}:${count}` }
+          }),
+      })
+    }
+  })
+  return { registry, snapshot: yield* registry.snapshot(), before, executed }
+})
+
+for (const [path, hookName] of [
+  ["example.missing", "example.missing"],
+  ["example.original", "example_original"],
+]) {
+  it.effect(`redirects tools.${path} to a visible namespaced target before validation`, () =>
+    Effect.gen(function* () {
+      const fixture = yield* redirected
+      const result = yield* program(fixture.snapshot, `return await tools.${path}({})`)
+      expect(result.output).toMatchObject({ output: "call-program:7" })
+      expect(fixture.before).toEqual([hookName])
+      expect(fixture.executed).toEqual(["target"])
+    }),
+  )
+}
+
+it.effect("keeps an unmodified underscore spelling unknown inside Code Mode", () =>
+  Effect.gen(function* () {
+    const fixture = yield* redirected
+    const result = yield* program(fixture.snapshot, "return await tools.example_target({ count: 4 })")
+    expect(result.output).toMatchObject({
+      error: true,
+      output: expect.stringContaining("Unknown tool 'example_target'"),
+    })
+    expect(fixture.before).toEqual(["example_target"])
+    expect(fixture.executed).toEqual([])
+  }),
+)
+
+it.effect("rejects a redirect outside a scheduled check's allowlist", () =>
+  Effect.gen(function* () {
+    const fixture = yield* redirected
+    const result = yield* fixture.registry.check({
+      code: "return await tools.example.original({ count: 1 })",
+      tools: ["example.original"],
+      bindings: {},
+      permissions: [],
+      limits: {},
+      context: { ...identity, progress: () => Effect.void },
+    })
+    expect(result.ok).toBe(false)
+    expect(fixture.before).toEqual(["example_original"])
+    expect(fixture.executed).toEqual([])
+  }),
+)
+
+it.effect("keeps a direct-only shell hidden from Code Mode alias repair", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: string[] = []
+    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* registry.transform((draft) =>
+      draft.add({
+        name: "shell",
+        options: { codemode: false },
+        description: "Shell",
+        input: Schema.Struct({ command: Schema.String }),
+        execute: ({ command }) => Effect.sync(() => executed.push(command)).pipe(Effect.as({ content: "done" })),
+      }),
+    )
+    const result = yield* program(yield* registry.snapshot(), 'return await tools.bash({ command: "pwd" })')
+    expect(result.output).toMatchObject({ error: true })
+    expect(executed).toEqual([])
+  }),
+)
+
+it.effect("keeps parallel text results clean and reports the alias on the outer execute result", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const siblingFinished = yield* Deferred.make<void>()
+    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* registry.transform((draft) => {
+      draft.add({
+        name: "shell",
+        description: "Shell",
+        input: Schema.Struct({}),
+        execute: () => Deferred.await(siblingFinished).pipe(Effect.as({ content: "shell text" })),
+      })
+      draft.add({
+        name: "sibling",
+        description: "Sibling",
+        input: Schema.Struct({}),
+        execute: () => Deferred.succeed(siblingFinished, undefined).pipe(Effect.as({ content: "sibling text" })),
+      })
+    })
+    const snapshot = yield* registry.snapshot()
+    const result = yield* program(snapshot, "return await Promise.all([tools.bash({}), tools.sibling({})])")
+    expect(result.output).toMatchObject({ output: '["shell text","sibling text"]' })
+    expect(result.content).toContainEqual({
+      type: "text",
+      text: 'There is no "bash" tool, so this ran as "shell". Call "shell" directly.',
+    })
+    const direct = yield* program(snapshot, "return await tools.shell({})")
+    expect(direct.content).toEqual([{ type: "text", text: "shell text" }])
   }),
 )

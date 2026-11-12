@@ -1,9 +1,8 @@
 export * as ToolInputRepairPlugin from "./tool-input-repair.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, JsonSchema, Option, Predicate, Schema } from "effect"
-import { definition, normalizeContent } from "../tool/runtime.js"
+import { definition, RepairInventory } from "../tool/runtime.js"
 
 // Repairs apply only when the input schema unambiguously supports them:
 // - Stringified root or nested object: '{"limit":"20"}' -> { limit: 20 }
@@ -27,45 +26,20 @@ export const Plugin = define({
   id: "opencode.tool.input.repair",
   effect: (ctx) =>
     Effect.gen(function* () {
-      const aliased = new Map<string, string>()
       yield* ctx.tool.hook("execute.before", (event) =>
         Effect.gen(function* () {
           // The outer Code Mode tool is built per snapshot rather than registered, so it cannot be
           // looked up here. Its `{ code }` input is trivial; the tools it calls are repaired normally.
           if (event.tool === "execute") return
-          const tools = yield* ctx.tool.list()
-          const alias = aliases.get(event.tool)
-          const tool =
-            tools.find((tool) => tool.id === event.tool) ??
-            (alias === undefined ? undefined : tools.find((tool) => tool.id === alias))
+          const tools = (yield* RepairInventory) ?? new Map((yield* ctx.tool.list()).map((tool) => [tool.id, tool]))
+          const name = tools.has(event.tool) ? event.tool : aliases.get(event.tool)
+          if (name === undefined) return
+          const tool = tools.get(name)
           if (!tool) return
-          if (tool.id !== event.tool) {
-            aliased.set(event.id, event.tool)
-            event.tool = tool.id
-          }
+          event.tool = name
           const schema = definition(tool).inputSchema
           if (schema.type !== "object") return
           event.input = repair(event.input, schema, schema, 0)
-        }),
-      )
-      yield* ctx.tool.hook("execute.after", (event) =>
-        Effect.sync(() => {
-          const called = aliased.get(event.id)
-          if (called === undefined) return
-          aliased.delete(event.id)
-          const note = `There is no "${called}" tool, so this ran as "${event.tool}". Call "${event.tool}" directly.`
-          if (event.status === "error") {
-            event.error = new ToolFailure({
-              message: `${event.error.message}\n\n${note}`,
-              error: event.error.error,
-              metadata: event.error.metadata,
-            })
-            return
-          }
-          event.result = {
-            ...event.result,
-            content: [...normalizeContent(event.result.content, event.result.output), { type: "text", text: note }],
-          }
         }),
       )
     }),

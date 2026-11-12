@@ -101,6 +101,10 @@ runs before the call reaches the host, and a failing one denies it: the host fun
 catches the failure as a thrown error. A denied call fails the way the call itself would: a tool call or asynchronous
 global rejects its promise, and a synchronous global throws.
 
+`tool.resolve` lets the host rewrite a plain tool call's path and input before lookup. It also sees unknown paths.
+The runtime counts the attempt toward `maxToolCalls` before invoking this hook. Return the original path to keep
+the usual lookup and suggestions. Search, durable tools, and idempotent tools use their own execution paths.
+
 ### Suspending and resuming a run
 
 `CodeMode.make` returns a `CodeMode.Runtime`, which can also run a program step by step:

@@ -2,10 +2,10 @@ export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
 export type { Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
-import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
+import { ToolDefinition, ToolFailure, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
-import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
+import { Context, Effect, Layer, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -16,7 +16,15 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
-import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
+import {
+  aliasNote,
+  definition,
+  effectiveName,
+  execute,
+  normalizedName,
+  normalizeContent,
+  RepairInventory,
+} from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
@@ -120,21 +128,29 @@ const layer = Layer.effect(
       ]
     })
 
-    const beforeExecute = (name: string, input: unknown, context: Tool.Context) =>
-      hooks.trigger("tool", "execute.before", {
-        tool: name,
-        sessionID: context.sessionID,
-        agent: context.agent,
-        messageID: context.messageID,
-        id: context.id,
-        input,
-      })
+    const beforeExecute = (
+      name: string,
+      input: unknown,
+      context: Tool.Context,
+      tools: ReadonlyMap<string, Tool.Info>,
+    ) =>
+      hooks
+        .trigger("tool", "execute.before", {
+          tool: name,
+          sessionID: context.sessionID,
+          agent: context.agent,
+          messageID: context.messageID,
+          id: context.id,
+          input,
+        })
+        .pipe(Effect.provideService(RepairInventory, tools))
 
     const executeTool = Effect.fn("Tool.execute")(function* (
       tool: Tool.Info,
       name: string,
       input: unknown,
       context: Tool.Context,
+      note?: string,
     ) {
       yield* Effect.annotateCurrentSpan({
         "gen_ai.tool.name": name,
@@ -161,6 +177,8 @@ const layer = Layer.effect(
           error: execution.failure,
         }
         yield* hooks.trigger("tool", "execute.after", afterEvent)
+        if (note)
+          return yield* new ToolFailure({ ...afterEvent.error, message: `${afterEvent.error.message}\n\n${note}` })
         return yield* afterEvent.error
       }
       const afterEvent: PluginHooks.Domains["tool"]["execute.after"] = {
@@ -176,13 +194,10 @@ const layer = Layer.effect(
       const afterContent = yield* normalizeImages(normalizeContent(afterEvent.result.content, afterEvent.result.output))
       return {
         ...(afterEvent.result.output === undefined ? {} : { output: afterEvent.result.output }),
-        content: afterContent,
+        content: note ? [...afterContent, { type: "text" as const, text: note }] : afterContent,
         ...(afterEvent.result.metadata === undefined ? {} : { metadata: afterEvent.result.metadata }),
       }
     })
-
-    const run = (tool: Tool.Info, name: string, input: unknown, context: Tool.Context) =>
-      beforeExecute(name, input, context).pipe(Effect.flatMap((event) => executeTool(tool, name, event.input, context)))
 
     let catalog:
       | {
@@ -275,8 +290,9 @@ const layer = Layer.effect(
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
                 codeModeInventory,
-                (name, tool, input, context) => run(tool, name, input, context),
+                (name, tool, input, context) => executeTool(tool, name, input, context),
                 permission,
+                (name, input, context) => beforeExecute(name, input, context, codeModeInventory.tools),
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -308,16 +324,19 @@ const layer = Layer.effect(
                 progress: input.progress ?? (() => Effect.void),
                 cancel: input.cancel,
               }
-              const event = yield* beforeExecute(input.call.name, input.call.input, context)
+              const event = yield* beforeExecute(input.call.name, input.call.input, context, direct)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool)
-                return yield* executeTool(codeModeTool, name, event.input, context)
-              const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
+              const tool = name === "execute" && codeModeTool ? codeModeTool : direct.get(name)
+              if (tool) {
+                const called = input.call.name
+                const missing = !direct.has(called) && called !== codeModeTool?.name && !input.definitions?.has(called)
+                const note = missing && called !== event.tool ? aliasNote(called, name) : undefined
+                return yield* executeTool(tool, name, event.input, context, note)
+              }
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
               })
@@ -343,21 +362,17 @@ const layer = Layer.effect(
               !whollyDisabled(tool.options?.permission ?? name, input.permissions),
           ),
         )
-        const callSeq = yield* Ref.make(0)
+        const context = (key: string): Tool.Context => ({
+          ...input.context,
+          id: Tool.CallID.make(`call_${input.context.messageID}_${key}`),
+        })
         return yield* CodeModeTool.check(
           { tools, namespaces: data.namespaces },
           input.code,
           input.bindings,
           input.limits,
-          (name, tool, toolInput) =>
-            Effect.gen(function* () {
-              const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)
-              const context: Tool.Context = {
-                ...input.context,
-                id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
-              }
-              return yield* run(tool, name, toolInput, context)
-            }),
+          (name, tool, toolInput, key) => executeTool(tool, name, toolInput, context(key)),
+          (name, toolInput, key) => beforeExecute(name, toolInput, context(key), tools),
         )
       }),
     })
