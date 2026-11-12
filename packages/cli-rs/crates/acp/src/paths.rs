@@ -52,6 +52,8 @@ mod tests {
         assert_eq!(resolve_in(w, "C:\\w", "D:\\p", "\\x"), "D:\\x");
         assert_eq!(resolve_in(w, "C:\\w", "C:\\p", "E:/y\\..\\z"), "E:\\z");
         assert_eq!(resolve_in(w, "C:\\w", "\\\\srv\\share\\p", "..\\..\\q"), "\\\\srv\\share\\q");
+        // A rooted base without a drive takes the working directory's.
+        assert_eq!(resolve_in(w, "D:\\a\\b", "/w", "sub"), "D:\\w\\sub");
         assert!(w.is_absolute("C:\\x") && w.is_absolute("c:/x") && !w.is_absolute("x\\y"));
     }
 }

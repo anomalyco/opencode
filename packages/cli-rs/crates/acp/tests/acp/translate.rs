@@ -1,5 +1,6 @@
 //! `translate.test.ts`: the rows for the turn fold, the compaction rows, and the replay rows.
 
+use opencode_acp::paths::resolve_from;
 use opencode_acp::translate::{self, Output, StartKind, Terminal, TurnContext, TurnStart, TurnState};
 use serde_json::{Value, json};
 
@@ -259,7 +260,7 @@ fn turn_translation() {
                 { "sessionUpdate": "tool_call", "toolCallId": "call_ok", "name": "shell", "status": "pending", "kind": "execute" },
                 {
                     "sessionUpdate": "tool_call_update", "status": "in_progress", "title": "printf done",
-                    "locations": [{ "path": "/workspace/sub" }],
+                    "locations": [{ "path": resolve_from("/workspace", "sub") }],
                     "rawInput": { "command": "printf done", "workdir": "sub" },
                 },
                 { "sessionUpdate": "tool_call_update", "status": "in_progress" },
