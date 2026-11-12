@@ -111,7 +111,9 @@ const getBase = (appId: string): Configuration => {
     // Electron stores cookies in plain text by default. The browser pane keeps sign-ins, so encrypt them with the OS
     // key store (Keychain, DPAPI, libsecret or kwallet). This is one-way: turning it off again loses every cookie.
     // https://www.electronjs.org/docs/latest/tutorial/fuses#cookieencryption
-    electronFuses: { enableCookieEncryption: true },
+    // Flipping a fuse breaks the macOS signature. A build without a signing identity is not signed again, so re-sign it
+    // ad hoc or Apple Silicon refuses to launch it. A signed build is signed again after the fuses anyway.
+    electronFuses: { enableCookieEncryption: true, resetAdHocDarwinSignature: true },
     afterPack: async (context) => {
       const arch = Arch[context.arch]
 
