@@ -134,7 +134,7 @@ pub fn run(input: Input) -> error::Result<()> {
         resize: Cell::new(None),
         resize_queued: Cell::new(false),
         height_pending: Cell::new(false),
-        size: Cell::new(mini_size(&app)),
+        size: Cell::new(SplitFooter::of(app.session()).map_or((0, 0), |footer| footer.terminal_size())),
         exit_splash: Cell::new(false),
         failure: RefCell::new(None),
     });
@@ -179,10 +179,6 @@ pub fn run(input: Input) -> error::Result<()> {
         return Err(failure);
     }
     Ok(())
-}
-
-fn mini_size(app: &App) -> (u16, u16) {
-    SplitFooter::of(app.session()).map_or((0, 0), |footer| footer.terminal_size())
 }
 
 /// What the command resolved, kept for the session's lifetime.
@@ -310,21 +306,9 @@ impl Mini {
                 mini.incoming(cx, incoming);
             }
         });
-        let weak = Rc::downgrade(self);
-        let with = move |run: fn(&Rc<Mini>)| {
-            let weak = weak.clone();
-            move || {
-                if let Some(mini) = weak.upgrade() {
-                    run(&mini);
-                }
-            }
-        };
-        let weak = Rc::downgrade(self);
-        let submit = weak.clone();
-        let interrupt = weak.clone();
-        let status = weak.clone();
+        let with = |run: fn(&Rc<Mini>)| bind!(self, |mini| run(&mini));
         self.prompt.set_hooks(Hooks {
-            submit: Some(Box::new(move |prompt| submit.upgrade().is_some_and(|mini| mini.submit(prompt)))),
+            submit: Some(Box::new(bind!(self, |mini, prompt| mini.submit(prompt)))),
             exit_request: Some(Box::new(with(|mini| {
                 let mini = mini.clone();
                 mini.app.clone().defer(move |cx| mini.request_exit(cx));
@@ -333,13 +317,9 @@ impl Mini {
                 let mini = mini.clone();
                 mini.app.clone().defer(move |cx| mini.close(cx));
             }))),
-            interrupt: Some(Box::new(move || interrupt.upgrade().is_some_and(|mini| mini.request_interrupt()))),
+            interrupt: Some(Box::new(bind!(self, |mini| mini.request_interrupt()))),
             input_clear: Some(Box::new(with(|mini| mini.input_clear()))),
-            status: Some(Box::new(move |text| {
-                if let Some(mini) = status.upgrade() {
-                    mini.set_notice(text);
-                }
-            })),
+            status: Some(Box::new(bind!(self, |mini, text| mini.set_notice(text)))),
             layout: Some(Box::new(with(|mini| {
                 mini.schedule_height();
                 mini.paint_status();
@@ -347,71 +327,27 @@ impl Mini {
             clear_screen: Some(Box::new(with(|mini| mini.clear_screen()))),
             settings: Some(Box::new(with(|mini| mini.footers.open_settings()))),
         });
-        let status = weak.clone();
-        let blocker = weak.clone();
-        let summary = weak.clone();
-        let agent = weak.clone();
         self.footers.set_hooks(crate::footers::Hooks {
             layout: Some(Box::new(with(|mini| {
                 mini.schedule_height();
                 mini.paint_status();
             }))),
-            status: Some(Box::new(move |text| {
-                if let Some(mini) = status.upgrade() {
-                    mini.set_notice(text);
-                }
-            })),
-            blocker: Some(Box::new(move |text| {
-                if let Some(mini) = blocker.upgrade() {
-                    mini.patch(|state| state.status = text.to_owned());
-                }
-            })),
-            summary: Some(Box::new(move || summary.upgrade().map(|mini| mini.summary()).unwrap_or_default())),
-            agent: Some(Box::new(move |id| {
-                if let Some(mini) = agent.upgrade() {
-                    mini.select_agent(id);
-                }
-            })),
+            status: Some(Box::new(bind!(self, |mini, text| mini.set_notice(text)))),
+            blocker: Some(Box::new(bind!(self, |mini, text| mini.patch(|state| state.status = text.to_owned())))),
+            summary: Some(Box::new(bind!(self, |mini| mini.summary()))),
+            agent: Some(Box::new(bind!(self, |mini, id| mini.select_agent(id)))),
             clear_screen: Some(Box::new(with(|mini| mini.clear_screen()))),
             exit: Some(Box::new(with(|mini| {
                 let mini = mini.clone();
                 mini.app.clone().defer(move |cx| mini.close(cx));
             }))),
-            models: Some(Box::new({
-                let weak = weak.clone();
-                move || weak.upgrade().map(|mini| mini.models()).unwrap_or_default()
-            })),
-            model: Some(Box::new({
-                let weak = weak.clone();
-                move |model| {
-                    if let Some(mini) = weak.upgrade() {
-                        mini.select_model(model);
-                    }
-                }
-            })),
-            variant: Some(Box::new({
-                let weak = weak.clone();
-                move |variant| {
-                    if let Some(mini) = weak.upgrade() {
-                        mini.select_variant(variant);
-                    }
-                }
-            })),
+            models: Some(Box::new(bind!(self, |mini| mini.models()))),
+            model: Some(Box::new(bind!(self, |mini, model| mini.select_model(model)))),
+            variant: Some(Box::new(bind!(self, |mini, variant| mini.select_variant(variant)))),
             cycle_variant: Some(Box::new(with(|mini| mini.cycle_variant()))),
-            settings: Some(Box::new({
-                let weak = weak.clone();
-                move || weak.upgrade().map(|mini| mini.settings.get()).unwrap_or_else(|| MiniSettings::resolve(None))
-            })),
-            setting: Some(Box::new({
-                let weak = weak.clone();
-                move |change, done| {
-                    if let Some(mini) = weak.upgrade() {
-                        mini.change_setting(change, done);
-                    }
-                }
-            })),
+            settings: Some(Box::new(bind!(self, |mini| mini.settings.get(), else MiniSettings::resolve(None)))),
+            setting: Some(Box::new(bind!(self, |mini, change, done| mini.change_setting(change, done)))),
         });
-        drop(weak);
         self.prompt.install();
         let mini = self.clone();
         self.app.on_resize(move |cx, _, _| mini.resized(cx));
@@ -1610,15 +1546,13 @@ impl Mini {
         if text.is_empty() {
             return;
         }
-        let weak = Rc::downgrade(self);
-        let timer = self.app.set_timeout(NOTICE, move |_| {
-            if let Some(mini) = weak.upgrade() {
-                mini.patch(|state| {
-                    state.notice.clear();
-                    state.notice_timer = None;
-                });
-            }
-        });
+        let timer = self.app.set_timeout(
+            NOTICE,
+            bind!(self, |mini, _| mini.patch(|state| {
+                state.notice.clear();
+                state.notice_timer = None;
+            })),
+        );
         self.state.borrow_mut().notice_timer = Some(timer);
     }
 
@@ -1831,16 +1765,13 @@ impl Mini {
         if self.height_pending.replace(true) {
             return;
         }
-        let weak = Rc::downgrade(self);
-        self.app.animate(move |_, _| {
-            if let Some(mini) = weak.upgrade() {
-                mini.height_pending.set(false);
-                if !mini.state.borrow().closed {
-                    mini.apply_height();
-                }
+        self.app.animate(bind!(self, |mini, _, _| {
+            mini.height_pending.set(false);
+            if !mini.state.borrow().closed {
+                mini.apply_height();
             }
             false
-        });
+        }));
     }
 
     fn patch(&self, change: impl FnOnce(&mut State)) {
