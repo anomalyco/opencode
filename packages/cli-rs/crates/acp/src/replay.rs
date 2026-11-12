@@ -3,7 +3,8 @@
 
 use opencode_api::client::Client;
 use opencode_api::generated::{MessageListInput, MessageListInputOrder};
-use serde_json::{Map, Value, json};
+use opencode_util::json_object;
+use serde_json::{Value, json};
 
 use crate::capabilities::Capabilities;
 use crate::client::classify;
@@ -91,15 +92,11 @@ fn user_updates(message: &Value, id: &Value) -> Vec<Value> {
         "messageId": id,
         "content": { "type": "text", "text": message.get("text").cloned().unwrap_or(Value::Null) },
     })];
-    updates.extend(parts_to_content_chunks(&parts).into_iter().map(|chunk| {
-        let mut update = Map::new();
-        update.insert("sessionUpdate".to_owned(), json!("user_message_chunk"));
-        update.insert("messageId".to_owned(), id.clone());
-        if let Value::Object(chunk) = chunk {
-            update.extend(chunk);
-        }
-        Value::Object(update)
-    }));
+    updates.extend(
+        parts_to_content_chunks(&parts)
+            .into_iter()
+            .map(|chunk| json_object! { "sessionUpdate": "user_message_chunk", "messageId": id, ..chunk }),
+    );
     updates
 }
 
@@ -161,12 +158,7 @@ fn tool_updates(part: &Value, cwd: &str) -> Vec<Value> {
 }
 
 fn tagged(kind: &str, update: Value) -> Value {
-    let mut tagged = Map::new();
-    tagged.insert("sessionUpdate".to_owned(), json!(kind));
-    if let Value::Object(update) = update {
-        tagged.extend(update);
-    }
-    Value::Object(tagged)
+    json_object! { "sessionUpdate": kind, ..update }
 }
 
 fn completed_source(message: &Value, update: &Value) -> Option<DiffSource> {

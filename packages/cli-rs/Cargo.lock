@@ -638,6 +638,7 @@ dependencies = [
  "log",
  "memchr",
  "opencode-api-types",
+ "opencode-util",
  "percent-encoding",
  "rand",
  "reqwest",
@@ -936,6 +937,7 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "ring",
+ "serde_json",
 ]
 
 [[package]]
