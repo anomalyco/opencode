@@ -77,13 +77,13 @@ One file per scenario, `parity/scenarios/<step>/<name>.sim.ts`, with `export def
   and body after the plan 7.5 normalizers (prefixed IDs, the sandbox root, ports). Reads that one side sent and the
   other did not are listed, not failed, as in H.2. Bodies are compared as JSON values (key order does not count),
   and epoch-millisecond times and other server-minted IDs (`sh_…`) are normalized, because the server is live.
-- Files per run: `parity/fixtures/<step>/<name>.sim/<checkpoint>.<side>.json` (cells after masks) and `.txt`
-  (text), and `report.json`. `.sim` keeps them apart from a P-APP scenario of the same name. With `--sides ts,ts`
-  the second side is named `ts2`.
+- Files per run: `parity/out/<step>/<name>.sim/<checkpoint>.<side>.json` (cells after masks) and `.txt` (text),
+  and `report.json`. `parity/out/` is ignored by git: nothing reads these files, they are for a person to look at
+  after a run. With `--sides ts,ts` the second side is named `ts2`.
 
 ## Known TS defect
 
-The TS endpoint never answers a `ui.matches` whose screen read meets a frame in flight (H.4's report:
+The TS endpoint never answers a `ui.matches` whose screen read meets a frame in flight (found in the H.4 runs:
 `OutputBusy`, logged by the control server, no response). `parity/sim/drive.ts` resends a `ui.matches` that gets
 no answer within 2 s, and a `ui.capture` after 5 s (both are reads). It is the only place with this workaround; H.4's
 `drive.ts` uses the same client.
