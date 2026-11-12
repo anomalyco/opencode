@@ -6,6 +6,7 @@ import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { fileURLWithin } from "../policy"
 import { extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, type CookieRead } from "./cookie"
+import { createExtensionApis } from "./extension-api"
 import { createFileGuard } from "./file-guard"
 import {
   displayName,
@@ -96,6 +97,13 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
     input.changed()
   }
 
+  const apis = await createExtensionApis({
+    session,
+    directory,
+    storage: input.storage,
+    log: input.log,
+  })
+
   const load = async (record: StoredExtension) => {
     if (session.extensions.getExtension(record.id)) return
 
@@ -183,6 +191,8 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
 
       return () => void roots.delete(webContentsId)
     },
+    /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
+    extensionTabs: apis.tabs,
     /** Extensions loaded now, whose pages may open in a tab. */
     extensionIDs: () => session.extensions.getAllExtensions().map((extension) => extension.id),
     extensions: () => stored.value.flatMap((record) => details.get(record.id) ?? []),
@@ -303,6 +313,7 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       const record = stored.value.find((item) => item.id === id)
 
       if (session.extensions.getExtension(id)) session.extensions.removeExtension(id)
+      apis.forget(id)
       stored.set(stored.value.filter((item) => item.id !== id))
       errors.delete(id)
 
@@ -321,6 +332,8 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       if (enabled) await load(next)
 
       if (!enabled && session.extensions.getExtension(id)) session.extensions.removeExtension(id)
+
+      if (!enabled) apis.forget(id)
       await refresh()
     },
     /**
@@ -365,6 +378,7 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
     },
     dispose() {
       stopFileGuard()
+      apis.dispose()
       roots.clear()
       session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
     },

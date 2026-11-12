@@ -77,8 +77,9 @@ export function createBrowserPane(input: {
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
-  // Each page of the profile's partition may load file: subresources inside its own session's workspace only.
-  const fileGrants = new WeakMap<BrowserPage, () => void>()
+  // Each page of the profile's partition may load file: subresources inside its own session's workspace only, and is
+  // a tab its extensions see. The release of both, by page.
+  const grants = new WeakMap<BrowserPage, () => void>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
@@ -392,6 +393,13 @@ export function createBrowserPane(input: {
 
   function dispatchBinding(binding: string, event: BindingEvent) {
     dispatch({ type: "binding", binding, event })
+
+    // Extensions hear which tab is active in a window.
+    if (event.type === "tab.focused" && handles.get(binding)?.shared) {
+      const focused = page(binding, event.tabID)
+
+      if (focused) input.profile.extensionTabs.activated(focused.contents.id)
+    }
   }
 
   function perform(effect: PaneEffect) {
@@ -459,7 +467,7 @@ export function createBrowserPane(input: {
   }
 
   function release(page: BrowserPage) {
-    fileGrants.get(page)?.()
+    grants.get(page)?.()
     const done = page.dispose()
     const settled = done.catch(() => undefined)
     disposals.set(page, done)
@@ -577,11 +585,15 @@ export function createBrowserPane(input: {
       },
     })
 
-    if (handle.shared)
-      fileGrants.set(
-        page,
-        input.profile.allowFiles(page.contents.id, () => selectFileRoots(machine.state, binding)),
-      )
+    if (handle.shared) {
+      const files = input.profile.allowFiles(page.contents.id, () => selectFileRoots(machine.state, binding))
+      const tab = input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused))
+      grants.set(page, () => {
+        files()
+        tab()
+      })
+    }
+
     handle.pages.set(attempt, page)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
@@ -591,6 +603,55 @@ export function createBrowserPane(input: {
     }, fail)
 
     return page
+  }
+
+  /**
+   * A tab as extensions drive it, through the same paths and address policy as the window's and the agent's commands:
+   * `chrome.tabs.create` opens a tab in this pane, `update` navigates or focuses it, `remove` closes it.
+   */
+  function extensionTab(
+    binding: string,
+    tabID: Browser.TabID,
+    page: BrowserPage,
+    win: BrowserWindow,
+    focused: () => boolean,
+  ) {
+    const guarded = (url: string) => {
+      const reason = refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding) })
+
+      if (reason) throw new Error(`This browser does not open ${url}.`)
+
+      return url
+    }
+
+    return {
+      contents: page.contents,
+      window: win,
+      focused,
+      open: async (url: string, active: boolean) => {
+        const opened = await execute(
+          binding,
+          { action: { type: "tabs.open", url: guarded(url), focus: active }, files: [] },
+          new AbortController().signal,
+        )
+
+        const created = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.Struct({ id: Browser.TabID }))(opened.value))
+        const contents = created ? load(binding, created.id)?.contents : undefined
+
+        if (!contents) throw new Error("The tab did not open.")
+
+        return contents
+      },
+      focus: () => dispatchBinding(binding, { type: "tab.focused", tabID }),
+      close: () => dispatchBinding(binding, { type: "tab.closed", tabID }),
+      navigate: async (url: string) => {
+        await execute(
+          binding,
+          { action: { type: "navigate", tabID, url: guarded(url) }, files: [] },
+          new AbortController().signal,
+        )
+      },
+    }
   }
 
   /** Reports the page's state after a command, which may have changed it without a page event yet. */

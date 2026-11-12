@@ -1,0 +1,47 @@
+import { expect, test } from "bun:test"
+import { declared, matchesQuery, reveals, tabInfo, type TabSnapshot } from "./tabs"
+
+const tab = (fields: Partial<TabSnapshot>): TabSnapshot => ({
+  id: 2,
+  index: 0,
+  windowId: 1,
+  active: true,
+  url: "https://example.com/",
+  title: "Example",
+  status: "complete",
+  audible: false,
+  muted: false,
+  ...fields,
+})
+
+// A popup asks for "the current tab": the active tab of the window it opened over, not the popup itself.
+test("the current tab is the active tab of the caller's window", () => {
+  const tabs = [tab({ id: 2 }), tab({ id: 3, active: false }), tab({ id: 4, windowId: 7 })]
+  const windows = { current: 1, lastFocused: 1 }
+
+  const ids = (query: Parameters<typeof matchesQuery>[1]) =>
+    tabs.flatMap((item) => (matchesQuery(item, query, windows) ? [item.id] : []))
+
+  expect(ids({ active: true, currentWindow: true })).toEqual([2])
+  expect(ids({ windowId: -2 })).toEqual([2, 3])
+  expect(tabs.filter((item) => matchesQuery(item, { url: "*://example.com/*", title: "Ex*" }, windows)).length).toBe(3)
+  expect(tabs.filter((item) => matchesQuery(item, { url: ["https://other.com/*"] }, windows))).toEqual([])
+})
+
+test("an extension sees a tab's address only with the tabs permission or host access", () => {
+  const value = tab({})
+
+  expect(tabInfo(value, false)).not.toHaveProperty("url")
+  expect(tabInfo(value, true)).toMatchObject({ url: "https://example.com/", title: "Example" })
+  expect(reveals({ permissions: ["tabs"], hosts: [] }, value.url)).toBe(true)
+  expect(reveals({ permissions: [], hosts: ["https://example.com/*"] }, value.url)).toBe(true)
+  expect(reveals({ permissions: ["storage"], hosts: ["https://other.com/*"] }, value.url)).toBe(false)
+})
+
+test("Manifest V2 host patterns among permissions count as hosts", () => {
+  expect(declared({ manifest: { permissions: ["tabs", "<all_urls>", 7], host_permissions: ["https://a.com/*"] } })).toEqual({
+    permissions: ["tabs", "<all_urls>"],
+    hosts: ["https://a.com/*", "<all_urls>"],
+  })
+  expect(declared({ manifest: "not a manifest" })).toEqual({ permissions: [], hosts: [] })
+})
