@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { OAuthError, UnauthorizedError, type AuthProvider } from "@modelcontextprotocol/client"
+import { OAuthError, UnauthorizedError, type AuthProvider, type FetchLike } from "@modelcontextprotocol/client"
 import path from "path"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
@@ -1182,5 +1182,56 @@ describe("MCP OAuth connections", () => {
     const exit = await connect(await processes.provider(processes.first), url).finally(() => server.stop(true))
 
     expect(failure(exit)).toBeInstanceOf(McpClient.NeedsAuthError)
+  })
+})
+
+describe("console eligibility", () => {
+  const fetchJson = (body: unknown, status = 200): FetchLike => async () => Response.json(body, { status })
+
+  test("returns an actionable error when the OAuth token is not eligible", async () => {
+    const error = await McpOAuth.consoleEligibilityError({
+      url: "https://opencode.ai/console/mcp",
+      token: "token",
+      fetchFn: fetchJson({ eligible: false }),
+    })
+
+    expect(error?.message).toContain("not authorized for this workspace")
+  })
+
+  test("allows an eligible token", async () => {
+    const error = await McpOAuth.consoleEligibilityError({
+      url: "https://opencode.ai/console/mcp",
+      token: "token",
+      fetchFn: fetchJson({ eligible: true }),
+    })
+
+    expect(error).toBeUndefined()
+  })
+
+  test("ignores non-Console MCP servers", async () => {
+    let called = false
+    const fetchFn: FetchLike = async () => {
+      called = true
+      return Response.json({ eligible: false })
+    }
+
+    const error = await McpOAuth.consoleEligibilityError({
+      url: "https://example.com/mcp",
+      token: "token",
+      fetchFn,
+    })
+
+    expect(error).toBeUndefined()
+    expect(called).toBe(false)
+  })
+
+  test("ignores an unavailable eligibility endpoint", async () => {
+    const error = await McpOAuth.consoleEligibilityError({
+      url: "https://opencode.ai/console/mcp",
+      token: "token",
+      fetchFn: async () => new Response(null, { status: 503 }),
+    })
+
+    expect(error).toBeUndefined()
   })
 })

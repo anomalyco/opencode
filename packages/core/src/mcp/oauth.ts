@@ -298,6 +298,9 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   // The token last sent. A 401 refreshes only while the row still holds it: another connection or process may
   // have refreshed it already.
   let presented: string | undefined
+  // The Console MCP is the one server whose OAuth token can be valid while still not being bound to a workspace.
+  // Check once per connection so the UI can show the real reason instead of a generic 403.
+  let consoleChecked = false
   return {
     token: () =>
       run(
@@ -308,8 +311,16 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
           const ahead =
             current?.refresh && discoveryFromCredential(current) && due(current, yield* Clock.currentTimeMillis)
           const value = ahead ? yield* refresh(due).pipe(Effect.orElseSucceed(() => current)) : current
-          presented = value?.access
-          return presented
+          const token = value?.access
+          presented = token
+          if (token && !consoleChecked) {
+            consoleChecked = true
+            const eligibility = yield* Effect.promise(() =>
+              consoleEligibilityError({ url: input.config.url, token, fetchFn }),
+            )
+            if (eligibility) return yield* Effect.fail(eligibility)
+          }
+          return token
         }),
       ),
     onUnauthorized: (context) =>
@@ -345,6 +356,33 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
       ),
   }
 })
+
+// A Console MCP OAuth token can be valid at the authorization server while the resource server still refuses it
+// because the token is not bound to the workspace. Ask the Console eligibility endpoint once so the failure is
+// actionable instead of a generic 403. Non-Console servers and network failures stay on the normal path.
+export async function consoleEligibilityError(input: {
+  readonly url: string
+  readonly token: string
+  readonly fetchFn: FetchLike
+}): Promise<Error | undefined> {
+  if (!URL.canParse(input.url)) return
+  const url = new URL(input.url)
+  if (url.pathname.replace(/\/+$/, "") !== "/console/mcp") return
+  const response = await input
+    .fetchFn(`${url.origin}/console/api/mcp/eligibility`, {
+      headers: { authorization: `Bearer ${input.token}`, accept: "application/json" },
+      signal: AbortSignal.timeout(5_000),
+    })
+    .catch(() => undefined)
+  if (!response?.ok) return
+  const body = (await response.json().catch(() => undefined)) as { eligible?: unknown } | undefined
+  if (body?.eligible !== false) return
+  return new Error(
+    "The Console MCP OAuth token is not authorized for this workspace. " +
+      "The workspace may be enabled; the token is not bound to it. " +
+      "Report this as an OpenCode Console MCP eligibility issue.",
+  )
+}
 
 // Refreshes with the discovery the login saved, or discovers as the login did and saves the result.
 const exchange = (input: {
