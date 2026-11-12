@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Schema } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
@@ -204,6 +204,7 @@ describe("PatchTool", () => {
             Effect.gen(function* () {
               const definitions = yield* toolDefinitions(registry)
               expect(definitions.map((tool) => tool.name)).toEqual(["patch", "execute"])
+              expect(definitions[0]?.outputSchema).toEqual({ type: "object", additionalProperties: false })
               expect(definitions[0]?.freeform).toEqual({
                 type: "lark",
                 grammar: expect.stringContaining('"*** Begin Patch"'),
@@ -224,12 +225,8 @@ describe("PatchTool", () => {
               ])
               const modelText = settled.content?.[0]?.type === "text" ? settled.content[0].text : ""
               if (process.platform === "win32") expect(modelText).not.toContain("\\")
-              expect(settled.output).toMatchObject({
-                applied: [
-                  { type: "add", resource: "nested/new.txt" },
-                  { type: "update", resource: "update.txt" },
-                  { type: "delete", resource: "remove.txt" },
-                ],
+              expect(settled.output).toStrictEqual({})
+              expect(settled.metadata).toMatchObject({
                 files: [
                   {
                     file: "nested/new.txt",
@@ -311,7 +308,7 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        expect(settled.output.files).toMatchObject([
+        expect(settled.metadata?.files).toMatchObject([
           { file: "trailing.txt", additions: 0, deletions: 1 },
           { file: "unterminated.txt", additions: 0, deletions: 1 },
         ])
@@ -371,7 +368,6 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        expect(settled.output.files[0]?.patch).toContain("+FORMATTED")
         expect(settled.metadata?.files?.[0]?.patch).toContain("+FORMATTED")
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMATTED\n")
       })
@@ -483,7 +479,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("includes move file info in output and metadata", () =>
+  it.live("includes move file info in metadata", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
         const source = path.join(directory, "old", "name.txt")
@@ -497,8 +493,7 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        expect(settled.output).toMatchObject({
-          applied: [{ type: "update", resource: "renamed/dir/name.txt" }],
+        expect(settled.metadata).toMatchObject({
           files: [
             {
               file: "renamed/dir/name.txt",
@@ -554,7 +549,7 @@ describe("PatchTool", () => {
                 )
                 expect(settled).toMatchObject({
                   status: "completed",
-                  output: { applied: [{ resource: "moved.txt" }] },
+                  metadata: { files: [{ file: "moved.txt" }] },
                 })
                 expect(assertions).toMatchObject([{ action: "edit", resources: ["old.txt", "moved.txt"] }])
               }),
@@ -747,10 +742,11 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        const output = Schema.decodeUnknownSync(PatchTool.Output)(settled.output)
-        expect(output.files[0]?.patch).not.toContain(bom)
-        expect(output.files[0]?.patch).not.toContain("-using System;")
-        expect(output.files[0]?.patch).not.toContain("+using System;")
+        const patch = settled.metadata?.files?.[0]?.patch
+        expect(patch).toContain("+class Next {}")
+        expect(patch).not.toContain(bom)
+        expect(patch).not.toContain("-using System;")
+        expect(patch).not.toContain("+using System;")
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
           `${bom}using System;\n\nclass Test {}\nclass Next {}\n`,
         )
@@ -1110,7 +1106,7 @@ describe("PatchTool", () => {
                 )
                 expect(settled).toMatchObject({
                   status: "completed",
-                  output: { applied: [{ resource: destination.replaceAll("\\", "/") }] },
+                  metadata: { files: [{ file: destination.replaceAll("\\", "/") }] },
                 })
                 expect(assertions).toMatchObject([
                   {
