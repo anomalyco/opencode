@@ -218,6 +218,41 @@ Array.of("pending", "reported").forEach((status) =>
   ),
 )
 
+it.live("keeps later plugins registered when a removed plugin's cleanup dies", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const loads: string[] = []
+    const broken: Plugin.Generation = {
+      id: "broken",
+      revision: "1",
+      effect: () => Effect.addFinalizer(() => Effect.die(new TypeError("cleanup is not a function"))),
+    }
+    // Last in activation order like the config agent and command plugins, so teardown closes it first.
+    const builtin: Plugin.Generation = {
+      id: "builtin",
+      revision: "internal",
+      effect: (ctx) =>
+        Effect.gen(function* () {
+          loads.push("builtin")
+          yield* ctx.command.transform((editor) => editor.add({ name: "custom", execute: () => Effect.void }))
+        }),
+    }
+    yield* plugins.activate([broken, builtin])
+    yield* plugins.activate([builtin])
+    expect(loads).toEqual(["builtin", "builtin"])
+    expect((yield* commands.list()).map((command) => command.name)).toEqual(["custom"])
+    expect(yield* plugins.list()).toEqual([
+      {
+        id: Plugin.ID.make("builtin"),
+        source: { type: "builtin" },
+        state: { status: "active" },
+        features: { server: true },
+      },
+    ])
+  }),
+)
+
 it.live("continues failure reporting and cleanup after a plugin update observer fails", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
