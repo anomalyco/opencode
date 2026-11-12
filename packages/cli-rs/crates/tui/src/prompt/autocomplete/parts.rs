@@ -55,21 +55,34 @@ impl Kind {
 
 /// The prompt's marks and the parts they stand for (`extmarkToPart`).
 #[derive(Default)]
-pub struct Parts(RefCell<Vec<(ExtmarkId, Kind, usize)>>);
+pub struct Parts {
+    marks: RefCell<Vec<(ExtmarkId, Kind, usize)>>,
+    /// Pastes whose marks an edit removed. TS keeps a paste's text on its extmark, which undo brings back; the
+    /// textarea here does not restore marks, so [`restore_pastes`] does after an undo or redo.
+    dropped: RefCell<Vec<Dropped>>,
+}
+
+struct Dropped {
+    start: u32,
+    end: u32,
+    label: String,
+    text: String,
+}
 
 impl Parts {
     pub fn clear(&self) {
-        self.0.borrow_mut().clear();
+        self.marks.borrow_mut().clear();
+        self.dropped.borrow_mut().clear();
     }
 
     /// Ties `mark` to entry `index` of `kind`'s list.
     pub fn track(&self, mark: ExtmarkId, kind: Kind, index: usize) {
-        self.0.borrow_mut().push((mark, kind, index));
+        self.marks.borrow_mut().push((mark, kind, index));
     }
 
     /// The part `mark` stands for.
     pub fn get(&self, mark: ExtmarkId) -> Option<(Kind, usize)> {
-        self.0.borrow().iter().find(|(id, _, _)| *id == mark).map(|&(_, kind, index)| (kind, index))
+        self.marks.borrow().iter().find(|(id, _, _)| *id == mark).map(|&(_, kind, index)| (kind, index))
     }
 }
 
@@ -103,7 +116,7 @@ pub fn insert(prompt: &Inner, start: u32, text: &str, kind: Kind, part: Value) {
     let mut part = part;
     part["mention"] = range;
     list.push(part);
-    prompt.parts.0.borrow_mut().push((id, kind, list.len() - 1));
+    prompt.parts.marks.borrow_mut().push((id, kind, list.len() - 1));
 }
 
 /// The skills dialog's pick: `@id ` at the cursor, unless the prompt has the skill
@@ -124,7 +137,7 @@ pub fn insert_skill(prompt: &Inner, id: &str) {
     }
     let Some(skills) = info["skills"].as_array_mut() else { return };
     skills.push(json!({ "id": id, "mention": { "start": start, "end": end, "text": mention } }));
-    prompt.parts.0.borrow_mut().push((mark, Kind::Skill, skills.len() - 1));
+    prompt.parts.marks.borrow_mut().push((mark, Kind::Skill, skills.len() - 1));
 }
 
 /// Marks the mentions of the `PromptInfo` the textarea now shows (`restoreExtmarksFromPrompt`).
@@ -141,7 +154,7 @@ pub fn restore(prompt: &Inner) {
             }
             let offset = |key: &str| mention[key].as_f64().unwrap_or_default() as u32;
             let id = prompt.textarea.add_extmark(offset("start")..offset("end"), options(prompt, kind));
-            prompt.parts.0.borrow_mut().push((id, kind, index));
+            prompt.parts.marks.borrow_mut().push((id, kind, index));
         }
     }
 }
@@ -152,8 +165,19 @@ pub fn sync(prompt: &Inner) {
     let mut marks = prompt.textarea.extmarks();
     // Marks in creation order, as TS lists them.
     marks.sort_by_key(|mark| mark.id);
-    let mapped = prompt.parts.0.borrow().clone();
+    let mapped = prompt.parts.marks.borrow().clone();
     let mut info = prompt.prompt.borrow_mut();
+    let gone = mapped.iter().filter(|(id, kind, _)| *kind == Kind::Pasted && !marks.iter().any(|mark| mark.id == *id));
+    prompt.parts.dropped.borrow_mut().extend(gone.filter_map(|&(_, _, index)| {
+        let paste = &info[Kind::Pasted.key()][index];
+        let offset = |key: &str| paste["source"][key].as_u64().map(|offset| offset as u32);
+        Some(Dropped {
+            start: offset("start")?,
+            end: offset("end")?,
+            label: paste["source"]["text"].as_str()?.to_owned(),
+            text: paste["text"].as_str()?.to_owned(),
+        })
+    }));
     let mut lists: [Vec<(Option<ExtmarkId>, Value)>; 4] = Default::default();
     for mark in &marks {
         let Some(&(_, kind, index)) = mapped.iter().find(|(id, _, _)| *id == mark.id) else { continue };
@@ -195,7 +219,31 @@ pub fn sync(prompt: &Inner) {
             info[kind.key()] = Value::Array(list.into_iter().map(|(_, part)| part).collect());
         }
     }
-    *prompt.parts.0.borrow_mut() = next;
+    *prompt.parts.marks.borrow_mut() = next;
+}
+
+/// After an undo or redo, brings back each dropped paste whose label is again where its mark was, so a submit sends
+/// its text (#63265). A fragment of the label stays plain text.
+pub fn restore_pastes(prompt: &Inner) {
+    let textarea = &prompt.textarea;
+    let marks = textarea.extmarks();
+    let dropped = std::mem::take(&mut *prompt.parts.dropped.borrow_mut());
+    let (back, kept): (Vec<_>, Vec<_>) = dropped.into_iter().partition(|paste| {
+        textarea.buffer().range(paste.start, paste.end).unwrap_or_default() == paste.label
+            && !marks.iter().any(|mark| mark.start < paste.end && paste.start < mark.end)
+    });
+    *prompt.parts.dropped.borrow_mut() = kept;
+    let mut info = prompt.prompt.borrow_mut();
+    for paste in back {
+        let mark = textarea.add_extmark(paste.start..paste.end, options(prompt, Kind::Pasted));
+        if !info[Kind::Pasted.key()].is_array() {
+            info[Kind::Pasted.key()] = json!([]);
+        }
+        let Some(pasted) = info[Kind::Pasted.key()].as_array_mut() else { return };
+        let source = json!({ "start": paste.start, "end": paste.end, "text": paste.label });
+        pasted.push(json!({ "text": paste.text, "source": source }));
+        prompt.parts.track(mark, Kind::Pasted, pasted.len() - 1);
+    }
 }
 
 /// Whether the prompt has a `kind` part whose `field` is `value` (`hasSkill`).

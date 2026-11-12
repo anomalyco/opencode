@@ -152,6 +152,30 @@ fn a_second_paste_or_a_click_expands_a_paste_and_backspace_removes_it() {
     setup.wait_text("");
 }
 
+// #63265 (`prompt-paste.test.tsx`): undo brings a cleared paste label back as the paste, so a submit sends its text.
+// A fragment of the label comes back as plain text.
+#[test]
+fn undo_submits_the_restored_paste_and_a_fragment_as_text() {
+    let pasted = "one\ntwo\nthree\nfour";
+    for (fragment, restored, sent) in
+        [(false, "[Pasted ~4 lines] ", format!("{pasted} ")), (true, "[Pasted ~4 ", "[Pasted ~4 ".to_owned())]
+    {
+        let setup = Setup::new();
+        setup.app.paste(pasted);
+        setup.wait_text("[Pasted ~4 lines] ");
+        if fragment {
+            // Remove the space after the label, then leave a fragment of it.
+            setup.app.press("backspace");
+            setup.app.press("ctrl+w");
+        }
+        setup.app.press("ctrl+u");
+        setup.wait_text("");
+        setup.app.press("super+z");
+        setup.wait_text(restored);
+        assert_eq!(setup.submit()["text"], sent, "fragment: {fragment}");
+    }
+}
+
 #[test]
 fn copying_a_selection_over_a_paste_copies_its_text() {
     let capture = testing::capture();
