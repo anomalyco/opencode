@@ -9,6 +9,8 @@ import {
   type HostClipboardService,
 } from "@opentui/core"
 import { createClipboardAdapter } from "../src/clipboard"
+import path from "node:path"
+import { tmpdir } from "./fixture/fixture"
 
 function coreClipboard(options: {
   read?: ClipboardReadResult
@@ -145,4 +147,42 @@ test("rejects reads when no clipboard route is supported", async () => {
   const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "unsupported" } }))
 
   await expect(clipboard.read()).rejects.toThrow("Clipboard read is not supported on this system")
+})
+
+test.skipIf(!Bun.which("tmux"))("copies through the tmux client showing the pane", async () => {
+  await using dir = await tmpdir()
+  const socket = path.join(dir.path, "tmux")
+  const env = { PATH: process.env.PATH, HOME: dir.path, TERM: "xterm-256color" }
+  const tmux = (...args: string[]) =>
+    new Response(
+      Bun.spawn(["tmux", "-S", socket, "-f", "/dev/null", ...args], { env, stdout: "pipe", stderr: "ignore" }).stdout,
+    ).text()
+  await tmux("new-session", "-d")
+  await using _server = { [Symbol.asyncDispose]: async () => void (await tmux("kill-server")) }
+  const writes: ClipboardWriteOptions[] = []
+  const clipboard = createClipboardAdapter(coreClipboard({ onWrite: (_, input) => writes.push(input) }), {
+    ...env,
+    TMUX: `${socket},0,0`,
+    TMUX_PANE: (await tmux("display-message", "-p", "#{pane_id}")).trim(),
+  })
+
+  // With no client attached, tmux cannot deliver the text, so the OpenTUI routes take it.
+  await clipboard.write("detached")
+  expect(writes).toEqual([{ destination: "all-available", selection: "clipboard" }])
+
+  const terminal = { output: "" }
+  const client = Bun.spawn(["tmux", "-S", socket, "-f", "/dev/null", "attach"], {
+    env,
+    terminal: { data: (_, data) => (terminal.output += new TextDecoder().decode(data)) },
+  })
+  const deadline = Date.now() + 10_000
+  while (!(await tmux("list-clients")).trim() && Date.now() < deadline) await Bun.sleep(10)
+
+  await clipboard.write("hello tmux")
+  const sequence = `]52;;${Buffer.from("hello tmux").toString("base64")}`
+  while (!terminal.output.includes(sequence) && Date.now() < deadline) await Bun.sleep(10)
+  client.kill()
+
+  expect(terminal.output).toContain(sequence)
+  expect(writes.at(-1)).toEqual({ destination: "host-only", selection: "clipboard" })
 })
