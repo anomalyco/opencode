@@ -375,8 +375,14 @@ mod tests {
 
     #[test]
     fn this_process_has_times_memory_and_a_release() {
+        // Both clocks advance in ticks of about 15.6 ms, so they may read 0 until the first one.
         let times = process_times().unwrap();
-        assert!(times.cpu_seconds > 0.0 && times.age_ms > 0.0);
+        assert!(times.cpu_seconds >= 0.0 && times.age_ms >= 0.0);
+        let started = std::time::Instant::now();
+        let later = std::iter::repeat_with(|| process_times().unwrap())
+            .find(|later| later.cpu_seconds > times.cpu_seconds || started.elapsed() > Duration::from_secs(5))
+            .unwrap();
+        assert!(later.cpu_seconds > times.cpu_seconds && later.age_ms > times.age_ms);
         assert!(resident_memory().unwrap() > 0);
         let release = os_release().unwrap();
         let parts: Vec<u32> = release.split('.').map(|part| part.parse().unwrap()).collect();
