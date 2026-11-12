@@ -56,7 +56,7 @@ impl Data {
         // Each event of a type someone listens to; a delta, the hot path, is neither looked up, cloned nor sent.
         let mut listened = None;
         for event in events.iter().filter(|event| !is_delta(event)) {
-            let listened = listened.get_or_insert_with(|| crate::state::lock(&self.inner.listened));
+            let listened = listened.get_or_insert_with(|| opencode_util::lock(&self.inner.listened));
             if listened.contains_key(event.tag()) {
                 // No receiver is not an error: views subscribe when they need to.
                 let _ = self.inner.signals.send(std::sync::Arc::new(event.clone()));

@@ -5,6 +5,7 @@
 //! their type, and malformed MCP servers and additional directories are skipped. A failed check answers
 //! `Invalid params` with zod's `format()` shape for the first failing field.
 
+use std::future::{Future, ready};
 use std::sync::Arc;
 
 use futures_util::future::BoxFuture;
@@ -29,45 +30,37 @@ impl Handler for Agent {
         let work: Result<BoxFuture<'static, Result<Value, Failure>>, RpcError> = match method {
             "initialize" => object(&params).and_then(|params| {
                 protocol_version(params)?;
-                let response = service.initialize(params);
-                Ok(ready(Ok(response)))
+                Ok(boxed(ready(Ok(service.initialize(params)))))
             }),
             "authenticate" => object(&params).and_then(|params| {
                 let method_id = string(params, "methodId")?;
-                Ok(ready(service.authenticate(&method_id)))
+                Ok(boxed(ready(service.authenticate(&method_id))))
             }),
-            "session/new" => setup(&params, false, true).map(|setup| -> BoxFuture<'static, _> {
-                Box::pin(async move { service.new_session(setup, context.responded).await })
-            }),
-            "session/load" => setup(&params, true, true).map(|setup| -> BoxFuture<'static, _> {
-                Box::pin(async move { service.load_session(setup, context.responded).await })
-            }),
-            "session/resume" => setup(&params, true, false).map(|setup| -> BoxFuture<'static, _> {
-                Box::pin(async move { service.resume_session(setup, context.responded).await })
-            }),
-            "session/fork" => setup(&params, true, false).map(|setup| -> BoxFuture<'static, _> {
-                Box::pin(async move { service.fork_session(setup, context.responded).await })
-            }),
+            "session/new" => setup(&params, false, true)
+                .map(|setup| boxed(async move { service.new_session(setup, context.responded).await })),
+            "session/load" => setup(&params, true, true)
+                .map(|setup| boxed(async move { service.load_session(setup, context.responded).await })),
+            "session/resume" => setup(&params, true, false)
+                .map(|setup| boxed(async move { service.resume_session(setup, context.responded).await })),
+            "session/fork" => setup(&params, true, false)
+                .map(|setup| boxed(async move { service.fork_session(setup, context.responded).await })),
             "session/list" => object(&params).and_then(|params| {
                 let cwd = nullable_string(params, "cwd")?;
                 let cursor = nullable_string(params, "cursor")?;
-                Ok(Box::pin(async move { service.list_sessions(cwd, cursor).await }) as BoxFuture<'static, _>)
+                Ok(boxed(async move { service.list_sessions(cwd, cursor).await }))
             }),
-            "session/delete" => session_id(&params)
-                .map(|id| -> BoxFuture<'static, _> { Box::pin(async move { service.delete_session(&id).await }) }),
-            "session/close" => session_id(&params)
-                .map(|id| -> BoxFuture<'static, _> { Box::pin(async move { service.close_session(&id).await }) }),
+            "session/delete" => session_id(&params).map(|id| boxed(async move { service.delete_session(&id).await })),
+            "session/close" => session_id(&params).map(|id| boxed(async move { service.close_session(&id).await })),
             "session/set_mode" => object(&params).and_then(|params| {
                 let id = string(params, "sessionId")?;
                 let mode = string(params, "modeId")?;
-                Ok(Box::pin(async move { service.set_mode(&id, &mode).await }) as BoxFuture<'static, _>)
+                Ok(boxed(async move { service.set_mode(&id, &mode).await }))
             }),
             "session/set_config_option" => object(&params).and_then(|params| {
                 let id = string(params, "sessionId")?;
                 let config_id = string(params, "configId")?;
                 let value = config_value(params)?;
-                Ok(Box::pin(async move { service.set_config_option(&id, &config_id, &value).await })
-                    as BoxFuture<'static, _>)
+                Ok(boxed(async move { service.set_config_option(&id, &config_id, &value).await }))
             }),
             "session/prompt" => object(&params).and_then(|params| {
                 let id = string(params, "sessionId")?;
@@ -75,9 +68,9 @@ impl Handler for Agent {
                 Ok(service.prompt(id, prompt, &context.cancel, context.responded))
             }),
             // Interim extension until ACP has native mid-turn steering.
-            "_session/steering" => steering(&params).map(|(id, prompt)| -> BoxFuture<'static, _> {
-                Box::pin(async move { service.steer(&id, &prompt).await })
-            }),
+            "_session/steering" => {
+                steering(&params).map(|(id, prompt)| boxed(async move { service.steer(&id, &prompt).await }))
+            }
             _ => return None,
         };
         Some(match work {
@@ -98,8 +91,10 @@ impl Handler for Agent {
     }
 }
 
-fn ready(result: Result<Value, Failure>) -> BoxFuture<'static, Result<Value, Failure>> {
-    Box::pin(async move { result })
+fn boxed(
+    work: impl Future<Output = Result<Value, Failure>> + Send + 'static,
+) -> BoxFuture<'static, Result<Value, Failure>> {
+    Box::pin(work)
 }
 
 fn received(value: Option<&Value>) -> &'static str {

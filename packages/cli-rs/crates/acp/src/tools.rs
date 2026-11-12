@@ -5,8 +5,9 @@ pub mod patch;
 use std::sync::LazyLock;
 
 use indexmap::IndexSet;
+use opencode_util::json_object;
 use regex::Regex;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use crate::paths;
 
@@ -198,20 +199,11 @@ fn raw_input(tool_name: &str, input: &Value, cwd: &str) -> Value {
     if !is_shell(tool_name) || truthy("cwd") || truthy("workdir") {
         return input.clone();
     }
-    let mut object = input.as_object().cloned().unwrap_or_default();
-    object.insert("cwd".to_owned(), json!(cwd));
-    Value::Object(object)
+    json_object! { ..input.clone(), "cwd": cwd }
 }
 
 fn raw_output(metadata: Option<&Value>, error: Option<&str>) -> Value {
-    let mut output = Map::new();
-    if let Some(metadata) = metadata {
-        output.insert("metadata".to_owned(), metadata.clone());
-    }
-    if let Some(error) = error {
-        output.insert("error".to_owned(), json!(error));
-    }
-    Value::Object(output)
+    json_object! { "metadata"?: metadata, "error"?: error }
 }
 
 static DATA_IMAGE: LazyLock<Regex> =
