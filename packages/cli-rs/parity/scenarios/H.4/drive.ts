@@ -5,7 +5,7 @@
 //
 // One TS server runs in simulation mode (`OPENCODE_SIMULATE=1`) in a fresh sandbox home, never the user's service.
 // Each client runs headless against it with its own drive manifest. Captures go to `parity/out/H.4/` (ignored by git).
-// Build the Rust binary first (`cargo build -p opencode-cli --bin opencode-rs`) or set OPENCODE_RS_BIN.
+// Build the Rust binary first (`cargo build -p opencode-cli --bin opencode-native`) or set OPENCODE_RS_BIN.
 
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"

@@ -33,10 +33,10 @@ pub fn no_proxy(upper: Option<&str>, lower: Option<&str>) -> String {
     entries.join(",")
 }
 
-/// The client name in telemetry and logs: `OPENCODE_CLIENT`, else `opencode-rs` (plan 6.1). As with
+/// The client name in telemetry and logs: `OPENCODE_CLIENT`, else `opencode-native` (plan 6.1). As with
 /// TS's `??`, an empty value is kept.
 pub fn client() -> String {
-    std::env::var("OPENCODE_CLIENT").unwrap_or_else(|_| "opencode-rs".to_owned())
+    std::env::var("OPENCODE_CLIENT").unwrap_or_else(|_| "opencode-native".to_owned())
 }
 
 #[cfg(test)]

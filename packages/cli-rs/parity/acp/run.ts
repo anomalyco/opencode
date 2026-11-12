@@ -1,5 +1,5 @@
 // P-WIRE (plan 7.1): runs each ACP subprocess suite of `packages/cli/test/acp` against the TS agent and
-// against `opencode-rs acp`, records every agent's JSON-RPC traffic, and compares the transcripts.
+// against `opencode-native acp`, records every agent's JSON-RPC traffic, and compares the transcripts.
 //
 //   bun run parity/acp/run.ts [suite ...]
 //
@@ -67,7 +67,7 @@ async function runSuite(suite: string, side: Side) {
       ACP_RECORD_TARGET:
         side === "ts"
           ? `${process.execPath} run src/index.ts`
-          : (process.env.OPENCODE_RS_BIN ?? path.join(rs, "target/debug/opencode-rs")),
+          : (process.env.OPENCODE_RS_BIN ?? path.join(rs, "target/debug/opencode-native")),
       ...(side === "rs" ? { OPENCODE_TS_BIN: path.join(import.meta.dir, "opencode-ts") } : {}),
     },
     stdout: "pipe",

@@ -1,4 +1,4 @@
-// How P-CLI and P-PTY start the two clients: the TS CLI from source and the Rust `opencode-rs`, each
+// How P-CLI and P-PTY start the two clients: the TS CLI from source and the Rust `opencode-native`, each
 // in a fresh home with its own XDG roots, so neither reads or writes the user's config, state, or service.
 
 import { mkdir, mkdtemp } from "node:fs/promises"
@@ -28,10 +28,10 @@ export function command(side: Side, args: string[]) {
       path.join(cli, "src/index.ts"),
       ...args,
     ]
-  return [process.env.OPENCODE_RS_BIN ?? path.join(rs, "target/debug/opencode-rs"), ...args]
+  return [process.env.OPENCODE_RS_BIN ?? path.join(rs, "target/debug/opencode-native"), ...args]
 }
 
-// Builds the debug `opencode-rs` (and the other debug binaries scenarios run) once per run, unless
+// Builds the debug `opencode-native` (and the other debug binaries scenarios run) once per run, unless
 // OPENCODE_RS_BIN names a binary.
 export async function buildRust(sides: Side[]) {
   if (!sides.includes("rs") || process.env.OPENCODE_RS_BIN) return
