@@ -383,14 +383,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       ).catch(() => {})
       return true
     },
-    onBackground: () => {
-      if (!state.sessionID) {
-        return
-      }
-
-      log?.write("send.background", { sessionID: state.sessionID })
-      void state.sdk.session.background({ sessionID: state.sessionID }).catch(() => {})
-    },
     onQueuedPromptAction: async (action, inboxID) => {
       if (!state.sessionID) return
       log?.write(`send.pending.${action}`, { sessionID: state.sessionID, inboxID })

@@ -385,7 +385,6 @@ export const dict = {
   "session.new.project.search": "Proje ara",
   "session.new.project.add": "Proje ekle",
   "session.new.workspace.runIn": "Oturumu şurada çalıştır",
-  "session.new.workspace.triggerLocal": "Yerel",
   "session.new.workspace.local": "Yerel depo",
   "session.new.git.none": "Git yok",
 

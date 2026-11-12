@@ -171,6 +171,7 @@ export const dict = {
   "ui.common.dismiss": "Закрыть",
   "ui.common.close": "Закрыть",
   "ui.common.next": "Далее",
+  "ui.common.continue": "Продолжить",
   "ui.common.submit": "Отправить",
   "ui.common.showMore": "Показать ещё",
   "ui.common.clear": "Очистить",

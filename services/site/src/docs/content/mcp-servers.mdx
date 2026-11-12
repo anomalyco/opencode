@@ -481,7 +481,7 @@ When a server returns instructions during initialization, OpenCode adds them to 
 
 For servers that use Code Mode, OpenCode adds a line that says where the agent can find the server's tools.
 
-A server's instructions are omitted when the agent's permissions deny every one of its tools, or when they deny `execute` for a server that uses Code Mode.
+A server's instructions are omitted when the agent's permissions deny every one of its tools. When they deny `execute`, the server's tools are listed directly and its instructions are kept without the Code Mode line.
 
 ## Input requests
 

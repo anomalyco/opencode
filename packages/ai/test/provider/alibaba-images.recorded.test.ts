@@ -27,7 +27,7 @@ describe("Alibaba Images recorded", () => {
       })
 
       expect(response.images).toHaveLength(2)
-      expect(response.image.source.type === "url" && response.image.source.url).toStartWith("https://")
+      expect(response.images[0].source.type === "url" && response.images[0].source.url).toStartWith("https://")
       expect(response.providerMetadata?.alibaba).toMatchObject({ usage: { image_count: 2, width: 512, height: 512 } })
     }),
   )
@@ -64,7 +64,7 @@ describe("Alibaba Images recorded", () => {
         })
 
         expect(response.images).toHaveLength(1)
-        expect(response.image.source.type).toBe("url")
+        expect(response.images[0].source.type).toBe("url")
       }),
     { timeout: 60_000 },
   )

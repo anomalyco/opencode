@@ -87,7 +87,7 @@ export interface MockServerConfig {
     items: SessionMessageInfo[]
     cursor?: string
   }
-  vcs?: { current: string; default: string } | ((directory: string) => { current: string; default: string })
+  vcs?: { current?: string; default: string } | ((directory: string) => { current?: string; default: string })
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
@@ -1263,7 +1263,25 @@ function mockHandlers(
           }),
         sessionRemove: () => noContent,
         sessionShell: () => noContent,
-        sessionView: () => noContent,
+        sessionView: (ctx) =>
+          Effect.sync(() => {
+            const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+
+            if (!session) return
+            const time = currentSession(session, config.directory).time
+
+            session.time = { ...time, viewed: Math.max(time.viewed ?? 0, ctx.payload.idle) }
+            state.emit([
+              {
+                id: `evt_viewed_${session.id}_${ctx.payload.idle}`,
+                created: Date.now(),
+                type: "session.viewed",
+                durable: { aggregateID: session.id, seq: 1, version: 1 },
+                location: { directory: requestDirectory(config, ctx.request) },
+                data: { sessionID: session.id, idle: ctx.payload.idle },
+              },
+            ])
+          }).pipe(Effect.andThen(noContent)),
         sessionForm: (ctx) =>
           Effect.succeed({
             data: resolve(config.forms ?? []).filter(

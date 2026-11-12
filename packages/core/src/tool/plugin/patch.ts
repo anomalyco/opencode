@@ -15,6 +15,7 @@ import { FileAccess } from "../../file-access.js"
 import { Patch } from "@opencode/util/patch"
 import { Permission } from "../../permission.js"
 import DESCRIPTION from "../patch.txt"
+import GRAMMAR from "../patch-grammar.txt"
 import { fileDiff } from "./file-diff.js"
 
 export const name = "patch"
@@ -82,6 +83,7 @@ export const Plugin = {
           options: { codemode: false, permission: "edit" },
           description: DESCRIPTION,
           input: Input,
+          freeform: { type: "lark", grammar: GRAMMAR },
           output: Output,
           execute: (input, context) => {
             const applied: Array<typeof Applied.Type> = []

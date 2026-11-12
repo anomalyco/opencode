@@ -1,5 +1,4 @@
 import "./reveal.css"
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { inView, washRootMargin, washStartTime, washThreshold } from "./entrance"
 import type { logoAnimations, SiteSettings } from "./settings"
 
@@ -9,95 +8,72 @@ import type { logoAnimations, SiteSettings } from "./settings"
  * items marked `data-slot="brand"` (the part that animates, with `data-state="in"` or `"out"`)
  * around a `data-slot="mark"` (the artwork, which some styles clip). revealMotion gives the
  * container the timing and each style's variables; an item can set its own `--logo-delay`. While
- * the container has `data-armed`, items without a state wait unseen.
+ * the container has `data-armed`, items without a state wait unseen. No framework code, so the
+ * static pages' script uses it too (src/client/islands/home.ts); use-wash.ts is the app's wash.
  */
 
 /**
- * The entrance wash for a grid: the first time `element` scrolls into view, `start` becomes that
- * moment (performance.now()), and each item arrives `washStep` staggers later. Armed on the client
- * only, never with reduced motion, and only while `enabled`. `columns` follows the grid's tracks (or --wash-columns).
- * Give the container `data-entrance` and `data-mounted={mounted()}` so it waits from first paint.
+ * Calls `start` with the moment the entrance begins (performance.now()) the first time `element`
+ * scrolls into view, as every entrance waits (entrance.ts). Returns its stop.
  */
-export function createWash(
-  element: () => HTMLElement | undefined,
-  enabled: () => boolean = () => true,
-  // Something that must start first (the open source numbers): the wash waits for its own trigger
-  // and for this, then starts no sooner than 150ms after it.
-  after?: () => number | undefined,
-) {
-  const [armed, setArmed] = createSignal(false)
-  const [own, setOwn] = createSignal<number>()
-  // While a replay restarts, nothing has a state, so every item starts over.
-  const [restarting, setRestarting] = createSignal(false)
-  const start = () => {
-    if (restarting()) return undefined
-    const at = own()
-    if (at === undefined || !after) return at
-    const first = after()
-    return first === undefined ? undefined : Math.max(at, first + 150)
-  }
-  const [columns, setColumns] = createSignal<number>()
-  // Set once the page's code runs; until then reveal.css keeps a `data-entrance` container's items unseen.
-  const [mounted, setMounted] = createSignal(false)
+export function onEntrance(element: Element, start: (at: number) => void) {
+  let first = true
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const initial = first
+      first = false
+      if (!entries.some(inView)) return
+      observer.disconnect()
+      start(washStartTime(initial))
+    },
+    { threshold: washThreshold, rootMargin: washRootMargin },
+  )
+  observer.observe(element)
+  return () => observer.disconnect()
+}
 
-  onMount(() => {
-    setMounted(true)
-    const target = element()
-    if (!target) return
-    // A grid whose cells span several tracks (the logo tiles, index.css) gives its cells across in
-    // --wash-columns.
-    const measure = () => {
-      const style = getComputedStyle(target)
-      setColumns(
-        Math.max(
-          1,
-          Number(style.getPropertyValue("--wash-columns")) ||
-            style.gridTemplateColumns.split(" ").filter(Boolean).length,
-        ),
-      )
-    }
-    measure()
-    const resize = new ResizeObserver(measure)
-    resize.observe(target)
-    onCleanup(() => resize.disconnect())
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    createEffect(() => {
-      if (!enabled()) {
-        setArmed(false)
-        setOwn(undefined)
-        return
-      }
-      setArmed(true)
-      let first = true
-      const observer = new IntersectionObserver(
-        (entries) => {
-          const initial = first
-          first = false
-          if (!entries.some(inView)) return
-          setOwn(washStartTime(initial))
-          observer.disconnect()
-        },
-        { threshold: washThreshold, rootMargin: washRootMargin },
-      )
-      observer.observe(target)
-      onCleanup(() => observer.disconnect())
-    })
-  })
-
-  // Plays the wash again (a changed style or stagger), once it has played.
-  const replay = () => {
-    if (start() === undefined) return
-    setRestarting(true)
-    requestAnimationFrame(() => {
-      setOwn(performance.now())
-      setRestarting(false)
-    })
-  }
-
-  return { armed, start, columns, mounted, replay }
+/** A grid's columns for the wash: its tracks, or --wash-columns for a grid whose cells span several (the logo tiles, index.css). */
+export function washColumns(element: Element) {
+  const style = getComputedStyle(element)
+  return Math.max(
+    1,
+    Number(style.getPropertyValue("--wash-columns")) || style.gridTemplateColumns.split(" ").filter(Boolean).length,
+  )
 }
 
 export { inView, washRootMargin, washStartTime, washThreshold }
+
+// The time each item was last asked to come in at, so a late picture never lands a stale request.
+const washes = new WeakMap<HTMLElement, number | undefined>()
+
+/**
+ * Brings one item of a wash (its `data-slot="brand"`) in at `at`, a performance.now() time, or, with
+ * an `image`, as soon as that has loaded and decoded after then, so no empty box animates in; a
+ * picture that fails never comes in, so it stays hidden while its grid is armed. The load comes
+ * first: Safari rejects decode() on an image that hasn't loaded, such as a lazy one off screen.
+ * `at` undefined takes the item out again (a replay). The app's avatar wall and the static pages'
+ * walls (src/client/islands/home.ts) both run it.
+ */
+export function washItem(brand: HTMLElement, at: number | undefined, image?: HTMLImageElement | null) {
+  washes.set(brand, at)
+  if (at === undefined) {
+    delete brand.dataset.state
+    brand.style.removeProperty("--logo-delay")
+    brand.style.removeProperty("--wipe-delay")
+    return
+  }
+  const show = () => {
+    if (washes.get(brand) !== at) return
+    const delay = `${Math.round(Math.max(0, at - performance.now()))}ms`
+    brand.style.setProperty("--logo-delay", delay)
+    brand.style.setProperty("--wipe-delay", delay)
+    brand.dataset.state = "in"
+  }
+  if (!image) return show()
+  const decode = () => void image.decode().then(show, () => {})
+  if (image.complete && image.naturalWidth > 0) return decode()
+  image.addEventListener("load", decode, { once: true })
+}
 
 /**
  * An item's place in a diagonal wash from the top left: diagonal by diagonal (row + column), and

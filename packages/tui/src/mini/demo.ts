@@ -504,19 +504,24 @@ function emitPatch(state: State): void {
   })
 }
 
+function subagentLaunch(sessionID: string) {
+  return {
+    output: [
+      `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
+      "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
+      "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+      "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
+    ].join("\n"),
+    metadata: { sessionID, status: "running" },
+  }
+}
+
 function emitTask(state: State): void {
   const ref = make(state, "subagent", {
     description: "Scan run/* for reducer touchpoints",
     agent: "explore",
   })
-  doneTool(state, ref, {
-    output: "",
-    metadata: {
-      sessionID: "ses_demo_child",
-      status: "completed",
-      output: "",
-    },
-  })
+  doneTool(state, ref, subagentLaunch("ses_demo_child"))
   const part = {
     type: "tool",
     id: "sub_demo_call_1",
@@ -666,14 +671,7 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       permission: "subagent",
       patterns: ["explore"],
       always: ["*"],
-      done: {
-        output: "",
-        metadata: {
-          sessionID: "sub_demo_perm_1",
-          status: "completed",
-          output: "",
-        },
-      },
+      done: subagentLaunch("sub_demo_perm_1"),
     })
     return
   }
@@ -713,10 +711,7 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       permission: "doom_loop",
       patterns: ["*"],
       always: ["*"],
-      done: {
-        output: "Continuing after repeated failures.\n",
-        metadata: {},
-      },
+      done: subagentLaunch("sub_demo_doom_1"),
     })
     return
   }
