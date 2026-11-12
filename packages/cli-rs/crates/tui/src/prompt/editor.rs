@@ -5,6 +5,8 @@
 //! layer runs the 36 `input.*` commands on it through `Tui::textarea` (U.2), and the layers here add
 //! submit, queue, clear, history, shell mode, interrupt, and background.
 
+use futures_util::FutureExt;
+use futures_util::future::BoxFuture;
 use opencode_api::generated::{SessionBackgroundInput, SessionInboxDelivery, SessionInfo, SessionInterruptInput};
 use opencode_local::cli_config::Permissions;
 use opencode_local::jsonl::empty_prompt;
@@ -120,6 +122,9 @@ pub struct Inner {
     pub(crate) prompt: RefCell<Value>,
     interrupt: Cell<u32>,
     interrupt_timer: Cell<Option<TimerId>>,
+    /// The last interrupt request. A submit's requests wait for its answer, so the server sees them in the order
+    /// they were made, as TS's fetches start in call order (`ctrl+⏎ interrupt & send`).
+    interrupting: RefCell<Option<futures_util::future::Shared<BoxFuture<'static, ()>>>>,
     pub(crate) submitting: Cell<bool>,
     /// Runs when a prompt with text is sent and the composer clears (`onSubmit`).
     pub(crate) on_submit: RefCell<Option<OnSubmit>>,
@@ -323,6 +328,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         prompt: RefCell::new(empty_prompt()),
         interrupt: Cell::new(0),
         interrupt_timer: Cell::new(None),
+        interrupting: RefCell::new(None),
         submitting: Cell::new(false),
         on_submit: RefCell::new(None),
         catalog: RefCell::new(None),
@@ -771,16 +777,31 @@ impl Inner {
         )));
         if self.interrupt.get() >= 2 {
             let client = tui.data.client().clone();
-            tui.app.runtime().spawn(async move {
+            let request = async move {
                 let input = SessionInterruptInput { session_id: session, resume: Some(true) };
                 if let Err(error) = client.session_interrupt(&input).await {
                     log::warn!("interrupt failed: {error}");
                 }
-            });
+            }
+            .boxed()
+            .shared();
+            tui.app.runtime().spawn(request.clone());
+            *self.interrupting.borrow_mut() = Some(request);
             self.interrupt.set(0);
         }
         tui.dialogs.clear();
         self.refresh(tui);
+    }
+
+    /// Resolves once the last interrupt request has its answer, at once without one.
+    pub(crate) fn interrupted(&self) -> BoxFuture<'static, ()> {
+        let pending = self.interrupting.borrow().clone();
+        async move {
+            if let Some(pending) = pending {
+                pending.await;
+            }
+        }
+        .boxed()
     }
 
     /// `session.background`.
