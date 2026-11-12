@@ -15,8 +15,23 @@ test("built-in browser skill uses a virtual skill:// URI", () => {
 })
 
 test("URL normalization rejects filesystem paths instead of treating them as hostnames", () => {
-  for (const path of ["/tmp/page.html", "./page.html", "../page.html", "C:\\Users\\me\\page.html", "D:/page.html"])
-    expect(() => navigate(path)).toThrow("Unsupported browser URL")
+  // 58 calls passed a local file to tabs.open or navigate; the error names it and says what to call instead.
+  for (const path of [
+    "/tmp/page.html",
+    "./page.html",
+    "../page.html",
+    "C:\\Users\\me\\page.html",
+    "D:/page.html",
+    "file:///D:/site/index.html",
+    "~/report.html",
+  ])
+    expect(() => navigate(path)).toThrow(
+      `${JSON.stringify(path)} is a local file, not a web address, so the browser cannot open it. To show it to the user, call browser.preview({ path: ${JSON.stringify(path)} }) instead;`,
+    )
+  expect(() => navigate("ftp://example.com/file")).toThrow(
+    '"ftp://example.com/file" is not a browser URL. Use an http:// or https:// address',
+  )
+  expect(() => navigate("https://user:secret@example.com")).toThrow("is not a browser URL")
   expect(navigate("example.com/docs")).toEqual({ type: "navigate", tabID, url: "https://example.com/docs" })
   expect(navigate("localhost:8000")).toEqual({ type: "navigate", tabID, url: "http://localhost:8000/" })
   expect(BrowserTools.normalizeAction({ type: "tabs.open" })).toEqual({ type: "tabs.open" })
@@ -75,7 +90,7 @@ test("URL normalization fails fast when percent-encoding exceeds the command bou
   const input = `https://example.com/${"é".repeat(400)}`
   expect(input.length).toBeLessThan(2_048)
   expect(new URL(input).href.length).toBeGreaterThan(2_048)
-  expect(() => navigate(input)).toThrow()
+  expect(() => navigate(input)).toThrow("The URL is longer than 2048 characters once encoded.")
 })
 
 test("saved capture names never escape their directory or name a Windows device", async () => {

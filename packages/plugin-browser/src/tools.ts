@@ -2,7 +2,7 @@ export * as BrowserTools from "./tools.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
-import { Clock, Duration, Effect, Result, Schema } from "effect"
+import { Clock, Duration, Effect, Option, Result, Schema } from "effect"
 import { Base64 } from "effect/encoding"
 import { Script } from "node:vm"
 import type { BrowserConnection } from "./connection.js"
@@ -116,7 +116,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     if (input.type === "wait") return yield* wait(input, tool)
     const action = yield* Effect.try({
       try: () => normalizeAction(input),
-      catch: (error) => (error instanceof Tool.Error ? error : new Tool.Error({ message: invalidURL, error })),
+      catch: (error) => (error instanceof Tool.Error ? error : new Tool.Error({ message: String(error), error })),
     })
     const target = yield* connection.target(tool.sessionID, action)
     const uploads =
@@ -215,24 +215,33 @@ function exportResult(output: Schema.Schema.Type<Browser.Operation["output"]>, f
   })
 }
 
-const invalidURL =
-  "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.preview to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server."
-
 export function normalizeAction(action: Exclude<Browser.Input, { readonly type: "wait" }>): Browser.Action {
   if (action.type === "evaluate") return evaluateAction(action)
   if (action.type !== "navigate" && action.type !== "tabs.open") return action
   if (action.type === "tabs.open" && action.url === undefined) return action
   const value = action.url?.trim() || "about:blank"
   // A filesystem path would otherwise gain a scheme and parse as a hostname: /tmp/x becomes https://tmp/x.
-  if (/^(?:[\\/.]|[a-zA-Z]:[\\/])/.test(value)) throw new Error("Unsupported browser URL")
+  if (/^(?:[\\/.~]|[a-zA-Z]:[\\/])/.test(value) || /^file:/i.test(value))
+    throw new Tool.Error({
+      message: `${JSON.stringify(value)} is a local file, not a web address, so the browser cannot open it. To show it to the user, call browser.preview({ path: ${JSON.stringify(value)} }) instead; preview renders HTML pages, images, PDF, SVG, Markdown and other files in the Review pane. To script the page (click, evaluate, wait), serve its folder over HTTP on the server, for example with \`bunx serve <folder>\`, and open that http://localhost:<port>/ address.`,
+    })
   const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
-  const url = new URL(
-    value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`,
-  )
-  if ((url.href !== "about:blank" && !/^https?:$/.test(url.protocol)) || url.username || url.password)
-    throw new Error("Unsupported browser URL")
+  const candidate =
+    value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`
+  const url = URL.canParse(candidate) ? new URL(candidate) : undefined
+  if (!url || (url.href !== "about:blank" && !/^https?:$/.test(url.protocol)) || url.username || url.password)
+    throw new Tool.Error({
+      message: `${JSON.stringify(value)} is not a browser URL. Use an http:// or https:// address, or about:blank, without a user name or password. The connected server must be able to reach it; localhost is that server.`,
+    })
   // Percent-encoding can grow the URL past the bound the desktop decodes from `command`.
-  return Schema.decodeUnknownSync(Browser.Action)({ ...action, url: url.href })
+  return Schema.decodeUnknownOption(Browser.Action)({ ...action, url: url.href }).pipe(
+    Option.getOrThrowWith(
+      () =>
+        new Tool.Error({
+          message: "The URL is longer than 2048 characters once encoded. Open a shorter address.",
+        }),
+    ),
+  )
 }
 
 type WaitInput = Extract<Browser.Input, { readonly type: "wait" }>
