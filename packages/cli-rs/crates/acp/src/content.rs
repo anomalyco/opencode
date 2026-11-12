@@ -216,9 +216,9 @@ fn filename_from_uri(uri: Option<&str>) -> Option<String> {
     (!base.is_empty()).then_some(base)
 }
 
-/// Node's `path.posix.basename`: the last segment, ignoring trailing slashes.
+/// Node's `path.basename`: the last segment, ignoring trailing separators.
 pub fn js_basename(path: &str) -> String {
-    path.trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_owned()
+    opencode_util::path::Flavor::NATIVE.basename(path).to_owned()
 }
 
 /// Node's `pathToFileURL(path).href`: resolved against the working directory.

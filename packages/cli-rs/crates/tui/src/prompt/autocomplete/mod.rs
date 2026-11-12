@@ -22,6 +22,7 @@ use opencode_local::storage::Storage;
 use opencode_store::location::{Catalog, Location};
 use opencode_ui::dialog::FocusId;
 use opencode_ui::fuzzy;
+use opencode_ui::path::Flavor;
 use opencode_ui::select::{move_wrap, truncate, truncate_middle};
 use opentui::input::{MouseButton, MouseEventKind};
 use std::cell::OnceCell;
@@ -569,7 +570,7 @@ impl State {
         let request_location = Some(LocationQueryInput { directory: Some(directory.clone()) });
         let query_for_results = search.to_owned();
         if mode == Mode::Directory {
-            let search = parse::directory_search(&base, &directory, &home);
+            let search = parse::directory_search(Flavor::NATIVE, &base, &directory, &home);
             let input = FileListInput { location: request_location, path: Some(search.directory.clone()) };
             tui.app.spawn(async move { client.file_list(&input).await }, move |_, result| {
                 finish(result.ok().map(|output| Results {
@@ -1126,7 +1127,7 @@ fn reference_items(tui: &Tui, location: &Location) -> Vec<Item> {
                         text: reference.name.clone(),
                         kind: Kind::File,
                         part: json!({
-                            "uri": parse::file_url(&reference.path.0),
+                            "uri": parse::file_url(Flavor::NATIVE, &reference.path.0),
                             "name": reference.name,
                         }),
                         visit: Some(reference.name.clone()),
@@ -1147,7 +1148,7 @@ fn file_item(
 ) -> Item {
     let is_directory = *kind == FileSystemEntryType::Directory;
     let range = range.filter(|_| !is_directory);
-    let mut uri = parse::file_url(&parse::resolve(root, path));
+    let mut uri = parse::file_url(Flavor::NATIVE, &parse::resolve(Flavor::NATIVE, root, path));
     let filename = match range {
         Some(range) => {
             uri.push_str(&format!("?start={}", range.start));
@@ -1191,10 +1192,10 @@ fn directory_items(
         .data
         .into_iter()
         .filter(|entry| entry.r#type == FileSystemEntryType::Directory)
-        .map(|entry| parse::resolve(&root, &entry.path.0))
-        .filter(|absolute| parse::directory_matches(parse::basename(absolute), &search.query))
+        .map(|entry| parse::resolve(Flavor::NATIVE, &root, &entry.path.0))
+        .filter(|absolute| parse::directory_matches(parse::basename(Flavor::NATIVE, absolute), &search.query))
         .map(|absolute| {
-            let value = parse::directory_value(&format!("{}/", parse::basename(&absolute)), search);
+            let value = parse::directory_value(&format!("{}/", parse::basename(Flavor::NATIVE, &absolute)), search);
             (value, absolute)
         });
     exact
@@ -1219,7 +1220,7 @@ fn recent_items(tui: &Tui, prompt: &Inner, width: usize) -> Vec<Item> {
         .recents(&project)
         .into_iter()
         .map(|directory| {
-            let value = parse::directory_recent_value(&directory, &home);
+            let value = parse::directory_recent_value(Flavor::NATIVE, &directory, &home);
             Item {
                 value: Some(value.clone()),
                 description: Some("recent".to_owned()),
@@ -1235,7 +1236,7 @@ fn recent_items(tui: &Tui, prompt: &Inner, width: usize) -> Vec<Item> {
 
 /// The user's home directory (`paths.home`).
 fn home() -> String {
-    std::env::var("HOME").unwrap_or_default()
+    opencode_local::paths::home()
 }
 
 #[cfg(test)]

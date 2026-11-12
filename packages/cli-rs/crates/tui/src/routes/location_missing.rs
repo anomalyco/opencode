@@ -86,7 +86,7 @@ fn dispose(tui: &Tui, layer: Option<Disposer>) {
 fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
     let app = &tui.app;
     let theme = tui.page();
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = opencode_local::paths::home();
     let shown = opencode_ui::select::truncate_middle(&opencode_ui::path::abbreviate_home(directory, &home), 72);
     let header = View::new(app)
         .row()
