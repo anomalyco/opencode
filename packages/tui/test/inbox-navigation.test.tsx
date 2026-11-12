@@ -69,25 +69,34 @@ test("section headers fold without stealing prompt arrows outside the section", 
     },
   })
   await app.ready
-  await app.waitForFrame((frame) => frame.includes("▾ Needs attention 2") && frame.includes("Answer question"))
+  await app.waitForFrame((frame) => frame.includes("▾ Needs attention 2") && frame.includes("[?] Decide"))
   const lines = app
     .captureCharFrame()
     .split("\n")
     .map((line) => line.slice(0, 32))
   const y = lines.findIndex((line) => line.includes("Needs attention"))
-  expect(lines[y + 1]).toMatch(/C.*! Review permission/)
-  expect(lines[y + 2]).toMatch(/Decide.*\? Answer question/)
+  expect(lines[y + 1]).toContain("[!] Check")
+  expect(lines[y + 2]).toContain("[?] Decide")
+  expect(lines.join("\n")).not.toMatch(/Review permission|Answer question/)
   const colors = app
     .captureSpans()
     .lines.slice(y + 1, y + 3)
-    .map((line) => line.spans.find((span) => /Review permission|Answer question/.test(span.text))?.fg.toInts())
+    .map((line) => line.spans.find((span) => /\[[!?]\]/.test(span.text))?.fg.toInts())
   expect(colors[0]).toBeDefined()
   expect(colors[1]).toBeDefined()
-  expect(colors[0]).toEqual(colors[1])
+  expect(colors[0]).not.toEqual(colors[1])
+  const titles = app
+    .captureSpans()
+    .lines.slice(y + 1, y + 3)
+    .map((line) => line.spans.find((span) => /Check|Decide/.test(span.text))?.fg.toInts())
+  expect(titles[0]).toBeDefined()
+  expect(titles[0]).toEqual(titles[1])
+  expect(titles[0]).not.toEqual(colors[0])
+  expect(titles[1]).not.toEqual(colors[1])
   await app.mockMouse.click(6, y)
-  await app.waitForFrame((frame) => frame.includes("▸ Needs attention 2") && !frame.includes("Answer question"))
+  await app.waitForFrame((frame) => frame.includes("▸ Needs attention 2") && !frame.includes("[?] Decide"))
   app.mockInput.pressArrow("right")
-  await app.waitForFrame((frame) => frame.includes("Review permission"))
+  await app.waitForFrame((frame) => frame.includes("[!] Check"))
   await app.mockMouse.moveTo(6, y + 1)
   app.mockInput.pressArrow("left")
   await app.waitForFrame((frame) => frame.includes("▸ Needs attention 2"))
@@ -98,6 +107,20 @@ test("section headers fold without stealing prompt arrows outside the section", 
   await app.mockInput.typeText("b")
   app.mockInput.pressArrow("right")
   await app.waitForFrame((frame) => frame.includes("abc") && frame.includes("▸ Needs attention 2"))
+
+  // The sidebar is collapsed: these results come from the picker, not the rail behind it.
+  app.mockInput.pressKey("p", { ctrl: true })
+  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+  await app.mockInput.typeText("Open inbox session")
+  app.mockInput.pressEnter()
+  await app.waitForFrame(
+    (frame) =>
+      frame.includes("[!] Check") &&
+      frame.includes("[?] Decide") &&
+      app.renderer.currentFocusedEditor instanceof InputRenderable,
+  )
+  await app.mockInput.typeText("Answer question")
+  await app.waitForFrame((frame) => frame.includes("[?] Decide") && !frame.includes("[!] Check"))
 })
 
 test("Focus Inbox traverses headers and sessions with the keyboard and releases focus", async () => {

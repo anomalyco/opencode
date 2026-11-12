@@ -5,9 +5,9 @@ export function inboxStatus(theme: Pick<ReturnType<typeof useTheme>, "text">, de
   const feedback = theme.text.feedback
   switch (detail) {
     case "Answer question":
-      return { label: `? ${detail}`, color: feedback.warning.base }
+      return { marker: "[?]", label: "", color: feedback.info.base }
     case "Review permission":
-      return { label: `! ${detail}`, color: feedback.warning.base }
+      return { marker: "[!]", label: "", color: feedback.warning.base }
     case "Working":
       return { label: detail, color: feedback.info.base }
     case "Failed":

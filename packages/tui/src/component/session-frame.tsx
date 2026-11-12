@@ -151,7 +151,7 @@ export function SessionFrame(props: { sessionID: string; leftPaneWidth: number }
   renderer.on(CliRenderEvents.FOCUSED_RENDERABLE, onFocused)
   onCleanup(() => renderer.off(CliRenderEvents.FOCUSED_RENDERABLE, onFocused))
   createEffect(() => {
-    if (fullscreen()) focusRightPane()
+    if (fullscreen() && !dialog.stack.length) focusRightPane()
   })
   createEffect(() => {
     if (rightPane() !== "terminal" && rightPane() !== "panel") setActivePane("session")

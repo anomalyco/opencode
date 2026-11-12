@@ -76,11 +76,9 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { InboxSidebar } from "./component/inbox-sidebar"
-import { DialogInbox, DialogInboxKey } from "./component/dialog-inbox"
 import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
-import { clampSessionTabsWidth, sessionInboxWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
+import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
 import { createPaneResize } from "./ui/pane-resize"
 import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { clickedLink } from "./ui/link"
@@ -165,7 +163,6 @@ const appBindingCommands = [
   "variant.list",
   "provider.connect",
   "opencode.settings",
-  "session.inbox.toggle",
   "opencode.status",
   "opencode.update",
   "server.pair",
@@ -621,14 +618,10 @@ function App() {
     panels.current()?.sessionID === route.data.sessionID &&
     panels.presentation() === "fullscreen"
   const tabsVisible = () => tabsAvailable() && !fullscreenPanel()
-  const overlayInbox = () => config.data.session.inbox_layout === "side-overlay"
-  const inboxWidth = () => {
-    if (overlayInbox() || !config.data.session.inbox || !plugins.ready() || route.data.type === "plugin") return 0
-    const width = sessionInboxWidth(dimensions().width)
-    return width && tabsAvailable() && tabsVertical() ? Math.max(width, tabsResize.size()) : width
-  }
-  const leftPaneWidth = () => inboxWidth() || (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)
-  const verticalTabsVisible = () => tabsVisible() && tabsVertical() && !inboxWidth()
+  const [railWidth, setRailWidth] = createSignal(0)
+  const tabWidth = () => (tabsAvailable() && tabsVertical() ? tabsResize.size() : 0)
+  const leftPaneWidth = () => railWidth() || tabWidth()
+  const verticalTabsVisible = () => tabsVisible() && tabsVertical() && !railWidth()
 
   // Measure the prospective split layout, even while full-screen hides the tabs.
   createEffect(() => panels.setWidth(dimensions().width - leftPaneWidth()))
@@ -734,17 +727,6 @@ function App() {
       .catch(toast.error)
   })
 
-  function openInbox() {
-    dialog.replace(() => <DialogInbox />, undefined, { key: DialogInboxKey, drawer: true })
-  }
-
-  let checkedInbox = false
-  createEffect(() => {
-    if (checkedInbox || !plugins.ready()) return
-    checkedInbox = true
-    if (overlayInbox() && config.data.session.inbox && !dialog.stack.length && route.data.type !== "plugin") openInbox()
-  })
-
   // Opens the release highlights once after an update, but only into an idle home screen during startup.
   const storage = useStorage()
   const paths = useTuiPaths()
@@ -779,20 +761,6 @@ function App() {
         palette: undefined,
         run: () => {
           dialog.replace(() => <CommandPaletteDialog />)
-        },
-      },
-      {
-        name: "session.inbox.toggle",
-        title: overlayInbox() ? "Open Inbox" : config.data.session.inbox ? "Hide Inbox sidebar" : "Show Inbox sidebar",
-        category: "Session",
-        run: () => {
-          if (overlayInbox()) return dialog.key === DialogInboxKey ? dialog.clear() : openInbox()
-          void config
-            .update((draft) => {
-              draft.session = { ...draft.session, inbox: !config.data.session.inbox }
-            })
-            .catch(toast.error)
-          dialog.clear()
         },
       },
       {
@@ -1465,11 +1433,15 @@ function App() {
         onMouseDragEnd={tabsResize.onMouseDragEnd}
         onMouseUp={tabsResize.onMouseUp}
       >
-        <Show when={inboxWidth() > 0 && !fullscreenPanel()}>
-          <box width={inboxWidth()} flexShrink={0}>
-            <InboxSidebar />
-          </box>
-        </Show>
+        <box
+          flexShrink={0}
+          flexDirection="row"
+          onSizeChange={function () {
+            setRailWidth(this.width)
+          }}
+        >
+          <Slot path="workspace.rail" input={{ tabWidth: tabWidth() }} />
+        </box>
         <Show when={verticalTabsVisible()}>
           <SessionTabs orientation="vertical" width={tabsResize.size()} />
         </Show>
@@ -1477,7 +1449,7 @@ function App() {
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
               <Show when={tabsVisible() && !tabsVertical()}>
-                <SessionTabs width={dimensions().width - inboxWidth()} />
+                <SessionTabs width={dimensions().width - railWidth()} />
               </Show>
               <Switch>
                 <Match when={route.data.type === "home"}>
@@ -1488,7 +1460,7 @@ function App() {
                     {(sessionID) => (
                       <SessionFrame
                         sessionID={sessionID}
-                        leftPaneWidth={fullscreenPanel() ? 0 : leftPaneWidth()}
+                        leftPaneWidth={fullscreenPanel() ? railWidth() : leftPaneWidth()}
                       />
                     )}
                   </Show>

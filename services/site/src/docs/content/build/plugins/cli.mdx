@@ -517,7 +517,7 @@ context.keymap.layer(() => ({
 
 ## Slots
 
-Slots insert or replace JSX at `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,
+Slots insert or replace JSX at `app`, `workspace.rail`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,
 `prompt.footer.file`, `session.composer.top`, `sidebar.content`, or `sidebar.footer`.
 
 ```tsx
@@ -536,6 +536,8 @@ context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot<
 context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
 context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
 ```
+
+`workspace.rail` is the left side of the full-screen workspace, across routes. The built-in `opencode.inbox` plugin uses it for its sidebar. The slot provides `tabWidth`, the width of the vertical tabs it can replace (zero when absent). Render nothing to leave the workspace unchanged.
 
 Use `home.footer.status` to add content to the built-in footer row without replacing it. Status contributions appear
 after OpenCode's health indicators and before the version.

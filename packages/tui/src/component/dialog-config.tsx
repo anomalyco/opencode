@@ -58,7 +58,7 @@ export const settings: Setting[] = [
   },
   {
     title: "Show Inbox on launch",
-    category: "Session",
+    category: "Inbox",
     path: ["session", "inbox"],
     description: "Start with the session Inbox open",
     default: false,
@@ -67,7 +67,7 @@ export const settings: Setting[] = [
   },
   {
     title: "Inbox layout",
-    category: "Session",
+    category: "Inbox",
     path: ["session", "inbox_layout"],
     description: "Dock the Inbox on the left or open it over the session without resizing the transcript",
     default: "sidebar",

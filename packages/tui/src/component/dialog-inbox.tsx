@@ -105,7 +105,6 @@ export function DialogInbox() {
   }
   Keymap.createLayer(() => ({
     mode: "modal",
-    bindings: ["session.inbox.toggle"],
     commands: [
       { id: "dialog.select.prev", run: () => move(-1) },
       { id: "dialog.select.next", run: () => move(1) },
@@ -212,41 +211,47 @@ export function DialogInbox() {
                       </text>
                     }
                   >
-                    {(row) => (
-                      <>
-                        <text
-                          marginLeft={2}
-                          minWidth={0}
-                          flexBasis={0}
-                          flexShrink={1}
-                          flexGrow={1}
-                          height={1}
-                          truncate
-                          wrapMode="none"
-                          fg={theme.text.base}
-                          attributes={tabs.current() === row().id ? TextAttributes.BOLD : undefined}
-                        >
-                          {row().title}
-                        </text>
-                        <Show when={row().detail}>
-                          <text flexShrink={0} wrapMode="none" fg={inboxStatus(theme, row().detail).color}>
-                            {inboxStatus(theme, row().detail).label}
-                          </text>
-                        </Show>
-                        <Show when={width() >= 84 || (query() && width() >= 64)}>
+                    {(row) => {
+                      const status = createMemo(() => inboxStatus(theme, row().detail))
+                      return (
+                        <>
                           <text
-                            width={Math.min(26, Math.floor(width() / 3))}
-                            flexShrink={0}
+                            marginLeft={2}
+                            minWidth={0}
+                            flexBasis={0}
+                            flexShrink={1}
+                            flexGrow={1}
                             height={1}
                             truncate
                             wrapMode="none"
-                            fg={theme.text.muted}
+                            fg={theme.text.base}
+                            attributes={tabs.current() === row().id ? TextAttributes.BOLD : undefined}
                           >
-                            Dir: {path.basename(row().directory) || row().directory}
+                            <Show when={status().marker}>
+                              {(marker) => <span style={{ fg: status().color }}>{marker() + " "}</span>}
+                            </Show>
+                            {row().title}
                           </text>
-                        </Show>
-                      </>
-                    )}
+                          <Show when={status().label}>
+                            <text flexShrink={0} wrapMode="none" fg={status().color}>
+                              {status().label}
+                            </text>
+                          </Show>
+                          <Show when={width() >= 84 || (query() && width() >= 64)}>
+                            <text
+                              width={Math.min(26, Math.floor(width() / 3))}
+                              flexShrink={0}
+                              height={1}
+                              truncate
+                              wrapMode="none"
+                              fg={theme.text.muted}
+                            >
+                              Dir: {path.basename(row().directory) || row().directory}
+                            </text>
+                          </Show>
+                        </>
+                      )
+                    }}
                   </Show>
                 </box>
               )

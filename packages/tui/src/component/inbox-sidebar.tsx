@@ -145,16 +145,25 @@ export function InboxSidebar() {
               sectionNavigation
               emptyView={<text fg={theme.text.muted}>{empty()}</text>}
               options={sections().flatMap((section) =>
-                section.rows.map((row) => ({
-                  title: row.title,
-                  value: row.id,
-                  category: section.title,
-                  footer: inboxStatus(theme.surface("dialog"), row.detail).label,
-                  footerColor: inboxStatus(theme.surface("dialog"), row.detail).color,
-                  truncateTitle: true,
-                  detail: `Location: ${row.directory}`,
-                  searchText: `${row.directory} ${row.detail}`,
-                })),
+                section.rows.map((row) => {
+                  const status = inboxStatus(theme.surface("dialog"), row.detail)
+                  return {
+                    title: row.title,
+                    titleView: status.marker ? (
+                      <span>
+                        <span style={{ fg: status.color }}>{status.marker}</span>
+                        {" " + row.title}
+                      </span>
+                    ) : undefined,
+                    value: row.id,
+                    category: section.title,
+                    footer: status.label,
+                    footerColor: status.color,
+                    truncateTitle: true,
+                    detail: `Location: ${row.directory}`,
+                    searchText: `${row.directory} ${row.detail}`,
+                  }
+                }),
               )}
               current={tabs.current()}
               onSelect={(option) => {
@@ -274,9 +283,12 @@ export function InboxSidebar() {
                             truncate
                           >
                             <span style={{ fg: theme.text.formfield.selected }}>{current() ? "▸ " : "  "}</span>
+                            <Show when={status().marker}>
+                              {(marker) => <span style={{ fg: status().color }}>{marker() + " "}</span>}
+                            </Show>
                             {row().title}
                           </text>
-                          <Show when={row().detail}>
+                          <Show when={status().label}>
                             <text flexShrink={0} marginLeft={1} fg={status().color} selectable={false} wrapMode="none">
                               {status().label}
                             </text>

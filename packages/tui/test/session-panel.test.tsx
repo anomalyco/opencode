@@ -60,6 +60,24 @@ test("/diff focuses the production session panel without sending typing to the p
   expect(setup.requests.prompt).toHaveLength(0)
 })
 
+test("a focused fullscreen panel shares the terminal with the global Inbox sidebar", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, { diffs: { fullscreen: true } })
+  await ready(setup)
+  setup.mockInput.pressKey("F6")
+  await panelReady(setup)
+  const panel = node(setup, "session-panel")
+  expect(panel.width).toBe(setup.renderer.width)
+  for (const show of [true, false]) {
+    setup.mockInput.pressKey("x", { ctrl: true })
+    setup.mockInput.pressKey("o")
+    await setup.waitFor(() => panel.width < setup.renderer.width === show)
+    const inbox = setup.renderer.root.findDescendantById("inbox-sidebar")
+    expect(panel.width + (inbox?.width ?? 0)).toBe(setup.renderer.width)
+    expect(setup.renderer.currentFocusedRenderable).toBe(panel)
+  }
+})
+
 test("repeated fullscreen toggles retain the viewer, transcript, scroll, and reviewed files", async () => {
   await using state = await tmpdir()
   await using setup = await createSessionFixture(state.path)

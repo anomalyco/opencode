@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { createAppFixture } from "./fixture/app"
 
-test("changing Inbox layout in Session settings switches the same shortcut from sidebar to drawer", async () => {
+test("changing Inbox layout in settings switches the same shortcut from sidebar to drawer", async () => {
   await using app = await createAppFixture({
     config: {
       animations: false,
