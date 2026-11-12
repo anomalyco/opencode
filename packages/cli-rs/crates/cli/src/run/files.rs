@@ -2,7 +2,7 @@
 //! file, type it, and send text inline in the prompt and anything else as a data URL.
 
 use std::io::Read;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
@@ -21,7 +21,7 @@ pub enum Prepared {
 
 /// Reads `input`, relative to `root`. The errors are the TS messages.
 pub fn prepare(input: &str, root: &Path) -> Result<Prepared, String> {
-    let file = std::path::PathBuf::from(resolve(Flavor::NATIVE, &root.to_string_lossy(), input));
+    let file = resolve(Flavor::NATIVE, root, input);
     let mut handle = std::fs::File::open(&file).map_err(|_| format!("File not found: {input}"))?;
     let metadata = handle.metadata().map_err(|_| format!("File not found: {input}"))?;
     if !metadata.is_file() || metadata.len() > ATTACH_FILE_MAX_BYTES {
@@ -52,9 +52,23 @@ fn classify(path: &str, name: String, bytes: Vec<u8>) -> Prepared {
     Prepared::Attachment { uri: format!("data:{mime};base64,{}", STANDARD.encode(&bytes)), name }
 }
 
-/// `path.resolve(root, input)`: absolute, with `.` and `..` resolved lexically.
-fn resolve(flavor: Flavor, root: &str, input: &str) -> String {
-    flavor.resolve(&[&flavor.sep().to_string(), root, input])
+/// `path.resolve(root, input)`: absolute, with `.` and `..` resolved lexically. POSIX folds `Path` components, so a
+/// directory name that is not UTF-8 keeps its bytes.
+fn resolve(flavor: Flavor, root: &Path, input: &str) -> PathBuf {
+    if flavor == Flavor::Windows {
+        return PathBuf::from(flavor.resolve(&["\\", &root.to_string_lossy(), input]));
+    }
+    let mut out = PathBuf::from("/");
+    for part in root.join(input).components() {
+        match part {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::Normal(part) => out.push(part),
+            _ => {}
+        }
+    }
+    out
 }
 
 /// `FSUtil.mimeType`: `mime-types`' `lookup`, else `application/octet-stream`.
@@ -129,14 +143,30 @@ mod tests {
         assert!(!is_binary(b"\t\r\n"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_non_utf8_directory_reads_its_own_file() {
+        use std::os::unix::ffi::OsStrExt;
+        // A lossy directory name would be the second one, which holds another `notes.txt`.
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let selected = dir.path().join(std::ffi::OsStr::from_bytes(b"sample-\xff"));
+        let other = dir.path().join("sample-\u{fffd}");
+        for (directory, text) in [(&selected, "selected"), (&other, "other")] {
+            std::fs::create_dir(directory).unwrap();
+            std::fs::write(directory.join("notes.txt"), text).unwrap();
+        }
+        let expected = Prepared::Text("<file name=\"notes.txt\">\nselected\n</file>".into());
+        assert_eq!(prepare("notes.txt", &selected), Ok(expected));
+    }
+
     #[test]
     fn paths_resolve_like_node() {
         let p = Flavor::Posix;
-        assert_eq!(resolve(p, "/w/x", "../a/./b.txt"), "/w/a/b.txt");
-        assert_eq!(resolve(p, "/w", "/abs/c"), "/abs/c");
+        assert_eq!(resolve(p, Path::new("/w/x"), "../a/./b.txt"), Path::new("/w/a/b.txt"));
+        assert_eq!(resolve(p, Path::new("/w"), "/abs/c"), Path::new("/abs/c"));
         let w = Flavor::Windows;
-        assert_eq!(resolve(w, "C:\\w\\x", "../a/./b.txt"), "C:\\w\\a\\b.txt");
-        assert_eq!(resolve(w, "C:\\w", "D:/abs\\c"), "D:\\abs\\c");
+        assert_eq!(resolve(w, Path::new("C:\\w\\x"), "../a/./b.txt"), Path::new("C:\\w\\a\\b.txt"));
+        assert_eq!(resolve(w, Path::new("C:\\w"), "D:/abs\\c"), Path::new("D:\\abs\\c"));
         assert_eq!(lookup(w, "C:\\a.b\\Makefile"), None);
         assert_eq!(lookup(w, "C:\\a\\b.png"), Some("image/png"));
     }
