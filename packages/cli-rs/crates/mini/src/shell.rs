@@ -53,6 +53,9 @@ pub fn run(input: Input) -> error::Result<()> {
     options.host.terminal.mouse = MouseTracking::Off;
     if settings.mono {
         options.host.terminal.kitty_keyboard = KittyKeyboard::OFF;
+    } else if cfg!(windows) {
+        // As `runtime.lifecycle.ts`: `{ events: platform === "win32" }`, the default flags plus event types.
+        options.host.terminal.kitty_keyboard = options.host.terminal.kitty_keyboard | KittyKeyboard::EVENT_TYPES;
     }
     let app = App::new(options)?;
     let footer = SplitFooter::of(app.session()).context("mini runs in a split footer")?;
