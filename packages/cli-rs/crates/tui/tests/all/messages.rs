@@ -7,7 +7,7 @@ use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 use std::sync::Arc;
 
 use opencode_api::generated::{SessionMessageInfo, V2Event};
-use opencode_local::cli_config::{Info, Session};
+use opencode_local::cli_config::{Info, Session, Verbosity};
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
@@ -23,6 +23,13 @@ fn fake(session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Fake {
             ("GET", p) if p == format!("{path}/message") => {
                 let page: Vec<_> = messages.iter().rev().cloned().collect();
                 (200, json!({ "data": page, "cursor": {} }))
+            }
+            ("GET", p) if p.starts_with(&format!("{path}/message/")) => {
+                let id = p.rsplit('/').next().unwrap_or_default();
+                match messages.iter().find(|message| message["id"] == id) {
+                    Some(message) => (200, json!({ "data": message })),
+                    None => support::not_found(),
+                }
             }
             ("GET", p) if p == format!("{path}/inbox") => (200, json!({ "data": inbox })),
             ("GET", p) if p == format!("{path}/permission") => (200, json!({ "data": [] })),
@@ -318,6 +325,37 @@ fn image_previews_show_three_and_count_the_rest() {
     let screen = h.wait_for("Look at these");
     assert!(!screen.contains("more"), "{screen}");
     assert!(screen.contains("file  a.png"), "{screen}");
+}
+
+// #63577: with previews off the store keeps no tool-result image bytes; turning previews on reads them back.
+#[test]
+fn tool_result_images_are_dropped_while_previews_are_off_and_restored_when_turned_on() {
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+    let uri = format!("data:image/png;base64,{png}");
+    let shot = |name: &str| json!({ "type": "file", "uri": uri, "mime": "image/png", "name": name });
+    let tool = json!({
+        "type": "tool", "id": "call_1", "name": "screenshot", "time": { "created": 2000, "ran": 2000 },
+        "state": { "status": "completed", "input": {}, "content": [shot("a.png"), shot("b.png"), shot("c.png"), shot("d.png")] },
+    });
+    let messages = vec![user("msg_1", 1000, "Take screenshots"), assistant("msg_2", 2000, json!([tool]))];
+    let verbose = Session { verbosity: Some(Verbosity::High), ..Session::default() };
+    let h = open(30, session(json!({})), messages, Vec::new(), Info { session: Some(verbose), ..Info::default() });
+    h.wait_for("Take screenshots");
+    let stored = || {
+        h.tui.data.read(|state| {
+            let message = serde_json::to_value(state.message(&opencode_api::generated::SessionID(ID.into()), "msg_2"));
+            message.unwrap()["content"][0]["state"]["content"][0]["uri"].as_str().unwrap_or_default().to_owned()
+        })
+    };
+    assert_eq!(stored(), "data:image/png;base64,");
+    assert!(!h.app.text().contains("more"), "{}", h.app.text());
+
+    opencode_tui::dialogs::settings::update(&h.tui, |draft| {
+        opencode_tui::dialogs::settings::set_path(draft, &["session", "image_preview"], json!(true))
+    });
+    let screen = h.wait_for("+1 more");
+    assert_eq!(stored(), uri);
+    assert!(!screen.contains("No preview"), "{screen}");
 }
 
 #[test]

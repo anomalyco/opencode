@@ -269,6 +269,52 @@ async fn omits_inline_tool_result_file_payloads_from_read_and_live_tool_results_
 }
 
 #[tokio::test]
+async fn follows_a_changed_omit_setting_and_restores_dropped_tool_files_from_the_server() {
+    let screenshot = format!("data:image/png;base64,{}", "A".repeat(64));
+    let shot = screenshot.clone();
+    let gets = Arc::new(AtomicUsize::new(0));
+    let count = gets.clone();
+    let data = data(
+        handler(move |req: Req| {
+            let screenshot = shot.clone();
+            let file = json!({ "type": "file", "uri": screenshot, "mime": "image/png" });
+            let message = |tools: Vec<Value>| {
+                json!({
+                    "id": "msg_assistant", "type": "assistant", "agent": "build",
+                    "model": { "providerID": "provider", "id": "model" }, "time": { "created": 1 },
+                    "content": tools,
+                })
+            };
+            let tool = |id: &str, state: Value| json!({ "type": "tool", "id": id, "name": "execute", "time": { "created": 1, "ran": 1 }, "state": state });
+            let done = |id: &str| tool(id, json!({ "status": "completed", "input": {}, "content": [file.clone()] }));
+            let reply = if req.path.ends_with("/message/msg_assistant") {
+                count.fetch_add(1, Ordering::SeqCst);
+                // The server read predates `call_live`'s live progress; only the dropped files come back.
+                let running = tool("call_live", json!({ "status": "running", "input": {}, "metadata": {} }));
+                json!({ "data": message(vec![done("call_read"), running]) })
+            } else {
+                json!({ "data": [message(vec![done("call_read"), done("call_live")])], "cursor": {} })
+            };
+            async move { ok(reply) }
+        }),
+        Options { omit_tool_file_data: true, ..Default::default() },
+    );
+    data.message_sync(&id(SESSION)).await.unwrap();
+    let dropped = json!([{ "type": "file", "uri": "data:image/png;base64,", "mime": "image/png" }]);
+    assert_eq!(message(&data, SESSION, "msg_assistant")["content"][0]["state"]["content"], dropped);
+
+    data.set_omit_tool_file_data(false);
+    data.restore_files();
+    let kept = json!([{ "type": "file", "uri": screenshot, "mime": "image/png" }]);
+    wait(|| message(&data, SESSION, "msg_assistant")["content"][0]["state"]["content"] == kept).await;
+    let row = message(&data, SESSION, "msg_assistant");
+    // The running copy from the server carries no content, so `call_live` stays as the store has it.
+    assert_eq!(row["content"][1]["state"]["status"], "completed");
+    assert_eq!(row["content"][1]["state"]["content"], dropped);
+    assert_eq!(gets.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn refreshes_a_loaded_sessions_execution_start_when_it_starts_running() {
     let data = data(
         handler(|req: Req| async move {
