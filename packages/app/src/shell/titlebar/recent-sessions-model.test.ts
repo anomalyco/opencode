@@ -13,6 +13,7 @@ import {
   partitionRecentSessions,
   recentSessionEndpoints,
   recentSessionKey,
+  recentRowUnread,
   removePin,
   reorderPins,
   sortRecentSessions,
@@ -37,6 +38,33 @@ const item = (server: string, value: SessionInfo): RecentSession => ({
   key: recentSessionKey(server, value.id),
   server,
   session: value,
+})
+
+test("hiding filters hydrated pins and recent rows only on their server", () => {
+  const pin = item("local", session("pinned", 1))
+  const recent = item("local", session("recent", 2))
+  const remote = item("remote", recent.session)
+
+  const input = {
+    items: [recent, remote],
+    pins: [pin.key],
+    endpoints: new Map<string, string>(),
+    open: new Set<string>(),
+    archived: () => false,
+    resolvePin: () => pin,
+  }
+
+  expect(partitionRecentSessions({ ...input, hidden: (server) => server === "local" })).toEqual({
+    pinned: [],
+    recent: [remote],
+  })
+  expect(partitionRecentSessions(input).pinned).toEqual([pin])
+})
+
+test("muting hides the unread dot until unmuted", () => {
+  expect(recentRowUnread(true, false, true)).toBe(false)
+  expect(recentRowUnread(true, false, false)).toBe(true)
+  expect(recentRowUnread(true, true, false)).toBe(false)
 })
 
 test("pin keys round trip server keys that contain the separator's neighbours", () => {
