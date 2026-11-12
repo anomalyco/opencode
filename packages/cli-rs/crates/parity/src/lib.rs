@@ -5,6 +5,10 @@
 //! `TestApp` at the same size and calls [`assert_fixture`], which panics with a readable list of the cells that
 //! differ.
 //!
+//! A fixture is JSON with the size and style table on its first line and then one line per screen row, the
+//! row's text and its style runs together (`["  ┃ text…",[[4,2],[5,1],[0,95]]]`); `parity/lib/cells.ts`
+//! documents the format, and [`Fixture::parse`] and [`Fixture::to_json`] read and write it.
+//!
 //! ```ignore
 //! let app = TestApp::new(60, 12);
 //! // build the widget...

@@ -1,13 +1,15 @@
-// The P-COMP cell fixture format, shared with crates/parity/src/fixture.rs. A fixture is JSON:
+// The P-COMP cell fixture format, shared with crates/parity/src/fixture.rs. A fixture is JSON with one
+// line per row:
 //
-//   { "width": 40, "height": 8,
-//     "rows": ["╭──…", ["a", "界", "", "b", …], …],
-//     "styles": ["#eeeeeeff #0a0a0aff 1", …],
-//     "runs": [[[0, 12], [3, 28]], …] }
+//   {"width":40,"height":8,"styles":["#eeeeeeff #0a0a0aff 1",…],"lines":[
+//   ["╭──…",[[0,12],[3,28]]],
+//   [["a","界","","b",…],[[1,40]]],
+//   …
+//   ]}
 //
-// `rows` holds one entry per row: a string when every cell holds exactly one code point, else an array
-// with one symbol per cell (the trailing cells of a wide grapheme are ""). `styles` lists each distinct
-// "fg bg attributes" once; `runs` holds per row the [style index, cell count] runs covering the row.
+// `styles` lists each distinct "fg bg attributes" once. Each entry of `lines` is one row: its text, then
+// the [style index, cell count] runs covering the row. The text is a string when every cell holds exactly
+// one code point, else an array with one symbol per cell (the trailing cells of a wide grapheme are "").
 // A color is `#rrggbbaa`, followed by `@<slot>` for a palette color or `@default` for the terminal
 // default; the RGBA part is the fallback snapshot native code keeps for those.
 import type { OptimizedBuffer } from "@opentui/core"
@@ -64,16 +66,11 @@ export function readCells(buffer: OptimizedBuffer): Fixture {
 }
 
 export async function writeFixture(path: string, fixture: Fixture) {
-  // One row per line keeps fixture diffs readable.
-  const rows = (key: "rows" | "runs") => fixture[key].map((row) => `    ${JSON.stringify(row)}`).join(",\n")
+  // One row per line, text and runs together, keeps fixture diffs readable.
   const text = [
-    "{",
-    `  "width": ${fixture.width},`,
-    `  "height": ${fixture.height},`,
-    `  "rows": [\n${rows("rows")}\n  ],`,
-    `  "styles": ${JSON.stringify(fixture.styles, null, 2).replace(/\n/g, "\n  ")},`,
-    `  "runs": [\n${rows("runs")}\n  ]`,
-    "}",
+    `{"width":${fixture.width},"height":${fixture.height},"styles":${JSON.stringify(fixture.styles)},"lines":[`,
+    fixture.rows.map((row, y) => JSON.stringify([row, fixture.runs[y]])).join(",\n"),
+    "]}",
     "",
   ].join("\n")
   await Bun.write(path, text)
