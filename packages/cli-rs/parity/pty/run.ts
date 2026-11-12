@@ -1,4 +1,4 @@
-// P-PTY (plan 7.1): runs one command with the TS CLI and with `opencode-rs` under a fixed-size
+// P-PTY (plan 7.1): runs one command with the TS CLI and with `opencode-native` under a fixed-size
 // pseudo-terminal, renders the output through OpenTUI's embedded terminal (which also answers the
 // program's terminal queries), and compares the OSC log, the screens at checkpoints, and the exit.
 //

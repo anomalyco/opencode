@@ -1,27 +1,28 @@
-# opencode-rs
+# OpenCode native CLI
 
-A Rust client for OpenCode, built on OpenTUI's Rust crates. It talks to an OpenCode server over HTTP and
-lives next to the TypeScript CLI in `packages/cli` and TUI in `packages/tui`; it does not replace them.
+The OpenCode CLI and TUI in Rust, built on OpenTUI's Rust crates. It talks to an OpenCode server over HTTP and
+lives next to the TypeScript CLI in `packages/cli` and TUI in `packages/tui`. Until it replaces them as
+`opencode`, its command is `opencode-native`.
 
 ## Try a preview build
 
-Nightly preview builds come from [`simonklee/cli-rs-preview`](https://github.com/simonklee/cli-rs-preview).
+Nightly preview builds come from [`simonklee/opencode-native-preview`](https://github.com/simonklee/opencode-native-preview).
 Install or update to the newest one with:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/simonklee/cli-rs-preview/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/simonklee/opencode-native-preview/main/install.sh | bash
 ```
 
-This puts `opencode-rs` in `~/.local/bin`. It needs the TypeScript `opencode` 2.2.7 or later on `PATH` (or
-`OPENCODE_TS_BIN` set to it): `opencode-rs` starts and uses its background service, and delegates `serve`,
-`upgrade`, `plugin` and remote access to it. `opencode-rs upgrade` in a preview build only tells you to re-run the
-install script.
+This installs `~/.local/bin/opencode-native`. It needs the TypeScript `opencode` 2.2.7 or later on `PATH` (or
+`OPENCODE_TS_BIN` set to it): `opencode-native` starts and uses its background service, and delegates `serve`,
+`upgrade`, `plugin` and remote access to it. `opencode-native upgrade` in a preview build only tells you to re-run
+the install script.
 
-`opencode-rs` uses your real sessions, service and `cli.json`. To keep its TUI state (tabs and other client-local
-state) apart from the TypeScript TUI's, set `OPENCODE_TUI_CHANNEL=rs-preview`.
+`opencode-native` uses your real sessions, service and `cli.json`. To keep its TUI state (tabs and other
+client-local state) apart from the TypeScript TUI's, set `OPENCODE_TUI_CHANNEL=native-preview`.
 
-To report a crash or bug, include the output of `opencode-rs --version` and the end of
-`~/.local/share/opencode/log/opencode.log` (`opencode-rs debug paths` prints the `log` directory). Each start logs
+To report a crash or bug, include the output of `opencode-native --version` and the end of
+`~/.local/share/opencode/log/opencode.log` (`opencode-native debug paths` prints the `log` directory). Each start logs
 a `cli starting` line with the version and the source commit of the build.
 
 ## Build
@@ -35,7 +36,7 @@ build:
 
 ```sh
 python3 /home/simon/src/opendocs/native-hardening/tools/abi-artifacts.py
-bun run --cwd packages/cli-rs cargo build --bin opencode-rs
+bun run --cwd packages/cli-rs cargo build --bin opencode-native
 ```
 
 On Linux and macOS the library is linked statically with its own private libc++, so neither the build nor the binary
@@ -63,16 +64,16 @@ Build the release binary once, then run it in a project directory. With no flags
 running background service, as `opencode` does, or starts one.
 
 ```sh
-bun run --cwd packages/cli-rs cargo build --release --bin opencode-rs
+bun run --cwd packages/cli-rs cargo build --release --bin opencode-native
 cd ~/src/my-project
-~/src/opencode/packages/cli-rs/target/release/opencode-rs        # home
-~/src/opencode/packages/cli-rs/target/release/opencode-rs -c     # continue the last session here
+~/src/opencode/packages/cli-rs/target/release/opencode-native        # home
+~/src/opencode/packages/cli-rs/target/release/opencode-native -c     # continue the last session here
 ```
 
-For a smaller, faster binary to ship or measure, build with `cargo build --profile dist --bin opencode-rs` (fat
+For a smaller, faster binary to ship or measure, build with `cargo build --profile dist --bin opencode-native` (fat
 LTO; the link takes about 10 minutes). The output is in `target/dist/`.
 
-`opencode-rs` reads the same `cli.json` (keybinds, theme, session settings) as the TypeScript TUI.
+`opencode-native` reads the same `cli.json` (keybinds, theme, session settings) as the TypeScript TUI.
 Main keys, with the default leader `ctrl+x`:
 
 | Key | Action |
@@ -104,14 +105,14 @@ Known gap: the release binary keeps line-table debug info (about 180 MB). `strip
 | `opencode-acp` | The ACP agent |
 | `opencode-drive` | The simulation UI endpoint |
 | `opencode-parity` | Parity fixtures and comparison (development only) |
-| `opencode-cli` | The `opencode-rs` binary |
+| `opencode-cli` | The `opencode-native` binary |
 
 `script/generate.ts` runs the generators in `script/gen`; `parity/fixtures.ts` regenerates the parity
 fixtures.
 
 ## Parity commands
 
-Each command runs the TypeScript client and `opencode-rs` on the same input and compares the results.
+Each command runs the TypeScript client and `opencode-native` on the same input and compares the results.
 Run them from this directory with `bun run <command>`. Each one builds the debug binary first, unless
 `OPENCODE_RS_BIN` names a binary.
 

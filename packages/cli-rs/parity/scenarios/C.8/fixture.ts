@@ -1,7 +1,7 @@
 // What the C.8 (`service`) and C.9 (`pair`) scenarios share. Both clients run in the sandbox as channel
 // `local`, the channel of the TS CLI from source: config and registration are `service-local.json` under the
 // sandbox's XDG roots. A registered service is the fake server, under this runner's pid, so discovery accepts
-// it; no scenario stops a registered service, which would signal the runner. `opencode-rs` gets a TS binary that
+// it; no scenario stops a registered service, which would signal the runner. `opencode-native` gets a TS binary that
 // does not exist, so it can never start a real service.
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"

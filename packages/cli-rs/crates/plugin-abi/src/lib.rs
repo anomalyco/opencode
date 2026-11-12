@@ -1,4 +1,4 @@
-//! The C ABI of native opencode-rs TUI plugins (P.4, `docs/P.4.md`, decision O-42).
+//! The C ABI of native TUI plugins for opencode-native (P.4, `docs/P.4.md`, decision O-42).
 //!
 //! A plugin is a shared library (`.so`, `.dylib`, `.dll`) that exports [`ENTRY`], a function returning a
 //! [`PluginApi`]. Everything after that crosses the boundary as JSON in byte buffers: the plugin's [`Manifest`],

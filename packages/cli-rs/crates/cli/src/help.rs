@@ -14,7 +14,7 @@ pub const VERSION: &str = match option_env!("OPENCODE_VERSION") {
 };
 
 /// The source commit CI stamps into a preview build; only the log shows it, so `--version` matches TypeScript.
-pub const COMMIT: &str = match option_env!("OPENCODE_RS_COMMIT") {
+pub const COMMIT: &str = match option_env!("OPENCODE_NATIVE_COMMIT") {
     Some(commit) => commit,
     None => "unknown",
 };
@@ -24,7 +24,7 @@ pub fn name() -> String {
     std::env::var("OPENCODE_CLI_NAME")
         .ok()
         .filter(|name| !name.is_empty())
-        .map_or_else(|| "opencode-rs".into(), |name| opencode_ui::terminal_text(&name).into_owned())
+        .map_or_else(|| "opencode-native".into(), |name| opencode_ui::terminal_text(&name).into_owned())
 }
 
 /// `TerminalCapabilities.canColor`: never for `TERM=dumb` or with `NO_COLOR`, always with `FORCE_COLOR`, else when
