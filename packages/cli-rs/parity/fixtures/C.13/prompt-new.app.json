@@ -28,7 +28,7 @@
   "writes": [
    {"method":"POST","path":"/api/session","query":{},"body":{"id":"ses_new","agent":"build","model":{"providerID":"demo","id":"model"},"location":{"directory":"/tmp/opencode/packages/tui"}},"status":200,"json":{"data":{"id":"ses_new","title":"","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1,"updated":1},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
    {"method":"POST","path":"/api/session/ses_new/model","query":{},"body":{"model":{"providerID":"demo","id":"model"}},"status":204},
-   {"method":"POST","path":"/api/session/ses_new/prompt","query":{},"body":{"id":"msg_1a86d2cb8001XIMo9oEpRLEyJQ","text":"hello","files":[],"agents":[],"delivery":"steer"},"status":200,"json":{"data":{"id":"msg_p","sessionID":"ses_new","time":{"created":3},"type":"user","payload":{"text":"hello"},"delivery":"steer"}}}
+   {"method":"POST","path":"/api/session/ses_new/prompt","query":{},"body":{"id":"<msg>","text":"hello","files":[],"agents":[],"delivery":"steer"},"status":200,"json":{"data":{"id":"msg_p","sessionID":"ses_new","time":{"created":3},"type":"user","payload":{"text":"hello"},"delivery":"steer"}}}
   ],
   "reads": [
    {"method":"GET","path":"/api/agent","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[{"id":"build","name":"build","mode":"primary","hidden":false,"permissions":[],"request":{"settings":{},"headers":{},"body":{}}}]}},

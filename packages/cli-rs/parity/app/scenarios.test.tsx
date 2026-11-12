@@ -142,7 +142,7 @@ async function record(name: string, file: string) {
     ...(pty ? { sockets: pty.recordings } : {}),
     ...(scenario.requests ? { deviation: scenario.requests.deviation } : {}),
     requests: {
-      writes: log.filter((entry) => !isRead(entry)),
+      writes: log.filter((entry) => !isRead(entry)).map((entry) => ({ ...entry, body: minted(entry.body) })),
       reads: dedupe(log.filter(isRead)),
     },
   }
@@ -323,6 +323,16 @@ function parse(text: string): unknown {
   } catch {
     return text
   }
+}
+
+// Every ID the client mints, such as `msg_1a849dc25001uU3OEwVPj4ND1G`, as `<msg>`, so a re-record does not
+// change; the same rule `minted` in crates/parity/src/app.rs applies to the writes.
+function minted(value: unknown): unknown {
+  if (typeof value === "string") return value.replace(/^([a-z]+)_[A-Za-z0-9]{20,}$/, "<$1>")
+  if (Array.isArray(value)) return value.map(minted)
+  if (value && typeof value === "object")
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, minted(item)]))
+  return value
 }
 
 // A GET, or a plugin RPC named `get` (the goal footer posts one); the same rule as `is_read` in
