@@ -4,6 +4,7 @@
 
 use opencode_api::js::locale_compare;
 use opencode_ui::fuzzy;
+use opencode_ui::path::Flavor;
 use opencode_ui::prompt_input::parse::{self, LineRange};
 use unicode_width::UnicodeWidthStr;
 
@@ -143,7 +144,7 @@ pub fn references(catalog: &Catalog) -> Vec<Choice> {
             value: reference.name.clone(),
             description: Some(reference.description.clone()),
             part: Part::File(File {
-                url: parse::file_url(&reference.path),
+                url: parse::file_url(Flavor::NATIVE, &reference.path),
                 mime: Some("application/x-directory".into()),
                 filename: Some(reference.name.clone()),
                 ..File::default()
@@ -160,7 +161,7 @@ pub fn files(results: &[String], range: Option<LineRange>, directory: &str, widt
         .iter()
         .map(|item| {
             let is_directory = item.ends_with('/');
-            let mut url = parse::file_url(&parse::resolve(directory, item));
+            let mut url = parse::file_url(Flavor::NATIVE, &parse::resolve(Flavor::NATIVE, directory, item));
             let mut filename = item.clone();
             if let Some(range) = range.filter(|_| !is_directory) {
                 filename = match range.end {

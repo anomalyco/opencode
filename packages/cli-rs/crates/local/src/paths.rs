@@ -8,6 +8,8 @@ use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use opencode_util::path::Flavor;
+
 /// The application directory name under each XDG root.
 pub const APP: &str = "opencode";
 
@@ -37,7 +39,7 @@ impl Paths {
     /// registration stay where other clients look for them.
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> io::Result<Self> {
         let set = |name: &str| var(name).filter(|value| !value.is_empty()).map(PathBuf::from);
-        let home = set("HOME").or_else(|| set("USERPROFILE")).ok_or_else(|| {
+        let home = home_dir(Flavor::NATIVE, &var).ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, "cannot find the home directory: HOME is not set")
         })?;
         let root = |name: &str, fallback: &[&str]| {
@@ -53,7 +55,7 @@ impl Paths {
             bin: cache.join("bin"),
             log: data.join("log"),
             repos: data.join("repos"),
-            tmp: tmpdir(&var).join(APP),
+            tmp: tmpdir(Flavor::NATIVE, &var).join(APP),
             data,
             cache,
             config,
@@ -67,10 +69,36 @@ impl Paths {
     }
 }
 
-// Node's `os.tmpdir()` on POSIX: TMPDIR, TMP, TEMP, else /tmp, without a trailing slash.
-fn tmpdir(var: &impl Fn(&str) -> Option<OsString>) -> PathBuf {
-    if cfg!(windows) {
-        return std::env::temp_dir();
+/// The user's home directory, `os.homedir()`: `USERPROFILE`, then `HOME` on Windows, the reverse elsewhere. Empty
+/// values count as unset. Empty when neither is set.
+pub fn home() -> String {
+    home_dir(Flavor::NATIVE, &|name| std::env::var_os(name))
+        .map(|home| home.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+// Git Bash and MSYS set `HOME` on Windows, sometimes to another directory; libuv reads `USERPROFILE` first there.
+fn home_dir(flavor: Flavor, var: &impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
+    let order = match flavor {
+        Flavor::Posix => ["HOME", "USERPROFILE"],
+        Flavor::Windows => ["USERPROFILE", "HOME"],
+    };
+    order.iter().find_map(|name| var(name).filter(|value| !value.is_empty())).map(PathBuf::from)
+}
+
+// Node's `os.tmpdir()`. POSIX: TMPDIR, TMP, TEMP, else /tmp, without a trailing slash. Windows: TEMP, TMP, else
+// `%SystemRoot%\temp` or `%windir%\temp`, without one trailing `\` unless the path is a drive root.
+fn tmpdir(flavor: Flavor, var: &impl Fn(&str) -> Option<OsString>) -> PathBuf {
+    let set =
+        |name: &&str| var(name).filter(|value| !value.is_empty()).map(|value| value.to_string_lossy().into_owned());
+    if flavor == Flavor::Windows {
+        let value = ["TEMP", "TMP"].iter().find_map(set).unwrap_or_else(|| {
+            // Node appends to `undefined` when both are unset; Windows always sets `SystemRoot`.
+            let system = ["SystemRoot", "windir"].iter().find_map(set).unwrap_or_else(|| "C:\\Windows".to_owned());
+            format!("{system}\\temp")
+        });
+        let trim = value.len() > 1 && value.ends_with('\\') && !value.ends_with(":\\");
+        return PathBuf::from(if trim { &value[..value.len() - 1] } else { &value });
     }
     let value = ["TMPDIR", "TMP", "TEMP"]
         .iter()
@@ -142,6 +170,31 @@ mod tests {
         assert_eq!(p.state, PathBuf::from("/h/.local/state/opencode"));
         assert_eq!(p.home, PathBuf::from("/t"));
         assert_eq!(p.tmp, PathBuf::from("/var/tmp/opencode"));
+    }
+
+    #[test]
+    fn home_and_tmpdir_follow_node_per_platform() {
+        let lookup = |vars: &'static [(&'static str, &'static str)]| {
+            move |name: &str| vars.iter().find(|(key, _)| *key == name).map(|(_, value)| OsString::from(value))
+        };
+        let both = lookup(&[("HOME", "/c/Users/git-bash"), ("USERPROFILE", "C:\\Users\\u")]);
+        assert_eq!(home_dir(Flavor::Windows, &both), Some(PathBuf::from("C:\\Users\\u")));
+        assert_eq!(home_dir(Flavor::Posix, &both), Some(PathBuf::from("/c/Users/git-bash")));
+        let empty = lookup(&[("USERPROFILE", ""), ("HOME", "/h")]);
+        assert_eq!(home_dir(Flavor::Windows, &empty), Some(PathBuf::from("/h")));
+        assert_eq!(home_dir(Flavor::Windows, &lookup(&[])), None);
+        for (vars, expected) in [
+            (&[("TMP", "C:\\tmp"), ("TEMP", "C:\\Temp\\")][..], "C:\\Temp"),
+            (&[("TMP", "C:\\tmp\\"), ("TMPDIR", "/tmp")][..], "C:\\tmp"),
+            (&[("TEMP", "D:\\")][..], "D:\\"),
+            (&[("TEMP", "\\")][..], "\\"),
+            (&[("SystemRoot", "C:\\Windows"), ("windir", "C:\\W")][..], "C:\\Windows\\temp"),
+            (&[("windir", "C:\\W")][..], "C:\\W\\temp"),
+        ] {
+            assert_eq!(tmpdir(Flavor::Windows, &lookup(vars)), PathBuf::from(expected), "{vars:?}");
+        }
+        assert_eq!(tmpdir(Flavor::Posix, &lookup(&[("TEMP", "C:\\Temp")])), PathBuf::from("C:\\Temp"));
+        assert_eq!(tmpdir(Flavor::Posix, &lookup(&[])), PathBuf::from("/tmp"));
     }
 
     #[test]

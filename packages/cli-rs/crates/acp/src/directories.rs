@@ -7,7 +7,8 @@ use serde_json::{Value, json};
 
 use crate::client::check;
 use crate::error::Failure;
-use crate::paths::{fs_resolve, is_absolute, resolve_lexical};
+use crate::paths::{fs_resolve, is_absolute, resolve_lexical, windows_path};
+use opencode_util::path::Flavor;
 
 const KEY: &str = "opencode.acp.additionalDirectories";
 
@@ -21,7 +22,7 @@ pub fn parse(cwd: &str, directories: &[String]) -> Result<Vec<String>, Failure> 
     }
     let root = fs_resolve(cwd);
     let mut unique: Vec<String> = Vec::new();
-    for directory in directories.iter().map(|directory| resolve_lexical(directory)) {
+    for directory in directories.iter().map(|directory| resolve_lexical(&windows_path(Flavor::NATIVE, directory))) {
         if !unique.contains(&directory) {
             unique.push(directory);
         }
@@ -98,7 +99,8 @@ fn rules(directories: &[String]) -> Vec<PermissionRule> {
         .into_iter()
         .map(|directory| PermissionRule {
             action: "external_directory".to_owned(),
-            resource: format!("{}/*", directory.trim_end_matches('/')),
+            // `join(directory, "*")`.
+            resource: format!("{}{}*", directory.trim_end_matches(|c| Flavor::NATIVE.is_sep(c)), Flavor::NATIVE.sep()),
             effect: PermissionEffect::Allow,
         })
         .collect()
