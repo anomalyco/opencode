@@ -1,3 +1,4 @@
+import { ArkPlugin } from "./provider/ark.js"
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock.js"
 import { AzurePlugin } from "./provider/azure.js"
 import { CerebrasPlugin } from "./provider/cerebras.js"
@@ -31,6 +32,7 @@ import { ZenmuxPlugin } from "./provider/zenmux.js"
 import type { PluginInternal } from "./internal.js"
 
 export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
+  ArkPlugin,
   AmazonBedrockPlugin,
   AzurePlugin,
   CerebrasPlugin,

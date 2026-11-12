@@ -92,6 +92,7 @@ export const iconNames = [
   "claude-agent",
   "chutes",
   "cerebras",
+  "byteplus",
   "berget",
   "baseten",
   "bailing",

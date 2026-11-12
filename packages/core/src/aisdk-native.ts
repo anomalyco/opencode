@@ -147,6 +147,13 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "alibaba-token-plan": protocols("alibaba"),
   "alibaba-token-plan-cn": protocols("alibaba"),
   baseten: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/baseten" },
+  // Volcengine Ark API — three provider IDs share the same Ark Chat protocol
+  // package. The model catalog (models.dev / local.txt) sets per-model base
+  // URLs so BytePlus overseas traffic goes to ark.ap-southeast.bytepluses.com
+  // while mainland traffic goes to ark.cn-beijing.volces.com.
+  byteplus: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/ark" },
+  volcengine: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/ark" },
+  "volcengine-coding-plan": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/ark" },
   "cloudflare-ai-gateway": {
     "@ai-sdk/anthropic": "@opencode/ai/providers/cloudflare-ai-gateway",
     "@ai-sdk/openai": "@opencode/ai/providers/cloudflare-ai-gateway",

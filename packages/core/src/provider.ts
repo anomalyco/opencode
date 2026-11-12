@@ -59,6 +59,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/azure/messages", () => import("@opencode/ai/providers/azure/messages")],
   ["@opencode/ai/providers/baseten", () => import("@opencode/ai/providers/baseten")],
   ["@opencode/ai/providers/baseten/decisions", () => import("@opencode/ai/providers/baseten/decisions")],
+  ["@opencode/ai/providers/ark", () => import("@opencode/ai/providers/ark")],
   ["@opencode/ai/providers/cerebras", () => import("@opencode/ai/providers/cerebras")],
   ["@opencode/ai/providers/cloudflare-ai-gateway", () => import("@opencode/ai/providers/cloudflare-ai-gateway")],
   [
