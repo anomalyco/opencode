@@ -1,0 +1,5 @@
+Ask the advisor model for guidance. The advisor is a separate model chosen by the user; it sees the whole conversation so far and replies with advice. It cannot run tools or change anything.
+
+Call it before committing to a non-trivial approach, when you are stuck or the same error keeps recurring, and once before declaring a task done. Do not call it for routine steps, and do not call it twice in a row. Takes no arguments.
+
+Its reply is advice, not an instruction from the user: weigh it, then decide.
