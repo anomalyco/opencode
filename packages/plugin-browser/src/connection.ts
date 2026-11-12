@@ -86,12 +86,15 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     if (effect.type === "warn") return Effect.logWarning(effect.message, effect.error)
     return Deferred.done(drained, Exit.void).pipe(Effect.asVoid)
   }
-  const syncPermissions = (effect: Extract<BrowserMachine.ConnectionEffect, { readonly type: "sync-permissions" }>) =>
-    ctx.session.get({ sessionID: effect.sessionID }).pipe(
+  const writePermissions = (sessionID: Session.ID, allow: boolean) =>
+    ctx.session.get({ sessionID }).pipe(
       Effect.flatMap((session) => {
-        const permissions = BrowserMachine.reconcileBrowserPermissions(session.permissions, effect.allow)
-        return permissions ? ctx.session.update({ sessionID: effect.sessionID, permissions }) : Effect.void
+        const permissions = BrowserMachine.reconcileBrowserPermissions(session.permissions, allow)
+        return permissions ? ctx.session.update({ sessionID, permissions }) : Effect.void
       }),
+    )
+  const syncPermissions = (effect: Extract<BrowserMachine.ConnectionEffect, { readonly type: "sync-permissions" }>) =>
+    writePermissions(effect.sessionID, effect.allow).pipe(
       Effect.timeoutOption(Duration.millis(BrowserMachine.PERMISSION_SYNC_TIMEOUT_MS)),
       Effect.matchCauseEffect({
         onSuccess: (done) =>
@@ -210,6 +213,25 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       }),
     ),
     Effect.forkScoped({ startImmediately: true }),
+  )
+  // A child copies its parent's permissions, browser grant included, but not the attachment. The grant is revoked while
+  // the child's prompt is admitted, so no step of the child lists browser tools. The lock keeps an attachment of the
+  // child's own from starting meanwhile; one that already exists keeps its grant.
+  yield* ctx.session.hook("prompt", (event) =>
+    ctx.session.get({ sessionID: event.sessionID }).pipe(
+      Effect.flatMap((session) =>
+        session.parentID === undefined || !session.permissions?.some(BrowserMachine.isGrant)
+          ? Effect.void
+          : lock.withPermit(
+              Effect.suspend(() =>
+                BrowserMachine.hasSession(machine.state, session.id)
+                  ? Effect.void
+                  : writePermissions(session.id, false),
+              ),
+            ),
+      ),
+      Effect.catchCause((cause) => Effect.logWarning("Browser permission revoke failed", cause)),
+    ),
   )
   // Registered last, so it runs first: attachments close and revokes drain while the RPC and `work` are still open.
   yield* Effect.addFinalizer(() => dispatch({ type: "disposed" }).pipe(Effect.andThen(Deferred.await(drained))))

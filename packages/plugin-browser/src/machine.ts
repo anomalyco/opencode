@@ -591,6 +591,11 @@ export function isConnectionDisposed(state: ConnectionState) {
   return state.status === "disposed"
 }
 
+/** Whether the session has an attachment or a permission sync in flight, either of which owns its browser rules. */
+export function hasSession(state: ConnectionState, sessionID: Session.ID) {
+  return state.sessions.has(sessionID)
+}
+
 /** The attempt the next `attach` gets; the driver keys its handle by it before dispatching `attach.started`. */
 export function selectNextAttempt(state: ConnectionState) {
   return state.nextAttempt

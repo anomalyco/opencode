@@ -33,8 +33,8 @@ const grant = [
   { action: "skill", resource: "browser", effect: "allow" },
 ] as const
 
-// A location with `config` as its opencode.json and one session, plus a stand-in desktop that attaches to a session
-// and answers every browser command with an empty tab list.
+// A location with `config` as its opencode.json and one session, plus a stand-in desktop that attaches to that
+// session and answers every browser command with an empty tab list.
 const setup = (config: object) =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
@@ -46,26 +46,32 @@ const setup = (config: object) =>
     const sessions = yield* Session.Service
     const session = yield* sessions.create({ location: ref })
     const rpc = Context.get(context, Rpc.Service).client(Browser.Definition)
-    const connectionID = crypto.randomUUID()
-    const attached = Deferred.makeUnsafe<void>()
+    const attachments = new Map<string, { sessionID: Session.ID; attached: Deferred.Deferred<void> }>()
     const commands = { count: 0 }
     yield* rpc.events.subscribe("control").pipe(
       Stream.runForEach((event) => {
-        if (event.data.type === "attached" && event.data.connectionID === connectionID)
-          return Deferred.succeed(attached, undefined)
-        if (event.data.type !== "command" || event.data.connectionID !== connectionID) return Effect.void
+        const attachment = attachments.get(event.data.connectionID)
+        if (!attachment) return Effect.void
+        if (event.data.type === "attached") return Deferred.succeed(attachment.attached, undefined)
+        if (event.data.type !== "command") return Effect.void
         commands.count++
         return rpc.result({
-          sessionID: session.id,
-          connectionID,
+          sessionID: attachment.sessionID,
+          connectionID: event.data.connectionID,
           requestID: event.data.requestID,
           outcome: { type: "success", result: { value: { tabs: [], focusedTabID: null }, files: [] } },
         })
       }),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* rpc.attach({ sessionID: session.id, connectionID, version: 4 }).pipe(Effect.forkScoped)
-    yield* Deferred.await(attached).pipe(Effect.timeout("10 seconds"))
+    const attach = Effect.fnUntraced(function* (sessionID: Session.ID) {
+      const connectionID = crypto.randomUUID()
+      const attached = Deferred.makeUnsafe<void>()
+      attachments.set(connectionID, { sessionID, attached })
+      yield* rpc.attach({ sessionID, connectionID, version: 4 }).pipe(Effect.forkScoped)
+      yield* Deferred.await(attached).pipe(Effect.timeout("10 seconds"))
+    })
+    yield* attach(session.id)
     const list = (yield* Context.get(context, Tool.Service).list()).find(
       (tool) => tool.name === "list" && tool.options?.namespace === "browser.tabs",
     )
@@ -73,13 +79,14 @@ const setup = (config: object) =>
     return {
       session,
       commands,
-      permissions: Effect.map(sessions.get(session.id), (info) => info.permissions ?? []),
+      attach,
+      permissions: (sessionID = session.id) => Effect.map(sessions.get(sessionID), (info) => info.permissions ?? []),
       // Runs browser.tabs.list as `agent` would, through the plugin's executor and the real permission service.
-      call: (agent = "build") =>
+      call: (agent = "build", sessionID = session.id) =>
         list.execute(
           {},
           {
-            sessionID: session.id,
+            sessionID,
             agent: Agent.ID.make(agent),
             messageID: SessionMessage.ID.create(),
             id: Tool.CallID.make(`call_${crypto.randomUUID()}`),
@@ -92,7 +99,7 @@ const setup = (config: object) =>
 it.live("without a deny, an attached session's browser calls run with no prompt", () =>
   Effect.gen(function* () {
     const browser = yield* setup({})
-    expect(yield* browser.permissions).toEqual([...grant])
+    expect(yield* browser.permissions()).toEqual([...grant])
     expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
     expect(browser.commands.count).toBe(1)
   }),
@@ -102,7 +109,7 @@ it.live("a browser deny in config refuses browser calls after the desktop attach
   Effect.gen(function* () {
     const browser = yield* setup({ permissions: [{ action: "browser", resource: "*", effect: "deny" }] })
     // The attachment still writes its grant; the configured deny must win over it.
-    expect(yield* browser.permissions).toEqual([...grant])
+    expect(yield* browser.permissions()).toEqual([...grant])
     expect((yield* browser.call().pipe(Effect.flip)).message).toStartWith("[browser.denied]")
     expect(browser.commands.count).toBe(0)
   }),
@@ -131,6 +138,39 @@ it.live("a tool.use policy refuses browser calls after the desktop attaches", ()
   Effect.gen(function* () {
     const browser = yield* setup({ policies: [{ action: "tool.use", resource: "browser:*", effect: "deny" }] })
     expect((yield* browser.call().pipe(Effect.flip)).message).toBe("Blocked by configuration policy")
+    expect(browser.commands.count).toBe(0)
+  }),
+)
+
+it.live("a subagent's session loses the inherited grant before its first prompt is admitted", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({})
+    const sessions = yield* Session.Service
+    const child = yield* sessions.create({ parentID: browser.session.id, agent: Agent.ID.make("general") })
+    expect(yield* browser.permissions(child.id)).toEqual([...grant])
+
+    yield* sessions.prompt({ sessionID: child.id, text: "Take a screenshot", resume: false })
+    expect(yield* browser.permissions(child.id)).toEqual([])
+    expect(yield* browser.permissions()).toEqual([...grant])
+    expect((yield* browser.call("general", child.id).pipe(Effect.flip)).message).toStartWith("[browser.disconnected]")
+    expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
+  }),
+)
+
+it.live("a subagent whose agent denies the browser stays denied, even with a browser attached to it", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup({
+      agents: { reviewer: { mode: "subagent", permissions: [{ action: "browser", resource: "*", effect: "deny" }] } },
+    })
+    const sessions = yield* Session.Service
+    const child = yield* sessions.create({ parentID: browser.session.id, agent: Agent.ID.make("reviewer") })
+    yield* sessions.prompt({ sessionID: child.id, text: "Review the page", resume: false })
+    // Viewing the child in the desktop attaches it, which grants it the browser again.
+    yield* browser.attach(child.id)
+    // The child's own attachment owns that grant, so a later prompt keeps it.
+    yield* sessions.prompt({ sessionID: child.id, text: "Check again", resume: false })
+    expect(yield* browser.permissions(child.id)).toEqual([...grant])
+    expect((yield* browser.call("reviewer", child.id).pipe(Effect.flip)).message).toStartWith("[browser.denied]")
     expect(browser.commands.count).toBe(0)
   }),
 )
