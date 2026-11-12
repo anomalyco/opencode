@@ -1,4 +1,5 @@
 import { Plugin } from "@opencode/plugin/tui"
+import type { BoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, onCleanup, Show } from "solid-js"
 import { DialogInbox, DialogInboxKey } from "../../component/dialog-inbox"
@@ -6,7 +7,9 @@ import { InboxSidebar } from "../../component/inbox-sidebar"
 import { useConfig } from "../../config"
 import { usePlugin } from "../../plugin/context"
 import { useDialog } from "../../ui/dialog"
-import { sessionInboxWidth } from "../../ui/layout"
+import { INBOX_SIDEBAR_WIDTH, sessionInboxWidth } from "../../ui/layout"
+import { createPaneResize } from "../../ui/pane-resize"
+import { PaneResizeHandle } from "../../ui/pane-resize-handle"
 import { useToast } from "../../ui/toast"
 
 export default Plugin.define({
@@ -14,13 +17,32 @@ export default Plugin.define({
   setup(context) {
     context.ui.slot({
       append: "workspace.rail",
-      render(input) {
+      render() {
         const config = useConfig()
         const dialog = useDialog()
         const toast = useToast()
         const plugins = usePlugin()
         const dimensions = useTerminalDimensions()
-        const sidebar = () => sessionInboxWidth(dimensions().width)
+        const [layout, updateLayout] = context.storage.store<{ inboxWidth?: number }>("layout", {
+          initial: { inboxWidth: INBOX_SIDEBAR_WIDTH },
+        })
+        let rail: BoxRenderable | undefined
+        const resize = createPaneResize({
+          value: () => layout.inboxWidth ?? INBOX_SIDEBAR_WIDTH,
+          defaultValue: () => INBOX_SIDEBAR_WIDTH,
+          clamp: (width) => sessionInboxWidth(dimensions().width, width),
+          fromMouse: (event) => event.x - (rail?.screenX ?? 0) + 1,
+          contains: (event, width) => {
+            const x = event.x - (rail?.screenX ?? 0)
+            return x >= width - 1 && x <= width
+          },
+          onCommit: (width) => {
+            void updateLayout((draft) => {
+              draft.inboxWidth = width
+            }).catch(toast.error)
+          },
+        })
+        const sidebar = resize.size
         const drawer = () => config.data.session.inbox_layout === "side-overlay" || sidebar() === 0
         const open = () => dialog.replace(() => <DialogInbox />, undefined, { key: DialogInboxKey, drawer: true })
 
@@ -56,8 +78,17 @@ export default Plugin.define({
         })
         return (
           <Show when={config.data.session.inbox && !drawer()}>
-            <box width={Math.max(input.tabWidth, sidebar())} flexShrink={0}>
+            <box
+              ref={(node) => (rail = node)}
+              width={sidebar()}
+              flexShrink={0}
+              position="relative"
+              onMouseDrag={resize.onMouseDrag}
+              onMouseDragEnd={resize.onMouseDragEnd}
+              onMouseUp={resize.onMouseUp}
+            >
               <InboxSidebar />
+              <PaneResizeHandle resize={resize} left={sidebar() - 1} />
             </box>
           </Show>
         )
