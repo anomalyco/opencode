@@ -54,9 +54,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
         TuiCommand::new(
             id,
             bind!(inner, |inner, _, _| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 run(&inner, &tui);
             }),
         )
@@ -128,9 +126,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
     for index in window(&entries, offset) {
         let hover = {
             bind!(inner, |inner| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 if std::mem::replace(&mut inner.shell.borrow_mut().selected, index) != index {
                     inner.redraw_later(&tui);
                 }
@@ -138,9 +134,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
         };
         let click = {
             bind!(inner, |inner| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 inner.shell.borrow_mut().selected = index;
                 tui.app.defer(bind!(inner, |inner, _| {
                     if let Some(tui) = inner.tui.upgrade() {

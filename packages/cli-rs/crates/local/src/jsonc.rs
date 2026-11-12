@@ -819,9 +819,7 @@ pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<Str
         break;
     }
     let Some(parent) = parent else {
-        let Some(value) = value else {
-            return Err(EditError::DeleteInEmpty);
-        };
+        let Some(value) = value else { return Err(EditError::DeleteInEmpty) };
         let (offset, length) = root.map_or((0, 0), |r| (tree.node(r).offset, tree.node(r).length));
         return Ok(with_formatting(text, offset, length, &stringify(&value)));
     };

@@ -312,15 +312,11 @@ impl ServiceConfig {
         {
             let _ = write_new_private(&self.file, &text);
         }
-        let Ok(text) = fs::read_to_string(&self.file) else {
-            return Ok(Info::default());
-        };
+        let Ok(text) = fs::read_to_string(&self.file) else { return Ok(Info::default()) };
         if let Some(info) = Info::parse(&text) {
             return Ok(info);
         }
-        let Some((enabled, rest)) = parse_legacy(&text) else {
-            return Ok(Info::default());
-        };
+        let Some((enabled, rest)) = parse_legacy(&text) else { return Ok(Info::default()) };
         let mut map = rest.to_map();
         if enabled {
             map.insert("remote".into(), serde_json::json!({ "route": route() }));
@@ -456,9 +452,7 @@ impl ServiceConfig {
             }),
             Edit::UnsetEnv(name) => self.update(|map| {
                 // TypeScript rebuilds the object, so a remaining `env` moves to the end.
-                let Some(Value::Object(mut env)) = map.shift_remove("env") else {
-                    return;
-                };
+                let Some(Value::Object(mut env)) = map.shift_remove("env") else { return };
                 env.shift_remove(name);
                 if !env.is_empty() {
                     map.insert("env".into(), Value::Object(env));

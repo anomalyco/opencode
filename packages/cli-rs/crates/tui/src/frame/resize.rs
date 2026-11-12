@@ -135,9 +135,7 @@ pub fn handle(app: &App, tui: Weak<Tui>, resize: Rc<PaneResize>, right: bool) ->
 
 impl Component for Handle {
     fn paint(&self, painter: &mut Painter<'_>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         if self.hovered.get() || self.resize.resizing() {
             let color = tui.page().background.raised.high;
             painter.fill(i32::from(self.right), 0, 1, painter.height(), color);
@@ -145,9 +143,7 @@ impl Component for Handle {
     }
 
     fn mouse(&mut self, cx: &mut Cx<'_>, event: &MouseEvent, _local: (i32, i32)) -> bool {
-        let Some(tui) = self.tui.upgrade() else {
-            return false;
-        };
+        let Some(tui) = self.tui.upgrade() else { return false };
         let now = cx.now();
         match event.kind {
             MouseEventKind::Down(MouseButton::Left) => self.resize.down(&tui, now),

@@ -181,9 +181,7 @@ impl Turns {
     /// responded.
     pub fn cancel(&self, session_id: &str) -> BoxFuture<'static, ()> {
         let handle = lock(&self.turns).remove(session_id);
-        let Some(handle) = handle else {
-            return Box::pin(async {});
-        };
+        let Some(handle) = handle else { return Box::pin(async {}) };
         handle.cancel.cancel();
         let mut done = handle.done;
         Box::pin(async move {
@@ -197,9 +195,7 @@ impl Turns {
             self.cancel(session_id).await;
             return Ok(());
         }
-        let Ok(id) = decode_session_id(session_id) else {
-            return Ok(());
-        };
+        let Ok(id) = decode_session_id(session_id) else { return Ok(()) };
         let result =
             self.client.session_interrupt(&SessionInterruptInput { session_id: SessionID(id), resume: None }).await;
         match result {
@@ -562,9 +558,7 @@ impl Turns {
         }
         let catalog = self.catalogs.get(&attached.cwd).await?;
         let model = find_model(&catalog.models, &current_model(&catalog, &attached.selection()));
-        let Some(size) = model.map(|model| model.limit.context).filter(|size| *size != 0) else {
-            return Ok(());
-        };
+        let Some(size) = model.map(|model| model.limit.context).filter(|size| *size != 0) else { return Ok(()) };
         let info =
             check(self.client.session_get(&SessionGetInput { session_id: SessionID(attached.id.clone()) }).await)?;
         self.connection.session_update(

@@ -651,9 +651,7 @@ pub fn reopen(tui: &Tui, session: Option<&str>) {
         return;
     }
     let open = tui.tabs.tabs(tui);
-    let Some((next, session)) = model::reopen(&mut tui.tabs.closed.borrow_mut(), &open, session) else {
-        return;
-    };
+    let Some((next, session)) = model::reopen(&mut tui.tabs.closed.borrow_mut(), &open, session) else { return };
     tui.tabs.cancelled.borrow_mut().remove(&session);
     update(tui, move |scope| scope.tabs = next.clone());
     tui.navigate(Route::Session { id: SessionID(session) });
@@ -729,13 +727,9 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let pending = tui.tabs.pending.clone();
     let proxy = tui.app.proxy();
     tui.tabs.writer.get_or_init(|| opencode_local::serial::Serial::new("tabs")).run(move || {
-        let Ok(batch) = pending.lock().map(|pending| pending.clone()) else {
-            return;
-        };
+        let Ok(batch) = pending.lock().map(|pending| pending.clone()) else { return };
         // An earlier job already wrote this one.
-        let Some(&(revision, _)) = batch.last() else {
-            return;
-        };
+        let Some(&(revision, _)) = batch.last() else { return };
         let result = storage.update("tabs", &serde_json::json!({}), |value| {
             let mut file: Persisted = serde_json::from_value(value.clone()).unwrap_or_default();
             for (_, write) in &batch {
@@ -805,9 +799,7 @@ fn acknowledge(tui: &Tui) {
     if tabs.focused.get() != Some(true) {
         return;
     }
-    let Some(session) = tabs.current(tui) else {
-        return;
-    };
+    let Some(session) = tabs.current(tui) else { return };
     let id = SessionID(session.clone());
     let Some(idle) = tui.data.read(|state| {
         let info = state.session(&id)?;

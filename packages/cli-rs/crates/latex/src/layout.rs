@@ -349,9 +349,7 @@ fn layout_matrix(rows: &[Vec<Node>], environment: Environment, columns: Option<&
         boundary_x += gap + column_widths.get(boundary).copied().unwrap_or(0);
     }
 
-    let Some((left, right)) = matrix_delimiters(environment) else {
-        return result;
-    };
+    let Some((left, right)) = matrix_delimiters(environment) else { return result };
     let baseline = result.baseline;
     hpack(vec![
         delimiter_box(left, height, baseline, true, &context.style),
@@ -608,9 +606,7 @@ fn apply_variant(value: &str, variant: Option<Variant>) -> String {
 /// The cells a grapheme takes, as TS `cellWidth` computes it.
 pub fn cell_width(value: &str) -> i32 {
     let mut chars = value.chars();
-    let Some(first) = chars.next() else {
-        return 0;
-    };
+    let Some(first) = chars.next() else { return 0 };
     let single = chars.next().is_none();
     let zero =
         matches!(first, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{300}'..='\u{36f}' | '\u{fe00}'..='\u{fe0f}');

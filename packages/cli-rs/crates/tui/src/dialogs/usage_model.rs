@@ -16,9 +16,7 @@ pub fn show(local: &Rc<Local>, model: ModelInfo) {
         move |cx| {
             let app = &cx.app;
             let theme = &cx.theme;
-            let Some(local) = weak.upgrade() else {
-                return View::new(app);
-            };
+            let Some(local) = weak.upgrade() else { return View::new(app) };
             let title = Text::new(app, vec!["Usage › ".fg(theme.text.muted), model.name.clone().fg(theme.text.base)])
                 .fg(theme.text.base);
             let head = header(cx, HeaderProps { title_view: Some(title.as_any()), ..HeaderProps::default() });

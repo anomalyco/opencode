@@ -74,17 +74,13 @@ impl State {
     /// Removes a form; a global form only at `location`, when given. True when one was removed.
     pub(crate) fn remove_form(&mut self, owner: &str, id: &FormID, location: Option<&Location>) -> bool {
         self.record_form(owner, id, location, None);
-        let Some(forms) = self.forms.get_mut(owner) else {
-            return false;
-        };
+        let Some(forms) = self.forms.get_mut(owner) else { return false };
         let before = forms.len();
         forms.retain(|form| {
             if form.info.id != *id {
                 return true;
             }
-            let (GLOBAL, Some(location)) = (owner, location) else {
-                return false;
-            };
+            let (GLOBAL, Some(location)) = (owner, location) else { return false };
             form.location.as_ref() != Some(location)
         });
         if forms.len() == before {
@@ -110,9 +106,7 @@ impl State {
     /// replaces the forms of `at`, where the server read them. True when the overlay overflowed:
     /// nothing is published and the read is invalidated, so the caller reads again.
     fn publish_forms(&mut self, read: &Read, ticket: u64, started: u64, list: Vec<Form>, at: Option<Location>) -> bool {
-        let Some(overlay) = Overlay::take(&mut self.form_reads, read, ticket) else {
-            return false;
-        };
+        let Some(overlay) = Overlay::take(&mut self.form_reads, read, ticket) else { return false };
         let owner = &read.0;
         if self.deleted_since(&SessionID(owner.clone()), started) {
             return false;

@@ -576,9 +576,7 @@ fn write(tui: &Tui, change: impl FnOnce(&mut Value) + Send + 'static, done: impl
 
 /// Sets `path` to `value`, creating the objects on the way (`dialog-config.tsx:463-468`).
 pub fn set_path(root: &mut Value, path: &[&str], value: Value) {
-    let Some((last, parents)) = path.split_last() else {
-        return;
-    };
+    let Some((last, parents)) = path.split_last() else { return };
     let parent = parents.iter().fold(root, |node, key| {
         if !node.is_object() {
             *node = Value::Object(Map::new());
@@ -690,9 +688,7 @@ fn change(tui: &Tui, saving: &Rc<Cell<bool>>, index: usize, direction: i32) {
     if saving.get() {
         return;
     }
-    let Some(setting) = SETTINGS.get(index) else {
-        return;
-    };
+    let Some(setting) = SETTINGS.get(index) else { return };
     let current = value(tui, setting);
     let next = match (values(tui, setting), setting.range) {
         (Some(choices), _) if !choices.is_empty() => {
@@ -851,9 +847,7 @@ fn install_reload(tui: &Rc<Tui>) {
         }
     }));
     let live = &tui.settings;
-    let (Some(config), Some(serial)) = (live.config.clone(), live.serial.clone()) else {
-        return;
-    };
+    let (Some(config), Some(serial)) = (live.config.clone(), live.serial.clone()) else { return };
     let proxy = tui.app.proxy();
     let watch = config.clone().watch(move || {
         let (config, proxy) = (config.clone(), proxy.clone());

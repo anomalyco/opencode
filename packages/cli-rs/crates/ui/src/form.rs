@@ -117,9 +117,7 @@ pub fn initial_values(fields: &[FormField]) -> (IndexMap<String, FormValue>, Has
     let custom = fields
         .iter()
         .filter_map(|field| {
-            let FormField::String(field) = field else {
-                return None;
-            };
+            let FormField::String(field) = field else { return None };
             let (Some(options), Some(true), Some(default)) = (&field.options, field.custom, &field.default) else {
                 return None;
             };
@@ -175,9 +173,7 @@ pub fn rows(field: Option<&FormField>) -> Vec<Row> {
 
 /// `formSelected`: the row of the current answer, the custom row for a custom string, else the first.
 pub fn selected_row(field: Option<&FormField>, value: Option<&FormValue>) -> usize {
-    let (Some(field), Some(value)) = (field, value) else {
-        return 0;
-    };
+    let (Some(field), Some(value)) = (field, value) else { return 0 };
     if matches!(value, FormValue::Array(_)) {
         return 0;
     }
@@ -194,9 +190,7 @@ pub fn selected_row(field: Option<&FormField>, value: Option<&FormValue>) -> usi
 /// `formValidateValue`: why `value` is not a valid answer, if it is not.
 pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> {
     let required = required(field);
-    let Some(value) = value else {
-        return required.then(|| "Answer required".to_owned());
-    };
+    let Some(value) = value else { return required.then(|| "Answer required".to_owned()) };
     let empty = match value {
         FormValue::String(text) => text.is_empty(),
         FormValue::Array(items) => items.is_empty(),
@@ -210,9 +204,7 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
     }
     match field {
         FormField::String(field) => {
-            let FormValue::String(text) = value else {
-                return Some("Expected text".to_owned());
-            };
+            let FormValue::String(text) = value else { return Some("Expected text".to_owned()) };
             // JavaScript lengths count UTF-16 code units.
             let length = text.encode_utf16().count() as i64;
             if let Some(min) = field.min_length.filter(|min| length < *min) {
@@ -256,9 +248,7 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
             None
         }
         FormField::Number(_) | FormField::Integer(_) => {
-            let FormValue::Number(value) = value.clone() else {
-                return Some("Expected a number".to_owned());
-            };
+            let FormValue::Number(value) = value.clone() else { return Some("Expected a number".to_owned()) };
             if !value.is_finite() {
                 return Some("Expected a number".to_owned());
             }
@@ -280,9 +270,7 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
         }
         FormField::Boolean(_) => (!matches!(value, FormValue::Bool(_))).then(|| "Expected yes or no".to_owned()),
         FormField::Multiselect(field) => {
-            let FormValue::Array(items) = value else {
-                return Some("Expected selections".to_owned());
-            };
+            let FormValue::Array(items) = value else { return Some("Expected selections".to_owned()) };
             let count = items.len() as i64;
             if let Some(min) = field.min_items.filter(|min| count < *min) {
                 return Some(format!("Select at least {min}"));
@@ -302,9 +290,7 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
 
 /// `formDisplayValue`: the answer as the review shows it, with option labels.
 pub fn display_value(field: &FormField, value: Option<&FormValue>, empty_multiselect: &str) -> String {
-    let Some(value) = value else {
-        return String::new();
-    };
+    let Some(value) = value else { return String::new() };
     let rows = rows(Some(field));
     let label = |item: &FormValue| {
         rows.iter().find(|row| row.value == *item).map_or_else(|| value_text(item), |row| row.label.clone())
@@ -365,9 +351,7 @@ pub fn value_text(value: &FormValue) -> String {
 
 pub fn email(text: &str) -> bool {
     let mut parts = text.splitn(2, '@');
-    let (Some(local), Some(domain)) = (parts.next(), parts.next()) else {
-        return false;
-    };
+    let (Some(local), Some(domain)) = (parts.next(), parts.next()) else { return false };
     let plain = |part: &str| !part.is_empty() && !part.contains(char::is_whitespace) && !part.contains('@');
     // `[^\s@]+\.[^\s@]+`: some dot with text on both sides.
     plain(local)
@@ -396,9 +380,7 @@ pub fn date_time(text: &str) -> bool {
 /// `field.when`: every condition holds on the answers of the fields before it that show.
 pub fn active(field: &FormField, answers: &HashMap<String, FormValue>) -> bool {
     conditions(field).iter().all(|when| {
-        let Some(value) = answers.get(&when.key) else {
-            return false;
-        };
+        let Some(value) = answers.get(&when.key) else { return false };
         let hit = match value {
             FormValue::Array(items) => {
                 items.iter().any(|item| equal_when(&FormValue::String(item.clone()), &when.value))

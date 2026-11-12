@@ -55,9 +55,7 @@ pub fn update(root_session_id: &str, child: &Session, event: Value) -> Value {
 
 /// A child's update as the parent session shows it: child metadata, and tool IDs and titles prefixed.
 pub fn project(mut update: Value, child: &Session) -> Value {
-    let Some(object) = update.as_object_mut() else {
-        return update;
-    };
+    let Some(object) = update.as_object_mut() else { return update };
     let mut merged = object.get("_meta").and_then(Value::as_object).cloned().unwrap_or_default();
     if let Value::Object(own) = meta(child) {
         merged.extend(own);

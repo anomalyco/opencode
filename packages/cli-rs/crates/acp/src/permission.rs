@@ -207,9 +207,7 @@ async fn permission_previews(tool_name: &str, input: &Value, metadata: Option<&V
         };
         let files = unified::parse(&file.patch)?;
         // `applyPatch` throws on a patch of more than one file.
-        let [hunks] = files.as_slice() else {
-            return None;
-        };
+        let [hunks] = files.as_slice() else { return None };
         if let Some(new_text) = unified::apply(old_text.as_deref().unwrap_or_default(), hunks) {
             previews.push(Diff::new(path, old_text, new_text));
         }
@@ -293,9 +291,7 @@ struct FileDiff {
 
 /// `Schema.decodeUnknownOption(Schema.Array(FileDiff.Info))`, with an invalid value as no files.
 fn decode_files(value: Option<&Value>) -> Vec<FileDiff> {
-    let Some(items) = value.and_then(Value::as_array) else {
-        return Vec::new();
-    };
+    let Some(items) = value.and_then(Value::as_array) else { return Vec::new() };
     items.iter().map(decode_file).collect::<Option<Vec<_>>>().unwrap_or_default()
 }
 

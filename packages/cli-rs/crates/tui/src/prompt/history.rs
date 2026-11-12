@@ -34,9 +34,7 @@ impl History {
     /// Loads `<state>/prompt-history.jsonl` on the worker; until then the history holds what was
     /// appended meanwhile.
     pub fn load(_app: &App, state: Option<PathBuf>) -> Self {
-        let Some(state) = state else {
-            return Self::default();
-        };
+        let Some(state) = state else { return Self::default() };
         let memory = Arc::new(Mutex::new(Memory { early: Some(Vec::new()), ..Memory::default() }));
         let writer = Serial::new("prompt-history.jsonl");
         let slot = memory.clone();
@@ -59,17 +57,13 @@ impl History {
 
     /// `append(entry)`: in memory at once, and written after the load and every earlier entry.
     pub fn append(&self, _app: &App, entry: Value) {
-        let Ok(mut memory) = self.memory.lock() else {
-            return;
-        };
+        let Ok(mut memory) = self.memory.lock() else { return };
         let added = memory.history.append(entry.clone());
         if let Some(early) = memory.early.as_mut().filter(|_| added) {
             early.push(entry.clone());
         }
         drop(memory);
-        let Some((state, writer)) = self.file.clone().filter(|_| added) else {
-            return;
-        };
+        let Some((state, writer)) = self.file.clone().filter(|_| added) else { return };
         writer.run(move || {
             if let Err(error) = jsonl::save_history(&state, &entry) {
                 log::warn!("prompt-history.jsonl: {error}");
@@ -89,9 +83,7 @@ pub fn previous(prompt: &Inner, history: &History) -> bool {
         textarea.perform(EditorAction::MoveUp);
         return true;
     }
-    let Some(item) = history.step(-1, &textarea.text()) else {
-        return false;
-    };
+    let Some(item) = history.step(-1, &textarea.text()) else { return false };
     prompt.restore(item);
     textarea.set_cursor_offset(0);
     true
@@ -110,9 +102,7 @@ pub fn next(prompt: &Inner, history: &History) -> bool {
         textarea.perform(EditorAction::MoveDown);
         return true;
     }
-    let Some(item) = history.step(1, &textarea.text()) else {
-        return false;
-    };
+    let Some(item) = history.step(1, &textarea.text()) else { return false };
     prompt.restore(item);
     textarea.set_cursor_offset(prompt.text_end());
     true

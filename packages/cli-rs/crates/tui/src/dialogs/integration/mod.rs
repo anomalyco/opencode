@@ -277,9 +277,7 @@ fn build_list(cx: &Rc<DialogCx>, flow: Flow, only: Option<IntegrationID>) -> Vie
             if started.get() || closed.get() {
                 return;
             }
-            let Some(integration) = flow.latest(only) else {
-                return;
-            };
+            let Some(integration) = flow.latest(only) else { return };
             started.set(true);
             let flow = flow.clone();
             let closed = closed.clone();
@@ -553,9 +551,7 @@ impl Manage {
             return;
         };
         let list = credentials(&current);
-        let Some(connection) = list.iter().find(|item| item.id == *id) else {
-            return;
-        };
+        let Some(connection) = list.iter().find(|item| item.id == *id) else { return };
         if let Some(status) = &connection.status {
             if let Some(url) = &status.url {
                 if !self.flow.open(url) {

@@ -99,9 +99,7 @@ impl Controls {
         if inner.restored.replace(true) || inner.is_away() {
             return;
         }
-        let Some(session) = inner.transcript.session() else {
-            return;
-        };
+        let Some(session) = inner.transcript.session() else { return };
         let Some(anchor) =
             tui.tabs.scroll_anchor(tui, &session.0).filter(|anchor| inner.transcript.mount_around(tui, &anchor.row))
         else {
@@ -136,9 +134,7 @@ impl Inner {
         })));
         let weak = self.this.clone();
         self.latest.mouse_pointer(MousePointer::POINTER).on_click(bind!(weak, |inner, _, _| {
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
+            let Some(tui) = inner.tui.upgrade() else { return };
             inner.to_bottom(&tui);
         }));
         let weak = self.this.clone();
@@ -196,9 +192,7 @@ impl Inner {
             TuiCommand::new(
                 id,
                 bind!(weak, |inner, _, _| {
-                    let Some(tui) = inner.tui.upgrade() else {
-                        return;
-                    };
+                    let Some(tui) = inner.tui.upgrade() else { return };
                     run(&inner, &tui);
                     tui.dialogs.clear();
                 }),
@@ -389,9 +383,7 @@ impl Inner {
         after_layout(
             &tui.app,
             bind!(weak, |inner| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 let Some(y) = inner.transcript.row_y(&anchor.row) else {
                     inner.to_bottom(&tui);
                     return;
@@ -418,9 +410,7 @@ impl Inner {
         if !self.restored.get() {
             return;
         }
-        let Some(session) = self.transcript.session() else {
-            return;
-        };
+        let Some(session) = self.transcript.session() else { return };
         let anchor = away.then(|| self.transcript.anchor()).flatten();
         tui.tabs.set_scroll_anchor(tui, &session.0, anchor);
     }

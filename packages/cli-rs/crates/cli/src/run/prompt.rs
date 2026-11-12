@@ -271,9 +271,7 @@ impl Run {
             let failed = self.failure.borrow().is_some();
             if failed || !self.outcomes.borrow().is_empty() || messages.iter().any(|item| item["type"] == "idle") {
                 let pending = if failed { None } else { self.background().await? };
-                let Some(pending) = pending else {
-                    return Ok(Some(Settled { found, messages, background: waited }));
-                };
+                let Some(pending) = pending else { return Ok(Some(Settled { found, messages, background: waited })) };
                 if !pending.is_empty() && pending.len() != shown {
                     self.render.waiting(&pending);
                 }
@@ -394,9 +392,7 @@ impl Run {
                 }
                 continue;
             }
-            let Some(session) = data.get("sessionID") else {
-                continue;
-            };
+            let Some(session) = data.get("sessionID") else { continue };
             let session = text(session);
             let terminal = terminal_outcome(&event);
             if self.job_sessions.borrow().iter().any(|known| known == session) {
@@ -461,9 +457,7 @@ impl Run {
     /// The jobs this prompt started (older ones belong to someone else), or `[]` while one of their wakes is
     /// queued or running. Work moves job → inbox → active, so reading in that order can't miss it.
     async fn background(&self) -> Result<Option<Vec<Value>>, String> {
-        let Admission::Admitted(since) = *self.admission.borrow() else {
-            return Ok(None);
-        };
+        let Admission::Admitted(since) = *self.admission.borrow() else { return Ok(None) };
         let input = ExperimentalJobListInput {
             session_id: Some(SessionID(self.input.session_id.clone())),
             descendants: Some(true),
@@ -991,9 +985,7 @@ impl Renderer {
             }
             "session.tool.input.delta" | "session.tool.input.ended" | "session.tool.progress" => {
                 let mut tools = self.tools.borrow_mut();
-                let Some(current) = tools.get_mut(&key(&[message, text(&data["id"])])) else {
-                    return;
-                };
+                let Some(current) = tools.get_mut(&key(&[message, text(&data["id"])])) else { return };
                 match kind {
                     "session.tool.input.delta" => {
                         current.raw = Some(current.raw.take().unwrap_or_default() + text(&data["delta"]));
@@ -1132,9 +1124,7 @@ impl Renderer {
     }
 
     fn render_tool(&self, part: &Value) {
-        let Some(info) = inline(part, &self.directory) else {
-            return;
-        };
+        let Some(info) = inline(part, &self.directory) else { return };
         if info.block {
             ui::empty();
             ui::println(&[&format!("{}{}", ui::TEXT_NORMAL, info.icon), &format!("{}{}", ui::TEXT_NORMAL, info.title)]);
@@ -1157,9 +1147,7 @@ impl Renderer {
     }
 
     fn render_tool_error(&self, part: &Value) {
-        let Some(info) = inline(part, &self.directory) else {
-            return;
-        };
+        let Some(info) = inline(part, &self.directory) else { return };
         ui::println(&[&format!("{}✗", ui::TEXT_NORMAL), &format!("{}{} failed", ui::TEXT_NORMAL, info.title)]);
     }
 }

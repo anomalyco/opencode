@@ -154,9 +154,7 @@ fn catalogs(directory: &str, query: Option<&str>) -> Vec<MemoryRoute> {
         MemoryRoute::json("GET", "/api/provider", 200, &list(providers)),
         MemoryRoute::json("GET", "/api/integration", 200, &list(json!([]))),
     ];
-    let Some(query) = query else {
-        return routes.into();
-    };
+    let Some(query) = query else { return routes.into() };
     routes
         .into_iter()
         .map(|route| route.with_query([("location[directory]".to_owned(), vec![query.to_owned()])].into()))

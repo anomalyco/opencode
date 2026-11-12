@@ -749,9 +749,7 @@ impl Mini {
         let directory = directory.to_owned();
         let mini = self.clone();
         self.app.spawn(async move { replay::default_model(&client, &directory).await }, move |_, model| {
-            let Some((provider_id, model_id)) = model else {
-                return;
-            };
+            let Some((provider_id, model_id)) = model else { return };
             // A model chosen meanwhile wins.
             if mini.state.borrow().model.is_some() {
                 return;
@@ -830,9 +828,7 @@ impl Mini {
         }
         let output = {
             let mut transcript = self.transcript.borrow_mut();
-            let Some(transcript) = transcript.as_mut() else {
-                return;
-            };
+            let Some(transcript) = transcript.as_mut() else { return };
             match incoming {
                 // A hydration of a session that was replaced meanwhile (`current(attempt)`).
                 Incoming::Hydrated { session, .. } if session != transcript.session_id => return,
@@ -912,9 +908,7 @@ impl Mini {
             return false;
         }
         let value = serde_json::to_value(event).unwrap_or_default();
-        let Some(directory) = value["location"]["directory"].as_str() else {
-            return true;
-        };
+        let Some(directory) = value["location"]["directory"].as_str() else { return true };
         self.session.borrow().as_ref().is_none_or(|session| session.directory == directory)
     }
 
@@ -925,9 +919,7 @@ impl Mini {
             self.catalog_refresh.set(Some(true));
             return;
         }
-        let Some(directory) = self.session.borrow().as_ref().map(|session| session.directory.clone()) else {
-            return;
-        };
+        let Some(directory) = self.session.borrow().as_ref().map(|session| session.directory.clone()) else { return };
         self.catalog_refresh.set(Some(false));
         let client = self.client.clone();
         let mini = self.clone();
@@ -1179,9 +1171,7 @@ impl Mini {
     /// the agent and model, is admitted with its delivery (`steer` by default), and waits for the session to
     /// settle, then prints what the live stream missed (`runPromptTurn`).
     fn send(self: &Rc<Self>, prompt: RunPrompt) {
-        let Some(session) = self.session.borrow().clone() else {
-            return;
-        };
+        let Some(session) = self.session.borrow().clone() else { return };
         let client = self.client.clone();
         let mini = self.clone();
         if prompt.shell {
@@ -1422,9 +1412,7 @@ impl Mini {
 
     /// `/compact`: `session.compact`.
     fn compact(self: &Rc<Self>) {
-        let Some(session) = self.session.borrow().clone() else {
-            return;
-        };
+        let Some(session) = self.session.borrow().clone() else { return };
         self.sending("compacting session");
         let client = self.client.clone();
         let mini = self.clone();
@@ -1439,9 +1427,7 @@ impl Mini {
 
     /// `/new`: a new session at the launch directory, with the current agent and model (`onNewSession`).
     fn new_session(self: &Rc<Self>) {
-        let Some(session) = self.session.borrow().clone() else {
-            return;
-        };
+        let Some(session) = self.session.borrow().clone() else { return };
         self.sending("starting new session");
         let client = self.client.clone();
         let mini = self.clone();
@@ -1606,9 +1592,7 @@ impl Mini {
             self.app.defer(move |cx| mini.end_shell(cx));
             return true;
         }
-        let Some(session) = self.session.borrow().clone() else {
-            return true;
-        };
+        let Some(session) = self.session.borrow().clone() else { return true };
         if let Some(transcript) = self.transcript.borrow_mut().as_mut() {
             transcript.interrupt_wait();
         }
@@ -1750,9 +1734,7 @@ impl Mini {
     fn replay_on_resize(self: &Rc<Self>, _cx: &mut Cx<'_>) {
         let (session, ticket) = {
             let mut transcript = self.transcript.borrow_mut();
-            let Some(transcript) = transcript.as_mut() else {
-                return;
-            };
+            let Some(transcript) = transcript.as_mut() else { return };
             if !self.input.replay || !transcript.connected {
                 return;
             }

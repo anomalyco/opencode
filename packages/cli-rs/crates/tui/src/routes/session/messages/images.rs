@@ -146,9 +146,7 @@ pub fn user_images(files: &[PromptFileAttachment]) -> Vec<String> {
         .filter(|file| {
             let mention = file.mention.as_ref().map(|mention| mention.text.as_str());
             let inline = matches!(file.source, PromptFileSource::Inline(_));
-            let Some(mention) = mention.filter(|_| inline) else {
-                return true;
-            };
+            let Some(mention) = mention.filter(|_| inline) else { return true };
             let key = (
                 file.mime.clone(),
                 file.name.clone(),

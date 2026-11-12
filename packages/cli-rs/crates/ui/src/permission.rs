@@ -176,9 +176,7 @@ pub fn always_lines(action: &str, save: &[String]) -> Vec<String> {
 
 /// The directory before the first wildcard, without trailing separators unless it is a root.
 fn wildcard_directory(value: &str) -> String {
-    let Some(wildcard) = value.find('*') else {
-        return value.to_owned();
-    };
+    let Some(wildcard) = value.find('*') else { return value.to_owned() };
     let prefix = &value[..wildcard];
     let separators = |text: &str| !text.is_empty() && text.chars().all(|c| c == '/' || c == '\\');
     let drive_root = {

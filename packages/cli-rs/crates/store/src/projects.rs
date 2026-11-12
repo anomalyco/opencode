@@ -49,9 +49,7 @@ impl State {
         let mut follow = Vec::new();
         let ids: Vec<SessionID> = self.info.keys().cloned().collect();
         for id in ids {
-            let Some(info) = self.info.get(&id) else {
-                continue;
-            };
+            let Some(info) = self.info.get(&id) else { continue };
             let explicit = data.adopted.as_ref().is_some_and(|adopted| adopted.contains(&info.project_id));
             let directory = if explicit {
                 self.projects.get(&info.project_id).map(|project| project.canonical.0.clone())
@@ -63,9 +61,7 @@ impl State {
                 follow.push(Follow::Session(id));
                 continue;
             };
-            let Some((project, subpath)) = adopt(&info.project_id.0, &directory, data) else {
-                continue;
-            };
+            let Some((project, subpath)) = adopt(&info.project_id.0, &directory, data) else { continue };
             if let Some(info) = self.info.get_mut(&id) {
                 info.project_id = ProjectID(project);
                 info.subpath = subpath.map(RelativePath);

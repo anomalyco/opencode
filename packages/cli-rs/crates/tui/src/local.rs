@@ -191,9 +191,7 @@ impl Local {
 
     /// Reads the integrations again, for example after a connect.
     pub fn load_integrations(&self) {
-        let Some(location) = self.state.borrow().location.clone() else {
-            return;
-        };
+        let Some(location) = self.state.borrow().location.clone() else { return };
         self.data.catalog_invalidate(Catalog::Integration, Some(&location));
         self.read(Catalog::Integration, &location);
     }
@@ -276,9 +274,7 @@ impl Local {
 
     /// The routed session, or `None` on home.
     pub(crate) fn route(&self) -> Option<Routed> {
-        let Route::Session { id } = self.tui.upgrade()?.route() else {
-            return None;
-        };
+        let Route::Session { id } = self.tui.upgrade()?.route() else { return None };
         let session = self.data.read(|state| state.session(&id).cloned());
         Some(Routed { id, session })
     }
@@ -324,9 +320,7 @@ impl Local {
     }
 
     fn load_preferences(&self) {
-        let Some(preferences) = self.preferences.clone() else {
-            return;
-        };
+        let Some(preferences) = self.preferences.clone() else { return };
         let weak = self.this.clone();
         let started = self.writes.get();
         let written = self.written.clone();
@@ -356,9 +350,7 @@ impl Local {
 
     /// Reads `model.json` again once the writer has finished every write sent so far.
     fn load_after_writes(&self) {
-        let (Some(writer), Some(_)) = (&self.writer, &self.preferences) else {
-            return;
-        };
+        let (Some(writer), Some(_)) = (&self.writer, &self.preferences) else { return };
         let proxy = self.app.proxy();
         let _ = writer.send(Box::new(move || {
             let _ = proxy.send(PreferencesChanged);
@@ -367,9 +359,7 @@ impl Local {
 
     // `model.json` writes, in order, off the UI thread.
     fn write(&self, job: impl FnOnce(&ModelPreferences) -> Result<(), opencode_local::lock::Error> + Send + 'static) {
-        let (Some(writer), Some(preferences)) = (&self.writer, self.preferences.clone()) else {
-            return;
-        };
+        let (Some(writer), Some(preferences)) = (&self.writer, self.preferences.clone()) else { return };
         self.writes.set(self.writes.get() + 1);
         let written = self.written.clone();
         let _ = writer.send(Box::new(move || {
@@ -703,9 +693,7 @@ impl Local {
             self.set_session_draft(&routed, selection);
             return true;
         }
-        let Some(agent) = self.agent() else {
-            return false;
-        };
+        let Some(agent) = self.agent() else { return false };
         let key = self.location_agent_key(&agent.id.0);
         self.state.borrow_mut().new_session.insert(key, model.clone());
         true
@@ -752,9 +740,7 @@ impl Local {
             }
         }
         let expected = self.state.borrow().commits.get(&id.0).cloned();
-        let Some((expected_agent, expected_selection)) = expected else {
-            return;
-        };
+        let Some((expected_agent, expected_selection)) = expected else { return };
         let durable = Self::durable(Some(session));
         if agent.as_ref() != Some(&expected_agent) || durable.is_none_or(|durable| durable.key() != expected_selection)
         {
@@ -838,9 +824,7 @@ impl Local {
 
     /// `model.cycle`: the next or previous recent model.
     pub fn cycle(&self, direction: i64) {
-        let Some(current) = self.selection() else {
-            return;
-        };
+        let Some(current) = self.selection() else { return };
         let recent: Vec<Model> = self.recent().into_iter().filter(|item| self.is_valid(item)).collect();
         let len = recent.len() as i64;
         let next = match recent.iter().position(|item| *item == current.model) {
@@ -855,9 +839,7 @@ impl Local {
         } else {
             next
         };
-        let Some(model) = usize::try_from(next).ok().and_then(|next| recent.get(next)) else {
-            return;
-        };
+        let Some(model) = usize::try_from(next).ok().and_then(|next| recent.get(next)) else { return };
         self.select_model(model);
         self.notify();
     }
@@ -911,9 +893,7 @@ impl Local {
 
     /// `model.variant.set`: `None` is the default variant.
     pub fn set_variant(&self, value: Option<&str>) {
-        let Some(current) = self.selection() else {
-            return;
-        };
+        let Some(current) = self.selection() else { return };
         if let Some(routed) = self.route() {
             self.set_session_draft(
                 &routed,

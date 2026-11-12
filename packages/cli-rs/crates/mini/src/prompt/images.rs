@@ -22,9 +22,7 @@ pub fn images(parts: &[Part]) -> Vec<String> {
             _ => None,
         })
         .filter(|file| {
-            let Some(mention) = &file.mention else {
-                return true;
-            };
+            let Some(mention) = &file.mention else { return true };
             let key = (&file.filename, &file.description, &mention.text, &file.url);
             if seen.contains(&key) {
                 return false;

@@ -86,9 +86,7 @@ pub async fn prepare(catalog: &Catalog, content: &[Value]) -> Result<Prepared, F
 
 /// A `file:` part that cannot be read becomes a text reference to its URI.
 async fn reference_unreadable_file(part: PromptPart) -> PromptPart {
-    let PromptPart::File { url, filename, .. } = &part else {
-        return part;
-    };
+    let PromptPart::File { url, filename, .. } = &part else { return part };
     if !url.starts_with("file://") {
         return part;
     }

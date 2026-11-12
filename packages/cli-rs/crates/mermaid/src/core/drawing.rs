@@ -361,9 +361,7 @@ pub fn draw_orthogonal_path(
 ) {
     for index in 1..points.len() {
         let (from, to) = (points[index - 1], points[index]);
-        let Some(direction) = direction_between(from, to) else {
-            continue;
-        };
+        let Some(direction) = direction_between(from, to) else { continue };
         let glyph = segment_glyph(direction, line);
         let mut step = if index == 1 { 0 } else { 1 };
         walk_orthogonal_segment(from, to, index == 1, |point| {

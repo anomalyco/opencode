@@ -73,9 +73,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     let at = Placement::append("sidebar.content");
     setup.slot(at.clone(), |read, input, changed| {
-        let Some(session) = input.session_id.as_deref() else {
-            return Render::Hide;
-        };
+        let Some(session) = input.session_id.as_deref() else { return Render::Hide };
         // Children come and go, and change, with session infos and statuses; the fold is in storage.
         if !(changed.all || changed.local || changed.woken || !changed.sessions.is_empty()) {
             return Render::Keep;

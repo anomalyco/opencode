@@ -249,9 +249,7 @@ impl Inner {
     /// `queued_prompt.undo`: takes a queued prompt back into the composer, unless the composer is in shell mode
     /// with text. The cancel goes first, then the text, then the dialog closes and the composer takes focus.
     pub(crate) fn undo(&self, tui: &Tui, inbox: &str) {
-        let Some(prompt) = self.prompt.upgrade() else {
-            return;
-        };
+        let Some(prompt) = self.prompt.upgrade() else { return };
         let Some(restored) = tui.data.read(|state| {
             users(state, &self.session).find(|user| user.id.as_str() == inbox).map(|user| {
                 let payload = &user.payload;

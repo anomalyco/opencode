@@ -77,12 +77,8 @@ pub fn show(tui: &Tui, props: Props) {
 
 /// `worktree.updated` of the open dialog's project reads the list again.
 pub(crate) fn event(event: &Handled) {
-    let Handled::WorktreeUpdated(event) = event else {
-        return;
-    };
-    let Some(workspaces) = OPEN.with(|open| open.borrow().upgrade()) else {
-        return;
-    };
+    let Handled::WorktreeUpdated(event) = event else { return };
+    let Some(workspaces) = OPEN.with(|open| open.borrow().upgrade()) else { return };
     if event.data.project_id == workspaces.props.project_id && workspaces.shown.get() {
         workspaces.load(None);
     }
@@ -286,9 +282,7 @@ impl Workspaces {
 
     /// `options()`.
     fn options(&self) -> Vec<SelectOption<Selection>> {
-        let Some(tui) = self.tui() else {
-            return Vec::new();
-        };
+        let Some(tui) = self.tui() else { return Vec::new() };
         if self.show_error() {
             return Vec::new();
         }
@@ -547,9 +541,7 @@ impl Workspaces {
     /// `remove`: the first press marks the worktree, the second deletes it.
     fn remove(self: &Rc<Self>, option: &SelectOption<Selection>) {
         let Some(tui) = self.tui() else { return };
-        let Selection::Directory { directory, subdirectory: false } = &option.value else {
-            return;
-        };
+        let Selection::Directory { directory, subdirectory: false } = &option.value else { return };
         if self.state.borrow().removing.is_some() || !self.has_strategy(directory) {
             return;
         }

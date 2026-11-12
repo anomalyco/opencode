@@ -489,9 +489,7 @@ pub fn mark(app: &TestApp, root: &impl Widget, keep: usize, marker: &Rc<()>) -> 
     for (x, y) in (0..height).flat_map(|y| (0..width).map(move |x| (x, y))) {
         let chain: Vec<AnyWidget> =
             std::iter::successors(app.app().widget_at(x, y), |widget| widget.parent()).collect();
-        let Some(level) = chain.iter().position(|widget| widget.id() == root.id()) else {
-            continue;
-        };
+        let Some(level) = chain.iter().position(|widget| widget.id() == root.id()) else { continue };
         for widget in &chain[..level.saturating_sub(keep)] {
             if marked.insert(widget.id()) {
                 let marker = marker.clone();

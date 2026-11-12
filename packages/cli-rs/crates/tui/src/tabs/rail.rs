@@ -185,9 +185,7 @@ impl Rail {
 
 impl Component for Rail {
     fn paint(&self, painter: &mut Painter<'_>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let theme = tui.page();
         let width = painter.width();
         let height = painter.height() as i32;
@@ -546,9 +544,7 @@ impl Component for Rail {
     }
 
     fn mouse(&mut self, cx: &mut Cx<'_>, event: &MouseEvent, local: (i32, i32)) -> bool {
-        let Some(tui) = self.tui.upgrade() else {
-            return false;
-        };
+        let Some(tui) = self.tui.upgrade() else { return false };
         let (x, y) = local;
         let width = tui.frame.rail_width(&tui);
         let compact = self.compact(u32::from(width));
@@ -572,9 +568,7 @@ impl Component for Rail {
                 true
             }
             MouseEventKind::Down(MouseButton::Middle) => {
-                let Some(Some(session)) = row else {
-                    return false;
-                };
+                let Some(Some(session)) = row else { return false };
                 defer(cx, Box::new(move |tui| super::close(tui, Some(&session))));
                 true
             }
@@ -589,9 +583,7 @@ impl Component for Rail {
                 true
             }
             MouseEventKind::Drag(MouseButton::Left) => {
-                let Some(source) = self.pressed.clone() else {
-                    return false;
-                };
+                let Some(source) = self.pressed.clone() else { return false };
                 self.dragged = true;
                 let count = tui.tabs.tabs(&tui).len();
                 let stride = self.stride(compact);
@@ -622,9 +614,7 @@ impl Component for Rail {
                     );
                     return true;
                 }
-                let Some(source) = self.pressed.take() else {
-                    return false;
-                };
+                let Some(source) = self.pressed.take() else { return false };
                 let dragged = std::mem::take(&mut self.dragged);
                 let preview = self.preview.take();
                 let closing = !dragged && !compact && on_close && self.hovered.as_deref() == Some(source.as_str());

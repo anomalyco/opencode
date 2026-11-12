@@ -394,12 +394,8 @@ fn tool<'a>(
 }
 
 fn reasoning_done(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>) -> bool {
-    let Spec::Part { message, part } = spec else {
-        return false;
-    };
-    let Some(assistant) = assistant(index, message) else {
-        return false;
-    };
+    let Spec::Part { message, part } = spec else { return false };
+    let Some(assistant) = assistant(index, message) else { return false };
     matches!(
         part.resolve(assistant),
         Some(SessionMessageAssistantContentItem::Reasoning(reasoning))
@@ -409,9 +405,7 @@ fn reasoning_done(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>) -> bo
 
 /// `instructionPaths`: the files an instruction load names in its metadata.
 pub fn instruction_paths(message: Option<&SessionMessageInfo>) -> Vec<String> {
-    let Some(SessionMessageInfo::Synthetic(message)) = message else {
-        return Vec::new();
-    };
+    let Some(SessionMessageInfo::Synthetic(message)) = message else { return Vec::new() };
     let Some(instruction) =
         message.metadata.as_ref().and_then(|metadata| metadata.get("instruction")).and_then(|value| value.as_object())
     else {
@@ -530,9 +524,7 @@ pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: boo
 
 /// `busyLabel`: a running item's status.
 fn busy_label(item: &Activity<'_>) -> String {
-    let Activity::Tool(tool) = item else {
-        return "Thinking…".to_owned();
-    };
+    let Activity::Tool(tool) = item else { return "Thinking…".to_owned() };
     let name = canonical_tool_name(&tool.name);
     let noun = match name {
         "shell" => "command",
@@ -549,9 +541,7 @@ fn busy_label(item: &Activity<'_>) -> String {
 /// The finished nested calls of a code-mode `execute` (`executeCalls`, without the running ones).
 fn execute_calls(tool: &SessionMessageAssistantTool) -> Vec<String> {
     let metadata = tool_display_metadata(&tool.state);
-    let Some(calls) = metadata.get("toolCalls").and_then(|calls| calls.as_array()) else {
-        return Vec::new();
-    };
+    let Some(calls) = metadata.get("toolCalls").and_then(|calls| calls.as_array()) else { return Vec::new() };
     calls
         .iter()
         .filter_map(|call| {
@@ -678,9 +668,7 @@ impl GroupView {
             if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
-            let (Some(id), Some(kind)) = (inner.id.borrow().clone(), inner.kind.get()) else {
-                return;
-            };
+            let (Some(id), Some(kind)) = (inner.id.borrow().clone(), inner.kind.get()) else { return };
             let open = inner.settings.expanded(&id, kind);
             inner.settings.expanded.borrow_mut().insert(id, !open);
             let refresh = inner.settings.refresh.borrow().clone();
@@ -852,9 +840,7 @@ impl GroupView {
             .iter()
             .filter(|spec| !pending.contains(spec))
             .filter_map(|spec| {
-                let Spec::Part { message, part } = spec else {
-                    return None;
-                };
+                let Spec::Part { message, part } = spec else { return None };
                 let assistant = cx.assistant(message)?;
                 match part.resolve(assistant)? {
                     SessionMessageAssistantContentItem::Reasoning(part) => Some(Activity::Thought(assistant, part)),
@@ -909,9 +895,7 @@ fn thought<'a>(
     cx: &'a Context<'_>,
     spec: &Spec,
 ) -> Option<(&'a SessionMessageAssistant, &'a SessionMessageAssistantReasoning)> {
-    let Spec::Part { message, part } = spec else {
-        return None;
-    };
+    let Spec::Part { message, part } = spec else { return None };
     let assistant = cx.assistant(message)?;
     match part.resolve(assistant)? {
         SessionMessageAssistantContentItem::Reasoning(part) => Some((assistant, part)),
@@ -976,9 +960,7 @@ impl Inner {
 
     fn paint_color(&self) {
         let painted = self.painted.borrow();
-        let Some((header, painted)) = painted.as_ref() else {
-            return;
-        };
+        let Some((header, painted)) = painted.as_ref() else { return };
         let fg = self.color(header.color);
         match painted {
             Painted::Done(texts) => texts.iter().for_each(|text| {

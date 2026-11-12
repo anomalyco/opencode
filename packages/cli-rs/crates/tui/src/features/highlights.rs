@@ -48,9 +48,7 @@ pub fn install_with(tui: &Rc<Tui>, release: Release, continue_: bool) {
         .slash("highlights");
         tui.keymap.install("highlights", [KeymapLayer::global(vec![command])]);
     }
-    let Some(mut watch) = tui.connection_watch() else {
-        return;
-    };
+    let Some(mut watch) = tui.connection_watch() else { return };
     let weak = tui.weak();
     tui.app.spawn(
         async move { watch.wait_for(|state| state.status == opencode_api::events::Status::Connected).await.is_ok() },
@@ -122,9 +120,7 @@ pub enum Decision {
 
 /// `decide`: only stable versions count.
 pub fn decide(input: &Input, seen: Option<&str>) -> Decision {
-    let Some(current) = stable(&input.version) else {
-        return Decision::None;
-    };
+    let Some(current) = stable(&input.version) else { return Decision::None };
     let seen = seen.and_then(stable);
     match seen {
         None if !input.history => return Decision::Record,

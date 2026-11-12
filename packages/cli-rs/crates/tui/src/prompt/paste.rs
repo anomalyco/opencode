@@ -113,9 +113,7 @@ fn next(prompt: &Rc<Inner>) {
     if prompt.paste.busy.get() {
         return;
     }
-    let Some(job) = prompt.paste.jobs.borrow_mut().pop_front() else {
-        return;
-    };
+    let Some(job) = prompt.paste.jobs.borrow_mut().pop_front() else { return };
     prompt.paste.busy.set(true);
     let before = Before::of(prompt);
     match job {
@@ -250,9 +248,7 @@ fn paste_text(prompt: &Inner, text: &str, label: &str) {
     if !info["pasted"].is_array() {
         info["pasted"] = json!([]);
     }
-    let Some(pasted) = info["pasted"].as_array_mut() else {
-        return;
-    };
+    let Some(pasted) = info["pasted"].as_array_mut() else { return };
     pasted.push(json!({ "text": text, "source": { "start": start, "end": end, "text": label } }));
     prompt.parts.track(mark, Kind::Pasted, pasted.len() - 1);
 }
@@ -294,15 +290,9 @@ fn attachment(prompt: &Inner, uri: &str, filename: Option<&str>, path: Option<&s
 /// `expandPastedText`: replaces a paste's mark with its text. Returns whether `mark` was one.
 fn expand(prompt: &Inner, mark: opentui::widget::ExtmarkId) -> bool {
     let textarea = &prompt.textarea;
-    let Some(extmark) = textarea.extmark(mark) else {
-        return false;
-    };
-    let Some((Kind::Pasted, index)) = prompt.parts.get(mark) else {
-        return false;
-    };
-    let Some(text) = prompt.prompt.borrow()["pasted"][index]["text"].as_str().map(str::to_owned) else {
-        return false;
-    };
+    let Some(extmark) = textarea.extmark(mark) else { return false };
+    let Some((Kind::Pasted, index)) = prompt.parts.get(mark) else { return false };
+    let Some(text) = prompt.prompt.borrow()["pasted"][index]["text"].as_str().map(str::to_owned) else { return false };
     textarea.remove_extmark(mark);
     parts::replace(textarea, extmark.start, extmark.end, &text);
     true
@@ -327,9 +317,7 @@ pub fn expanded_text(prompt: &Inner) -> String {
 /// The text a copy of the mouse selection puts on the clipboard: with the prompt focused, its paste labels
 /// become their text (the prompt textarea's `getClipboardText`).
 pub fn clipboard_text(tui: &crate::app::Tui, text: &str) -> String {
-    let Some(prompt) = tui.prompt.current.borrow().upgrade() else {
-        return text.to_owned();
-    };
+    let Some(prompt) = tui.prompt.current.borrow().upgrade() else { return text.to_owned() };
     if !prompt.focused() {
         return text.to_owned();
     }
@@ -348,12 +336,8 @@ fn expand_placeholders(text: &str, pasted: &[Value]) -> String {
     let mut cursor = 0;
     let mut result = String::new();
     for part in parts {
-        let (Some(label), Some(content)) = (part["source"]["text"].as_str(), part["text"].as_str()) else {
-            continue;
-        };
-        let Some(index) = text[cursor..].find(label).map(|index| index + cursor) else {
-            continue;
-        };
+        let (Some(label), Some(content)) = (part["source"]["text"].as_str(), part["text"].as_str()) else { continue };
+        let Some(index) = text[cursor..].find(label).map(|index| index + cursor) else { continue };
         result.push_str(&text[cursor..index]);
         result.push_str(content);
         cursor = index + label.len();
@@ -376,13 +360,9 @@ pub fn expand_prompt(prompt: &Value) -> Value {
         .collect();
     let mut next = prompt.clone();
     for key in ["files", "agents", "skills"] {
-        let Some(list) = next[key].as_array_mut() else {
-            continue;
-        };
+        let Some(list) = next[key].as_array_mut() else { continue };
         for part in list {
-            let Some(start) = part["mention"]["start"].as_f64() else {
-                continue;
-            };
+            let Some(start) = part["mention"]["start"].as_f64() else { continue };
             let shift: i64 = ranges
                 .iter()
                 .filter(|(_, end, _)| f64::from(*end) <= start)
