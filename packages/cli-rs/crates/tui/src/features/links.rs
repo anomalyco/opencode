@@ -65,14 +65,7 @@ pub fn link_at(app: &App, x: u16, y: u16) -> Option<String> {
 
 /// `openUrl`: http and https links only, in the system browser.
 pub fn open_url(input: &str) -> Result<(), String> {
-    let url = match opencode_api::js::parse_url(input) {
-        Err(error @ opencode_api::js::UrlError::NonAsciiHost(_)) => return Err(error.to_string()),
-        url => url
-            .ok()
-            .filter(|url| matches!(url.scheme(), "http" | "https"))
-            .ok_or_else(|| format!("Only http and https links can be opened in the browser: {input}"))?,
-    };
-    open(url.as_str())
+    open(&opencode_ui::open::web_url(input)?)
 }
 
 /// `openPath`: a file or folder in the system's default app.
