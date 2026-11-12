@@ -7,11 +7,13 @@ import { tmpdir } from "../fixture/fixture"
 async function composerWithHistory(state: string) {
   takeDraft(undefined)
   const file = path.join(state, "prompt-history.jsonl")
-  await Bun.write(file, JSON.stringify({ text: "previous", pasted: [] }))
+  // Matching the oldest entry lets Up recall "previous" even before the draft restoration fix.
+  const entries = ["echo pen", "previous"].map((text) => JSON.stringify({ text, mode: "normal", pasted: [] }))
+  await Bun.write(file, entries.join("\n"))
   const setup = await createAppFixture({ state })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("commands"))
-  // Loading history rewrites the entry with a trailing newline.
+  // Loading history rewrites the file with a trailing newline.
   await setup.waitFor(async () => (await Bun.file(file).text()).endsWith("\n"))
   return setup
 }
