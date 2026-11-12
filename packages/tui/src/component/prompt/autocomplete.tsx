@@ -480,27 +480,37 @@ export function Autocomplete(props: {
       ),
   )
 
+  // Callers have already removed the typed token, so the cursor sits at store.index.
   function insertSlash(name: string) {
-    const newText = `/${name} `
-    const cursor = props.input().logicalCursor
-    props.input().deleteRange(0, 0, cursor.row, cursor.col)
-    props.input().insertText(newText)
-    props.input().cursorOffset = measureEditText(newText, { widthMethod: renderer.widthMethod })
+    const input = props.input()
+    const needsSpace = input.getTextRange(input.cursorOffset, input.cursorOffset + 1) !== " "
+    const newText = `/${name}` + (needsSpace ? " " : "")
+    input.insertText(newText)
+    input.cursorOffset = store.index + measureEditText(newText, { widthMethod: renderer.widthMethod })
   }
 
   const commands = createMemo((): AutocompleteOption[] => {
+    // Past the start of the prompt a command cannot run, so only offer entries that insert text,
+    // and match names by prefix so prose like "and/or" never opens a list of unrelated commands.
+    const inline = store.index !== 0
+    const query = search().toLowerCase()
+    const matches = (name: string) => !inline || name.toLowerCase().startsWith(query)
+
     const results: AutocompleteOption[] = keymapCommands().flatMap((command) => {
       const slash = command.slash
-      if (!slash) return []
-      return [slash.name, ...(slash.aliases ?? [])].map((name) => ({
-        display: `/${name}`,
-        description: command.description ?? command.title,
-        onSelect: slash.arguments ? () => insertSlash(name) : command.run,
-      }))
+      if (!slash || (inline && !slash.arguments)) return []
+      return [slash.name, ...(slash.aliases ?? [])]
+        .filter(matches)
+        .map((name) => ({
+          display: `/${name}`,
+          description: command.description ?? command.title,
+          onSelect: slash.arguments ? () => insertSlash(name) : command.run,
+        }))
     })
     const commandNames = new Set<string>()
 
     for (const serverCommand of data.location.command.list(location.current) ?? []) {
+      if (!matches(serverCommand.name)) continue
       commandNames.add(serverCommand.name)
       results.push({
         display: "/" + serverCommand.name,
@@ -558,9 +568,7 @@ export function Autocomplete(props: {
     const nonFileOptions: AutocompleteOption[] =
       store.visible === "reference"
         ? [...skillOptions(), ...referenceAliasesValue, ...agentsValue]
-        : store.index === 0
-          ? [...commandsValue]
-          : []
+        : [...commandsValue]
 
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]
@@ -596,6 +604,12 @@ export function Autocomplete(props: {
     filter()
     setStore("selected", 0)
     setConfirming(undefined)
+  })
+
+  // An empty list mid-prompt closes the popup so its Enter binding cannot swallow submission
+  // of a sentence that merely contains "/". At the prompt start the empty list stays visible.
+  createEffect(() => {
+    if (store.visible === "command" && store.index !== 0 && options().length === 0) hide()
   })
 
   function move(direction: -1 | 1) {
@@ -827,7 +841,8 @@ export function Autocomplete(props: {
         if (offset === 0) return
 
         const slash = slashTriggerIndex(beforeCursor, renderer.widthMethod)
-        if (slash === 0) {
+        // A bare "/" past the start of the prompt is usually prose or a path, not a command.
+        if (slash !== undefined && (slash === 0 || offset > slash + 1)) {
           show("command")
           setStore("index", slash)
           return
