@@ -109,11 +109,14 @@ jobs:
         # An explicit bash runs with pipefail, so a failed secret read fails the step.
         shell: bash
         run: |
+          if [[ "$STAGE" == dev ]]; then
+            exec bash .github/release/deploy-legacy.sh dev "$RUNNER_TEMP/in/legacy-dev"
+          fi
           umask 077
           secrets="$RUNNER_TEMP/legacy-secrets.json"
           trap 'rm -f "$secrets"' EXIT
           for name in GITHUB_APP_ID GITHUB_APP_PRIVATE_KEY; do
-            aws secretsmanager get-secret-value --secret-id "opencode/$STAGE/$name" --output json |
+            aws secretsmanager get-secret-value --secret-id "opencode/production/$name" --output json |
               jq --arg name "$name" '{($name): .SecretString}'
           done | jq -s add > "$secrets"
           bash .github/release/deploy-legacy.sh "$STAGE" "$RUNNER_TEMP/in/legacy-$STAGE" "$secrets"
