@@ -11,11 +11,14 @@ use crate::state::{Data, Error, State, Task};
 const GLOBAL_PROJECT: &str = "global";
 
 impl State {
-    /// Projects that are not archived, most recently active first.
+    /// Projects that are not archived, most recently active first. Equal ones keep TS's
+    /// `Object.values` order: array-index IDs ascending, then the rest in insertion order.
     pub fn projects(&self) -> Vec<&Project> {
         let mut projects: Vec<&Project> =
             self.projects.values().filter(|project| project.time.archived.is_none()).collect();
-        projects.sort_by_key(|project| std::cmp::Reverse(project.time.active));
+        projects.sort_by_key(|project| {
+            (std::cmp::Reverse(project.time.active), array_index(&project.id.0).is_none(), array_index(&project.id.0))
+        });
         projects
     }
 
@@ -120,6 +123,12 @@ fn normalize(value: &str) -> String {
     })
 }
 
+/// The value of a JS array-index key: a canonical decimal below 2^32 - 1, so not `"02"`.
+fn array_index(key: &str) -> Option<u32> {
+    let value: u32 = key.parse().ok()?;
+    (value != u32::MAX && value.to_string() == key).then_some(value)
+}
+
 /// `/^\/[a-z]:/i`
 fn is_windows_root(root: &str) -> bool {
     let bytes = root.as_bytes();
@@ -168,6 +177,10 @@ mod tests {
         again.push(project("recent", 2));
         state.replace_projects(again);
         assert_eq!(order(&state), ["recent", "c", "x", "a", "m", "k", "z", "b", "new"]);
+        // `Object.values` puts array-index keys first, ascending; `"02"` and `"4294967295"` are not indices.
+        let ids = ["10", "local", "2", "02", "4294967295", "4294967294", "+1"];
+        state.replace_projects(ids.iter().map(|id| project(id, 1)).collect());
+        assert_eq!(order(&state), ["2", "10", "4294967294", "local", "02", "4294967295", "+1"]);
     }
 
     #[test]
