@@ -16,7 +16,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "./lib/index.js"
+import { CodeMode, Tool } from "../src/index.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
