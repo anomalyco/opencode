@@ -78,7 +78,15 @@ impl Env {
     }
 
     fn ts(&self) -> TsCommand {
-        TsCommand::from_vars(|_| self.ts_bin.clone().map(Into::into))
+        self.ts_with(|name| std::env::var_os(name), cfg!(windows))
+    }
+
+    /// `ts_bin` stands in for `OPENCODE_TS_BIN`; `PATH` and `PATHEXT` come from `var`.
+    fn ts_with(&self, var: impl Fn(&str) -> Option<std::ffi::OsString>, windows: bool) -> TsCommand {
+        TsCommand::resolve(
+            |name| if name == TsCommand::VAR { self.ts_bin.clone().map(Into::into) } else { var(name) },
+            windows,
+        )
     }
 }
 
@@ -406,6 +414,36 @@ mod tests {
         let text = message(result);
         assert!(text.starts_with("Failed to start server: /nonexistent/opencode-ts: "), "{text}");
         assert!(text.contains("OPENCODE_TS_BIN"), "{text}");
+    }
+
+    // The Windows runner after `npm install -g`: its prefix holds the sh shim `opencode` and `opencode.cmd`, which
+    // runs the package's `.exe`. Without `OPENCODE_TS_BIN` the service and standalone server start that `.exe`, or
+    // the `.cmd` when it names none.
+    #[test]
+    fn without_the_variable_windows_finds_the_npm_shim_on_path() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let prefix = dir.path();
+        let exe = prefix.join("node_modules/@opencode/cli/bin/opencode.exe");
+        std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        std::fs::write(&exe, "MZ").unwrap();
+        std::fs::write(
+            prefix.join("opencode"),
+            "#!/bin/sh\nexec \"$basedir/node_modules/@opencode/cli/bin/opencode.exe\" \"$@\"\n",
+        )
+        .unwrap();
+        std::fs::write(prefix.join("opencode.cmd"), "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\"%dp0%\\node_modules\\@opencode\\cli\\bin\\opencode.exe\"   %*\r\n").unwrap();
+        let path = format!("C:\\Windows\\system32;{}", prefix.display());
+        let var = |name: &str| match name {
+            "PATH" => Some(path.clone().into()),
+            "PATHEXT" => Some(".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL".into()),
+            _ => None,
+        };
+        let ts = |env: &Env| env.ts_with(var, true).program;
+        assert_eq!(ts(&Env::default()), exe.as_os_str());
+        std::fs::remove_file(&exe).unwrap();
+        assert_eq!(ts(&Env::default()), prefix.join("opencode.cmd").as_os_str());
+        assert_eq!(ts(&missing_ts()), "/nonexistent/opencode-ts");
+        assert_eq!(Env::default().ts_with(var, false).program, "opencode");
     }
 
     const OTHER: &str = "http://127.0.0.1:4097/api/info";
