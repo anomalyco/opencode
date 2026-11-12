@@ -1,6 +1,7 @@
 //! ACP errors and their JSON-RPC form (`packages/cli/src/acp/error.ts`).
 
-use serde_json::{Map, Value, json};
+use opencode_util::json_object;
+use serde_json::{Value, json};
 
 /// A JSON-RPC error object, as the ACP SDK's `RequestError` writes it.
 #[derive(Debug, Clone, PartialEq)]
@@ -42,13 +43,7 @@ impl RpcError {
     /// The `error` member of a response. `data` is left out when unset, as `JSON.stringify` drops
     /// `undefined`.
     pub fn to_json(&self) -> Value {
-        let mut object = Map::new();
-        object.insert("code".to_owned(), json!(self.code));
-        object.insert("message".to_owned(), json!(self.message));
-        if let Some(data) = &self.data {
-            object.insert("data".to_owned(), data.clone());
-        }
-        Value::Object(object)
+        json_object! { "code": self.code, "message": self.message, "data"?: &self.data }
     }
 }
 
@@ -160,14 +155,10 @@ impl Failure {
                 json!({ "configId": config_id }),
                 &format!("unknown config option: {config_id}"),
             ),
-            Self::InvalidModel { model_id, provider_id } => {
-                let mut data = Map::new();
-                if let Some(provider_id) = provider_id {
-                    data.insert("providerId".to_owned(), json!(provider_id));
-                }
-                data.insert("modelId".to_owned(), json!(model_id));
-                RpcError::invalid_params(Value::Object(data), &format!("model not found: {model_id}"))
-            }
+            Self::InvalidModel { model_id, provider_id } => RpcError::invalid_params(
+                json_object! { "providerId"?: provider_id, "modelId": model_id },
+                &format!("model not found: {model_id}"),
+            ),
             Self::InvalidEffort { effort } => {
                 RpcError::invalid_params(json!({ "effort": effort }), &format!("effort not found: {effort}"))
             }
@@ -187,14 +178,7 @@ impl Failure {
                 message,
             ),
             Self::ServiceFailure { safe_message, service, error_name } => {
-                let mut data = Map::new();
-                if let Some(service) = service {
-                    data.insert("service".to_owned(), json!(service));
-                }
-                if let Some(error_name) = error_name {
-                    data.insert("errorName".to_owned(), json!(error_name));
-                }
-                RpcError::internal_error(Value::Object(data), safe_message)
+                RpcError::internal_error(json_object! { "service"?: service, "errorName"?: error_name }, safe_message)
             }
             Self::ServerUnavailable => {
                 RpcError::internal_error(json!({ "errorName": "ServerUnavailable" }), "OpenCode server is unavailable")

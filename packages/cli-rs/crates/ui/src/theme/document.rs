@@ -1,6 +1,7 @@
 //! V2 theme documents as JSON: the schema check (`schema.ts`), merging and expansion (`expand.ts`), and mode
 //! selection (`select.ts`) from `packages/theme/src/tui`.
 
+use opencode_util::json_object;
 use serde_json::{Map, Value};
 
 use super::color::is_hex;
@@ -204,126 +205,108 @@ type Check = Result<Value, Issue>;
 /// keys the schema does not name are dropped.
 pub(crate) fn decode(document: &Value) -> Check {
     let input = object(document)?;
-    let mut output = Map::new();
-    field(input, &mut output, "$schema", false, |value| match value {
+    let schema = field(input, "$schema", false, |value| match value {
         Value::String(_) => Ok(value.clone()),
         _ => Err(Issue::Got(value.clone())),
     })?;
-    field(input, &mut output, "base", true, base_definition)?;
+    let base = field(input, "base", true, base_definition)?;
     if input.get("light").is_none() && input.get("dark").is_none() {
         return Err(Issue::Other);
     }
-    field(input, &mut output, "light", false, mode_definition)?;
-    field(input, &mut output, "dark", false, mode_definition)?;
-    Ok(Value::Object(output))
+    Ok(json_object! {
+        "$schema"?: schema,
+        "base"?: base,
+        "light"?: field(input, "light", false, mode_definition)?,
+        "dark"?: field(input, "dark", false, mode_definition)?,
+    })
 }
 
 fn base_definition(value: &Value) -> Check {
     let input = object(value)?;
-    let mut output = Map::new();
-    field(input, &mut output, "categorical", true, categorical)?;
-    tokens(input, &mut output, true)?;
-    field(input, &mut output, "@dialog", false, dialog)?;
-    Ok(Value::Object(output))
+    Ok(json_object! {
+        "categorical"?: field(input, "categorical", true, categorical)?,
+        ..tokens(input, true)?,
+        "@dialog"?: field(input, "@dialog", false, dialog)?,
+    })
 }
 
 fn mode_definition(value: &Value) -> Check {
     let input = object(value)?;
-    let mut output = Map::new();
-    field(input, &mut output, "hue", true, hue)?;
-    field(input, &mut output, "categorical", false, categorical)?;
-    tokens(input, &mut output, false)?;
-    field(input, &mut output, "@dialog", false, dialog)?;
-    Ok(Value::Object(output))
+    Ok(json_object! {
+        "hue"?: field(input, "hue", true, hue)?,
+        "categorical"?: field(input, "categorical", false, categorical)?,
+        ..tokens(input, false)?,
+        "@dialog"?: field(input, "@dialog", false, dialog)?,
+    })
 }
 
 fn dialog(value: &Value) -> Check {
     let input = object(value)?;
-    let mut output = Map::new();
-    tokens(input, &mut output, false)?;
-    field(input, &mut output, "@footer", false, |value| {
-        let input = object(value)?;
-        let mut output = Map::new();
-        tokens(input, &mut output, false)?;
-        Ok(Value::Object(output))
-    })?;
-    Ok(Value::Object(output))
+    let footer = |value: &Value| tokens(object(value)?, false);
+    Ok(json_object! { ..tokens(input, false)?, "@footer"?: field(input, "@footer", false, footer)? })
 }
 
 /// The token sections; `complete` requires every token a base definition needs.
-fn tokens(input: &Map<String, Value>, output: &mut Map<String, Value>, complete: bool) -> Result<(), Issue> {
+fn tokens(input: &Map<String, Value>, complete: bool) -> Check {
     let single = |value: &Value| strict(value, &[("base", complete)], color);
-    field(input, output, "text", complete, |value| text(value, complete))?;
-    field(input, output, "background", complete, |value| background(value, complete))?;
-    field(input, output, "border", complete, single)?;
-    field(input, output, "scrollbar", complete, single)?;
-    field(input, output, "diff", complete, |value| diff(value, complete))?;
-    field(input, output, "syntax", complete, |value| record(value, &SYNTAX, complete))?;
-    field(input, output, "markdown", complete, |value| record(value, &MARKDOWN, complete))?;
-    Ok(())
+    Ok(json_object! {
+        "text"?: field(input, "text", complete, |value| text(value, complete))?,
+        "background"?: field(input, "background", complete, |value| background(value, complete))?,
+        "border"?: field(input, "border", complete, single)?,
+        "scrollbar"?: field(input, "scrollbar", complete, single)?,
+        "diff"?: field(input, "diff", complete, |value| diff(value, complete))?,
+        "syntax"?: field(input, "syntax", complete, |value| record(value, &SYNTAX, complete))?,
+        "markdown"?: field(input, "markdown", complete, |value| record(value, &MARKDOWN, complete))?,
+    })
 }
 
 fn text(value: &Value, complete: bool) -> Check {
     let input = object(value)?;
-    let mut output = Map::new();
-    field(input, &mut output, "base", complete, color)?;
-    field(input, &mut output, "muted", complete, color)?;
-    field(input, &mut output, "faint", false, color)?;
-    field(input, &mut output, "action", complete, |value| actions(value, complete))?;
-    field(input, &mut output, "formfield", complete, |value| stateful(value, complete))?;
-    field(input, &mut output, "feedback", complete, |value| {
-        feedback(value, complete, |value| strict(value, &[("base", complete), ("muted", false)], color))
-    })?;
-    Ok(Value::Object(output))
+    let feedback_color = |value: &Value| strict(value, &[("base", complete), ("muted", false)], color);
+    Ok(json_object! {
+        "base"?: field(input, "base", complete, color)?,
+        "muted"?: field(input, "muted", complete, color)?,
+        "faint"?: field(input, "faint", false, color)?,
+        "action"?: field(input, "action", complete, |value| actions(value, complete))?,
+        "formfield"?: field(input, "formfield", complete, |value| stateful(value, complete))?,
+        "feedback"?: field(input, "feedback", complete, |value| feedback(value, complete, feedback_color))?,
+    })
 }
 
 fn background(value: &Value, complete: bool) -> Check {
     let input = object(value)?;
-    let mut output = Map::new();
-    field(input, &mut output, "base", complete, color)?;
-    field(input, &mut output, "raised", complete, |value| {
-        strict(value, &[("base", complete), ("high", complete), ("max", complete)], color)
-    })?;
-    field(input, &mut output, "action", complete, |value| actions(value, complete))?;
-    field(input, &mut output, "formfield", complete, |value| stateful(value, complete))?;
-    field(input, &mut output, "feedback", complete, |value| {
-        feedback(value, complete, |value| strict(value, &[("base", complete)], color))
-    })?;
-    Ok(Value::Object(output))
+    let raised = |value: &Value| strict(value, &[("base", complete), ("high", complete), ("max", complete)], color);
+    let feedback_color = |value: &Value| strict(value, &[("base", complete)], color);
+    Ok(json_object! {
+        "base"?: field(input, "base", complete, color)?,
+        "raised"?: field(input, "raised", complete, raised)?,
+        "action"?: field(input, "action", complete, |value| actions(value, complete))?,
+        "formfield"?: field(input, "formfield", complete, |value| stateful(value, complete))?,
+        "feedback"?: field(input, "feedback", complete, |value| feedback(value, complete, feedback_color))?,
+    })
 }
 
 fn diff(value: &Value, complete: bool) -> Check {
     let input = object(value)?;
-    let mut output = Map::new();
     let pair = |value: &Value| strict(value, &[("added", complete), ("removed", complete)], color);
-    field(input, &mut output, "text", complete, |value| {
-        strict(
-            value,
-            &[("added", complete), ("removed", complete), ("context", complete), ("hunkHeader", complete)],
-            color,
-        )
-    })?;
-    field(input, &mut output, "background", complete, |value| {
-        strict(value, &[("added", complete), ("removed", complete), ("context", complete)], color)
-    })?;
-    field(input, &mut output, "highlight", complete, pair)?;
-    field(input, &mut output, "lineNumber", complete, |value| {
+    let text = [("added", complete), ("removed", complete), ("context", complete), ("hunkHeader", complete)];
+    let line_number = |value: &Value| {
         let input = object(value)?;
-        let mut output = Map::new();
-        field(input, &mut output, "text", complete, color)?;
-        field(input, &mut output, "background", complete, pair)?;
-        Ok(Value::Object(output))
-    })?;
-    Ok(Value::Object(output))
+        Ok(json_object! {
+            "text"?: field(input, "text", complete, color)?,
+            "background"?: field(input, "background", complete, pair)?,
+        })
+    };
+    Ok(json_object! {
+        "text"?: field(input, "text", complete, |value| strict(value, &text, color))?,
+        "background"?: field(input, "background", complete, |value| strict(value, &text[..3], color))?,
+        "highlight"?: field(input, "highlight", complete, pair)?,
+        "lineNumber"?: field(input, "lineNumber", complete, line_number)?,
+    })
 }
 
 fn actions(value: &Value, complete: bool) -> Check {
-    let input = object(value)?;
-    let mut output = Map::new();
-    for variant in VARIANTS {
-        field(input, &mut output, variant, complete, |value| stateful(value, complete))?;
-    }
-    Ok(Value::Object(output))
+    strict(value, &VARIANTS.map(|variant| (variant, complete)), |value| stateful(value, complete))
 }
 
 fn stateful(value: &Value, complete: bool) -> Check {
@@ -339,30 +322,22 @@ fn stateful(value: &Value, complete: bool) -> Check {
 }
 
 fn feedback(value: &Value, complete: bool, check: impl Fn(&Value) -> Check) -> Check {
-    let input = object(value)?;
-    let mut output = Map::new();
-    for kind in FEEDBACK {
-        field(input, &mut output, kind, complete, &check)?;
-    }
-    Ok(Value::Object(output))
+    strict(value, &FEEDBACK.map(|kind| (kind, complete)), check)
 }
 
 /// A `Schema.Record` over literal keys: every key in literal order, required when `complete`.
 fn record(value: &Value, keys: &[&str], complete: bool) -> Check {
-    let input = object(value)?;
-    let mut output = Map::new();
-    for key in keys {
-        field(input, &mut output, key, complete, hue_color)?;
-    }
-    Ok(Value::Object(output))
+    strict(value, &keys.iter().map(|key| (*key, complete)).collect::<Vec<_>>(), hue_color)
 }
 
 /// A struct whose fields all share one check.
-fn strict(value: &Value, keys: &[(&str, bool)], check: fn(&Value) -> Check) -> Check {
+fn strict(value: &Value, keys: &[(&str, bool)], check: impl Fn(&Value) -> Check) -> Check {
     let input = object(value)?;
     let mut output = Map::new();
     for (key, required) in keys {
-        field(input, &mut output, key, *required, check)?;
+        if let Some(value) = field(input, key, *required, &check)? {
+            output.insert((*key).to_owned(), value);
+        }
     }
     Ok(Value::Object(output))
 }
@@ -434,19 +409,16 @@ fn object(value: &Value) -> Result<&Map<String, Value>, Issue> {
     value.as_object().ok_or_else(|| Issue::Got(value.clone()))
 }
 
+/// The checked value of `key`, or `None` when it is absent and not `required`.
 fn field(
     input: &Map<String, Value>,
-    output: &mut Map<String, Value>,
     key: &str,
     required: bool,
     check: impl Fn(&Value) -> Check,
-) -> Result<(), Issue> {
+) -> Result<Option<Value>, Issue> {
     match input.get(key) {
-        Some(value) => {
-            output.insert(key.to_owned(), check(value)?);
-            Ok(())
-        }
+        Some(value) => check(value).map(Some),
         None if required => Err(Issue::Missing),
-        None => Ok(()),
+        None => Ok(None),
     }
 }

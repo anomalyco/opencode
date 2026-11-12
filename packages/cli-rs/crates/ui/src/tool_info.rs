@@ -9,6 +9,7 @@
 
 use opencode_api_types::js::js_string;
 use opencode_api_types::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
+use opencode_util::json_object;
 use serde_json::{Map, Value};
 
 /// The summary of one tool call.
@@ -337,37 +338,31 @@ pub fn normalize_metadata(name: &str, mut metadata: Map<String, Value>) -> Map<S
         return metadata;
     }
     if let Some(Value::Array(files)) = metadata.get("files") {
-        let files = files.iter().filter_map(normalize_file).map(Value::Object).collect();
+        let files = files.iter().filter_map(normalize_file).collect();
         metadata.insert("files".to_owned(), Value::Array(files));
     }
     metadata
 }
 
 /// A file of edit or patch metadata, with legacy field names mapped to `file`, `status`, and `from`.
-fn normalize_file(value: &Value) -> Option<Map<String, Value>> {
-    let mut file = dict(Some(value));
-    let name = [text(file.get("file")), text(file.get("relativePath")), text(file.get("filePath"))]
-        .into_iter()
-        .find(|name| !name.is_empty())?
-        .to_owned();
-    let status = match (text(file.get("status")), text(file.get("type"))) {
+fn normalize_file(value: &Value) -> Option<Value> {
+    let field = |key| text(value.get(key));
+    let name = [field("file"), field("relativePath"), field("filePath")].into_iter().find(|name| !name.is_empty())?;
+    let status = match (field("status"), field("type")) {
         ("", "add") => "added",
         ("", "delete") => "deleted",
         ("", "update") => "modified",
         ("", "move") => "moved",
         ("", legacy) => legacy,
         (status, _) => status,
-    }
-    .to_owned();
-    let from = text(file.get("filePath")).to_owned();
-    file.insert("file".to_owned(), Value::String(name));
-    if status == "moved" && !from.is_empty() {
-        file.insert("from".to_owned(), Value::String(from));
-    }
-    if !status.is_empty() {
-        file.insert("status".to_owned(), Value::String(status));
-    }
-    Some(file)
+    };
+    let from = field("filePath");
+    Some(json_object! {
+        ..value.clone(),
+        "file": name,
+        "from"?: (status == "moved" && !from.is_empty()).then_some(from),
+        "status"?: (!status.is_empty()).then_some(status),
+    })
 }
 
 fn fallback_inline(frame: &Frame) -> ToolInline {

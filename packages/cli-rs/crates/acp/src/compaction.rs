@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use serde_json::{Map, Value, json};
+use opencode_util::json_object;
+use serde_json::{Value, json};
 
 const MARKER_META: &str = "opencode/compaction";
 
@@ -116,18 +117,17 @@ fn open(event: &Value) -> Started {
 
 fn update(compaction: &Compaction, standard_updates: bool) -> Value {
     if !standard_updates {
-        let mut marker = Map::new();
-        let status = match compaction.status {
-            Status::Started => "started",
-            Status::Completed { .. } => "completed",
-            Status::Failed { .. } => "failed",
+        let (status, error) = match &compaction.status {
+            Status::Started => ("started", None),
+            Status::Completed { .. } => ("completed", None),
+            Status::Failed { error } => ("failed", Some(error)),
         };
-        marker.insert("status".to_owned(), json!(status));
-        marker.insert("messageId".to_owned(), json!(compaction.message_id));
-        marker.insert("reason".to_owned(), json!(compaction.reason));
-        if let Status::Failed { error } = &compaction.status {
-            marker.insert("error".to_owned(), error.clone());
-        }
+        let marker = json_object! {
+            "status": status,
+            "messageId": compaction.message_id,
+            "reason": compaction.reason,
+            "error"?: error,
+        };
         return json!({ "sessionUpdate": "session_info_update", "_meta": { (MARKER_META): marker } });
     }
     let id = &compaction.message_id;

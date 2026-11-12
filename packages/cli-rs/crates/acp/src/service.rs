@@ -9,7 +9,8 @@ use opencode_api::generated::{
     AbsolutePath, LocationPublicRef, MessageListInput, SessionCreateInput, SessionForkInput, SessionGetInput,
     SessionID, SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput, SessionsCursor,
 };
-use serde_json::{Map, Value, json};
+use opencode_util::{json_object, lock};
+use serde_json::{Value, json};
 
 use crate::capabilities::{self, CHILD_SESSION_UPDATES, Capabilities};
 use crate::catalog::Catalogs;
@@ -51,30 +52,24 @@ pub struct Service {
 impl Service {
     pub fn initialize(&self, params: &Value) -> Value {
         let client = params.get("clientCapabilities");
-        *self.capabilities.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = capabilities::parse(client);
-        let mut auth = Map::new();
-        auth.insert("description".to_owned(), json!("Run `opencode auth login` in the terminal"));
-        auth.insert("name".to_owned(), json!("Login with opencode"));
-        auth.insert("id".to_owned(), json!(AUTH_METHOD_ID));
+        *lock(&self.capabilities) = capabilities::parse(client);
         let terminal = client
             .and_then(|client| client.get("auth"))
             .and_then(|auth| auth.get("terminal"))
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        if terminal {
-            auth.insert("type".to_owned(), json!("terminal"));
-            auth.insert("args".to_owned(), json!(["--login"]));
-        }
-        if client.and_then(|client| client.get("_meta")).and_then(|meta| meta.get("terminal-auth"))
-            == Some(&Value::Bool(true))
-        {
-            auth.insert(
-                "_meta".to_owned(),
-                json!({
-                    "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" },
-                }),
-            );
-        }
+        let terminal_auth = client.and_then(|client| client.get("_meta")).and_then(|meta| meta.get("terminal-auth"))
+            == Some(&Value::Bool(true));
+        let auth = json_object! {
+            "description": "Run `opencode auth login` in the terminal",
+            "name": "Login with opencode",
+            "id": AUTH_METHOD_ID,
+            "type"?: terminal.then_some("terminal"),
+            "args"?: terminal.then_some(["--login"]),
+            "_meta"?: terminal_auth.then(|| json!({
+                "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" },
+            })),
+        };
         json!({
             "protocolVersion": 1,
             "agentCapabilities": {
@@ -121,7 +116,7 @@ impl Service {
                 .await,
         )?;
         let (attached, options) = self.sessions.attach(&created, &setup.cwd, &mcp_servers, responded).await?;
-        self.unprompted().insert(attached.id.clone());
+        lock(&self.unprompted).insert(attached.id.clone());
         Ok(json!({ "sessionId": attached.id, "configOptions": options }))
     }
 
@@ -132,7 +127,7 @@ impl Service {
         directories::activate(&self.client, &session, &directories).await?;
         let (attached, _) =
             self.sessions.attach(&session, &session.location.directory.0, &mcp_servers, responded).await?;
-        let capabilities = *self.capabilities.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let capabilities = *lock(&self.capabilities);
         let loaded = async {
             replay::history(&self.client, &self.connection, &attached, &capabilities).await?;
             self.current_options(&attached).await
@@ -164,30 +159,22 @@ impl Service {
             .data
             .iter()
             .map(|session| {
-                let mut item = Map::new();
-                item.insert("sessionId".to_owned(), json!(session.id.0));
-                item.insert("cwd".to_owned(), json!(session.location.directory.0));
                 let additional = directories::list(session);
-                if !additional.is_empty() {
-                    item.insert("additionalDirectories".to_owned(), json!(additional));
+                json_object! {
+                    "sessionId": session.id.0,
+                    "cwd": session.location.directory.0,
+                    "additionalDirectories"?: (!additional.is_empty()).then_some(additional),
+                    "title": title(session),
+                    "updatedAt": iso(session.time.updated),
                 }
-                item.insert("title".to_owned(), json!(title(session)));
-                item.insert("updatedAt".to_owned(), json!(iso(session.time.updated)));
-                Value::Object(item)
             })
             .collect();
-        let mut response = Map::new();
-        response.insert("sessions".to_owned(), json!(sessions));
-        if let Some(Some(next)) =
-            page.cursor.next.as_ref().filter(|next| next.as_ref().is_some_and(|next| !next.0.is_empty()))
-        {
-            response.insert("nextCursor".to_owned(), json!(next.0));
-        }
-        Ok(Value::Object(response))
+        let next = page.cursor.next.as_ref().and_then(Option::as_ref).filter(|next| !next.0.is_empty());
+        Ok(json_object! { "sessions": sessions, "nextCursor"?: next.map(|next| &next.0) })
     }
 
     pub async fn delete_session(&self, session_id: &str) -> Result<Value, Failure> {
-        self.unprompted().remove(session_id);
+        lock(&self.unprompted).remove(session_id);
         self.turns.cancel(session_id).await;
         if let Ok(id) = decode_session_id(session_id) {
             let result = self.client.session_remove(&SessionRemoveInput { session_id: SessionID(id) }).await;
@@ -219,7 +206,7 @@ impl Service {
 
     /// Removes a session closed without a prompt, unless another client of the server used it.
     async fn discard_unprompted(&self, session_id: &str) {
-        if !self.unprompted().remove(session_id) {
+        if !lock(&self.unprompted).remove(session_id) {
             return;
         }
         let result = async {
@@ -247,10 +234,6 @@ impl Service {
     /// `_session/steering` (an interim extension until ACP has native mid-turn steering).
     pub async fn steer(&self, session_id: &str, prompt: &[Value]) -> Result<Value, Failure> {
         self.turns.steer(session_id, prompt).await
-    }
-
-    fn unprompted(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
-        self.unprompted.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub async fn fork_session(&self, setup: Setup, responded: Responded) -> Result<Value, Failure> {
@@ -289,7 +272,7 @@ impl Service {
         cancel: &tokio_util::sync::CancellationToken,
         responded: Responded,
     ) -> BoxFuture<'static, Result<Value, Failure>> {
-        self.unprompted().remove(&session_id);
+        lock(&self.unprompted).remove(&session_id);
         match self.turns.start(session_id, prompt, cancel, responded) {
             Ok(result) => Box::pin(async move {
                 result.await.unwrap_or_else(|_| {

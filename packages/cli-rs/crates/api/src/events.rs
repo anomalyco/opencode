@@ -15,12 +15,13 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::panic::AssertUnwindSafe;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use futures_util::stream::BoxStream;
+use opencode_util::lock;
 use tokio::sync::{Notify, mpsc, watch};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -70,10 +71,6 @@ pub type Activity = Arc<dyn Fn() + Send + Sync>;
 
 /// Opens one upstream event stream. The token is cancelled when the stream is no longer wanted.
 pub type Connect<E, X> = Arc<dyn Fn(CancellationToken, Activity) -> BoxStream<'static, Result<E, X>> + Send + Sync>;
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
-}
 
 // ---------------------------------------------------------------------------------------------------
 // Shared subscription

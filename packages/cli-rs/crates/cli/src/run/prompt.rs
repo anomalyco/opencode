@@ -20,6 +20,7 @@ use opencode_api::generated::*;
 use opencode_api::transport::SseResponse;
 use opencode_ui::terminal_text;
 use opencode_ui::tool_info::{tool_inline_info, tool_output_text};
+use opencode_util::json_object;
 use serde_json::value::RawValue;
 use serde_json::{Value, json};
 use tokio::sync::watch;
@@ -208,11 +209,7 @@ impl Run {
             // The TS key order, `{ providerID, id, variant }`; the generated `ModelRef` puts `id` first.
             let input = SessionSwitchModelInput { session_id: session.clone(), ..Default::default() };
             let mut call = Client::session_switch_model_call(&input).map_err(|error| error.error_message())?;
-            call.json(&json!({ "model": object([
-                ("providerID", Some(model.provider_id.0.clone().into())),
-                ("id", Some(model.id.clone().into())),
-                ("variant", model.variant.clone().map(Value::from)),
-            ]) }))
+            call.json(&json!({ "model": json_object! { "providerID": model.provider_id.0, "id": model.id, "variant"?: &model.variant } }))
             .map_err(|error| error.error_message())?;
             client.empty(call).await.map_err(|error| error.error_message())?;
         }
@@ -742,14 +739,8 @@ impl Renderer {
         if !self.json {
             return false;
         }
-        let mut line = serde_json::Map::new();
-        line.insert("type".into(), kind.into());
-        line.insert("timestamp".into(), timestamp.clone());
-        line.insert("sessionID".into(), self.session_id.clone().into());
-        if let Value::Object(data) = data {
-            line.extend(data);
-        }
-        let _ = crate::output::print(&(Value::Object(line).to_string() + "\n"));
+        let line = json_object! { "type": kind, "timestamp": timestamp, "sessionID": self.session_id, ..data };
+        let _ = crate::output::print(&(line.to_string() + "\n"));
         true
     }
 
@@ -770,15 +761,7 @@ impl Renderer {
         }
         self.printed.borrow_mut().insert(id, part.text.to_owned());
         let value = &part.text[previous.map_or(0, |previous| previous.len())..];
-        let json = object([
-            ("id", Some(part.id.into())),
-            ("sessionID", Some(self.session_id.clone().into())),
-            ("messageID", Some(part.message_id.into())),
-            ("type", Some(part.kind.into())),
-            ("text", Some(value.into())),
-            ("metadata", if part.kind == "reasoning" { part.metadata } else { None }),
-            ("time", Some(json!({ "start": start, "end": end }))),
-        ]);
+        let json = json_object! { "id": part.id, "sessionID": self.session_id, "messageID": part.message_id, "type": part.kind, "text": value, "metadata"?: part.metadata.filter(|_| part.kind == "reasoning"), "time": json!({ "start": start, "end": end }) };
         if self.emit(part.kind, end, json!({ "part": json })) {
             return;
         }
@@ -813,32 +796,11 @@ impl Renderer {
         });
         let completed = state["status"] == "completed";
         let projected = if completed {
-            object([
-                ("status", Some("completed".into())),
-                ("input", state.get("input").cloned()),
-                ("output", Some(output_text(name, state.get("content")).into())),
-                ("title", Some(name.into())),
-                ("metadata", Some(metadata)),
-                ("time", Some(time)),
-            ])
+            json_object! { "status": "completed", "input"?: state.get("input"), "output": output_text(name, state.get("content")), "title": name, "metadata": metadata, "time": time }
         } else {
-            object([
-                ("status", Some("error".into())),
-                ("input", state.get("input").cloned()),
-                ("error", state["error"].get("message").cloned()),
-                ("metadata", Some(metadata)),
-                ("time", Some(time)),
-            ])
+            json_object! { "status": "error", "input"?: state.get("input"), "error"?: state["error"].get("message"), "metadata": metadata, "time": time }
         };
-        let part = object([
-            ("partID", Some(part_id.into())),
-            ("sessionID", Some(self.session_id.clone().into())),
-            ("messageID", Some(message_id.into())),
-            ("type", Some("tool".into())),
-            ("id", item.get("id").cloned()),
-            ("tool", Some(name.into())),
-            ("state", Some(projected)),
-        ]);
+        let part = json_object! { "partID": part_id, "sessionID": self.session_id, "messageID": message_id, "type": "tool", "id"?: item.get("id"), "tool": name, "state": projected };
         if self.emit("tool_use", timestamp, json!({ "part": part })) {
             return;
         }
@@ -847,12 +809,7 @@ impl Renderer {
         }
         if truthy(&state["content"]) && !output_text(name, state.get("content")).trim().is_empty() {
             let mut shown = item.clone();
-            shown["state"] = object([
-                ("status", Some("completed".into())),
-                ("input", state.get("input").cloned()),
-                ("metadata", state.get("metadata").cloned()),
-                ("content", state.get("content").cloned()),
-            ]);
+            shown["state"] = json_object! { "status": "completed", "input"?: state.get("input"), "metadata"?: state.get("metadata"), "content"?: state.get("content") };
             self.render_tool(&shown);
         }
         self.render_tool_error(item);
@@ -861,15 +818,8 @@ impl Renderer {
 
     fn step(&self, kind: &str, timestamp: &Value, id: String, message_id: &str, rest: Value) -> bool {
         self.steps.borrow_mut().insert(message_id.to_owned(), kind == "step-finish");
-        let mut part = object([
-            ("id", Some(id.into())),
-            ("sessionID", Some(self.session_id.clone().into())),
-            ("messageID", Some(message_id.into())),
-            ("type", Some(kind.into())),
-        ]);
-        if let (Value::Object(part), Value::Object(rest)) = (&mut part, rest) {
-            part.extend(rest);
-        }
+        let part =
+            json_object! { "id": id, "sessionID": self.session_id, "messageID": message_id, "type": kind, ..rest };
         let name = if kind == "step-start" { "step_start" } else { "step_finish" };
         self.emit(name, timestamp, json!({ "part": part }))
     }
@@ -884,11 +834,7 @@ impl Renderer {
         let list: Vec<Value> = jobs
             .iter()
             .map(|job| {
-                object([
-                    ("id", job.get("id").cloned()),
-                    ("kind", job.get("kind").cloned()),
-                    ("title", job.get("title").cloned()),
-                ])
+                json_object! { "id"?: job.get("id"), "kind"?: job.get("kind"), "title"?: job.get("title") }
             })
             .collect();
         if self.emit("background_wait", &now(), json!({ "jobs": list })) {
@@ -910,12 +856,7 @@ impl Renderer {
         let message = text(&data["assistantMessageID"]);
         match kind {
             "session.retry.scheduled" => {
-                let retry = object([
-                    ("messageID", data.get("assistantMessageID").cloned()),
-                    ("attempt", data.get("attempt").cloned()),
-                    ("nextRetryAt", data.get("at").cloned()),
-                    ("error", data.get("error").cloned()),
-                ]);
+                let retry = json_object! { "messageID"?: data.get("assistantMessageID"), "attempt"?: data.get("attempt"), "nextRetryAt"?: data.get("at"), "error"?: data.get("error") };
                 if self.emit("retry", &time, retry) {
                     return;
                 }
@@ -931,19 +872,14 @@ impl Renderer {
             }
             // Each retried attempt of a step starts it again.
             "session.step.started" if !self.steps.borrow().contains_key(message) => {
-                let rest = object([("snapshot", data.get("snapshot").cloned())]);
+                let rest = json_object! { "snapshot"?: data.get("snapshot") };
                 if !self.step("step-start", &time, part_id(text(&event["id"])), message, rest) {
                     let (agent, model) = (text(&data["agent"]), text(&data["model"]["id"]));
                     self.block(&format!("> {} · {}", terminal_text(agent), terminal_text(model)));
                 }
             }
             "session.step.ended" => {
-                let rest = object([
-                    ("reason", data.get("finish").cloned()),
-                    ("snapshot", data.get("snapshot").cloned()),
-                    ("cost", data.get("cost").cloned()),
-                    ("tokens", data.get("tokens").cloned()),
-                ]);
+                let rest = json_object! { "reason"?: data.get("finish"), "snapshot"?: data.get("snapshot"), "cost"?: data.get("cost"), "tokens"?: data.get("tokens") };
                 self.step("step-finish", &time, part_id(text(&event["id"])), message, rest);
             }
             "session.text.started" | "session.reasoning.started" => {
@@ -977,7 +913,7 @@ impl Renderer {
                     input: if called { data["input"].clone() } else { json!({}) },
                     raw: current.and_then(|current| current.raw),
                     call: called.then(|| {
-                        object([("executed", data.get("executed").cloned()), ("state", data.get("native").cloned())])
+                        json_object! { "executed"?: data.get("executed"), "state"?: data.get("native") }
                     }),
                     metadata: json!({}),
                 };
@@ -1011,59 +947,22 @@ impl Renderer {
             metadata: json!({}),
         });
         let call_state = current.call.as_ref().and_then(|call| call.get("state")).cloned();
-        let call = object([
-            ("providerCall", current.call.clone()),
-            (
-                "providerResult",
-                Some(object([("executed", data.get("executed").cloned()), ("state", data.get("native").cloned())])),
-            ),
-            ("rawInput", current.raw.clone().map(Value::from)),
-        ]);
+        let call = json_object! { "providerCall"?: &current.call, "providerResult": json_object! { "executed"?: data.get("executed"), "state"?: data.get("native") }, "rawInput"?: &current.raw };
         let native = if truthy(&data["native"]) {
-            let mut merged = match &call_state {
-                Some(Value::Object(previous)) => previous.clone(),
-                _ => serde_json::Map::new(),
-            };
-            if let Value::Object(next) = &data["native"] {
-                merged.extend(next.clone());
-            }
-            Some(Value::Object(merged))
+            Some(json_object! { ..call_state.unwrap_or_default(), ..data["native"].clone() })
         } else {
             call_state
         };
         let success = text(&event["type"]) == "session.tool.success";
         let (state, metadata) = if success {
-            let state = object([
-                ("status", Some("completed".into())),
-                ("input", Some(current.input.clone())),
-                ("metadata", data.get("metadata").cloned()),
-                ("content", data.get("content").cloned()),
-            ]);
-            let mut metadata =
-                object([("metadata", data.get("metadata").cloned()), ("content", data.get("content").cloned())]);
-            if let (Value::Object(metadata), Value::Object(call)) = (&mut metadata, call) {
-                metadata.extend(call);
-            }
+            let state = json_object! { "status": "completed", "input": current.input, "metadata"?: data.get("metadata"), "content"?: data.get("content") };
+            let metadata = json_object! { "metadata"?: data.get("metadata"), "content"?: data.get("content"), ..call };
             (state, metadata)
         } else {
-            let state = object([
-                ("status", Some("error".into())),
-                ("input", Some(current.input.clone())),
-                ("metadata", Some(present(data.get("metadata")).unwrap_or(current.metadata.clone()))),
-                ("content", data.get("content").cloned()),
-                ("error", data.get("error").cloned()),
-            ]);
+            let state = json_object! { "status": "error", "input": current.input, "metadata": present(data.get("metadata")).unwrap_or(current.metadata.clone()), "content"?: data.get("content"), "error"?: data.get("error") };
             (state, call)
         };
-        let item = object([
-            ("type", Some("tool".into())),
-            ("id", data.get("id").cloned()),
-            ("name", Some(current.name.clone().into())),
-            ("executed", data.get("executed").cloned()),
-            ("native", native),
-            ("time", Some(json!({ "created": current.timestamp, "ran": current.timestamp, "completed": time }))),
-            ("state", Some(state)),
-        ]);
+        let item = json_object! { "type": "tool", "id"?: data.get("id"), "name": current.name, "executed"?: data.get("executed"), "native"?: native, "time": json!({ "created": current.timestamp, "ran": current.timestamp, "completed": time }), "state": state };
         self.tool(current.id, message, &item, metadata, &time);
     }
 
@@ -1075,7 +974,7 @@ impl Renderer {
             let seen = self.steps.borrow().get(message_id).copied();
             let id = |part: &str| projected_part_id(message_id, part);
             if seen.is_none() {
-                let rest = object([("snapshot", message["snapshot"].get("start").cloned())]);
+                let rest = json_object! { "snapshot"?: message["snapshot"].get("start") };
                 self.step("step-start", created, id("step-start"), message_id, rest);
             }
             let (mut texts, mut reasonings) = (0u64, 0u64);
@@ -1087,10 +986,8 @@ impl Renderer {
                         continue;
                     }
                     let state = &item["state"];
-                    let metadata = object([
-                        ("metadata", state.get("metadata").cloned()),
-                        ("content", state.get("content").cloned()),
-                    ]);
+                    let metadata =
+                        json_object! { "metadata"?: state.get("metadata"), "content"?: state.get("content") };
                     self.tool(id(&format!("tool-{}", text(&item["id"]))), message_id, item, metadata, &timestamp);
                     continue;
                 }
@@ -1112,12 +1009,7 @@ impl Renderer {
                 self.text(part, created, &timestamp);
             }
             if seen != Some(true) && truthy(&message["finish"]) && truthy(&message["tokens"]) {
-                let rest = object([
-                    ("reason", message.get("finish").cloned()),
-                    ("snapshot", message["snapshot"].get("end").cloned()),
-                    ("cost", Some(or(&message["cost"], &Value::from(0)))),
-                    ("tokens", message.get("tokens").cloned()),
-                ]);
+                let rest = json_object! { "reason"?: message.get("finish"), "snapshot"?: message["snapshot"].get("end"), "cost": or(&message["cost"], &Value::from(0)), "tokens"?: message.get("tokens") };
                 self.step("step-finish", &timestamp, id("step-finish"), message_id, rest);
             }
         }
@@ -1181,11 +1073,6 @@ fn output_text(name: &str, content: Option<&Value>) -> String {
     let content: Vec<ToolContent> =
         content.and_then(|content| serde_json::from_value(content.clone()).ok()).unwrap_or_default();
     tool_output_text(name, &content)
-}
-
-/// An object of the fields that are present: `undefined` fields vanish from `JSON.stringify`.
-fn object<const N: usize>(fields: [(&str, Option<Value>); N]) -> Value {
-    Value::Object(fields.into_iter().filter_map(|(key, value)| value.map(|value| (key.to_owned(), value))).collect())
 }
 
 fn array(value: &Value) -> &[Value] {
@@ -1255,12 +1142,7 @@ mod tests {
     use super::*;
 
     fn idle(id: &str, outcome: &str, error: Option<Value>) -> Value {
-        object([
-            ("id", Some(id.into())),
-            ("type", Some("idle".into())),
-            ("outcome", Some(outcome.into())),
-            ("error", error),
-        ])
+        json_object! { "id": id, "type": "idle", "outcome": outcome, "error"?: error }
     }
 
     fn settled(messages: Vec<Value>, background: bool) -> Settled {

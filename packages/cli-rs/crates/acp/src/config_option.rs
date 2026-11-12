@@ -2,7 +2,8 @@
 
 use opencode_api::generated::{ModelInfo, ModelRef, ProviderID};
 use opencode_api::js::locale_compare;
-use serde_json::{Map, Value, json};
+use opencode_util::json_object;
+use serde_json::{Value, json};
 
 use crate::catalog::{BUILTIN_COMMANDS, Catalog, find_model};
 use crate::error::Failure;
@@ -85,13 +86,8 @@ pub fn config_options(catalog: &Catalog, selection: &Selection) -> Vec<Value> {
             .modes
             .iter()
             .map(|mode| {
-                let mut option = Map::new();
-                option.insert("value".to_owned(), json!(mode.id));
-                option.insert("name".to_owned(), json!(mode.name));
-                if let Some(description) = mode.description.as_ref().filter(|text| !text.is_empty()) {
-                    option.insert("description".to_owned(), json!(description));
-                }
-                Value::Object(option)
+                let description = mode.description.as_ref().filter(|text| !text.is_empty());
+                json_object! { "value": mode.id, "name": mode.name, "description"?: description }
             })
             .collect::<Vec<_>>(),
     }));

@@ -4,7 +4,8 @@
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;
-use serde_json::{Map, Value, json};
+use opencode_util::json_object;
+use serde_json::{Value, json};
 
 use crate::child;
 use crate::compaction;
@@ -238,33 +239,25 @@ pub fn number(value: f64) -> Value {
 }
 
 pub fn response(state: &TurnState, session_id: &str, terminal: Terminal) -> Value {
-    let mut response = Map::new();
     let error = state.step_error.as_ref().or(state.execution_error.as_ref()).and_then(|error| text(error, "type"));
-    response.insert("stopReason".to_owned(), json!(stop_reason(terminal, state.finish.as_deref(), error)));
-    if let Some(usage) = &state.usage {
+    let usage = state.usage.as_ref().map(|usage| {
         let tokens = usage.turn;
-        let mut out = Map::new();
-        out.insert("inputTokens".to_owned(), number(tokens.input));
-        out.insert("outputTokens".to_owned(), number(tokens.output));
-        out.insert("totalTokens".to_owned(), number(tokens.total()));
-        if tokens.reasoning > 0.0 {
-            out.insert("thoughtTokens".to_owned(), number(tokens.reasoning));
+        let positive = |value: f64| (value > 0.0).then(|| number(value));
+        json_object! {
+            "inputTokens": number(tokens.input),
+            "outputTokens": number(tokens.output),
+            "totalTokens": number(tokens.total()),
+            "thoughtTokens"?: positive(tokens.reasoning),
+            "cachedReadTokens"?: positive(tokens.cache_read),
+            "cachedWriteTokens"?: positive(tokens.cache_write),
         }
-        if tokens.cache_read > 0.0 {
-            out.insert("cachedReadTokens".to_owned(), number(tokens.cache_read));
-        }
-        if tokens.cache_write > 0.0 {
-            out.insert("cachedWriteTokens".to_owned(), number(tokens.cache_write));
-        }
-        response.insert("usage".to_owned(), Value::Object(out));
-    }
+    });
     // Interruption clears the projected retry, so a retry pending at interrupt is reported here.
     let meta = match state.retries.get(session_id) {
         Some(retry) => json!({ (RETRY_META): retry }),
         None => json!({}),
     };
-    response.insert("_meta".to_owned(), meta);
-    Value::Object(response)
+    json_object! { "stopReason": stop_reason(terminal, state.finish.as_deref(), error), "usage"?: usage, "_meta": meta }
 }
 
 // Child compactions are left to the background consumer.
@@ -380,11 +373,9 @@ fn child_event(state: &mut TurnState, event: &Value, ctx: &TurnContext, child: &
 }
 
 fn tag(update: &mut Value, session_update: &str) {
-    let Some(object) = update.as_object_mut() else { return };
-    let mut tagged = Map::new();
-    tagged.insert("sessionUpdate".to_owned(), json!(session_update));
-    tagged.extend(std::mem::take(object));
-    *object = tagged;
+    if update.is_object() {
+        *update = json_object! { "sessionUpdate": session_update, ..update.take() };
+    }
 }
 
 fn session_event(state: &mut TurnState, event: &Value, ctx: &TurnContext, child: Option<&child::Session>) -> Folded {

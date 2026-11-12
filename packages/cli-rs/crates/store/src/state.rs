@@ -18,6 +18,7 @@ use opencode_api::generated::{
     PermissionRequest, PermissionSavedInfo, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo,
     SessionInfo, SessionMessageID,
 };
+use opencode_util::lock;
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
 use tokio::task::AbortHandle;
@@ -672,10 +673,6 @@ impl Drop for Listening {
             }
         }
     }
-}
-
-pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 pub(crate) fn is_tag(error: &Error, tag: &str) -> bool {

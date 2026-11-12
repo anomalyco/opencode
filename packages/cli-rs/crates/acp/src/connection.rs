@@ -8,10 +8,11 @@
 use std::collections::HashMap;
 use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::future::BoxFuture;
+use opencode_util::lock;
 use serde_json::{Map, Value, json};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
@@ -98,10 +99,6 @@ struct Inner {
     /// Messages queued and not yet written.
     unwritten: AtomicUsize,
     written: tokio::sync::Notify,
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn key(id: &Value) -> String {

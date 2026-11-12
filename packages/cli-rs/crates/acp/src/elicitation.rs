@@ -7,6 +7,7 @@ use opencode_api::client::Client;
 use opencode_api::generated::{
     FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput, SessionID, SessionInterruptInput,
 };
+use opencode_util::json_object;
 use regex::Regex;
 use serde_json::{Map, Value, json};
 
@@ -102,21 +103,15 @@ pub async fn ask(input: &Input) -> Result<Outcome, Failure> {
         .then(|| input.form.get("metadata")?.get("tool")?.get("id")?.as_str())
         .flatten()
         .map(|id| child::tool_call_id(input.child.as_ref(), id));
-    let mut params = Map::new();
-    params.insert("mode".to_owned(), json!("form"));
-    params.insert("sessionId".to_owned(), json!(input.client_session_id));
-    if let Some(id) = tool_call_id {
-        params.insert("toolCallId".to_owned(), json!(id));
-    }
-    params.insert(
-        "message".to_owned(),
-        json!(child::prefix_title(
-            input.child.as_ref(),
-            input.form.get("title").and_then(Value::as_str).unwrap_or_default()
-        )),
-    );
-    params.insert("requestedSchema".to_owned(), input.requested_schema.clone());
-    let response = input.connection.request("elicitation/create", Value::Object(params)).await?;
+    let title = input.form.get("title").and_then(Value::as_str).unwrap_or_default();
+    let params = json_object! {
+        "mode": "form",
+        "sessionId": input.client_session_id,
+        "toolCallId"?: tool_call_id,
+        "message": child::prefix_title(input.child.as_ref(), title),
+        "requestedSchema": input.requested_schema,
+    };
+    let response = input.connection.request("elicitation/create", params).await?;
     Ok(answer(&input.form, &response).map_or(Outcome::Cancel, Outcome::Answer))
 }
 
@@ -240,70 +235,62 @@ fn representable(field: &Value, keys: &HashSet<&str>) -> bool {
 
 fn field_properties(field: &Value) -> Vec<(String, Value)> {
     let key = text(field, "key");
-    let mut schema = Map::new();
     let kind = kind_of(field);
-    let schema_type = match kind {
-        "multiselect" => "array",
-        other => other,
-    };
-    schema.insert("type".to_owned(), json!(schema_type));
+    let mut schema = json_object! { "type": if kind == "multiselect" { "array" } else { kind } };
     copy(&mut schema, field, &["title", "description"]);
     match kind {
         "string" if !has_options(field) => {
             string_constraints(&mut schema, field);
             copy(&mut schema, field, &["default"]);
-            vec![(key, Value::Object(schema))]
+            vec![(key, schema)]
         }
         "string" => {
-            schema.insert("oneOf".to_owned(), json!(enum_options(field)));
+            schema["oneOf"] = json!(enum_options(field));
             copy(&mut schema, field, &["default"]);
             with_other(field, key, schema, "Type your own answer")
         }
         "multiselect" => {
-            schema.insert("items".to_owned(), json!({ "anyOf": enum_options(field) }));
+            schema["items"] = json!({ "anyOf": enum_options(field) });
             let min_items = field.get("minItems").and_then(Value::as_f64);
             let min_items = if flag(field, "required") { Some(min_items.unwrap_or(0.0).max(1.0)) } else { min_items };
             if let Some(min_items) = min_items {
-                schema.insert("minItems".to_owned(), number(min_items));
+                schema["minItems"] = number(min_items);
             }
             copy(&mut schema, field, &["maxItems", "default"]);
             with_other(field, key, schema, "Add your own answer")
         }
         "number" | "integer" => {
             copy(&mut schema, field, &["minimum", "maximum", "default"]);
-            vec![(key, Value::Object(schema))]
+            vec![(key, schema)]
         }
         _ => {
             copy(&mut schema, field, &["default"]);
-            vec![(key, Value::Object(schema))]
+            vec![(key, schema)]
         }
     }
 }
 
-fn with_other(field: &Value, key: String, select: Map<String, Value>, description: &str) -> Vec<(String, Value)> {
-    let mut properties = vec![(key.clone(), Value::Object(select))];
+fn with_other(field: &Value, key: String, select: Value, description: &str) -> Vec<(String, Value)> {
+    let mut properties = vec![(key.clone(), select)];
     if !flag(field, "custom") {
         return properties;
     }
-    let mut other = Map::new();
-    other.insert("type".to_owned(), json!("string"));
     let title = field.get("title").and_then(Value::as_str).unwrap_or(&key);
-    other.insert("title".to_owned(), json!(format!("{title} (other)")));
-    other.insert("description".to_owned(), json!(description));
+    let mut other = json_object! { "type": "string", "title": format!("{title} (other)"), "description": description };
     if kind_of(field) == "string" {
         string_constraints(&mut other, field);
     }
-    properties.push((custom_key(field), Value::Object(other)));
+    properties.push((custom_key(field), other));
     properties
 }
 
 // Core rejects an empty string for a required field.
-fn string_constraints(schema: &mut Map<String, Value>, field: &Value) {
+fn string_constraints(schema: &mut Value, field: &Value) {
     copy(schema, field, &["format"]);
     let min_length = field.get("minLength").and_then(Value::as_f64);
     let min_length = if flag(field, "required") { Some(min_length.unwrap_or(0.0).max(1.0)) } else { min_length };
     if let Some(min_length) = min_length {
-        schema.insert("minLength".to_owned(), number(min_length));
+        schema["minLength"] = number(min_length);
     }
     copy(schema, field, &["maxLength", "pattern"]);
 }
@@ -312,25 +299,19 @@ fn enum_options(field: &Value) -> Vec<Value> {
     options(field)
         .iter()
         .map(|option| {
-            let mut item = Map::new();
-            if let Some(value) = option.get("value") {
-                item.insert("const".to_owned(), value.clone());
+            json_object! {
+                "const"?: option.get("value"),
+                "title"?: option.get("label"),
+                "description"?: option.get("description"),
             }
-            if let Some(label) = option.get("label") {
-                item.insert("title".to_owned(), label.clone());
-            }
-            if let Some(description) = option.get("description") {
-                item.insert("description".to_owned(), description.clone());
-            }
-            Value::Object(item)
         })
         .collect()
 }
 
-fn copy(schema: &mut Map<String, Value>, field: &Value, keys: &[&str]) {
+fn copy(schema: &mut Value, field: &Value, keys: &[&str]) {
     for key in keys {
         if let Some(value) = field.get(*key) {
-            schema.insert((*key).to_owned(), value.clone());
+            schema[*key] = value.clone();
         }
     }
 }

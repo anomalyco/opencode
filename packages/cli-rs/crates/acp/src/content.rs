@@ -1,7 +1,8 @@
 //! ACP content blocks to prompt parts and back (`packages/cli/src/acp/content.ts`).
 
 use base64::Engine as _;
-use serde_json::{Map, Value, json};
+use opencode_util::json_object;
+use serde_json::{Value, json};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromptPart {
@@ -118,15 +119,11 @@ fn part_to_chunk(part: &ReplayPart) -> Option<Value> {
             if text.is_empty() {
                 return None;
             }
-            let mut content = Map::new();
-            content.insert("type".to_owned(), json!("text"));
-            content.insert("text".to_owned(), json!(text));
-            if *synthetic {
-                content.insert("annotations".to_owned(), json!({ "audience": ["assistant"] }));
-            } else if *ignored {
-                content.insert("annotations".to_owned(), json!({ "audience": ["user"] }));
-            }
-            return Some(json!({ "content": content }));
+            let audience = if *synthetic { Some("assistant") } else { ignored.then_some("user") };
+            let annotations = audience.map(|audience| json!({ "audience": [audience] }));
+            return Some(
+                json!({ "content": json_object! { "type": "text", "text": text, "annotations"?: annotations } }),
+            );
         }
         PromptPart::File { url, filename, mime } => (url, filename.as_deref(), mime),
     };
