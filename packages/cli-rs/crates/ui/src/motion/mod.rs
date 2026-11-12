@@ -168,6 +168,20 @@ fn rgba(r: f64, g: f64, b: f64, a: f64) -> Color {
     Color::rgba(byte(r), byte(g), byte(b), byte(a))
 }
 
+/// `x ** n` for a small `n` as JavaScriptCore computes it, by repeated squaring. Not `powi`: on MSVC targets LLVM
+/// lowers that to the C runtime's `pow`, which rounds once and so can differ from JavaScript in the last bit.
+fn int_pow(mut x: f64, mut n: u32) -> f64 {
+    let mut result = 1.0;
+    while n > 0 {
+        if n & 1 == 1 {
+            result *= x;
+        }
+        x *= x;
+        n >>= 1;
+    }
+    result
+}
+
 /// A color's channels as the `f32` floats of a TypeScript `RGBA` made from it.
 fn channels(color: Color) -> [f64; 4] {
     let float = |byte: u8| f64::from((f64::from(byte) / 255.0) as f32);
