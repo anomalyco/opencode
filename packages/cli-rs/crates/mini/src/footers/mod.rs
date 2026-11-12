@@ -2355,7 +2355,8 @@ mod tests {
     #[test]
     fn a_form_url_that_is_not_a_web_link_never_starts_the_opener() {
         // The Windows opener's `Start` would run a program; the failure tells the user to open it themselves.
-        for url in [r"C:\Windows\System32\calc.exe", "calc", "file:///etc/passwd"] {
+        for url in [r"C:\Windows\System32\calc.exe", "calc", "file:///etc/passwd", r"\\host\share\payload.exe", "-a x"]
+        {
             assert!(!open_url(url), "{url}");
         }
     }
