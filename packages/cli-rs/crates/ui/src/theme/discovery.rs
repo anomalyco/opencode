@@ -79,7 +79,8 @@ mod tests {
         {
             std::fs::create_dir_all(directory.join("themes")).unwrap();
             for file in files {
-                let content = format!("{{\"from\":\"{}\"}}", directory.display());
+                // Escaped: a Windows path has backslashes.
+                let content = serde_json::json!({ "from": directory.display().to_string() }).to_string();
                 std::fs::write(directory.join("themes").join(file), content).unwrap();
             }
         }
