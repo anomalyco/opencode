@@ -412,12 +412,10 @@ impl Footers {
                 let Some(target) = inner.target.borrow().clone() else { return };
                 // A reply or another session that comes while the tool call is read drops the request.
                 inner.asking.borrow_mut().insert(request.id.as_str().to_owned());
-                let weak = Rc::downgrade(inner);
                 let generation = inner.generation.get();
                 inner.app.spawn(
                     async move { source(&target.client, &target.session, request).await },
-                    move |_, request| {
-                        let Some(inner) = weak.upgrade() else { return };
+                    bind!(inner, |inner, _, request| {
                         if inner.generation.get() != generation
                             || !inner.asking.borrow_mut().remove(request.info.id.as_str())
                         {
@@ -431,7 +429,7 @@ impl Footers {
                             state.permissions.push(request);
                         }
                         inner.sync();
-                    },
+                    }),
                 );
             }
             V2Event::PermissionReplied(replied) => {
@@ -577,24 +575,25 @@ impl Inner {
         let Some(target) = self.target.borrow().clone() else { return };
         let generation = self.generation.get();
         for fetch in fetches {
-            let weak = Rc::downgrade(self);
             let client = target.client.clone();
             match fetch {
                 Fetch::Family => {
                     let parent = target.session.clone();
-                    self.app.spawn(async move { family(&client, &parent).await }, move |_, sessions| {
-                        if let Some(inner) = weak.upgrade() {
+                    self.app.spawn(
+                        async move { family(&client, &parent).await },
+                        bind!(self, |inner, _, sessions| {
                             inner.tracked(generation, |tracker: &mut Tracker| tracker.family(sessions));
-                        }
-                    });
+                        }),
+                    );
                 }
                 Fetch::Discover { session, family } => {
                     let id = session.clone();
-                    self.app.spawn(async move { lineage(&client, &id, &family).await }, move |_, discovery| {
-                        if let Some(inner) = weak.upgrade() {
+                    self.app.spawn(
+                        async move { lineage(&client, &id, &family).await },
+                        bind!(self, |inner, _, discovery| {
                             inner.tracked(generation, |tracker: &mut Tracker| tracker.discovered(&session, discovery));
-                        }
-                    });
+                        }),
+                    );
                 }
                 Fetch::Child(session) => {
                     let id = session.clone();
@@ -608,31 +607,30 @@ impl Inner {
                             .await;
                             Ok::<_, String>((messages?, inbox.map_err(|error| error.to_string())?))
                         },
-                        move |_, result| {
-                            if let Some(inner) = weak.upgrade() {
-                                inner.tracked(generation, |tracker: &mut Tracker| {
-                                    tracker.child_loaded(&session, result)
-                                });
-                            }
-                        },
+                        bind!(self, |inner, _, result| {
+                            inner.tracked(generation, |tracker: &mut Tracker| tracker.child_loaded(&session, result));
+                        }),
                     );
                 }
                 Fetch::Blockers { session, epoch, delay } => {
                     if !delay.is_zero() {
-                        self.app.set_timeout(delay, move |_| {
-                            let Some(inner) = weak.upgrade().filter(|inner| inner.generation.get() == generation)
-                            else {
-                                return;
-                            };
-                            let due = inner.tracker.borrow_mut().as_mut().is_some_and(|t| t.retry_due(&session, epoch));
-                            if due {
-                                inner.run(vec![Fetch::Blockers {
-                                    session: session.clone(),
-                                    epoch,
-                                    delay: Duration::ZERO,
-                                }]);
-                            }
-                        });
+                        self.app.set_timeout(
+                            delay,
+                            bind!(self, |inner, _| {
+                                if inner.generation.get() != generation {
+                                    return;
+                                }
+                                let due =
+                                    inner.tracker.borrow_mut().as_mut().is_some_and(|t| t.retry_due(&session, epoch));
+                                if due {
+                                    inner.run(vec![Fetch::Blockers {
+                                        session: session.clone(),
+                                        epoch,
+                                        delay: Duration::ZERO,
+                                    }]);
+                                }
+                            }),
+                        );
                         continue;
                     }
                     let id = session.clone();
@@ -655,13 +653,11 @@ impl Inner {
                             };
                             (permissions, forms.map_err(|error| error.to_string()))
                         },
-                        move |_, (permissions, forms)| {
-                            if let Some(inner) = weak.upgrade() {
-                                inner.tracked(generation, |tracker: &mut Tracker| {
-                                    tracker.blockers_loaded(&session, epoch, permissions, forms)
-                                });
-                            }
-                        },
+                        bind!(self, |inner, _, (permissions, forms)| {
+                            inner.tracked(generation, |tracker: &mut Tracker| {
+                                tracker.blockers_loaded(&session, epoch, permissions, forms)
+                            });
+                        }),
                     );
                 }
             }
@@ -1039,12 +1035,7 @@ impl Inner {
             }
         }
         if let Some(field) = &widgets.field {
-            let weak = Rc::downgrade(self);
-            field.on_change(move |_, text| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.field_changed(text);
-                }
-            });
+            field.on_change(bind!(self, |inner, _, text| inner.field_changed(text)));
         }
         let focus = widgets.field.clone();
         *self.widgets.borrow_mut() = widgets;
@@ -1154,16 +1145,14 @@ impl Inner {
             },
         };
         let panel = Panel::new(&self.app, spec);
-        let weak = Rc::downgrade(self);
-        panel.input().on_change(move |_, text| {
-            let Some(inner) = weak.upgrade() else { return };
+        panel.input().on_change(bind!(self, |inner, _, text| {
             let rows = inner.terminal().1;
             if let Some(panel) = inner.state.borrow_mut().panel.as_mut() {
                 panel.set_query(text.to_owned(), rows);
             }
             inner.paint();
             inner.layout();
-        });
+        }));
         self.unselect();
         self.body.clear();
         self.body.add(panel.root());
@@ -1248,7 +1237,8 @@ impl Inner {
                 settings.map(|settings| setting_entries(&settings, saving)).unwrap_or_default()
             }
             Route::Agent => {
-                let current = self.current_agent();
+                let label = self.prompt.agent_id();
+                let current = (!label.is_empty()).then_some(label);
                 self.prompt
                     .agents()
                     .into_iter()
@@ -1296,8 +1286,7 @@ impl Inner {
         let mut state = self.state.borrow_mut();
         let Some(panel) = state.panel.as_mut() else { return };
         if route == Route::Model {
-            let loading = self.models_loading();
-            panel.spec.empty = if loading { "Models loading" } else { "No results found" };
+            panel.spec.empty = if self.models().providers.is_none() { "Models loading" } else { "No results found" };
         }
         if route == Route::Settings {
             panel.hint = Some("left/right change".to_owned());
@@ -1331,11 +1320,6 @@ impl Inner {
         if let Some(panel) = state.panel.as_mut() {
             panel.paint(&self.app, width, rows, theme, self.mono);
         }
-    }
-
-    fn current_agent(&self) -> Option<String> {
-        let label = self.prompt.agent_id();
-        (!label.is_empty()).then_some(label)
     }
 
     /// A key while a panel is open.
@@ -1424,12 +1408,13 @@ impl Inner {
             }
             Pick::Pending(id, delivery) => {
                 let next = if delivery == Delivery::Queue { Delivery::Steer } else { Delivery::Queue };
-                let weak = Rc::downgrade(self);
-                self.prompt.queued_action(&id, Some(next), move |ok| {
-                    if let Some(inner) = weak.upgrade().filter(|_| ok) {
-                        inner.close_route();
-                    }
-                });
+                self.prompt.queued_action(
+                    &id,
+                    Some(next),
+                    bind!(self, |inner, ok| if ok {
+                        inner.close_route()
+                    }),
+                );
             }
         }
     }
@@ -1443,10 +1428,6 @@ impl Inner {
 
     fn models(&self) -> Models {
         self.hooks().models.as_ref().map(|models| models()).unwrap_or_default()
-    }
-
-    fn models_loading(&self) -> bool {
-        self.models().providers.is_none()
     }
 
     fn query(&self) -> String {
@@ -1463,15 +1444,12 @@ impl Inner {
         let Some(change) = settings().change(key, forward) else { return };
         self.state.borrow_mut().saving = Some(key);
         self.paint();
-        let weak = Rc::downgrade(self);
         save(
             change,
-            Box::new(move || {
-                if let Some(inner) = weak.upgrade() {
-                    inner.state.borrow_mut().saving = None;
-                    inner.paint();
-                }
-            }),
+            Box::new(bind!(self, |inner| {
+                inner.state.borrow_mut().saving = None;
+                inner.paint();
+            })),
         );
     }
 
@@ -1502,12 +1480,12 @@ impl Inner {
             self.prompt.queued_action(&id, None, |_| {});
             return true;
         }
-        let weak = Rc::downgrade(self);
-        self.prompt.undo(&id, move |ok| {
-            if let Some(inner) = weak.upgrade().filter(|_| ok) {
-                inner.close_route();
-            }
-        });
+        self.prompt.undo(
+            &id,
+            bind!(self, |inner, ok| if ok {
+                inner.close_route()
+            }),
+        );
         true
     }
 
@@ -1615,21 +1593,22 @@ impl Inner {
             decision: reply.decision,
             message: reply.message,
         };
-        let weak = Rc::downgrade(self);
         let id = request.info.id.0.clone();
-        self.app.spawn(async move { target.client.permission_reply(&input).await }, move |_, result| {
-            let Some(inner) = weak.upgrade() else { return };
-            if let Err(error) = result {
-                log::warn!("mini permission reply failed: {error}");
-                let mut state = inner.state.borrow_mut();
-                match state.permission.as_mut() {
-                    Some(current) if current.request == id => current.submitting = false,
-                    _ => return,
+        self.app.spawn(
+            async move { target.client.permission_reply(&input).await },
+            bind!(self, |inner, _, result| {
+                if let Err(error) = result {
+                    log::warn!("mini permission reply failed: {error}");
+                    let mut state = inner.state.borrow_mut();
+                    match state.permission.as_mut() {
+                        Some(current) if current.request == id => current.submitting = false,
+                        _ => return,
+                    }
+                    drop(state);
+                    inner.paint();
                 }
-                drop(state);
-                inner.paint();
-            }
-        });
+            }),
+        );
     }
 
     // -----------------------------------------------------------------------------------------------------------
@@ -1811,13 +1790,11 @@ impl Inner {
         self.set_form(current);
         let input = SessionFormReplyInput { session_id: info.session_id.clone(), form_id: info.id.clone(), answer };
         let id = info.id.0.clone();
-        let weak = Rc::downgrade(self);
         let client = form_client(&target, info);
-        self.app.spawn(async move { client.session_form_reply(&input).await }, move |_, result| {
-            if let Some(inner) = weak.upgrade() {
-                inner.form_settled(&id, result);
-            }
-        });
+        self.app.spawn(
+            async move { client.session_form_reply(&input).await },
+            bind!(self, |inner, _, result| inner.form_settled(&id, result)),
+        );
     }
 
     /// `cancel` (`onFormCancel`).
@@ -1830,13 +1807,11 @@ impl Inner {
         let input =
             SessionFormCancelInput { session_id: info.session_id.clone(), form_id: info.id.clone(), message: None };
         let id = info.id.0.clone();
-        let weak = Rc::downgrade(self);
         let client = form_client(&target, info);
-        self.app.spawn(async move { client.session_form_cancel(&input).await }, move |_, result| {
-            if let Some(inner) = weak.upgrade() {
-                inner.form_settled(&id, result);
-            }
-        });
+        self.app.spawn(
+            async move { client.session_form_cancel(&input).await },
+            bind!(self, |inner, _, result| inner.form_settled(&id, result)),
+        );
     }
 
     /// A reply or cancel answered: the form leaves (`settleForm`), unless it failed for another reason than being
@@ -2214,10 +2189,7 @@ fn setting_entries(settings: &MiniSettings, saving: Option<Key>) -> Vec<Entry<Pi
 
 /// The footer's layers (`footer.view.tsx:560-613`, the panels' and the request bodies' keys).
 fn install_layers(inner: &Rc<Inner>) {
-    let when = |check: fn(&Inner) -> bool| {
-        let weak = Rc::downgrade(inner);
-        Condition::when(move || weak.upgrade().is_some_and(|inner| check(&inner)))
-    };
+    let when = |check: fn(&Inner) -> bool| Condition::when(bind!(inner, |inner| check(&inner)));
     fn composer(inner: &Inner) -> bool {
         let state = inner.state.borrow();
         matches!(state.shown, None | Some(Shown::Prompt)) && state.route.is_none()
@@ -2228,24 +2200,17 @@ fn install_layers(inner: &Rc<Inner>) {
     fn shown(inner: &Inner) -> Option<Shown> {
         inner.state.borrow().shown.clone()
     }
-    let run = |action: fn(&Rc<Inner>)| {
-        let weak = Rc::downgrade(inner);
-        move |_: Option<&str>, _: Option<&KeyEvent>| {
-            if let Some(inner) = weak.upgrade() {
-                action(&inner);
-            }
-        }
-    };
+    let run = |action: fn(&Rc<Inner>)| bind!(inner, |inner, _: Option<&str>, _: Option<&KeyEvent>| action(&inner));
     // Inline keys, each handled by `handle`; a `false` lets the key through to the focused field.
     let keys = |binds: &[&'static str], handle: fn(&Rc<Inner>, &str) -> bool| -> Vec<TuiCommand> {
         binds
             .iter()
             .map(|bind| {
-                let weak = Rc::downgrade(inner);
                 let name = *bind;
-                TuiCommand::inline(name, move |_: Option<&str>, _: Option<&KeyEvent>| {
-                    weak.upgrade().is_some_and(|inner| handle(&inner, name))
-                })
+                TuiCommand::inline(
+                    name,
+                    bind!(inner, |inner, _: Option<&str>, _: Option<&KeyEvent>| handle(&inner, name)),
+                )
             })
             .collect()
     };
@@ -2254,7 +2219,9 @@ fn install_layers(inner: &Rc<Inner>) {
             TuiCommand::new("command.palette.show", run(|inner| inner.open_route(Route::Command)))
                 .title("Open command palette")
                 .group("Prompt"),
-            TuiCommand::new("variant.cycle", run(Inner::cycle_variant_rc)).title("Cycle model variant").group("Model"),
+            TuiCommand::new("variant.cycle", run(|inner| inner.cycle_variant()))
+                .title("Cycle model variant")
+                .group("Model"),
         ])
         .enabled(when(|inner| composer(inner) && !inner.prompt.menu_visible())),
         KeymapLayer::new(vec![
@@ -2297,16 +2264,16 @@ fn install_layers(inner: &Rc<Inner>) {
             .enabled(when(|inner| route(inner) == Some(Route::Settings)))
             .priority(3),
         KeymapLayer::new(vec![
-            TuiCommand::new("queued_prompt.undo", {
-                let weak = Rc::downgrade(inner);
-                move |_: Option<&str>, _: Option<&KeyEvent>| weak.upgrade().is_some_and(|inner| inner.pending(true))
-            })
+            TuiCommand::new(
+                "queued_prompt.undo",
+                bind!(inner, |inner, _: Option<&str>, _: Option<&KeyEvent>| inner.pending(true)),
+            )
             .title("Undo")
             .group("Prompt"),
-            TuiCommand::new("queued_prompt.delete", {
-                let weak = Rc::downgrade(inner);
-                move |_: Option<&str>, _: Option<&KeyEvent>| weak.upgrade().is_some_and(|inner| inner.pending(false))
-            })
+            TuiCommand::new(
+                "queued_prompt.delete",
+                bind!(inner, |inner, _: Option<&str>, _: Option<&KeyEvent>| inner.pending(false)),
+            )
             .title("Delete pending prompt")
             .group("Prompt"),
         ])
@@ -2361,10 +2328,6 @@ impl Inner {
     /// The running children.
     fn running(&self) -> usize {
         self.state.borrow().tabs.iter().filter(|tab| tab.status == Status::Running).count()
-    }
-
-    fn cycle_variant_rc(self: &Rc<Self>) {
-        self.cycle_variant();
     }
 }
 

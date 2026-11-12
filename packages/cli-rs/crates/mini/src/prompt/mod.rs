@@ -248,21 +248,19 @@ impl Prompt {
     pub fn install(&self) {
         let app = &self.0.app;
         route_keys(app, self.0.keymap.clone());
-        let keymap = Rc::downgrade(&self.0.keymap);
         let timer = Rc::new(Cell::new(None::<TimerId>));
-        app.on_key(move |cx, _| {
-            let Some(keys) = keymap.upgrade() else { return };
+        app.on_key(bind!(self.0.keymap, |keys, cx, _| {
             if let Some(previous) = timer.take() {
                 cx.cancel_timer(previous);
             }
             let Some(deadline) = keys.leader_deadline() else { return };
-            let keymap = Rc::downgrade(&keys);
-            timer.set(Some(cx.set_timeout(deadline.saturating_duration_since(cx.now()), move |cx| {
-                if let Some(keys) = keymap.upgrade() {
+            timer.set(Some(cx.set_timeout(
+                deadline.saturating_duration_since(cx.now()),
+                bind!(keys, |keys, cx| {
                     keys.expire_leader(cx.now());
-                }
-            })));
-        });
+                }),
+            )));
+        }));
     }
 
     pub fn set_hooks(&self, hooks: Hooks) {
@@ -366,27 +364,25 @@ impl Prompt {
                 state.history = History::default();
             }
         }
-        let weak = Rc::downgrade(&self.0);
         let (client, directory) = (client.clone(), directory.to_owned());
-        self.0.app.spawn(async move { api::catalog(&client, &directory).await }, move |_, catalog| {
-            if let Some(inner) = weak.upgrade() {
-                Prompt(inner).set_catalog(catalog);
-            }
-        });
+        self.0.app.spawn(
+            async move { api::catalog(&client, &directory).await },
+            bind!(self.0, |inner, _, catalog| Prompt(inner).set_catalog(catalog)),
+        );
         if !resume {
             return;
         }
         let Some(target) = self.0.target.borrow().clone() else { return };
-        let weak = Rc::downgrade(&self.0);
-        self.0.app.spawn(async move { api::history(&target.client, &target.session).await }, move |_, history| {
-            if let Some(inner) = weak.upgrade() {
+        self.0.app.spawn(
+            async move { api::history(&target.client, &target.session).await },
+            bind!(self.0, |inner, _, history| {
                 let mut state = inner.state.borrow_mut();
                 state.history = History::new(&history);
                 state.first = history.is_empty();
                 drop(state);
                 inner.paint();
-            }
-        });
+            }),
+        );
     }
 
     /// An inbox event of the session (`syncPending`): the queued and steering prompts.
@@ -882,12 +878,7 @@ impl Inner {
             state.search
         };
         // Keys that arrive together search once, for the last query (`createResource` on the settled query).
-        let weak = Rc::downgrade(self);
-        self.app.set_timeout(Duration::ZERO, move |_| {
-            if let Some(inner) = weak.upgrade() {
-                inner.search(search);
-            }
-        });
+        self.app.set_timeout(Duration::ZERO, bind!(self, |inner, _| inner.search(search)));
     }
 
     fn search(self: &Rc<Self>, search: u64) {
@@ -900,11 +891,9 @@ impl Inner {
         };
         let Some(target) = self.target.borrow().clone() else { return };
         let base = parse::file_line_range(&query).0.to_owned();
-        let weak = Rc::downgrade(self);
         self.app.spawn(
             async move { api::find_files(&target.client, &target.directory, &base).await },
-            move |_, files| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(self, |inner, _, files| {
                 {
                     let mut state = inner.state.borrow_mut();
                     if state.search != search {
@@ -913,7 +902,7 @@ impl Inner {
                     state.files = files;
                 }
                 inner.rows();
-            },
+            }),
         );
     }
 
@@ -1142,16 +1131,11 @@ impl Inner {
     /// `onQueuedPromptSteer`: steers a queued prompt.
     fn steer(self: &Rc<Self>, id: String) {
         self.state.borrow_mut().submitting = true;
-        let weak = Rc::downgrade(self);
         self.queued_action(
             &id,
             Some(Delivery::Steer),
             None,
-            Box::new(move |_| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.state.borrow_mut().submitting = false;
-                }
-            }),
+            Box::new(bind!(self, |inner, _| inner.state.borrow_mut().submitting = false)),
         );
     }
 
@@ -1174,21 +1158,19 @@ impl Inner {
                 Some(delivery) => delivery.as_str(),
             })
             .to_owned();
-        let weak = Rc::downgrade(self);
         let id = id.to_owned();
         self.app.spawn(
             {
                 let id = id.clone();
                 async move { api::queued_action(&target.client, &target.session, &id, delivery).await }
             },
-            move |_, result| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(self, |inner, _, result| {
                 inner.state.borrow_mut().flights.remove(&id);
                 if let Err(error) = &result {
                     inner.status(&format!("failed to {label} pending prompt: {error}"));
                 }
                 done(result.is_ok());
-            },
+            }),
         );
     }
 
@@ -1254,9 +1236,7 @@ impl Inner {
             self.target.borrow().as_ref().map(|target| target.directory.clone()).unwrap_or_else(|| ".".to_owned());
         let command =
             ["VISUAL", "EDITOR"].iter().find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()));
-        let weak = Rc::downgrade(self);
-        let task = move |_: &mut Cx<'_>| {
-            let Some(inner) = weak.upgrade() else { return };
+        let task = bind!(self, |inner, _: &mut Cx<'_>| {
             let result = command
                 .ok_or_else(|| "Set $VISUAL or $EDITOR to open an external editor".to_owned())
                 .and_then(|command| {
@@ -1291,35 +1271,36 @@ impl Inner {
                 }
             }
             inner.app.request_redraw();
-        };
+        });
         self.app.release_terminal(task);
     }
 
     /// `paste`: a terminal paste (`Some`), or the clipboard (`None`).
     fn paste(self: &Rc<Self>, text: Option<String>) {
-        let weak = Rc::downgrade(self);
         let Some(text) = text else {
             self.state.borrow_mut().pasting = true;
-            self.app.read_clipboard_as(&["image/png", "text/plain"], move |_, outcome: ClipboardOutcome| {
-                let Some(inner) = weak.upgrade() else { return };
-                match content(outcome) {
-                    Err(error) => {
-                        inner.state.borrow_mut().pasting = false;
-                        inner.status(&error);
-                    }
-                    Ok(None) => inner.state.borrow_mut().pasting = false,
-                    Ok(Some(Content::Image { mime, data })) => {
-                        inner.state.borrow_mut().pasting = false;
-                        if inner.state.borrow().shell {
-                            inner.status("image attachments are unavailable in shell mode");
-                            return;
+            self.app.read_clipboard_as(
+                &["image/png", "text/plain"],
+                bind!(self, |inner, _, outcome: ClipboardOutcome| {
+                    match content(outcome) {
+                        Err(error) => {
+                            inner.state.borrow_mut().pasting = false;
+                            inner.status(&error);
                         }
-                        inner.attachment(&format!("data:{mime};base64,{data}"), Some("clipboard"));
-                        inner.pasted();
+                        Ok(None) => inner.state.borrow_mut().pasting = false,
+                        Ok(Some(Content::Image { mime, data })) => {
+                            inner.state.borrow_mut().pasting = false;
+                            if inner.state.borrow().shell {
+                                inner.status("image attachments are unavailable in shell mode");
+                                return;
+                            }
+                            inner.attachment(&format!("data:{mime};base64,{data}"), Some("clipboard"));
+                            inner.pasted();
+                        }
+                        Ok(Some(Content::Text(text))) => inner.paste_text(text),
                     }
-                    Ok(Some(Content::Text(text))) => inner.paste_text(text),
-                }
-            });
+                }),
+            );
             return;
         };
         self.state.borrow_mut().pasting = true;
@@ -1335,13 +1316,11 @@ impl Inner {
             self.pasted();
             return;
         }
-        let weak = Rc::downgrade(self);
         let input = normalized.clone();
         let before = self.textarea.text();
         self.app.spawn(
             async move { tokio::task::spawn_blocking(move || attach::resolve(&input, windows)).await.ok().flatten() },
-            move |_, resolved| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(self, |inner, _, resolved| {
                 inner.state.borrow_mut().pasting = false;
                 if inner.textarea.text() != before {
                     return;
@@ -1364,7 +1343,7 @@ impl Inner {
                     }
                 }
                 inner.pasted();
-            },
+            }),
         );
     }
 
@@ -1421,25 +1400,13 @@ impl Inner {
 
 /// The text change, submit, and paste handlers.
 fn connect(inner: &Rc<Inner>) {
-    let weak = Rc::downgrade(inner);
-    inner.textarea.on_change(move |_, _| {
-        if let Some(inner) = weak.upgrade() {
-            inner.changed();
-        }
-    });
-    let weak = Rc::downgrade(inner);
-    inner.textarea.on_submit(move |_, _| {
-        if let Some(inner) = weak.upgrade() {
-            inner.submit(Delivery::Steer);
-        }
-    });
-    let weak = Rc::downgrade(inner);
-    inner.textarea.on_paste(move |cx, text| {
-        let Some(inner) = weak.upgrade() else { return };
+    inner.textarea.on_change(bind!(inner, |inner, _, _| inner.changed()));
+    inner.textarea.on_submit(bind!(inner, |inner, _, _| inner.submit(Delivery::Steer)));
+    inner.textarea.on_paste(bind!(inner, |inner, cx, text| {
         cx.prevent_default();
         cx.stop_propagation();
         inner.paste((!text.is_empty()).then(|| text.to_owned()));
-    });
+    }));
 }
 
 /// The footer's keymap with `cli.json`'s keybinds; the managed textarea layer edits the prompt.
@@ -1474,25 +1441,17 @@ fn keymap(app: &App, config: &Info, textarea: &Textarea) -> DialogKeymap {
 fn install_layers(inner: &Rc<Inner>) {
     // `input.prompt()`: the composer shows.
     let when = |check: fn(&Inner) -> bool| {
-        let weak = Rc::downgrade(inner);
-        Condition::when(move || weak.upgrade().is_some_and(|inner| inner.view.get() == "prompt" && check(&inner)))
+        Condition::when(bind!(inner, |inner| inner.view.get() == "prompt" && check(&inner)))
     };
     // `baseBindingsEnabled`: everywhere but the panels.
-    let base = {
-        let weak = Rc::downgrade(inner);
-        Condition::when(move || {
-            weak.upgrade().is_some_and(|inner| {
-                !matches!(
-                    inner.view.get(),
-                    "command" | "skill" | "model" | "variant" | "settings" | "queued-menu" | "subagent-menu"
-                )
-            })
-        })
-    };
-    let run = |action: fn(&Rc<Inner>) -> bool| {
-        let weak = Rc::downgrade(inner);
-        move |_: Option<&str>, _: Option<&KeyEvent>| weak.upgrade().is_some_and(|inner| action(&inner))
-    };
+    let base = Condition::when(bind!(inner, |inner| {
+        !matches!(
+            inner.view.get(),
+            "command" | "skill" | "model" | "variant" | "settings" | "queued-menu" | "subagent-menu"
+        )
+    }));
+    let run =
+        |action: fn(&Rc<Inner>) -> bool| bind!(inner, |inner, _: Option<&str>, _: Option<&KeyEvent>| action(&inner));
     let command = |id: &str, title: &str, group: &str, action: fn(&Rc<Inner>) -> bool| {
         TuiCommand::new(id, run(action)).title(title).group(group)
     };
