@@ -183,9 +183,15 @@ const layer = Layer.effect(
 
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
-      if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
+      // Capture the exact matched rule for each resource during evaluation.
+      // This provides structured rule attribution without altering enforcement logic.
+      const matchedRules = input.resources.map((resource) => {
+        const matched = evaluate(input.action, resource, all)
+        return { resource, rule: matched }
+      })
+      if (denied(input, rules)) return { effect: "deny" as const, rules: all, matchedRules: input.resources.map((resource) => ({ resource, rule: evaluate(input.action, resource, all) })) }
+      const effects = matchedRules.map((m) => m.rule.effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
@@ -195,17 +201,21 @@ const layer = Layer.effect(
         metadata: input.metadata,
         source: input.source,
         effect,
+        // Structured rule attribution: the winning rule matched per resource.
+        // Omitted when diagnostics are disabled to maintain zero performance overhead.
+        matchedRules,
       })
       const unattended = yield* Unattended
       if (event.effect !== "ask" || unattended === undefined)
-        return { effect: event.effect, message: event.message, rules: all }
+        return { effect: event.effect, message: event.message, rules: all, matchedRules }
       const settled = [...all, ...unattended]
       const allowed = input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
-      if (allowed) return { effect: "allow" as const, rules: all }
+      if (allowed) return { effect: "allow" as const, rules: all, matchedRules }
       return {
         effect: "deny" as const,
         message: `Permission ${input.action} needs approval, and nobody is present to give it`,
         rules: all,
+        matchedRules,
       }
     })
 
@@ -246,11 +256,11 @@ const layer = Layer.effect(
       )
 
     const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
-      if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
+      if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const, matchedRules: [] }
       const result = yield* evaluateInput(input)
       const value = request(input, result.message)
       if (result.effect === "ask") yield* create(value, input.agent)
-      return { id: value.id, effect: result.effect }
+      return { id: value.id, effect: result.effect, matchedRules: result.matchedRules ?? [] }
     })
 
     const assert = Effect.fn("Permission.assert")((input: AssertInput) =>

@@ -102,13 +102,40 @@ describe("Permission", () => {
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
       const service = yield* Permission.Service
-      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "allow" })
+      expect(yield* service.ask(assertion())).toEqual({
+        id: Permission.ID.create("per_test"),
+        effect: "allow",
+        matchedRules: [
+          {
+            resource: "src/index.ts",
+            rule: { action: "read", resource: "*", effect: "allow" },
+          },
+        ],
+      })
       expect(yield* service.list()).toEqual([])
       yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
-      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "deny" })
+      expect(yield* service.ask(assertion())).toEqual({
+        id: Permission.ID.create("per_test"),
+        effect: "deny",
+        matchedRules: [
+          {
+            resource: "src/index.ts",
+            rule: { action: "read", resource: "*", effect: "deny" },
+          },
+        ],
+      })
       expect(yield* service.list()).toEqual([])
       yield* setRules([])
-      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "ask" })
+      expect(yield* service.ask(assertion())).toEqual({
+        id: Permission.ID.create("per_test"),
+        effect: "ask",
+        matchedRules: [
+          {
+            resource: "src/index.ts",
+            rule: { action: "read", resource: "*", effect: "ask" },
+          },
+        ],
+      })
       expect(yield* service.get(Permission.ID.create("per_test"))).toBeDefined()
     }),
   )
@@ -124,7 +151,7 @@ describe("Permission", () => {
       )
       const service = yield* Permission.Service
 
-      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow", matchedRules: [{ resource: "src/index.ts", rule: { action: "*", resource: "*", effect: "allow" } }] })
       expect(yield* service.ask(assertion({ agent: Agent.ID.make("reviewer") }))).toMatchObject({ effect: "deny" })
       yield* agents.transform((editor) =>
         editor.update(Agent.ID.make("reviewer"), (agent) => {

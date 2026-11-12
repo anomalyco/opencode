@@ -56,8 +56,15 @@ export function notice(output: Pick<Output, "exit" | "signal" | "timeout" | "kil
 }
 
 // A signal reads as the shell's 128 + signal number convention, followed by its name.
+// On Windows, os.constants.signals is limited; use raw exit codes instead.
+const isWindows = process.platform === "win32"
+
 function exitCode(output: Pick<Output, "exit" | "signal">) {
   if (output.exit !== undefined) return output.exit
+  if (isWindows) {
+    // On Windows, PowerShell uses raw exit codes; signal information is not available via os.constants.signals.
+    return output.signal !== undefined ? `${output.signal}` : "unknown"
+  }
   const signal = output.signal === undefined ? undefined : os.constants.signals[output.signal as NodeJS.Signals]
   return signal === undefined ? "unknown" : `${128 + signal} (${output.signal})`
 }

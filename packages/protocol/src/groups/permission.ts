@@ -97,7 +97,20 @@ export const makePermissionGroup = <
           agent: Agent.ID.pipe(Schema.optional),
         }),
         success: Schema.Struct({
-          data: Schema.Struct({ id: Permission.ID, effect: Permission.Effect }),
+          data: Schema.Struct({
+            id: Permission.ID,
+            effect: Permission.Effect,
+            matchedRules: Schema.Array(
+              Schema.Struct({
+                resource: Schema.String,
+                rule: Schema.Struct({
+                  action: Schema.String,
+                  resource: Schema.String,
+                  effect: Permission.Effect,
+                }),
+              }),
+            ),
+          }),
         }),
         error: SessionNotFoundError,
       })

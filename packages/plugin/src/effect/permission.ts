@@ -16,6 +16,8 @@ export interface PermissionEvaluation {
   readonly source?: Permission.Source
   effect: Permission.Effect
   message?: string
+  /** Structured rule attribution: the winning rule matched per resource during evaluation. */
+  readonly matchedRules: ReadonlyArray<{ readonly resource: string; readonly rule: Permission.Rule }>
 }
 
 export interface PermissionHooks {

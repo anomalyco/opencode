@@ -28,6 +28,7 @@ import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
+import { Permission } from "@opencode/core/permission"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
@@ -2183,6 +2184,10 @@ describe("OpencodePlugin with a Console config", () => {
               action: "shell",
               resources: ["ls"],
               effect: "allow",
+              matchedRules: ["ls"].map((resource) => ({
+                resource,
+                rule: { action: "shell", resource, effect: "allow" } as Permission.Rule,
+              })),
             }),
           ).toMatchObject({ effect: "deny", message: "Blocked by Acme's policy" })
         }),

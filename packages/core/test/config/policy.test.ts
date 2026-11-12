@@ -77,6 +77,10 @@ const evaluate = Effect.fn(function* (action: string, resources: string[], effec
     action,
     resources,
     effect,
+    matchedRules: resources.map((resource) => ({
+      resource,
+      rule: { action, resource, effect: "allow" } as Permission.Rule,
+    })),
   })
   return { effect: event.effect, message: event.message }
 })
