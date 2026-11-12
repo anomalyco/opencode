@@ -3,6 +3,7 @@ import { latestModels, uniqueModels } from "./models"
 
 const model = (provider: string, id: string, release_date: string, family?: string) => ({
   id,
+  api: { id },
   family,
   release_date,
   provider: { id: provider },
@@ -20,6 +21,23 @@ test("keeps the newest model of each provider and family", () => {
     { providerID: "a", modelID: "new" },
     { providerID: "a", modelID: "other" },
     { providerID: "b", modelID: "b-only" },
+  ])
+})
+
+test("keeps every preset without crowding out the newest base model", () => {
+  expect(
+    latestModels([
+      { ...model("a", "preset-new", "2026-04-01", "f"), api: { id: "new" } },
+      { ...model("a", "preset-old", "2026-01-01", "f"), api: { id: "old" } },
+      { ...model("a", "preset-twin", "2026-04-01", "f"), api: { id: "new" } },
+      model("a", "old", "2026-01-01", "f"),
+      model("a", "new", "2026-03-01", "f"),
+    ]),
+  ).toEqual([
+    { providerID: "a", modelID: "preset-new" },
+    { providerID: "a", modelID: "preset-old" },
+    { providerID: "a", modelID: "preset-twin" },
+    { providerID: "a", modelID: "new" },
   ])
 })
 

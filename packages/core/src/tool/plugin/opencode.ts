@@ -264,10 +264,13 @@ export const Plugin = {
                     right.time.released - left.time.released,
                 )
                 .filter((model, index, sorted) => {
-                  if (input.all || model.family === undefined) return true
+                  if (input.all || model.family === undefined || model.modelID !== model.id) return true
                   return (
                     sorted.findIndex(
-                      (other) => other.providerID === model.providerID && other.family === model.family,
+                      (other) =>
+                        other.modelID === other.id &&
+                        other.providerID === model.providerID &&
+                        other.family === model.family,
                     ) === index
                   )
                 })

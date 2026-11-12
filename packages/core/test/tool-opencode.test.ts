@@ -141,6 +141,34 @@ it.effect("groups available models by provider with paging", () =>
     })
     expect(yield* run({ query: "old" })).toMatchObject({ total: 1, providers: [{ models: [gammaOld] }] })
     expect(yield* run({ provider: "other", query: "alpha" })).toEqual({ providers: [], total: 0, next: null })
+
+    // Presets sharing a family (and target) all survive, but never replace its newest base model.
+    yield* catalog.transform((editor) => {
+      const provider = editor.get(Provider.ID.make("other"))!
+      const base = provider.models.get(Model.ID.make("gamma"))!
+      editor.models.set(provider.provider.id, [
+        ...provider.models.values(),
+        ...[
+          { id: "preset-new", released: 150, target: "gamma" },
+          { id: "preset-twin", released: 150, target: "gamma" },
+          { id: "preset-old", released: 25, target: "gamma-old" },
+        ].map((preset) => ({
+          ...base,
+          id: Model.ID.make(preset.id),
+          modelID: Model.ID.make(preset.target),
+          time: { ...base.time, released: preset.released },
+        })),
+      ])
+    })
+    expect(yield* run({ provider: "other" })).toMatchObject({
+      total: 5,
+      providers: [
+        {
+          models: [beta, { id: "other/preset-new" }, { id: "other/preset-twin" }, gamma, { id: "other/preset-old" }],
+        },
+      ],
+    })
+    expect(yield* run({ provider: "other", all: true })).toMatchObject({ total: 6 })
   }),
 )
 

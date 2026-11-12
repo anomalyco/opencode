@@ -20,12 +20,16 @@ export const isFreeModel = (model: { provider: { id: string }; cost?: { input: n
   model.provider.id === "opencode" && (!model.cost || model.cost.input === 0)
 
 // The newest release of each family per provider. A free model shares its family and release date with its paid twin,
-// so the two are grouped apart. A tie keeps the first model listed.
-export function latestModels<T extends { id: string; provider: { id: string }; family?: string; release_date: string }>(
-  models: T[],
-) {
+// so the two are grouped apart. Presets stay separate from base families. A tie keeps the first model listed.
+export function latestModels<
+  T extends { id: string; api: { id: string }; provider: { id: string }; family?: string; release_date: string },
+>(models: T[]) {
   return [...Map.groupBy(models, (x) => x.provider.id).values()].flatMap((provider) =>
-    [...Map.groupBy(provider, (x) => `${x.family}:${isFreeModel(x)}`).values()].map((group) => {
+    [
+      ...Map.groupBy(provider, (x) =>
+        x.api.id !== x.id ? `preset:${x.id}` : `family:${x.family}:${isFreeModel(x)}`,
+      ).values(),
+    ].map((group) => {
       const first = group.reduce((best, x) => (x.release_date > best.release_date ? x : best))
 
       return { modelID: first.id, providerID: first.provider.id }
