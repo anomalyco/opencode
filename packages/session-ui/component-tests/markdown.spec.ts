@@ -375,6 +375,57 @@ for (const mode of ["cached", "streamed"] as const) {
   })
 }
 
+for (const theme of ["light", "dark"]) {
+  story(`styles inline code inside a link like the link label in ${theme}`, async ({ mount, page }) => {
+    await mount("components-markdown--complete-response", { globals: { theme } })
+    await expect(page.locator("html")).toHaveClass(new RegExp(theme))
+    await page.evaluate(async (fixture) => {
+      const { mountMarkdown } = await import(fixture)
+      await mountMarkdown({
+        text: "[removes `providerCost` from events](https://github.com/anomalyco/opencode/pull/1) and `plainCode`",
+        cached: true,
+      })
+    }, fixture)
+
+    const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+    const link = markdown.getByRole("link", { name: "removes providerCost from events" })
+    const code = link.locator("code")
+
+    const style = () =>
+      code.evaluate((code) => {
+        const style = getComputedStyle(code)
+
+        return {
+          color: style.color,
+          background: style.backgroundColor,
+          padding: style.padding,
+          font: style.fontFamily,
+        }
+      })
+
+    const plain = await markdown.locator("code", { hasText: "plainCode" }).evaluate((code) => {
+      const style = getComputedStyle(code)
+
+      return { color: style.color, backgroundColor: style.backgroundColor, fontFamily: style.fontFamily }
+    })
+
+    expect(await style()).toEqual({
+      color: await resolvedColor(page, "--v2-text-text-accent"),
+      background: "rgba(0, 0, 0, 0)",
+      padding: "0px",
+      font: plain.fontFamily,
+    })
+    expect(plain.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
+    expect(plain.color).not.toBe(await resolvedColor(page, "--v2-text-text-accent"))
+
+    await link.hover()
+    await expect(link).toHaveCSS("text-decoration-line", "underline")
+    const hover = await resolvedColor(page, "--v2-text-text-accent-hover")
+    await expect.poll(async () => (await style()).color).toBe(hover)
+  })
+}
+
 story("keeps favicon space stable across loading and failure without fetching private hosts", async ({ page }) => {
   const requested: string[] = []
   let release: () => void = () => undefined
