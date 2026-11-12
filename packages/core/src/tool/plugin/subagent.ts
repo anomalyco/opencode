@@ -132,11 +132,7 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${depth}). Increase "experimental.subagent_depth" to allow nested subagents.`,
                 })
-              const concurrency = SubagentJob.limits({ entries, override: yield* SubagentJob.Concurrency })
-              if (concurrency.ignored !== undefined)
-                yield* Effect.logWarning("ignoring invalid OPENCODE_SUBAGENT_CONCURRENCY", {
-                  value: concurrency.ignored,
-                })
+              const concurrency = SubagentJob.limits(entries)
               const agent = yield* agents.resolve(input.agent)
               if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
               if (agent.mode === "primary")
@@ -280,10 +276,7 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
-        const limits = SubagentJob.limits({
-          entries: yield* config.entries(),
-          override: yield* SubagentJob.Concurrency,
-        })
+        const limits = SubagentJob.limits(yield* config.entries())
         // Zero allows no subagents, so the model is not offered a call that can only fail.
         if (limits.limit === 0) {
           delete event.tools[name]

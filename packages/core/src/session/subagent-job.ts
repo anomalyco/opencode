@@ -10,7 +10,7 @@ import { SessionSchema } from "./schema.js"
 
 type Recovery = Extract<Job.Recovery, { kind: "subagent" }>
 
-/** The unlimited cap, used when no config layer or override sets `experimental.subagent_concurrency`. */
+/** The unlimited cap, used when no config layer sets `experimental.subagent_concurrency`. */
 export const unlimited = -1
 
 export type OverLimit = "fail" | "wait"
@@ -18,37 +18,18 @@ export type OverLimit = "fail" | "wait"
 export interface Limits {
   readonly limit: number
   readonly mode: OverLimit
-  /** Override text that was set but rejected, so the caller can note it once. */
-  readonly ignored: string | undefined
 }
 
 /**
- * `OPENCODE_SUBAGENT_CONCURRENCY`: a startup override for `experimental.subagent_concurrency`, ahead of
- * every config document, the way `OPENCODE_FLAGS` outranks `experimental.<flag>` in `Flag.resolve`.
+ * Resolves the cap from the highest-priority document that sets each key. Both keys are read per key
+ * instead of from one `experimental` block, so a global setting survives a project block that only
+ * sets `subagent_depth`; see the same choice for `all_flags` in `Flag.resolve`.
  */
-export const Concurrency = Context.Reference<string | undefined>("@opencode/SubagentJob/Concurrency", {
-  defaultValue: () => process.env.OPENCODE_SUBAGENT_CONCURRENCY,
-})
-
-/**
- * Resolves the cap: the environment override, else the highest-priority document that sets each key.
- * Both keys are read per key instead of from one `experimental` block, so a global setting survives a
- * project block that only sets `subagent_depth`; see the same choice for `all_flags` in `Flag.resolve`.
- */
-export function limits(input: { readonly entries: readonly Entry[]; readonly override?: string }): Limits {
-  const override = parseOverride(input.override)
+export function limits(entries: readonly Entry[]): Limits {
   return {
-    limit: override ?? configured(input.entries, "subagent_concurrency") ?? unlimited,
-    mode: configured(input.entries, "subagent_over_limit") ?? "fail",
-    ignored: input.override === undefined || override !== undefined ? undefined : input.override,
+    limit: configured(entries, "subagent_concurrency") ?? unlimited,
+    mode: configured(entries, "subagent_over_limit") ?? "fail",
   }
-}
-
-function parseOverride(value: string | undefined) {
-  const text = value?.trim()
-  if (!text) return undefined
-  const parsed = Number(text)
-  return Number.isInteger(parsed) && parsed >= unlimited ? parsed : undefined
 }
 
 function configured<K extends "subagent_concurrency" | "subagent_over_limit">(
@@ -76,6 +57,11 @@ export interface Interface {
   }) => Effect.Effect<boolean>
   /** Frees a child's slot and wakes one queued call. Idempotent, so release paths may overlap. */
   readonly release: (parentSessionID: SessionSchema.ID, childSessionID: SessionSchema.ID) => Effect.Effect<void>
+  /**
+   * Counts a recovered child against the parent's cap. The work was already admitted before the
+   * restart, so this never blocks or refuses, even when the cap is now full or lower.
+   */
+  readonly recover: (parentSessionID: SessionSchema.ID, childSessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SubagentJob") {}
@@ -130,9 +116,20 @@ const make = Effect.gen(function* () {
       if (!entry) return
       entry.children.delete(childSessionID)
       const waiting = entry.waiting
-      if (waiting === undefined) return
-      entry.waiting = undefined
-      Deferred.doneUnsafe(waiting, Exit.void)
+      if (waiting !== undefined) {
+        entry.waiting = undefined
+        Deferred.doneUnsafe(waiting, Exit.void)
+      }
+      // Drop the parent's bookkeeping once nothing holds a slot or waits, so a long-lived server
+      // does not keep one entry per session that ever ran a subagent.
+      if (entry.children.size === 0 && entry.waiting === undefined) slots.delete(parentSessionID)
+    })
+
+  const recover: Interface["recover"] = (parentSessionID, childSessionID) =>
+    Effect.sync(() => {
+      const entry = slots.get(parentSessionID) ?? { children: new Set<SessionSchema.ID>(), waiting: undefined }
+      slots.set(parentSessionID, entry)
+      entry.children.add(childSessionID)
     })
 
   const acquire: Interface["acquire"] = Effect.fn("SubagentJob.acquire")(function* (input) {
@@ -163,6 +160,7 @@ const make = Effect.gen(function* () {
       ),
     acquire,
     release,
+    recover,
   })
 })
 

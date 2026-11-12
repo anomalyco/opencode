@@ -1287,6 +1287,7 @@ describe("SessionRestart background recovery", () => {
       )
       const restart = Context.get(context, SessionRestart.Service)
       const execution = Context.get(context, SessionExecution.Service)
+      const subagents = Context.get(context, SubagentJob.Service)
       yield* restart.resumeSuspendedSessions
       yield* Deferred.await(resumed)
       yield* Deferred.await(parentResumed)
@@ -1297,6 +1298,11 @@ describe("SessionRestart background recovery", () => {
       expect(yield* claims(database)).toEqual({ [parent]: false, [child]: true, [unrelated]: false })
       expect(yield* attempts(database, child)).toBe(1)
       expect(yield* restarted.get(child)).toMatchObject({ status: "running" })
+      // The recovered child counts against the parent's cap even though it never called acquire.
+      const extra = Session.ID.make("ses_subagent_recovery_extra")
+      expect(
+        yield* subagents.acquire({ parentSessionID: parent, childSessionID: extra, limit: 1, mode: "fail" }),
+      ).toBe(false)
 
       yield* Deferred.succeed(release, undefined)
       yield* Deferred.await(parentWoken)
@@ -1311,6 +1317,10 @@ describe("SessionRestart background recovery", () => {
         },
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
+      // The settled job released the recovered child's slot.
+      expect(
+        yield* subagents.acquire({ parentSessionID: parent, childSessionID: extra, limit: 1, mode: "fail" }),
+      ).toBe(true)
       yield* restart.resumeSuspendedSessions
       expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
     }),

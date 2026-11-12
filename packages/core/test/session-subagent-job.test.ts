@@ -40,39 +40,19 @@ const it = testEffect(
 
 describe("SubagentJob.limits", () => {
   test("stays unlimited without a setting and reads each key from its own document", () => {
-    expect(SubagentJob.limits({ entries: [] })).toEqual({ limit: -1, mode: "fail", ignored: undefined })
-    expect(SubagentJob.limits({ entries: [document(), document({ subagent_depth: 2 })] })).toEqual({
-      limit: -1,
-      mode: "fail",
-      ignored: undefined,
-    })
-    expect(
-      SubagentJob.limits({
-        entries: [document({ subagent_concurrency: 3 }), document({ subagent_over_limit: "wait" })],
-      }),
-    ).toEqual({ limit: 3, mode: "wait", ignored: undefined })
+    expect(SubagentJob.limits([])).toEqual({ limit: -1, mode: "fail" })
+    expect(SubagentJob.limits([document(), document({ subagent_depth: 2 })])).toEqual({ limit: -1, mode: "fail" })
+    expect(SubagentJob.limits([document({ subagent_concurrency: 3 }), document({ subagent_over_limit: "wait" })])).toEqual(
+      { limit: 3, mode: "wait" },
+    )
   })
 
   test("a later partial experimental block does not shadow an earlier limit", () => {
     // The global layer sets the cap; the project block only sets the depth, as Config.latest would drop the cap.
+    expect(SubagentJob.limits([document({ subagent_concurrency: 4 }), document({ subagent_depth: 2 })]).limit).toBe(4)
     expect(
-      SubagentJob.limits({
-        entries: [document({ subagent_concurrency: 4 }), document({ subagent_depth: 2 })],
-      }).limit,
-    ).toBe(4)
-    expect(
-      SubagentJob.limits({
-        entries: [document({ subagent_concurrency: 4 }), document({ subagent_concurrency: 1 })],
-      }).limit,
+      SubagentJob.limits([document({ subagent_concurrency: 4 }), document({ subagent_concurrency: 1 })]).limit,
     ).toBe(1)
-  })
-
-  test("the environment override outranks every document and reports a rejected value", () => {
-    const entries = [document({ subagent_concurrency: 3 })]
-    expect(SubagentJob.limits({ entries, override: " 2 " })).toEqual({ limit: 2, mode: "fail", ignored: undefined })
-    expect(SubagentJob.limits({ entries, override: "-1" })).toEqual({ limit: -1, mode: "fail", ignored: undefined })
-    for (const override of ["", " ", "two", "1.5", "-2"])
-      expect(SubagentJob.limits({ entries, override })).toEqual({ limit: 3, mode: "fail", ignored: override })
   })
 })
 
@@ -190,6 +170,28 @@ describe("SubagentJob concurrency slots", () => {
       expect(fiber.pollUnsafe()).toBeUndefined()
       yield* subagents.release(parent, held)
       expect(yield* Fiber.join(fiber)).toBe(true)
+    }),
+  )
+
+  it.effect("counts recovered children against the cap and frees their slot on release", () =>
+    Effect.gen(function* () {
+      const subagents = yield* SubagentJob.Service
+      const parent = SessionSchema.ID.make("ses_recovered")
+      const recovered = SessionSchema.ID.make("ses_recovered_child")
+      const next = SessionSchema.ID.make("ses_recovered_next")
+      yield* subagents.recover(parent, recovered)
+      // The recovered child holds a slot even though it never called acquire.
+      expect(yield* subagents.acquire({ parentSessionID: parent, childSessionID: next, limit: 1, mode: "fail" })).toBe(
+        false,
+      )
+      // A follow-up on the recovered child keeps its existing slot.
+      expect(
+        yield* subagents.acquire({ parentSessionID: parent, childSessionID: recovered, limit: 1, mode: "fail" }),
+      ).toBe(true)
+      yield* subagents.release(parent, recovered)
+      expect(yield* subagents.acquire({ parentSessionID: parent, childSessionID: next, limit: 1, mode: "fail" })).toBe(
+        true,
+      )
     }),
   )
 

@@ -457,6 +457,7 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(
             resumable,
             Effect.fnUntraced(function* ({ background, recovery }) {
+              yield* subagents.recover(recovery.parentSessionID, recovery.childSessionID)
               yield* SubagentJob.start(
                 jobs,
                 execution,

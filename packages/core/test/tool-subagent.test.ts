@@ -181,10 +181,6 @@ const completionGraph = AppNodeBuilder.build(LayerNode.group([nodes, SessionRest
   ),
 ])
 const completionIt = testEffect(Layer.merge(completionLLM, completionGraph))
-// Same completion graph with a startup OPENCODE_SUBAGENT_CONCURRENCY, to check it outranks the config file.
-const overrideCompletionIt = testEffect(
-  Layer.merge(completionLLM, Layer.merge(completionGraph, Layer.succeed(SubagentJob.Concurrency, "1"))),
-)
 
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
@@ -1101,43 +1097,6 @@ describe("SubagentTool", () => {
     ),
   )
 
-  overrideCompletionIt.live("prefers the startup override over the configured cap", () =>
-    tmpdirScoped().pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_concurrency: 5 } })),
-          )
-          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const sessions = yield* Session.Service
-          const parent = yield* sessions.create({ location, model: parentModel })
-          yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
-          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          const llm = yield* TestLLM.Test
-          const gate = yield* llm.gate()
-          const call = (id: string, input: Record<string, unknown>) =>
-            executeTool(registry, {
-              sessionID: parent.id,
-              ...toolIdentity,
-              call: { type: "tool-call" as const, id, name: SubagentTool.name, input },
-            }).pipe(Effect.timeout("2 seconds"))
-
-          const launched = yield* call("override-launch", { agent: "reviewer", description: "review", prompt: "one" })
-          expect(launched).toMatchObject({ status: "completed", metadata: { status: "running" } })
-          yield* gate.started
-          // The layer's OPENCODE_SUBAGENT_CONCURRENCY of 1 outranks the file's 5.
-          expect(
-            yield* call("override-blocked", { agent: "reviewer", description: "next", prompt: "should fail" }),
-          ).toEqual({
-            status: "error",
-            error: { type: "tool.execution", message: expect.stringContaining("Subagent concurrency limit reached (1)") },
-          })
-          yield* gate.release
-        }),
-      ),
-    ),
-  )
 })
 
 /** A parent with the subagent tool registered, its child calls, and every synthetic notice it received. */

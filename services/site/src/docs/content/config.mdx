@@ -671,13 +671,6 @@ until a slot frees instead.
 }
 ```
 
-`OPENCODE_SUBAGENT_CONCURRENCY` sets the same cap when OpenCode starts and outranks every config file, which is handy
-for scripted runs.
-
-```bash
-opencode service set env OPENCODE_SUBAGENT_CONCURRENCY 2
-```
-
 ### Background compaction
 
 Set `background_compaction` to `true` to write the compaction summary in the background before it is needed, so
