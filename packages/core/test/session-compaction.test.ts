@@ -9,7 +9,7 @@ import {
   ToolDefinition,
   type LLMRequest,
 } from "@opencode/ai/effect"
-import { OpenAIChat } from "@opencode/ai/protocols"
+import { OpenAIChat, OpenAIResponses } from "@opencode/ai/protocols"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -52,6 +52,8 @@ let requests: LLMRequest[] = []
 /** Runs before a request's response streams; tests hold it back to keep a background summary in flight. */
 let beforeResponse: Effect.Effect<void> = Effect.void
 let reject: ((request: LLMRequest) => boolean) | undefined
+/** When set, the summary model speaks this stream instead of the default chat completion. */
+let summaryStream: ((request: LLMRequest) => Stream.Stream<LLMEvent, AIError>) | undefined
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
@@ -77,6 +79,7 @@ const client = Layer.mock(LLMClient.Service)({
         }),
       )
     }
+    if (summaryStream) return summaryStream(request)
     return Stream.fromEffect(beforeResponse).pipe(
       Stream.drain,
       Stream.concat(
@@ -1521,3 +1524,86 @@ it.effect("a background summary waits for a response whose prompt is still cache
     expect(yield* summarizedAfterBreak("ses_precompute_hour", "1h")).not.toContain("Third question")
   }),
 )
+
+const COMMENTARY = "COMMENTARY_LEAK: I will now write the structured summary for the next agent."
+// A later heading stays on its own line, so a commentary prefix glued to "## Objective" still matches the template.
+const PHASE_SUMMARY = "## Objective\n- Say hello.\n## Requirements\n- (none)"
+
+/** Sanitized shape of a live Responses stream: commentary output_text, then the template summary. */
+const responsesSummary = (request: LLMRequest, timing: "start" | "end" | "none") =>
+  Stream.fromIterable([
+    {
+      type: "response.output_item.added",
+      item: { type: "message", id: "commentary", ...(timing === "start" ? { phase: "commentary" } : {}) },
+    },
+    { type: "response.output_text.delta", item_id: "commentary", delta: COMMENTARY },
+    {
+      type: "response.output_item.done",
+      item: { type: "message", id: "commentary", ...(timing === "none" ? {} : { phase: "commentary" }) },
+    },
+    {
+      type: "response.output_item.added",
+      item: { type: "message", id: "final", ...(timing === "none" ? {} : { phase: "final_answer" }) },
+    },
+    { type: "response.output_text.delta", item_id: "final", delta: PHASE_SUMMARY },
+    {
+      type: "response.output_item.done",
+      item: { type: "message", id: "final", ...(timing === "none" ? {} : { phase: "final_answer" }) },
+    },
+    { type: "response.completed", response: { id: "response_summary" } },
+  ]).pipe(
+    Stream.map((event) => Schema.decodeUnknownSync(OpenAIResponses.protocol.stream.event)(JSON.stringify(event))),
+    Stream.mapAccumEffect(() => OpenAIResponses.protocol.stream.initial(request), OpenAIResponses.protocol.stream.step),
+  )
+
+const expectCheckpoint = (sessionID: Session.ID, summary: string) =>
+  Effect.gen(function* () {
+    const store = yield* SessionStore.Service
+    const stored = yield* store.context(sessionID)
+    expect(stored).toMatchObject([{ type: "compaction", summary }])
+    const text = toLLMMessages(stored, resolved.ref).flatMap((message) => {
+      const part = message.content[0]
+      return part?.type === "text" ? [part.text] : []
+    })
+    expect(text.join("\n")).toContain(`<summary>\n${summary}\n</summary>`)
+  })
+
+for (const timing of ["start", "end"] as const)
+  it.effect(`excludes commentary from compaction summaries when the response phase arrives at ${timing}`, () =>
+    Effect.gen(function* () {
+      summaryStream = (request) => responsesSummary(request, timing)
+      const sessionID = Session.ID.make(`ses_compaction_phase_${timing}`)
+      const session = yield* insertSession(sessionID)
+      expect(yield* compactManually(session, [textUser("Say hello")])).toEqual({ status: "completed" })
+      yield* expectCheckpoint(sessionID, PHASE_SUMMARY)
+    }).pipe(Effect.ensuring(Effect.sync(() => (summaryStream = undefined)))),
+  )
+
+it.effect("keeps compaction summary text unchanged when the provider sends no response phase", () =>
+  Effect.gen(function* () {
+    summaryStream = (request) => responsesSummary(request, "none")
+    const sessionID = Session.ID.make("ses_compaction_phase_none")
+    const session = yield* insertSession(sessionID)
+    expect(yield* compactManually(session, [textUser("Say hello")])).toEqual({ status: "completed" })
+    yield* expectCheckpoint(sessionID, `${COMMENTARY}${PHASE_SUMMARY}`)
+  }).pipe(Effect.ensuring(Effect.sync(() => (summaryStream = undefined)))),
+)
+
+for (const timing of ["start", "end"] as const)
+  it.effect(
+    `excludes commentary from a background compaction summary when the response phase arrives at ${timing}`,
+    () =>
+      Effect.gen(function* () {
+        summaryStream = (request) => responsesSummary(request, timing)
+        const compaction = yield* enablePrecompute
+        const sessionID = Session.ID.make(`ses_precompute_phase_${timing}`)
+        const session = yield* insertSession(sessionID)
+        const history = precomputeHistory()
+        yield* storeMessages(sessionID, history.due)
+        yield* compaction.precompute(Effect.succeed(loaded(session, history.near)))
+        expect(yield* compaction.compact({ reason: "auto", context: loaded(session, history.due) })).toEqual({
+          status: "completed",
+        })
+        yield* expectCheckpoint(sessionID, PHASE_SUMMARY)
+      }).pipe(Effect.ensuring(Effect.sync(() => (summaryStream = undefined)))),
+  )
