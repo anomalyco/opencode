@@ -44,7 +44,6 @@ pub fn show(tui: &Tui) {
             request: 0,
         }),
         timer: Cell::new(None),
-        seen: Cell::new(tui.data.revision()),
     });
     let current = match tui.route() {
         Route::Session { id } => Some(id),
@@ -142,6 +141,9 @@ pub fn show(tui: &Tui) {
             let (view, select) = select::select(cx, props);
             *list.select.borrow_mut() = Some(select);
             list.render_title(&cx.theme);
+            if let Some(tui) = list.tui.upgrade() {
+                cx.on_close(tui.follow(&list, |list, tui, changes| list.sync(tui, changes)));
+            }
             // The dialog owns the list; handlers hold weak references.
             cx.on_dismiss(move || {
                 if let Some(timer) = list.timer.take() {
@@ -165,8 +167,6 @@ struct List {
     select: RefCell<Option<Select<SessionID>>>,
     state: RefCell<State>,
     timer: Cell<Option<TimerId>>,
-    /// The store revision the list last looked at.
-    seen: Cell<u64>,
 }
 
 struct State {
@@ -205,26 +205,13 @@ impl List {
             tui.data.project_sync(),
         );
         tui.app.spawn(reads, bind!(self, |list, _, _| list.fetch()));
-        self.watch(tui.data.subscribe());
     }
 
     /// Repaints after each store flush that touched the projects or the picker location.
-    fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-        let Some(tui) = self.tui.upgrade() else { return };
-        let weak = Rc::downgrade(self);
-        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-            let (Some(list), Some(revisions)) = (weak.upgrade(), revisions) else { return };
-            let Some(tui) = list.tui.upgrade() else { return };
-            if list.select.borrow().is_none() {
-                return;
-            }
-            let (revision, changes) = tui.data.changes_since(list.seen.get());
-            list.seen.set(revision);
-            if changes.projects() || changes.location(&picker_location(&tui)) {
-                list.refresh();
-            }
-            list.watch(revisions);
-        });
+    fn sync(&self, tui: &Tui, changes: &Changes) {
+        if changes.projects() || changes.location(&picker_location(tui)) {
+            self.refresh();
+        }
     }
 
     /// `data.location.info(pickerLocation())`.
