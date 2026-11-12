@@ -16,6 +16,21 @@ const Manifest = Schema.Struct({
   browser_action: Schema.optional(Schema.Struct({ default_popup: Schema.optional(Schema.String) })),
   options_page: Schema.optional(Schema.String),
   options_ui: Schema.optional(Schema.Struct({ page: Schema.optional(Schema.String) })),
+  // What the compatibility check reads. Lists keep any entry, and the keys below only need to be present, so an
+  // unusual value never makes a manifest unreadable.
+  permissions: Schema.optional(Schema.Array(Schema.Unknown)),
+  optional_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
+  optional_host_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
+  background: Schema.optional(Schema.Unknown),
+  page_action: Schema.optional(Schema.Struct({ default_popup: Schema.optional(Schema.String) })),
+  commands: Schema.optional(Schema.Unknown),
+  devtools_page: Schema.optional(Schema.Unknown),
+  side_panel: Schema.optional(Schema.Unknown),
+  omnibox: Schema.optional(Schema.Unknown),
+  oauth2: Schema.optional(Schema.Unknown),
+  chrome_url_overrides: Schema.optional(Schema.Unknown),
+  chrome_settings_overrides: Schema.optional(Schema.Unknown),
+  declarative_net_request: Schema.optional(Schema.Unknown),
 })
 
 export type Manifest = typeof Manifest.Type

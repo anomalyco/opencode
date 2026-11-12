@@ -4,6 +4,7 @@ import electron, { app, type Session } from "electron"
 import { Schema } from "effect"
 import type { Log, Storage } from "@opencode/plugin/gui/main"
 import { fileURLWithin } from "../policy"
+import { extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, type CookieRead } from "./cookie"
 import {
   displayName,
@@ -77,6 +78,7 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       popup: page(pages.popup),
       options: page(pages.options),
       error: errors.get(record.id),
+      compatibility: extensionCompatibility(manifest),
     }
   }
 
@@ -106,11 +108,25 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
   await Promise.all(stored.value.filter((record) => record.enabled).map(load))
   await refresh()
 
-  /** Loads a directory as a new extension and remembers it, or reports why it is not one. */
-  const add = async (folder: string, source: StoredExtension["source"]): Promise<InstallResult> => {
+  /**
+   * Loads a directory as a new extension and remembers it, or reports why it is not one. One that will not work here
+   * loads only with `force`; otherwise a copy this app made is deleted again.
+   */
+  const add = async (folder: string, source: StoredExtension["source"], force = false): Promise<InstallResult> => {
     const manifest = await readManifest(folder)
 
     if (!manifest || manifest.theme !== undefined) return { type: "failed", reason: "manifest" }
+    const compatibility = extensionCompatibility(manifest)
+    // Installing one again, such as an update, keeps it, as the user added it before.
+    const known = stored.value.some((record) => record.directory === folder)
+
+    if (compatibility.level === "unsupported" && !force && !known) {
+      const name = await displayName(folder, manifest)
+
+      if (source !== "folder") await rm(folder, { recursive: true, force: true }).catch(() => undefined)
+
+      return { type: "unsupported", name, compatibility }
+    }
 
     const extension = await session.extensions.loadExtension(folder, { allowFileAccess: false }).then(
       (value) => value,
@@ -225,6 +241,7 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
               version: manifest.version,
               icon: await extensionIcon(item.directory, manifest),
               installed: stored.value.some((record) => record.id === item.id),
+              compatibility: extensionCompatibility(manifest),
             },
           ]
         }),
@@ -234,11 +251,11 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
     },
     async install(
       request:
-        | { kind: "folder"; path: string }
-        | { kind: "store"; url: string }
-        | { kind: "browser"; source: string; profile: string; id: string },
+        | { kind: "folder"; path: string; force?: boolean }
+        | { kind: "store"; url: string; force?: boolean }
+        | { kind: "browser"; source: string; profile: string; id: string; force?: boolean },
     ): Promise<InstallResult> {
-      if (request.kind === "folder") return add(request.path, "folder")
+      if (request.kind === "folder") return add(request.path, "folder", request.force)
 
       if (request.kind === "browser") {
         const folder = await chromiumProfileDirectory(request.source, request.profile)
@@ -251,7 +268,7 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
         await mkdir(directory, { recursive: true })
         await cp(found.directory, target, { recursive: true, filter: (item) => path.basename(item) !== "_metadata" })
 
-        return add(target, "browser")
+        return add(target, "browser", request.force)
       }
 
       const target = storeTarget(request.url)
@@ -274,7 +291,7 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
 
       if (crx.key) await pinKey(folder, crx.key)
 
-      return add(folder, "store")
+      return add(folder, "store", request.force)
     },
     async remove(id: string) {
       const record = stored.value.find((item) => item.id === id)

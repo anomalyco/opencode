@@ -4,7 +4,7 @@ import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
-import type { ProfileExtension, ProfileSource } from "./profile/ipc"
+import type { ExtensionCompatibility, ProfileExtension, ProfileSource } from "./profile/ipc"
 
 /**
  * Settings › Browser: whether links open in the pane, importing sign-ins, the extensions the profile runs, and its
@@ -192,6 +192,7 @@ function ExtensionRow(props: {
           fallback="extensions"
           name={props.extension.name}
           detail={props.extension.version}
+          status={<CompatibilityNote compatibility={props.extension.compatibility} />}
           message={props.extension.error ? { text: props.extension.error, error: true } : undefined}
         />
       }
@@ -250,6 +251,18 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
     const job = jobs.running()
 
     return job?.type === "install-browser" && job.id === id
+  }
+
+  // The install that stopped because its extension will not work here, which the user may still add.
+  const confirming = () => {
+    const last = jobs.last()
+
+    if (last?.outcome.type !== "installed" || last.outcome.result.type !== "unsupported") return undefined
+    const job = last.job
+
+    return job.type === "install-store" || job.type === "install-folder" || job.type === "install-browser"
+      ? job
+      : undefined
   }
 
   const addLink = () => {
@@ -311,13 +324,39 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
         </div>
         <Show when={jobs.describe(jobs.last())}>
           {(message) => (
-            <p
+            <div
               role={message().error ? "alert" : "status"}
-              class="text-[13px] leading-[var(--line-height-base)]"
-              classList={{ "text-v2-state-fg-danger": message().error, "text-v2-text-text-muted": !message().error }}
+              class="flex flex-col gap-2 text-[13px] leading-[var(--line-height-base)]"
             >
-              {message().text}
-            </p>
+              <p
+                classList={{
+                  "text-v2-state-fg-warning": !!confirming(),
+                  "text-v2-state-fg-danger": message().error && !confirming(),
+                  "text-v2-text-text-muted": !message().error,
+                }}
+              >
+                {message().text}
+              </p>
+              <Show when={message().compatibility}>
+                {(compatibility) => (
+                  <span class="text-v2-text-text-muted">
+                    <CompatibilityDetails compatibility={compatibility()} />
+                  </span>
+                )}
+              </Show>
+              <Show when={confirming()}>
+                {(job) => (
+                  <div class="flex items-center gap-2">
+                    <ui.Button size="small" disabled={blocked()} onClick={() => jobs.start({ ...job(), force: true })}>
+                      {ctx.t("settings.extensions.anyway")}
+                    </ui.Button>
+                    <ui.Button size="small" variant="ghost" onClick={() => jobs.dismiss()}>
+                      {ctx.t("common.cancel")}
+                    </ui.Button>
+                  </div>
+                )}
+              </Show>
+            </div>
           )}
         </Show>
         <Show when={selected()}>
@@ -347,8 +386,11 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                 {(item) => (
                   <div class="flex h-9 items-center gap-3">
                     <Glyph image={item.icon} fallback="extensions" />
-                    <span class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                      {item.name}
+                    <span class="flex min-w-0 flex-1 items-center gap-2">
+                      <span class="min-w-0 shrink truncate text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                        {item.name}
+                      </span>
+                      <CompatibilityNote compatibility={item.compatibility} />
                     </span>
                     <ui.Button
                       size="small"
@@ -361,10 +403,16 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                           source: choice().source.id,
                           profile: choice().profile.id,
                           id: item.id,
+                          // The row already says it will not work here.
+                          force: true,
                         })
                       }
                     >
-                      {item.installed ? ctx.t("settings.extensions.added") : ctx.t("settings.extensions.add")}
+                      {item.installed
+                        ? ctx.t("settings.extensions.added")
+                        : item.compatibility.level === "unsupported"
+                          ? ctx.t("settings.extensions.anyway")
+                          : ctx.t("settings.extensions.add")}
                     </ui.Button>
                   </div>
                 )}
@@ -377,14 +425,31 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
   )
 }
 
-/** A row's subject: its icon, its name, and under it a detail or what the last action on it did. */
-function Identity(props: { image?: string; fallback: IconName; name: string; detail?: string; message?: JobMessage }) {
+/**
+ * A row's subject: its icon, its name, and under it a detail and a status, or what the last action on it did.
+ */
+function Identity(props: {
+  image?: string
+  fallback: IconName
+  name: string
+  detail?: string
+  status?: JSX.Element
+  message?: JobMessage
+}) {
   return (
     <span class="flex min-w-0 items-center gap-3">
       <Glyph image={props.image} fallback={props.fallback} />
       <span class="flex min-w-0 flex-col gap-1">
         <span class="truncate">{props.name}</span>
-        <Show when={props.message} fallback={<Show when={props.detail}>{(detail) => <Muted>{detail()}</Muted>}</Show>}>
+        <Show
+          when={props.message}
+          fallback={
+            <span class="flex min-w-0 items-center gap-2 empty:hidden">
+              <Show when={props.detail}>{(detail) => <Muted>{detail()}</Muted>}</Show>
+              {props.status}
+            </span>
+          }
+        >
           {(message) => (
             <span
               role={message().error ? "alert" : "status"}
@@ -396,6 +461,53 @@ function Identity(props: { image?: string; fallback: IconName; name: string; det
           )}
         </Show>
       </span>
+    </span>
+  )
+}
+
+/**
+ * A quiet note for an extension that partly works here and a warning for one that will not, with what does not work
+ * on hover or focus; nothing for one that works.
+ */
+function CompatibilityNote(props: { compatibility: ExtensionCompatibility }) {
+  const ctx = usePlugin<typeof definition>()
+  const ui = ctx.ui
+  const level = () => props.compatibility.level
+
+  return (
+    <Show when={level() !== "supported" ? level() : undefined}>
+      {(shown) => (
+        <ui.Tooltip value={<CompatibilityDetails compatibility={props.compatibility} />}>
+          <span
+            tabIndex={0}
+            data-compatibility={shown()}
+            class="min-w-0 truncate text-[13px] font-[440] leading-[var(--line-height-base)]"
+            classList={{
+              "text-v2-state-fg-warning": shown() === "unsupported",
+              "text-v2-text-text-muted": shown() === "partial",
+            }}
+          >
+            {ctx.t(`extensions.compat.${shown()}`)}
+          </span>
+        </ui.Tooltip>
+      )}
+    </Show>
+  )
+}
+
+/** Why an extension will not work here, and each part of it that does not. */
+function CompatibilityDetails(props: { compatibility: ExtensionCompatibility }) {
+  const ctx = usePlugin<typeof definition>()
+
+  return (
+    <span class="flex flex-col gap-1">
+      <Show when={props.compatibility.cause}>{(cause) => <span>{ctx.t(`extensions.compat.cause.${cause()}`)}</span>}</Show>
+      <Show when={props.compatibility.missing.length > 0}>
+        <span>{ctx.t("extensions.compat.missing")}</span>
+        <For each={props.compatibility.missing}>
+          {(feature) => <span class="ps-2">{ctx.t(`extensions.compat.feature.${feature}`)}</span>}
+        </For>
+      </Show>
     </span>
   )
 }

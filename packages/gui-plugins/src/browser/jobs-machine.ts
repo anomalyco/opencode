@@ -4,9 +4,16 @@ import type { ImportResult, InstallResult } from "./profile/ipc"
 export type Job =
   | { readonly type: "import-browser"; readonly source: string; readonly profile: string }
   | { readonly type: "import-file"; readonly path: string }
-  | { readonly type: "install-store"; readonly url: string }
-  | { readonly type: "install-folder"; readonly path: string }
-  | { readonly type: "install-browser"; readonly source: string; readonly profile: string; readonly id: string }
+  /** Each install adds an extension that will not work here only with `force`, after the user confirms. */
+  | { readonly type: "install-store"; readonly url: string; readonly force?: boolean }
+  | { readonly type: "install-folder"; readonly path: string; readonly force?: boolean }
+  | {
+      readonly type: "install-browser"
+      readonly source: string
+      readonly profile: string
+      readonly id: string
+      readonly force?: boolean
+    }
   | { readonly type: "remove"; readonly id: string }
   | { readonly type: "enable"; readonly id: string; readonly enabled: boolean }
   | { readonly type: "clear" }

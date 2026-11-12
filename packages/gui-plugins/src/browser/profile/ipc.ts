@@ -5,6 +5,60 @@ const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
 const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(maximum))
 
+/**
+ * A part of an extension that does not work in this browser, by what the user would notice.
+ * - `blocking`: blocking or changing requests (`webRequestBlocking`, `declarativeNetRequest`).
+ * - `network`: watching requests (`webRequest`).
+ * - `toolbar`: a toolbar button without a popup, which only tells the extension it was clicked.
+ * - `popup`: a toolbar popup about the current page; here it opens as a tab of its own.
+ * - `menus`: right-click menu items. `shortcuts`: keyboard shortcuts. `native`: an app on the computer.
+ * - `signin`: signing in with a browser account. `sidePanel`: a side panel. `notifications`: system notifications.
+ * - `navigation`: following page navigation. `cookies`: reading and changing cookies.
+ * - `browserData`: history, bookmarks, sessions and downloads. `settings`: browser settings such as privacy or fonts.
+ * - `addressBar`: an address bar keyword. `newTab`: replacing the new tab page. `devtools`: a developer tools panel.
+ * - `access`: asking for more access after install. `userScripts`: user scripts. `other`: any other missing API.
+ */
+export const ExtensionFeature = Schema.Literals([
+  "blocking",
+  "network",
+  "toolbar",
+  "popup",
+  "menus",
+  "shortcuts",
+  "native",
+  "signin",
+  "sidePanel",
+  "notifications",
+  "navigation",
+  "cookies",
+  "browserData",
+  "settings",
+  "addressBar",
+  "newTab",
+  "devtools",
+  "access",
+  "userScripts",
+  "other",
+])
+
+export type ExtensionFeature = typeof ExtensionFeature.Type
+
+/**
+ * Whether an extension works in this browser, from what its manifest declares.
+ * - `supported`: everything it declares works here.
+ * - `partial`: it runs, but `missing` does not work.
+ * - `unsupported`: it will not do its job here, for `cause`: `startup`, its background script needs an API this
+ *   browser lacks and stops when it starts; `blocking`, it blocks or changes requests; `native`, it needs an app on
+ *   the computer.
+ */
+export const ExtensionCompatibility = Schema.Struct({
+  level: Schema.Literals(["supported", "partial", "unsupported"]),
+  cause: Schema.optional(Schema.Literals(["startup", "blocking", "native"])),
+  missing: Schema.Array(ExtensionFeature),
+})
+
+export type ExtensionCompatibility = typeof ExtensionCompatibility.Type
+
 /** An extension the desktop browser installed, as the window lists it. */
 export const ProfileExtension = Schema.Struct({
   id: text(64),
@@ -20,6 +74,7 @@ export const ProfileExtension = Schema.Struct({
   options: Schema.optional(Schema.String),
   /** Why an enabled extension did not load. */
   error: Schema.optional(Schema.String),
+  compatibility: ExtensionCompatibility,
 })
 
 export type ProfileExtension = typeof ProfileExtension.Type
@@ -66,9 +121,17 @@ export type ImportResult = typeof ImportResult.Type
  * - `manifest`: the directory or package has no extension manifest, or a theme's.
  * - `download`: the store did not serve the package.
  * - `load`: Chromium refused the extension; `message` says why.
+ *
+ * `unsupported`: nothing was installed, because the extension will not work here; installing again with `force` adds
+ * it anyway.
  */
 export const InstallResult = Schema.Union([
   Schema.Struct({ type: Schema.Literal("installed"), extension: ProfileExtension }),
+  Schema.Struct({
+    type: Schema.Literal("unsupported"),
+    name: Schema.String,
+    compatibility: ExtensionCompatibility,
+  }),
   Schema.Struct({
     type: Schema.Literal("failed"),
     reason: Schema.Literals(["manifest", "download", "load"]),
@@ -105,14 +168,21 @@ export const BrowserProfile = Ipc.define({
           version: Schema.String,
           icon: Schema.optional(Schema.String),
           installed: Schema.Boolean,
+          compatibility: ExtensionCompatibility,
         }),
       ),
     },
+    /** Adds an extension. One that will not work here is added only with `force`. */
     install: {
       input: Schema.Union([
-        Schema.Struct({ kind: Schema.Literal("folder"), path: text(4096) }),
-        Schema.Struct({ kind: Schema.Literal("store"), url: text(2048) }),
-        Schema.Struct({ kind: Schema.Literal("browser"), ...SourceProfile, id: text(64) }),
+        Schema.Struct({ kind: Schema.Literal("folder"), path: text(4096), force: Schema.optional(Schema.Boolean) }),
+        Schema.Struct({ kind: Schema.Literal("store"), url: text(2048), force: Schema.optional(Schema.Boolean) }),
+        Schema.Struct({
+          kind: Schema.Literal("browser"),
+          ...SourceProfile,
+          id: text(64),
+          force: Schema.optional(Schema.Boolean),
+        }),
       ]),
       output: InstallResult,
     },

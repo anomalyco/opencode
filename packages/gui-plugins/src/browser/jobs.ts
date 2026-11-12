@@ -1,7 +1,7 @@
 import { createSignal, onCleanup, untrack } from "solid-js"
 import { createLatest, usePlugin, type IpcClient } from "@opencode/plugin/gui"
 import type definition from "./index"
-import { BrowserProfile, type ProfileSource } from "./profile/ipc"
+import { BrowserProfile, type ExtensionCompatibility, type ProfileSource } from "./profile/ipc"
 import {
   importedCookies,
   initialJobsState,
@@ -19,8 +19,15 @@ type Client = IpcClient<(typeof BrowserProfile)["spec"]>
 
 export type ProfileJobs = ReturnType<typeof createProfileJobs>
 
-/** What a surface says about a finished job, and whether it is bad news. */
-export type JobMessage = { readonly text: string; readonly error: boolean }
+/**
+ * What a surface says about a finished job, and whether it is bad news. An install that added an extension which only
+ * partly works here, or added nothing because it will not work here, says what will not work.
+ */
+export type JobMessage = {
+  readonly text: string
+  readonly error: boolean
+  readonly compatibility?: ExtensionCompatibility
+}
 
 /**
  * The browser profile as one surface drives it: the settings page, or the pane's import prompt. It runs the jobs
@@ -113,8 +120,22 @@ export function createProfileJobs(input: { readonly finished?: (finished: Finish
     if (outcome.type === "installed") {
       const result = outcome.result
 
+      if (result.type === "installed" && result.extension.compatibility.level !== "supported")
+        return {
+          text: ctx.t(`extensions.added.${result.extension.compatibility.level}`, { name: result.extension.name }),
+          error: false,
+          compatibility: result.extension.compatibility,
+        }
+
       if (result.type === "installed")
         return { text: ctx.t("extensions.added", { name: result.extension.name }), error: false }
+
+      if (result.type === "unsupported")
+        return {
+          text: ctx.t("extensions.unsupported", { name: result.name }),
+          error: true,
+          compatibility: result.compatibility,
+        }
 
       if (result.reason === "load")
         return { text: ctx.t("extensions.failed.load", { message: result.message ?? "" }), error: true }
@@ -173,14 +194,20 @@ async function perform(client: Client, job: Job, signal: AbortSignal): Promise<O
     case "import-file":
       return { type: "imported", result: await client.importFile({ path: job.path }, { signal }) }
     case "install-store":
-      return { type: "installed", result: await client.install({ kind: "store", url: job.url }, { signal }) }
+      return {
+        type: "installed",
+        result: await client.install({ kind: "store", url: job.url, force: job.force }, { signal }),
+      }
     case "install-folder":
-      return { type: "installed", result: await client.install({ kind: "folder", path: job.path }, { signal }) }
+      return {
+        type: "installed",
+        result: await client.install({ kind: "folder", path: job.path, force: job.force }, { signal }),
+      }
     case "install-browser":
       return {
         type: "installed",
         result: await client.install(
-          { kind: "browser", source: job.source, profile: job.profile, id: job.id },
+          { kind: "browser", source: job.source, profile: job.profile, id: job.id, force: job.force },
           { signal },
         ),
       }
