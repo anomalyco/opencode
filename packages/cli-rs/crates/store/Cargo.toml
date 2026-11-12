@@ -14,6 +14,7 @@ futures-util.workspace = true
 indexmap.workspace = true
 log.workspace = true
 opencode-api.workspace = true
+opencode-util.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
@@ -22,6 +23,5 @@ tokio-util.workspace = true
 bytes.workspace = true
 opencode-local.workspace = true
 opencode-service.workspace = true
-opencode-util.workspace = true
 serde.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

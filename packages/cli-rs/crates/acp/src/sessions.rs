@@ -11,6 +11,7 @@ use opencode_api::generated::{
     AgentID, ExperimentalMcpAddInput, ExperimentalMcpAddInputConfig, LocationQueryInput, ModelRef, SessionID,
     SessionInfo, SessionSwitchAgentInput, SessionSwitchModelInput,
 };
+use opencode_util::lock;
 use serde_json::{Map, Value, json};
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
@@ -35,7 +36,7 @@ impl Attached {
     }
 
     fn lock(&self) -> MutexGuard<'_, Selection> {
-        self.selection.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        lock(&self.selection)
     }
 
     pub fn selection(&self) -> Selection {
@@ -68,10 +69,6 @@ pub struct Sessions {
     registered_mcp: Mutex<HashMap<String, HashMap<String, Value>>>,
     connected: watch::Receiver<bool>,
     scope: CancellationToken,
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl Sessions {

@@ -1,6 +1,7 @@
 //! Child-session updates (`packages/cli/src/acp/child.ts`).
 
-use serde_json::{Map, Value, json};
+use opencode_util::json_object;
+use serde_json::{Value, json};
 
 pub const UPDATE_METHOD: &str = "opencode/session/child_update";
 
@@ -23,13 +24,7 @@ impl Session {
 
 /// A child status event: `{ type: "status", status, error? }`.
 pub fn status(status: &str, error: Option<Value>) -> Value {
-    let mut event = Map::new();
-    event.insert("type".to_owned(), json!("status"));
-    event.insert("status".to_owned(), json!(status));
-    if let Some(error) = error {
-        event.insert("error".to_owned(), error);
-    }
-    Value::Object(event)
+    json_object! { "type": "status", "status": status, "error"?: error }
 }
 
 /// A child update event: `{ type: "update", update }`.
@@ -39,18 +34,14 @@ pub fn update_event(update: Value) -> Value {
 
 /// The `opencode/session/child_update` params for `event`.
 pub fn update(root_session_id: &str, child: &Session, event: Value) -> Value {
-    let mut update = Map::new();
-    update.insert("rootSessionId".to_owned(), json!(root_session_id));
-    update.insert("childSessionId".to_owned(), json!(child.id));
-    update.insert("parentSessionId".to_owned(), json!(child.parent_id));
-    update.insert("depth".to_owned(), json!(child.depth));
-    if let Some(title) = child.title() {
-        update.insert("title".to_owned(), json!(title));
+    json_object! {
+        "rootSessionId": root_session_id,
+        "childSessionId": child.id,
+        "parentSessionId": child.parent_id,
+        "depth": child.depth,
+        "title"?: child.title(),
+        ..event
     }
-    if let Value::Object(event) = event {
-        update.extend(event);
-    }
-    Value::Object(update)
 }
 
 /// A child's update as the parent session shows it: child metadata, and tool IDs and titles prefixed.
@@ -76,13 +67,8 @@ pub fn project(mut update: Value, child: &Session) -> Value {
 }
 
 pub fn meta(child: &Session) -> Value {
-    let mut session = Map::new();
-    session.insert("id".to_owned(), json!(child.id));
-    session.insert("parentID".to_owned(), json!(child.parent_id));
-    session.insert("depth".to_owned(), json!(child.depth));
-    if let Some(title) = child.title() {
-        session.insert("title".to_owned(), json!(title));
-    }
+    let session =
+        json_object! { "id": child.id, "parentID": child.parent_id, "depth": child.depth, "title"?: child.title() };
     json!({ "opencode/child-session": session })
 }
 

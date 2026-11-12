@@ -12,6 +12,7 @@ use opencode_api::generated::{
     AgentInfoMode, AgentListInput, CommandInfo, CommandListInput, LocationQueryInput, ModelDefaultInput, ModelInfo,
     ModelListInput, ModelRef, PluginListInput,
 };
+use opencode_util::lock;
 use serde_json::Value;
 use tokio::sync::{OnceCell, watch};
 use tokio::time::Instant;
@@ -112,7 +113,7 @@ impl Catalogs {
             let directory =
                 event.get("location").and_then(|location| location.get("directory")).and_then(Value::as_str);
             let targets: Vec<(String, Slot)> = {
-                let entries = self.entries.lock().unwrap_or_else(|p| p.into_inner());
+                let entries = lock(&self.entries);
                 match directory {
                     None => entries.iter().map(|(key, slot)| (key.clone(), slot.clone())).collect(),
                     Some(directory) => {
@@ -153,12 +154,12 @@ impl Catalogs {
     }
 
     fn has_slot(&self, slot: &Slot) -> bool {
-        self.entries.lock().unwrap_or_else(|p| p.into_inner()).values().any(|item| Arc::ptr_eq(item, slot))
+        lock(&self.entries).values().any(|item| Arc::ptr_eq(item, slot))
     }
 
     async fn entry(&self, cwd: &str) -> Result<Arc<Entry>, Failure> {
         let key = fs_resolve(cwd);
-        let slot = self.entries.lock().unwrap_or_else(|p| p.into_inner()).entry(key.clone()).or_default().clone();
+        let slot = lock(&self.entries).entry(key.clone()).or_default().clone();
         let result = slot
             .get_or_try_init(|| async {
                 let mut connected = self.connected.clone();
@@ -175,7 +176,7 @@ impl Catalogs {
             .await
             .cloned();
         if result.is_err() {
-            let mut entries = self.entries.lock().unwrap_or_else(|p| p.into_inner());
+            let mut entries = lock(&self.entries);
             if entries.get(&key).is_some_and(|item| Arc::ptr_eq(item, &slot)) {
                 entries.remove(&key);
             }

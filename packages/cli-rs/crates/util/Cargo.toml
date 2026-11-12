@@ -16,3 +16,6 @@ ring = ["dep:ring"]
 [dependencies]
 libc.workspace = true
 ring = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true

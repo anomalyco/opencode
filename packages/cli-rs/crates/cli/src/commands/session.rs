@@ -1,7 +1,7 @@
 //! `session`: list, delete, export, and import sessions
 //! (`packages/cli/src/commands/handlers/session/*.ts`).
 
-use opencode_util::{bail, err, error, time::Zone};
+use opencode_util::{bail, err, error, json_object, time::Zone};
 use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
 
@@ -11,7 +11,7 @@ use opencode_api::generated::types::{
     AbsolutePath, ExperimentalSessionExportInput, LocationGetInput, LocationQueryInput, ProjectID, SessionListInput,
     SessionListInputOrder, SessionRemoveInput,
 };
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use super::Context;
 use super::client::{block_on, connect, pretty};
@@ -84,23 +84,14 @@ fn page(output: &str) -> error::Result<()> {
 
 // The JSON format's fields; a missing one stays missing, as `JSON.stringify` drops `undefined`.
 fn summary(session: &Value) -> Value {
-    let fields = [
-        ("id", &["id"][..]),
-        ("title", &["title"]),
-        ("updated", &["time", "updated"]),
-        ("created", &["time", "created"]),
-        ("projectId", &["projectID"]),
-        ("directory", &["location", "directory"]),
-    ];
-    Value::Object(
-        fields
-            .iter()
-            .filter_map(|(key, path)| {
-                let value = path.iter().try_fold(session, |value, name| value.get(name))?;
-                Some((key.to_string(), value.clone()))
-            })
-            .collect::<Map<_, _>>(),
-    )
+    json_object! {
+        "id"?: session.get("id"),
+        "title"?: session.get("title"),
+        "updated"?: session.pointer("/time/updated"),
+        "created"?: session.pointer("/time/created"),
+        "projectId"?: session.get("projectID"),
+        "directory"?: session.pointer("/location/directory"),
+    }
 }
 
 fn table(sessions: &[Value]) -> String {
