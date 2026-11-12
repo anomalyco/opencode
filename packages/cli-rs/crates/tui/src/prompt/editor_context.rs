@@ -1135,6 +1135,11 @@ mod sqlite {
 mod tests {
     use super::*;
 
+    /// A POSIX test path as an absolute path of this platform: `/w/app` is `C:\w\app` on Windows.
+    fn abs(posix: &str) -> String {
+        if cfg!(windows) { format!("C:{}", posix.replace('/', "\\")) } else { posix.to_owned() }
+    }
+
     fn range(text: &str, start: (i64, i64), end: (i64, i64)) -> Range {
         Range {
             text: text.to_owned(),
@@ -1190,17 +1195,17 @@ mod tests {
         let write = |name: &str, value: Value| {
             std::fs::write(root.path().join(name), value.to_string()).unwrap();
         };
-        write("4100.lock", json!({ "workspaceFolders": ["/w"], "transport": "ws" }));
-        write("4200.lock", json!({ "workspaceFolders": ["/w/app"], "authToken": "secret" }));
-        write("4300.lock", json!({ "workspaceFolders": ["/w/app/deep"], "transport": "sse" }));
-        write("nope.lock", json!({ "workspaceFolders": ["/w"] }));
-        write("4400.lock", json!({ "workspaceFolders": ["/other"] }));
+        write("4100.lock", json!({ "workspaceFolders": [abs("/w")], "transport": "ws" }));
+        write("4200.lock", json!({ "workspaceFolders": [abs("/w/app")], "authToken": "secret" }));
+        write("4300.lock", json!({ "workspaceFolders": [abs("/w/app/deep")], "transport": "sse" }));
+        write("nope.lock", json!({ "workspaceFolders": [abs("/w")] }));
+        write("4400.lock", json!({ "workspaceFolders": [abs("/other")] }));
         assert_eq!(
-            discover(root.path(), "/w/app/deep/src"),
+            discover(root.path(), &abs("/w/app/deep/src")),
             Some(Connection { url: "ws://127.0.0.1:4200".into(), auth_token: Some("secret".into()) })
         );
-        assert_eq!(discover(root.path(), "/w/x").map(|found| found.url), Some("ws://127.0.0.1:4100".into()));
-        assert_eq!(discover(root.path(), "/elsewhere"), None);
+        assert_eq!(discover(root.path(), &abs("/w/x")).map(|found| found.url), Some("ws://127.0.0.1:4100".into()));
+        assert_eq!(discover(root.path(), &abs("/elsewhere")), None);
         assert_eq!(parse_port("8123abc"), Some(8123));
         assert_eq!(parse_port("0"), None);
         assert_eq!(parse_port("70000"), None);
@@ -1212,29 +1217,35 @@ mod tests {
         let db = root.path().join("db.sqlite");
         zed::exec(
             &db,
-            "create table workspaces (workspace_id integer, paths text, timestamp text);
-            create table panes (pane_id integer, workspace_id integer, active integer);
-            create table items (item_id integer, workspace_id integer, pane_id integer, kind text, active integer);
-            create table editors (item_id integer, workspace_id integer, buffer_path text, contents text);
-            create table editor_selections (editor_id integer, workspace_id integer, start integer, end integer);
-            insert into workspaces values (1, '[\"/w\"]', '2026-01-01'), (2, '/w/app', '2026-01-02');
-            insert into panes values (10, 1, 1), (20, 2, 1);
-            insert into items values (100, 1, 10, 'Editor', 1), (200, 2, 20, 'Editor', 1);
-            insert into editors values (100, 1, '/w/a.ts', 'x'), (200, 2, '/w/app/b.ts', 'héllo\n日本語 end');
-            insert into editor_selections values (200, 2, 14, 1);",
+            &format!(
+                "create table workspaces (workspace_id integer, paths text, timestamp text);
+                create table panes (pane_id integer, workspace_id integer, active integer);
+                create table items (item_id integer, workspace_id integer, pane_id integer, kind text, active integer);
+                create table editors (item_id integer, workspace_id integer, buffer_path text, contents text);
+                create table editor_selections (editor_id integer, workspace_id integer, start integer, end integer);
+                insert into workspaces values (1, '{}', '2026-01-01'), (2, '{}', '2026-01-02');
+                insert into panes values (10, 1, 1), (20, 2, 1);
+                insert into items values (100, 1, 10, 'Editor', 1), (200, 2, 20, 'Editor', 1);
+                insert into editors values (100, 1, '{}', 'x'), (200, 2, '{}', 'héllo\n日本語 end');
+                insert into editor_selections values (200, 2, 14, 1);",
+                json!([abs("/w")]),
+                abs("/w/app"),
+                abs("/w/a.ts"),
+                abs("/w/app/b.ts"),
+            ),
         )
         .unwrap();
-        let selection = zed::resolve(&db, Path::new("/w/app/src")).unwrap().unwrap();
-        assert_eq!(selection.file_path, "/w/app/b.ts");
+        let selection = zed::resolve(&db, Path::new(&abs("/w/app/src"))).unwrap().unwrap();
+        assert_eq!(selection.file_path, abs("/w/app/b.ts"));
         // Bytes 1..14 end inside 語, so the range takes the whole character.
         assert_eq!(selection.ranges, vec![range("éllo\n日本語", (1, 2), (2, 4))]);
         // An editor without selections cannot tell, so the last selection stays.
-        assert_eq!(zed::resolve(&db, Path::new("/w/lib")), None);
-        assert_eq!(zed::resolve(&db, Path::new("/elsewhere")), Some(None));
-        assert_eq!(zed::resolve(&root.path().join("missing"), Path::new("/w")), None);
+        assert_eq!(zed::resolve(&db, Path::new(&abs("/w/lib"))), None);
+        assert_eq!(zed::resolve(&db, Path::new(&abs("/elsewhere"))), Some(None));
+        assert_eq!(zed::resolve(&root.path().join("missing"), Path::new(&abs("/w"))), None);
         // Text that is not UTF-8 makes the read unavailable.
         zed::exec(&db, "update editors set contents = cast(x'ff' as text) where item_id = 200").unwrap();
-        assert_eq!(zed::resolve(&db, Path::new("/w/app/src")), None);
+        assert_eq!(zed::resolve(&db, Path::new(&abs("/w/app/src"))), None);
     }
 
     #[test]
@@ -1243,23 +1254,28 @@ mod tests {
         let db = root.path().join("db.sqlite");
         zed::exec(
             &db,
-            "create table workspaces (workspace_id integer, paths text, timestamp text);
-            create table panes (pane_id integer, workspace_id integer, active integer);
-            create table items (item_id integer, workspace_id integer, pane_id integer, kind text, active integer);
-            create table editors (item_id integer, workspace_id integer, buffer_path text, contents text);
-            create table editor_selections (editor_id integer, workspace_id integer, start integer, end integer);
-            insert into workspaces values (1, '/w', '2026-01-01');
-            insert into panes values (10, 1, 1);
-            insert into items values (100, 1, 10, 'Editor', 1);
-            insert into editors values (100, 1, '/w/a.ts', 'abc');
-            insert into editor_selections values (100, 1, 0, 2);",
+            &format!(
+                "create table workspaces (workspace_id integer, paths text, timestamp text);
+                create table panes (pane_id integer, workspace_id integer, active integer);
+                create table items (item_id integer, workspace_id integer, pane_id integer, kind text, active integer);
+                create table editors (item_id integer, workspace_id integer, buffer_path text, contents text);
+                create table editor_selections (editor_id integer, workspace_id integer, start integer, end integer);
+                insert into workspaces values (1, '{}', '2026-01-01');
+                insert into panes values (10, 1, 1);
+                insert into items values (100, 1, 10, 'Editor', 1);
+                insert into editors values (100, 1, '{}', 'abc');
+                insert into editor_selections values (100, 1, 0, 2);",
+                abs("/w"),
+                abs("/w/a.ts"),
+            ),
         )
         .unwrap();
-        assert_eq!(zed::resolve(&db, Path::new("/w")).unwrap().unwrap().ranges[0].text, "ab");
+        let cwd = abs("/w");
+        assert_eq!(zed::resolve(&db, Path::new(&cwd)).unwrap().unwrap().ranges[0].text, "ab");
         let missing = sqlite::Sqlite::load("libsqlite3-missing.so.0");
         assert!(missing.is_none());
         // The caller keeps the last selection and polls again, as for a database it cannot read.
-        assert_eq!(zed::resolve_with(missing.as_ref(), &db, Path::new("/w")), None);
+        assert_eq!(zed::resolve_with(missing.as_ref(), &db, Path::new(&cwd)), None);
     }
 
     #[test]
