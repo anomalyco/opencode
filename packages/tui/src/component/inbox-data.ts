@@ -7,7 +7,12 @@ import { useData } from "../context/data"
 import { useLog } from "../context/log"
 import { useRoute } from "../context/route"
 
-export type InboxRow = { id: string; title: string; directory: string; detail: string }
+export type InboxRow = {
+  id: string
+  title: string
+  directory: string
+  detail: "Review permission" | "Answer question" | "Working" | "Failed" | "Done" | ""
+}
 export type InboxSection = { title: string; rows: InboxRow[] }
 type Group = "Needs attention" | "Working" | "Unread" | "Recent"
 type Request = { id: string; sessionID: string; kind: "Approval" | "Question" }
@@ -162,9 +167,9 @@ export function useInbox() {
           title: displayLabel(info),
           directory: info.location.directory,
           detail: approval
-            ? "Approval"
+            ? "Review permission"
             : question
-              ? "Question"
+              ? "Answer question"
               : busy
                 ? "Working"
                 : unread

@@ -89,10 +89,10 @@ test("loads root sessions across locations and moves a family as its child reque
       })
   })
   const { events, group, inbox } = fixture
-  await until(() => group("Needs attention")[0]?.detail === "Question")
+  await until(() => group("Needs attention")[0]?.detail === "Answer question")
   expect(inbox.loading()).toBe(false)
   permission.resolve(json({ data: [{ id: "permission", sessionID: "child", action: "read", resources: ["a"] }] }))
-  await until(() => !inbox.loading() && group("Needs attention")[0]?.detail === "Approval")
+  await until(() => !inbox.loading() && group("Needs attention")[0]?.detail === "Review permission")
   expect(group("Needs attention")[0]).toMatchObject({ id: "root", directory: "/other", title: "root" })
   expect(inbox.sections().map((s) => s.title)).toEqual(["Needs attention", "Working", "Unread", "Recent"])
   expect(group("Recent").map((row) => row.id)).toEqual(recent.toReversed().map((s) => s.id))
@@ -110,7 +110,7 @@ test("loads root sessions across locations and moves a family as its child reque
     location: root.location,
     data: { sessionID: "child", requestID: "permission", reply: "once" },
   })
-  await until(() => group("Needs attention")[0]?.detail === "Question")
+  await until(() => group("Needs attention")[0]?.detail === "Answer question")
   events.emit({
     id: "cancel",
     created: 8,
@@ -156,7 +156,7 @@ test("a second location's cold form promotes an idle grandchild's root without s
   })
   await until(() => fixture.group("Needs attention")[0]?.id === "remote")
   expect(fixture.group("Needs attention")).toEqual([
-    { id: "remote", directory: "/second", title: "remote", detail: "Question" },
+    { id: "remote", directory: "/second", title: "remote", detail: "Answer question" },
   ])
   expect(reads.filter((path) => path === "/api/form")).toHaveLength(2)
   expect(reads.filter((path) => path === "/api/permission/request")).toHaveLength(2)
