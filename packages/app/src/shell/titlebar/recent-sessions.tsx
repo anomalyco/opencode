@@ -6,7 +6,6 @@ import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Key } from "@solid-primitives/keyed"
 import { useQueryClient } from "@tanstack/solid-query"
 import { Button } from "@opencode/ui/button"
-import { Icon } from "@opencode/ui/icon"
 import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Loader } from "@opencode/ui/loader"
@@ -970,11 +969,9 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
         </Menu.Item>
       </Show>
       <Menu.Item onSelect={() => global.sessionPreferences.update("muted", server(), item().session.id, !muted())}>
-        <Icon name={muted() ? "notifications" : "monitor"} size="small" />
         {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
       </Menu.Item>
       <Menu.Item onSelect={() => global.sessionPreferences.update("hidden", server(), item().session.id, true)}>
-        <Icon name="outline-eye-slash" size="small" />
         {language.t("sidebar.recent.hide")}
       </Menu.Item>
       <Menu.Separator />
