@@ -5,7 +5,7 @@ use opentui::style::Color;
 use opentui::theme::ThemeMode;
 use serde_json::{Map, Value, json};
 
-use super::color::{Oklch, from_hex, hex, oklch_to_hex, to_oklch, unit};
+use super::color::{Oklch, contrast, from_hex, hex, oklch_to_hex, to_oklch};
 use super::document::STEPS;
 use super::v1::{
     V1, dialog_background, feedback_background, feedback_text, infer_hues, migrate_with, palette_tokens,
@@ -282,18 +282,6 @@ fn hue_scale(color: Color, mode: ThemeMode, neutral: &Neutral) -> Vec<String> {
             with_alpha(oklch_to_hex(generated), color.a)
         })
         .collect()
-}
-
-/// WCAG contrast ratio.
-fn contrast(first: Color, second: Color) -> f64 {
-    let luminance = |color: Color| {
-        let channel = |value: u8| {
-            if unit(value) <= 0.04045 { unit(value) / 12.92 } else { ((unit(value) + 0.055) / 1.055).powf(2.4) }
-        };
-        0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
-    };
-    let (first, second) = (luminance(first), luminance(second));
-    (first.max(second) + 0.05) / (first.min(second) + 0.05)
 }
 
 fn mix(start: Oklch, end: Oklch, amount: f64) -> Oklch {
