@@ -121,8 +121,7 @@ fn inline_tools_show_running_and_finished_lines() {
         tool("c10", "todowrite", failed(json!({}), "bad todos")),
     ]);
     let h = open(100, 40, messages);
-    let screen = h.wait_for("Todo update failed");
-    for line in [
+    h.wait_for_all(&[
         "   % WebFetch https://example.com\n",
         "   % WebFetch https://opencode.ai/docs\n",
         "   ⋯ Searching web…\n",
@@ -133,9 +132,7 @@ fn inline_tools_show_running_and_finished_lines() {
         "   ⋯ Updating todos…\n",
         "   ⚙ Cleared todos\n",
         "   ⚙ Todo update failed\n",
-    ] {
-        assert!(screen.contains(line), "{line:?} missing:\n{screen}");
-    }
+    ]);
     let theme = h.tui.page();
     assert_eq!(h.fg("Todo update failed"), theme.text.feedback.error.base);
 }
@@ -191,8 +188,7 @@ fn blocks_list_todos_answers_and_patched_files() {
         ),
     ]);
     let h = open(100, 60, messages);
-    let screen = h.wait_for("Patch failed");
-    for text in [
+    h.wait_for_all(&[
         "# Todos",
         "[✓] Write the views",
         "[•] Prove them",
@@ -208,9 +204,7 @@ fn blocks_list_todos_answers_and_patched_files() {
         "⋯ Patching src/new.rs",
         "# Patch failed",
         "context mismatch",
-    ] {
-        assert!(screen.contains(text), "{text:?} missing:\n{screen}");
-    }
+    ]);
     let theme = h.tui.page();
     assert_eq!(h.fg("Prove them"), theme.text.feedback.warning.base);
     assert_eq!(h.fg("Drop legacy"), theme.text.faint);
@@ -242,14 +236,11 @@ fn a_subagent_row_opens_its_child_session() {
         tool("c3", "task", completed(json!({ "description": "Resume", "sessionID": "ses_child" }), "done", json!({}))),
     ]);
     let h = open(100, 30, messages);
-    let screen = h.wait_for("Resume");
-    for line in [
+    let screen = h.wait_for_all(&[
         "   ⋯ Explore Subagent — Survey the views · provider/model (high)\n",
         "   ✓ General Subagent — Check the docs\n",
         "   ↳ Continue subagent — Resume\n",
-    ] {
-        assert!(screen.contains(line), "{line:?} missing:\n{screen}");
-    }
+    ]);
     assert!(!screen.contains("Background"), "{screen}");
 
     h.click("Check the docs");
@@ -306,8 +297,7 @@ fn execute_lists_its_calls_and_opens_the_dialog() {
         ),
     ]);
     let h = open(120, 40, messages);
-    let screen = h.wait_for("Error: boom");
-    for line in [
+    h.wait_for_all(&[
         "   ⋯ execute\n",
         "   › read [path=src/a.rs]\n",
         "   ✗ grep [pattern=TODO]\n",
@@ -316,9 +306,7 @@ fn execute_lists_its_calls_and_opens_the_dialog() {
         "   ✗ execute\n",
         "\n     ↳ Error: boom\n",
         "\n         at main\n",
-    ] {
-        assert!(screen.contains(line), "{line:?} missing:\n{screen}");
-    }
+    ]);
     let theme = h.tui.page();
     assert_eq!(h.fg("✗ execute"), theme.text.feedback.error.base);
 

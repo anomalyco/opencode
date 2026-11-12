@@ -64,17 +64,18 @@ fn routes() -> Vec<MemoryRoute> {
     routes
 }
 
-fn mount(layout: &str, animations: bool) -> support::Harness {
+fn mount(layout: &str, animations: bool) -> (support::Harness, Memory) {
     // Medium verbosity draws the tool rows; low, the default, folds them into one summary.
     let config = json!({
         "animations": animations,
         "tabs": { "layout": layout },
         "session": { "sidebar": "hide", "verbosity": "medium" },
     });
+    let memory = Memory::new(routes());
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         events: true,
-        ..support::deps(Arc::new(Memory::new(routes())))
+        ..support::deps(Arc::new(memory.clone()))
     };
     let h = support::mount(120, 30, deps);
     h.tui.navigate(support::session_route("ses_b"));
@@ -85,7 +86,7 @@ fn mount(layout: &str, animations: bool) -> support::Harness {
     // The running status comes from the `session.active` read after the event stream connects, which may land after
     // the messages.
     h.wait_for("esc interrupt");
-    h
+    (h, memory)
 }
 
 /// Whether a spinner frame past the first shows. A running tab's still indicator is the first frame, `⠋`, as in
@@ -108,6 +109,13 @@ fn frames(h: &support::Harness, span: Duration) -> usize {
         .count()
 }
 
+/// Lets the startup polls (the data migration's status) start and end: two seconds for their timers, then no read in
+/// flight and a stretch that asks for no frame, since a reply can land after any fixed stretch on a loaded machine.
+fn settle(h: &support::Harness, memory: &Memory) {
+    frames(h, Duration::from_secs(2));
+    h.wait("the startup polls to end", || memory.in_flight() == 0 && frames(h, Duration::from_millis(400)) == 0);
+}
+
 /// The glyph before the running shell's command.
 fn shell_glyph(h: &support::Harness) -> char {
     let screen = h.app.text();
@@ -124,15 +132,14 @@ fn backgrounds(h: &support::Harness) -> Vec<Color> {
 #[test]
 fn off_draws_still_glyphs_and_asks_for_no_frames() {
     for layout in ["horizontal", "vertical"] {
-        let h = mount(layout, false);
+        let (h, memory) = mount(layout, false);
         let screen = h.app.text();
         assert!(screen.contains("⋯ npm test"), "{layout}:\n{screen}");
         assert!(screen.contains("⋯ Explore Subagent — Survey the views"), "{layout}:\n{screen}");
         assert!(screen.contains("⠋ Fix the parser") && screen.contains("⠋ Write docs"), "{layout}:\n{screen}");
         assert!(screen.contains("[⋯] esc interrupt"), "{layout}:\n{screen}");
         assert!(!moving(&screen), "{layout}: a spinner frame shows:\n{screen}");
-        // The startup polls (the data migration's status) settle first.
-        frames(&h, Duration::from_secs(2));
+        settle(&h, &memory);
         let still = backgrounds(&h);
         assert_eq!(frames(&h, Duration::from_secs(3)), 0, "{layout}: frames with animations off");
         assert_eq!(h.app.text(), screen);
@@ -143,7 +150,7 @@ fn off_draws_still_glyphs_and_asks_for_no_frames() {
 #[test]
 fn turning_animations_off_and_on_takes_effect_at_once() {
     for layout in ["horizontal", "vertical"] {
-        let h = mount(layout, true);
+        let (h, memory) = mount(layout, true);
         let before = backgrounds(&h);
         assert!(frames(&h, Duration::from_secs(1)) > 0, "{layout}: no frames with animations on");
         assert!(backgrounds(&h) != before, "{layout}: the tab pulse did not move");
@@ -155,7 +162,7 @@ fn turning_animations_off_and_on_takes_effect_at_once() {
         assert!(screen.contains("⋯ npm test"), "{layout}:\n{screen}");
         assert!(screen.contains("⋯ Explore Subagent — Survey the views"), "{layout}:\n{screen}");
         assert!(!moving(&screen), "{layout}: a spinner frame shows:\n{screen}");
-        frames(&h, Duration::from_secs(2));
+        settle(&h, &memory);
         assert_eq!(frames(&h, Duration::from_secs(3)), 0, "{layout}: frames after turning animations off");
 
         settings::update(&h.tui, |draft| settings::set_path(draft, &["animations"], json!(true)));

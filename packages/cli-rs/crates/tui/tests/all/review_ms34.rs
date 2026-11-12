@@ -298,6 +298,13 @@ fn session_new_keeps_the_location_agent_and_model_and_closes_dialogs() {
         json!({ "animations": false, "session": { "new_location": "inherit" } }),
     );
     h.wait_for("Worktree work");
+    // The worktree's catalog loads after the session moves the location there: until then the agent and model are not
+    // valid there, and the new session's home, in the worktree too, would drop them.
+    h.wait("the worktree's catalog", || {
+        opencode_tui::features::location::current(&h.tui).is_some_and(|location| location.directory == WORKTREE)
+            && h.tui.local.catalog_ready()
+            && !h.tui.local.agents().is_empty()
+    });
     h.tui.local.set_agent("plan");
     h.tui.local.set(&Model::new("demo", "other"), false);
     assert_eq!(h.tui.local.current(), Some(Model::new("demo", "other")));
