@@ -354,11 +354,49 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const skill = yield* start([source], tmp.path)
           const watcher = yield* Watcher.Test
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Initial")
-          expect(yield* watcher.subscriptions()).toContainEqual({ path: file, type: "file" })
+          expect(yield* watcher.subscriptions()).toContainEqual(
+            process.platform === "linux"
+              ? { path: file, type: "file" }
+              : { path: path.dirname(target), type: "directory", ignore: SkillScan.ignore.toSorted() },
+          )
 
           yield* Effect.promise(() => fs.writeFile(file, "---\nname: bro\ndescription: Updated\n---\n# bro"))
           yield* emitAndWait({ type: "update", path: file })
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Updated")
+        }),
+      ),
+    ),
+  )
+
+  it.live("shares one watch between skills linked from the same folder", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const source = path.join(tmp.path, "source")
+          const target = path.join(tmp.path, "target")
+          const names = ["one", "three", "two"]
+          yield* Effect.promise(async () => {
+            await fs.mkdir(source, { recursive: true })
+            for (const name of names) {
+              await fs.mkdir(path.join(target, name), { recursive: true })
+              await write(target, name, name)
+              const link = path.join(source, name)
+              await fs.symlink(path.join(target, name), link, process.platform === "win32" ? "junction" : undefined)
+            }
+          })
+
+          const skill = yield* start([source], tmp.path)
+          const watcher = yield* Watcher.Test
+          expect((yield* skill.list()).map((item) => item.id)).toEqual(names.map((name) => Skill.ID.make(name)))
+          expect((yield* watcher.subscriptions()).filter((item) => FSUtil.contains(target, item.path))).toEqual(
+            process.platform === "linux"
+              ? names.map((name) => ({ path: path.join(target, name, "SKILL.md"), type: "file" as const }))
+              : [{ path: target, type: "directory", ignore: SkillScan.ignore.toSorted() }],
+          )
+
+          yield* Effect.promise(() => write(target, "two", "Updated"))
+          yield* emitAndWait({ type: "update", path: path.join(target, "two", "SKILL.md") })
+          expect((yield* skill.list()).find((item) => item.id === "two")?.description).toBe("Updated")
         }),
       ),
     ),

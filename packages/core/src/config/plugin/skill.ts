@@ -34,7 +34,12 @@ export const Plugin = define({
     const changes = yield* PubSub.sliding<string>(1)
     const lock = Semaphore.makeUnsafe(1)
 
-    const watch = Effect.fn("ConfigSkillPlugin.watch")(function* (directory: string, type: "file" | "directory") {
+    const watch = Effect.fn("ConfigSkillPlugin.watch")(function* (
+      directory: string,
+      type: "file" | "directory",
+      // Limits a directory watch to updates on these files or the folders holding them.
+      only?: readonly string[],
+    ) {
       const target = path.resolve(directory)
       const updates = yield* watcher.subscribe(
         type === "directory" ? { path: target, type, ignore: SkillScan.ignore } : { path: target, type },
@@ -42,9 +47,24 @@ export const Plugin = define({
       yield* FiberMap.run(
         watches,
         `${type}:${target}`,
-        updates.pipe(Stream.runForEach((update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid))),
+        updates.pipe(
+          Stream.filter((update) => !only || only.some((file) => FSUtil.contains(update.path, file))),
+          Stream.runForEach((update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)),
+        ),
         { onlyIfMissing: true, startImmediately: true },
       )
+    })
+
+    // macOS and Windows watch a folder tree with one native watch, while a file watch costs one each (about 7 ms apiece
+    // on macOS, so 2000 linked skills took 14 s). There, skills linked from the same folder share a watch on it. Linux
+    // keeps a watch per file: a folder tree there takes a watch per directory, and /nix/store holds over a million.
+    const watchLinked = Effect.fn("ConfigSkillPlugin.watchLinked")(function* (files: readonly string[]) {
+      if (process.platform === "linux")
+        return yield* Effect.forEach(files, (file) => watch(file, "file"), { discard: true })
+      const folders = Map.groupBy(files, (file) =>
+        path.dirname(path.basename(file) === "SKILL.md" ? path.dirname(file) : file),
+      )
+      yield* Effect.forEach(folders, ([folder, linked]) => watch(folder, "directory", linked), { discard: true })
     })
 
     function firstMissing(target: string): Effect.Effect<string | undefined> {
@@ -119,10 +139,11 @@ export const Plugin = define({
             )
       const roots = (yield* Effect.forEach(directories, watchDirectory)).flat()
       const skills: Skill.Info[] = []
+      const linked: string[] = []
       for (const directory of directories) {
         for (const filepath of yield* SkillScan.scan(directory)) {
           const resolved = yield* fs.realPath(filepath).pipe(Effect.orElseSucceed(() => filepath))
-          if (!roots.some((root) => FSUtil.contains(root, resolved))) yield* watch(resolved, "file")
+          if (!roots.some((root) => FSUtil.contains(root, resolved))) linked.push(resolved)
           const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
           if (!content) continue
           const parsed = SkillFile.parse(directory, filepath, content)
@@ -137,6 +158,7 @@ export const Plugin = define({
           skills.push(parsed.skill)
         }
       }
+      yield* watchLinked(linked)
       yield* Effect.logDebug("skill source loaded", {
         source: Skill.Source.key(source),
         type: source.type,
