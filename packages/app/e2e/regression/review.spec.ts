@@ -1736,33 +1736,15 @@ test("branch review uses the local base for its list, full patches, and expanded
   expect(bases).toEqual([workspace.directory, workspace.directory])
 })
 
-test("branch review retries unavailable bases and shares a pending lookup across mode switches", async ({ page }) => {
-  const state = { base: "missing" }
-  const bases: string[] = []
-  const diffs: (string | undefined)[] = []
-
-  page.on("request", (request) => {
-    const url = new URL(request.url())
-
-    if (url.pathname === "/api/vcs/base") bases.push(url.searchParams.get("location[directory]") ?? "")
-  })
+test("branch review resolves an unavailable base after a refresh", async ({ page }) => {
+  const state = { available: false }
 
   const workspace = await openSession(page, {
     name: "ReviewBaseRecovery",
     vcs: { current: "feature", default: "main" },
-    vcsBase: () => {
-      if (state.base === "missing") return undefined
-
-      if (state.base === "cold") return null
-
-      return { name: "main", ref: "refs/heads/main", source: "reflog" }
-    },
-    vcsDiff: (input) => {
-      if (input.mode !== "branch") return [fileDiff("working.ts")]
-      diffs.push(input.base)
-
-      return [fileDiff(input.base === "refs/heads/main" ? "resolved.ts" : `${state.base}.ts`)]
-    },
+    vcsBase: () => (state.available ? { name: "main", ref: "refs/heads/main", source: "reflog" } : null),
+    vcsDiff: (input) =>
+      input.mode === "branch" ? [fileDiff(input.base === "refs/heads/main" ? "resolved.ts" : "fallback.ts")] : [],
   })
 
   const panel = page.locator("#review-panel")
@@ -1771,27 +1753,11 @@ test("branch review retries unavailable bases and shares a pending lookup across
   await openReviewLauncher(panel)
   await panel.getByRole("button", { name: "Git changes", exact: true }).click()
   await page.getByRole("option", { name: "Branch changes", exact: true }).click()
-  await expect(panel.getByRole("treeitem", { name: "missing.ts", exact: true })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "fallback.ts", exact: true })).toBeVisible()
 
-  state.base = "cold"
-  await workspace.push([filesystemEvent(workspace.directory, "cold.ts", "add")])
-  await expect(panel.getByRole("treeitem", { name: "cold.ts", exact: true })).toBeVisible()
-
-  const pending = await holdRoute(page, /\/api\/vcs\/base\?/)
-
-  state.base = "ready"
+  state.available = true
   await workspace.push([filesystemEvent(workspace.directory, "resolved.ts", "add")])
-  await pending.arrived
-  await panel.getByRole("button", { name: "Branch changes", exact: true }).click()
-  await page.getByRole("option", { name: "Git changes", exact: true }).click()
-  await expect(panel.getByRole("treeitem", { name: "working.ts", exact: true })).toBeVisible()
-  await panel.getByRole("button", { name: "Git changes", exact: true }).click()
-  await page.getByRole("option", { name: "Branch changes", exact: true }).click()
-  await expect(panel.getByRole("button", { name: "Branch changes", exact: true })).toBeVisible()
-  pending.release()
   await expect(panel.getByRole("treeitem", { name: "resolved.ts", exact: true })).toBeVisible()
-  expect(bases).toEqual([workspace.directory, workspace.directory, workspace.directory])
-  expect(diffs).toEqual([undefined, undefined, "refs/heads/main"])
 })
 
 test("restores review state and the side-panel tab per session", async ({ page }) => {

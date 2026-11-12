@@ -88,7 +88,7 @@ export interface MockServerConfig {
     cursor?: string
   }
   vcs?: { current?: string; default: string } | ((directory: string) => { current?: string; default: string })
-  vcsBase?: VcsBase | null | ((directory: string) => VcsBase | null | undefined)
+  vcsBase?: VcsBase | null | ((directory: string) => VcsBase | null)
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
