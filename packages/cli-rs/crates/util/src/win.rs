@@ -1,5 +1,6 @@
-//! Win32 calls that std does not cover: whether a process is alive, ending one, and pointing stdin at the console;
-//! the executable, times and memory of a process, and the OS release; shared libraries; stderr on a pipe.
+//! Win32 calls that std does not cover: whether a process is alive, ending one, pointing stdin at the console, and
+//! ignoring Ctrl+C while a child runs; the executable, times and memory of a process, and the OS release; shared
+//! libraries; stderr on a pipe.
 //! Windows only.
 
 #![allow(unsafe_code)]
@@ -12,7 +13,10 @@ use std::path::PathBuf;
 use std::ptr::NonNull;
 use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
 use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, FILETIME, FreeLibrary, STILL_ACTIVE};
-use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetStdHandle};
+use windows_sys::Win32::System::Console::{
+    CTRL_BREAK_EVENT, CTRL_C_EVENT, GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler,
+    SetStdHandle,
+};
 use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows_sys::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
 use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
@@ -21,6 +25,7 @@ use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_ACCESS_RIGHTS, PROCESS_NAME_WIN32,
     PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, QueryFullProcessImageNameW, TerminateProcess,
 };
+use windows_sys::core::BOOL;
 
 /// Whether process `pid` exists and has not exited. A process this user may not open exists, so it counts as alive.
 pub fn process_alive(pid: u32) -> bool {
@@ -214,6 +219,22 @@ pub fn pipe_available(read: BorrowedHandle<'_>) -> io::Result<u32> {
     Ok(available)
 }
 
+/// From now on Ctrl+C and Ctrl+Break do nothing in this process, for a parent that waits for a child on the same
+/// console: the child gets them too, and the parent exits with the child's code. Other console events reach the
+/// handlers registered before. Unlike `SetConsoleCtrlHandler(NULL, TRUE)`, children do not inherit it.
+pub fn ignore_interrupts() -> io::Result<()> {
+    // SAFETY: `interrupted` is a valid handler for the life of the process.
+    if unsafe { SetConsoleCtrlHandler(Some(interrupted), 1) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+// The last handler registered runs first; `TRUE` stops the event there.
+unsafe extern "system" fn interrupted(event: u32) -> BOOL {
+    BOOL::from(event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT)
+}
+
 fn open(pid: u32, access: PROCESS_ACCESS_RIGHTS) -> io::Result<OwnedHandle> {
     // SAFETY: plain call; a null result is an error.
     let handle = unsafe { OpenProcess(access, 0, pid) };
@@ -238,6 +259,15 @@ mod tests {
         let status = child.wait().unwrap();
         assert_eq!(status.code(), Some(1));
         assert!(!process_alive(child.id()));
+    }
+
+    #[test]
+    fn only_interrupts_are_ignored() {
+        use windows_sys::Win32::System::Console::CTRL_CLOSE_EVENT;
+        // SAFETY: the handler only compares its argument.
+        let handled = |event| unsafe { interrupted(event) };
+        assert_eq!([CTRL_C_EVENT, CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT].map(handled), [1, 1, 0]);
+        ignore_interrupts().unwrap();
     }
 
     #[test]
