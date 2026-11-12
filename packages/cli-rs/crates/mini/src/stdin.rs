@@ -5,8 +5,8 @@ use std::io::{IsTerminal, Read};
 
 pub const INTERACTIVE_INPUT_ERROR: &str = "opencode mini requires a controlling terminal for input";
 
-/// Reads piped stdin to its end, then puts the controlling terminal (`/dev/tty`) on fd 0, where the renderer reads
-/// keys. Returns `None` when stdin is already a terminal.
+/// Reads piped stdin to its end, then puts the controlling terminal (`/dev/tty`, the console `CONIN$` on Windows)
+/// on standard input, where the renderer reads keys. Returns `None` when stdin is already a terminal.
 pub fn take_piped() -> Result<Option<String>, String> {
     if std::io::stdin().is_terminal() {
         return Ok(None);
@@ -24,9 +24,11 @@ fn reopen_terminal() -> Result<(), String> {
     rustix::stdio::dup2_stdin(&terminal).map_err(|_| INTERACTIVE_INPUT_ERROR.to_owned())
 }
 
-#[cfg(not(unix))]
+/// `CONIN$` on Windows (`resolveInteractiveStdin`): the console becomes the standard input handle, which std and the
+/// renderer look up.
+#[cfg(windows)]
 fn reopen_terminal() -> Result<(), String> {
-    Err(INTERACTIVE_INPUT_ERROR.to_owned())
+    opencode_util::win::set_stdin_console().map_err(|_| INTERACTIVE_INPUT_ERROR.to_owned())
 }
 
 /// `mergeInput`: the piped text, then `--prompt` on its own line; either alone; `None` when both are empty.
@@ -55,5 +57,17 @@ mod tests {
         assert_eq!(merge_input(None, Some("prompt")).as_deref(), Some("prompt"));
         assert_eq!(merge_input(Some(""), Some("prompt")).as_deref(), Some("prompt"));
         assert_eq!(merge_input(Some("piped\n"), Some("prompt")).as_deref(), Some("piped\n\nprompt"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_console_becomes_stdin() {
+        // Without a console (a detached runner) `CONIN$` cannot open, and mini fails as TS does.
+        if std::fs::OpenOptions::new().write(true).open("CONOUT$").is_err() {
+            assert_eq!(reopen_terminal(), Err(INTERACTIVE_INPUT_ERROR.to_owned()));
+            return;
+        }
+        reopen_terminal().unwrap();
+        assert!(std::io::stdin().is_terminal());
     }
 }
