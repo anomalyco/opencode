@@ -264,6 +264,9 @@ const immediate = <A, E>(db: DatabaseService, effect: Effect.Effect<A, E>) =>
  * SQLITE_ERROR (unknown module or option) means unsupported; locks, read-only files and corruption are defects.
  */
 const probe = Effect.fnUntraced(function* (db: DatabaseService, state: State | undefined) {
+  // Reading sources uses `->>` (3.38+), also for an index another SQLite built.
+  const json = yield* db.all(sql.raw(`SELECT '{}' ->> '$.a'`)).pipe(capability)
+  if (json) return json
   const existing = yield* db
     .get<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${IndexTable}`)
     .pipe(Effect.orDie)
@@ -272,9 +275,6 @@ const probe = Effect.fnUntraced(function* (db: DatabaseService, state: State | u
     if (unopened) return unopened
     if (state?.version === Version && state.layout) return state.layout
   }
-  // Reading sources uses `->>` (3.38+).
-  const json = yield* db.all(sql.raw(`SELECT '{}' ->> '$.a'`)).pipe(capability)
-  if (json) return json
   if (!(yield* creatable(db, "compact"))) return "compact" as const
   return (yield* creatable(db, "text")) ?? ("text" as const)
 })
