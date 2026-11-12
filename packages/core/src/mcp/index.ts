@@ -362,14 +362,19 @@ export const layer = (options?: Options) =>
 
       // Streams until the server terminates or rejects the subscription. A clean close reopens like a broken stream.
       const follow = (sub: Followed, events: McpClient.Events) =>
-        Effect.suspend(() => {
-          return events
-            .stream({ name: sub.name, arguments: sub.arguments, cursor: sub.cursor })
-            .pipe(Stream.runForEach((message) => receive(sub, message)))
-        }).pipe(
-          Effect.andThen(Effect.fail(new Error(`MCP server ${sub.server} closed the event stream`))),
-          Effect.tapError(() => setStatus(sub, { status: "pending" })),
-          Effect.retry({ schedule: EVENT_REOPEN, while: (error) => !isEnded(error) }),
+        Stream.suspend(() => events.stream({ name: sub.name, arguments: sub.arguments, cursor: sub.cursor })).pipe(
+          Stream.tap((message) => receive(sub, message)),
+          // Stream.retry resets on output. Only a confirmed open resets the delay, not a failed attempt.
+          Stream.filter((message) => message.type === "active"),
+          Stream.concat(Stream.fail(new Error(`MCP server ${sub.server} closed the event stream`))),
+          Stream.tapError((error) => (isEnded(error) ? Effect.void : setStatus(sub, { status: "pending" }))),
+          Stream.retry(
+            EVENT_REOPEN.pipe(
+              Schedule.setInputType<Error>(),
+              Schedule.while(({ input }) => !isEnded(input)),
+            ),
+          ),
+          Stream.runDrain,
           Effect.catch((error) =>
             isEnded(error)
               ? setStatus(sub, {
