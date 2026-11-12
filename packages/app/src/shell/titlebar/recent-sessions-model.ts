@@ -353,6 +353,7 @@ export function mergeRecentSessions(
  * one that is not loaded yet resolves through `resolvePin`.
  */
 export function partitionRecentSessions(input: {
+  hidden?: (server: string, id: string) => boolean
   items: readonly RecentSession[]
   pins: readonly string[]
   endpoints: ReadonlyMap<string, string>
@@ -373,6 +374,8 @@ export function partitionRecentSessions(input: {
 
     if (!item || item.session.time.archived !== undefined) return []
 
+    if (input.hidden?.(item.server, item.session.id)) return []
+
     const id = identity(item)
 
     if (pinnedSessions.has(id)) return []
@@ -386,6 +389,7 @@ export function partitionRecentSessions(input: {
 
   // Opening a row should reuse an existing tab. Otherwise prefer a stable route regardless of fetch order.
   for (const item of input.items) {
+    if (input.hidden?.(item.server, item.session.id)) continue
     const id = identity(item)
 
     if (pinnedKeys.has(item.key) || pinnedSessions.has(id)) continue
@@ -404,4 +408,8 @@ export function partitionRecentSessions(input: {
   }
 
   return { pinned, recent: sortRecentSessions([...recent.values()]) }
+}
+
+export function recentRowUnread(unread: boolean, loading: boolean, muted: boolean) {
+  return unread && !loading && !muted
 }
