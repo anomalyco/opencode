@@ -307,7 +307,7 @@ impl Component for Strip {
             let pulse = pulses
                 .entry(session.to_owned())
                 .and_modify(|pulse| pulse.set(input))
-                .or_insert_with(|| Pulse::new(animations, input));
+                .or_insert_with(|| Pulse::mount(animations, input));
             let colors = pulse::Colors {
                 background,
                 color: tint(background, theme.text.base, 0.45),
