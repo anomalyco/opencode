@@ -141,8 +141,17 @@ impl Owner {
     }
 }
 
+/// The executable process `pid` runs, canonical as `resolve` makes it (`\\?\C:\…`); the image path when it
+/// cannot be canonicalized. `None` when the process cannot be opened.
+#[cfg(windows)]
+pub fn process_executable(pid: u32) -> Option<PathBuf> {
+    let image = opencode_util::win::process_image(pid).ok()?;
+    Some(std::fs::canonicalize(&image).unwrap_or(image))
+}
+
 /// The executable process `pid` runs, with symlinks resolved. A binary replaced since it started
-/// keeps its path. `None` where the platform does not tell (only Linux does here).
+/// keeps its path. `None` where the platform does not tell (only Linux and Windows do here).
+#[cfg(not(windows))]
 pub fn process_executable(pid: u32) -> Option<PathBuf> {
     if !cfg!(target_os = "linux") {
         return None;
@@ -277,6 +286,14 @@ mod tests {
     fn ready(port: u16) -> (String, Reply) {
         let body = format!(r#"{{"version":"1.0.0","pid":{port}}}"#).leak();
         (format!("http://127.0.0.1:{port}/api/info"), Reply::json(200, body))
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn process_executable_matches_resolve() {
+        let exe = std::env::current_exe().unwrap();
+        assert_eq!(process_executable(std::process::id()), resolve(exe.as_os_str()));
+        assert_eq!(process_executable(u32::MAX - 2), None);
     }
 
     fn server(replies: impl IntoIterator<Item = (String, Reply)>) -> Server {

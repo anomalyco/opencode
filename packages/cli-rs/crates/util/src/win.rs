@@ -1,15 +1,25 @@
-//! Win32 calls that std does not cover: whether a process is alive, ending one, and pointing stdin at the console.
+//! Win32 calls that std does not cover: whether a process is alive, ending one, and pointing stdin at the console;
+//! the executable, times and memory of a process, and the OS release; shared libraries; stderr on a pipe.
 //! Windows only.
 
 #![allow(unsafe_code)]
 
+use std::ffi::{CStr, OsStr, OsString, c_void};
 use std::io;
-use std::os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle, OwnedHandle};
-use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, STILL_ACTIVE};
-use windows_sys::Win32::System::Console::{STD_INPUT_HANDLE, SetStdHandle};
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, IntoRawHandle, OwnedHandle, RawHandle};
+use std::path::PathBuf;
+use std::ptr::NonNull;
+use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
+use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, FILETIME, FreeLibrary, STILL_ACTIVE};
+use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetStdHandle};
+use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use windows_sys::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
+use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+use windows_sys::Win32::System::SystemInformation::{GetSystemTimeAsFileTime, OSVERSIONINFOW};
 use windows_sys::Win32::System::Threading::{
-    GetExitCodeProcess, OpenProcess, PROCESS_ACCESS_RIGHTS, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
-    TerminateProcess,
+    GetCurrentProcess, GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_ACCESS_RIGHTS, PROCESS_NAME_WIN32,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, QueryFullProcessImageNameW, TerminateProcess,
 };
 
 /// Whether process `pid` exists and has not exited. A process this user may not open exists, so it counts as alive.
@@ -49,6 +59,161 @@ pub fn set_stdin_console() -> io::Result<()> {
     Ok(())
 }
 
+/// The executable process `pid` runs, as a Win32 path (`QueryFullProcessImageNameW`).
+pub fn process_image(pid: u32) -> io::Result<PathBuf> {
+    let process = open(pid, PROCESS_QUERY_LIMITED_INFORMATION)?;
+    // The longest path Win32 allows.
+    let mut buffer = vec![0u16; 32_768];
+    let mut size = buffer.len() as u32;
+    // SAFETY: `process` has query access, and `size` is the length of `buffer`, which outlives the call.
+    let ok = unsafe {
+        QueryFullProcessImageNameW(process.as_raw_handle(), PROCESS_NAME_WIN32, buffer.as_mut_ptr(), &mut size)
+    };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(PathBuf::from(OsString::from_wide(&buffer[..size as usize])))
+}
+
+/// This process's CPU time and age, from `GetProcessTimes`.
+pub struct ProcessTimes {
+    /// User plus kernel time in seconds, as libuv's `uv_getrusage` adds them for `process.cpuUsage()`.
+    pub cpu_seconds: f64,
+    /// Milliseconds since the process was created.
+    pub age_ms: f64,
+}
+
+pub fn process_times() -> Option<ProcessTimes> {
+    let [mut created, mut exited, mut kernel, mut user, mut now] = [FILETIME::default(); 5];
+    // SAFETY: the current process's pseudo handle needs no closing; the out-parameters outlive the call.
+    let ok = unsafe { GetProcessTimes(GetCurrentProcess(), &mut created, &mut exited, &mut kernel, &mut user) };
+    if ok == 0 {
+        return None;
+    }
+    // SAFETY: `now` outlives the call.
+    unsafe { GetSystemTimeAsFileTime(&mut now) };
+    // A FILETIME counts 100 ns intervals.
+    let ticks = |time: FILETIME| ((u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime)) as f64;
+    Some(ProcessTimes { cpu_seconds: (ticks(kernel) + ticks(user)) / 1e7, age_ms: (ticks(now) - ticks(created)) / 1e4 })
+}
+
+/// This process's working set in bytes, which libuv's `uv_resident_set_memory` reports as the RSS.
+pub fn resident_memory() -> Option<usize> {
+    let mut counters =
+        PROCESS_MEMORY_COUNTERS { cb: size_of::<PROCESS_MEMORY_COUNTERS>() as u32, ..Default::default() };
+    // SAFETY: the pseudo handle needs no closing; `counters` is as large as `cb` says and outlives the call.
+    let ok = unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, counters.cb) };
+    (ok != 0).then_some(counters.WorkingSetSize)
+}
+
+/// `os.release()`: `major.minor.build` from `RtlGetVersion`, as libuv's `uv_os_uname` reads it. Unlike
+/// `GetVersionExW`, it is not capped at 6.2 for an executable without a compatibility manifest.
+pub fn os_release() -> Option<String> {
+    let mut info = OSVERSIONINFOW { dwOSVersionInfoSize: size_of::<OSVERSIONINFOW>() as u32, ..Default::default() };
+    // SAFETY: `info` is as large as its size field says and outlives the call.
+    let status = unsafe { RtlGetVersion(&mut info) };
+    (status >= 0).then(|| format!("{}.{}.{}", info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber))
+}
+
+/// Loads the library at `path`, or by name through the loader's search order when it has no separator
+/// (`LoadLibraryW`). Each `/` becomes `\`, as `LoadLibraryW` needs. Errors name the path.
+///
+/// # Safety
+///
+/// Loading runs the library's initializers, which may do anything.
+pub unsafe fn load_library(path: &OsStr) -> io::Result<NonNull<c_void>> {
+    let wide: Vec<u16> = path
+        .encode_wide()
+        .map(|unit| if unit == u16::from(b'/') { u16::from(b'\\') } else { unit })
+        .chain([0])
+        .collect();
+    // SAFETY: `wide` is NUL-terminated. The caller vouches for the initializers.
+    let module = unsafe { LoadLibraryW(wide.as_ptr()) };
+    NonNull::new(module).ok_or_else(|| named(path.display(), io::Error::last_os_error()))
+}
+
+/// The address of `name` in `module` (`GetProcAddress`). Errors name the symbol.
+///
+/// # Safety
+///
+/// `module` must come from [`load_library`] and not be freed yet.
+pub unsafe fn library_symbol(module: NonNull<c_void>, name: &CStr) -> io::Result<NonNull<c_void>> {
+    // SAFETY: `module` is loaded and `name` is a C string.
+    let address = unsafe { GetProcAddress(module.as_ptr(), name.as_ptr().cast()) };
+    address
+        .and_then(|address| NonNull::new(address as *mut c_void))
+        .ok_or_else(|| named(name.to_string_lossy(), io::Error::last_os_error()))
+}
+
+/// Unloads `module` (`FreeLibrary`).
+///
+/// # Safety
+///
+/// `module` must come from [`load_library`], and nothing may use a symbol from it afterwards.
+pub unsafe fn free_library(module: NonNull<c_void>) {
+    // SAFETY: as the caller vouches.
+    unsafe { FreeLibrary(module.as_ptr()) };
+}
+
+fn named(name: impl std::fmt::Display, error: io::Error) -> io::Error {
+    io::Error::new(error.kind(), format!("{name}: {error}"))
+}
+
+/// An anonymous pipe: the read end, then the write end. Child processes inherit neither.
+pub fn pipe() -> io::Result<(OwnedHandle, OwnedHandle)> {
+    let (mut read, mut write) = (std::ptr::null_mut(), std::ptr::null_mut());
+    // SAFETY: the out-parameters outlive the call; without attributes the handles are not inheritable.
+    if unsafe { CreatePipe(&mut read, &mut write, std::ptr::null(), 0) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: both handles are open and owned by nothing else.
+    Ok(unsafe { (OwnedHandle::from_raw_handle(read), OwnedHandle::from_raw_handle(write)) })
+}
+
+/// A handle put in place of the standard error by [`redirect_stderr`], until [`StderrRedirect::restore`].
+pub struct StderrRedirect {
+    /// The standard error before, open and owned by nobody here.
+    previous: RawHandle,
+    /// The handle in its place, open while it is the standard error.
+    _handle: OwnedHandle,
+}
+
+// SAFETY: `previous` is only passed back to `SetStdHandle`, which accepts it from any thread.
+unsafe impl Send for StderrRedirect {}
+
+/// Makes `handle` this process's standard error. std looks the standard handle up on each write, so `eprintln!`
+/// follows it.
+pub fn redirect_stderr(handle: OwnedHandle) -> io::Result<StderrRedirect> {
+    // SAFETY: plain calls; the redirect keeps `handle` open while it is the standard error.
+    unsafe {
+        let previous = GetStdHandle(STD_ERROR_HANDLE);
+        if SetStdHandle(STD_ERROR_HANDLE, handle.as_raw_handle()) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(StderrRedirect { previous, _handle: handle })
+    }
+}
+
+impl StderrRedirect {
+    /// Gives the previous standard error back, then closes the handle that stood in for it.
+    pub fn restore(self) {
+        // SAFETY: `previous` was the standard error and is still open; it is not ours to close.
+        unsafe { SetStdHandle(STD_ERROR_HANDLE, self.previous) };
+    }
+}
+
+/// How many bytes wait in the pipe `read`, without reading them (`PeekNamedPipe`). An error once every write end is
+/// closed and nothing waits (`ERROR_BROKEN_PIPE`).
+pub fn pipe_available(read: BorrowedHandle<'_>) -> io::Result<u32> {
+    let mut available = 0;
+    let null = std::ptr::null_mut();
+    // SAFETY: `read` is open, no bytes are copied, and `available` outlives the call.
+    if unsafe { PeekNamedPipe(read.as_raw_handle(), null, 0, null.cast(), &mut available, null.cast()) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(available)
+}
+
 fn open(pid: u32, access: PROCESS_ACCESS_RIGHTS) -> io::Result<OwnedHandle> {
     // SAFETY: plain call; a null result is an error.
     let handle = unsafe { OpenProcess(access, 0, pid) };
@@ -81,5 +246,38 @@ mod tests {
         assert!(!process_alive(u32::MAX - 2));
         assert!(!process_alive(0));
         assert!(terminate(u32::MAX - 2).is_err());
+    }
+
+    #[test]
+    fn process_image_is_this_executable() {
+        let image = process_image(std::process::id()).unwrap();
+        assert_eq!(
+            std::fs::canonicalize(image).unwrap(),
+            std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap()
+        );
+    }
+
+    #[test]
+    fn this_process_has_times_memory_and_a_release() {
+        let times = process_times().unwrap();
+        assert!(times.cpu_seconds > 0.0 && times.age_ms > 0.0);
+        assert!(resident_memory().unwrap() > 0);
+        let release = os_release().unwrap();
+        let parts: Vec<u32> = release.split('.').map(|part| part.parse().unwrap()).collect();
+        assert!(parts.len() == 3 && parts[0] >= 10, "{release}");
+    }
+
+    #[test]
+    fn a_pipe_reports_what_waits_and_its_closed_writer() {
+        use std::io::{Read, Write};
+        use std::os::windows::io::AsHandle;
+        let (read, write) = pipe().unwrap();
+        assert_eq!(pipe_available(read.as_handle()).unwrap(), 0);
+        std::fs::File::from(write).write_all(b"line\n").unwrap();
+        assert_eq!(pipe_available(read.as_handle()).unwrap(), 5);
+        let mut text = String::new();
+        std::fs::File::from(read.try_clone().unwrap()).read_to_string(&mut text).unwrap();
+        assert_eq!(text, "line\n");
+        assert!(pipe_available(read.as_handle()).is_err());
     }
 }

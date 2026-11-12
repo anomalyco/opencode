@@ -9,7 +9,8 @@ system row of the scrollback above the footer, and the footer stays intact. When
 first, then a last line without a newline, or lines that arrive after the app stopped, go to the real stderr. A
 panic on the UI thread restores stderr before the panic is printed. Only this process's writes are captured: a
 `--standalone` server started before mini keeps the real stderr. A row from stderr is not kept for a resize replay.
-Windows keeps stderr as it is.
+Windows does the same with an anonymous pipe as the standard error handle (`SetStdHandle`), which the reader polls
+every 50 ms.
 
 **Reason.** The user decided to fix the defects the TS client shares in Rust and record them as deviations, with no
 upstream proposal (O-89).

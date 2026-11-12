@@ -4,7 +4,8 @@ TypeScript: in a Zed terminal, `editor-zed.ts` reads Zed's workspace database th
 the runtime (`bun:sqlite`, or `node:sqlite` under Node). The context works wherever the TUI runs.
 
 Rust: the TUI loads the system SQLite at run time, the first time it reads the database: `libsqlite3.so.0` on
-Linux and `/usr/lib/libsqlite3.dylib` on macOS (`crates/tui/src/prompt/editor_context.rs`, `mod sqlite`). When
+Linux, `/usr/lib/libsqlite3.dylib` on macOS and `winsqlite3.dll` on Windows
+(`crates/tui/src/prompt/editor_context.rs`, `mod sqlite`). When
 the library does not load, every read is "unavailable", as for a database it cannot read: the prompt never
 shows a Zed selection, and the TUI polls again every second. Nothing else changes; the binary starts and runs
 without the library.

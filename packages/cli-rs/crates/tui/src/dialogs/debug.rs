@@ -151,7 +151,14 @@ pub fn describe_os() -> String {
     format!("{name} {} ({arch})", release())
 }
 
+/// `os.release()`: `10.0.26100` on Windows, as libuv reads it.
+#[cfg(windows)]
+fn release() -> String {
+    opencode_util::win::os_release().unwrap_or_default()
+}
+
 /// `os.release()`: the kernel release, from `/proc` on Linux, else `uname -r`.
+#[cfg(not(windows))]
 fn release() -> String {
     std::fs::read_to_string("/proc/sys/kernel/osrelease")
         .ok()

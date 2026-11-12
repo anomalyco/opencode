@@ -814,7 +814,26 @@ fn url_host(url: &str) -> String {
     default.and_then(|port| host.strip_suffix(port)).unwrap_or(host).to_lowercase()
 }
 
+/// CPU time of this process in seconds (`process.cpuUsage()`), user plus kernel.
+#[cfg(windows)]
+fn cpu_time() -> f64 {
+    opencode_util::win::process_times().map_or(0.0, |times| times.cpu_seconds)
+}
+
+/// Resident memory in bytes (`process.memoryUsage().rss`), the working set.
+#[cfg(windows)]
+fn memory() -> f64 {
+    opencode_util::win::resident_memory().map_or(0.0, |bytes| bytes as f64)
+}
+
+/// Milliseconds since the process started (`performance.now()` at the first draw).
+#[cfg(windows)]
+fn process_age_ms() -> f64 {
+    opencode_util::win::process_times().map_or(0.0, |times| times.age_ms.max(0.0))
+}
+
 /// CPU time of this process in seconds, from `/proc/self/schedstat` on Linux; 0 elsewhere.
+#[cfg(not(windows))]
 fn cpu_time() -> f64 {
     std::fs::read_to_string("/proc/self/schedstat")
         .ok()
@@ -823,6 +842,7 @@ fn cpu_time() -> f64 {
 }
 
 /// Resident memory in bytes, from `VmRSS` in `/proc/self/status` on Linux; 0 elsewhere.
+#[cfg(not(windows))]
 fn memory() -> f64 {
     std::fs::read_to_string("/proc/self/status")
         .ok()
@@ -834,6 +854,7 @@ fn memory() -> f64 {
 }
 
 /// Milliseconds since the process started (`performance.now()` at the first draw), from `/proc` on Linux.
+#[cfg(not(windows))]
 fn process_age_ms() -> f64 {
     // `starttime` is in clock ticks; Linux fixes the user-visible tick rate (`USER_HZ`) at 100.
     const TICKS: f64 = 100.0;
