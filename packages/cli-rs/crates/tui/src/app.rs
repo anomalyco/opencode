@@ -16,7 +16,7 @@ use opencode_ui::theme::{Effect, ModeSetting, TerminalColors, ThemeMode, ThemeSt
 use opencode_ui::toast::Toasts;
 use opencode_ui::{help, palette};
 use opentui::app::ProxyError;
-use opentui::widget::Textarea;
+use opentui::widget::{EditorAction, Textarea};
 
 use crate::features::startup::{Args, Startup};
 use crate::prelude::*;
@@ -385,6 +385,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let theme = ThemeState::new(theme_options(app, &deps.config.info, files.as_ref()));
 
     let textarea: Rc<RefCell<Option<Textarea>>> = Rc::default();
+    let history_edit = Rc::new(Cell::new(false));
     let keybinds = Keybinds::resolve(&deps.config.keybinds(), !cfg!(windows)).unwrap_or_else(|error| {
         log::warn!("invalid keybinds config: {error}");
         Keybinds::defaults()
@@ -395,11 +396,14 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
             leader_timeout: deps.config.leader_timeout,
             textarea_enabled: textarea_focused(app, &textarea),
             textarea_run: {
-                let textarea = textarea.clone();
+                let (textarea, history_edit) = (textarea.clone(), history_edit.clone());
                 Rc::new(move |action| {
                     let current = textarea.borrow().clone();
                     current.is_some_and(|textarea| {
+                        // Undo and redo may put back a paste label whose mark an edit removed.
+                        history_edit.set(matches!(action, EditorAction::Undo | EditorAction::Redo));
                         textarea.perform(action);
+                        history_edit.set(false);
                         true
                     })
                 })
@@ -432,7 +436,11 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         theme: RefCell::new(theme),
         directory: deps.directory,
         textarea,
-        prompt: crate::prompt::editor::Shared::new(app, deps.roots.as_ref().map(|roots| roots.paths.state.clone())),
+        prompt: crate::prompt::editor::Shared::new(
+            app,
+            deps.roots.as_ref().map(|roots| roots.paths.state.clone()),
+            history_edit,
+        ),
         settings,
         startup: Startup::new(args),
         plugins,

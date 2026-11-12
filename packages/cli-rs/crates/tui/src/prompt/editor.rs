@@ -62,6 +62,8 @@ pub struct Shared {
     pub stash: super::stash::Stash,
     /// The prompt last mounted, whose pastes a copy expands (E.4).
     pub(crate) current: RefCell<Weak<Inner>>,
+    /// Set while the keymap runs an undo or redo in the focused textarea.
+    pub(crate) history_edit: Rc<Cell<bool>>,
     /// Each session's last pending interrupt request, which waits for the ones before it. It outlives the composer
     /// that sent it, as a later prompt from another composer must still wait for it.
     interrupts: RefCell<std::collections::HashMap<SessionID, Interrupt>>,
@@ -70,12 +72,13 @@ pub struct Shared {
 type Interrupt = futures_util::future::Shared<BoxFuture<'static, ()>>;
 
 impl Shared {
-    pub fn new(app: &App, state: Option<PathBuf>) -> Self {
+    pub fn new(app: &App, state: Option<PathBuf>, history_edit: Rc<Cell<bool>>) -> Self {
         Self {
             history: History::load(app, state.clone()),
             drafts: Drafts::default(),
             stash: super::stash::Stash::load(app, state),
             current: RefCell::new(Weak::new()),
+            history_edit,
             complete: autocomplete::Shared::default(),
             editor: editor_context::Context::default(),
             interrupts: RefCell::default(),
@@ -870,6 +873,9 @@ fn connect(inner: &Rc<Inner>) {
     inner.textarea.on_change(bind!(inner, |prompt, _, text| {
         prompt.prompt.borrow_mut()["text"] = Value::String(text.to_owned());
         parts::sync(&prompt);
+        if prompt.tui.upgrade().is_some_and(|tui| tui.prompt.history_edit.get()) {
+            parts::restore_pastes(&prompt);
+        }
         prompt.parts_changed();
         if let Some(complete) = prompt.autocomplete.get() {
             complete.on_input(text);
