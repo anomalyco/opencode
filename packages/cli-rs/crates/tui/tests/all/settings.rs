@@ -475,6 +475,47 @@ fn a_settings_step_while_saving_is_ignored_after_a_theme_change() {
     assert_eq!(footer(&app, "Animations"), "on");
 }
 
+// Expected: `DialogExperiments` ignores a change while the previous one is being written (`saving`), and a theme change
+// that restyles the dialog keeps it. Holding the config lock keeps the first write from landing.
+#[test]
+fn an_experiment_change_while_saving_is_ignored_also_after_a_theme_change() {
+    use opentui::prelude::Event;
+    use opentui::theme::ThemeMode;
+
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::xdg_paths(home.path());
+    std::fs::create_dir_all(&paths.config).unwrap();
+    let config = CliConfig::new(&paths);
+    std::fs::write(config.path(), "{}\n").unwrap();
+    let app = TestApp::new(80, 24);
+    let tui = support::mount_empty(
+        &app,
+        config.get().unwrap(),
+        Some(Roots { paths: paths.clone(), storage_channel: "test".into() }),
+    );
+    experiments::show(&tui);
+    wait_for(&app, "TUI tools");
+    let lock = opencode_local::lock::acquire(
+        &paths.state.join("locks"),
+        &config.path().to_string_lossy(),
+        &opencode_local::lock::Options::default(),
+    )
+    .unwrap();
+    app.press("right");
+    assert_eq!(tui.settings.pending_writes(), 1);
+    app.press("left");
+    app.press("return");
+    assert_eq!(tui.settings.pending_writes(), 1, "a change while saving was written too");
+    app.event(Event::ThemeMode(ThemeMode::Light));
+    app.press("right");
+    assert_eq!(tui.settings.pending_writes(), 1, "the change after the theme change was written too");
+    lock.release().unwrap();
+    assert!(app.wait_until(WAIT, || tui.settings.pending_writes() == 0));
+    assert!(tui.settings.experiment("client-mcp"));
+    app.press("right");
+    assert!(app.wait_until(WAIT, || !tui.settings.experiment("client-mcp")), "the guard ends with the write");
+}
+
 // Expected (O-89): a theme change from outside an open dialog restyles it in place, as TS `useTheme()` does. Each kind
 // (a select, a prompt, Settings), open with a filter or typed text and a moved selection or cursor, draws what it
 // draws when opened in the new theme after the same keys, and goes on from there. The change comes from the terminal
