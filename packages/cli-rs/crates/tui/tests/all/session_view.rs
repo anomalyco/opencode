@@ -374,9 +374,16 @@ fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     h.tui.toasts.dismiss();
     h.wait_for("$5 remaining");
     let mut frames = vec![h.app.render()];
-    for (seq, message, input) in [(1, "msg_029b", 2_000), (2, "msg_030b", 12_000), (3, "msg_029b", 30_000)] {
+    // The last end is of an earlier reply, which changes nothing.
+    for (seq, message, input, shows) in
+        [(1, "msg_029b", 2_000, "2,000 tokens"), (2, "msg_030b", 12_000, "12,000 tokens"), (3, "msg_029b", 30_000, "")]
+    {
         h.ended(seq, message, input);
-        h.settle();
+        if shows.is_empty() {
+            h.settle();
+        } else {
+            support::wait_for_all(&h.app, &[shows, &format!("{}% used", input / 2_000)]);
+        }
         frames.push(h.app.render());
     }
     let screen = h.app.text();

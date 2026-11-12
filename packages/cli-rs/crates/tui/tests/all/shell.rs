@@ -163,6 +163,7 @@ fn the_system_theme_follows_the_terminal_palette_after_a_color_scheme_change() {
 fn session_flag_opens_the_session_directly() {
     let app = TestApp::new(80, 20);
     let _tui = mount(&app, support::session_route("ses_b"));
-    let screen = wait_for(&app, "Why does the parser fail?");
-    assert!(screen.contains("Fix the parser"), "the header shows the title:\n{screen}");
+    wait_for(&app, "Why does the parser fail?");
+    // The header shows the title, which comes with the session read, apart from the transcript's.
+    wait_for(&app, "Fix the parser");
 }

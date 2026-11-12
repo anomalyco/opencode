@@ -6,11 +6,25 @@
 // The provider loads <state>/frecency.jsonl on mount, which rewrites it as TypeScript keeps it. Each path is
 // then opened once (`updateFrecency`). Prints the frequencies by absolute path, after the updates.
 
-import { existsSync, statSync } from "node:fs"
+import { mock } from "bun:test"
+import fs from "node:fs/promises"
 import { resolve } from "node:path"
 
 const [root, state, cwd] = process.argv.slice(2)
 if (!root || !state || !cwd) throw new Error("usage: E.3-frecency.ts <ts-root> <state> <cwd>")
+
+// The load's rewrite (`writeText`, a `writeFile`) is not awaited, and an append that lands before it ends is lost.
+// The file's time changes while the rewrite still runs, so the writes are counted where they run, before the TUI
+// modules load, as E.2 does.
+const writes = { started: 0, pending: 0 }
+mock.module("node:fs/promises", () => ({
+  ...fs,
+  writeFile: (...args: Parameters<typeof fs.writeFile>) => {
+    writes.started++
+    writes.pending++
+    return fs.writeFile(...args).finally(() => writes.pending--)
+  },
+}))
 
 const load = (spec: string) => import(Bun.resolveSync(spec, `${root}/packages/tui/src`))
 const tui = `${root}/packages/tui`
@@ -21,8 +35,6 @@ const { FrecencyProvider, useFrecency } = await load("./prompt/frecency")
 const paths: string[] = await Bun.stdin.json()
 
 let frecency: { updateFrecency(path: string): void; data(): Record<string, { frequency: number }> }
-// File times come from a coarse clock that can trail `Date.now()`, so the rewrite is told by a changed time.
-const written = existsSync(`${state}/frecency.jsonl`) ? statSync(`${state}/frecency.jsonl`).mtimeMs : 0
 const app = await testRender(() =>
   createComponent(TuiPathsProvider, {
     value: { cwd, home: state, state, worktree: cwd },
@@ -49,8 +61,8 @@ const until = async (what: string, done: () => Promise<boolean> | boolean) => {
 const file = Bun.file(`${state}/frecency.jsonl`)
 if ((await file.exists()) && (await file.text()).trim()) {
   await until("the load", () => Object.keys(frecency!.data()).length > 0)
-  // The load's rewrite is not awaited, and an append that lands before it is lost: wait for it.
-  await until("the load's rewrite", () => statSync(file.name!).mtimeMs !== written)
+  // A file with entries is rewritten on load: wait until that write has ended.
+  await until("the load's rewrite", () => writes.started > 0 && writes.pending === 0)
 }
 const loaded = Object.keys(frecency!.data()).length
 for (const path of paths) frecency!.updateFrecency(path)

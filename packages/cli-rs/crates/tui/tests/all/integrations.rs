@@ -14,7 +14,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use opencode_api::generated::IntegrationID;
-use opencode_parity::assert_fixture;
 use opencode_tui::{Args, Deps, Route};
 use serde_json::{Value, json};
 
@@ -244,10 +243,9 @@ fn integrations_match_typescript() {
     kit.connect();
     kit.wait_for("Acme");
     kit.only_dialog();
-    assert_fixture(&kit.app.render(), "E.17a/list");
+    support::wait_fixture(&kit.app, "E.17a/list");
     kit.app.press("up");
-    kit.app.wait_until(Duration::from_millis(200), || false);
-    assert_fixture(&kit.app.render(), "E.17a/list-end");
+    support::wait_fixture(&kit.app, "E.17a/list-end");
 
     let open_with = |mode: &'static str, keys: &[&str], text: &str, fixture: &str| {
         let kit = Kit::with(integrations(), mode);
@@ -257,7 +255,7 @@ fn integrations_match_typescript() {
         }
         kit.wait_for(text);
         kit.only_dialog();
-        assert_fixture(&kit.app.render(), fixture);
+        support::wait_fixture(&kit.app, fixture);
     };
     let open = |keys: &[&str], text: &str, fixture: &str| open_with("auto", keys, text, fixture);
     open(&["return"], "Connected accounts", "E.17a/accounts");
