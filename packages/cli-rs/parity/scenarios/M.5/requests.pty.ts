@@ -26,7 +26,14 @@ export default definePty({
   server: server({ childPermissions: [childPermission], globalForms: [globalForm] }),
   setup: (root) => config(root),
   steps: [
-    { until: { screen: "Permission required" }, settle: 800, timeout: 30_000, checkpoint: "permission" },
+    // The footer can show the permission before the replayed transcript is written, so wait for the transcript's
+    // last row and the footer's.
+    {
+      until: { screen: /› check the tests[\s\S]*Permission required[\s\S]*Allow once/ },
+      settle: 800,
+      timeout: 30_000,
+      checkpoint: "permission",
+    },
     { keys: "\r", until: { screen: "Connect the tracker" }, settle: 500, checkpoint: "form" },
     { keys: "1", until: { screen: "1 sub" }, settle: 600, checkpoint: "answered" },
     ...leave,
