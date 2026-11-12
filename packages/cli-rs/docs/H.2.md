@@ -114,7 +114,16 @@ key, route, step, socket message, write and read per line. Its value, shown pret
 - The one query value that depends on the machine, the `fs/list` startup probe of `process.cwd()`, is
   normalized to `<cwd>`.
 - Each checkpoint's cells are written to `parity/fixtures/<step>/<name>/<checkpoint>.json`, H.1's format,
-  with masked cells blanked as `" "` in style `#00000000 #00000000 0`.
+  with masked cells blanked as `" "` in style `#00000000 #00000000 0`. That format (`parity/lib/cells.ts`
+  documents it) puts the size and the style table on the first line, then one line per screen row with the
+  row's text and its `[style, cell count]` runs:
+
+  ```json
+  {"width":100,"height":30,"styles":["#eeeeeeff #0a0a0aff 0",…],"lines":[
+  ["  ┃ text…",[[4,2],[5,1],[0,95]]],
+  …
+  ]}
+  ```
 
 ## The TS runner
 

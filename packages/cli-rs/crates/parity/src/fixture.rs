@@ -20,9 +20,8 @@ pub struct Fixture {
 struct Raw {
     width: u32,
     height: u32,
-    rows: Vec<Row>,
     styles: Vec<String>,
-    runs: Vec<Vec<(usize, u32)>>,
+    lines: Vec<(Row, Vec<(usize, u32)>)>,
 }
 
 #[derive(Deserialize)]
@@ -42,16 +41,11 @@ impl Fixture {
     pub fn parse(text: &str) -> Result<Self, String> {
         let raw: Raw = serde_json::from_str(text).map_err(|error| error.to_string())?;
         let styles = raw.styles.iter().map(|style| parse_style(style)).collect::<Result<Vec<_>, _>>()?;
-        if raw.rows.len() != raw.height as usize || raw.runs.len() != raw.height as usize {
-            return Err(format!(
-                "expected {} rows and runs, found {} and {}",
-                raw.height,
-                raw.rows.len(),
-                raw.runs.len()
-            ));
+        if raw.lines.len() != raw.height as usize {
+            return Err(format!("expected {} lines, found {}", raw.height, raw.lines.len()));
         }
         let mut cells = Vec::with_capacity(raw.width as usize * raw.height as usize);
-        for (y, (row, runs)) in raw.rows.into_iter().zip(raw.runs).enumerate() {
+        for (y, (row, runs)) in raw.lines.into_iter().enumerate() {
             let symbols = match row {
                 Row::Text(text) => text.chars().map(String::from).collect(),
                 Row::Cells(symbols) => symbols,
@@ -103,47 +97,34 @@ impl Fixture {
     pub fn to_json(&self) -> String {
         let mut styles: Vec<String> = Vec::new();
         let mut index: HashMap<String, usize> = HashMap::new();
-        let mut rows = Vec::new();
-        let mut runs = Vec::new();
+        let mut lines = Vec::new();
         for y in 0..self.height {
             let cells = self.row(y);
             let row: Vec<&str> = cells.iter().map(|cell| cell.symbol.as_str()).collect();
-            rows.push(if row.iter().all(|symbol| symbol.chars().count() == 1) {
-                json(&row.concat())
-            } else {
-                json(&row)
-            });
-            let mut line: Vec<(usize, u32)> = Vec::new();
+            let text =
+                if row.iter().all(|symbol| symbol.chars().count() == 1) { json(&row.concat()) } else { json(&row) };
+            let mut runs: Vec<(usize, u32)> = Vec::new();
             for cell in cells {
                 let key = format_style(cell);
                 let style = *index.entry(key.clone()).or_insert_with(|| {
                     styles.push(key);
                     styles.len() - 1
                 });
-                match line.last_mut() {
+                match runs.last_mut() {
                     Some(last) if last.0 == style => last.1 += 1,
-                    _ => line.push((style, 1)),
+                    _ => runs.push((style, 1)),
                 }
             }
-            runs.push(json(&line));
+            lines.push(format!("[{text},{}]", json(&runs)));
         }
-        let lines = |rows: &[String]| rows.iter().map(|row| format!("    {row}")).collect::<Vec<_>>().join(",\n");
-        let styles = if styles.is_empty() {
-            "[]".to_owned()
-        } else {
-            format!(
-                "[\n{}\n  ]",
-                styles.iter().map(|style| format!("    {}", json(style))).collect::<Vec<_>>().join(",\n")
-            )
-        };
         let mut out = String::new();
         let _ = write!(
             out,
-            "{{\n  \"width\": {},\n  \"height\": {},\n  \"rows\": [\n{}\n  ],\n  \"styles\": {styles},\n  \"runs\": [\n{}\n  ]\n}}\n",
+            "{{\"width\":{},\"height\":{},\"styles\":{},\"lines\":[\n{}\n]}}\n",
             self.width,
             self.height,
-            lines(&rows),
-            lines(&runs),
+            json(&styles),
+            lines.join(",\n"),
         );
         out
     }
@@ -206,8 +187,7 @@ mod tests {
 
     #[test]
     fn parse_rejects_rows_of_the_wrong_width() {
-        let text =
-            r##"{"width": 2, "height": 1, "rows": ["abc"], "styles": ["#00000000 #00000000 0"], "runs": [[[0, 2]]]}"##;
+        let text = r##"{"width":2,"height":1,"styles":["#00000000 #00000000 0"],"lines":[["abc",[[0,2]]]]}"##;
         assert!(Fixture::parse(text).unwrap_err().contains("row 0"));
     }
 }
