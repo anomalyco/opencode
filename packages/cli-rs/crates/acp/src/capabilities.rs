@@ -13,9 +13,7 @@ pub struct Capabilities {
 
 pub fn parse(client: Option<&Value>) -> Capabilities {
     let present = |value: Option<&Value>| value.is_some_and(|value| !value.is_null());
-    let Some(client) = client else {
-        return Capabilities::default();
-    };
+    let Some(client) = client else { return Capabilities::default() };
     Capabilities {
         child_session_updates: client.get("_meta").and_then(|meta| meta.get(CHILD_SESSION_UPDATES))
             == Some(&Value::Bool(true)),

@@ -217,9 +217,7 @@ impl Library {
 
     /// What the plugin says about itself, when it has `describe` (1.1).
     fn metadata(&self) -> abi::Metadata {
-        let Some(describe) = self.describe else {
-            return abi::Metadata::default();
-        };
+        let Some(describe) = self.describe else { return abi::Metadata::default() };
         let mut out = Owned::EMPTY;
         // SAFETY: `describe` writes `out`, which `free` takes back.
         let (status, bytes) = unsafe {

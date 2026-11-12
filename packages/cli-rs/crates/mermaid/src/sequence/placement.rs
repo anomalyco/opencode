@@ -334,23 +334,17 @@ fn fragment_frames(context: &Context, centers: &[i32]) -> IndexMap<usize, HBound
             }
             continue;
         };
-        let Some(bounds) = fragment_frame(centers, fragment, active.len() as i32) else {
-            continue;
-        };
+        let Some(bounds) = fragment_frame(centers, fragment, active.len() as i32) else { continue };
         if matches!(fragment.kind, FragmentKind::Alt | FragmentKind::Loop) {
             active.push((index, bounds));
             continue;
         }
-        let Some(frame) = active.last_mut() else {
-            continue;
-        };
+        let Some(frame) = active.last_mut() else { continue };
         frame.1.expand(bounds.left, bounds.right);
         if fragment.kind != FragmentKind::End {
             continue;
         }
-        let Some((start, bounds)) = active.pop() else {
-            continue;
-        };
+        let Some((start, bounds)) = active.pop() else { continue };
         by_step.insert(start, bounds);
         if let Some(parent) = active.last_mut() {
             parent.1.expand(bounds.left - 1, bounds.right + 1);
@@ -387,9 +381,7 @@ fn participant_centers(context: &Context, min_gap: i32) -> Vec<i32> {
             }
             continue;
         }
-        let (Some(from), Some(to)) = (from, to) else {
-            continue;
-        };
+        let (Some(from), Some(to)) = (from, to) else { continue };
         if from.abs_diff(to) != 1 {
             continue;
         }
@@ -397,9 +389,7 @@ fn participant_centers(context: &Context, min_gap: i32) -> Vec<i32> {
         gaps[gap] = gaps[gap].max(message_width(message) + 6);
     }
     for step in &context.diagram.steps {
-        let Step::Note(note) = step else {
-            continue;
-        };
+        let Step::Note(note) = step else { continue };
         let indexes = context.indexes_of(&note.over);
         let need = lines_width(&note_lines(&note.label)) + 4;
         if indexes.len() == 1
@@ -538,9 +528,7 @@ pub fn plan(diagram: &Diagram, compact: bool) -> Plan<'_> {
     let close =
         |active_by: &mut IndexMap<String, Vec<i32>>, activations: &mut Vec<Activation>, participant: &str, y: i32| {
             let opened = active_by.get_mut(participant).and_then(Vec::pop);
-            let (Some(start), Some(index)) = (opened, context.index(participant)) else {
-                return;
-            };
+            let (Some(start), Some(index)) = (opened, context.index(participant)) else { return };
             activations.push(Activation { center: centers[index], start, end: y });
         };
     let mut step_y = step_start;
@@ -598,12 +586,8 @@ pub fn plan(diagram: &Diagram, compact: bool) -> Plan<'_> {
             Step::Activation { .. } => continue,
             Step::Message(_) => {}
         }
-        let Step::Message(message) = step else {
-            continue;
-        };
-        let (Some(from), Some(to)) = (context.index(&message.from), context.index(&message.to)) else {
-            continue;
-        };
+        let Step::Message(message) = step else { continue };
+        let (Some(from), Some(to)) = (context.index(&message.from), context.index(&message.to)) else { continue };
         let lines = label_lines(&message_text(message));
         if from == to {
             let center = centers[from];

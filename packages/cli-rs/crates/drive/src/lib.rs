@@ -65,9 +65,7 @@ struct Call {
 }
 
 fn serve(stream: TcpStream, proxy: &opentui::app::AppProxy, version: &str) {
-    let Ok(mut socket) = tungstenite::accept(stream) else {
-        return;
-    };
+    let Ok(mut socket) = tungstenite::accept(stream) else { return };
     loop {
         let input = match socket.read() {
             Ok(Message::Text(text)) => text.to_string(),

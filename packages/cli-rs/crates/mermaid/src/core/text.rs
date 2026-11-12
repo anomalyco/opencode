@@ -21,9 +21,7 @@ pub fn width(value: &str) -> i32 {
 /// A grapheme's width as `string-width` counts it: two for wide characters and emoji (by its first code point),
 /// none for zero-width ones, else one.
 pub fn grapheme_width(grapheme: &str) -> i32 {
-    let Some(first) = grapheme.chars().next() else {
-        return 0;
-    };
+    let Some(first) = grapheme.chars().next() else { return 0 };
     if super::wide::is_wide(first) {
         return 2;
     }

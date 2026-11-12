@@ -323,9 +323,7 @@ fn load(storage: &Storage, key: &str) -> Option<String> {
 /// Reads the plugins' stored keys again after the storage directory changed, so another client's writes show. While a
 /// write of this TUI is queued the keys stay; its own change of the directory reads them again after it.
 pub fn reload_storage(tui: &Tui) {
-    let Some(storage) = tui.storage().filter(|_| tui.reads.pending.load(Ordering::SeqCst) == 0) else {
-        return;
-    };
+    let Some(storage) = tui.storage().filter(|_| tui.reads.pending.load(Ordering::SeqCst) == 0) else { return };
     let mut changed = false;
     for (key, json) in tui.reads.stored.borrow_mut().iter_mut() {
         let fresh = load(&storage, key);

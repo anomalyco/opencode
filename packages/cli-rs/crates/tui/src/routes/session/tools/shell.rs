@@ -168,9 +168,7 @@ impl Inner {
 
     /// Reads [`Self::listed`] again, outside a render (timers and clicks).
     fn refresh(&self) {
-        let Some(id) = self.call.borrow().as_ref().and_then(|call| call.shell.clone()) else {
-            return;
-        };
+        let Some(id) = self.call.borrow().as_ref().and_then(|call| call.shell.clone()) else { return };
         let listed = self.tui.upgrade().is_some_and(|tui| tui.data.read(|state| state.shell(&ShellID(id)).is_some()));
         self.listed.set(listed);
     }
@@ -223,9 +221,7 @@ impl Inner {
             return;
         }
         let Some(id) = call.shell else { return };
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let pages = self.output.borrow_mut().start(tui.data.client(), ShellID(id), call.directory, drain);
         let Some(pages) = pages else { return };
         tui.app.spawn(

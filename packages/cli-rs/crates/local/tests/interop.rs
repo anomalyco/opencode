@@ -74,9 +74,7 @@ fn lock_try(dir: &Path, key: &str, stale_ms: u64) -> Option<String> {
 #[test]
 fn typescript_holds_rust_waits() {
     let dir = opencode_util::temp::tempdir().unwrap();
-    let Some(mut command) = bun(&["lock-hold", dir.path().to_str().unwrap(), "shared-key", "60000"]) else {
-        return;
-    };
+    let Some(mut command) = bun(&["lock-hold", dir.path().to_str().unwrap(), "shared-key", "60000"]) else { return };
     let mut child = command.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
     let mut out = BufReader::new(child.stdout.take().unwrap());
     let mut line = String::new();
@@ -98,9 +96,7 @@ fn typescript_holds_rust_waits() {
 fn rust_holds_typescript_waits() {
     let dir = opencode_util::temp::tempdir().unwrap();
     let held = lock::acquire(dir.path(), "shared-key", &quick(60_000)).unwrap();
-    let Some(result) = lock_try(dir.path(), "shared-key", 60_000) else {
-        return;
-    };
+    let Some(result) = lock_try(dir.path(), "shared-key", 60_000) else { return };
     assert_eq!(result, "timeout");
     held.release().unwrap();
     assert_eq!(lock_try(dir.path(), "shared-key", 60_000).unwrap(), "acquired");
@@ -110,9 +106,7 @@ fn rust_holds_typescript_waits() {
 fn stale_locks_are_broken_across_clients() {
     // A TypeScript owner killed while holding the lock.
     let dir = opencode_util::temp::tempdir().unwrap();
-    let Some(mut command) = bun(&["lock-hold", dir.path().to_str().unwrap(), "k", "300"]) else {
-        return;
-    };
+    let Some(mut command) = bun(&["lock-hold", dir.path().to_str().unwrap(), "k", "300"]) else { return };
     let mut child = command.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
     let mut line = String::new();
     BufReader::new(child.stdout.take().unwrap()).read_line(&mut line).unwrap();
@@ -139,9 +133,7 @@ fn channel_and_registration_match_typescript() {
     if !with_modules() {
         return;
     }
-    let Some(mut command) = bun(&["oracle"]) else {
-        return;
-    };
+    let Some(mut command) = bun(&["oracle"]) else { return };
     let output = command.output().unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let oracle: Value = serde_json::from_slice(&output.stdout).unwrap();

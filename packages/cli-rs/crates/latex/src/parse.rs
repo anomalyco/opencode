@@ -373,9 +373,7 @@ impl Parser {
     fn environment(&mut self) -> Result<Node> {
         let raw = self.read_raw_group()?;
         let name = raw.strip_suffix('*').unwrap_or(&raw);
-        let Some(environment) = environment(name) else {
-            return self.fail(format!("Unsupported environment {name}"));
-        };
+        let Some(environment) = environment(name) else { return self.fail(format!("Unsupported environment {name}")) };
         let columns = match environment {
             Environment::Array => {
                 let columns: String = self.read_raw_group()?.chars().filter(|c| !c.is_whitespace()).collect();
@@ -515,9 +513,7 @@ impl Parser {
 
     fn read_command(&mut self) -> Result<String> {
         self.expect("\\")?;
-        let Some(next) = self.peek() else {
-            return Ok("\\".into());
-        };
+        let Some(next) = self.peek() else { return Ok("\\".into()) };
         if !is_command_letter(next) {
             self.position += 1;
             return Ok(next.into());

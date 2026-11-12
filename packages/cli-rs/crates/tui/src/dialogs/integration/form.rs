@@ -166,9 +166,7 @@ fn active(field: &FormField, answer: &FormAnswer) -> bool {
     }
     .unwrap_or_default();
     when.iter().all(|when| {
-        let Some(value) = answer.get(&when.key) else {
-            return false;
-        };
+        let Some(value) = answer.get(&when.key) else { return false };
         let hit = match (value, &when.value) {
             (FormValue::Array(items), want) => items.contains(&when_string(want)),
             (FormValue::String(a), FormWhenValue::String(b)) => a == b,

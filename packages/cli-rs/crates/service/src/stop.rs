@@ -126,9 +126,7 @@ pub(crate) fn signal(pid: u32, signal: Signal) {
     #[cfg(unix)]
     {
         use rustix::process::{Pid, Signal as Raw, kill_process};
-        let Some(pid) = i32::try_from(pid).ok().and_then(Pid::from_raw) else {
-            return;
-        };
+        let Some(pid) = i32::try_from(pid).ok().and_then(Pid::from_raw) else { return };
         let raw = match signal {
             Signal::Term => Raw::TERM,
             Signal::Kill => Raw::KILL,

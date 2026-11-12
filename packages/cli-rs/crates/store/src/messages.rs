@@ -74,9 +74,7 @@ impl Transcript {
 
     /// Moves the item to the end.
     pub(crate) fn move_last(&mut self, id: &str) {
-        let Some(position) = self.index.get(id).copied() else {
-            return;
-        };
+        let Some(position) = self.index.get(id).copied() else { return };
         let item = self.items.remove(position);
         self.items.push(item);
         self.reindex(position);
@@ -191,9 +189,7 @@ pub(crate) fn from_event(id: &EventID) -> SessionMessageID {
 /// what it was (`omitFileData`).
 pub(crate) fn omit_file_data(content: &mut [ToolContent]) {
     for item in content {
-        let ToolContent::File(file) = item else {
-            continue;
-        };
+        let ToolContent::File(file) = item else { continue };
         if file.uri.starts_with("data:") {
             file.uri = format!("data:{};base64,", file.mime);
         }
@@ -201,13 +197,9 @@ pub(crate) fn omit_file_data(content: &mut [ToolContent]) {
 }
 
 fn omit_message_file_data(message: &mut SessionMessageInfo) {
-    let SessionMessageInfo::Assistant(assistant) = message else {
-        return;
-    };
+    let SessionMessageInfo::Assistant(assistant) = message else { return };
     for part in &mut assistant.content {
-        let SessionMessageAssistantContentItem::Tool(tool) = part else {
-            continue;
-        };
+        let SessionMessageAssistantContentItem::Tool(tool) = part else { continue };
         match &mut tool.state {
             SessionMessageAssistantToolState::Completed(state) => omit_file_data(&mut state.content),
             SessionMessageAssistantToolState::Error(state) => {
@@ -294,9 +286,7 @@ impl State {
 
     /// Records a row the current event created, with its `durable.seq`, for the head read in flight.
     pub(crate) fn created(&mut self, session: &SessionID, id: &str) {
-        let (Some(seq), Some(read)) = (self.event_seq, self.head_reads.get_mut(session)) else {
-            return;
-        };
+        let (Some(seq), Some(read)) = (self.event_seq, self.head_reads.get_mut(session)) else { return };
         if read.room() {
             read.created.push((id.to_owned(), seq));
         }
@@ -304,9 +294,7 @@ impl State {
 
     /// Records a durable edit for the head read of its session in flight, to replay onto the page.
     pub(crate) fn record_edit(&mut self, event: &V2Event) {
-        let Some(read) = edit_session(event).and_then(|session| self.head_reads.get_mut(session)) else {
-            return;
-        };
+        let Some(read) = edit_session(event).and_then(|session| self.head_reads.get_mut(session)) else { return };
         if read.room() {
             read.edits.push(event.clone());
         }
@@ -709,9 +697,7 @@ impl State {
         let data = &event.data;
         let omit = self.omit_file_data;
         self.edit_tool(&data.session_id, &data.assistant_message_id, &data.id, |tool| {
-            let SessionMessageAssistantToolState::Running(state) = &tool.state else {
-                return;
-            };
+            let SessionMessageAssistantToolState::Running(state) = &tool.state else { return };
             let mut content = data.content.clone();
             if omit {
                 omit_file_data(&mut content);
@@ -766,9 +752,7 @@ impl State {
 
     /// Clears the retry notice of the active assistant message.
     pub(crate) fn clear_retry(&mut self, session: &SessionID) {
-        let Some(current) = self.transcript_mut(session).active_assistant() else {
-            return;
-        };
+        let Some(current) = self.transcript_mut(session).active_assistant() else { return };
         if current.retry.take().is_some() {
             let id = current.id.clone();
             self.message_changed(session, &id);
@@ -778,9 +762,7 @@ impl State {
     /// True when a loaded assistant message still has a streaming or running tool.
     pub(crate) fn has_live_tool(&self, session: &SessionID) -> bool {
         self.messages(session).iter().any(|item| {
-            let SessionMessageInfo::Assistant(assistant) = item else {
-                return false;
-            };
+            let SessionMessageInfo::Assistant(assistant) = item else { return false };
             assistant.content.iter().any(|part| {
                 matches!(
                     part,
@@ -816,9 +798,7 @@ impl State {
 
     pub(crate) fn on_shell_ended(&mut self, event: &SessionShellEnded) {
         let session = &event.data.session_id;
-        let Some(transcript) = self.messages.get_mut(session) else {
-            return;
-        };
+        let Some(transcript) = self.messages.get_mut(session) else { return };
         let Some(shell) = transcript.items_mut().iter_mut().rev().find_map(|item| match item {
             SessionMessageInfo::Shell(shell) if shell.shell_id == event.data.shell.id => Some(shell),
             _ => None,
@@ -836,21 +816,15 @@ impl State {
     /// `session.revert.committed`: drops messages at or after the boundary.
     pub(crate) fn revert_messages(&mut self, session: &SessionID, to: &SessionMessageID) {
         let transcript = self.transcript_mut(session);
-        let Some(position) = transcript.items().iter().position(|item| item.id() >= to.as_str()) else {
-            return;
-        };
+        let Some(position) = transcript.items().iter().position(|item| item.id() >= to.as_str()) else { return };
         transcript.truncate(position);
         self.log.messages(session);
     }
 
     pub(crate) fn on_compaction_delta(&mut self, data: &SessionCompactionDeltaData) {
         let session = &data.session_id;
-        let Some(transcript) = self.messages.get_mut(session) else {
-            return;
-        };
-        let Some(running) = running_compaction(transcript) else {
-            return;
-        };
+        let Some(transcript) = self.messages.get_mut(session) else { return };
+        let Some(running) = running_compaction(transcript) else { return };
         let SessionMessageInfo::Compaction(SessionMessageCompaction::Running(current)) =
             &mut transcript.items_mut()[running]
         else {
@@ -1049,9 +1023,7 @@ impl Data {
                 };
                 let reread = data.write(|state| {
                     // Deletion and eviction drop the read; a revert ends the window under it, so it reads again.
-                    let Some(read) = HeadRead::take(state, &session, ticket) else {
-                        return false;
-                    };
+                    let Some(read) = HeadRead::take(state, &session, ticket) else { return false };
                     let reread = state.incarnation(&session) != incarnation
                         || state.publish_head(&session, read, response.data, response.cursor.next.flatten());
                     if reread {

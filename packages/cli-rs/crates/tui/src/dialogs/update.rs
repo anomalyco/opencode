@@ -45,18 +45,14 @@ pub fn show(tui: &Tui, checks: bool) {
             let check = check.clone();
             move |cx| {
                 cx.dialogs.set_centered(true);
-                let Some(tui) = weak.upgrade() else {
-                    return View::new(&cx.app);
-                };
+                let Some(tui) = weak.upgrade() else { return View::new(&cx.app) };
                 let root = View::new(&cx.app);
                 let row: Rc<RefCell<Option<DialogButtons>>> = Rc::default();
                 let draw: Rc<dyn Fn()> = Rc::new({
                     let (weak, cx, root, check, row) =
                         (tui.weak(), Rc::downgrade(cx), root.clone(), check.clone(), row.clone());
                     move || {
-                        let (Some(tui), Some(cx)) = (weak.upgrade(), cx.upgrade()) else {
-                            return;
-                        };
+                        let (Some(tui), Some(cx)) = (weak.upgrade(), cx.upgrade()) else { return };
                         *row.borrow_mut() = draw(&tui, &cx, &root, &check.borrow());
                     }
                 });

@@ -156,9 +156,7 @@ fn interpolate(path: &str, params: &[(String, String)]) -> error::Result<String>
     let mut pathname = String::new();
     let mut rest = path;
     while let Some(open) = rest.find('{') {
-        let Some(close) = rest[open + 1..].find('}').filter(|close| *close > 0) else {
-            break;
-        };
+        let Some(close) = rest[open + 1..].find('}').filter(|close| *close > 0) else { break };
         let name = &rest[open + 1..open + 1 + close];
         let Some((key, value)) = params.iter().find(|(key, _)| key == name) else {
             bail!("Missing path parameter: {name}");

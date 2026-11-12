@@ -169,9 +169,7 @@ fn compute_ranks(diagram: &Diagram) -> IndexMap<String, i32> {
     }
     let first =
         diagram.states.iter().find(|s| s.kind == StateKind::Start).or(diagram.states.first()).map(|s| s.id.clone());
-    let Some(first) = first else {
-        return ranks;
-    };
+    let Some(first) = first else { return ranks };
     ranks.insert(first.clone(), 0);
     let mut queue = VecDeque::from([first]);
     while let Some(id) = queue.pop_front() {
@@ -244,9 +242,7 @@ fn main_path(diagram: &Diagram) -> Vec<String> {
                 candidates.iter().find(|t| matches!((parent(&current), parent(&t.to)), (Some(a), Some(b)) if a != b))
             })
             .or(if candidates.len() == 1 { candidates.first() } else { None });
-        let Some(next) = next else {
-            break;
-        };
+        let Some(next) = next else { break };
         let to = next.to.clone();
         path.push(to.clone());
         visited.insert(to.clone());
@@ -354,9 +350,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
     let mut bounds: IndexMap<String, usize> = IndexMap::new();
     let mut x = 0;
     for (index, id) in path.iter().enumerate() {
-        let (Some(state), Some(size)) = (lookup.states.get(id.as_str()), sizes.get(id)) else {
-            continue;
-        };
+        let (Some(state), Some(size)) = (lookup.states.get(id.as_str()), sizes.get(id)) else { continue };
         let top = if state.kind == StateKind::State { baseline - size.height.div_euclid(2) } else { baseline };
         place(&mut arena, &mut bounds, id, Bounds::rect(x, top, size.width, size.height));
         let next = path.get(index + 1);
@@ -383,9 +377,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
         }
     }
     for (parent_id, branch_ids) in &branches {
-        let Some(parent) = bounds.get(*parent_id).map(|&i| arena[i]) else {
-            continue;
-        };
+        let Some(parent) = bounds.get(*parent_id).map(|&i| arena[i]) else { continue };
         let branch_sizes: Vec<&Size> = branch_ids.iter().filter_map(|id| sizes.get(*id)).collect();
         let total = branch_sizes.iter().map(|s| s.width).sum::<i32>() + 0.max(branch_sizes.len() as i32 - 1) * gap;
         let parent_index = main_index.get(parent_id).copied();
@@ -413,9 +405,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
             if bounds.contains_key(*id) {
                 continue;
             }
-            let Some(size) = sizes.get(*id) else {
-                continue;
-            };
+            let Some(size) = sizes.get(*id) else { continue };
             let existing: Vec<Bounds> = bounds.values().map(|&i| arena[i]).collect();
             let mut top = baseline + if lane.is_some() { 6 } else { 5 };
             while let Some(collision) = existing.iter().find(|b| intersects(left, top, size.width, size.height, b, 0)) {
@@ -440,9 +430,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
                     && top < b.top + b.height
                     && top + size.height > b.top
             });
-            let Some(collision) = collision else {
-                break;
-            };
+            let Some(collision) = collision else { break };
             left = collision.left + collision.width + gap;
         }
         place(&mut arena, &mut bounds, &state.id, Bounds::rect(left, top, size.width, size.height));
@@ -534,9 +522,7 @@ fn set_box(b: &mut Bounds, left: i32, top: i32, w: i32, h: i32) {
 fn expand_for_notes(diagram: &Diagram, layout: &mut Layout) {
     let lookup = Lookup::new(diagram);
     for composite in diagram.composites.iter().rev() {
-        let Some(&index) = layout.composites.get(&composite.id) else {
-            continue;
-        };
+        let Some(&index) = layout.composites.get(&composite.id) else { continue };
         let notes: Vec<&NoteBox> =
             layout.notes.iter().filter(|n| lookup.belongs(&n.note.target, &composite.id)).collect();
         if notes.is_empty() {
@@ -568,9 +554,7 @@ fn expand_for_internal_routing(diagram: &Diagram, layout: &mut Layout) {
     }
     let lookup = Lookup::new(diagram);
     for composite in diagram.composites.iter().rev() {
-        let Some(&index) = layout.composites.get(&composite.id) else {
-            continue;
-        };
+        let Some(&index) = layout.composites.get(&composite.id) else { continue };
         let b = layout.arena[index];
         let internal = diagram.transitions.iter().filter(|t| {
             if t.from == t.to {
@@ -583,9 +567,7 @@ fn expand_for_internal_routing(diagram: &Diagram, layout: &mut Layout) {
         let mut occurrences: HashMap<(&str, &str), i32> = HashMap::new();
         let side_routes: Vec<&Transition> = internal
             .filter(|t| {
-                let (Some(from), Some(to)) = (layout.get(&t.from), layout.get(&t.to)) else {
-                    return false;
-                };
+                let (Some(from), Some(to)) = (layout.get(&t.from), layout.get(&t.to)) else { return false };
                 let occurrence = occurrences.entry((&t.from, &t.to)).or_insert(0);
                 let previous = *occurrence;
                 *occurrence += 1;
@@ -659,15 +641,11 @@ pub fn separate_external(diagram: &Diagram, layout: &mut Layout) -> bool {
     let mut shifted = false;
     for composite in &diagram.composites {
         for state in &diagram.states {
-            let Some(composite_bound) = layout.composite(&composite.id) else {
-                break;
-            };
+            let Some(composite_bound) = layout.composite(&composite.id) else { break };
             if lookup.belongs(&state.id, &composite.id) {
                 continue;
             }
-            let Some(bound) = layout.get(&state.id) else {
-                continue;
-            };
+            let Some(bound) = layout.get(&state.id) else { continue };
             if !intersects(bound.left, bound.top, bound.width, bound.height, &composite_bound, 0) {
                 continue;
             }
@@ -715,9 +693,7 @@ pub fn expand_for_feedback(diagram: &Diagram, layout: &mut Layout, lane_y: i32) 
     }
     let lookup = Lookup::new(diagram);
     for composite in &diagram.composites {
-        let Some(&index) = layout.composites.get(&composite.id) else {
-            continue;
-        };
+        let Some(&index) = layout.composites.get(&composite.id) else { continue };
         let internal = diagram.transitions.iter().any(|t| {
             lookup.belongs(&t.from, &composite.id)
                 && lookup.belongs(&t.to, &composite.id)
@@ -736,9 +712,7 @@ pub fn expand_for_feedback(diagram: &Diagram, layout: &mut Layout, lane_y: i32) 
 pub fn expand_for_internal_transitions(diagram: &Diagram, layout: &mut Layout, plans: &[RenderPlan]) {
     let lookup = Lookup::new(diagram);
     for composite in &diagram.composites {
-        let Some(&index) = layout.composites.get(&composite.id) else {
-            continue;
-        };
+        let Some(&index) = layout.composites.get(&composite.id) else { continue };
         let mut occupied: Vec<(i32, i32)> = Vec::new();
         for plan in plans {
             if !lookup.belongs(&plan.route.from_id, &composite.id) || !lookup.belongs(&plan.route.to_id, &composite.id)
@@ -892,9 +866,7 @@ fn place_notes(diagram: &Diagram, layout: &mut Layout, plans: &[RenderPlan], bud
     let body_policy = Policy { contacts: Vec::new(), clearance: ClearancePolicy::All(Clearance { x: 1, y: 1 }) };
     let mut placed: Vec<NoteBox> = Vec::new();
     for (index, note) in diagram.notes.iter().enumerate() {
-        let Some(target) = boxes.get(&note.target).copied() else {
-            continue;
-        };
+        let Some(target) = boxes.get(&note.target).copied() else { continue };
         let size = note_size(note);
         let right = note.side == NoteSide::Right;
         let base_left = if right { target.left + target.width + 4 } else { target.left - size.width - 4 };

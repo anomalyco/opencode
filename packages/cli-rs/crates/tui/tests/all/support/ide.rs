@@ -40,9 +40,7 @@ impl Ide {
                     );
                     Ok(response)
                 };
-                let Ok(socket) = tokio_tungstenite::accept_hdr_async(stream, header).await else {
-                    continue;
-                };
+                let Ok(socket) = tokio_tungstenite::accept_hdr_async(stream, header).await else { continue };
                 let (mut write, mut read) = socket.split();
                 let (log, mut notifications) = (log.clone(), sender.subscribe());
                 let (reply, mut replies) = tokio::sync::mpsc::unbounded_channel::<String>();

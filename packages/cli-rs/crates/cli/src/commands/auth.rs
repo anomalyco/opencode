@@ -263,9 +263,7 @@ mod legacy {
 
     pub fn decode(text: &str) -> Result<Vec<Entry>, String> {
         let value: Value = serde_json::from_str(text).map_err(|_| "Expected a valid JSON string".to_owned())?;
-        let Value::Array(items) = value else {
-            return Err("Expected array".to_owned());
-        };
+        let Value::Array(items) = value else { return Err("Expected array".to_owned()) };
         items.iter().enumerate().map(|(index, item)| entry(item, &format!("[{index}]"))).collect()
     }
 
@@ -959,9 +957,7 @@ impl PasteRedirect {
         let thread = std::thread::spawn({
             let (stop, cancelled) = (stop.clone(), cancelled.clone());
             move || {
-                let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
-                    return;
-                };
+                let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return };
                 loop {
                     let message = "If the browser can't reach this machine, paste the URL it was redirected to";
                     let Ok(code) = prompt::text(message).validate(required).prompt_until(Some(stop.clone())) else {
@@ -1071,9 +1067,7 @@ fn completed_lines(message: &str, printed: usize) -> (usize, &str) {
 
 /// Runs a cancel request to completion within 5 s, on a runtime of its own; errors are ignored.
 fn cancel_now(request: impl Future<Output = Result<(), ApiError>> + Send + 'static) {
-    let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
-        return;
-    };
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return };
     let _ = runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), request).await });
 }
 
@@ -1099,9 +1093,7 @@ pub(super) fn answer_form(fields: Option<&[FormField]>, input: &[String]) -> err
         }
         supplied.insert(key.to_owned(), item[separator + 1..].to_owned());
     }
-    let Some(fields) = fields else {
-        return Ok(None);
-    };
+    let Some(fields) = fields else { return Ok(None) };
     let mut answer = FormAnswer::new();
     for field in fields {
         if matches!(field, FormField::Unknown(_)) {
@@ -1323,9 +1315,7 @@ fn validate_text(field: &FormField, value: &str) -> Option<String> {
         }
         return None;
     }
-    let FormField::String(field) = field else {
-        return None;
-    };
+    let FormField::String(field) = field else { return None };
     let length = value.encode_utf16().count() as i64;
     if let Some(min) = field.min_length.filter(|min| length < *min) {
         return Some(format!("Must be at least {min} characters"));
@@ -1392,9 +1382,7 @@ fn default(field: &FormField) -> Option<FormValue> {
 /// when it includes the condition's value as a string.
 fn active(field: &FormField, answer: &FormAnswer) -> bool {
     form::conditions(field).iter().all(|condition| {
-        let Some(value) = answer.get(&condition.key) else {
-            return false;
-        };
+        let Some(value) = answer.get(&condition.key) else { return false };
         let matches = match (value, &condition.value) {
             (FormValue::Array(items), want) => {
                 let want = match want {

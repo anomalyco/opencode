@@ -133,9 +133,7 @@ fn hue_scale(
     let scale = match source.get(name) {
         Some(Value::String(alias)) => {
             let target = alias.strip_prefix("$hue.").filter(|target| !target.is_empty());
-            let Some(target) = target else {
-                return Err(format!("Hue alias \"{alias}\" must reference a hue scale"));
-            };
+            let Some(target) = target else { return Err(format!("Hue alias \"{alias}\" must reference a hue scale")) };
             if source.get(target).is_none() {
                 return Err(format!("Hue alias \"{alias}\" references a missing hue"));
             }

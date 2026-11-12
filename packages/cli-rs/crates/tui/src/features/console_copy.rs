@@ -15,9 +15,7 @@ pub fn install(tui: &Rc<Tui>) {
         if !key.matches("ctrl+y") || !tui.app.console().is_visible() {
             return;
         }
-        let Some(text) = tui.app.selected_text() else {
-            return;
-        };
+        let Some(text) = tui.app.selected_text() else { return };
         crate::features::selection::copy(&tui, &text, "Copied to clipboard");
         tui.app.clear_selection();
         cx.prevent_default();

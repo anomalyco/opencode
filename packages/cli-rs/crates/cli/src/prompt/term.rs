@@ -143,9 +143,7 @@ impl Drop for Raw {
 /// prompt holds raw mode.
 pub fn restore() {
     let active = active();
-    let Some((_, fd, saved, _)) = active.first() else {
-        return;
-    };
+    let Some((_, fd, saved, _)) = active.first() else { return };
     let _ = tcsetattr(*fd, OptionalActions::Now, saved);
     for output in [Output::Stdout, Output::Stderr] {
         if active.iter().any(|entry| entry.3 == output) && output.is_terminal() {

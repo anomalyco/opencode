@@ -77,9 +77,7 @@ fn revert(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
 
 /// Copies a user message's text, a reply's text parts, or another message's `text`; it closes once copied.
 fn copy(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
-    let Some(text) = tui.data.read(|state| state.message(session, message).map(text)) else {
-        return;
-    };
+    let Some(text) = tui.data.read(|state| state.message(session, message).map(text)) else { return };
     if crate::features::selection::put(&tui.app, &text) {
         dialogs.clear();
         return;

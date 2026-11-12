@@ -105,9 +105,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             return Err(error(n, line, "Gantt header is required"));
         }
         if let Some(captures) = SECTION.captures(line) {
-            let Some(label) = captures.get(1) else {
-                return Err(error(n, line, "Gantt section cannot be empty"));
-            };
+            let Some(label) = captures.get(1) else { return Err(error(n, line, "Gantt section cannot be empty")) };
             entries.push(Entry::Section(strip_quotes(label.as_str())));
             continue;
         }
@@ -124,9 +122,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             continue;
         }
         let separator = line.find(':').filter(|&index| index >= 1);
-        let Some(separator) = separator else {
-            return Err(SyntaxError::unsupported(Kind::Gantt, n, line));
-        };
+        let Some(separator) = separator else { return Err(SyntaxError::unsupported(Kind::Gantt, n, line)) };
         let label = strip_quotes(&line[..separator]);
         let mut fields: Vec<&str> =
             line[separator + 1..].split(',').map(js_trim).filter(|field| !field.is_empty()).collect();
@@ -179,18 +175,14 @@ fn parse_start(value: &str, format: &str, by_id: &HashMap<String, f64>) -> Resul
     let rest = js_trim(&AFTER.replace(value, "")).to_string();
     let mut latest = f64::NEG_INFINITY;
     for id in rest.split_whitespace() {
-        let Some(&end) = by_id.get(id) else {
-            return Err(format!("Unknown Gantt task id \"{id}\""));
-        };
+        let Some(&end) = by_id.get(id) else { return Err(format!("Unknown Gantt task id \"{id}\"")) };
         latest = latest.max(end);
     }
     Ok(latest)
 }
 
 fn parse_end(value: &str, start: f64, format: &str) -> Result<f64, String> {
-    let Some(captures) = DURATION.captures(value) else {
-        return parse_date(value, format);
-    };
+    let Some(captures) = DURATION.captures(value) else { return parse_date(value, format) };
     let unit = match captures[2].to_lowercase().as_str() {
         "ms" => 1.0,
         "s" => 1_000.0,

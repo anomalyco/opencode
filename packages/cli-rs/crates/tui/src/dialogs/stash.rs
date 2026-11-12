@@ -35,9 +35,7 @@ pub fn show(tui: &Tui, on_select: OnSelect) {
             props.on_select = Some(Rc::new({
                 let (weak, on_select) = (weak.clone(), on_select.clone());
                 move |option: &SelectOption<usize>| {
-                    let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else {
-                        return;
-                    };
+                    let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else { return };
                     let (index, on_select, weak) = (option.value, on_select.clone(), tui.weak());
                     tui.app.defer(bind!(weak, |tui, _| {
                         if let Some(entry) = tui.prompt.stash.list().get(index) {
@@ -74,9 +72,7 @@ struct List {
 
 impl List {
     fn options(&self) -> Vec<SelectOption<usize>> {
-        let Some(tui) = self.tui.upgrade() else {
-            return Vec::new();
-        };
+        let Some(tui) = self.tui.upgrade() else { return Vec::new() };
         let theme = tui.page().surface(opencode_ui::theme::Surface::Dialog);
         let key = tui.keymap.shortcut("stash.delete").unwrap_or_default();
         let now = crate::dialogs::session_list::now_ms();
@@ -109,9 +105,7 @@ impl List {
     }
 
     fn delete(self: &Rc<Self>, index: usize) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         if self.to_delete.get() == Some(index) {
             tui.prompt.stash.remove(&tui.app, index);
             self.to_delete.set(None);
@@ -123,9 +117,7 @@ impl List {
 
     /// Refreshes after the current select handler returns.
     fn refresh_later(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         tui.app.defer(bind!(self, |list, _| {
             let select = list.select.borrow().clone();
             if let Some(select) = select {

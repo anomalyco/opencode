@@ -254,9 +254,7 @@ impl Component for SpinnerView {
             return;
         }
         let index = self.frame();
-        let Some(glyphs) = self.glyphs.get(index) else {
-            return;
-        };
+        let Some(glyphs) = self.glyphs.get(index) else { return };
         let mut x = 0;
         for (char, glyph) in glyphs.iter().enumerate() {
             let color = match &self.color {

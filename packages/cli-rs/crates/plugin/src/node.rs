@@ -521,9 +521,7 @@ fn drag(app: &App, text: Text, height: f32, content_width: f64) -> View {
         MouseEventKind::Drag(MouseButton::Left) => {
             cx.prevent_default();
             cx.stop_propagation();
-            let Some(from) = start.get() else {
-                return;
-            };
+            let Some(from) = start.get() else { return };
             start.set(Some(event.x));
             let dx = f64::from(event.x) - f64::from(from);
             let max = (content_width - f64::from(this.rect().width)).max(0.0);

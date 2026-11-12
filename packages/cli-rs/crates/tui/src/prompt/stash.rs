@@ -38,9 +38,7 @@ impl Stash {
     /// Loads `<state>/prompt-stash.jsonl` on the worker; until then the stash holds what was stashed
     /// meanwhile, which then goes after the file's entries.
     pub fn load(app: &App, state: Option<PathBuf>) -> Self {
-        let Some(state) = state else {
-            return Self::default();
-        };
+        let Some(state) = state else { return Self::default() };
         let writer = Serial::new("prompt-stash.jsonl");
         let (send, receive) = oneshot::channel();
         let file = state.clone();

@@ -111,9 +111,7 @@ fn expand_text(text: &Map<String, Value>) -> Map<String, Value> {
         let expanded = feedback
             .iter()
             .map(|(kind, item)| {
-                let Value::Object(item) = item else {
-                    return (kind.clone(), item.clone());
-                };
+                let Value::Object(item) = item else { return (kind.clone(), item.clone()) };
                 let mut item = item.clone();
                 if item.get("muted").is_none_or(Value::is_null) && item.get("base").is_some_and(truthy) {
                     item.insert("muted".to_owned(), reference(&format!("text.feedback.{kind}.base")));
@@ -143,9 +141,7 @@ fn expand_section(section: &mut Map<String, Value>, path: &str) {
 
 /// Points every missing state of a stateful color with a `base` at that base.
 fn expand_states(value: &Value, path: &str) -> Value {
-    let Value::Object(states) = value else {
-        return value.clone();
-    };
+    let Value::Object(states) = value else { return value.clone() };
     if !states.get("base").is_some_and(truthy) {
         return value.clone();
     }
@@ -404,9 +400,7 @@ fn hue(value: &Value) -> Check {
 }
 
 fn categorical(value: &Value) -> Check {
-    let Value::Array(names) = value else {
-        return Err(Issue::Got(value.clone()));
-    };
+    let Value::Array(names) = value else { return Err(Issue::Got(value.clone())) };
     if let Some(bad) = names.iter().find(|name| name.as_str().is_none_or(str::is_empty)) {
         return Err(Issue::Got(bad.clone()));
     }
@@ -428,9 +422,7 @@ fn color(value: &Value) -> Check {
 
 /// `HueColorValue`: a hex color or a `$hue.<name>.<step>` reference, as syntax and Markdown tokens require.
 fn hue_color(value: &Value) -> Check {
-    let Value::String(text) = value else {
-        return Err(Issue::Got(value.clone()));
-    };
+    let Value::String(text) = value else { return Err(Issue::Got(value.clone())) };
     let reference = text
         .strip_prefix("$hue.")
         .and_then(|rest| rest.rsplit_once('.'))

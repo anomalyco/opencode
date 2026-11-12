@@ -171,9 +171,7 @@ fn compile(entry: &Entry) -> Result<CompiledGrammar, GrammarError> {
         let grammar = Grammar::new((entry.language)(), query.clone()).injections(entry.injections).core_captures();
         match grammar.compile() {
             Err(GrammarError::Query(error)) if error.kind == QueryErrorKind::Structure => {
-                let Some(rest) = without_pattern(&query, error.offset) else {
-                    return Err(GrammarError::Query(error));
-                };
+                let Some(rest) = without_pattern(&query, error.offset) else { return Err(GrammarError::Query(error)) };
                 query = Cow::Owned(rest);
             }
             result => return result,

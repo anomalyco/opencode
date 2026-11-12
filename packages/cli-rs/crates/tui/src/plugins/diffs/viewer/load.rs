@@ -16,25 +16,19 @@ impl Viewer {
         if self.chosen_base(&key).is_some() || self.reported_base(&key).is_some() {
             return;
         }
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let client = tui.data.client().clone();
         let input = VcsBaseInput { location: self.location() };
         let weak = self.this.clone();
         tui.app.spawn(async move { client.vcs_base(&input).await }, move |_, result| {
-            let (Some(viewer), Ok(output)) = (weak.upgrade(), result) else {
-                return;
-            };
+            let (Some(viewer), Ok(output)) = (weak.upgrade(), result) else { return };
             let base = output.data.map(|base| Base { name: base.name, reference: base.r#ref });
             viewer.state.borrow_mut().reported.insert(key, base);
         });
     }
 
     pub(super) fn load(&self) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let (generation, mode, location, key) = {
             let mut state = self.state.borrow_mut();
             state.generation += 1;
@@ -150,9 +144,7 @@ impl Viewer {
         tui.app.spawn(
             async move { client.file_read(&input).await },
             bind!(weak, |viewer, _, result| {
-                let Some(tui) = viewer.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = viewer.tui.upgrade() else { return };
                 if viewer.state.borrow().generation != generation {
                     return;
                 }

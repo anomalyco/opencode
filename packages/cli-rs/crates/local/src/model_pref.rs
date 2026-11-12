@@ -45,9 +45,7 @@ pub struct Preference {
 }
 
 fn models(value: Option<&Value>) -> Vec<Model> {
-    let Some(items) = value.and_then(Value::as_array) else {
-        return Vec::new();
-    };
+    let Some(items) = value.and_then(Value::as_array) else { return Vec::new() };
     items
         .iter()
         .filter_map(|item| {
@@ -59,9 +57,7 @@ fn models(value: Option<&Value>) -> Vec<Model> {
 }
 
 fn variants(value: Option<&Value>) -> IndexMap<String, String> {
-    let Some(map) = value.and_then(Value::as_object) else {
-        return IndexMap::new();
-    };
+    let Some(map) = value.and_then(Value::as_object) else { return IndexMap::new() };
     map.iter()
         .filter_map(|(key, item)| {
             let item = item.as_str().filter(|s| !s.is_empty())?;
@@ -121,9 +117,7 @@ pub fn favorite_models(model: &Model, favorite: &[Model], enabled: bool) -> Vec<
 pub fn cycle_variant(current: Option<&str>, variants: &[&str]) -> Option<String> {
     let named: Vec<&str> = variants.iter().copied().filter(|v| *v != "default").collect();
     let first = *named.first()?;
-    let Some(value) = normalize_variant(current) else {
-        return Some(first.to_string());
-    };
+    let Some(value) = normalize_variant(current) else { return Some(first.to_string()) };
     let index = named.iter().position(|v| *v == value)?;
     named.get(index + 1).map(|v| v.to_string())
 }

@@ -212,9 +212,7 @@ fn rewrite(file: &Path, mut change: impl FnMut(&str) -> Option<String>) -> io::R
         if let Some(old) = old.as_mut() {
             old.read_to_end(&mut bytes)?;
         }
-        let Some(next) = change(&String::from_utf8_lossy(&bytes)) else {
-            return Ok(());
-        };
+        let Some(next) = change(&String::from_utf8_lossy(&bytes)) else { return Ok(()) };
         let temp = PathBuf::from(format!("{}.{}.{}.tmp", file.display(), std::process::id(), crate::id::v4()));
         let replaced = write_synced(&temp, &next).and_then(|()| {
             if !unchanged(file, read.as_ref(), bytes.len())? {

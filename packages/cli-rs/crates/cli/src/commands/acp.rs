@@ -27,9 +27,7 @@ pub fn run(context: &Context, args: &AcpArgs) -> error::Result<()> {
     }
     let print_logs = std::env::var("OPENCODE_PRINT_LOGS").as_deref() == Ok("1");
     let failure = opencode_acp::run(&TsCommand::from_env().standalone(), print_logs, crate::help::VERSION)?;
-    let Some(failure) = failure else {
-        return Ok(());
-    };
+    let Some(failure) = failure else { return Ok(()) };
     eprintln!("opencode acp: {failure}");
     Err(Exit(1).into())
 }

@@ -93,9 +93,7 @@ impl Inner {
             return;
         }
         let entries = self.entries.borrow();
-        let Some((inputs, output)) = entries.as_ref() else {
-            return;
-        };
+        let Some((inputs, output)) = entries.as_ref() else { return };
         let rows = inputs
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))

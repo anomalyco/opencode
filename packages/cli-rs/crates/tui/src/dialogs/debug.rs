@@ -130,9 +130,7 @@ pub fn show(tui: &Tui) {
 
 /// Redraws the footer after the current event, since a footer action runs inside the footer it replaces.
 fn redraw(tui: &Weak<Tui>, hook: &Hook) {
-    let (Some(tui), Some(draw)) = (tui.upgrade(), hook.borrow().as_ref().and_then(Weak::upgrade)) else {
-        return;
-    };
+    let (Some(tui), Some(draw)) = (tui.upgrade(), hook.borrow().as_ref().and_then(Weak::upgrade)) else { return };
     tui.app.defer(move |_| draw());
 }
 

@@ -692,9 +692,7 @@ pub fn commit(
 
 /// `toolFinalPhase`: a completed tool whose output already streamed ends with that output as progress.
 pub fn final_phase(part: &SessionMessageAssistantTool) -> Phase {
-    let State::Completed(state) = &part.state else {
-        return Phase::Final;
-    };
+    let State::Completed(state) = &part.state else { return Phase::Final };
     let name = canonical_tool_name(&part.name);
     if tool_view(name).output && !tool_output_text(name, &state.content).is_empty() {
         return Phase::Progress;

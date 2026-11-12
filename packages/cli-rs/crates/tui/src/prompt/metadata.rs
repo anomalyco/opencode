@@ -85,9 +85,7 @@ impl Catalog {
 
     /// `model.parsed()`: the model and provider labels.
     pub fn labels(&self, choice: Option<&Choice>) -> (String, String) {
-        let Some(choice) = choice else {
-            return ("No provider selected".into(), "Connect a provider".into());
-        };
+        let Some(choice) = choice else { return ("No provider selected".into(), "Connect a provider".into()) };
         let provider = self
             .providers
             .iter()

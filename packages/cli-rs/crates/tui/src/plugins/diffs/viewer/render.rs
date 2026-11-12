@@ -19,9 +19,7 @@ use crate::plugins::diffs::tree;
 impl Viewer {
     /// Rebuilds what changed: everything when the cards change, else the tree.
     pub(super) fn refresh(&self) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let key = self.render_key(&tui);
         let same = self.parts.borrow().key.as_ref() == Some(&key);
         if same {
@@ -214,9 +212,7 @@ impl Viewer {
         let pane_width = self.patch_pane_width();
         let mut cards = Vec::new();
         for (index, file) in self.visible().into_iter().enumerate() {
-            let Some(entry) = files.get(file) else {
-                continue;
-            };
+            let Some(entry) = files.get(file) else { continue };
             let reviewed = self.state.borrow().reviewed.contains(&entry.file);
             let background = if reviewed { theme.background.raised.high } else { theme.diff.background.context };
             let image = is_image(&entry.file);
@@ -471,9 +467,7 @@ impl Viewer {
 
     /// Rebuilds the tree pane in its slot.
     pub(super) fn render_tree(&self, tui: &Tui) {
-        let Some(slot) = self.parts.borrow().tree.clone() else {
-            return;
-        };
+        let Some(slot) = self.parts.borrow().tree.clone() else { return };
         slot.clear();
         let theme = tui.page();
         let files = self.files();
@@ -607,9 +601,7 @@ pub(super) fn fill_image(tui: &Tui, theme: &Theme, slot: &View, file: &str, heig
     };
     let decoded = opentui::native::Image::decode(app.session().context(), &bytes)
         .and_then(|image| image.info().map(|info| (image, info)));
-    let Ok((image, info)) = decoded else {
-        return error("Could not decode image");
-    };
+    let Ok((image, info)) = decoded else { return error("Could not decode image") };
     let open = {
         let (tui, file) = (tui.weak(), file.to_owned());
         move |cx: &mut Cx<'_>, event: &MouseEvent| {

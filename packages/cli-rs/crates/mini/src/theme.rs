@@ -417,9 +417,7 @@ pub fn mono_tool_text(value: &str, mono: bool) -> String {
         return result;
     }
     let separator = " \u{b7} ";
-    let Some(index) = result.rfind(separator) else {
-        return result;
-    };
+    let Some(index) = result.rfind(separator) else { return result };
     let head = &result[..index];
     let questions = head
         .strip_suffix(" questions")
@@ -447,9 +445,7 @@ pub fn mono_snapshot(buffer: &opentui::native::Buffer) -> opentui::Result<()> {
     let capture = buffer.capture()?;
     for y in 0..capture.height {
         for x in 0..capture.width {
-            let Some(cell) = capture.cell(x, y) else {
-                continue;
-            };
+            let Some(cell) = capture.cell(x, y) else { continue };
             let mut chars = cell.symbol.chars();
             let character = match (chars.next(), chars.next()) {
                 (Some(c), None) if c.is_ascii() => continue,

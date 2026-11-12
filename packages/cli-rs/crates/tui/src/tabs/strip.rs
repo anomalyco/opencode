@@ -232,9 +232,7 @@ impl Strip {
 
 impl Component for Strip {
     fn paint(&self, painter: &mut Painter<'_>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let theme = tui.page();
         let animations = opencode_ui::motion::enabled(tui.config().info.animations);
         let numbers = matches!(tui.config().tabs.indicators, opencode_local::cli_config::TabsIndicators::Numbers);
@@ -449,13 +447,9 @@ impl Component for Strip {
                 true
             }
             MouseEventKind::Drag(MouseButton::Left) => {
-                let Some(source) = self.pressed.clone().filter(|source| source != NEW_TAB) else {
-                    return false;
-                };
+                let Some(source) = self.pressed.clone().filter(|source| source != NEW_TAB) else { return false };
                 self.dragged = true;
-                let Some(tui) = self.tui.upgrade() else {
-                    return false;
-                };
+                let Some(tui) = self.tui.upgrade() else { return false };
                 let tabs = tui.tabs.tabs(&tui);
                 let target = self
                     .slots

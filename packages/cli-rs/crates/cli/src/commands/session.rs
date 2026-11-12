@@ -296,9 +296,7 @@ fn text(value: &Value) -> String {
 /// `new Date(ms).toLocaleString()` as Bun writes it: `en-US` in the local time zone, whatever `LANG`
 /// says, for example `11/4/2025, 4:04:05 PM`.
 fn locale_string(value: &Value) -> String {
-    let Some(time) = value.as_f64().and_then(|ms| Zone::Local.at(ms as i64)) else {
-        return "Invalid Date".to_owned();
-    };
+    let Some(time) = value.as_f64().and_then(|ms| Zone::Local.at(ms as i64)) else { return "Invalid Date".to_owned() };
     time.locale_string()
 }
 

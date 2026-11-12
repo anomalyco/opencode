@@ -542,9 +542,7 @@ fn install_keys(tui: &Rc<Tui>) {
         if let Some(previous) = timer.take() {
             cx.cancel_timer(previous);
         }
-        let Some(deadline) = tui.keymap.leader_deadline() else {
-            return;
-        };
+        let Some(deadline) = tui.keymap.leader_deadline() else { return };
         timer.set(Some(cx.set_timeout(
             deadline.saturating_duration_since(cx.now()),
             bind!(tui, |tui, cx| {

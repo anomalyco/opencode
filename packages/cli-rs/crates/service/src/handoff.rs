@@ -29,9 +29,7 @@ pub async fn prepare(transport: Arc<dyn Transport>, file: &Path, info: &Registra
     if read(file).is_some_and(|existing| existing.current() && existing.from(info)) {
         return;
     }
-    let Ok(client) = Endpoint::new(&info.url, info.password.clone()).client(transport) else {
-        return;
-    };
+    let Ok(client) = Endpoint::new(&info.url, info.password.clone()).client(transport) else { return };
     let handoff = match tokio::time::timeout(timeout, client.experimental_persistent_pty_handoff()).await {
         Ok(Ok(output)) => match output.handoff {
             None => Ok(Value::Null),

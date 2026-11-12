@@ -124,18 +124,14 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
 
 /// Closes the menu after the event that asked for it, so its widgets outlive their own handlers.
 fn close(viewer: &Weak<Viewer>) {
-    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else {
-        return;
-    };
+    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else { return };
     let viewer = viewer.clone();
     tui.app.defer(bind!(viewer, |viewer, _| drop(viewer.menu.take())));
 }
 
 /// The menu's one action: closes it, then toggles the file's mark (`run`).
 fn run(viewer: &Weak<Viewer>, file: usize) {
-    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else {
-        return;
-    };
+    let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else { return };
     let viewer = viewer.clone();
     tui.app.defer(bind!(viewer, |viewer, _| {
         drop(viewer.menu.take());

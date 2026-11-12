@@ -577,9 +577,7 @@ impl Viewer {
     // Commands.
 
     pub(super) fn run(&self, action: Action) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         match action {
             Action::Close => {
                 tui.dialogs.clear();
@@ -801,9 +799,7 @@ impl Viewer {
             })
             .collect();
         let top = self.scroll_top();
-        let Some(next) = hunks::jump(&positions, self.state.borrow().selected_hunk, top, offset) else {
-            return;
-        };
+        let Some(next) = hunks::jump(&positions, self.state.borrow().selected_hunk, top, offset) else { return };
         self.select_file(next.file);
         self.refresh();
         let content = scroll.content_view().rect().height as i64;
@@ -816,9 +812,7 @@ impl Viewer {
     /// another file's mark keeps the reading position.
     pub fn toggle_reviewed(&self, file: Option<usize>) {
         let Some(file) = file else { return };
-        let Some(name) = self.files().get(file).map(|file| file.file.clone()) else {
-            return;
-        };
+        let Some(name) = self.files().get(file).map(|file| file.file.clone()) else { return };
         let current = self.state.borrow().selected.or_else(|| self.current_file());
         let offset = current.and_then(|current| {
             let parts = self.parts.borrow();
@@ -882,9 +876,7 @@ impl Viewer {
     /// Runs [`Self::pass`] before each of the next [`PASSES`] frames.
     fn passes(&self) {
         let running = self.passes.replace(PASSES) > 0;
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         tui.app.request_redraw();
         if running {
             return;
@@ -903,9 +895,7 @@ impl Viewer {
 
     /// The work TS does in lifecycle passes: the pending scroll, the sticky headers, and the top edge's color.
     fn pass(&self) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let pending = self.state.borrow().pending;
         if let Some((file, offset)) = pending
             && let Some(y) = self.card_y(file)

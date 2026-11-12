@@ -75,9 +75,7 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
     let copy: Rc<dyn Fn(Copied)> = {
         let (tui, live) = (tui.clone(), Rc::downgrade(live));
         Rc::new(move |kind| {
-            let (Some(tui), Some(live)) = (tui.upgrade(), live.upgrade()) else {
-                return;
-            };
+            let (Some(tui), Some(live)) = (tui.upgrade(), live.upgrade()) else { return };
             let shown = Shown::new(&live.part.borrow());
             let Some(text) = (match kind {
                 Copied::Code => shown.code,
@@ -119,9 +117,7 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
         let (cx, live) = (Rc::downgrade(cx), Rc::downgrade(live));
         let (status, scroll, foot, copy) = (status.clone(), scroll.clone(), foot.clone(), copy.clone());
         Rc::new(move || {
-            let (Some(cx), Some(live)) = (cx.upgrade(), live.upgrade()) else {
-                return;
-            };
+            let (Some(cx), Some(live)) = (cx.upgrade(), live.upgrade()) else { return };
             let shown = Shown::new(&live.part.borrow());
             status.set_text(shown.status.clone());
             status.fg(if shown.failed { cx.theme.text.feedback.error.base } else { cx.theme.text.muted });
@@ -369,9 +365,7 @@ fn highlighted(text: &str) -> Option<(String, Option<String>)> {
 
 /// `wrappedRows`: the rows `text` takes when each line breaks every `width` characters.
 fn wrapped_rows(text: Option<&str>, width: usize) -> usize {
-    let Some(text) = text.filter(|text| !text.is_empty()) else {
-        return 0;
-    };
+    let Some(text) = text.filter(|text| !text.is_empty()) else { return 0 };
     text.split('\n').map(|line| line.chars().count().div_ceil(width.max(1)).max(1)).sum()
 }
 

@@ -58,9 +58,7 @@ enum Kind {
 /// Takes tool calls on the UI thread and connects when the flag is on. `app::mount_with` calls it once.
 pub fn install(tui: &Rc<Tui>) {
     tui.app.on_message(bind!(tui, |tui, _, call: &Call| {
-        let Some(reply) = call.reply.lock().ok().and_then(|mut reply| reply.take()) else {
-            return;
-        };
+        let Some(reply) = call.reply.lock().ok().and_then(|mut reply| reply.take()) else { return };
         let done = move |result: ToolResult| {
             let _ = reply.send(result);
         };
@@ -192,9 +190,7 @@ type Done = Box<dyn FnOnce(&Tui, Result<String, ToolResult>)>;
 /// or a tool failure.
 fn terminal_for(tui: &Tui, called_by: Option<String>, done: impl FnOnce(&Tui, Result<String, ToolResult>) + 'static) {
     let done: Done = Box::new(done);
-    let Some(called_by) = called_by.map(SessionID) else {
-        return done(tui, Err(ToolResult::error("Unknown session")));
-    };
+    let Some(called_by) = called_by.map(SessionID) else { return done(tui, Err(ToolResult::error("Unknown session"))) };
     known(tui, called_by.clone(), move |tui| {
         if !tui.data.read(|state| state.session(&called_by).is_some()) {
             return done(tui, Err(ToolResult::error("Unknown session")));
@@ -216,9 +212,7 @@ fn terminal_for(tui: &Tui, called_by: Option<String>, done: impl FnOnce(&Tui, Re
             _ if crate::tabs::Tabs::enabled(tui) && tui.tabs.open_ids(tui).contains(&root.0) => Some(root),
             _ => None,
         };
-        let Some(target) = target else {
-            return done(tui, Err(ToolResult::error("session not open in this TUI")));
-        };
+        let Some(target) = target else { return done(tui, Err(ToolResult::error("session not open in this TUI"))) };
         known(tui, target.clone(), move |tui| {
             let session = target.clone();
             crate::terminal::refresh(tui, &target, false, move |tui| {

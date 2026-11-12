@@ -343,9 +343,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
 
 fn dont_show_again(local: &Rc<Local>) {
     local.go_memory.borrow_mut().dont_show = true;
-    let Some(storage) = local.storage.clone() else {
-        return;
-    };
+    let Some(storage) = local.storage.clone() else { return };
     local.app.runtime().spawn_blocking(move || {
         let result = storage.update("go-upsell", &json!({}), |draft| {
             if !draft.is_object() {
@@ -497,9 +495,7 @@ impl Connect {
 
     // The first credential connection has no error status.
     fn valid(&self) -> bool {
-        let Some(integration) = self.local.integration("opencode") else {
-            return false;
-        };
+        let Some(integration) = self.local.integration("opencode") else { return false };
         integration
             .connections
             .iter()
@@ -714,9 +710,7 @@ impl Connect {
     }
 
     fn open(&self) {
-        let Some(attempt) = self.attempt.borrow().clone() else {
-            return;
-        };
+        let Some(attempt) = self.attempt.borrow().clone() else { return };
         if (self.local.open_url.borrow())(&attempt.url).is_err() {
             self.local.toasts.show(ToastOptions::new(
                 Variant::Error,
@@ -726,9 +720,7 @@ impl Connect {
     }
 
     fn copy(&self) {
-        let Some(attempt) = self.attempt.borrow().clone() else {
-            return;
-        };
+        let Some(attempt) = self.attempt.borrow().clone() else { return };
         let value = oauth_code(&attempt.instructions).unwrap_or(attempt.url);
         if crate::features::selection::put(&self.local.app, &value) {
             self.local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));

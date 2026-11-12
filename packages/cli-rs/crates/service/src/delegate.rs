@@ -74,9 +74,7 @@ pub fn enable_remote(command: &TsCommand) -> Result<Child, StartError> {
 pub fn tunnel_hostname(paths: &Paths, route: &str) -> io::Result<Option<String>> {
     let data_home = paths.data.parent().unwrap_or(&paths.data);
     let root = data_home.join("opentunnel").join("default");
-    let Some(metadata) = read_optional(&root.join("tunnel.json"))? else {
-        return Ok(None);
-    };
+    let Some(metadata) = read_optional(&root.join("tunnel.json"))? else { return Ok(None) };
     for name in ["token", "private-key.pem", "certificate.pem", "chain.pem"] {
         let content = read_optional(&root.join(name))?;
         // The SDK accepts an empty chain but no empty token, key, or certificate.

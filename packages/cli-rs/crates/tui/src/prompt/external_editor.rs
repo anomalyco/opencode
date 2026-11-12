@@ -32,9 +32,7 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
     tui.app.release_terminal(move |_| {
         let result = edit(&command, snapshot["text"].as_str().unwrap_or_default(), &cwd);
         let Some(prompt) = weak.upgrade() else { return };
-        let Some(tui) = prompt.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = prompt.tui.upgrade() else { return };
         match result {
             Err(message) => failed(&tui, &message),
             Ok(None) => {}

@@ -78,9 +78,7 @@ pub fn path_spans(points: &[Point]) -> Vec<SpatialSpan> {
     let mut spans = Vec::new();
     for (y, xs) in cells {
         let mut iter = xs.into_iter();
-        let Some(first) = iter.next() else {
-            continue;
-        };
+        let Some(first) = iter.next() else { continue };
         let (mut start, mut end) = (first, first);
         for x in iter {
             if x == end + 1 {

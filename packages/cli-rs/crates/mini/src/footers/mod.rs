@@ -417,9 +417,7 @@ impl Footers {
                 if inner.state.borrow().permissions.iter().any(|item| item.info.id == request.id) {
                     return;
                 }
-                let Some(target) = inner.target.borrow().clone() else {
-                    return;
-                };
+                let Some(target) = inner.target.borrow().clone() else { return };
                 // A reply or another session that comes while the tool call is read drops the request.
                 inner.asking.borrow_mut().insert(request.id.as_str().to_owned());
                 let weak = Rc::downgrade(inner);
@@ -558,19 +556,13 @@ pub(crate) fn asked(data: &PermissionAskedData) -> PermissionRequest {
 /// `resolvePermissionSources`: the request with its tool call's input and metadata, read from its message.
 async fn source(client: &Client, session: &str, info: PermissionRequest) -> permission::Request {
     let mut request = permission::Request { info, input: Value::Null, metadata: Value::Null };
-    let Some(source) = request.info.source.clone().filter(|source| source.r#type == "tool") else {
-        return request;
-    };
+    let Some(source) = request.info.source.clone().filter(|source| source.r#type == "tool") else { return request };
     let input = SessionMessageGetInput {
         session_id: SessionID(session.to_owned()),
         message_id: source.message_id.as_str().into(),
     };
-    let Ok(call) = Client::session_message_get_call(&input) else {
-        return request;
-    };
-    let Ok(message) = client.json::<Value>(call).await else {
-        return request;
-    };
+    let Ok(call) = Client::session_message_get_call(&input) else { return request };
+    let Ok(message) = client.json::<Value>(call).await else { return request };
     let message = message.get("data").unwrap_or(&message);
     if message["type"] != "assistant" {
         return request;
@@ -1027,9 +1019,7 @@ impl Inner {
             }
             Some(Shown::Form(id)) => {
                 let mut state = self.state.borrow_mut();
-                let Some(info) = find_form(&state, &id).cloned() else {
-                    return;
-                };
+                let Some(info) = find_form(&state, &id).cloned() else { return };
                 let current = state.form_states.entry(id.clone()).or_insert_with(|| form::State::new(&info)).clone();
                 drop(state);
                 let painted = form::paint(
@@ -1312,9 +1302,7 @@ impl Inner {
         let rows = self.terminal().1;
         let running_only = self.state.borrow().running_only;
         let mut state = self.state.borrow_mut();
-        let Some(panel) = state.panel.as_mut() else {
-            return;
-        };
+        let Some(panel) = state.panel.as_mut() else { return };
         if route == Route::Model {
             let loading = self.models_loading();
             panel.spec.empty = if loading { "Models loading" } else { "No results found" };
@@ -1363,12 +1351,8 @@ impl Inner {
         let rows = self.terminal().1;
         let outcome = {
             let mut state = self.state.borrow_mut();
-            let Some(panel) = state.panel.as_mut() else {
-                return false;
-            };
-            let Some(outcome) = panel.key(name, rows) else {
-                return false;
-            };
+            let Some(panel) = state.panel.as_mut() else { return false };
+            let Some(outcome) = panel.key(name, rows) else { return false };
             match outcome {
                 Outcome::Select(index) => Some(panel.entries()[index].action.clone()),
                 Outcome::Close => None,
@@ -1521,9 +1505,7 @@ impl Inner {
     fn pending(self: &Rc<Self>, undo: bool) -> bool {
         let selected =
             self.state.borrow().panel.as_ref().and_then(|panel| panel.selected()).map(|entry| entry.action.clone());
-        let Some(Pick::Pending(id, _)) = selected else {
-            return false;
-        };
+        let Some(Pick::Pending(id, _)) = selected else { return false };
         if !undo {
             self.prompt.queued_action(&id, None, |_| {});
             return true;
@@ -1559,20 +1541,14 @@ impl Inner {
 
     fn permission_request(&self) -> Option<permission::Request> {
         let state = self.state.borrow();
-        let Some(Shown::Permission(id)) = &state.shown else {
-            return None;
-        };
+        let Some(Shown::Permission(id)) = &state.shown else { return None };
         find_permission(&state, id).cloned()
     }
 
     /// The permission body's keys (`useKeyboard`).
     fn permission_key(self: &Rc<Self>, name: &str) -> bool {
-        let Some(request) = self.permission_request() else {
-            return false;
-        };
-        let Some(mut current) = self.state.borrow().permission.clone() else {
-            return false;
-        };
+        let Some(request) = self.permission_request() else { return false };
+        let Some(mut current) = self.state.borrow().permission.clone() else { return false };
         if current.stage == permission::Stage::Reject {
             return match name {
                 "return" => {
@@ -1636,9 +1612,7 @@ impl Inner {
 
     /// `onPermissionReply`; the request leaves once its `permission.replied` arrives.
     fn send_permission(self: &Rc<Self>, request: &permission::Request, reply: permission::Reply) {
-        let Some(target) = self.target.borrow().clone() else {
-            return;
-        };
+        let Some(target) = self.target.borrow().clone() else { return };
         if let Some(current) = self.state.borrow_mut().permission.as_mut() {
             current.submitting = true;
         }
@@ -1672,9 +1646,7 @@ impl Inner {
 
     fn form(&self) -> Option<(FormInfo, form::State)> {
         let state = self.state.borrow();
-        let Some(Shown::Form(id)) = &state.shown else {
-            return None;
-        };
+        let Some(Shown::Form(id)) = &state.shown else { return None };
         let info = find_form(&state, id)?.clone();
         let current = state.form_states.get(id).cloned().unwrap_or_else(|| form::State::new(&info));
         Some((info, current))
@@ -1692,9 +1664,7 @@ impl Inner {
 
     /// The form body's keys (`useKeyboard`, and the answer field's Enter and Escape).
     fn form_key(self: &Rc<Self>, name: &str) -> bool {
-        let Some((info, mut current)) = self.form() else {
-            return false;
-        };
+        let Some((info, mut current)) = self.form() else { return false };
         if current.submitting {
             return true;
         }
@@ -1842,12 +1812,8 @@ impl Inner {
             current.fail(invalid);
             return self.set_form(current);
         }
-        let Some(answer) = form::answer(info, &current) else {
-            return;
-        };
-        let Some(target) = self.target.borrow().clone() else {
-            return;
-        };
+        let Some(answer) = form::answer(info, &current) else { return };
+        let Some(target) = self.target.borrow().clone() else { return };
         current.submitting = true;
         current.error.clear();
         self.set_form(current);
@@ -1864,12 +1830,8 @@ impl Inner {
 
     /// `cancel` (`onFormCancel`).
     fn cancel_form(self: &Rc<Self>, info: &FormInfo) {
-        let Some((_, mut current)) = self.form() else {
-            return;
-        };
-        let Some(target) = self.target.borrow().clone() else {
-            return;
-        };
+        let Some((_, mut current)) = self.form() else { return };
+        let Some(target) = self.target.borrow().clone() else { return };
         current.submitting = true;
         current.error.clear();
         self.set_form(current);
@@ -2104,9 +2066,7 @@ async fn family(client: &Client, parent: &str) -> Vec<SessionInfo> {
 /// `runDiscovery`: walks up from `session` until a session whose parent is in `family`.
 async fn lineage(client: &Client, session: &str, family: &HashSet<String>) -> Discovery {
     let get = |id: String| async move { client.session_get(&SessionGetInput { session_id: SessionID(id) }).await };
-    let Ok(mut current) = get(session.to_owned()).await else {
-        return Discovery::Failed;
-    };
+    let Ok(mut current) = get(session.to_owned()).await else { return Discovery::Failed };
     let mut lineage: Vec<SessionInfo> = Vec::new();
     let mut visited = HashSet::new();
     while lineage.len() < FAMILY_LIMIT && visited.insert(current.id.0.clone()) {

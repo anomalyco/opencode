@@ -133,9 +133,7 @@ fn feedback_allocations(
     let top_lane = top_y.unwrap_or_else(|| bounds.values().map(|b| b.top).min().unwrap_or(i32::MAX) - 3);
     let mut intervals: Vec<(usize, (i32, i32))> = Vec::new();
     for (index, transition) in diagram.transitions.iter().enumerate() {
-        let (Some(from), Some(to)) = (bounds.get(&transition.from), bounds.get(&transition.to)) else {
-            continue;
-        };
+        let (Some(from), Some(to)) = (bounds.get(&transition.from), bounds.get(&transition.to)) else { continue };
         if transition.from == transition.to || !is_horizontal_feedback(diagram, from, to) {
             continue;
         }
@@ -155,9 +153,7 @@ fn feedback_allocations(
                 .into_iter()
                 .find(|side| !sided[*side as usize].iter().any(|existing| cross(existing.1, interval)))
         });
-        let Some(side) = side else {
-            continue;
-        };
+        let Some(side) = side else { continue };
         canonical.insert(key, side);
         sided[side as usize].push((index, interval));
     }
@@ -183,9 +179,7 @@ fn feedback_allocations(
 
 fn has_opposing_top_connector(diagram: &Diagram, index: usize, bounds: &Boxes) -> bool {
     let transition = &diagram.transitions[index];
-    let (Some(from), Some(to)) = (bounds.get(&transition.from), bounds.get(&transition.to)) else {
-        return false;
-    };
+    let (Some(from), Some(to)) = (bounds.get(&transition.from), bounds.get(&transition.to)) else { return false };
     if from.center_y == to.center_y {
         return false;
     }
@@ -196,9 +190,7 @@ fn has_opposing_top_connector(diagram: &Diagram, index: usize, bounds: &Boxes) -
         if other_index == index || (if leaves_lower { other.to != *lower_id } else { other.from != *lower_id }) {
             return false;
         }
-        let (Some(other_from), Some(other_to)) = (bounds.get(&other.from), bounds.get(&other.to)) else {
-            return false;
-        };
+        let (Some(other_from), Some(other_to)) = (bounds.get(&other.from), bounds.get(&other.to)) else { return false };
         if other_from.center_y.max(other_to.center_y) != lower.center_y {
             return false;
         }
@@ -377,9 +369,7 @@ pub fn route_plans(diagram: &Diagram, bounds: &Boxes, lane_y: i32, top_y: Option
         + gap;
     let mut plans = Vec::new();
     for (index, transition) in diagram.transitions.iter().enumerate() {
-        let (Some(&from), Some(&to)) = (bounds.get(&transition.from), bounds.get(&transition.to)) else {
-            continue;
-        };
+        let (Some(&from), Some(&to)) = (bounds.get(&transition.from), bounds.get(&transition.to)) else { continue };
         let target = state_of(&transition.to);
         let base = |kind: RouteKind| RoutePlan {
             transition: index,
@@ -972,9 +962,7 @@ fn intersects_unrelated(plan: &RenderPlan, diagram: &Diagram, bounds: &Boxes, no
         if plan.path.iter().any(|&p| inside(p, &note.bounds)) {
             return true;
         }
-        let Some(target) = bounds.get(&note.note.target) else {
-            return false;
-        };
+        let Some(target) = bounds.get(&note.note.target) else { return false };
         let connector =
             path_claim("note-connector", "note-connector", Role::Boundary, &note_connector_of(note, target).points);
         plan.path.iter().any(|&(x, y)| connector.spans.iter().any(|s| s.y == y && x >= s.from_x && x <= s.to_x))
@@ -1163,9 +1151,7 @@ fn body_safe(
     }
     let source = plan.path.iter().position(|&p| !inside(p, &plan.route.from));
     let target = plan.path.iter().rposition(|&p| !inside(p, &plan.route.to));
-    let (Some(source), Some(target)) = (source, target) else {
-        return plan.clone();
-    };
+    let (Some(source), Some(target)) = (source, target) else { return plan.clone() };
     if target < source {
         return plan.clone();
     }

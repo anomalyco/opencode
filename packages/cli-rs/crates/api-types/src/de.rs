@@ -117,9 +117,7 @@ impl<'de: 'a, 'a> Visitor<'de> for RawVisitor<'a> {
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
         // serde_json hands the text over as a map of one entry keyed by the token.
-        let Some(first) = map.next_key::<Key>()? else {
-            return Ok(Raw::Value(Value::Object(serde_json::Map::new())));
-        };
+        let Some(first) = map.next_key::<Key>()? else { return Ok(Raw::Value(Value::Object(serde_json::Map::new()))) };
         let first = match first {
             Key::Token => return map.next_value::<Text>().map(|text| Raw::Text(text.0)),
             Key::Other(key) => key,

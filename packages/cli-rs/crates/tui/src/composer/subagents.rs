@@ -113,9 +113,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
         TuiCommand::new(
             id,
             bind!(inner, |inner, _, _| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 run(&inner, &tui);
             }),
         )
@@ -201,9 +199,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
         };
         let hover = {
             bind!(inner, |inner| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 if std::mem::replace(&mut inner.subagents.borrow_mut().selected, index) != index {
                     inner.redraw_later(&tui);
                 }
@@ -212,9 +208,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
         let click = {
             let id = entry.session.clone();
             bind!(inner, |inner| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 inner.subagents.borrow_mut().selected = index;
                 let id = id.clone();
                 tui.app.defer(bind!(tui, |tui, _| tui.navigate(Route::Session { id })));
@@ -271,9 +265,7 @@ fn entry(session: &SessionInfo, prefix: String, current: &SessionID, status: Ses
 
 /// `sessionFamily`: every descendant of the root of `id`, depth first, each with its tree prefix.
 fn family<'a>(sessions: &[&'a SessionInfo], id: &SessionID) -> Vec<(&'a SessionInfo, String)> {
-    let Some(current) = sessions.iter().find(|session| session.id == *id) else {
-        return Vec::new();
-    };
+    let Some(current) = sessions.iter().find(|session| session.id == *id) else { return Vec::new() };
     let mut root = *current;
     let mut seen = vec![root.id.clone()];
     while let Some(parent) =

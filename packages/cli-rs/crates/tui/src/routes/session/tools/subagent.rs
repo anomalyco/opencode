@@ -29,9 +29,7 @@ impl Subagent {
         let tui: Weak<Tui> = cx.tui.weak();
         let target = session.clone();
         inline.on_click(move || {
-            let Some(id) = target.borrow().clone() else {
-                return;
-            };
+            let Some(id) = target.borrow().clone() else { return };
             let Some(tui) = tui.upgrade() else { return };
             // The click runs inside the transcript the navigation replaces.
             tui.app.defer(bind!(tui, |tui, _| tui.navigate(Route::Session { id: SessionID(id) })));

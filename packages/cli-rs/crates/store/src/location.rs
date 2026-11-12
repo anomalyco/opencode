@@ -258,9 +258,7 @@ impl State {
             }
             _ => {}
         }
-        let Some(location) = located(event) else {
-            return Vec::new();
-        };
+        let Some(location) = located(event) else { return Vec::new() };
         let location = Location::from(location);
         match event {
             V2Event::ProviderUpdated(_) => self.refresh_catalog(Catalog::Provider, &location),
@@ -328,9 +326,7 @@ impl State {
 
     /// `credential.switched`: the switched credential becomes the integration's first connection.
     fn promote_credential(&mut self, location: &Location, data: &CredentialSwitchedData) {
-        let Some(credential) = &data.credential_id else {
-            return;
-        };
+        let Some(credential) = &data.credential_id else { return };
         let Some(integrations) = self.locations.get_mut(location).and_then(|data| data.integration.as_mut()) else {
             return;
         };

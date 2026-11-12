@@ -201,9 +201,7 @@ async fn latest_session(
         if let Some(session) = page.data.into_iter().find(|session| session.location.directory == location.directory) {
             return Ok(Some(session));
         }
-        let Some(Some(next)) = page.cursor.next else {
-            return Ok(None);
-        };
+        let Some(Some(next)) = page.cursor.next else { return Ok(None) };
         if empty {
             return Ok(None);
         }
@@ -280,9 +278,7 @@ fn subfolder(project: &str, directory: &str) -> Option<String> {
 
 /// `parseSessionTargetModel`: `provider/model` or `provider/model#variant`.
 pub fn parse_model(value: Option<&str>) -> Result<Option<ModelRef>, String> {
-    let Some(value) = value.filter(|value| !value.is_empty()) else {
-        return Ok(None);
-    };
+    let Some(value) = value.filter(|value| !value.is_empty()) else { return Ok(None) };
     let invalid = || format!("Invalid model reference: {value}");
     let provider_end = value.find('/').filter(|at| *at > 0).ok_or_else(invalid)?;
     let provider = &value[..provider_end];

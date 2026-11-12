@@ -134,9 +134,7 @@ struct Mcp {
 impl Mcp {
     /// Reads the list when the location has none yet, then follows the store.
     fn load(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let loaded =
             tui.data.read(|state| state.location(Some(&self.location)).is_some_and(|data| data.mcp_server.is_some()));
         if !loaded {
@@ -155,14 +153,10 @@ impl Mcp {
 
     /// Refreshes the list after each store flush that touched the location, while the dialog is open.
     fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let weak = Rc::downgrade(self);
         tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-            let (Some(mcp), Some(revisions)) = (weak.upgrade(), revisions) else {
-                return;
-            };
+            let (Some(mcp), Some(revisions)) = (weak.upgrade(), revisions) else { return };
             let Some(tui) = mcp.tui.upgrade() else { return };
             let (revision, changes) = tui.data.changes_since(mcp.seen.get());
             mcp.seen.set(revision);
@@ -175,9 +169,7 @@ impl Mcp {
 
     /// The location's servers by name.
     fn servers(&self) -> Vec<McpServer> {
-        let Some(tui) = self.tui.upgrade() else {
-            return Vec::new();
-        };
+        let Some(tui) = self.tui.upgrade() else { return Vec::new() };
         let mut servers = tui.data.read(|state| {
             state.location(Some(&self.location)).and_then(|data| data.mcp_server.clone()).unwrap_or_default()
         });
@@ -212,9 +204,7 @@ impl Mcp {
     }
 
     fn refresh(&self) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let select = self.select.borrow().clone();
         if let Some(select) = select {
             select.set_options(self.options(&dialog_theme(&tui)));
@@ -223,9 +213,7 @@ impl Mcp {
 
     /// Enter: the integration flow for a sign-in, else the error of a failed server.
     fn select(self: &Rc<Self>, name: &str) {
-        let Some(server) = self.server(name) else {
-            return;
-        };
+        let Some(server) = self.server(name) else { return };
         if kind(&server.status) == "needs_auth"
             && let Some(integration) = server.integration_id.clone()
         {
@@ -259,9 +247,7 @@ impl Mcp {
         if self.loading.borrow().contains(name) {
             return;
         }
-        let Some(server) = self.server(name) else {
-            return;
-        };
+        let Some(server) = self.server(name) else { return };
         let status = kind(&server.status);
         if status == "pending" {
             return;
@@ -270,9 +256,7 @@ impl Mcp {
             self.select(name);
             return;
         }
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         self.loading.borrow_mut().insert(name.to_owned());
         self.refresh();
         let client = tui.data.client().clone();
@@ -309,9 +293,7 @@ impl Mcp {
 
     /// The error view in place of the list; Escape goes back to the list on this server.
     fn detail(self: &Rc<Self>, server: McpServer) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let weak = tui.weak();
         let mut context = format!("Status: {}\nConfiguration: mcp.servers.{}", kind(&server.status), server.name);
         if let Some(integration) = &server.integration_id {

@@ -192,9 +192,7 @@ pub fn preferred(paths: &Paths, env_channel: Option<&str>) -> Vec<PathBuf> {
 
 /// Every `service*.json` in `state` not in `skip`, newest first.
 pub fn scan(state: &Path, skip: &[PathBuf]) -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(state) else {
-        return Vec::new();
-    };
+    let Ok(entries) = std::fs::read_dir(state) else { return Vec::new() };
     let mut files: Vec<(std::time::SystemTime, PathBuf)> = entries
         .filter_map(Result::ok)
         .filter(|entry| {

@@ -115,9 +115,7 @@ fn copied_tokens_shift_like_the_typescript_tokens() {
         for what in ["decrease", "increase"] {
             let wanted = unpack(expected[what].as_str().unwrap());
             for (path, wanted) in paths.iter().zip(wanted) {
-                let Some(copy) = theme.get(path).copied() else {
-                    continue;
-                };
+                let Some(copy) = theme.get(path).copied() else { continue };
                 let shifted = if what == "decrease" { theme.decrease(&copy, 1) } else { theme.increase(&copy, 2) };
                 let ambiguous = shifted == copy && path != "background.raised.base";
                 if pack(shifted) != wanted && !ambiguous {
@@ -142,9 +140,7 @@ fn v1_migration_matches_the_typescript_migration() {
         if name == "opencode" {
             continue;
         }
-        let Ok(raw) = std::fs::read_to_string(format!("{ASSETS}/{name}.json")) else {
-            continue;
-        };
+        let Ok(raw) = std::fs::read_to_string(format!("{ASSETS}/{name}.json")) else { continue };
         let mut catalog = Catalog::default();
         catalog.set_custom(IndexMap::from([(name.to_owned(), serde_json::from_str(&raw).unwrap())]));
         let loaded = catalog.load(name, mode(requested)).unwrap();

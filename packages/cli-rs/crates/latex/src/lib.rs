@@ -68,9 +68,7 @@ fn renderer(shown: Shown) -> impl Fn(&Fence) -> Fenced {
             return Fenced::Keep;
         }
         shown.remove(&fence.key);
-        let Some(layout) = layout else {
-            return Fenced::Code;
-        };
+        let Some(layout) = layout else { return Fenced::Code };
         if streaming {
             shown.insert(fence.key, fence.code.clone());
         }

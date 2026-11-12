@@ -161,9 +161,7 @@ fn answer(form: &Value, response: &Value) -> Option<Value> {
     }
     let mut answer = Map::new();
     for field in form.get("fields")?.as_array()? {
-        let Some(key) = field.get("key").and_then(Value::as_str) else {
-            continue;
-        };
+        let Some(key) = field.get("key").and_then(Value::as_str) else { continue };
         if let Some(value) = field_answer(field, content) {
             answer.insert(key.to_owned(), value);
         }

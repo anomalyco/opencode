@@ -57,19 +57,13 @@ impl Execute {
         });
         let (weak, tui): (Weak<Inner>, Weak<Tui>) = (Rc::downgrade(&inner), cx.tui.weak());
         inner.inline.on_click(move || {
-            let (Some(inner), Some(tui)) = (weak.upgrade(), tui.upgrade()) else {
-                return;
-            };
-            let Some(part) = inner.part.borrow().clone() else {
-                return;
-            };
+            let (Some(inner), Some(tui)) = (weak.upgrade(), tui.upgrade()) else { return };
+            let Some(part) = inner.part.borrow().clone() else { return };
             // The dialog takes the focus the click is still delivering to.
             let weak = Rc::downgrade(&inner);
             let tui_weak = tui.weak();
             tui.app.defer(move |_| {
-                let (Some(inner), Some(tui)) = (weak.upgrade(), tui_weak.upgrade()) else {
-                    return;
-                };
+                let (Some(inner), Some(tui)) = (weak.upgrade(), tui_weak.upgrade()) else { return };
                 *inner.dialog.borrow_mut() = execute::show(&tui, part);
             });
         });

@@ -125,9 +125,7 @@ fn resolve_v1_color(
                 return Err(format!("Circular color reference: {} -> {text}", chain.join(" -> ")));
             }
             let next = defs.get(text).filter(|value| !value.is_null()).or_else(|| theme.get(text));
-            let Some(next) = next else {
-                return Err(format!("Color reference \"{text}\" not found in defs or theme"));
-            };
+            let Some(next) = next else { return Err(format!("Color reference \"{text}\" not found in defs or theme")) };
             chain.push(text.clone());
             let color = resolve_v1_color(next, defs, theme, mode, chain);
             chain.pop();
@@ -265,9 +263,7 @@ pub(crate) fn palette_tokens(theme: &V1) -> Value {
 
 /// Replaces the `@palette` placeholder with its sections, keeping the key order of the TypeScript literal.
 pub(crate) fn splice_palette(definition: Value) -> Map<String, Value> {
-    let Value::Object(definition) = definition else {
-        return Map::new();
-    };
+    let Value::Object(definition) = definition else { return Map::new() };
     definition
         .into_iter()
         .flat_map(|(key, value)| match (key.as_str(), value) {
@@ -296,18 +292,12 @@ pub(crate) fn dialog_background(theme: &V1) -> String {
 
 /// Rewrites colors that equal a hue step as references to that step, preferring the semantic hues.
 pub(crate) fn reference_hues(theme: Map<String, Value>) -> Map<String, Value> {
-    let Some(Value::Object(definitions)) = theme.get("hue") else {
-        return theme;
-    };
+    let Some(Value::Object(definitions)) = theme.get("hue") else { return theme };
     let mut references: HashMap<String, String> = HashMap::new();
     let mut index = |name: &str, overwrite: bool| {
-        let Some(scale) = alias_scale(definitions, name, &mut Vec::new()) else {
-            return;
-        };
+        let Some(scale) = alias_scale(definitions, name, &mut Vec::new()) else { return };
         for step in STEPS {
-            let Some(color) = scale.get(&step.to_string()).and_then(Value::as_str) else {
-                continue;
-            };
+            let Some(color) = scale.get(&step.to_string()).and_then(Value::as_str) else { continue };
             let key = color.to_lowercase();
             if !overwrite && references.contains_key(&key) {
                 continue;
@@ -412,9 +402,7 @@ pub(crate) fn infer_hues(theme: &V1) -> Hues {
     let mut hues = Hues { by_hue: Vec::new(), by_token: Vec::new() };
     for token in ["accent", "success", "warning", "primary", "error", "info", "secondary"] {
         let color = theme.get(token);
-        let Some((name, distance)) = infer_hue(color) else {
-            continue;
-        };
+        let Some((name, distance)) = infer_hue(color) else { continue };
         let current = hues.by_hue.iter().find(|(hue, _, _)| *hue == name);
         if !current.is_some_and(|(_, _, current)| *current <= distance) {
             hues.set_hue(name, color, distance);
@@ -424,9 +412,7 @@ pub(crate) fn infer_hues(theme: &V1) -> Hues {
     // Accent and primary always own the hue they fall into.
     for token in ["accent", "primary"] {
         let color = theme.get(token);
-        let Some((name, distance)) = infer_hue(color) else {
-            continue;
-        };
+        let Some((name, distance)) = infer_hue(color) else { continue };
         hues.set_hue(name, color, distance);
         hues.set_token(token, name);
     }
