@@ -1,5 +1,6 @@
 //! The drive manifest, as `packages/simulation/src/manifest.ts` resolves it from `OPENCODE_DRIVE`.
 
+use opencode_util::path::Flavor;
 use serde::Deserialize;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -127,8 +128,9 @@ fn decode(contents: &str) -> Result<Manifest, String> {
     let recording = raw
         .recording
         .map(|recording| {
-            Path::new(&recording.timeline)
-                .is_absolute()
+            // Node's `isAbsolute`, which on Windows also takes a rooted path without a drive (`\t`, `/t`).
+            Flavor::NATIVE
+                .is_absolute(&recording.timeline)
                 .then(|| PathBuf::from(&recording.timeline))
                 .ok_or_else(|| "recording.timeline: expected an absolute path".to_owned())
         })
