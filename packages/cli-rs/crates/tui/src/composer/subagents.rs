@@ -1,20 +1,15 @@
 //! The Subagents tab (`routes/session/composer/subagents-tab.tsx`): the session's family under its root, running or
 //! not as the filter says, with the current session marked.
 
-use opencode_api::generated::{SessionID, SessionInfo, SessionInterruptInput};
+use opencode_api::generated::{SessionInfo, SessionInterruptInput};
 use opencode_store::SessionStatus;
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, TuiCommand};
-use opencode_ui::theme::Theme;
 use opentui::prelude::Container;
 use regex::Regex;
-use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::LazyLock;
 
 use super::{Inner, Label, RowState, Tab, clamp_offset, empty, row, window};
-use crate::app::Tui;
-use crate::routes::Route;
+
+use crate::prelude::*;
 
 static AGENT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"@([A-Za-z0-9_]+) subagent").expect("valid regex"));
 

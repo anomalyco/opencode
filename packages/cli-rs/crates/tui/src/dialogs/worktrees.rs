@@ -14,21 +14,15 @@ use opencode_api::generated::{
     WorktreeListInput, WorktreeRefreshInput, WorktreeRemoveInput,
 };
 use opencode_store::Location;
-use opencode_ui::bind;
-use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
+use opencode_ui::dialog::DIALOG_LIST_INSET;
 use opencode_ui::motion::Spinner;
 use opencode_ui::path::abbreviate_home;
-use opencode_ui::select::{self, ActionRun, Select, SelectAction, SelectOption, SelectProps, Truncate};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
+use opencode_ui::select::{ActionRun, Select, SelectAction, Truncate};
 
 use super::file_changes::{self, Choice};
 use super::session_list::dialog_theme;
-use crate::app::Tui;
 use crate::features::events::Handled;
-use crate::routes::Route;
+use crate::prelude::*;
 
 /// The dialog's key, so a rebuild only replaces this dialog.
 pub const KEY: &str = "worktrees";

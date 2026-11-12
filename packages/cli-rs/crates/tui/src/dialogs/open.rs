@@ -5,27 +5,20 @@
 //! list. `right` on a Git project lists its worktrees, where `ctrl+n` creates one.
 
 use opencode_api::generated::{
-    ProjectID, SessionGetInput, SessionID, SessionInfo, SessionListInput, SessionListInputOrder, WorktreeCreateInput,
+    ProjectID, SessionGetInput, SessionInfo, SessionListInput, SessionListInputOrder, WorktreeCreateInput,
     WorktreeListInput, WorktreeRefreshInput,
 };
-use opencode_ui::bind;
-use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
-use opencode_ui::keymap::TuiCommand;
+use opencode_ui::dialog::DIALOG_LIST_INSET;
 use opencode_ui::motion::Spinner;
 use opencode_ui::path::abbreviate_home;
 use opencode_ui::prompt::{Prompt, PromptProps, prompt};
-use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectOption, SelectProps};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
+use opencode_ui::select::{FooterHint, Gutter, Select};
 use std::collections::HashSet;
-use std::rc::{Rc, Weak};
 use unicode_width::UnicodeWidthStr;
 
 use super::session_list::{attention, basename, dialog_theme, now_ms, project_name, running, status_gutter, title};
-use crate::app::Tui;
 use crate::features::events::Handled;
-use crate::routes::Route;
+use crate::prelude::*;
 use crate::routes::session::form::quiet;
 
 /// `DialogOpenKey`.

@@ -4,24 +4,19 @@
 //!
 //! E.7b adds webfetch, websearch, subagent, execute, patch, todowrite, question, and skill.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent,
 };
-use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
-use opencode_ui::theme::Theme;
 use opencode_ui::tool_info::{canonical_tool_name, tool_display_content, tool_display_metadata};
-use opentui::prelude::*;
-use serde_json::{Map, Value};
+use serde_json::Map;
 use unicode_width::UnicodeWidthStr;
 
 use super::{
     edit, execute, generic, glob, grep, patch, question, read, shell, skill, subagent, todo, webfetch, websearch, write,
 };
 use crate::dialogs::open::truncate_file_path;
+use crate::prelude::*;
 use crate::routes::session::messages::images::{Images, tool_images};
 use crate::routes::session::messages::list::Context;
 use crate::routes::session::permission;

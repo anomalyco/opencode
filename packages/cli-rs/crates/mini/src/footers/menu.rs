@@ -1,11 +1,8 @@
 //! The footer menu of the panels (`footer.menu.tsx`): grouped rows with category headers, right-aligned footers in
 //! a tone, and a shaded background. The autocomplete's flat menu is [`crate::prompt::menu`].
 
-use opentui::prelude::*;
-use unicode_width::UnicodeWidthStr;
-
+use crate::prelude::*;
 use crate::prompt::menu::{COMPACT_WIDTH, Selection, fit};
-use crate::theme::FooterTheme;
 
 /// `footerTone`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

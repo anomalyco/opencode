@@ -1,16 +1,12 @@
 //! The Terminals tab (`routes/session/composer/terminals-tab.tsx`): the session's terminals and "+ New terminal";
 //! Enter shows the selected one in the right pane, or creates one. `terminal.select` opens the composer here.
 
-use std::rc::Rc;
-
-use opencode_api::generated::{PersistentPtyInfo, SessionID};
-use opencode_ui::bind;
-use opencode_ui::keymap::TuiCommand;
-use opencode_ui::theme::Theme;
+use opencode_api::generated::PersistentPtyInfo;
 use opentui::prelude::Container;
 
 use super::{Inner, Label, RowState, Tab, row};
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 #[derive(Default)]
 pub(super) struct State {

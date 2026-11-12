@@ -4,16 +4,10 @@
 //! `~N lines` for longer ones. Choosing one takes it out of the stash and hands it to the prompt;
 //! `stash.delete` (Ctrl+D) deletes on the second press.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
-use opencode_ui::bind;
-use opencode_ui::dialog::{DialogOptions, DialogSize};
-use opencode_ui::select::{self, Select, SelectAction, SelectOption, SelectProps};
+use opencode_ui::select::{Select, SelectAction};
 use opencode_util::time::Zone;
-use serde_json::Value;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// What choosing an entry does with it (`{prompt, timestamp}`).
 pub type OnSelect = Rc<dyn Fn(&Value)>;

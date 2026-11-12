@@ -22,13 +22,7 @@ pub mod parts;
 pub mod queue;
 pub mod status;
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-use std::time::Duration;
-
-use opencode_api::client::Client;
-use opencode_api::generated::{SessionInboxDelivery, SessionInboxItem, SessionInboxUser, V2Event};
-use opencode_local::cli_config::Info;
+use opencode_api::generated::{SessionInboxDelivery, SessionInboxItem, SessionInboxUser};
 use opencode_ui::dialog::{DialogKeymap, route_keys};
 use opencode_ui::keymap::{Keybinds, KeymapLayer, TuiCommand};
 use opencode_ui::prompt_input::editor::{Mention, normalize, realign_mentions};
@@ -38,15 +32,14 @@ use opencode_ui::prompt_input::{attach, replace};
 use opentui::input::KeyEvent;
 use opentui::keymap::{Condition, Disposer};
 use opentui::native::{ClipboardOutcome, EditorQuery};
-use opentui::prelude::*;
 use opentui::widget::{ExtmarkId, ExtmarkOptions};
-use serde_json::{Value, json};
 
 use self::complete::{Action, Catalog, Choice};
 use self::history::History;
 use self::menu::{MENU_ROWS, Menu, Selection};
 pub use self::parts::{Command, Delivery, File, Part, RunPrompt, is_exit};
-use crate::theme::RunTheme;
+
+use crate::prelude::*;
 
 /// `TEXTAREA_MIN_ROWS`.
 pub const MIN_ROWS: u16 = 1;

@@ -12,17 +12,10 @@
 //! [`cursor`] is the prompt's cursor shape.
 
 use opencode_local::cli_config::{CursorStyle, DiffWrap, Info, PromptPaste, Resolved};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::{Condition, Disposer};
 use opentui::native::{Control, MouseTracking};
-use serde_json::Value;
-use std::cell::Cell;
-use std::rc::Rc;
 
-use crate::app::Tui;
 use crate::dialogs::settings::{set_path, update};
+use crate::prelude::*;
 
 const DOCS: &str = "https://opencode.ai/docs";
 

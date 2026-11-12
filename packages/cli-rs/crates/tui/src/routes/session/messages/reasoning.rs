@@ -1,18 +1,14 @@
 //! Reasoning blocks (E.6a): `ReasoningPart` and `ReasoningHeader` (`message-parts.tsx:43-171`).
 //! With `session.thinking: hide` a block is one header line that a click opens and closes.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantReasoning};
-use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
-use opencode_ui::theme::Theme;
-use opentui::prelude::*;
 use opentui::widget::Markdown;
 
 use super::list::Context;
 use opencode_ui::locale::duration;
+
+use crate::prelude::*;
 
 pub struct Reasoning(Rc<Inner>);
 

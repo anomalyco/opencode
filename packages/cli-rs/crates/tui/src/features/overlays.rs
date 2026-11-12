@@ -12,15 +12,9 @@
 //! `app::mount` calls [`install`] once and [`connection_changed`] on every connection state.
 
 use opencode_api::events::{State, Status};
-use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::Weak;
-use std::time::Duration;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// `MigrationOverlay` starts polling after this, then polls at the same interval.
 const MIGRATION_POLL: Duration = Duration::from_millis(1000);

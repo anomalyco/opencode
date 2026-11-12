@@ -3,16 +3,15 @@
 //! palette slots, and a palette change later still reads well. `mini.mono` uses the terminal's default colors
 //! only.
 
-use std::path::PathBuf;
-
 use opencode_ui::theme::{
     Catalog, TerminalColors, Theme as UiTheme, ThemeMode, discover, generate_system, terminal_mode,
 };
-use opentui::prelude::*;
 use opentui::style::Intent;
 use opentui::syntax::SyntaxTheme;
 use opentui::term::TerminalPalette;
 use opentui::widget::MarkdownColors;
+
+use crate::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tone {

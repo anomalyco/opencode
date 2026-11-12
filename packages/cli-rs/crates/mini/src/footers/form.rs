@@ -1,19 +1,16 @@
 //! The form footer (`footer.form.tsx`, `form.shared.ts`): one field at a time, choices as numbered rows, typed
 //! answers in a field, and a review before the answers are sent.
 
-use std::collections::{HashMap, HashSet};
-
 use indexmap::IndexMap;
 use opencode_api::generated::{FormAnswer, FormField, FormInfo, FormValue};
 use opencode_ui::form::{
     custom, display_value, initial_values, key, label, rows, selected_row, set_multiselect_custom, textual,
     toggle_multiselect, validate,
 };
-use opentui::prelude::*;
-use unicode_width::UnicodeWidthStr;
 
 use super::scroll::Scroller;
-use crate::theme::FooterTheme;
+
+use crate::prelude::*;
 
 /// `FormBodyState`.
 #[derive(Clone, Debug, PartialEq)]

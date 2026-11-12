@@ -11,23 +11,16 @@
 //! A task on the runtime owns the socket and the polling; it posts what it reads to the UI thread, where
 //! [`Context`] keeps the state the prompt shows. Changing the directory replaces the task.
 
-use std::cell::RefCell;
 use std::path::{Path, PathBuf};
-use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use opencode_ui::bind;
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
 use serde::Deserialize;
-use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::Message as Frame;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 const MCP_PROTOCOL_VERSION: &str = "2025-11-25";
 /// How often a Zed terminal reads the database again (`scheduleZedPoll`).

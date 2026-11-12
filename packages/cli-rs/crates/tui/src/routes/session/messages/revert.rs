@@ -2,18 +2,11 @@
 //! transcript ends with how many messages were reverted, the files it changed back, and how to restore them; a click
 //! clears the revert.
 
-use opencode_api::generated::{
-    FileDiffInfo, FileDiffInfoStatus, SessionID, SessionMessageInfo, SessionRevertClearInput,
-};
-use opencode_ui::bind;
-use opencode_ui::theme::Theme;
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
+use opencode_api::generated::{FileDiffInfo, FileDiffInfoStatus, SessionRevertClearInput};
 use unicode_width::UnicodeWidthStr;
 
-use crate::app::Tui;
 use crate::dialogs::open::truncate_file_path;
+use crate::prelude::*;
 
 pub struct Banner(Rc<Inner>);
 

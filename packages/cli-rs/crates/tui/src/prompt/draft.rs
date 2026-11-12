@@ -2,11 +2,7 @@
 //! route changes (`component/prompt/draft-stash.ts`). Taking a draft removes it, so a stale copy
 //! never shadows newer input.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-
-use opencode_api::generated::SessionID;
-use serde_json::Value;
+use crate::prelude::*;
 
 /// A saved prompt and its cursor.
 #[derive(Clone, Debug)]

@@ -7,24 +7,18 @@
 //! load first, then each change under the file's lock, against what the file holds then, so entries
 //! another TUI stashed meanwhile stay.
 
-use std::cell::RefCell;
 use std::path::{Path, PathBuf};
-use std::rc::{Rc, Weak};
 
 use opencode_local::jsonl::{self, MAX_STASH_ENTRIES};
 use opencode_local::lock;
 use opencode_local::serial::Serial;
-use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opentui::keymap::Condition;
-use opentui::prelude::*;
-use serde_json::Value;
 use tokio::sync::oneshot;
 
 use super::autocomplete::parts;
 use super::editor::Inner;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// The app's stash: `{prompt, timestamp}` entries, oldest first. Without a state directory it lives in
 /// memory only.

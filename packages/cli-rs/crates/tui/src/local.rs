@@ -6,32 +6,25 @@
 //! (`prompt/index.tsx:1293`), and the session's `session.agent.selected` and `session.model.selected` settle the
 //! drafts that commit sent. `model.json` writes run in order on one worker thread, because its file lock blocks.
 
-use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
-use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef, ProviderInfo, SessionID,
-    SessionInfo, UsageLimitsInfo,
+    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef, ProviderInfo, SessionInfo,
+    UsageLimitsInfo,
 };
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
 use opencode_local::watch::Watch;
 use opencode_store::location::{Catalog, Location, LocationData};
-use opencode_store::{Changes, Data, Selected};
-use opencode_ui::bind;
+use opencode_store::{Data, Selected};
 use opencode_ui::dialog::Dialogs;
-use opencode_ui::toast::{ToastOptions, Toasts, Variant};
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
+use opencode_ui::toast::Toasts;
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 /// A model with its variant (`ModelSelection`).
 #[derive(Clone, Debug, PartialEq, Eq)]

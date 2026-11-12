@@ -4,20 +4,13 @@
 //! `mutatePending`, and `undoPending`, `:760-787`).
 
 use opencode_api::generated::{
-    SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput,
-    SessionInboxUser, SessionMessageID,
+    SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput, SessionInboxUser,
+    SessionMessageID,
 };
-use opencode_store::{Changes, State};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
+use opencode_store::State;
 use std::collections::HashSet;
-use std::rc::{Rc, Weak};
 
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::prompt::editor::{Inner as PromptInner, Mode};
 
 /// What a pending action does to an inbox item (`PendingAction`).

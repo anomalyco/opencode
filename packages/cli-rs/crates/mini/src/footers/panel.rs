@@ -2,12 +2,10 @@
 //! with a count and hints, a search field, and the footer menu, on a shaded block that ends in a half-block row.
 
 use opencode_ui::fuzzy;
-use opentui::prelude::*;
-use unicode_width::UnicodeWidthStr;
 
 use super::menu::{self, Groups, Item, Look};
+use crate::prelude::*;
 use crate::prompt::menu::{COMPACT_WIDTH, Selection, fit};
-use crate::theme::FooterTheme;
 
 /// `PANEL_LIST_ROWS`.
 pub const LIST_ROWS: usize = 10;

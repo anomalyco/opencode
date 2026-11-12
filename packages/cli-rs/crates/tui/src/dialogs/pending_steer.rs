@@ -2,14 +2,7 @@
 //! (`routes/session/index.tsx:2398-2414`). "Move to queue" queues it and "Delete" cancels it; the dialog closes once
 //! the server took the change.
 
-use std::rc::Rc;
-
-use opencode_api::generated::SessionID;
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::select::{self, SelectOption, SelectProps};
-
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::routes::session::queued::{self, Action};
 
 pub fn show(tui: &Tui, session: SessionID, message: String) {

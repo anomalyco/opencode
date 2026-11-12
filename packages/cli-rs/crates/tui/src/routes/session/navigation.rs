@@ -4,13 +4,12 @@
 
 use std::collections::HashSet;
 
-use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageInfo};
+use opencode_api::generated::SessionMessageAssistantContentItem;
 use opencode_store::{LoadMore, MessageExt};
-use opencode_ui::bind;
-use opentui::prelude::*;
 
 use super::scroll::{Inner, after_layout};
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// A message a jump can land on: its ID, its content y, and the scroll top that aligns it.
 #[derive(Clone, Debug, PartialEq)]

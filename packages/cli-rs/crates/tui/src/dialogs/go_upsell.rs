@@ -9,20 +9,10 @@ use opencode_api::generated::{
 };
 use opencode_local::model_pref::Model;
 use opencode_store::Catalog;
-use opencode_ui::bind;
-use opencode_ui::dialog::{
-    DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
-};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::Condition;
-use opentui::prelude::*;
-use serde_json::{Value, json};
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
+use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 
 use crate::local::Local;
+use crate::prelude::*;
 
 pub const GO_URL: &str = "https://opencode.ai/go";
 const ACTIONS: [&str; 3] = ["don't show again", "dismiss", "subscribe"];

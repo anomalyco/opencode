@@ -1,15 +1,10 @@
 //! Any other tool (E.7a): `GenericTool` (`routes/session/index.tsx:2734-2789`). One line with the
 //! tool's name and primitive inputs; a click lists every input and the output.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
-use opencode_ui::bind;
 use opencode_ui::tool_info::primitive_input_summary;
-use opentui::prelude::*;
-use serde_json::Value;
 
 use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 use opencode_ui::prompt_input::paste::strip_ansi;
 

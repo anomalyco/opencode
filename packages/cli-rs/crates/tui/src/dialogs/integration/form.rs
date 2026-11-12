@@ -4,24 +4,15 @@
 //! Each field replaces the dialog. Closing a field's dialog cancels the whole form; the next field's `replace`
 //! closes the previous one too, so each step resolves once and ignores the close that follows.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
 use opencode_api::generated::{
     FormAnswer, FormBooleanField, FormExternalField, FormField, FormMultiselectField, FormStringField, FormValue,
     FormWhen, FormWhenOp, FormWhenValue,
 };
-use opencode_ui::bind;
-use opencode_ui::dialog::{
-    DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
-};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 use opencode_ui::prompt::{PromptProps, prompt};
-use opencode_ui::select::{self, SelectOption, SelectProps};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
 
 use crate::local::Local;
+use crate::prelude::*;
 use crate::routes::session::form::{initial_values, label, rows, selected_row, toggle_multiselect, validate};
 
 type Done = Box<dyn FnOnce(Option<FormAnswer>)>;

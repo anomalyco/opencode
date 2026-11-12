@@ -2,20 +2,15 @@
 //! (`routes/session/index.tsx:1737-1895,2013-2071`), with `SessionTurn`'s measurements
 //! (`packages/util/src/session-turn.ts`).
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
 use opencode_api::generated::{
     ModelRef, SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantFinish,
-    SessionMessageInfo,
 };
-use opencode_ui::bind;
 use opencode_ui::locale::{duration, titlecase};
-use opencode_ui::theme::Theme;
-use opentui::prelude::*;
 
 use super::errors::StepError;
 use super::list::Context;
+
+use crate::prelude::*;
 
 /// The line under a finished step: agent, model, turn duration, tokens per second.
 pub struct Footer {

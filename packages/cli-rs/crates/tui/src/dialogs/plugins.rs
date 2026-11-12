@@ -14,19 +14,12 @@ use opencode_api::generated::{
 };
 use opencode_api::js::locale_compare;
 use opencode_plugin::{Source, Status};
-use opencode_ui::bind;
-use opencode_ui::dialog::{DialogOptions, DialogSize};
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::motion::Spinner;
-use opencode_ui::select::{ActionRun, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps, select};
-use opencode_ui::theme::Theme;
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
+use opencode_ui::select::{ActionRun, FooterHint, Group, Select, SelectAction, select};
 
 use super::error_details;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 pub const ID: &str = "opencode.plugins";
 

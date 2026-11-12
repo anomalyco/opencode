@@ -1,9 +1,8 @@
 //! The skill tool (E.7b): `Skill` (`routes/session/index.tsx:3698-3705`). One line with the skill's
 //! name.
 
-use opentui::prelude::*;
-
 use super::dispatch::{Inline, InlineTool, Props};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct Skill(InlineTool);

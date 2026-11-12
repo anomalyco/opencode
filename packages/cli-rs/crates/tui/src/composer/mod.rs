@@ -10,17 +10,7 @@ mod shell;
 mod subagents;
 mod terminals;
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
-use opencode_api::generated::SessionID;
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::theme::Theme;
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// The input mode the composer pushes while it is open.
 pub(crate) const MODE: &str = "composer";

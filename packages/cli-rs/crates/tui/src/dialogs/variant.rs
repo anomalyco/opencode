@@ -1,13 +1,7 @@
 //! Variant dialog (E.16): `component/dialog-variant.tsx`, "Select variant".
 
-use std::rc::Rc;
-
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::select::{self, SelectOption, SelectProps};
-use opentui::prelude::*;
-
 use crate::local::Local;
+use crate::prelude::*;
 
 pub fn show(local: &Rc<Local>) {
     local.dialogs.replace(

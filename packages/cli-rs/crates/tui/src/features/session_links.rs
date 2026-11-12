@@ -6,18 +6,11 @@
 //! The transcript's text parts, the compaction summary and the `/btw` answer use it, through [`attach`]; other
 //! plugins' Markdown does not, as in TS.
 
-use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
-use std::rc::{Rc, Weak};
+use std::collections::HashSet;
 
-use opencode_api::generated::SessionID;
-use opencode_store::Changes;
-use opencode_ui::bind;
-use opentui::prelude::*;
 use opentui::widget::{InlineContext, InlineSpan, Markdown};
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 /// A Markdown with session links. Its owner holds it; the TUI's [`Registry`] and the click handler hold it weakly.
 pub struct Links {

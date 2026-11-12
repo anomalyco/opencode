@@ -1,15 +1,12 @@
 //! Assistant parts (E.6a): text as Markdown (`TextPart`, `message-parts.tsx:173-200`). Tool rows
 //! are `tools::dispatch::Tool` (E.7a).
 
-use std::cell::Cell;
-use std::rc::Rc;
-
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantText};
-use opentui::prelude::*;
 use opentui::widget::Markdown;
 
 use super::list::Context;
 use crate::features::session_links::{self, Links};
+use crate::prelude::*;
 
 /// Assistant text: Markdown in a box padded 3 from the left, streaming until the message
 /// completes.

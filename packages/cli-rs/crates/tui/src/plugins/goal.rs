@@ -6,22 +6,17 @@
 //! events keep them current. A change that arrives while a read is in flight is newer than its reply, so each read and
 //! change takes a turn, and a reply of an older turn is dropped.
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::Rc;
-
 use opencode_api::client::Client;
-use opencode_api::generated::{
-    LocationQueryInput, RpcCallInput, RpcCallOutput, SessionCommandInput, SessionID, V2Event,
-};
+use opencode_api::generated::{LocationQueryInput, RpcCallInput, RpcCallOutput, SessionCommandInput, V2Event};
 use opencode_plugin::abi::{
     self, Action, Click, Command, Dialog, Host, Layout, Node, Panel, PanelAction, PanelBind, PanelSize, RequestId,
     Span, Toast, Variant, Wrap,
 };
 use serde::Deserialize;
-use serde_json::json;
 
 use super::fetch::fetch_of;
+
+use crate::prelude::*;
 
 const RPC: &str = "opencode.goal";
 const CHANGED: &str = "rpc.opencode.goal.changed";

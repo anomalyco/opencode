@@ -2,16 +2,13 @@
 //! completed `todowrite` call before the revert boundary. Above two items the header folds the list, and the
 //! folded header counts what remains. It is a plugin of the one API (O-67).
 
-use std::cell::RefCell;
-
-use opencode_api::generated::{
-    SessionMessageAssistantContentItem, SessionMessageAssistantToolState, SessionMessageInfo,
-};
+use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageAssistantToolState};
 use opencode_plugin::abi::{self, Changed, Click, Command, Layout, Node, Placement, Render, Span};
 use opencode_plugin::slot;
 use opencode_store::MessageExt;
 use opencode_ui::tool_info::{Todo, TodoStatus, parse_todos, todo_marker};
-use serde_json::{Value, json};
+
+use crate::prelude::*;
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.todo", setup }

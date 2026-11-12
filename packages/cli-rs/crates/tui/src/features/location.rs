@@ -6,16 +6,10 @@
 //! session's location, and every new connection reads it again. Opening a session also uploads the
 //! terminal's environment to it when the server is local (row G13, `app.tsx:529-539`).
 
-use std::cell::{Cell, RefCell};
-use std::time::Duration;
-
-use opencode_api::generated::SessionID;
 use opencode_store::location::Catalog;
 use opencode_store::{Error, Location};
-use opencode_ui::bind;
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 /// `retry`'s defaults: three attempts, 500 ms doubling.
 const ATTEMPTS: u32 = 3;

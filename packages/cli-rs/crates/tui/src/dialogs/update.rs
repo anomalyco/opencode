@@ -5,18 +5,11 @@
 //! `Update` to install or `Restart` after an install; the last one starts active. The arrows and Tab move between
 //! them and Enter runs the active one.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use opencode_ui::bind;
-use opencode_ui::dialog::{DialogButton, DialogButtons, DialogCx, DialogOptions, HeaderProps, header};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_ui::dialog::{DialogButton, DialogButtons, DialogCx};
 use opencode_ui::motion::Spinner;
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
 
-use crate::app::Tui;
 use crate::features::update_notification::{self as updates, UpdateState};
+use crate::prelude::*;
 
 /// What the dialog shows (`state()` of `DialogUpdate`).
 #[derive(Clone, Debug, PartialEq, Eq)]

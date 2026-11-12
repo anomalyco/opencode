@@ -7,19 +7,11 @@
 
 use opencode_api::generated::{LocationGetInput, LocationQueryInput, ProjectID, SessionInfo, WorktreeCreateInput};
 use opencode_store::Location;
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, TuiCommand};
 use opencode_ui::motion::Spinner;
-use opencode_ui::theme::Theme;
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
 
 use super::editor::Inner;
-use crate::app::Tui;
 use crate::dialogs::worktrees::{self, Selection};
+use crate::prelude::*;
 
 pub const COMMAND: &str = "session.move";
 

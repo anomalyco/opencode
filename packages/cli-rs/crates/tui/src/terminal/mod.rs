@@ -8,24 +8,17 @@
 pub mod palette;
 pub mod pane;
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
 use indexmap::IndexMap;
 use opencode_api::generated::{
-    ExperimentalPersistentPtyCreateInput, ExperimentalPersistentPtyListInput, PersistentPtyInfo, SessionID,
+    ExperimentalPersistentPtyCreateInput, ExperimentalPersistentPtyListInput, PersistentPtyInfo,
 };
 use opencode_api::pty::{Connector, Tungstenite};
 use opencode_local::serial::Serial;
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opentui::keymap::{Condition, Disposer};
-use serde_json::{Value, json};
 
-use crate::app::Tui;
 use crate::features::events::Handled;
+use crate::prelude::*;
 
 const SELECTION: &str = "session-terminal-selection";
 

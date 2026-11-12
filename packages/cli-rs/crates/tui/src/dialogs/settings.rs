@@ -6,23 +6,16 @@
 //! that every reader queries; writes and outside `cli.json` edits replace it, so everything follows a change
 //! without a restart.
 
-use std::cell::{Cell, Ref, RefCell};
+use std::cell::Ref;
 use std::collections::VecDeque;
-use std::rc::{Rc, Weak};
 
 use opencode_api::js::number_to_string;
 use opencode_local::cli_config::{CliConfig, Info, Permissions, Resolved, merge};
 use opencode_local::serial::Serial;
 use opencode_local::watch::Watch;
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::select::{Choice, Detail, SelectOption, SelectProps, select};
+use opencode_ui::select::{Choice, Detail, select};
 use opencode_ui::theme::ModeSetting;
-use opentui::keymap::Disposer;
-use serde_json::{Map, Value};
-
-use crate::app::Tui;
+use serde_json::Map;
 
 /// A setting value in the table.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -130,6 +123,8 @@ const fn number(
 }
 
 use Lit::Str as S;
+
+use crate::prelude::*;
 
 /// The TS `settings` table, in its order (`dialog-config.tsx:27-382`).
 pub const SETTINGS: &[Setting] = &[

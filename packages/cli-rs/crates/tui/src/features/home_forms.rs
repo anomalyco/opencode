@@ -2,13 +2,10 @@
 //! arrive without a session route, so home shows the first one of its location over the screen's bottom. The home
 //! prompt keeps its place but takes no keys meanwhile.
 
-use std::cell::RefCell;
-
+use opencode_store::Location;
 use opencode_store::forms::GLOBAL;
-use opencode_store::{Changes, Location};
-use opentui::prelude::*;
 
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::routes::session::form::{Host, quiet};
 
 pub struct HomeForms {

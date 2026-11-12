@@ -2,15 +2,12 @@
 //! its diff in a block (split above 120 columns unless `diffs.view` says otherwise); before that, the
 //! path or "Preparing edit…".
 
-use std::cell::RefCell;
-
 use opencode_local::cli_config::{DiffView as ConfigDiffView, DiffWrap};
-use opentui::prelude::*;
 use opentui::widget::DiffView;
-use serde_json::Value;
 
 use super::diagnostics;
 use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct Edit {

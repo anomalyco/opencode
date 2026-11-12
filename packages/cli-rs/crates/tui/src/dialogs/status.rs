@@ -1,19 +1,11 @@
 //! Status dialog (E.18b): `packages/tui/src/component/dialog-status.tsx`, `opencode.status` (`/status`,
 //! `<leader>s`). It lists the default location's MCP servers and follows the store while it is open.
 
-use std::cell::Cell;
-use std::rc::{Rc, Weak};
-
 use opencode_api::generated::{McpServer, McpServerStatus};
 use opencode_store::Catalog;
-use opencode_ui::bind;
-use opencode_ui::dialog::{DialogCx, DialogOptions, HeaderProps, header, layout};
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::theme::Theme;
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
+use opencode_ui::dialog::{DialogCx, layout};
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// Registers `opencode.status` ("View status", `/status`) as `app.tsx:1054-1061` does.
 pub fn install(tui: &Rc<Tui>) {

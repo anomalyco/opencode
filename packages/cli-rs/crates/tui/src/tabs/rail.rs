@@ -2,24 +2,17 @@
 //! `component/session-tabs-rail.tsx`). Two rows per tab (title, project and branch) with a gap row the edge
 //! pulses draw into; below 12 columns it is compact: one centered indicator per tab and a search control.
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::Weak;
-
-use opencode_api::generated::SessionID;
 use opencode_store::Location;
-use opencode_ui::bind;
 use opencode_ui::theme::tint;
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
-use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
 use super::model::{self, NEW_SESSION_TAB_TITLE, Tab};
 use super::pulse::{self, Pulse};
 use super::strip::{FADE_WIDTH, draw_chars, fade, feedback, indicator, paint_pulse, take_width};
 use super::{Status, Unread};
-use crate::app::Tui;
 use crate::frame::layout::SESSION_TABS_COMPACT_BREAKPOINT;
+use crate::prelude::*;
 
 pub struct Rail {
     tui: Weak<Tui>,

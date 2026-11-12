@@ -5,20 +5,15 @@
 //! family that this TUI shows: the routed session if it is in that family, else the family's root while it is open in
 //! a tab. The socket reconnects when the flag, the viewed location, or the server changes.
 
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use opencode_api::client::Auth;
 use opencode_api::client_mcp::{self, Connection, Connector, Options, Tool, ToolResult, Tungstenite};
-use opencode_api::generated::SessionID;
-use opencode_ui::bind;
-use serde_json::{Map, Value, json};
+use serde_json::Map;
 use tokio::sync::oneshot;
 
-use crate::app::Tui;
 use crate::features::events::Handled;
-use crate::routes::Route;
+use crate::prelude::*;
 
 const EXPERIMENT: &str = "client-mcp";
 

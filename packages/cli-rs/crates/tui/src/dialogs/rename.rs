@@ -1,15 +1,10 @@
 //! Rename dialog (E.10a, row DLG17): `packages/tui/src/component/dialog-session-rename.tsx`. E.11a
 //! wrote it for the session list's rename action; E.10a binds `session.rename` to it.
 
-use opencode_api::generated::{SessionID, SessionUpdateInput};
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
+use opencode_api::generated::SessionUpdateInput;
 use opencode_ui::prompt::{PromptProps, prompt};
-use opencode_ui::toast::{ToastOptions, Variant};
-use std::rc::Rc;
-use std::time::Duration;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// `DialogSessionRename.show`: replaces the open dialogs with the rename prompt.
 pub fn show(tui: &Tui, session: SessionID, title: Option<String>) {

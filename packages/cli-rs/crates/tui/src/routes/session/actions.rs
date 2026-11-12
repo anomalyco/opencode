@@ -2,30 +2,20 @@
 //! session (`routes/session/index.tsx:1053-1433`). The commands sit in TS's layers: every one in the global
 //! mode's command list, so the palette and slash completion see them, and their keys in the base mode.
 
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
 use opencode_api::client::Client;
 use opencode_api::generated::{
     ExperimentalSessionExportInput, ExperimentalSessionWaitInput, ModelRef, PromptAgentAttachment,
-    PromptFileAttachment, PromptFileSource, PromptMention, PromptSkillAttachment, ProviderID, SessionID,
-    SessionInboxCancelInput, SessionInboxInfo, SessionInfo, SessionInterruptInput, SessionMessageAssistantContentItem,
-    SessionMessageCompaction, SessionMessageInfo, SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput,
-    SessionUpdateInput,
+    PromptFileAttachment, PromptFileSource, PromptMention, PromptSkillAttachment, ProviderID, SessionInboxCancelInput,
+    SessionInboxInfo, SessionInfo, SessionInterruptInput, SessionMessageAssistantContentItem, SessionMessageCompaction,
+    SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput, SessionUpdateInput,
 };
 use opencode_store::{MessageExt, State};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::{Condition, Disposer};
-use serde_json::Value;
+use opencode_ui::keymap::Slash;
 
 use super::scroll;
-use crate::app::Tui;
 use crate::dialogs::{export, fork, rename, timeline};
+use crate::prelude::*;
 use crate::prompt::draft::Draft;
-use crate::routes::Route;
 
 /// The session view's action commands. Dropping it removes their layers.
 pub struct Actions(Rc<Inner>);

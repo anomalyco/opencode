@@ -12,21 +12,19 @@
 //! Pastes run one after another. A paste whose file or clipboard read finishes after the prompt changed
 //! (its text or mode, or the prompt went) is dropped, as in TS.
 
-use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
-use std::rc::Rc;
 
 use opencode_local::cli_config::PromptPaste;
-use opencode_ui::bind;
 use opencode_ui::prompt_input::paste::{Content, content, strip_ansi};
 use opentui::native::ClipboardOutcome;
-use opentui::prelude::*;
-use serde_json::{Map, Value, json};
+use serde_json::Map;
 
 use super::attach::{self, Resolved};
 use super::autocomplete::parse::{index_at, measure};
 use super::autocomplete::parts::{self, Kind};
 use super::editor::{Inner, Mode};
+
+use crate::prelude::*;
 
 /// Pastes waiting while one reads files or the clipboard.
 const MAX_QUEUED: usize = 16;
