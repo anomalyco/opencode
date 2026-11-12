@@ -16,7 +16,7 @@ fi
 export COPYFILE_DISABLE=1
 for target in darwin-arm64 darwin-x64 darwin-x64-baseline; do
   work=$(mktemp -d)
-  tar -xzf "$in/opencode-$target-$OPENCODE_VERSION.tgz" -C "$work"
+  python3 "$release_dir/extract-cli.py" "$in/opencode-$target-$OPENCODE_VERSION.tgz" "$work" "$target" "$OPENCODE_VERSION"
   bin="$work/package/bin/opencode"
   file -b "$bin" | grep -q '^Mach-O' || die "$target is not a Mach-O binary"
   chmod 755 "$bin"

@@ -8,7 +8,7 @@ mkdir -p "$work"
 if [ -d "$in/build-npm" ]; then
   for target in windows-arm64 windows-x64 windows-x64-baseline; do
     mkdir -p "$work/cli/$target"
-    tar -xzf "$in/build-npm/opencode-$target-$OPENCODE_VERSION.tgz" -C "$work/cli/$target"
+    python "$release_dir/extract-cli.py" "$in/build-npm/opencode-$target-$OPENCODE_VERSION.tgz" "$work/cli/$target" "$target" "$OPENCODE_VERSION"
     test -s "$work/cli/$target/package/bin/opencode.exe" || die "Missing opencode.exe for $target"
   done
 fi
