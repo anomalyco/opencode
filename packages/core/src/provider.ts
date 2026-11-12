@@ -258,9 +258,10 @@ export function encoding(settings: Readonly<Record<string, unknown>>) {
   return Option.getOrUndefined(decodeEncoding(settings.encoding))
 }
 
-/** Unix domain socket the provider's HTTP requests dial instead of the URL's host and port. */
+/** Unix domain socket the provider's HTTP requests dial instead of the URL's host and port. Empty paths are left for
+ * `unixSocketFetch` to reject, so a configured-but-empty socket never falls back to TCP. */
 export function socketPath(settings: Readonly<Record<string, unknown>>) {
-  return typeof settings.socketPath === "string" && settings.socketPath.length > 0 ? settings.socketPath : undefined
+  return typeof settings.socketPath === "string" ? settings.socketPath : undefined
 }
 
 export function mergeOverlay(

@@ -110,6 +110,15 @@ describe("Config.Entry", () => {
     })
   })
 
+  test("accepts a provider Unix socket path and rejects an empty one", () => {
+    expect(Schema.decodeUnknownSync(Provider.Settings)({ socketPath: "/run/llm.sock" })).toMatchObject({
+      socketPath: "/run/llm.sock",
+    })
+    expect(() => Schema.decodeUnknownSync(Config.Info)({ providers: { local: { settings: { socketPath: "" } } } })).toThrow(
+      "socketPath must not be empty",
+    )
+  })
+
   test("accepts disabled, fixed, and random web search selection", () => {
     const decode = Schema.decodeUnknownSync(Config.Info)
 
