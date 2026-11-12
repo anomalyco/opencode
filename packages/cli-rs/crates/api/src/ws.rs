@@ -5,18 +5,129 @@
 //! the persistent PTY, authenticates with a `ticket` query parameter that the caller first requests over
 //! HTTP with `x-opencode-ticket: 1`; other sockets send the `authorization` header in the handshake.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
+use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue};
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use url::Url;
 
 pub use tokio_tungstenite::tungstenite::{Error, Message};
 
-pub type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+pub type Stream = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+
+/// Messages a socket queue holds in each direction.
+pub const QUEUE: usize = 256;
+
+/// What a socket delivers. `Closed` and `Failed` end it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Incoming {
+    Text(String),
+    Binary(Vec<u8>),
+    Closed,
+    Failed(String),
+}
+
+/// An open socket as two bounded queues: frames out, [`Incoming`] in. Dropping `outgoing` closes it.
+pub struct Socket<T> {
+    pub outgoing: mpsc::Sender<T>,
+    pub incoming: mpsc::Receiver<Incoming>,
+}
+
+/// The far end of [`pair`], for fake servers in tests.
+pub struct Remote<T> {
+    pub sent: mpsc::Receiver<T>,
+    pub deliver: mpsc::Sender<Incoming>,
+}
+
+/// A connected socket and its far end, joined by queues.
+pub fn pair<T>() -> (Socket<T>, Remote<T>) {
+    let (outgoing, sent) = mpsc::channel(QUEUE);
+    let (deliver, incoming) = mpsc::channel(QUEUE);
+    (Socket { outgoing, incoming }, Remote { sent, deliver })
+}
+
+/// A frame a [`Socket`] sends: binary for the PTY, text for client MCP.
+pub trait Frame: Send + 'static {
+    fn message(self) -> Message;
+
+    /// The close frame sent once `outgoing` drops; `None` closes without one of its own.
+    fn close() -> Option<CloseFrame> {
+        None
+    }
+}
+
+impl Frame for Vec<u8> {
+    fn message(self) -> Message {
+        Message::binary(self)
+    }
+}
+
+impl Frame for String {
+    fn message(self) -> Message {
+        Message::text(self)
+    }
+
+    fn close() -> Option<CloseFrame> {
+        Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })
+    }
+}
+
+/// Opens sockets with tokio-tungstenite: [`open`] behind the PTY's and client MCP's connectors.
+pub struct Tungstenite;
+
+/// Opens the socket; two tasks move frames between it and the queues.
+pub async fn open<T: Frame>(url: Url, headers: Vec<(String, String)>) -> Result<Socket<T>, String> {
+    let socket = connect(&url, &headers).await.map_err(|error| error.to_string())?;
+    let (mut sink, mut stream) = socket.split();
+    let (socket, remote) = pair::<T>();
+    let (mut sent, deliver) = (remote.sent, remote.deliver);
+    let (written, writer) = oneshot::channel::<()>();
+    let reader = async move {
+        while let Some(message) = stream.next().await {
+            let incoming = match message {
+                Ok(Message::Text(text)) => Incoming::Text(text.as_str().to_owned()),
+                Ok(Message::Binary(data)) => Incoming::Binary(data.to_vec()),
+                Ok(Message::Close(_)) => break,
+                Ok(_) => continue,
+                Err(error) => {
+                    let _ = deliver.send(Incoming::Failed(error.to_string())).await;
+                    return;
+                }
+            };
+            if deliver.send(incoming).await.is_err() {
+                return;
+            }
+        }
+        let _ = deliver.send(Incoming::Closed).await;
+    };
+    tokio::spawn(read_until_closed(reader, writer));
+    tokio::spawn(async move {
+        let _written = written;
+        while let Some(frame) = sent.recv().await {
+            if sink.send(frame.message()).await.is_err() {
+                return;
+            }
+        }
+        let closing = async {
+            if let Some(close) = T::close() {
+                let _ = sink.send(Message::Close(Some(close))).await;
+            }
+            let _ = sink.close().await;
+        };
+        let _ = tokio::time::timeout(CLOSE_GRACE, closing).await;
+    });
+    Ok(socket)
+}
 
 /// The socket URL for `path` (relative, without a leading slash) under `base`: a path prefix and the
 /// query on `base` are kept, `query` pairs are set in order, and `http`/`https` become `ws`/`wss`.
@@ -59,7 +170,7 @@ pub fn ticket_url(base: &Url, path: &str, ticket: &str, query: &[(&str, &str)]) 
 }
 
 /// Opens a socket, sending `headers` (for example `authorization`) in the handshake.
-pub async fn connect(url: &Url, headers: &[(String, String)]) -> Result<Socket, Error> {
+pub async fn connect(url: &Url, headers: &[(String, String)]) -> Result<Stream, Error> {
     let mut request = url.as_str().into_client_request()?;
     for (name, value) in headers {
         let name = HeaderName::from_bytes(name.as_bytes()).map_err(|error| Error::HttpFormat(error.into()))?;
