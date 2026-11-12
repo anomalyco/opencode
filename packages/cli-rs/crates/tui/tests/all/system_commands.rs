@@ -45,6 +45,11 @@ fn mount(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
     )
 }
 
+/// Copy on select, which is the default outside Windows only (`app.tsx:586`).
+fn select() -> Info {
+    support::component_info(json!({ "terminal": { "copy": "select" } }))
+}
+
 /// The cell of the first `needle` on screen.
 fn find(app: &TestApp, needle: &str) -> (u16, u16) {
     let screen = wait_for(app, needle);
@@ -62,7 +67,7 @@ fn find(app: &TestApp, needle: &str) -> (u16, u16) {
 fn copy_on_select_copies_the_drag_and_ctrl_c_clears_it_then_exits() {
     let capture = testing::capture();
     let app = TestApp::new(100, 30);
-    let _tui = mount(&app, support::component_info(json!({})), None);
+    let _tui = mount(&app, select(), None);
     let (x, y) = find(&app, "/project");
     app.drag((x, y), (x + 7, y));
     wait_for(&app, "Copied to clipboard");
@@ -81,7 +86,7 @@ fn copy_on_select_copies_the_drag_and_ctrl_c_clears_it_then_exits() {
 fn a_drag_inside_a_dialog_copies_and_keeps_it_open() {
     let capture = testing::capture();
     let app = TestApp::new(100, 30);
-    let tui = mount(&app, support::component_info(json!({})), None);
+    let tui = mount(&app, select(), None);
     tui.keymap.dispatch("help.show", None);
     let (x, y) = find(&app, "Press ctrl+p");
     app.drag((x, y), (x + 11, y));
@@ -221,7 +226,7 @@ fn system_commands_run_from_their_keys_and_the_palette() {
 fn ctrl_y_in_the_console_copies_its_selection() {
     let capture = testing::capture();
     let app = TestApp::new(100, 30);
-    let tui = mount(&app, support::component_info(json!({})), None);
+    let tui = mount(&app, select(), None);
     app.app().console().log(opentui::console::LogLevel::Info, "hello from the console");
     tui.keymap.dispatch("app.console", None);
     assert!(app.app().console().is_visible());
