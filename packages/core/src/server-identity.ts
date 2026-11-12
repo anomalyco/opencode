@@ -2,9 +2,9 @@ export * as ServerIdentity from "./server-identity.js"
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto"
 import { and, eq } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Schema } from "effect"
 
-import { NonNegativeInt } from "@opencode/schema/schema"
+import { NonNegativeInt, optional } from "@opencode/schema/schema"
 import { ServerIdentity } from "@opencode/schema/server-identity"
 
 import { Database } from "./database/database.js"
@@ -41,14 +41,14 @@ export class User extends Schema.Class<User>("ServerIdentity.User")({
   id: UserID,
   method: Method,
   username: Schema.String,
-  displayName: Schema.optionalKey(Schema.String),
-  email: Schema.optionalKey(Schema.String),
+  displayName: optional(Schema.String),
+  email: optional(Schema.String),
   status: UserStatus,
 }) {}
 
 export class Session extends Schema.Class<Session>("ServerIdentity.Session")({
   id: SessionID,
-  userID: Schema.optionalKey(UserID),
+  userID: optional(UserID),
   method: SessionMethod,
   // Unix seconds.
   expiresAt: NonNegativeInt,
@@ -168,6 +168,9 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const kv = yield* KV.Service
+    // The layer captures the caller's clock once: expiry, lockouts and revocations all read it, so tests
+    // control time through their own provided Clock and the server reads wall time.
+    const clock = yield* Clock.Clock
     let cachedSecret: string | undefined
     const secret = Effect.fn("ServerIdentity.secret")(function* () {
       if (cachedSecret) return cachedSecret
@@ -249,7 +252,7 @@ const layer = Layer.effect(
         return toUser(inserted)
       }),
       authenticate: Effect.fn("ServerIdentity.authenticate")(function* (input) {
-        const now = Date.now()
+        const now = clock.currentTimeMillisUnsafe()
         const attempt = lockedFor(input.username, now)
         if (attempt)
           yield* new AttemptLockedError({
@@ -263,7 +266,7 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
         const invalid = Effect.suspend(() => {
-          punish(input.username, Date.now())
+          punish(input.username, now)
           return new InvalidCredentialsError({})
         })
         const storedHash = row?.password_hash
@@ -295,13 +298,15 @@ const layer = Layer.effect(
         return { token: signToken(signingSecret, id), session: toSession(inserted) }
       }),
       verify: Effect.fn("ServerIdentity.verify")(function* (token) {
+        const now = clock.currentTimeMillisUnsafe()
         const signingSecret = yield* secret()
         const id = tokenIdentity(token, signingSecret)
         if (!id) return
         const row = yield* db.select().from(ServerSessionTable).where(eq(ServerSessionTable.id, id)).get().pipe(
           Effect.orDie,
         )
-        if (!row || row.revoked_at !== null || row.expires_at * 1000 <= Date.now()) return
+        // A disabled user's sessions stop verifying: the row lookup happens first, but the status check below invalidates them.
+        if (!row || row.revoked_at !== null || row.expires_at * 1000 <= now) return
         const user = row.user_id
           ? yield* db.select().from(ServerUserTable).where(eq(ServerUserTable.id, row.user_id)).get().pipe(
                 Effect.orDie,
@@ -311,9 +316,10 @@ const layer = Layer.effect(
         return { session: toSession(row), user: user ? toUser(user) : undefined }
       }),
       revoke: Effect.fn("ServerIdentity.revoke")(function* (id) {
+        const now = clock.currentTimeMillisUnsafe()
         yield* db
           .update(ServerSessionTable)
-          .set({ revoked_at: Math.floor(Date.now() / 1000) })
+          .set({ revoked_at: Math.floor(now / 1000) })
           .where(eq(ServerSessionTable.id, id))
           .run()
           .pipe(Effect.orDie)
