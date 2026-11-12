@@ -146,12 +146,12 @@ describe("wait reads the condition from the keys models write", () => {
     // 190: timeoutMs without condition, up to 180 s.
     [{ text: "Done", timeoutMs: 250 }, desktop("text", 250, "Done")],
     [{ text: "Done", timeoutMs: 180_000 }, desktop("text", 30_000, "Done")],
-    // 33: text alone; 27: load state alone; 12: no keys; 13: timeout alone.
+    // 33: text alone; 27: load state alone; 4: no keys.
     [{ text: "Done" }, desktop("text", 10_000, "Done")],
     [{ state: "load" }, desktop("load", 10_000)],
     [{ state: "networkidle" }, desktop("load", 10_000)],
+    [{ state: "load", timeout: 5_000 }, desktop("load", 5_000)],
     [{}, desktop("load", 10_000)],
-    [{ timeout: 5_000 }, desktop("load", 5_000)],
     // Playwright MCP's textGone.
     [{ textGone: "Loading" }, desktop("textGone", 10_000, "Loading")],
     // Shapes that worked before keep their meaning.
@@ -191,6 +191,14 @@ describe("wait reads the condition from the keys models write", () => {
     expect(plan({ delayMs: 500 })).toEqual({ kind: "delay", timeoutMs: 500 })
     expect(plan({ delayMs: 90_000 })).toEqual({ kind: "delay", timeoutMs: 30_000 })
     expect(plan({ condition: "delay", timeout: 2_000 })).toEqual({ kind: "delay", timeoutMs: 2_000 })
+  })
+
+  test("a lone timeout pauses for it, up to the maximum", () => {
+    // 21 calls { timeout } or { timeoutMs } with no condition: attempted pauses. A load wait on a loaded page returns
+    // at once.
+    expect(plan({ timeout: 5_000 })).toEqual({ kind: "delay", timeoutMs: 5_000 })
+    expect(plan({ timeoutMs: 1_500 })).toEqual({ kind: "delay", timeoutMs: 1_500 })
+    expect(plan({ timeout: 120_000 })).toEqual({ kind: "delay", timeoutMs: 30_000 })
   })
 
   test("an ambiguous or incomplete wait fails with one corrective example", () => {

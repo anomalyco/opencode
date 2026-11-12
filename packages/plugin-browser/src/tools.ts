@@ -30,10 +30,23 @@ export const register = Effect.fn("BrowserTools.register")(function* (
             : Effect.fail(new Tool.Error({ message: "Browser tab is unavailable. Call browser.tabs.list({})." })),
         ),
       )
+    const waited =
+      plan.kind === "desktop"
+        ? plan.action.condition
+        : plan.kind === "delay"
+          ? "pause"
+          : plan.kind === "url"
+            ? "url"
+            : plan.gone
+              ? "elementGone"
+              : "element"
     const finish = (tab: Browser.Tab, met: boolean, observed?: string) =>
       Clock.currentTimeMillis.pipe(
         Effect.flatMap((now) =>
-          exportResult({ ...tab, met, elapsedMs: now - started, ...(observed === undefined ? {} : { observed }) }, []),
+          exportResult(
+            { ...tab, met, waited, elapsedMs: now - started, ...(observed === undefined ? {} : { observed }) },
+            [],
+          ),
         ),
       )
     const deadline = started + plan.timeoutMs
@@ -280,7 +293,8 @@ export type WaitPlan = { readonly timeoutMs: number } & (
 
 /**
  * What a wait call asks for. Models write Playwright-style keys (text with timeout, state, selector, url, time, ms), so
- * the condition is read from whichever one is present; a call with none waits for loading.
+ * the condition is read from whichever one is present. A call with only a duration pauses; one with nothing waits for
+ * loading.
  */
 export function waitPlan(input: WaitInput): WaitPlan {
   const timeoutMs = Math.min(Browser.MAX_WAIT_MS, Math.round(input.timeoutMs ?? input.timeout ?? 10_000))
@@ -316,7 +330,8 @@ export function waitPlan(input: WaitInput): WaitPlan {
             : "element"
           : input.url !== undefined
             ? "url"
-            : pause !== undefined
+            : // A lone timeout is an attempted pause: a load wait on a loaded page would return at once.
+              pause !== undefined || (input.state === undefined && (input.timeoutMs ?? input.timeout) !== undefined)
               ? "delay"
               : "load")
   const frame = input.frameID === undefined ? {} : { frameID: input.frameID }

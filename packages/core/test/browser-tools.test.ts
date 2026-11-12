@@ -155,14 +155,22 @@ it.live("wait infers its condition and reports an unmet one as met: false", () =
           : success(tab),
     )
     // The most common failing shape: text with timeout, no condition.
-    expect(JSON.parse(yield* browser.run(waited(`text: "Done", timeout: 1000`)))).toMatchObject({ ...tab, met: true })
+    expect(JSON.parse(yield* browser.run(waited(`text: "Done", timeout: 1000`)))).toMatchObject({
+      ...tab,
+      met: true,
+      waited: "text",
+    })
     expect(JSON.parse(yield* browser.run(waited(`text: "Never", timeout: 60000`)))).toMatchObject({
       ...tab,
       met: false,
+      waited: "text",
       observed: 'Text "Never" did not appear within 30000 ms.',
     })
-    expect(JSON.parse(yield* browser.run(waited(`text: "Spinner", state: "hidden"`)))).toMatchObject({ met: true })
-    expect(JSON.parse(yield* browser.run(waited(`state: "load"`)))).toMatchObject({ met: true })
+    expect(JSON.parse(yield* browser.run(waited(`text: "Spinner", state: "hidden"`)))).toMatchObject({
+      met: true,
+      waited: "textGone",
+    })
+    expect(JSON.parse(yield* browser.run(waited(`state: "load"`)))).toMatchObject({ met: true, waited: "load" })
     expect(browser.commands).toEqual([
       { type: "wait", tabID, condition: "text", text: "Done", timeoutMs: 1000 },
       { type: "wait", tabID, condition: "text", text: "Never", timeoutMs: 30000 },
@@ -194,11 +202,24 @@ it.live("wait pauses, and polls for an element or an address", () =>
       seen.checks++
       return evaluated(seen.checks < 2 ? { count: 0, visible: 0 } : { count: 1, visible: 1 })
     })
-    expect(JSON.parse(yield* browser.run(waited(`delayMs: 20`)))).toMatchObject({ ...tab, met: true })
-    expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true })
+    expect(JSON.parse(yield* browser.run(waited(`delayMs: 20`)))).toMatchObject({ ...tab, met: true, waited: "pause" })
+    expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true, waited: "pause" })
+    // A lone timeout is a pause for that long, not a load wait that returns at once on a loaded page.
+    const paused = JSON.parse(yield* browser.run(waited(`timeout: 50`)))
+    expect(paused).toMatchObject({ met: true, waited: "pause" })
+    expect(paused.elapsedMs).toBeGreaterThanOrEqual(45)
     expect(browser.commands).toEqual([])
+    expect(JSON.parse(yield* browser.run(`return await tools.browser.wait({ tabID: "${tabID}" })`))).toMatchObject({
+      met: true,
+      waited: "load",
+    })
+    expect(browser.commands).toEqual([{ type: "wait", tabID, condition: "load", timeoutMs: 10000 }])
+    browser.commands.length = 0
 
-    expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", timeout: 5000`)))).toMatchObject({ met: true })
+    expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", timeout: 5000`)))).toMatchObject({
+      met: true,
+      waited: "element",
+    })
     expect(browser.commands).toHaveLength(2)
     expect(browser.commands[0]).toMatchObject({ type: "evaluate", tabID })
     expect(JSON.parse(yield* browser.run(waited(`selector: "#ready", state: "hidden", timeout: 150`)))).toMatchObject({

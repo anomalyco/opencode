@@ -152,6 +152,9 @@ const recording = Schema.Struct({ ...page, recording: Schema.Boolean })
 export const Waited = Schema.Struct({
   ...Tab.fields,
   met: Schema.Boolean.annotate({ description: "False when the condition did not hold before the timeout." }),
+  waited: Schema.Literals(["load", "text", "textGone", "element", "elementGone", "url", "pause"]).annotate({
+    description: "What the call waited for; pause means it slept for elapsedMs.",
+  }),
   elapsedMs: count,
   observed: optional(text.annotate({ description: "What the page showed when an unmet wait ended." })),
 }).annotate({ identifier: "Browser.Waited" })
@@ -351,7 +354,7 @@ export const Operations = [
   ),
   operation(
     "wait",
-    'Wait until a condition holds in this tab, or pause. Pass one of: text (visible text appears), textGone, selector or ref (a matching element is visible; with state: "hidden", until none is), url (a substring or * glob of the address), delayMs (a plain pause; Code Mode has no timers), or nothing (the page finishes loading). For example wait({ tabID, text: "Saved", timeout: 5000 }). A timeout is a result, not an error: it returns met: false with what the page showed. timeoutMs defaults to 10000; values above 30000 count as 30000.',
+    'Wait until a condition holds in this tab, or pause. Pass one of: text (visible text appears), textGone, selector or ref (a matching element is visible; with state: "hidden", until none is), url (a substring or * glob of the address), delayMs (a plain pause; Code Mode has no timers; time up to 60 counts as seconds, larger as milliseconds), or nothing (the page finishes loading). Only a timeout or timeoutMs, with no condition, pauses that long. For example wait({ tabID, text: "Saved", timeout: 5000 }). A timeout is a result, not an error: it returns met: false with what the page showed; waited says what the call waited for. timeoutMs defaults to 10000; values above 30000 count as 30000.',
     { ...tab, ...frame, condition: Schema.Literals(["load", "text", "textGone"]), text: optional(short), timeoutMs },
     Waited,
     {
@@ -384,7 +387,9 @@ export const Operations = [
         short.annotate({ description: "Wait until the tab's address contains this text or matches this * glob." }),
       ),
       delayMs: optional(waitMs.annotate({ description: "Pause this many milliseconds, then return met: true." })),
-      time: optional(waitMs.annotate({ description: "Same as delayMs. Values up to 60 count as seconds." })),
+      time: optional(
+        waitMs.annotate({ description: "Same as delayMs. Values up to 60 count as seconds, larger as milliseconds." }),
+      ),
       ms: optional(waitMs.annotate({ description: "Same as delayMs." })),
       timeoutMs: optional(waitMs.annotate({ description: "Default 10000. Values above 30000 count as 30000." })),
       timeout: optional(waitMs.annotate({ description: "Same as timeoutMs." })),
