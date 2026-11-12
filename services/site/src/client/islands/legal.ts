@@ -2,7 +2,7 @@ import { inHistory, pinnedScroll, revealTab } from "~/component/site/legal-tabs"
 import { checkPath, copyPath } from "~/component/site/icon-paths"
 import { copySelection } from "~/lib/clipboard"
 import { strip } from "~/lib/language"
-import { refreshContents } from "../contents"
+import { refreshContents } from "~/component/site/contents-spy"
 import { $, $$, on, target } from "../dom"
 
 /**
@@ -157,12 +157,9 @@ function print() {
     void document.fonts.ready.then(() => setTimeout(() => window.print(), 800))
 }
 
-// The Privacy Policy's analytics control (analytics-choice.tsx) shows in the browser only: rendered
+// The Privacy Policy's analytics control (analytics-choice.ts) shows in the browser only: rendered
 // into its host once the page is idle, as the hydrated page does after it loads.
 function analytics() {
   const host = $('[data-slot="analytics-choice-host"]')
-  if (!host) return
-  void Promise.all([import("solid-js/web"), import("~/component/site/analytics-choice")]).then(([web, choice]) =>
-    web.render(() => web.createComponent(choice.AnalyticsChoice, {}), host),
-  )
+  if (host) void import("~/component/site/analytics-choice").then((module) => module.analyticsChoice(host))
 }

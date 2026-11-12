@@ -9,6 +9,13 @@ export const mediaBase = "/files/site/2026-11"
 /** File types that live in the files bucket rather than in the Worker's static assets. */
 export const mediaFile = /\.(mp4|webm|mov|mp3|wav|ogg|m4a|zip|glb|gltf)$/i
 
+/**
+ * Whether a file under public/ (its path from there) goes to the files bucket. The link-card videos
+ * script/og.ts writes to og/ (og:video, under 100 kB each) are the exception: they ship as static
+ * assets with the cards that name them.
+ */
+export const inBucket = (file: string) => mediaFile.test(file) && !/^og[\\/]/.test(file)
+
 /** The files-bucket URL for a media site path, for example `mediaUrl("/arcade3d/cabinet.glb")`. Other paths pass through. */
 export function mediaUrl(path: string) {
   if (!path.startsWith("/") || path.startsWith(mediaBase) || !mediaFile.test(path.split(/[?#]/)[0])) return path

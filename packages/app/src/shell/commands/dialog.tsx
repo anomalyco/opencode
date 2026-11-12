@@ -1,5 +1,6 @@
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { FileIcon } from "@opencode/ui/file-icon"
+import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody } from "@opencode/ui/dialog"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -69,6 +70,7 @@ export function CommandPaletteView(props: {
   close: () => void
   /** The row whose selection is still in progress, such as an archived session being restored. */
   busyEntryID?: string
+  unhide?: (entry: CommandPaletteEntry) => (() => void) | undefined
 }) {
   const language = useLanguage()
   const tabs = useTabs()
@@ -110,15 +112,30 @@ export function CommandPaletteView(props: {
           onSelect={props.select}
           onClose={props.close}
         >
-          {(item, row) => (
-            <PaletteRow
-              row={row}
-              item={item()}
-              language={language}
-              sessionOpen={sessionOpen(item())}
-              busy={props.busyEntryID === item().id}
-            />
-          )}
+          {(item, row) => {
+            const entry = () => (
+              <PaletteRow
+                row={row}
+                item={item()}
+                language={language}
+                sessionOpen={sessionOpen(item())}
+                busy={props.busyEntryID === item().id}
+              />
+            )
+
+            return (
+              <Show when={props.unhide?.(item())} fallback={entry()}>
+                {(unhide) => (
+                  <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+                    {entry()}
+                    <Button size="small" variant="ghost-muted" onClick={() => unhide()()}>
+                      {language.t("sidebar.recent.unhide")}
+                    </Button>
+                  </div>
+                )}
+              </Show>
+            )
+          }}
         </SearchList>
       </DialogBody>
     </Dialog>

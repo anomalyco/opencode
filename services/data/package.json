@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/data",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run --cwd ../../packages/data/app dev",
+    "build:dev": "bun script/build.ts --mode dev",
+    "build:production": "bun script/build.ts --mode production",
+    "deploy:dev": "bun script/deploy.ts --mode dev",
+    "deploy:production": "bun script/deploy.ts --mode production",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/build-output-utils": "0.8.5",
+    "@cloudflare/config": "0.23.0",
+    "@opencode/data-app": "workspace:*",
+    "@opencode/data-server": "workspace:*",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:",
+    "cf": "1.0.0-beta.12",
+    "typescript": "catalog:"
+  }
+}

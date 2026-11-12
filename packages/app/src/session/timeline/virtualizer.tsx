@@ -100,6 +100,8 @@ type Input = {
   active?: Accessor<boolean>
   sessionKey: Accessor<string>
   presentationKey?: Accessor<string>
+  /** Whether what the user opened or closed survives a change of detail setting, as in the New timeline. */
+  keepsDisclosure?: boolean
   projection: Projection
   showHeader: Accessor<boolean>
   /** Whether the timeline follows the newest content. Drives every anchoring decision. */
@@ -120,7 +122,6 @@ type Input = {
     disclosure: Readonly<Record<string, boolean | undefined>>,
   ) => boolean
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
-  setRevealPart?: (fn: (target: string) => boolean) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
@@ -166,14 +167,19 @@ export function createTimelineVirtualizer(input: Input) {
   const [visibleArea, setVisibleArea] = createSignal<HTMLDivElement>()
   const [viewRoot, setViewRoot] = createSignal<HTMLDivElement>()
   const bottomInset = () => input.bottomInset?.() ?? 0
-  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(cached?.toolOpen ?? {})
+
+  const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>(
+    (input.keepsDisclosure ? entry : cached)?.toolOpen ?? {},
+  )
+
   const patchGroupKeys = cached?.patchGroupKeys ?? new Map<string, string>()
   createEffect(
     on(
       () => input.presentationKey?.(),
       () => {
         patchGroupKeys.clear()
-        setToolOpen(reconcile({}))
+
+        if (!input.keepsDisclosure) setToolOpen(reconcile({}))
       },
       { defer: true },
     ),
@@ -637,7 +643,6 @@ export function createTimelineVirtualizer(input: Input) {
       reportOffset?.(root.scrollTop, false)
       dispatchCold(CHECK_REQUESTED)
     })
-    input.setRevealPart?.(revealPart)
     input.setRevealMessage?.((id, partID) => {
       if (!active()) return
 
@@ -1235,7 +1240,6 @@ export function createTimelineVirtualizer(input: Input) {
     if (active()) {
       input.setScrollRef(undefined)
       input.setRevealMessage?.(() => {})
-      input.setRevealPart?.(() => false)
       input.setScrollToEnd?.(() => {})
       input.setPage?.(() => {})
     }

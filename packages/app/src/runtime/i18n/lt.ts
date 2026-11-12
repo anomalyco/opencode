@@ -352,7 +352,6 @@ export const dict = {
   "session.new.project.search": "Ieškoti projektų",
   "session.new.project.add": "Pridėti projektą",
   "session.new.workspace.runIn": "Vykdykite sesiją",
-  "session.new.workspace.triggerLocal": "Vietinis",
   "session.new.workspace.local": "Vietinė saugykla",
   "session.new.git.none": "Nėra Git",
   "session.header.open.finder": "Finder",

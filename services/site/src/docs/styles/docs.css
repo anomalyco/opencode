@@ -759,3 +759,227 @@
     padding-inline: 0;
   }
 }
+
+/* ───────────── V1 notice in the logo row ─────────────
+   The V1 docs' notice is the solid dark bar ("inverted", docs-version-notice.css) in the logo row,
+   centred on the logo and as wide as the article column. A narrow column shortens the sentence with
+   "…" and keeps the link at its end. In the dark theme it stays dark: a raised dark bar with a
+   hairline, so it stands off the page. Behind it the logo row is the page's colour down to the bar's
+   bottom edge, so the article, the docs nav and the Contents rail pass under it and end there. Phones
+   have it on the screen's bottom edge instead (below). */
+[data-site] [data-component="docs-version-notice"][data-placement="header"] {
+  /* The link's grey: 6.6:1 on the light theme's bar, 6.1:1 on the dark theme's. */
+  --notice-muted: hsl(0, 0%, 64%);
+  --notice-text: light-dark(var(--text-inverted), var(--text-strong));
+  position: fixed;
+  z-index: 7;
+  top: calc(var(--banner-offset, 0px) + var(--top) + var(--logo-height) / 2);
+  height: var(--v1-notice-height);
+  /* The article column's edges. A long translated label ("DOKUMENTACJA V1") can end past the
+     article's start; the notice then starts after its chevron. Browsers without anchor positioning
+     keep the article's start and end before the GitHub mark. */
+  inset-inline-start: calc(var(--page-offset) + var(--sidebar-width) + var(--gutter));
+  inset-inline-end: calc(
+    var(--page-offset) + var(--github-right) + (var(--github-size) + var(--github-mark, 20px)) / 2 + 24px
+  );
+  inset-inline-start: max(
+    anchor(--docs-article start, calc(var(--page-offset) + var(--sidebar-width) + var(--gutter))),
+    calc(anchor(--docs-lockup-toggle end, 0px) + 12px)
+  );
+  inset-inline-end: anchor(
+    --docs-article end,
+    calc(var(--page-offset) + var(--github-right) + (var(--github-size) + var(--github-mark, 20px)) / 2 + 24px)
+  );
+  translate: 0 -50%;
+  margin: 0;
+  white-space: nowrap;
+  background: light-dark(var(--bg-strong), hsl(0, 0%, 13%));
+  box-shadow: inset 0 0 0 1px light-dark(transparent, var(--border-strong));
+  border-color: transparent;
+  color: var(--notice-text);
+
+  &::before,
+  &::after {
+    content: none;
+  }
+
+  p {
+    flex: 1;
+    display: flex;
+    min-width: 0;
+    gap: 0.5em;
+    white-space: nowrap;
+  }
+
+  [data-slot="sentence"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  a {
+    position: relative;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--notice-muted);
+    text-decoration: none;
+    transition: color 100ms ease-out;
+
+    /* 44px tall to tap, on the bar's 32px. */
+    &::after {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      top: 50%;
+      height: 44px;
+      translate: 0 -50%;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 2px;
+    }
+
+    &:is(:hover, :focus-visible) {
+      color: var(--notice-text);
+      transition-duration: 0ms;
+    }
+  }
+
+  [data-slot="badge"] {
+    background: none;
+    color: inherit;
+    border-inline-end-color: light-dark(
+      color-mix(in srgb, var(--text-inverted) 22%, transparent),
+      var(--border-strong)
+    );
+  }
+
+  [data-slot="short"] {
+    display: none;
+  }
+}
+
+/* The link's chevron, after its text toward the reading direction, nudged 2px on hover. */
+[data-site] [data-slot="link-chevron"] {
+  flex: none;
+  transition: translate 150ms var(--ease-out);
+
+  :is(a:hover, a:focus-visible) > & {
+    translate: 2px 0;
+  }
+
+  [dir="rtl"] & {
+    scale: -1 1;
+  }
+
+  [dir="rtl"] :is(a:hover, a:focus-visible) > & {
+    translate: -2px 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+@media (min-width: 60.0625rem) {
+  /* A heading reached from Contents or a link lands below the logo row's band. */
+  [data-site] [data-slot="frame"]:has(> [data-placement="header"]) [data-component="docs-article"] [id] {
+    scroll-margin-top: calc(var(--v1-notice-bottom) + 1.5rem);
+  }
+
+  [data-site] [data-slot="frame"]:has(> [data-placement="header"]) > [data-component="content"]::before {
+    content: "";
+    position: fixed;
+    /* Under the sidebar (2), whose logo strip covers its own nav, and over the article. */
+    z-index: 1;
+    top: 0;
+    inset-inline: 0;
+    height: var(--v1-notice-bottom);
+    background: var(--bg);
+    pointer-events: none;
+  }
+}
+
+[data-site] [data-component="sidebar"] [data-component="docs-lockup"] :is([data-slot="toggle"], [data-slot="trigger"]) {
+  anchor-name: --docs-lockup-toggle;
+}
+
+[data-site] [data-slot="frame"] {
+  --v1-notice-height: 2rem;
+  /* The bar's bottom edge, where the logo row's band ends. */
+  --v1-notice-bottom: calc(
+    var(--banner-offset, 0px) + var(--top) + var(--logo-height) / 2 + var(--v1-notice-height) / 2
+  );
+
+  &:has(> [data-placement="header"]) [data-component="docs-article"] {
+    anchor-name: --docs-article;
+  }
+}
+
+/* Phones: one line on the screen's bottom edge, "V1 docs" and the link, in the same dark, running
+   under the home indicator to the very edge. iOS Safari tints its bottom toolbar from what touches the
+   bottom edge, and the page behind the site (html) takes the dark too, so the bottom of the screen is
+   one dark area; the top still takes the top bar's page colour. The page ends above the bar, so the
+   footer stays reachable. Open menus and sheets sit over it. */
+@media (max-width: 60rem) {
+  html:has([data-component="docs-version-notice"][data-placement="header"]) {
+    background: light-dark(hsl(0, 0%, 8%), hsl(0, 0%, 13%));
+  }
+
+  [data-site]:has([data-component="docs-version-notice"][data-placement="header"]) {
+    padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  [data-site][data-page="docs"] [data-component="docs-version-notice"][data-placement="header"] {
+    position: fixed;
+    inset: auto 0 0;
+    margin: 0;
+    z-index: 5;
+    height: auto;
+    translate: none;
+    align-items: center;
+    padding: 0 calc(var(--edge) + env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px)
+      calc(var(--edge) + env(safe-area-inset-left, 0px));
+    box-shadow: inset 0 1px 0 light-dark(transparent, var(--border-strong));
+    font-size: 14px;
+
+    [data-slot="badge"],
+    [data-slot="sentence"] {
+      display: none;
+    }
+
+    [data-slot="short"] {
+      display: block;
+      flex: none;
+      text-transform: uppercase;
+    }
+
+    p {
+      justify-content: flex-end;
+      padding: 0;
+    }
+
+    a {
+      height: 3rem;
+      text-decoration: none;
+    }
+
+    a::after {
+      content: none;
+    }
+  }
+
+  /* While a phone menu or sheet is open, the bar goes, so nothing sits half under it. */
+  [data-site]:has(
+      [data-component="topbar"] [data-slot="menu"]:not([hidden]),
+      [data-component="section-nav"][data-open],
+      [data-component="contents-menu"][open],
+      [data-search-dialog]:not([hidden])
+    )
+    [data-component="docs-version-notice"][data-placement="header"] {
+    visibility: hidden;
+  }
+}

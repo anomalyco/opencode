@@ -345,7 +345,6 @@ export const dict = {
   "session.new.project.search": "គម្រោងស្វែងរក",
   "session.new.project.add": "បន្ថែមគម្រោង",
   "session.new.workspace.runIn": "ដំណើរការសម័យក្នុង",
-  "session.new.workspace.triggerLocal": "ក្នុងស្រុក",
   "session.new.workspace.local": "ឃ្លាំងមូលដ្ឋាន",
   "session.new.git.none": "គ្មាន Git",
   "session.header.open.finder": "អ្នកស្វែងរក",

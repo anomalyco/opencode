@@ -4,6 +4,8 @@ import "./diff-changes.css"
 export function DiffChanges(props: {
   class?: string
   appearance?: "standard" | "compact"
+  /** Marks a side with no changes `data-empty`, so a page can hide it. */
+  markEmpty?: boolean
   changes: { additions: number; deletions: number } | { additions: number; deletions: number }[]
 }) {
   const additions = createMemo(() =>
@@ -27,8 +29,14 @@ export function DiffChanges(props: {
         data-appearance={props.appearance ?? "compact"}
         classList={{ [props.class ?? ""]: true }}
       >
-        <span data-slot="diff-changes-additions">{`+${additions()}`}</span>
-        <span data-slot="diff-changes-deletions">{`-${deletions()}`}</span>
+        <span
+          data-slot="diff-changes-additions"
+          data-empty={props.markEmpty && !additions() ? "" : undefined}
+        >{`+${additions()}`}</span>
+        <span
+          data-slot="diff-changes-deletions"
+          data-empty={props.markEmpty && !deletions() ? "" : undefined}
+        >{`-${deletions()}`}</span>
       </div>
     </Show>
   )

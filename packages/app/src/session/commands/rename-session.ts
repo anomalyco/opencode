@@ -18,9 +18,8 @@ export function createSessionRenamer() {
 
     if (!ctx || !conn) throw new Error(language.t("common.requestFailed"))
     await ctx.sdk.api.session.update({ sessionID: session.id, title })
+    // The data layer's rename guard keeps the server's advanced time.updated from moving the session.
     ctx.data.session.remember({ ...(ctx.data.session.get(session.id) ?? session), title })
-    ctx.data.session.invalidate(session.id)
-    void ctx.data.session.sync(session.id).catch(() => undefined)
     void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
     void queryClient.invalidateQueries({ queryKey: ["inbox-sessions", conn], exact: true })
     void queryClient.invalidateQueries({ queryKey: ["inbox-archived-sessions", conn], exact: true })

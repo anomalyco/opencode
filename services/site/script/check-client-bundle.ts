@@ -65,7 +65,7 @@ console.log(
 // browser build is there for its stylesheets only, so none of its scripts may ship, and the script
 // may bring no router, no serialized data (seroval) and no hydration. Its budget in kB, gzipped, is
 // what it was when last measured, plus a kB of room; lower it when the script gets lighter.
-const budget = 11.6
+const budget = 11.5
 type Chunk = { file: string; imports?: string[] }
 const app: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
 const statics: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/static-manifest.json")).json()

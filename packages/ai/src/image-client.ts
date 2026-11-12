@@ -1,6 +1,6 @@
 import { Context } from "effect"
 import { MediaClient } from "./media-client.js"
-import { ImageOutputEvent, ImageFinishEvent, type ImageEvent, type ImageRequest, type ImageResponse } from "./image.js"
+import type { ImageEvent, ImageRequest, ImageResponse } from "./image.js"
 
 export type Interface = MediaClient.Interface<ImageRequest, ImageEvent, ImageResponse>
 
@@ -13,11 +13,8 @@ export const ImageClient = {
   ...MediaClient.make(Service, {
     modality: "image",
     responseEvents: (response: ImageResponse) => [
-      ...response.images.map((image, index) => ImageOutputEvent.make({ index, image })),
-      ImageFinishEvent.make({
-        usage: response.usage,
-        providerMetadata: response.providerMetadata,
-      }),
+      ...response.images.map((image, index) => ({ type: "image" as const, index, image })),
+      { type: "finish" as const, usage: response.usage, providerMetadata: response.providerMetadata },
     ],
   }),
 } as const

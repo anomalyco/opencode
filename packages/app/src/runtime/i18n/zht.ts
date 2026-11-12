@@ -376,7 +376,6 @@ export const dict = {
   "session.new.project.search": "搜尋專案",
   "session.new.project.add": "新增專案",
   "session.new.workspace.runIn": "工作階段執行位置",
-  "session.new.workspace.triggerLocal": "本機",
   "session.new.workspace.local": "本機儲存庫",
   "session.new.git.none": "無 Git",
 

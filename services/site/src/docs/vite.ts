@@ -22,7 +22,7 @@ import remarkStarlight, { remarkStarlightLinks } from "./remark-starlight"
 
 const repository = path.join(import.meta.dirname, "../../../..")
 const pages = "virtual:docs-pages"
-// The V1 docs' MDX imports their app's config (packages/web/config.mjs) for a few URLs, as production had them.
+// The V1 docs' MDX imports their old app's config (config.mjs) for a few URLs, as production had them.
 const v1Config = "\0docs-v1-config"
 const v1ConfigValues = {
   url: "https://opencode.ai",
