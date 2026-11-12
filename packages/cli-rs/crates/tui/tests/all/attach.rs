@@ -50,6 +50,12 @@ impl Setup {
         Self::with(opencode_util::temp::tempdir().unwrap(), Info::default(), false)
     }
 
+    /// Releasing a drag copies it, which is the default outside Windows only (`app.tsx:586`).
+    fn copying_on_select() -> Self {
+        let info = opencode_local::cli_config::merge(&[Some(json!({ "terminal": { "copy": "select" } }))]);
+        Self::with(opencode_util::temp::tempdir().unwrap(), info, false)
+    }
+
     fn with(home: opencode_util::temp::TempDir, info: Info, local: bool) -> Self {
         let fake = fake();
         let seen = fake.log();
@@ -149,7 +155,7 @@ fn a_second_paste_or_a_click_expands_a_paste_and_backspace_removes_it() {
 #[test]
 fn copying_a_selection_over_a_paste_copies_its_text() {
     let capture = testing::capture();
-    let setup = Setup::new();
+    let setup = Setup::copying_on_select();
     setup.app.type_text("see ");
     setup.app.paste("a\nb\nc");
     setup.wait_text("see [Pasted ~3 lines] ");
@@ -164,7 +170,7 @@ fn copying_a_selection_over_a_paste_copies_its_text() {
 #[test]
 fn copying_a_selection_copies_the_paste_inside_it_not_an_earlier_one_with_the_same_label() {
     let capture = testing::capture();
-    let setup = Setup::new();
+    let setup = Setup::copying_on_select();
     setup.app.paste("a\nb\nc");
     setup.wait_text("[Pasted ~3 lines] ");
     setup.app.type_text("and ");
