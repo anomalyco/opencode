@@ -42,6 +42,7 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { SessionCompaction } from "@opencode/core/session/compaction"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { Money } from "@opencode/schema/money"
 import { SessionProjector } from "@opencode/core/session/projector"
@@ -1985,6 +1986,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Fourth")
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(before)
+    expect(s.requests.slice(-1).flatMap(systemTexts)).toContain("Changed context")
   })
 
   scenario("resyncs the instruction state when a committed revert removes an update", function* (s) {
@@ -1999,6 +2001,96 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Fourth")
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, "Latest context"])
+    expect(s.requests.slice(-1).flatMap(systemTexts)).not.toContain("Changed context")
+    const notice = (yield* s.messages).find(
+      (message) => message.type === "system" && message.text === "Changed context",
+    )
+    expect(notice?.metadata).toMatchObject({ notice: "instructions", instructionSuperseded: true })
+
+    yield* replaySessionProjection(sessionID)
+    expect((yield* s.messages).find((message) => message.id === notice?.id)).toEqual(notice)
+    expect((yield* s.context).filter((message) => message.type === "system")).toEqual([])
+
+    s.systemBaseline = "After revert context"
+    yield* s.runPrompt("Fifth")
+    expect(s.requests.slice(-1).flatMap(systemTexts)).toContain("After revert context")
+    expect(s.requests.slice(-1).flatMap(systemTexts)).not.toContain("Changed context")
+  })
+
+  scenario("keeps current API context after reverting an instruction update", function* (s) {
+    const entries = yield* InstructionEntry.Service
+    yield* entries.put({ sessionID, key: "deploy-target", value: "Initial target" })
+    yield* s.runPrompt("First")
+    yield* entries.put({ sessionID, key: "deploy-target", value: "Changed target" })
+    const second = yield* s.runPrompt("Second")
+    yield* entries.put({ sessionID, key: "deploy-target", value: "Latest target" })
+    yield* s.runPrompt("Third")
+
+    yield* s.bus.publish(SessionEvent.RevertEvent.Staged, { sessionID, revert: { messageID: second.id, files: [] } })
+    yield* s.session.revert.commit(sessionID)
+    const instructions = yield* entries.load(sessionID)
+    const preview = yield* SessionHistory.preview(s.db, sessionID, instructions, "latest")
+    expect(preview.initial.map((part) => part.text).join("\n")).toContain("Latest target")
+    expect(preview.messages.filter((message) => message.type === "system")).toEqual([])
+    yield* s.runPrompt("Fourth")
+
+    expect(
+      s.requests
+        .at(-1)
+        ?.system.map((part) => part.text)
+        .join("\n"),
+    ).toContain("Latest target")
+    expect(s.requests.slice(-1).flatMap(systemTexts).join("\n")).not.toContain("Changed target")
+  })
+
+  scenario("retires surviving notices after instructions return to their initial value", function* (s) {
+    yield* s.runPrompt("First")
+    s.systemBaseline = "Changed context"
+    const second = yield* s.runPrompt("Second")
+    s.systemBaseline = "Initial context"
+    yield* s.runPrompt("Third")
+
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    yield* s.runPrompt("Fourth")
+
+    const request = s.requests.at(-1)
+    if (!request) throw new Error("Expected continuation request")
+    expect(userTexts(request).at(-1)).toBe("Fourth")
+    expect(request.system.map((part) => part.text)).toContain("Initial context")
+    expect(systemTexts(request)).toEqual([])
+  })
+
+  scenario("retires surviving notices when reverting past a native checkpoint", function* (s) {
+    yield* s.runPrompt("First")
+    s.systemBaseline = "Changed context"
+    const second = yield* s.runPrompt("Second")
+    s.systemBaseline = "Latest context"
+    yield* s.runPrompt("Third")
+    const replacement = [
+      Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
+    ]
+    yield* s.bus.publish(SessionEvent.Compaction.Ended, {
+      sessionID,
+      reason: "manual",
+      model: Model.Ref.make({
+        id: Model.ID.make(s.currentModel.id),
+        providerID: Provider.ID.make(s.currentModel.provider),
+      }),
+      text: "",
+      native: { messages: JSON.parse(JSON.stringify(replacement)) },
+    })
+
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    yield* s.runPrompt("Fourth")
+
+    const request = s.requests.at(-1)
+    if (!request) throw new Error("Expected continuation request")
+    expect(userTexts(request).at(-1)).toBe("Fourth")
+    expect(request.system.map((part) => part.text)).toContain("Latest context")
+    expect(systemTexts(request)).toEqual([])
+    expect(request.messages.flatMap((message) => [...message.content]).some((part) => part.type === "compaction")).toBe(
+      false,
+    )
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {

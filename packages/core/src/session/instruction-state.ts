@@ -7,7 +7,7 @@ import type { Bus } from "../bus.js"
 import { Instructions } from "../instructions/index.js"
 import { SessionEvent } from "./event.js"
 import { SessionSchema } from "./schema.js"
-import { InstructionBlobTable, InstructionStateTable } from "./sql.js"
+import { InstructionBlobTable, InstructionStateTable, SessionMessageTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -142,16 +142,31 @@ export const advanceEpoch = Effect.fn("InstructionState.advanceEpoch")(function*
 
 /**
  * Clears the fold only when a committed revert removed an update or the epoch start. Otherwise the
- * fold still matches the surviving history, and keeping its baseline keeps the prompt cache.
+ * fold still matches the surviving history, and keeping its baseline keeps the prompt cache. A reset
+ * supersedes surviving instruction notices, since the next observation establishes a fresh baseline.
  */
 export const rewind = Effect.fn("InstructionState.rewind")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   boundary: number,
 ) {
-  yield* db
+  const removed = yield* db
     .delete(InstructionStateTable)
     .where(and(eq(InstructionStateTable.session_id, sessionID), gte(InstructionStateTable.through_seq, boundary)))
+    .returning({ sessionID: InstructionStateTable.session_id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!removed) return
+  yield* db
+    .update(SessionMessageTable)
+    .set({ data: sql`json_set(${SessionMessageTable.data}, '$.metadata.instructionSuperseded', json('true'))` })
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "system"),
+        sql`json_extract(${SessionMessageTable.data}, '$.metadata.notice') = 'instructions'`,
+      ),
+    )
     .run()
     .pipe(Effect.orDie)
 })
