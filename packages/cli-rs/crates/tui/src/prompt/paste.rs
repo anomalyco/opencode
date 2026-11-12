@@ -313,14 +313,32 @@ pub fn expanded_text(prompt: &Inner) -> String {
 }
 
 /// The text a copy of the mouse selection puts on the clipboard: with the prompt focused, its paste labels
-/// become their text (the prompt textarea's `getClipboardText`).
+/// become their text (the prompt textarea's `getClipboardText`). A selection inside the prompt expands the pastes
+/// it holds by offset, so a repeated label maps to its own paste.
 pub fn clipboard_text(tui: &crate::app::Tui, text: &str) -> String {
     let Some(prompt) = tui.prompt.current.borrow().upgrade() else { return text.to_owned() };
     if !prompt.focused() {
         return text.to_owned();
     }
+    let textarea = &prompt.textarea;
+    let range = textarea.view().selection().ok().flatten();
     let info = prompt.prompt.borrow();
-    expand_placeholders(text, info["pasted"].as_array().map(Vec::as_slice).unwrap_or_default())
+    // A selection spanning other widgets is not indexed relative to this textarea.
+    let Some((start, end)) = range.filter(|_| text == textarea.selected_text()) else {
+        return expand_placeholders(text, info["pasted"].as_array().map(Vec::as_slice).unwrap_or_default());
+    };
+    let ranges = textarea
+        .extmarks()
+        .into_iter()
+        .filter(|mark| mark.start >= start && mark.end <= end)
+        .filter_map(|mark| match prompt.parts.get(mark.id)? {
+            (Kind::Pasted, index) => {
+                Some((mark.start - start, mark.end - start, info["pasted"][index]["text"].as_str()?.to_owned()))
+            }
+            _ => None,
+        })
+        .collect();
+    expand_tracked(text, ranges)
 }
 
 /// `expandPastedTextPlaceholders`: each paste's label, found in order of where the paste sits, becomes its
