@@ -10,6 +10,8 @@ use std::time::{Duration, Instant};
 
 use super::Output;
 
+#[cfg(any(windows, test))]
+mod piped;
 #[cfg(not(any(unix, windows)))]
 mod stub;
 #[cfg(unix)]
