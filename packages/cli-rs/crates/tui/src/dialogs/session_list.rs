@@ -4,33 +4,23 @@
 //! first under date headings, with pinned sessions on top. The list is read from the server with
 //! the typed search, debounced by 150 ms. Actions: open, pin, delete (press twice), and rename.
 
-use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::rc::{Rc, Weak};
-use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    LocationPublicInfo, Project, SessionID, SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput,
+    LocationPublicInfo, Project, SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput,
 };
 use opencode_local::cli_config::TabsScope;
 use opencode_store::state::State as Store;
 use opencode_store::{Location, SessionStatus};
-use opencode_ui::bind;
-use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
-use opencode_ui::keymap::TuiCommand;
+use opencode_ui::dialog::DIALOG_LIST_INSET;
 use opencode_ui::motion::Spinner;
 use opencode_ui::path::relative;
-use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps};
-use opencode_ui::theme::Theme;
-use opencode_ui::toast::{ToastOptions, Variant};
+use opencode_ui::select::{FooterHint, Gutter, Select, SelectAction};
 use opencode_util::time::{self, Zone};
-use opentui::prelude::*;
-use serde_json::{Value, json};
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 /// `limit` of every list read.
 const LIMIT: i64 = 50;

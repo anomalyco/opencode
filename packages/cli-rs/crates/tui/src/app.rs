@@ -1,11 +1,8 @@
 //! The app (T.1): the shared context, mounting over any `App`, and the terminal entry point
 //! (`packages/tui/src/app.tsx`). Structure: `docs/T.1.md`.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
 
 use opencode_api::client::Client;
 use opencode_api::events::{self, Connection};
@@ -13,19 +10,17 @@ use opencode_local::cli_config::{CliConfig, Info, Resolved, ThemeMode as ConfigM
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_store::{Data, Options};
-use opencode_ui::bind;
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
-use opencode_ui::keymap::{Bind, COMMAND_PALETTE_COMMAND, Keybinds, KeymapLayer, Slash, TuiCommand};
-use opencode_ui::theme::{Effect, ModeSetting, TerminalColors, Theme, ThemeMode, ThemeState, ThemeStateOptions};
+use opencode_ui::keymap::{COMMAND_PALETTE_COMMAND, Keybinds, Slash};
+use opencode_ui::theme::{Effect, ModeSetting, TerminalColors, ThemeMode, ThemeState, ThemeStateOptions};
 use opencode_ui::toast::Toasts;
 use opencode_ui::{help, palette};
 use opentui::app::ProxyError;
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
 use opentui::widget::Textarea;
 
 use crate::features::startup::{Args, Startup};
-use crate::routes::{self, Route, RouteView};
+use crate::prelude::*;
+use crate::routes::{self, RouteView};
 
 /// What the TUI is built from. Tests pass an in-memory client and no roots.
 pub struct Deps {

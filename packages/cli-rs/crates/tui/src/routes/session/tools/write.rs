@@ -1,12 +1,9 @@
 //! The write tool (E.7a): `Write` (`routes/session/index.tsx:3156-3190`). Once written, the file
 //! with line numbers in a block; before that, one line.
 
-use std::cell::RefCell;
-
-use opentui::prelude::*;
-
 use super::diagnostics;
 use super::dispatch::{Block, BlockTool, Header, Inline, InlineTool, Props, Status, content_width, format_path};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct Write {

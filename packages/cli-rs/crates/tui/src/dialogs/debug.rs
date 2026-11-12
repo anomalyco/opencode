@@ -3,20 +3,10 @@
 //! The facts to paste into a bug report, one per row, and a copy action (`c`) that
 //! puts them on the clipboard. Rows are not click-to-copy, so a mouse selection still copies a single value.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
-use opencode_ui::bind;
-use opencode_ui::dialog::{
-    DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
-};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::toast::{ToastOptions, Variant};
+use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, footer, layout_view};
 use opencode_util::time;
-use opentui::prelude::*;
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 /// Like the TypeScript client, a build without `OPENCODE_VERSION` reports `local`.
 pub const VERSION: &str = match option_env!("OPENCODE_VERSION") {

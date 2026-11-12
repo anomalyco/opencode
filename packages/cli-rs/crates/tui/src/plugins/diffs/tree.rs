@@ -2,11 +2,10 @@
 //! `diff-viewer-file-tree.tsx`.
 
 use std::collections::BTreeSet;
-use std::rc::Rc;
 
-use opencode_ui::theme::Theme;
 use opencode_ui::theme::tint;
-use opentui::prelude::*;
+
+use crate::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {

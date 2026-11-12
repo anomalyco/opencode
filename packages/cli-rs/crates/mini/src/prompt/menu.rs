@@ -2,10 +2,7 @@
 //! (`createFooterMenuState` on `ui/select-controller.ts`). Only the flat form is here; the grouped form belongs to
 //! M.3's command and selection views.
 
-use opentui::prelude::*;
-use unicode_width::UnicodeWidthStr;
-
-use crate::theme::FooterTheme;
+use crate::prelude::*;
 
 /// `FOOTER_MENU_ROWS`.
 pub const MENU_ROWS: u16 = 8;

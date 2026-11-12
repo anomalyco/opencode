@@ -3,18 +3,11 @@
 //! Lists a worktree's changed files (status letter, path, `+added -removed`) under a question. With the new
 //! designs the confirm key answers yes and Escape cancels; there is no yes/no toggle.
 
-use std::cell::Cell;
-use std::rc::Rc;
-
 use opencode_api::generated::{FileDiffInfoStatus, VcsFileStatus};
-use opencode_ui::dialog::{
-    DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, header, layout,
-};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opentui::prelude::*;
+use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout};
 use unicode_width::UnicodeWidthStr;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// `WorkspaceFileChangesChoice`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -4,9 +4,7 @@
 //! The focus is unknown until the first report, so a `focused` or `blurred` request waits on a terminal that
 //! reports focus. `app::mount` calls [`install`] once.
 
-use opencode_ui::bind;
-
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// The terminal focus (`FocusState`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

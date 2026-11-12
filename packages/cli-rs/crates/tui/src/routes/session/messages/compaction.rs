@@ -2,16 +2,13 @@
 //! (`routes/session/index.tsx:2171-2251`). A rule with the status in the middle, then the summary or the
 //! failure as Markdown.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use opencode_api::generated::{SessionMessageCompaction, SessionMessageInfo, TokenUsageInfo};
+use opencode_api::generated::{SessionMessageCompaction, TokenUsageInfo};
 use opencode_ui::motion::Spinner;
-use opentui::prelude::*;
 use opentui::widget::Markdown;
 
 use super::list::Context;
 use crate::features::session_links::{self, Links};
+use crate::prelude::*;
 
 pub struct Compaction {
     root: View,

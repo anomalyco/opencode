@@ -4,10 +4,6 @@
 //! even after the command exits, so the last flush shows: the newest 64 KiB first, then each new page, one second
 //! apart once it has caught up.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
 use opencode_api::client::Client;
 use opencode_api::error::Error;
 use opencode_api::generated::{
@@ -15,17 +11,12 @@ use opencode_api::generated::{
     ShellOutputInput,
 };
 use opencode_store::Location;
-use opencode_ui::bind;
-use opencode_ui::dialog::{
-    DIALOG_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, footer, layout_view,
-};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
+use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 use opentui::widget::ScrollEdge;
 
-use crate::app::Tui;
 use opencode_ui::prompt_input::paste::strip_ansi;
+
+use crate::prelude::*;
 
 const PAGE_BYTES: i64 = 64 * 1024;
 /// `Number.MAX_SAFE_INTEGER`: an output cursor past the end, which answers with the size alone.

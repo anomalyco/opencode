@@ -1,15 +1,9 @@
 //! Timeline dialog (E.10a, row DLG39): `routes/session/dialog-timeline.tsx`. The session's prompts, newest
 //! first; moving jumps the transcript to the prompt, and Enter opens the message actions (E.10b).
 
-use std::rc::Rc;
-
-use opencode_api::generated::{SessionID, SessionMessageInfo};
-use opencode_ui::bind;
-use opencode_ui::dialog::{DialogOptions, DialogSize};
-use opencode_ui::select::{self, SelectOption, SelectProps};
 use opencode_util::time::Zone;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// Called with a message ID as the selection moves (`onMove`).
 pub type OnMove = Rc<dyn Fn(&Tui, String)>;

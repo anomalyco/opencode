@@ -4,10 +4,7 @@
 //! E.18b records an installed update with [`Epilogue::updated_version`]. `app::run` prints [`text`] once the
 //! terminal is restored.
 
-use std::cell::RefCell;
-
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";

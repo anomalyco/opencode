@@ -6,14 +6,9 @@
 //! (P.1 connects the `session.panel` slot to it; E.15a's diff viewer is the first user).
 
 use std::any::Any;
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::Rc;
 
-use opentui::prelude::*;
-
-use crate::app::Tui;
 use crate::frame::layout::SESSION_PANEL_SPLIT_MIN_WIDTH;
+use crate::prelude::*;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Presentation {

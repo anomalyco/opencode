@@ -3,15 +3,9 @@
 //! E.17b added [`view`] for the MCP dialog's failed servers; the plugin manager (E.18b) adds the `source` path
 //! line under the title.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
+use opencode_ui::dialog::{DialogCx, FooterAction, FooterProps, footer};
 
-use opencode_ui::bind;
-use opencode_ui::dialog::{DialogCx, FooterAction, FooterProps, HeaderProps, footer, header};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opentui::prelude::*;
-
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// `DialogErrorDetails` props.
 #[derive(Clone)]

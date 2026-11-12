@@ -2,10 +2,6 @@
 //! `ImageView`. With `session.image_preview` on, a user message or tool result shows up to three images side by side,
 //! then `+N more`. A `data:` URI decodes in place; a `media:<hash>` ref reads its bytes from the server once.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
-
 use opencode_api::generated::{
     ExperimentalMediaGetInput, MediaHash, PromptFileAttachment, PromptFileSource, SessionMessageAssistantTool,
     SessionMessageAssistantToolState, ToolContent,
@@ -13,10 +9,11 @@ use opencode_api::generated::{
 use opencode_store::Data;
 use opencode_ui::prompt_input::attach::data_uri;
 use opentui::native::ImageFit;
-use opentui::prelude::*;
 use opentui::widget::ImageView;
 
 use super::list::Context;
+
+use crate::prelude::*;
 
 /// The most images shown in a row.
 const VISIBLE: usize = 3;

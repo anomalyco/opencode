@@ -2,24 +2,16 @@
 //! `session.last`, the scrollbar, and the wheel speed (`routes/session/index.tsx:896-1051,1181-1223,
 //! 1524-1592`, `util/scroll.ts`). Message navigation is in `navigation.rs`.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use opencode_local::cli_config::{Grouping, Info, SubmitScroll, Verbosity};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::theme::Theme;
 use opentui::input::MouseEventKind;
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
 use opentui::widget::{MacOsScroll, ScrollAcceleration};
-use serde_json::Value;
 
 use super::grouping::DEFAULT_VERBOSITY;
 use super::messages::list::{ScrollAnchor, Transcript};
-use crate::app::Tui;
 use crate::dialogs::settings;
+use crate::prelude::*;
 
 /// The scroll and navigation state of one session view.
 pub struct Controls(pub(super) Rc<Inner>);

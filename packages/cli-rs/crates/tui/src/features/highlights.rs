@@ -6,15 +6,8 @@
 //! when the event connection first connects, into an idle home screen, and claims the version in the `highlights`
 //! storage under its lock, so only one of several TUIs starting together shows it.
 
-use std::rc::Rc;
-
-use opencode_ui::bind;
-use serde_json::{Value, json};
-
-use crate::app::Tui;
 use crate::dialogs::highlights::{self, Highlight};
-use crate::routes::Route;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
+use crate::prelude::*;
 
 /// The current release's highlights and the version they belong to.
 #[derive(Clone, Debug, Default)]

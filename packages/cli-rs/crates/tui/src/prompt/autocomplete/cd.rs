@@ -3,14 +3,10 @@
 //! project's recents, which the `/cd` argument completion lists first.
 
 use opencode_api::generated::{AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Slash, TuiCommand};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::prelude::*;
-use std::rc::{Rc, Weak};
+use opencode_ui::keymap::Slash;
 
 use super::parse;
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::prompt::editor::Inner;
 
 pub const COMMAND: &str = "session.cd";
