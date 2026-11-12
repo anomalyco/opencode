@@ -26,7 +26,6 @@ indexmap.workspace = true
 log = { workspace = true, features = ["kv"] }
 regex.workspace = true
 reqwest.workspace = true
-rustix = { workspace = true, features = ["termios", "event", "pty"] }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
@@ -43,6 +42,12 @@ opencode-store.workspace = true
 opencode-tui.workspace = true
 opencode-ui.workspace = true
 opencode-util.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["termios", "event", "pty"] }
+
+[target.'cfg(not(unix))'.dependencies]
+opentui.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

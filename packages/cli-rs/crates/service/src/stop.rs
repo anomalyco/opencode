@@ -99,6 +99,8 @@ async fn registered_process(transport: &dyn Transport, info: &Registration, file
         // `/proc` times are in clock ticks; allow for that and for coarse file times.
         return started <= written + Duration::from_secs(1);
     }
+    #[cfg(not(target_os = "linux"))]
+    let _ = file;
     let probe = probe::probe(transport, info, REQUEST_TIMEOUT).await;
     probe.service.is_some() || probe.timed_out
 }

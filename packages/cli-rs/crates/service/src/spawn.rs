@@ -92,7 +92,7 @@ fn exit_failure() -> ExitStatus {
     return std::os::windows::process::ExitStatusExt::from_raw(1);
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
