@@ -1,6 +1,7 @@
 //! Civil dates and times on the C library: days to dates and back (Howard Hinnant's algorithms), the few formats the
 //! client prints, RFC 3339 and `%Y-%m-%d` parsing as `chrono` parses them, and local offsets from `localtime_r`,
-//! which reads `TZ` and `/etc/localtime` (`localtime_s` on Windows). Instants are milliseconds since the Unix epoch.
+//! which reads `TZ` and `/etc/localtime` (on Windows from Windows' ICU, as Node and Bun do). Instants are
+//! milliseconds since the Unix epoch.
 
 use std::fmt;
 use std::sync::{LazyLock, Once};
@@ -394,11 +395,26 @@ fn local_offset(seconds: i64) -> i32 {
     tm.tm_gmtoff as i32
 }
 
-/// Windows' C runtime has no `tm_gmtoff`: the offset is the local civil time `localtime_s` gives, minus `seconds`.
-/// Without `TZ` the runtime uses the Windows zone, as Node does; a `TZ` it reads in POSIX syntax, not as an IANA name.
+/// Node and Bun take local times from ICU: `TZ` as an IANA name, else the Windows zone. So does this, through the
+/// ICU Windows ships. Without it, the offset is the local civil time `localtime_s` gives, minus `seconds` (the C
+/// runtime has no `tm_gmtoff`); that reads `TZ` in POSIX syntax and the Windows zone with this year's rules only.
 #[cfg(windows)]
 #[allow(unsafe_code)]
 fn local_offset(seconds: i64) -> i32 {
+    static ICU: LazyLock<Option<std::sync::Mutex<crate::win::IcuZone>>> = LazyLock::new(|| {
+        // As Bun reads it: an empty `TZ` is UTC, and a leading `:` is dropped.
+        let zone = std::env::var("TZ").ok().map(|zone| match zone.trim_start_matches(':') {
+            "" => "UTC".to_owned(),
+            zone => zone.to_owned(),
+        });
+        crate::win::IcuZone::open(zone.as_deref()).map(std::sync::Mutex::new)
+    });
+    let icu = ICU.as_ref().and_then(|zone| {
+        zone.lock().unwrap_or_else(std::sync::PoisonError::into_inner).offset_ms(seconds.saturating_mul(1000))
+    });
+    if let Some(offset) = icu {
+        return offset / 1000;
+    }
     static TZSET: Once = Once::new();
     unsafe extern "C" {
         fn _tzset();
