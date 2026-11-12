@@ -171,7 +171,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     // New-session sends wait for creation and the environment upload.
     let environment = created.then(|| tui.startup.args.environment.clone()).flatten();
     let commit = Commit {
-        interrupted: prompt.interrupted(),
+        interrupted: tui.prompt.interrupted(&target),
         client: tui.data.client().clone(),
         session: target.clone(),
         environment: environment.clone(),
@@ -211,7 +211,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         (Mode::Shell, _) => {
             let client = tui.data.client().clone();
             let input = SessionShellInput { session_id: target.clone(), id: None, command: text };
-            let interrupted = prompt.interrupted();
+            let interrupted = tui.prompt.interrupted(&target);
             tui.app.spawn(
                 async move {
                     interrupted.await;
@@ -273,7 +273,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                     resume: Some(Some(false)),
                     ..SessionSyntheticInput::default()
                 };
-                let interrupted = prompt.interrupted();
+                let interrupted = tui.prompt.interrupted(&target);
                 Box::pin(async move {
                     interrupted.await;
                     if let Some(creation) = creation {
@@ -333,7 +333,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
 
 /// The selection a submit commits before it sends (`prepareAgent` and `commitModel`).
 struct Commit {
-    /// The prompt's last interrupt request, answered before anything here is sent.
+    /// The session's pending interrupt requests, answered before anything here is sent.
     interrupted: futures_util::future::BoxFuture<'static, ()>,
     client: Client,
     session: SessionID,
