@@ -776,6 +776,18 @@ async function scrollsBehindComposerRegion(
             },
             time: { created: 2 },
           },
+          // Subagents always run in the background, so a running shell is what offers the background hint.
+          {
+            type: "tool",
+            id: "call_running_shell",
+            name: "shell",
+            state: {
+              status: "running",
+              input: { command: "sleep 120" },
+              metadata: { shellID: "shell_running_blocking" },
+            },
+            time: { created: 2 },
+          },
           { type: "text", id: "prt_timeline_end", text: "The last answer ends above the composer region." },
         ],
         time: { created: 2 },
