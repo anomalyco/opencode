@@ -1,12 +1,8 @@
 //! The read tool (E.7a): `Read` (`routes/session/index.tsx:3205-3241`), one line plus the files the
 //! read loaded.
 
-use std::cell::RefCell;
-
-use opentui::prelude::*;
-use serde_json::Value;
-
 use super::dispatch::{Inline, InlineTool, Props, Status, finite, format_path, number, truthy};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct Read {

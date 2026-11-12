@@ -8,18 +8,17 @@
 //!
 //! [`tool_inline_info`]: opencode_ui::tool_info::tool_inline_info
 
-use opencode_api::generated::{SessionMessageAssistantTool, SessionMessageAssistantToolState as State, ToolContent};
+use opencode_api::generated::{SessionMessageAssistantToolState as State, ToolContent};
 use opencode_ui::prompt_input::paste::strip_ansi;
 use opencode_ui::tool_info::{
     Todo, TodoStatus, canonical_tool_name, normalize_input, normalize_metadata, parse_todos, primitive_input_summary,
     todo_marker, tool_display_content, tool_display_metadata, tool_output_text, tool_path, web_search_provider_label,
 };
-use opentui::prelude::*;
 use opentui::widget::{Code, DiffColors, DiffView, LineNumbers};
-use serde_json::{Map, Value};
+use serde_json::Map;
 
-use crate::scrollback::{Body, BodyOptions, Commit, EntryKind, Phase, Source, ToolState};
-use crate::theme::RunTheme;
+use crate::prelude::*;
+use crate::scrollback::{Body, BodyOptions, EntryKind, Phase, Source, ToolState};
 
 /// A structured tool body (`ToolSnapshot`).
 #[derive(Clone, Debug, PartialEq)]

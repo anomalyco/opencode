@@ -4,12 +4,8 @@
 //! behind it. A resumed session clears the terminal and replays its transcript. Closing writes what is queued,
 //! leaves split mode, and ends with a newline so the shell continues below the transcript.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use opencode_api::client::Client;
-use opencode_api::generated::V2Event;
 use opencode_local::cli_config::{CliConfig, MiniWorkSpinner, NewLocation, ThemeMode as ConfigMode, Visibility};
 use opencode_local::model_pref::ModelPreferences;
 use opencode_store::target::{self, Prepared, SessionTarget, TargetError};
@@ -17,22 +13,20 @@ use opencode_ui::motion::{Spinner, SpinnerColor};
 use opencode_ui::theme::ThemeMode;
 use opencode_util::error::{self, Context as _};
 use opentui::native::{KittyKeyboard, MouseTracking};
-use opentui::prelude::*;
 use opentui::split::{Scrollback, SplitFooter};
-use serde_json::{Value, json};
 
 use crate::footers::Footers;
+use crate::prelude::*;
 use crate::prompt::queue::{Queue, Submitted, Work};
 use crate::prompt::status::{self, mono_shortcut};
 use crate::prompt::{Delivery, Hooks, PROMPT_MAX_ROWS, Prompt, RunPrompt};
 use crate::replay::{self, Envelope, Incoming, Output, Transcript};
-use crate::scrollback::{Commit, Flags, Writer};
+use crate::scrollback::{Flags, Writer};
 use crate::settings::{Change, MiniSettings};
 use crate::signals::{self, Trace};
 use crate::theme::{self, ThemeInput};
 use crate::variants::{ModelSelection, Provider};
 use crate::{Input, InputError};
-use unicode_width::UnicodeWidthStr;
 
 /// `FOOTER_HEIGHT`: the footer's rows before the prompt measures itself.
 const FOOTER_HEIGHT: u16 = 4;

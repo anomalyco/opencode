@@ -2,15 +2,13 @@
 //! surface behind a bar in the agent's color, its images (E.6b), then skill and file chips. A click
 //! opens E.10b's pending steer or message actions dialog.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
 use opencode_api::generated::{PromptFileSource, SessionInboxDelivery, SessionMessageUser};
 use opencode_ui::theme::ThemeMode;
-use opentui::prelude::*;
 
 use super::images::{self, Images};
 use super::list::Context;
+
+use crate::prelude::*;
 
 pub struct User {
     root: View,

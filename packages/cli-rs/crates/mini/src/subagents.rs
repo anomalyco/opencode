@@ -9,23 +9,21 @@
 //! the results to the matching method ([`Tracker::family`], [`Tracker::discovered`], [`Tracker::child_loaded`],
 //! [`Tracker::blockers_loaded`]).
 
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::Duration;
+use std::collections::VecDeque;
 
 use indexmap::{IndexMap, IndexSet};
 use opencode_api::generated::{
     FormInfo, PromptFileAttachment, SessionInboxInfo, SessionInboxItem, SessionInfo,
-    SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantTool,
-    SessionMessageAssistantToolState as ToolPartState, SessionMessageAssistantToolTime, SessionMessageInfo,
-    SessionMessageToolStateCompleted, SessionMessageToolStateError, SessionMessageToolStateRunning,
-    SessionMessageToolStateStreaming, V2Event,
+    SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantToolState as ToolPartState,
+    SessionMessageAssistantToolTime, SessionMessageToolStateCompleted, SessionMessageToolStateError,
+    SessionMessageToolStateRunning, SessionMessageToolStateStreaming,
 };
 use opencode_ui::tool_info::{canonical_tool_name, titlecase, tool_display_content, tool_output_text};
-use serde_json::Value;
 
 use crate::footers::permission::Request;
+use crate::prelude::*;
 use crate::replay::{Fragment, Fragments, session_of, user_image_commits};
-use crate::scrollback::{Commit, EntryKind, Phase, Source};
+use crate::scrollback::{EntryKind, Phase, Source};
 
 /// `CHILD_MESSAGE_LIMIT`: the messages a child's transcript lists.
 pub const CHILD_MESSAGE_LIMIT: u32 = 80;

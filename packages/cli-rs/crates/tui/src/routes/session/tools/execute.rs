@@ -3,19 +3,12 @@
 //! (a click lists its inputs), and the error output under a failed run. A click on the call opens
 //! the execute dialog.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
 use opencode_api::generated::SessionMessageAssistantTool;
-use opencode_ui::bind;
-use opencode_ui::theme::Theme;
 use opencode_ui::tool_info::{ExecuteCall, ExecuteStatus, execute_call_summary, execute_calls};
-use opentui::prelude::*;
-use serde_json::Value;
 
 use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status, content_width};
-use crate::app::Tui;
 use crate::dialogs::execute::{self, Live};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 use crate::routes::session::messages::shell::collapse_tool_output;
 use opencode_ui::prompt_input::paste::strip_ansi;

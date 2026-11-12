@@ -4,26 +4,21 @@
 //! failure puts the prompt back unless something new was typed. On home, it creates the session
 //! first (optimistically, so the session opens at once) and the prompt waits for the creation.
 
-use std::rc::Rc;
-
 use indexmap::IndexMap;
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionID, SessionInboxDelivery,
-    SessionInboxInfo, SessionPromptInput, SessionRevertCommitInput, SessionShellInput, SessionSwitchAgentInput,
-    SessionSwitchModelInput, SessionSyntheticInput,
+    AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionInboxDelivery, SessionInboxInfo,
+    SessionPromptInput, SessionRevertCommitInput, SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
+    SessionSyntheticInput,
 };
 use opencode_store::inbox::Gate;
 use opencode_store::{CreateSession, Error, Prompt};
-use opencode_ui::bind;
-use opencode_ui::toast::{ToastOptions, Variant};
-use serde_json::Value;
 
 use super::autocomplete::parts;
 use super::draft::Draft;
 use super::editor::{Inner, Mode};
-use crate::app::Tui;
-use crate::routes::Route;
+
+use crate::prelude::*;
 
 /// Submits the prompt with `delivery`. Returns whether it was handled (the caller then closes
 /// dialogs).

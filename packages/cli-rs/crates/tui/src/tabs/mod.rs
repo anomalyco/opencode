@@ -9,24 +9,17 @@ pub mod pulse;
 pub mod rail;
 pub mod strip;
 
-use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::rc::Rc;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-use opencode_api::generated::{SessionID, SessionInboxInfo, SessionInboxItem, SessionInfoOutcome, SessionViewInput};
+use opencode_api::generated::{SessionInboxInfo, SessionInboxItem, SessionInfoOutcome, SessionViewInput};
 use opencode_local::storage::Storage;
-use opencode_store::{Catalog, Changes, Location, SessionStatus, State};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
+use opencode_store::{Catalog, Location, SessionStatus, State};
 use opentui::input::{KeyCode, Modifiers};
-use opentui::keymap::Condition;
 use serde::{Deserialize, Serialize};
 
-use crate::app::Tui;
 use crate::features::events::Handled;
-use crate::routes::Route;
+use crate::prelude::*;
 use crate::routes::session::form::quiet;
 use crate::routes::session::messages::list::ScrollAnchor;
 use model::{Closed, History, NEW_SESSION_TAB_TITLE, Tab, Unread};

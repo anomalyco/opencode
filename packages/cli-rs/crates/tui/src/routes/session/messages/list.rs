@@ -8,33 +8,26 @@
 //! `grouping::project`. Queued inputs (E.10b) are not here yet. The background hint and the
 //! revert banner (E.6b) follow the rows.
 
-use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
 
 use opencode_api::generated::{
-    AgentInfo, ModelInfo, ModelRef, SessionID, SessionInboxInfo, SessionInfo, SessionMessageAssistant,
+    AgentInfo, ModelInfo, ModelRef, SessionInboxInfo, SessionInfo, SessionMessageAssistant,
     SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageID,
-    SessionMessageInfo, SessionStructuredError,
+    SessionStructuredError,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
-use opencode_store::{Changes, LoadMore, MessageExt, State};
-use opencode_ui::bind;
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
+use opencode_store::{LoadMore, MessageExt, State};
 use opencode_ui::markdown::CodeBlockRenderers;
-use opencode_ui::theme::{Theme, ThemeMode};
+use opencode_ui::theme::ThemeMode;
 use opentui::input::MouseEventKind;
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::ScrollEdge;
 
 use super::super::tools;
 use super::{assistant, background, compaction, errors, footer, reasoning, revert, shell, skill, user};
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::routes::session::grouping;
 
 /// Rows mounted when a session opens (`TRANSCRIPT_TAIL_ROWS`).

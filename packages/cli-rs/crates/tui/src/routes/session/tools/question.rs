@@ -3,12 +3,8 @@
 //!
 //! The row only shows the call. The user answers in the question form, which is E.9b's.
 
-use std::cell::RefCell;
-
-use opentui::prelude::*;
-use serde_json::Value;
-
 use super::dispatch::{Block, BlockTool, Header, Inline, InlineTool, Props, content_width};
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct Question {

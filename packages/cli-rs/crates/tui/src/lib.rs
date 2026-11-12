@@ -12,6 +12,7 @@ pub mod frame;
 pub mod local;
 pub mod panel;
 pub mod plugins;
+mod prelude;
 pub mod prompt;
 pub mod routes;
 pub mod tabs;

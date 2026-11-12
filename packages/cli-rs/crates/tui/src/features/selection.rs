@@ -10,14 +10,9 @@
 //! [`copy`] is the one clipboard write of the TUI: it drops NUL, then writes OSC 52 and the host clipboard
 //! (`App::copy_to_clipboard`, G.4), and toasts.
 
-use std::rc::Rc;
-
 use opencode_local::cli_config::TerminalCopy;
-use opencode_ui::bind;
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::prelude::*;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// Registers the selection keys, the release copy, and the right-click copy. `app::install_keys` calls it before
 /// the keymap's key handler, as TS intercepts selection keys at priority 101 (`app.tsx:589-596`).

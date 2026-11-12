@@ -2,14 +2,9 @@
 //! session's queued prompts with `1 of n` footers; Enter steers one, `queued_prompt.delete` cancels it, and
 //! `queued_prompt.undo` takes it back into the composer. The list follows the inbox while the dialog is open.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
+use opencode_ui::select::{FooterHint, Group, Select, SelectAction};
 
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::select::{self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps};
-
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::routes::session::queued::{self, Action};
 
 /// Opens the dialog for the session view `view`, with `dialog.replace`.

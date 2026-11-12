@@ -1,14 +1,12 @@
 //! Model usage dialog (E.16): `DialogUsageModel` in `component/usage.tsx`, every limit on one model, the one
 //! setting what's left marked.
 
-use std::rc::Rc;
-
 use opencode_api::generated::ModelInfo;
-use opencode_ui::dialog::{DialogOptions, HeaderProps, header, layout};
-use opentui::prelude::*;
+use opencode_ui::dialog::layout;
 
 use crate::dialogs::usage::{Level, format_dollars, format_reset, level, limit_scope};
 use crate::local::Local;
+use crate::prelude::*;
 
 pub fn show(local: &Rc<Local>, model: ModelInfo) {
     let weak = Rc::downgrade(local);

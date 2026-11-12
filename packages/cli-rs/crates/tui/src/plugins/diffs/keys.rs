@@ -3,15 +3,11 @@
 //! and the five deprecated tree keys (`diff.toggle`, `.expand`, `.expand_all`, `.collapse`, `.switch_focus`) are
 //! kept for config only and register nothing, as in TS.
 
-use std::rc::{Rc, Weak};
-
-use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opentui::keymap::Condition;
 
 use super::viewer::Viewer;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {

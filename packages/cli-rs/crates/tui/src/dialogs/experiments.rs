@@ -3,17 +3,11 @@
 //! The registry, the dialog, the toggle, and its persistence under `cli.json` `experimental.<id>` are permanent
 //! infrastructure (`packages/tui/AGENTS.md`): keep them when [`EXPERIMENTS`] is empty.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::keymap::TuiCommand;
-use opencode_ui::select::{SelectOption, SelectProps, select};
-use serde_json::Value;
+use opencode_ui::select::select;
 
 use super::settings::{self, set_path};
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 pub struct Experiment {
     pub id: &'static str,

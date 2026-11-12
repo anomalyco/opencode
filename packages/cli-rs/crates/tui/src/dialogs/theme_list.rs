@@ -5,17 +5,10 @@
 //! dialog opened with. A preview stays in memory and only Enter writes `theme.name`; TS writes on every move and
 //! writes the old name back on cancel, which leaves the same file.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
+use opencode_ui::select::{Select, select};
 
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::select::{Select, SelectOption, SelectProps, select};
-use serde_json::Value;
-
-use crate::app::Tui;
 use crate::dialogs::settings::{set_path, update};
+use crate::prelude::*;
 
 /// Registers `theme.switch` ("Switch theme", `/themes`) as `app.tsx:1130-1137` does.
 pub fn install(tui: &Rc<Tui>) {

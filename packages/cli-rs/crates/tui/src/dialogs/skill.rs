@@ -4,17 +4,11 @@
 //! the padded name. Choosing one hands its ID to the caller and closes the dialog; the prompt
 //! inserts an `@skill` mention as a prompt part (`prompt::autocomplete::parts::insert_skill`).
 
-use std::cell::Cell;
-use std::rc::Rc;
-
 use opencode_api::generated::{SkillID, SkillInfo};
 use opencode_store::{Catalog, Location};
-use opencode_ui::bind;
-use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
-use opencode_ui::select::{self, SelectOption, SelectProps};
-use opentui::prelude::*;
+use opencode_ui::dialog::DIALOG_LIST_INSET;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// What choosing a skill does.
 pub type OnSelect = Rc<dyn Fn(&Tui, &SkillID)>;

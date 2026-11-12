@@ -4,9 +4,6 @@
 //! poster: the token total in large digits, a calendar of active days, the best streak, the active days, and the
 //! sessions. Escape goes back.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
 use opencode_api::client::Client;
 use opencode_api::generated::{ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionStatsInfo};
 use opencode_plugin::abi::{
@@ -18,6 +15,8 @@ use opencode_util::time::{self, Date, Zone};
 use opentui::style::Color;
 
 use super::fetch::{data, fetch_of};
+
+use crate::prelude::*;
 
 const ID: &str = "opencode.stats";
 const ROUTE: &str = "stats";

@@ -9,20 +9,13 @@ use opencode_api::generated::{
     ExperimentalMcpConnectInput, ExperimentalMcpDisconnectInput, LocationQueryInput, McpServer, McpServerStatus,
 };
 use opencode_store::{Catalog, Location};
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::select::{self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps};
-use opencode_ui::theme::Theme;
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
+use opencode_ui::select::{FooterHint, Group, Select, SelectAction};
 use std::collections::HashSet;
-use std::rc::{Rc, Weak};
 
 use super::error_details;
 use super::session_list::dialog_theme;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// Registers `mcp.list` (`/mcps`) and its binding as `app.tsx:158,967-975` do. With a server's name as its input
 /// (the sidebar's MCP section), it opens on that server, and on its error when it failed.

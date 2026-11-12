@@ -5,13 +5,7 @@
 //! `app::mount` calls [`install`] once, `Tui::navigate` calls [`route_changed`], and `Tui::sync` calls
 //! [`sync`] with what changed.
 
-use std::cell::RefCell;
-
-use opencode_api::generated::SessionID;
-use opencode_store::Changes;
-
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 #[derive(Default)]
 pub struct Title {

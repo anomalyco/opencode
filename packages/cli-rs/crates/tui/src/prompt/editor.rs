@@ -5,25 +5,15 @@
 //! layer runs the 36 `input.*` commands on it through `Tui::textarea` (U.2), and the layers here add
 //! submit, queue, clear, history, shell mode, interrupt, and background.
 
-use opencode_api::generated::{
-    SessionBackgroundInput, SessionID, SessionInboxDelivery, SessionInfo, SessionInterruptInput,
-};
+use opencode_api::generated::{SessionBackgroundInput, SessionInboxDelivery, SessionInfo, SessionInterruptInput};
 use opencode_local::cli_config::Permissions;
 use opencode_local::jsonl::empty_prompt;
+use opencode_store::SessionStatus;
 use opencode_store::location::Location;
-use opencode_store::{Changes, SessionStatus};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::motion::{ScannerOptions, ScannerStyle, Spinner, SpinnerColor, scanner_colors, scanner_frames};
-use opencode_ui::theme::Theme;
 use opentui::input::Keymap;
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-use serde_json::Value;
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::OnceCell;
 use std::path::PathBuf;
-use std::rc::{Rc, Weak};
-use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
 use super::autocomplete::{self, Autocomplete, parts};
@@ -31,7 +21,8 @@ use super::draft::{Draft, Drafts};
 use super::editor_context::{self, LabelState, Selection};
 use super::history::{self, History};
 use super::metadata::{self, Catalog, Display, Row};
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// How long an armed interrupt waits for the second Escape.
 const INTERRUPT_WINDOW: Duration = Duration::from_secs(5);

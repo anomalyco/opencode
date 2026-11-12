@@ -2,18 +2,15 @@
 //! entries, external plugins with hot reload (P.4, `docs/P.4.md`), and the calls the TUI's slots, plugin
 //! routes, and Markdown make.
 
-use std::cell::{Cell, OnceCell, RefCell};
-use std::collections::HashMap;
+use std::cell::OnceCell;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
 
 use opencode_api::generated::{
     IntegrationInfo, LocationQueryInput, McpServer, ModelInfo, ModelRef, PluginInfo, PluginListInput, PluginSource,
-    PluginState, ProviderID, ProviderInfo, SessionID, SessionMessageInfo, UsageLimitsInfo, V2Event, VcsInfo,
+    PluginState, ProviderID, ProviderInfo, UsageLimitsInfo, V2Event, VcsInfo,
 };
 use opencode_local::cli_config::AttentionSoundName;
 use opencode_local::serial::Serial;
@@ -23,21 +20,14 @@ use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Configured, Loader};
 use opencode_plugin::node::{abi_mode, assign, refill, theme_color};
 use opencode_plugin::{Builtin, Definition, Host, Registry, RouteMount, SlotInput, SlotMount, Status};
+use opencode_store::State;
 use opencode_store::location::{Catalog, Location, LocationData};
-use opencode_store::{Changes, State};
-use opencode_ui::bind;
 use opencode_ui::dialog::DialogKeymap;
 use opencode_ui::markdown::CodeBlockRenderers;
-use opencode_ui::theme::Theme;
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::Disposer;
-use opentui::prelude::*;
-use serde_json::Value;
 
-use crate::app::Tui;
 use crate::features::attention::focus::When;
 use crate::features::attention::notify::{self, Request, Sound};
-use crate::routes::Route;
+use crate::prelude::*;
 
 /// The plugin registry, and what its host entries ([`Builtin::Host`]) reach the TUI through once `Rc<Tui>` exists.
 pub struct Plugins {

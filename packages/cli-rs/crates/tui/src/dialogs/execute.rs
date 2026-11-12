@@ -2,24 +2,15 @@
 //! output of a code-mode `execute` call, with copy actions. It follows the call while it runs: the
 //! transcript row passes each new state to [`Live::set`].
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
 use opencode_api::generated::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
-use opencode_ui::bind;
-use opencode_ui::dialog::{
-    DIALOG_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer, header,
-};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::theme::Theme;
+use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer};
 use opencode_ui::tool_info::tool_display_metadata;
-use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
-use serde_json::Value;
 
-use crate::app::Tui;
 use opencode_ui::locale::duration;
 use opencode_ui::prompt_input::paste::strip_ansi;
+
+use crate::prelude::*;
 
 /// The open dialog: the call it shows and how to redraw it.
 pub struct Live {

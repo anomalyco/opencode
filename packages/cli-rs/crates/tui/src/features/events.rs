@@ -11,20 +11,11 @@
 //! a [`Signal`]; [`handle`] sees it first, then every [`subscribe`]r in order. When it skipped signals, it posts
 //! [`Lagged`] instead.
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
 
-use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDeleted, SessionID, V2Event};
-use opencode_store::Changes;
-use opencode_ui::bind;
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::Disposer;
+use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDeleted, V2Event};
 
-use crate::app::Tui;
-use crate::routes::Route;
+use crate::prelude::*;
 
 type Subscribers = Rc<RefCell<Vec<(u64, Rc<dyn Fn(&Tui, &V2Event)>)>>>;
 

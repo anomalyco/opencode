@@ -2,14 +2,9 @@
 //! right-clicked file heading or tree row that marks the file complete or incomplete. It holds the `menu` input
 //! mode while open, so the viewer's keys wait; Escape, Ctrl+C, or a click elsewhere close it.
 
-use std::rc::{Rc, Weak};
-
-use opencode_ui::bind;
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-
 use super::viewer::{ID, Viewer};
+
+use crate::prelude::*;
 
 const MODE: &str = "menu";
 const WIDTH: u16 = 19;

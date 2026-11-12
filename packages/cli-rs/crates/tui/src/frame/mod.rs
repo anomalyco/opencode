@@ -7,24 +7,15 @@
 pub mod layout;
 pub mod resize;
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
 use std::sync::OnceLock;
 
-use opencode_api::generated::SessionID;
 use opencode_local::cli_config::TabsLayout;
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_plugin::{SlotInput, SlotMount, slot};
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opentui::keymap::Condition;
-use opentui::prelude::*;
-use serde_json::{Value, json};
 
-use crate::app::Tui;
 use crate::panel::{Host, Presentation};
-use crate::routes::Route;
+use crate::prelude::*;
 use crate::tabs::{Tabs, rail, strip};
 use layout::SESSION_SIDEBAR_WIDTH;
 use resize::{PaneResize, Rules};

@@ -6,15 +6,13 @@
 //! keep their parts, moved to where their text now is.
 
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use opencode_ui::prompt_input::editor::{Mention, edit, normalize, realign_mentions};
 use opencode_ui::prompt_input::parse::measure;
-use opencode_ui::toast::{ToastOptions, Variant};
-use serde_json::{Value, json};
 
 use super::editor::Inner;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// `prompt.editor`.
 pub fn open(tui: &Tui, prompt: &Rc<Inner>) {

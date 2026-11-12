@@ -1,13 +1,11 @@
 //! Loading: the diff for the source, the reported base, and image previews.
 
 use opencode_api::generated::{FileReadInput, SessionDiffInput, VcsBaseInput, VcsDiffInput};
-use opencode_ui::bind;
-use std::rc::Rc;
 
 use super::render::fill_image;
 use super::{Base, File, ID, Load, Mode, Preview, VCS_DIFF_CONTEXT_LINES, Viewer, query};
-use crate::app::Tui;
 use crate::plugins::diffs::tree;
+use crate::prelude::*;
 
 impl Viewer {
     /// `loadBase` for the base dialog: looks the reported base up once, when none is chosen or known.

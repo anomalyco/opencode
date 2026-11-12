@@ -6,26 +6,23 @@
 //! `projectEntries` does. A group is one transcript row; [`GroupView`] draws its header and, while it
 //! is open or not grouped, its children.
 
-use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::collections::HashSet;
 
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantReasoning,
-    SessionMessageAssistantTool, SessionMessageAssistantToolState, SessionMessageCompaction, SessionMessageInfo,
+    SessionMessageAssistantTool, SessionMessageAssistantToolState, SessionMessageCompaction,
 };
 use opencode_local::cli_config::{Grouping, Info, Verbosity};
 use opencode_store::MessageExt;
-use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
-use opencode_ui::theme::Theme;
 use opencode_ui::tool_info::{canonical_tool_name, tool_display_metadata};
-use opentui::prelude::*;
 use opentui::widget::Markdown;
 
 use super::messages::list::{Context, Part, Row, Spec};
 use super::messages::reasoning;
 use opencode_ui::locale::duration;
+
+use crate::prelude::*;
 
 /// A group's kind (`GroupKind`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

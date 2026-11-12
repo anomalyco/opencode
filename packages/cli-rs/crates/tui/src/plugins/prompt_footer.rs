@@ -7,15 +7,14 @@
 //!
 //! It is a plugin of the one API (O-67). Each mount of a session's footer counts in [`Goals`], which reads the goal.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use opencode_plugin::abi::{self, Changed, Click, Layout, Node, Placement, PromptInput, Render, SlotInput, Span, Wrap};
 use opencode_plugin::slot;
 use unicode_width::UnicodeWidthStr;
 
 use super::goal::{self, Goal, Goals};
 use super::sidebar_context::{self, Last, Usage, money};
+
+use crate::prelude::*;
 
 pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.prompt.footer", setup }

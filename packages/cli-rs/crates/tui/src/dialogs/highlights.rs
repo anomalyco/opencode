@@ -1,14 +1,10 @@
 //! Release highlights dialog (E.18b): `packages/tui/src/component/dialog-highlights.tsx`, "What's new in …".
 //! `features::highlights` opens it from `/highlights` and once after an update.
 
-use std::rc::Rc;
-
-use opencode_ui::dialog::{DIALOG_INSET, DialogOptions, FooterAction, FooterProps, HeaderProps, header, layout};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opentui::prelude::*;
+use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout};
 use serde::Deserialize;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// One highlight of the release notes (`TuiHighlight`).
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]

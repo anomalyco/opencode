@@ -2,15 +2,12 @@
 //! patched file with its diff; when the metadata has only the applied resources, one block per
 //! resource; before either, one block that names the target while it patches or fails.
 
-use std::cell::RefCell;
-
 use opencode_local::cli_config::{DiffView as ConfigDiffView, DiffWrap};
-use opentui::prelude::*;
 use opentui::widget::DiffView;
-use serde_json::Value;
 
 use super::dispatch::{Block, BlockColors, BlockTool, Header, Props, Status, content_width, format_path, number};
 use crate::dialogs::open::truncate_file_path;
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
 pub struct Patch {

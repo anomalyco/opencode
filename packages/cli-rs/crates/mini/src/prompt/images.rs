@@ -1,13 +1,12 @@
 //! The image previews above the composer (`footer.prompt.tsx:277-310`), shown with `prompt.image_preview`.
 
-use std::cell::RefCell;
-
 use opencode_ui::prompt_input::attach::data_uri;
 use opentui::native::ImageFit;
-use opentui::prelude::*;
 use opentui::widget::ImageView;
 
 use super::parts::Part;
+
+use crate::prelude::*;
 
 /// The previews shown before `+N more`.
 const VISIBLE: usize = 3;

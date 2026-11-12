@@ -2,16 +2,9 @@
 //! `<leader>1` to `<leader>9` open the pinned root sessions in pin order. Pins are toggled in the session
 //! list (`session.pin.toggle`, `dialogs::session_list::pins`); a deleted session loses its pin.
 
-use std::rc::Rc;
-
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opentui::keymap::Condition;
-
-use crate::app::Tui;
 use crate::dialogs::session_list::pins;
 use crate::features::events::Handled;
-use crate::routes::Route;
+use crate::prelude::*;
 
 pub fn install(tui: &Rc<Tui>) {
     let weak = tui.weak();

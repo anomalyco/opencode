@@ -3,21 +3,14 @@
 //! (`routes/session/index.tsx:1966-1973,2035-2049,2514-2566`, `component/usage.tsx:255-332`). Also the free-limit
 //! stop that restores the prompt and offers OpenCode Go (`index.tsx:646-759`).
 
-use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
-use std::rc::{Rc, Weak};
-use std::time::Duration;
 
-use opencode_api::generated::{
-    SessionMessageAssistant, SessionMessageAssistantRetry, SessionMessageInfo, SessionStructuredError,
-};
-use opencode_ui::bind;
+use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantRetry, SessionStructuredError};
 use opencode_util::time::{self, Zone};
-use opentui::prelude::*;
 
 use super::list::Context;
-use crate::app::Tui;
 use crate::dialogs::{go_upsell, usage};
+use crate::prelude::*;
 
 const DAY_MS: f64 = 86_400_000.0;
 

@@ -5,14 +5,10 @@
 //! Opening the dialog creates a pairing code on the server, so tests prove it against a test transport only.
 
 use opencode_api::generated::{PairingCode, ServerInfo};
-use opencode_ui::bind;
-use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, HeaderProps, header, layout};
-use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
-use opentui::prelude::*;
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use opencode_ui::dialog::{DialogCx, layout};
+use opencode_ui::keymap::Slash;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// Registers `server.pair` ("Pair device", `/pair` and `/web`) as `app.tsx:1074-1081` does.
 pub fn install(tui: &Rc<Tui>) {

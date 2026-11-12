@@ -16,6 +16,7 @@ use opencode_store::target::TargetInput;
 use opencode_util::error;
 
 pub mod footers;
+mod prelude;
 pub mod prompt;
 pub mod replay;
 pub mod scrollback;

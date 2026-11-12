@@ -3,13 +3,9 @@
 //! "Name worktree" asks for a name; `tab` (`dialog.worktree.generate`) fills in a generated one, and an empty
 //! or symbol-only name becomes a generated one on Enter.
 
-use std::cell::Cell;
-use std::rc::Rc;
-
-use opencode_ui::dialog::DialogOptions;
 use opencode_ui::prompt::{PromptAction, PromptProps, prompt};
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// `DialogWorktreeName.show`: `on_name` gets the name, or `None` when the dialog closes without one.
 pub fn show(tui: &Tui, on_name: Rc<dyn Fn(Option<String>)>) {

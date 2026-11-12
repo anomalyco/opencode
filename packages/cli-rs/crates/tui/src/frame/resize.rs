@@ -2,15 +2,11 @@
 //! boundary; a press starts a resize, drags move it, and the release commits the size. A second press within
 //! 300 ms of a click that did not move resets the default.
 
-use std::cell::Cell;
-use std::rc::{Rc, Weak};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use opencode_ui::bind;
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
-use opentui::prelude::*;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
 

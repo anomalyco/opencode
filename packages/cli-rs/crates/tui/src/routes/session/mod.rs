@@ -23,14 +23,13 @@ pub mod scroll;
 pub mod sidebar;
 pub mod tools;
 
-use opencode_api::generated::{SessionID, SessionMessageAssistantContentItem, SessionMessageInfo};
-use opencode_store::{Changes, Task};
-use opentui::prelude::*;
+use opencode_api::generated::SessionMessageAssistantContentItem;
+use opencode_store::Task;
 use std::collections::BTreeSet;
-use std::rc::Rc;
 
 use super::RouteView;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 pub struct Session {
     id: SessionID,

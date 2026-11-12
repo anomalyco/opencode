@@ -5,17 +5,11 @@
 //! every second while the store lists the shell as running, once more when it exits, and on expand.
 
 use opencode_api::generated::ShellID;
-use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::prompt_input::paste::strip_ansi;
-use opencode_ui::theme::Theme;
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
 
 use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, status_badge};
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 use crate::routes::session::messages::shell::{Output, collapse_shell_output};
 

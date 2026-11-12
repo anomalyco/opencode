@@ -1,16 +1,7 @@
 //! Working directory dialog (E.20, row DLG42): `ui/working-directory-actions.tsx`. Clicking the prompt footer's
 //! location opens "Working directory" with "Copy path", "Open folder", and "Workspaces".
 
-use std::rc::Rc;
-
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
-use opencode_ui::select::{self, SelectOption, SelectProps};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::prelude::*;
-
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// Registers `workspace.directory`, a hidden command (no palette entry, slash or key) that opens the menu of the
 /// directory its input names, for a plugin's click (the sidebar footer's location).

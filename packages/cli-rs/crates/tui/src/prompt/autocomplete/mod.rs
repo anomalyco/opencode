@@ -20,25 +20,19 @@ use opencode_local::jsonl::{self, Frecency};
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_store::location::{Catalog, Location};
-use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
 use opencode_ui::fuzzy;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::select::{move_wrap, truncate, truncate_middle};
 use opentui::input::{MouseButton, MouseEventKind};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-use serde_json::{Value, json};
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
-use std::rc::{Rc, Weak};
 use std::sync::atomic::{self, AtomicU64};
 use std::sync::{Arc, Mutex};
 use unicode_width::UnicodeWidthStr;
 
 use self::parse::{DirectorySearch, measure};
 use self::parts::Kind;
-use crate::app::Tui;
+use crate::prelude::*;
 use crate::prompt::editor::Inner;
 
 /// The most rows the popup shows, and the most fuzzy matches it keeps.

@@ -7,17 +7,10 @@
 //! `installation.update-available` and `installation.updated` events show the notice; a notice dismissed once is
 //! kept in the `update-notifications` storage and not shown again.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
 use opencode_api::generated::V2Event;
-use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::motion::FadeInText;
-use opentui::prelude::*;
-use serde_json::{Value, json};
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {

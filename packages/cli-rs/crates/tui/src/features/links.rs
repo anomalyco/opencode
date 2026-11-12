@@ -8,13 +8,7 @@
 //! [`open_url`] and [`open_path`] start the system opener. Tests call [`testing::capture`] first, so nothing
 //! opens a browser or file manager.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
-use opencode_ui::bind;
-use opentui::prelude::*;
-
-use crate::app::Tui;
+use crate::prelude::*;
 
 /// Registers the link click handler. `app::mount` calls it once.
 pub fn install(tui: &Rc<Tui>) {

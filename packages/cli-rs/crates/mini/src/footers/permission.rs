@@ -3,12 +3,10 @@
 
 use opencode_api::generated::{PermissionReply, PermissionRequest};
 use opencode_ui::permission::{Presentation, always_lines, presentation};
-use opentui::prelude::*;
-use serde_json::Value;
-use unicode_width::UnicodeWidthStr;
 
 use super::scroll::Scroller;
-use crate::theme::{FooterTheme, mono_prefix};
+use crate::prelude::*;
+use crate::theme::mono_prefix;
 
 /// `PermissionStage`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

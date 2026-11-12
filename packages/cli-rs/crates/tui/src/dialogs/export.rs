@@ -2,16 +2,10 @@
 //! as they look under `new-designs`. The options pick a format (Markdown with or without thinking and tools, or
 //! JSON, sanitized or not) and an action (copy or save to a file); the result shows where the file went.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout_with};
+use opencode_ui::select::{ActionRun, FooterHint, Group, SelectAction};
 
-use opencode_ui::bind;
-use opencode_ui::dialog::{DIALOG_INSET, DialogOptions, FooterAction, FooterProps, HeaderProps, header, layout_with};
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::select::{self, ActionRun, FooterHint, Group, SelectAction, SelectOption, SelectProps};
-use opentui::prelude::*;
-
-use crate::app::Tui;
+use crate::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {

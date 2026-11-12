@@ -2,14 +2,11 @@
 //! sources the viewer offers, then "Base", which opens the base branch dialog. Also the last turn's refetch when a
 //! turn ends.
 
-use std::rc::{Rc, Weak};
-
 use opencode_store::SessionStatus;
-use opencode_ui::bind;
-use opencode_ui::dialog::DialogOptions;
-use opencode_ui::select::{self, SelectOption, SelectProps};
 
 use super::viewer::{Mode, Viewer};
+
+use crate::prelude::*;
 
 /// The width the labels are padded to, so the descriptions line up (`padEnd(11)`).
 const LABEL_WIDTH: usize = 11;

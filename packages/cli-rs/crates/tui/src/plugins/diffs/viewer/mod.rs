@@ -8,26 +8,19 @@
 //! frame, as TS reads them from the render tree: a few passes before the next frames ([`Viewer::passes`]) pin the
 //! file headers, color the fixed top edge, and finish the scrolls that wait for a rebuilt layout.
 
-use std::cell::{Cell, RefCell};
-use std::collections::{BTreeSet, HashMap};
-use std::rc::{Rc, Weak};
+use std::collections::BTreeSet;
 
-use opencode_api::generated::{FileDiffInfo, FileDiffInfoStatus, LocationQueryInput, SessionID, VcsMode};
+use opencode_api::generated::{FileDiffInfo, FileDiffInfoStatus, LocationQueryInput, VcsMode};
 use opencode_local::cli_config::{DiffSource, DiffView as PreferredView};
 use opencode_store::Location;
-use opencode_ui::bind;
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
 use opentui::widget::DiffView;
-use serde_json::{Value, json};
 
 use super::hunks::{self, Hunk, Selected};
 use super::keys::{self, Action};
 use super::tree::{self, Expanded, Tree};
-use crate::app::Tui;
 use crate::frame::layout::SESSION_PANEL_SPLIT_MIN_WIDTH;
 use crate::panel::{Presentation, Target};
-use crate::routes::Route;
+use crate::prelude::*;
 
 mod load;
 mod render;

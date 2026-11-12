@@ -23,23 +23,12 @@ use opencode_api::generated::{
 };
 use opencode_api::js::locale_compare;
 use opencode_store::Catalog;
-use opencode_ui::bind;
-use opencode_ui::dialog::{
-    DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps,
-    footer, header, layout_view,
-};
-use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
+use opencode_ui::dialog::{DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 use opencode_ui::prompt::{PromptAction, PromptProps, prompt};
-use opencode_ui::select::{self, Gutter, SelectAction, SelectOption, SelectProps};
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
+use opencode_ui::select::{Gutter, SelectAction};
 
-use crate::app::Tui;
 use crate::local::Local;
+use crate::prelude::*;
 
 /// `INTEGRATION_PRIORITY`: these come first, as "Popular".
 const PRIORITY: [&str; 6] = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"];

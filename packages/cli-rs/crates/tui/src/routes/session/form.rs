@@ -8,24 +8,16 @@
 //! A remount keeps the answers in progress: dropping a prompt whose form is still pending stashes its draft, and
 //! the next prompt for that form takes it, as `drafts` in TS does.
 
-use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
-use std::rc::{Rc, Weak};
+use std::collections::HashSet;
 
 use indexmap::IndexMap;
-use opencode_api::generated::{FormField, FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput, SessionID};
+use opencode_api::generated::{FormField, FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput};
 use opencode_api::js::number_to_string;
+use opencode_store::State;
 use opencode_store::forms::{Form, GLOBAL};
 use opencode_store::location::Location;
-use opencode_store::{Changes, State};
-use opencode_ui::bind;
-use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::theme::Theme;
-use opencode_ui::toast::{ToastOptions, Variant};
-use opentui::keymap::{Condition, Disposer};
-use opentui::prelude::*;
 
-use crate::app::Tui;
+use crate::prelude::*;
 
 pub const FORM_MODE: &str = "form";
 

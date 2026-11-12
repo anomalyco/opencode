@@ -3,16 +3,12 @@
 //! chosen branch is remembered per location and branch until the TUI exits.
 
 use opencode_api::generated::{LocationQueryInput, VcsBranchListInput};
-use opencode_ui::bind;
-use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions};
-use opencode_ui::select::{self, Select, SelectOption, SelectProps};
-use opentui::prelude::*;
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
+use opencode_ui::dialog::DIALOG_LIST_INSET;
+use opencode_ui::select::Select;
 
 use super::viewer::Viewer;
-use crate::app::Tui;
+
+use crate::prelude::*;
 
 /// `createDebouncedSignal("", 150)`.
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(150);
