@@ -2522,6 +2522,45 @@ test("the inbox waits for initial requests and orders attention by waiting age r
   await expect(inbox.getByRole("status")).toHaveCount(1)
 })
 
+test("the inbox shows requests already pending on idle child sessions before the app opened", async ({ page }) => {
+  const permission = { id: "perm_idle_child", sessionID: "ses_idle_child_a", action: "shell", resources: ["build"] }
+
+  await mockWorkspace(page, {
+    name: "InboxIdleRequests",
+    sessions: [
+      { id: "ses_idle_root_a", title: "Idle approval root" },
+      { id: "ses_idle_child_a", title: "Idle approval child", parentID: "ses_idle_root_a" },
+      { id: "ses_idle_root_b", title: "Idle question root" },
+      { id: "ses_idle_child_b", title: "Idle question child", parentID: "ses_idle_root_b" },
+    ],
+    sessionStatus: { ses_idle_child_a: { type: "idle" }, ses_idle_child_b: { type: "idle" } },
+    // The server lists a request both for its location and for its own session.
+    permissions: [permission],
+    sessionPermissions: { ses_idle_child_a: [permission] },
+    forms: [
+      {
+        id: "form_idle_child",
+        sessionID: "ses_idle_child_b",
+        title: "Choose a library",
+        metadata: { kind: "question" },
+        fields: [{ key: "library", type: "string", title: "Library" }],
+      },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+
+  await page.goto("/")
+
+  const needs = page
+    .locator('[data-slot="sidebar-inbox"]')
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(needs.filter({ hasText: "Idle approval root" })).toHaveAttribute("data-status", "approval")
+  await expect(needs.filter({ hasText: "Idle question root" })).toHaveAttribute("data-status", "input")
+  await expect(needs).toHaveCount(2)
+})
+
 test("an inactive tab shows attention once auto-accept gives up on its permission", async ({ page }) => {
   const reply = await mockGaveUpPermission(page, "horizontal")
   await page.goto(sessionHref(a.id))

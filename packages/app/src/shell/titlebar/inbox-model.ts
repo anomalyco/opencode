@@ -140,6 +140,39 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     })),
   }))
 
+  // Requests can outlive a run, and the event stream does not replay ones asked before this client connected, so read
+  // them once per indexed location, idle sessions included. Loading the owning session joins a child to its root.
+  createEffect(() =>
+    connections().forEach((item, index) => {
+      const data = item.ctx.data
+      const checked = new Set<string>()
+      const own = (requests: { sessionID: string }[], sync: (sessionID: string) => Promise<void>) =>
+        new Set(requests.map((request) => request.sessionID)).forEach((sessionID) => {
+          if (sessionID === "global") return
+          if (!data.session.get(sessionID)) void data.session.sync(sessionID).catch(() => undefined)
+          void sync(sessionID).catch(() => undefined)
+        })
+
+      createEffect(() =>
+        (queries[index]?.data?.() ?? []).forEach((session) => {
+          const key = pathKey(session.location.directory)
+
+          if (checked.has(key)) return
+          checked.add(key)
+          const location = { directory: session.location.directory }
+          void item.ctx.sdk.api.permission.request
+            .list({ location })
+            .then((response) => own(response.data, (sessionID) => data.session.permission.sync(sessionID)))
+            .catch(() => undefined)
+          void item.ctx.sdk.api.form
+            .list({ location })
+            .then((response) => own(response.data, (sessionID) => data.session.form.sync(sessionID)))
+            .catch(() => undefined)
+        }),
+      )
+    }),
+  )
+
   const archivedQueries = useQueries(() => ({
     queries: connections().map((item) => ({
       queryKey: ["inbox-archived-sessions", item.conn] as const,
