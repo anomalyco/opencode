@@ -30,8 +30,9 @@ test("native protocol errors keep the cause and give a valid recovery operation"
   expect(unsupported.message).toContain("does not support or allow")
   expect(unsupported.message).toContain("do not retry unchanged")
   expect(unsupported.cause).toBeInstanceOf(Error)
-  const failure = browserFailure({ type: "screenshot", tabID }, new Error("UnknownVizError"))
-  expect(failure.message).toContain("browser.tabs.focus({tabID})")
+  const failure = browserFailure({ type: "screenshot", tabID }, new Error("Capture failed: UnknownVizError"))
+  expect(failure.message).not.toContain("browser.tabs.focus")
+  expect(failure.message).toContain("browser.reload({tabID})")
   expect(failure.message).toContain("report the capture failure")
 })
 

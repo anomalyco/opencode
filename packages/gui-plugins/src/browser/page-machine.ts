@@ -177,6 +177,11 @@ export function documentGeneration(state: DocumentState) {
   return state.status === "closed" ? 0 : state.generation
 }
 
+/** Whether a main-frame navigation started that has not committed, failed, or stopped. */
+export function isNavigationPending(state: DocumentState) {
+  return state.status !== "closed" && state.pending !== undefined
+}
+
 /** Whether the native surface holds a document worth exposing over the themed background. */
 export function documentVisible(state: DocumentState) {
   return state.status === "loaded" && state.revealed
