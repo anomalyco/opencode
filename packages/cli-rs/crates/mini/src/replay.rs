@@ -821,12 +821,11 @@ impl Transcript {
     }
 
     fn compaction(&mut self, message: &SessionMessageCompaction, render: bool) -> Output {
-        let (id, summary, completed) = match message {
-            SessionMessageCompaction::Running(running) => (running.id.as_str(), running.summary.as_str(), false),
-            SessionMessageCompaction::Completed(done) => (done.id.as_str(), done.summary.as_str(), true),
-            SessionMessageCompaction::Failed(failed) => (failed.id.as_str(), "", false),
-            SessionMessageCompaction::Unknown(_) => return Output::default(),
-        };
+        if let SessionMessageCompaction::Unknown(_) = message {
+            return Output::default();
+        }
+        let (id, summary) = (message.id(), message.summary().unwrap_or_default());
+        let completed = matches!(message, SessionMessageCompaction::Completed(_));
         let visible = !self.message_ids.insert(id.to_owned());
         // A client that attaches while it runs sees no `session.compaction.started` that would set it.
         if matches!(message, SessionMessageCompaction::Running(_)) {

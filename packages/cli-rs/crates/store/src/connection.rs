@@ -155,7 +155,7 @@ impl Data {
 impl State {
     /// One `handleEvent` arm; returns the reads it leaves for after the lock.
     pub(crate) fn apply_event(&mut self, event: &V2Event) -> Vec<Follow> {
-        self.event_seq = crate::messages::durable_seq(event);
+        self.event_seq = event.durable_seq();
         self.record_edit(event);
         match event {
             V2Event::ServerConnected(_) => {

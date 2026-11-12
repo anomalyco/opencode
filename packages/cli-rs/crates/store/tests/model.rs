@@ -55,7 +55,7 @@ use std::sync::{Arc, Mutex};
 use common::*;
 use futures_util::FutureExt;
 use opencode_api::generated::SessionID;
-use opencode_store::{Data, LoadMore, Location, MessageExt, Options, Task};
+use opencode_store::{Data, LoadMore, Location, Options, Task};
 use serde_json::{Value, json};
 use tokio::sync::oneshot;
 

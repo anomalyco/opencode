@@ -16,65 +16,25 @@ pub struct Row {
     pub description: Option<String>,
 }
 
-/// The field's key; an unknown field has none.
+/// The field's key; an unknown field without one has an empty key.
 pub fn key(field: &FormField) -> &str {
-    match field {
-        FormField::String(field) => &field.key,
-        FormField::Number(field) => &field.key,
-        FormField::Integer(field) => &field.key,
-        FormField::Boolean(field) => &field.key,
-        FormField::Multiselect(field) => &field.key,
-        FormField::External(field) => &field.key,
-        FormField::Unknown(_) => "",
-    }
+    field.key()
 }
 
 pub fn title(field: &FormField) -> Option<&str> {
-    match field {
-        FormField::String(field) => field.title.as_deref(),
-        FormField::Number(field) => field.title.as_deref(),
-        FormField::Integer(field) => field.title.as_deref(),
-        FormField::Boolean(field) => field.title.as_deref(),
-        FormField::Multiselect(field) => field.title.as_deref(),
-        FormField::External(field) => field.title.as_deref(),
-        FormField::Unknown(_) => None,
-    }
+    field.title()
 }
 
 pub fn description(field: &FormField) -> Option<&str> {
-    match field {
-        FormField::String(field) => field.description.as_deref(),
-        FormField::Number(field) => field.description.as_deref(),
-        FormField::Integer(field) => field.description.as_deref(),
-        FormField::Boolean(field) => field.description.as_deref(),
-        FormField::Multiselect(field) => field.description.as_deref(),
-        FormField::External(field) => field.description.as_deref(),
-        FormField::Unknown(_) => None,
-    }
+    field.description()
 }
 
 pub fn required(field: &FormField) -> bool {
-    let required = match field {
-        FormField::String(field) => field.required,
-        FormField::Number(field) => field.required,
-        FormField::Integer(field) => field.required,
-        FormField::Boolean(field) => field.required,
-        FormField::Multiselect(field) => field.required,
-        FormField::External(_) | FormField::Unknown(_) => None,
-    };
-    required == Some(true)
+    field.required() == Some(true)
 }
 
 pub fn conditions(field: &FormField) -> &[FormWhen] {
-    let when = match field {
-        FormField::String(field) => field.when.as_deref(),
-        FormField::Number(field) => field.when.as_deref(),
-        FormField::Integer(field) => field.when.as_deref(),
-        FormField::Boolean(field) => field.when.as_deref(),
-        FormField::Multiselect(field) => field.when.as_deref(),
-        FormField::External(_) | FormField::Unknown(_) => None,
-    };
-    when.unwrap_or_default()
+    field.when().unwrap_or_default()
 }
 
 /// `isFormAnswerField`.

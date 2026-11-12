@@ -9,7 +9,7 @@ use opencode_api::generated::{
     SessionInboxInfo, SessionInfo, SessionInterruptInput, SessionMessageAssistantContentItem, SessionMessageCompaction,
     SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput, SessionUpdateInput,
 };
-use opencode_store::{MessageExt, State};
+use opencode_store::State;
 use opencode_ui::keymap::Slash;
 
 use super::scroll;

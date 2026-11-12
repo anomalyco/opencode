@@ -18,7 +18,7 @@ use opencode_api::generated::{
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
-use opencode_store::{LoadMore, MessageExt, State};
+use opencode_store::{LoadMore, State};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::ThemeMode;
 use opentui::input::MouseEventKind;

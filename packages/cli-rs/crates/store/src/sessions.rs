@@ -7,8 +7,8 @@ use futures_util::FutureExt;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
-use crate::inbox::{InboxExt, now};
-use crate::messages::{MessageExt, from_event};
+use crate::inbox::now;
+use crate::messages::from_event;
 use crate::state::{Data, Error, SessionStatus, State, Task, evict_missing};
 
 /// Children per page of a family read (`CHILD_PAGE`).

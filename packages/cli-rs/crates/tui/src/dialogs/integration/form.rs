@@ -6,7 +6,7 @@
 
 use opencode_api::generated::{
     FormAnswer, FormBooleanField, FormExternalField, FormField, FormMultiselectField, FormStringField, FormValue,
-    FormWhen, FormWhenOp, FormWhenValue,
+    FormWhenOp, FormWhenValue,
 };
 use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 use opencode_ui::prompt::{PromptProps, prompt};
@@ -60,7 +60,7 @@ impl Run {
                 self.index.set(self.index.get() + 1);
                 continue;
             }
-            if hidden(&field) {
+            if field.hidden() == Some(true) {
                 let key = crate::routes::session::form::key(&field).to_owned();
                 if let Some(value) = initial_values(std::slice::from_ref(&field)).0.shift_remove(&key) {
                     self.answer.borrow_mut().insert(key, value);
@@ -121,42 +121,9 @@ impl Run {
     }
 }
 
-fn hidden(field: &FormField) -> bool {
-    let hidden = match field {
-        FormField::String(field) => field.hidden,
-        FormField::Number(field) => field.hidden,
-        FormField::Integer(field) => field.hidden,
-        FormField::Boolean(field) => field.hidden,
-        FormField::Multiselect(field) => field.hidden,
-        FormField::External(_) | FormField::Unknown(_) => None,
-    };
-    hidden == Some(true)
-}
-
-fn required(field: &FormField) -> bool {
-    let required = match field {
-        FormField::String(field) => field.required,
-        FormField::Number(field) => field.required,
-        FormField::Integer(field) => field.required,
-        FormField::Boolean(field) => field.required,
-        FormField::Multiselect(field) => field.required,
-        FormField::External(_) | FormField::Unknown(_) => None,
-    };
-    required == Some(true)
-}
-
 /// `active`: every `when` holds on the answers given so far.
 fn active(field: &FormField, answer: &FormAnswer) -> bool {
-    let when: &[FormWhen] = match field {
-        FormField::String(field) => field.when.as_deref(),
-        FormField::Number(field) => field.when.as_deref(),
-        FormField::Integer(field) => field.when.as_deref(),
-        FormField::Boolean(field) => field.when.as_deref(),
-        FormField::Multiselect(field) => field.when.as_deref(),
-        FormField::External(_) | FormField::Unknown(_) => None,
-    }
-    .unwrap_or_default();
-    when.iter().all(|when| {
+    field.when().unwrap_or_default().iter().all(|when| {
         let Some(value) = answer.get(&when.key) else { return false };
         let hit = match (value, &when.value) {
             (FormValue::Array(items), want) => items.contains(&when_string(want)),
@@ -253,12 +220,7 @@ fn text(local: &Local, title: String, field: FormField, resolve: Resolve) {
         FormField::String(field) => field.placeholder.clone(),
         _ => None,
     };
-    let description = match &field {
-        FormField::String(field) => field.description.clone(),
-        FormField::Number(field) => field.description.clone(),
-        FormField::Integer(field) => field.description.clone(),
-        _ => None,
-    };
+    let description = field.description().map(str::to_owned);
     let confirm = resolve.clone();
     replace(local, &resolve, move |cx| {
         let (errors, set_error) = super::error_slot(cx, true);
@@ -268,7 +230,7 @@ fn text(local: &Local, title: String, field: FormField, resolve: Resolve) {
         let (field, confirm) = (field.clone(), confirm.clone());
         let on_confirm = Rc::new(move |input: &str| {
             let text = input.trim();
-            let value = if text.is_empty() && !required(&field) {
+            let value = if text.is_empty() && field.required() != Some(true) {
                 None
             } else if matches!(field, FormField::String(_)) {
                 Some(FormValue::String(text.to_owned()))

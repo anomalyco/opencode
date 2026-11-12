@@ -88,12 +88,9 @@ impl Banner {
             *self.0.rendered.borrow_mut() = None;
             return;
         };
-        let count = messages
-            .iter()
-            .position(|message| opencode_store::MessageExt::id(message) == boundary)
-            .map_or(0, |start| {
-                messages[start..].iter().filter(|message| matches!(message, SessionMessageInfo::User(_))).count()
-            });
+        let count = messages.iter().position(|message| message.id() == boundary).map_or(0, |start| {
+            messages[start..].iter().filter(|message| matches!(message, SessionMessageInfo::User(_))).count()
+        });
         let props = Props { count, files: files.to_vec(), redo, width };
         self.0.root.visible(true);
         if self.0.rendered.borrow().as_ref() == Some(&props) {

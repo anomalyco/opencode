@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
-use opencode_store::{Catalog, CreateSession, Data, LoadMore, MessageExt, Options};
+use opencode_store::{Catalog, CreateSession, Data, LoadMore, Options};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
