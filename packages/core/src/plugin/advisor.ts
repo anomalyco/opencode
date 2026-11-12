@@ -83,13 +83,9 @@ export const Plugin = {
             transcript: full,
           })
           .pipe(
+            // No `error` field: toSessionError would show the inner error instead of this message.
             Effect.mapError(
-              (error) =>
-                new ToolFailure({
-                  message: `Advisor unavailable: ${error.message}. Continue without advice.`,
-                  error,
-                  metadata: { model, status: "unavailable" },
-                }),
+              (error) => new ToolFailure({ message: `Advisor unavailable: ${error.message}. Continue without advice.` }),
             ),
           )
         const text = result.text.trim()
