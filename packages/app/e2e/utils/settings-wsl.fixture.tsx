@@ -11,7 +11,7 @@ import { ServerConnection } from "../../src/runtime/server/registry"
 import { usePluginServers } from "../../src/runtime/plugin/servers"
 
 /** The input of a WSL or SSH method this fixture answers. */
-type FixtureInput = { id?: string; name?: string }
+type FixtureInput = { id?: string; name?: string; target?: string }
 
 /** A main-side method: SSH `start` answers with the state revision, the others with nothing. */
 type FixtureMethod = (input: FixtureInput) => number | void
@@ -186,8 +186,20 @@ export function mount(input: {
 
     const ssh = {
       // Like main: a connect opens a new tunnel to a remote server with a new password.
-      start() {
+      start(value) {
         setStore("connects", (count) => count + 1)
+
+        if (!store.ssh.servers.length && value.id && value.target) {
+          const config = { id: value.id, target: value.target, name: value.name ?? "" }
+
+          setStore("ssh", (state) => ({
+            revision: state.revision + 1,
+            servers: [{ config, saved: false, stage: "connecting", detail: "" }],
+          }))
+
+          return store.ssh.revision
+        }
+
         setSsh({ stage: "ready", http: { url: input.ssh ?? "", password: `ssh-${store.connects + 1}` } })
 
         return store.ssh.revision
@@ -303,6 +315,17 @@ export function mount(input: {
               />
               SSH plugin
             </label>
+            <Show when={store.ssh.servers.some((item) => !item.saved && item.stage === "connecting")}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ saved: true, stage: "ready", http: { url: input.server, password: "ssh-1" } })
+                  publish("ssh")
+                }}
+              >
+                Finish SSH connection
+              </button>
+            </Show>
             {/* The SSH tunnel dropping, which only main notices. */}
             <Show when={input.ssh}>
               <button
