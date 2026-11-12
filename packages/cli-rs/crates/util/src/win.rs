@@ -1,6 +1,7 @@
 //! Win32 calls that std does not cover: whether a process is alive, ending one, pointing stdin at the console, and
 //! ignoring Ctrl+C while a child runs; the executable, times and memory of a process, and the OS release; shared
-//! libraries; stderr on a pipe; console modes and waits; time zones of Windows' ICU.
+//! libraries; stderr on a pipe; console modes and waits; time zones of Windows' ICU; file indexes and times of
+//! directories.
 //! Windows only.
 
 #![allow(unsafe_code)]
@@ -11,12 +12,16 @@ use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::io::{
     AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, IntoRawHandle, OwnedHandle, RawHandle,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
 use windows_sys::Win32::Foundation::{
     ERROR_ACCESS_DENIED, FILETIME, FreeLibrary, STILL_ACTIVE, WAIT_FAILED, WAIT_OBJECT_0,
+};
+use windows_sys::Win32::Storage::FileSystem::{
+    BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_READ_ATTRIBUTES, FILE_WRITE_ATTRIBUTES,
+    GetFileInformationByHandle,
 };
 use windows_sys::Win32::System::Console::{
     CONSOLE_SCREEN_BUFFER_INFO, CTRL_BREAK_EVENT, CTRL_C_EVENT, ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT,
@@ -363,6 +368,32 @@ impl IcuZone {
     }
 }
 
+/// The file index of `path`, a file or a directory, which stands in for the inode: it tells a directory from one
+/// made again at its path, where the creation time does not (NTFS gives a name made again within 15 s its old
+/// creation time).
+pub fn file_index(path: &Path) -> io::Result<u64> {
+    let file = open_path(path, FILE_READ_ATTRIBUTES)?;
+    // SAFETY: an all-zero `BY_HANDLE_FILE_INFORMATION` is valid plain data.
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+    // SAFETY: `file` is open with attribute access, and `info` outlives the call.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok((u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow))
+}
+
+/// Sets the modification time of `path`, a file or a directory. `File::set_modified` needs a handle with write
+/// access, which `File::open` does not give and a directory does not open with.
+pub fn set_modified(path: &Path, time: SystemTime) -> io::Result<()> {
+    open_path(path, FILE_WRITE_ATTRIBUTES)?.set_modified(time)
+}
+
+// Opens `path` with `access` alone; `FILE_FLAG_BACKUP_SEMANTICS` lets it be a directory.
+fn open_path(path: &Path, access: u32) -> io::Result<std::fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new().access_mode(access).custom_flags(FILE_FLAG_BACKUP_SEMANTICS).open(path)
+}
+
 fn open(pid: u32, access: PROCESS_ACCESS_RIGHTS) -> io::Result<OwnedHandle> {
     // SAFETY: plain call; a null result is an error.
     let handle = unsafe { OpenProcess(access, 0, pid) };
@@ -472,6 +503,21 @@ mod tests {
         assert_eq!(offset("Asia/Kathmandu", 1_719_792_000_000), 20_700_000);
         assert_eq!(offset("No/Such_Zone", 0), 0);
         assert!(IcuZone::open(None).is_some());
+    }
+
+    #[test]
+    fn a_directory_made_again_has_another_index_and_takes_a_time() {
+        let root = crate::temp::tempdir().unwrap();
+        let dir = root.path().join("d");
+        std::fs::create_dir(&dir).unwrap();
+        let first = file_index(&dir).unwrap();
+        assert_eq!(file_index(&dir).unwrap(), first);
+        std::fs::remove_dir(&dir).unwrap();
+        std::fs::create_dir(&dir).unwrap();
+        assert_ne!(file_index(&dir).unwrap(), first);
+        let old = SystemTime::now() - Duration::from_secs(3600);
+        set_modified(&dir, old).unwrap();
+        assert_eq!(std::fs::metadata(&dir).unwrap().modified().unwrap(), old);
     }
 
     #[test]
