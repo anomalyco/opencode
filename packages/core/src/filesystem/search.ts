@@ -28,14 +28,25 @@ function emptyIndex() {
   return { files: new Map<string, Prepared>(), directories: new Map<string, Prepared>() }
 }
 
+type Index = ReturnType<typeof emptyIndex>
+
+// Each scan builds a fresh index object and swaps it in atomically, so arrays
+// cached per index object are naturally invalidated at the swap.
+const itemsCache = new WeakMap<Index, { files: Prepared[]; directories: Prepared[]; all: Prepared[] }>()
+
+function items(index: Index, input: FileSystem.FindInput) {
+  let cached = itemsCache.get(index)
+  if (!cached) {
+    const files = Array.from(index.files.values())
+    const directories = Array.from(index.directories.values())
+    cached = { files, directories, all: [...files, ...directories] }
+    itemsCache.set(index, cached)
+  }
+  return input.type === "file" ? cached.files : input.type === "directory" ? cached.directories : cached.all
+}
+
 function search(index: ReturnType<typeof emptyIndex>, input: FileSystem.FindInput) {
-  const items =
-    input.type === "file"
-      ? Array.from(index.files.values())
-      : input.type === "directory"
-        ? Array.from(index.directories.values())
-        : [...index.files.values(), ...index.directories.values()]
-  const result = fuzzysort.go(input.query, items, { limit: input.limit ?? 50 })
+  const result = fuzzysort.go(input.query, items(index, input), { limit: input.limit ?? 50 })
   // Targets are owned by the current location index. The only global fuzzysort
   // state left is its query cache, which must not retain every query forever.
   fuzzysort.cleanup()
