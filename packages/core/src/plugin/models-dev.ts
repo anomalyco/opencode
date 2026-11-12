@@ -37,7 +37,8 @@ export const ModelsDevPlugin = define({
     const bus = yield* Bus.Service
     // Filtering and definition indexes are shared across Locations. Only Model materialization
     // makes mutable copies, after provider configuration and access have been resolved.
-    const loaded = { data: snapshots(yield* modelsDev.get()) }
+    const local = yield* ModelsDev.localSnapshot
+    const loaded = { data: snapshots(yield* modelsDev.get(), local) }
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
         if (provider.environment.length === 0) continue
@@ -66,7 +67,7 @@ export const ModelsDevPlugin = define({
       }
     })
     const apply = (data: readonly ModelsDev.Snapshot[]) => {
-      loaded.data = snapshots(data)
+      loaded.data = snapshots(data, local)
       return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
     }
     yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
@@ -77,13 +78,30 @@ export const ModelsDevPlugin = define({
     // Refreshed to nobody here. On a cold cache that read served the bundled snapshot, so
     // re-read now instead of waiting for the next TTL refresh.
     const latest = yield* modelsDev.get()
-    if (snapshots(latest) !== loaded.data) yield* apply(latest)
+    if (snapshots(latest, local) !== loaded.data) yield* apply(latest)
   }),
 })
 
 const prepared = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()
+const merged = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()
 
-function snapshots(data: readonly ModelsDev.Snapshot[]) {
+/**
+ * The catalog's providers, plus the ones opencode ships itself. A shipped provider keeps its own
+ * definition, so a source that later names it cannot narrow down what opencode ships.
+ */
+function snapshots(data: readonly ModelsDev.Snapshot[], local: readonly ModelsDev.Snapshot[] = []) {
+  if (local.length === 0) return filtered(data)
+  const cached = merged.get(data)
+  if (cached) return cached
+  const result = filtered([
+    ...data.filter((item) => !local.some((entry) => entry.info.id === item.info.id)),
+    ...local,
+  ])
+  merged.set(data, result)
+  return result
+}
+
+function filtered(data: readonly ModelsDev.Snapshot[]) {
   const cached = prepared.get(data)
   if (cached) return cached
   const result = data

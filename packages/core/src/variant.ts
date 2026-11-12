@@ -149,6 +149,31 @@ const nvidiaTemplate = (chat_template_kwargs: Record<string, unknown>): Overlay 
   body: { chat_template_kwargs },
 })
 
+// Ark's Chat API takes deep reasoning as a `thinking` switch rather than an effort level.
+// Shared by volcengine, volcengine-coding-plan, and byteplus (all Ark API).
+//
+// Ark rejects `thinking.type=disabled` combined with a graded effort, so a variant that
+// turns thinking off must not also carry a reasoning effort. The catalog lists the
+// effort levels each model separates, and `none` and `minimal` are the off values: a
+// model with a toggle declares it, and a model without one relies on the effort alone.
+const arkChat: Protocol = (model, support) => {
+  switch (support.type) {
+    case "effort":
+      return efforts(support.values ?? EFFORTS, (effort) => ({
+        ...(effort === "none" || effort === "minimal"
+          ? { body: { thinking: { type: "disabled" } } }
+          : { settings: { reasoningEffort: effort }, body: { thinking: { type: "enabled" } } }),
+      }))
+    case "toggle":
+      return toggle(
+        { body: { thinking: { type: "disabled" } } },
+        { body: { thinking: { type: "enabled" } } },
+      )
+    case "budget_tokens":
+      return []
+  }
+}
+
 const nvidiaToggle = (key: string): Variants =>
   toggle(nvidiaTemplate({ [key]: false }), nvidiaTemplate({ [key]: true }))
 
@@ -633,6 +658,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/alibaba": alibabaChat,
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
+  "@opencode/ai/providers/ark": arkChat,
   "@opencode/ai/providers/cerebras": openaiChat,
   "@opencode/ai/providers/cloudflare-workers-ai": workersAIChat,
   "@opencode/ai/providers/cohere/chat": openaiChat,

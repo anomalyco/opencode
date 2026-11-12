@@ -17,6 +17,7 @@ import { Provider } from "./provider.js"
 import { Variant } from "./variant.js"
 import { KV } from "./kv.js"
 import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
+import localCatalogText from "./models-dev/local.txt" with { type: "text" }
 import { isV1, toV2 } from "./models-dev/v1.js"
 
 // Only the fields opencode reads are decoded. Unknown keys are ignored, and a model that
@@ -178,6 +179,9 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:@jerome-benoit/sap-ai-provider-v2",
   "aisdk:watsonx-ai-provider",
 ])
+
+const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+const decodeCatalog = (text: string) => Schema.decodeUnknownEffect(CatalogJson)(text)
 
 const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
@@ -488,8 +492,6 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
-const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
-const decodeCatalog = (text: string) => Schema.decodeUnknownEffect(CatalogJson)(text)
 const Cache = Schema.Struct({
   updatedAt: Schema.Number,
   // Digest of the raw body, persisted so refresh() can skip republishing a
@@ -508,6 +510,23 @@ const defaultSource = "https://models.opencode.ai"
 export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}`
 
 export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.flatMap(normalize))
+
+/**
+ * The providers opencode ships itself, so no catalog source has to name them. They are merged over
+ * whatever the source holds, which keeps them present across the periodic refresh.
+ */
+let localCache: readonly Snapshot[] | undefined
+export const localSnapshot = Effect.suspend(() => {
+  if (localCache) return Effect.succeed(localCache)
+  return decodeCatalog(localCatalogText).pipe(
+    Effect.flatMap(normalize),
+    Effect.map((snapshots) => {
+      localCache = snapshots
+      return snapshots
+    }),
+    Effect.orElseSucceed(() => [] as readonly Snapshot[]),
+  )
+})
 
 // Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via

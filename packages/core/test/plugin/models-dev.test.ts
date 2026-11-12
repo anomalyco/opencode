@@ -755,13 +755,21 @@ describe("ModelsDevPlugin", () => {
 
       yield* activate(providers)
       const ids = (models: readonly Model.Info[]) => models.map((item) => item.id).sort()
-      expect(ids(yield* modelState.available())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
-      expect(ids(yield* modelState.all())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      // The providers opencode ships itself contribute their models too.
+      const shipped = (yield* modelState.all())
+        .filter((item) => item.providerID !== providerID)
+        .map((item) => item.id)
+      expect(ids(yield* modelState.available())).toEqual(
+        [...shipped, Model.ID.make("gpt-5.5"), Model.ID.make("gpt-audio")].sort(),
+      )
+      expect(ids(yield* modelState.all())).toEqual(
+        [...shipped, Model.ID.make("gpt-5.5"), Model.ID.make("gpt-audio")].sort(),
+      )
       expect(yield* modelState.get(providerID, Model.ID.make("jev-1.13"))).toBeUndefined()
       expect(ids(yield* modelState.available(["decision"]))).toEqual([Model.ID.make("jev-1.13")])
       expect(ids(yield* modelState.available(["image"]))).toEqual([Model.ID.make("gpt-image-2")])
       expect(ids(yield* modelState.available(["chat", "image", "image"]))).toEqual(
-        ["gpt-5.5", "gpt-audio", "gpt-image-2"].map((id) => Model.ID.make(id)),
+        [...shipped, Model.ID.make("gpt-5.5"), Model.ID.make("gpt-audio"), Model.ID.make("gpt-image-2")].sort(),
       )
       expect(yield* modelState.available(["embedding"])).toEqual([])
     }),
@@ -786,6 +794,19 @@ describe("ModelsDevPlugin", () => {
             {
               type: "env",
               names: ["ACME_API_KEY"],
+            },
+          ],
+          connections: [],
+        }),
+        // The providers opencode ships itself are in the catalog whatever the source holds.
+        Integration.Info.make({
+          id: Integration.ID.make("byteplus"),
+          name: "BytePlus",
+          methods: [
+            { type: "key" },
+            {
+              type: "env",
+              names: ["BYTEPLUS_API_KEY", "ARK_API_KEY"],
             },
           ],
           connections: [],

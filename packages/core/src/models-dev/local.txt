@@ -1,0 +1,1732 @@
+{
+  "byteplus": {
+    "id": "byteplus",
+    "name": "BytePlus",
+    "doc": "https://ai.byteplus.com/ark/region:ap-southeast-1/docs/product-overview",
+    "env": [
+      "BYTEPLUS_API_KEY",
+      "ARK_API_KEY"
+    ],
+    "models": {
+      "doubao-seed-character-260628": {
+        "id": "doubao-seed-character-260628",
+        "canonical_id": "bytedance-seed/seed-character",
+        "type": "chat",
+        "name": "Seed Character",
+        "description": "ByteDance Seed model optimized for character-driven dialogue and consistent conversational behavior",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2026-06-23",
+        "last_updated": "2026-06-23",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": [
+              "minimal",
+              "low",
+              "high"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 256000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.11875,
+              "cache": {
+                "read": 0.02375
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.17812,
+                  "cache": {
+                    "read": 0.02375
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 0.29687,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.8906
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "glm-5-3-flash-260828": {
+        "id": "glm-5-3-flash-260828",
+        "canonical_id": "zhipuai/glm-5.3-flash",
+        "type": "chat",
+        "name": "GLM-5.3-Flash",
+        "description": "Native multimodal GLM model for efficient coding and long-horizon agent tasks",
+        "family": "glm-flash",
+        "open_weights": true,
+        "release_date": "2026-08-26",
+        "last_updated": "2026-08-26",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "video/mp4",
+            "video/x-matroska",
+            "video/quicktime",
+            "application/pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "low",
+              "high",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": true,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 131072
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.11875,
+              "cache": {
+                "read": 0.03414
+              }
+            },
+            "output": {
+              "price": 0.41563
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "deepseek-v4-pro-ga-260813": {
+        "id": "deepseek-v4-pro-ga-260813",
+        "canonical_id": "deepseek/deepseek-v4-pro-0813",
+        "type": "chat",
+        "name": "DeepSeek V4 Pro 0813",
+        "description": "DeepSeek V4 Pro snapshot with million-token context and support for thinking and non-thinking modes",
+        "family": "deepseek-thinking",
+        "open_weights": true,
+        "release_date": "2026-08-13",
+        "last_updated": "2026-08-22",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": [
+              "minimal",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": true,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 384000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 1.3359,
+              "cache": {
+                "read": 0.04453
+              }
+            },
+            "output": {
+              "price": 4.00771
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-1-6-251015": {
+        "id": "doubao-seed-1-6-251015",
+        "canonical_id": "bytedance-seed/seed-1-6",
+        "type": "chat",
+        "name": "Seed 1.6",
+        "description": "ByteDance Seed model for long-context reasoning, instruction following, and tool-assisted tasks",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2025-10-15",
+        "last_updated": "2025-10-15",
+        "status": "deprecated",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": [
+              "minimal",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 64000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.11875,
+              "cache": {
+                "read": 0.02375
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.17812,
+                  "cache": {
+                    "read": 0.02375
+                  }
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 0.35624,
+                  "cache": {
+                    "read": 0.02375
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 1.18747,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 2.37494
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 3.56241
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "glm-5-2-260617": {
+        "id": "glm-5-2-260617",
+        "canonical_id": "zhipuai/glm-5.2",
+        "type": "chat",
+        "name": "GLM-5.2",
+        "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
+        "family": "glm",
+        "open_weights": true,
+        "release_date": "2026-06-13",
+        "last_updated": "2026-06-13",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": [
+              "minimal",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": true,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 131072
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 1.18747,
+              "cache": {
+                "read": 0.29687
+              }
+            },
+            "output": {
+              "price": 4.15615
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-2-0-pro-260215": {
+        "id": "doubao-seed-2-0-pro-260215",
+        "canonical_id": "bytedance-seed/seed-2.0-pro",
+        "type": "chat",
+        "name": "Seed 2.0 Pro",
+        "description": "Flagship ByteDance Seed 2.0 model for complex multimodal reasoning and long-horizon agent workflows",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2026-02-14",
+        "last_updated": "2026-02-14",
+        "status": "deprecated",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": false,
+          "top_p": false,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 128000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.47499,
+              "cache": {
+                "read": 0.095
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.71248,
+                  "cache": {
+                    "read": 0.1425
+                  }
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 1.42496,
+                  "cache": {
+                    "read": 0.28499
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 2.37494,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 3.56241
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 7.12482
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-2-0-code-preview-260215": {
+        "id": "doubao-seed-2-0-code-preview-260215",
+        "canonical_id": "bytedance-seed/seed-2.0-code",
+        "type": "chat",
+        "name": "Seed 2.0 Code",
+        "description": "ByteDance Seed coding model for multimodal software engineering and long-running agents",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2026-02-14",
+        "last_updated": "2026-02-14",
+        "status": "deprecated",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 262144,
+          "output": 131072
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.47499,
+              "cache": {
+                "read": 0.095
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.71248,
+                  "cache": {
+                    "read": 0.1425
+                  }
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 1.42496,
+                  "cache": {
+                    "read": 0.28499
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 2.37494,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 3.56241
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 7.12482
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-2-0-lite-260428": {
+        "id": "doubao-seed-2-0-lite-260428",
+        "canonical_id": "bytedance-seed/seed-2.0-lite",
+        "type": "chat",
+        "name": "Seed 2.0 Lite",
+        "description": "Cost-efficient ByteDance Seed 2.0 model for production chat, analysis, and structured generation",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2026-02-14",
+        "last_updated": "2026-02-14",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 131072
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.08906,
+              "cache": {
+                "read": 0.01781
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.13359,
+                  "cache": {
+                    "read": 0.02672
+                  }
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 0.26718,
+                  "cache": {
+                    "read": 0.05344
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 0.53436,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.80154
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 1.60308
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-2-0-mini-260428": {
+        "id": "doubao-seed-2-0-mini-260428",
+        "canonical_id": "bytedance-seed/seed-2.0-mini",
+        "type": "chat",
+        "name": "Seed 2.0 Mini",
+        "description": "Lightweight ByteDance Seed 2.0 model for low-latency multimodal reasoning and high-volume tasks",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2026-02-14",
+        "last_updated": "2026-02-14",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 131072
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.02969,
+              "cache": {
+                "read": 0.00594
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.05937,
+                  "cache": {
+                    "read": 0.01187
+                  }
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 0.11875,
+                  "cache": {
+                    "read": 0.02375
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 0.29687,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.59374
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 1.18747
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-1-8-251228": {
+        "id": "doubao-seed-1-8-251228",
+        "canonical_id": "bytedance-seed/seed-1-8",
+        "type": "chat",
+        "name": "Seed 1.8",
+        "description": "ByteDance Seed model for multimodal reasoning, long-context analysis, and agent workflows",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2025-12-28",
+        "last_updated": "2025-12-28",
+        "status": "deprecated",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 64000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.11875,
+              "cache": {
+                "read": 0.02375
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.17812,
+                  "cache": {
+                    "read": 0.02375
+                  }
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 0.35624,
+                  "cache": {
+                    "read": 0.02375
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 1.18747,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 2.37494
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 3.56241
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-2-1-pro-260628": {
+        "id": "doubao-seed-2-1-pro-260628",
+        "canonical_id": "bytedance-seed/seed-2.1-pro",
+        "type": "chat",
+        "name": "Seed 2.1 Pro",
+        "description": "Flagship ByteDance Seed 2.1 model for complex multimodal reasoning, coding, and agents",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2026-06-23",
+        "last_updated": "2026-06-23",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 256000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.8906,
+              "cache": {
+                "read": 0.17812
+              }
+            },
+            "output": {
+              "price": 4.45301
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-2-1-turbo-260628": {
+        "id": "doubao-seed-2-1-turbo-260628",
+        "canonical_id": "bytedance-seed/seed-2.1-turbo",
+        "type": "chat",
+        "name": "Seed 2.1 Turbo",
+        "description": "Faster ByteDance Seed 2.1 model for multimodal reasoning and latency-sensitive agent workflows",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2026-06-23",
+        "last_updated": "2026-06-23",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 256000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.4453,
+              "cache": {
+                "read": 0.08906
+              }
+            },
+            "output": {
+              "price": 2.22651
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-1-6-vision-250815": {
+        "id": "doubao-seed-1-6-vision-250815",
+        "canonical_id": "bytedance-seed/seed-1-6-vision",
+        "type": "chat",
+        "name": "Seed 1.6 Vision",
+        "description": "ByteDance Seed multimodal model for image understanding, visual reasoning, and tool-assisted tasks",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2025-08-15",
+        "last_updated": "2025-08-15",
+        "status": "deprecated",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 32000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.11875,
+              "cache": {
+                "read": 0.02375
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.17812,
+                  "cache": {
+                    "read": 0.02375
+                  }
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 0.35624,
+                  "cache": {
+                    "read": 0.02375
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 1.18747,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 2.37494
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 3.56241
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "deepseek-v4-flash-ga-260731": {
+        "id": "deepseek-v4-flash-ga-260731",
+        "canonical_id": "deepseek/deepseek-v4-flash-0731",
+        "type": "chat",
+        "name": "DeepSeek V4 Flash 0731",
+        "description": "Official DeepSeek V4 Flash release with enhanced agentic capabilities and integrated DSpark speculative decoding",
+        "family": "deepseek-flash",
+        "open_weights": true,
+        "knowledge": "2025-05",
+        "release_date": "2026-07-31",
+        "last_updated": "2026-07-31",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true,
+            "effort": [
+              "minimal",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": true,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 384000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.4453,
+              "cache": {
+                "read": 0.01484
+              }
+            },
+            "output": {
+              "price": 1.3359
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-evolving": {
+        "id": "doubao-seed-evolving",
+        "canonical_id": "bytedance-seed/seed-evolving",
+        "type": "chat",
+        "name": "Seed Evolving",
+        "description": "Rolling ByteDance Seed model for rapidly updated reasoning, coding, and agent capabilities",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2026-06-23",
+        "last_updated": "2026-06-23",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 256000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.8906,
+              "cache": {
+                "read": 0.17812
+              }
+            },
+            "output": {
+              "price": 4.45301
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      },
+      "doubao-seed-1-6-flash-250828": {
+        "id": "doubao-seed-1-6-flash-250828",
+        "canonical_id": "bytedance-seed/seed-1-6-flash",
+        "type": "chat",
+        "name": "Seed 1.6 Flash",
+        "description": "Low-latency ByteDance Seed model for high-throughput chat, extraction, and lightweight tool use",
+        "family": "seed",
+        "open_weights": false,
+        "release_date": "2025-08-28",
+        "last_updated": "2025-08-28",
+        "status": "deprecated",
+        "modalities": {
+          "input": [
+            "text",
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+            "image/tiff",
+            "image/x-icon",
+            "image/x-icns",
+            "image/sgi",
+            "image/jp2",
+            "image/heic",
+            "video/mp4",
+            "video/x-msvideo",
+            "video/quicktime"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "toggle": true
+          },
+          "structured_output": true,
+          "temperature": true,
+          "top_p": true,
+          "top_k": false,
+          "system_updates": false,
+          "effort_updates": false
+        },
+        "limit": {
+          "context": 256000,
+          "output": 32000
+        },
+        "cost": {
+          "text": {
+            "input": {
+              "price": 0.02227,
+              "cache": {
+                "read": 0.00445
+              },
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.04453,
+                  "cache": {
+                    "read": 0.00445
+                  }
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 0.08906,
+                  "cache": {
+                    "read": 0.00445
+                  }
+                }
+              ]
+            },
+            "output": {
+              "price": 0.22265,
+              "overrides": [
+                {
+                  "when": {
+                    "context": {
+                      "gt": 32000
+                    }
+                  },
+                  "price": 0.4453
+                },
+                {
+                  "when": {
+                    "context": {
+                      "gt": 128000
+                    }
+                  },
+                  "price": 0.8906
+                }
+              ]
+            }
+          }
+        },
+        "api": {
+          "chat-completions": {
+            "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai-compatible",
+              "opencodeai": "@opencode/ai/providers/ark"
+            },
+            "compatibility": {
+              "reasoning_field": "reasoning_content"
+            },
+            "capabilities": {
+              "tools": {
+                "updates": false
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
