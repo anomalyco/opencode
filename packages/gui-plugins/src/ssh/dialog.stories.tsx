@@ -39,7 +39,7 @@ type FixtureState = {
 function Fixture(props: {
   session?: boolean
   settings?: boolean
-  incompatible?: true | "failed-update"
+  incompatible?: true | "failed-update" | "version-mismatch"
   prompts?: (keyof typeof challenges)[]
   rejectPassword?: boolean
   connectionDelay?: number
@@ -107,6 +107,8 @@ function Fixture(props: {
 
       const connected = () => {
         if (props.incompatible === "failed-update") return update({ stage: "failed", error: "install" })
+
+        if (props.incompatible === "version-mismatch") return update({ stage: "incompatible", error: "version" })
 
         if (props.initial === "failure" && state.before?.stage !== "failed")
           return update({ stage: "failed", error: "connection", detail: "Connection refused" })
@@ -316,7 +318,7 @@ export const SlowPassword = {
 }
 
 export const KeyPassphraseRejected = {
-  render: () => <Fixture initial="challenge" prompts={["passphrase", "password", "otp"]} />,
+  render: () => <Fixture initial="challenge" prompts={["passphrase", "password", "otp"]} responseDelay={700} />,
 }
 
 export const VerificationCode = { render: () => <Fixture initial="challenge" prompts={["otp"]} /> }
@@ -330,6 +332,10 @@ export const AuthenticationFailureRetry = { render: () => <Fixture prompts={["pa
 export const IncompatibleHost = { render: () => <Fixture incompatible prompts={[]} connectionDelay={1500} /> }
 
 export const FailedUpdate = { render: () => <Fixture incompatible="failed-update" connectionDelay={1500} /> }
+
+export const StillIncompatibleAfterUpdate = {
+  render: () => <Fixture incompatible="version-mismatch" connectionDelay={1500} />,
+}
 
 export const AuthenticationRequired = { render: () => <Fixture initial="required" /> }
 
