@@ -202,6 +202,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     }
 
     tui.prompt.history.append(&tui.app, entry.clone());
+    prompt.history.reset();
     let failure = Failure {
         tui: tui.weak(),
         prompt: prompt.this.clone(),

@@ -396,6 +396,7 @@ fn last_reply(messages: &[SessionMessageInfo]) -> Option<String> {
 pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, prompt: Value) {
     let mounted = tui.prompt.current.borrow().upgrade().filter(|inner| inner.session.as_ref() == Some(session));
     if let Some(inner) = mounted {
+        inner.history.reset();
         inner.restore(append(&inner.snapshot(), prompt));
         inner.textarea.set_cursor_offset(inner.text_end());
         return;
