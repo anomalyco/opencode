@@ -1,5 +1,6 @@
 //! D.1: the delegated commands run `OPENCODE_TS_BIN` with the same arguments, stdio, and exit code. A fake
 //! TypeScript binary records what it got, so nothing real is installed, removed, or served.
+#![cfg(unix)]
 
 use std::io::Write;
 use std::path::Path;

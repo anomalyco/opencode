@@ -1611,15 +1611,9 @@ fn storage_merge_whole<H: Host + ?Sized>(host: &H, key: &str, fields: serde_json
 
 /// The host table, as the plugin calls it. It is valid until the host destroys the instance, so it is the plugin's
 /// own: a 1.4 plugin gets it only as the [`Read`] or [`Host`] of one callback.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct HostHandle {
     api: *const HostApi,
-}
-
-impl Default for HostHandle {
-    fn default() -> Self {
-        Self { api: std::ptr::null() }
-    }
 }
 
 impl HostHandle {

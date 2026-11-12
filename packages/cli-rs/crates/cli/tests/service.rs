@@ -5,6 +5,7 @@
 //! small Bun service that registers itself like the TS one and logs its requests, and `service set remote true`
 //! writes a route and an OpenTunnel identity as the TS command and the SDK would, without any network. Every process
 //! started here is killed at the end. Needs `bun`; without it the tests pass with a note.
+#![cfg(unix)]
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
