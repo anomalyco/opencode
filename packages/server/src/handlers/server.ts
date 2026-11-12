@@ -3,6 +3,7 @@ import { Duration, Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { PersistentPty } from "@opencode/core/persistent-pty"
+import { ServerIdentity } from "@opencode/core/server-identity"
 import { UnauthorizedError } from "@opencode/protocol/errors"
 import { Api } from "../api"
 import { ServerAuth } from "../auth"
@@ -13,6 +14,7 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
   Effect.gen(function* () {
     const pairing = yield* ServerPairing.Service
     const auth = yield* ServerAuth.Config
+    const identity = yield* ServerIdentity.Service
 
     return handlers
       .handle("server.info", () =>
@@ -24,7 +26,13 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
             hostname: hostname() || undefined,
             urls: info.urls(),
             paths: info.paths,
-            capabilities: { persistentPty: PersistentPty.available },
+            capabilities: {
+              persistentPty: PersistentPty.available,
+              auth: {
+                // What the sign-in screen may offer: local accounts, the shared password, or nothing.
+                methods: auth.local ? ["local"] : ServerAuth.required(auth) ? ["password"] : [],
+              },
+            },
           }
         }),
       )
@@ -35,7 +43,18 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
           const request = yield* HttpServerRequest.HttpServerRequest
           // Browser navigations ask for HTML; everything else is an API client that wants the token.
           const browser = request.headers.accept?.includes("text/html") === true
-          const token = (yield* pairing.consume(ctx.params.code)) ? ServerAuth.issueSession(auth) : undefined
+          const token =
+            (yield* pairing.consume(ctx.params.code)) === false
+              ? undefined
+              : auth.local
+                ? // Pairing proves access to the machine, not who is behind it: no user binds to the session.
+                  (
+                    yield* identity.issue({
+                      method: "pairing",
+                      expiresAt: new Date(Date.now() + ServerAuth.SESSION_TTL_SECONDS * 1000),
+                    })
+                  ).token
+                : ServerAuth.issueSession(auth)
           if (token === undefined) {
             if (!browser) return yield* new UnauthorizedError({ message: "Pairing link expired or already used" })
             return HttpServerResponse.text(

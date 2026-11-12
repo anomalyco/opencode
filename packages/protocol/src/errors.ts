@@ -40,7 +40,12 @@ export class RpcInternalError extends Schema.TaggedError<RpcInternalError>()(
 
 export class UnauthorizedError extends Schema.TaggedError<UnauthorizedError>()(
   "UnauthorizedError",
-  { message: Schema.String },
+  {
+    message: Schema.String,
+    // How the server accepts sign-ins, so a client that only got a 401 knows whether to offer the shared
+    // password or the server's local username and password accounts.
+    methods: Schema.optional(Schema.Array(Schema.Literals(["password", "local"]))),
+  },
   { httpApiStatus: 401 },
 ) {}
 

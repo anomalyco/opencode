@@ -277,6 +277,10 @@ import type {
   ExperimentalArtifactsViewOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalAuthRegisterInput,
+  ExperimentalAuthRegisterOutput,
+  ExperimentalAuthLoginInput,
+  ExperimentalAuthLoginOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1755,6 +1759,32 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+      },
+      auth: {
+        register: (input: ExperimentalAuthRegisterInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalAuthRegisterOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/auth/register`,
+              body: { username: input["username"], password: input["password"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 409, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        login: (input: ExperimentalAuthLoginInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalAuthLoginOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/auth/login`,
+              body: { username: input["username"], password: input["password"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
       },
       migration: {
         v1: {

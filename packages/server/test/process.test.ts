@@ -131,6 +131,7 @@ it.live("authenticates API requests behind the frontend transform while allowing
         expect(yield* Effect.promise(() => response.json())).toEqual({
           _tag: "UnauthorizedError",
           message: "Authentication required",
+          methods: ["password"],
         })
       }),
     )

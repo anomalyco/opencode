@@ -16,6 +16,13 @@ export const ServerInfo = Schema.Struct({
   capabilities: Schema.optional(
     Schema.Struct({
       persistentPty: Schema.optional(Schema.Boolean),
+      // How clients may sign in: "password" is the shared server password, "local" the server's own
+      // username and password accounts. Empty when the server accepts requests without credentials.
+      auth: Schema.optional(
+        Schema.Struct({
+          methods: Schema.optional(Schema.Array(Schema.Literals(["password", "local"]))),
+        }),
+      ),
     }),
   ),
 }).annotate({ identifier: "ServerInfo" })

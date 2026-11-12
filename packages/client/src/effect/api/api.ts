@@ -53,7 +53,12 @@ export type ServerInfoOutput = {
   readonly hostname?: string | undefined
   readonly urls: ReadonlyArray<string>
   readonly paths: { readonly tmp: string }
-  readonly capabilities?: { readonly persistentPty?: boolean | undefined } | undefined
+  readonly capabilities?:
+    | {
+        readonly persistentPty?: boolean | undefined
+        readonly auth?: { readonly methods?: ReadonlyArray<"password" | "local"> | undefined } | undefined
+      }
+    | undefined
 }
 export type ServerInfoOperation<E = never> = () => Effect.Effect<ServerInfoOutput, E>
 
@@ -2554,6 +2559,18 @@ export type ExperimentalJobListOperation<E = never> = (
   input?: ExperimentalJobListInput,
 ) => Effect.Effect<ExperimentalJobListOutput, E>
 
+export type ExperimentalAuthRegisterInput = { readonly username: string; readonly password: string }
+export type ExperimentalAuthRegisterOutput = { readonly token: string }
+export type ExperimentalAuthRegisterOperation<E = never> = (
+  input: ExperimentalAuthRegisterInput,
+) => Effect.Effect<ExperimentalAuthRegisterOutput, E>
+
+export type ExperimentalAuthLoginInput = { readonly username: string; readonly password: string }
+export type ExperimentalAuthLoginOutput = { readonly token: string }
+export type ExperimentalAuthLoginOperation<E = never> = (
+  input: ExperimentalAuthLoginInput,
+) => Effect.Effect<ExperimentalAuthLoginOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2584,6 +2601,10 @@ export interface ExperimentalApi<E = never> {
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E> }
+  readonly auth: {
+    readonly register: ExperimentalAuthRegisterOperation<E>
+    readonly login: ExperimentalAuthLoginOperation<E>
+  }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

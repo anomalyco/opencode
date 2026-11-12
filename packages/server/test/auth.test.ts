@@ -2,14 +2,14 @@ import { expect, test } from "bun:test"
 import { ServerAuth } from "@opencode/server/auth"
 import { Option, Redacted } from "effect"
 
+const config = { password: Option.some("secret"), username: "opencode", local: false }
+
 test("accepts only the fixed opencode username", () => {
-  const config = { password: Option.some("secret"), username: "opencode" }
   expect(ServerAuth.authorized({ username: "opencode", password: Redacted.make("secret") }, config)).toBe(true)
   expect(ServerAuth.authorized({ username: "custom", password: Redacted.make("secret") }, config)).toBe(false)
 })
 
 test("session tokens expire, resist tampering, and are revoked by changing the password", () => {
-  const config = { password: Option.some("secret"), username: "opencode" }
   const now = Date.now()
   const token = ServerAuth.issueSession(config, now)
   if (!token) throw new Error("Expected a session token")
@@ -21,4 +21,10 @@ test("session tokens expire, resist tampering, and are revoked by changing the p
   expect(ServerAuth.verifySession(`${Number(parts[0]) + 1}.${parts[1]}`, config, now)).toBe(false)
   expect(ServerAuth.verifySession(token, { ...config, password: Option.some("rotated") }, now)).toBe(false)
   expect(ServerAuth.issueSession({ ...config, password: Option.none() })).toBeUndefined()
+})
+
+test("required is true with local accounts even without a password", () => {
+  expect(ServerAuth.required({ ...config, password: Option.none(), local: true })).toBe(true)
+  expect(ServerAuth.required({ ...config, password: Option.some(""), local: true })).toBe(true)
+  expect(ServerAuth.required({ ...config, password: Option.none(), local: false })).toBe(false)
 })
