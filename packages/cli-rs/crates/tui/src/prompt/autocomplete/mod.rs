@@ -24,6 +24,7 @@ use opencode_ui::dialog::FocusId;
 use opencode_ui::fuzzy;
 use opencode_ui::path::Flavor;
 use opencode_ui::select::{move_wrap, truncate, truncate_middle};
+use opentui::app::{AppProxy, ProxyError};
 use opentui::input::{MouseButton, MouseEventKind};
 use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
@@ -72,8 +73,14 @@ impl Shared {
             return;
         }
         let Some(state) = tui.state_dir() else { return };
+        tui.app.on_message(bind!(tui, |tui, _, _: &RecentsChanged| {
+            let prompt = tui.prompt.current.borrow().upgrade();
+            if let Some(complete) = prompt.as_ref().and_then(|prompt| prompt.autocomplete.get()) {
+                complete.sync();
+            }
+        }));
         let (frecency, recents, storage) = (self.frecency.clone(), self.recents.clone(), tui.storage());
-        let writes = self.recents_writes.clone();
+        let (writes, proxy) = (self.recents_writes.clone(), tui.app.proxy());
         // `paths.cwd`: the directory the TUI started in.
         let cwd = PathBuf::from(&tui.directory);
         self.writer().run(move || {
@@ -83,8 +90,11 @@ impl Shared {
             // change back together; the file alone would drop it until then.
             if let Ok(mut slot) = recents.lock()
                 && writes.load(atomic::Ordering::SeqCst) == 0
+                && *slot != stored
             {
                 *slot = stored;
+                drop(slot);
+                recents_changed(&proxy);
             }
         });
     }
@@ -172,7 +182,7 @@ impl Shared {
             apply(value, &change);
         }
         let Some(storage): Option<Storage> = tui.storage() else { return };
-        let (recents, writes) = (self.recents.clone(), self.recents_writes.clone());
+        let (recents, writes, proxy) = (self.recents.clone(), self.recents_writes.clone(), tui.app.proxy());
         self.writer().run(move || {
             let written = storage.update(RECENTS_KEY, &recents_initial(), |value| {
                 apply(value, &change);
@@ -181,8 +191,11 @@ impl Shared {
                 Ok(value) => {
                     if let Ok(mut slot) = recents.lock()
                         && writes.load(atomic::Ordering::SeqCst) == revision
+                        && slot.as_ref() != Some(&value)
                     {
                         *slot = Some(value);
+                        drop(slot);
+                        recents_changed(&proxy);
                     }
                 }
                 Err(error) => log::error!("Failed to persist directory recents: {error}"),
@@ -200,6 +213,18 @@ fn load_frecency(slot: &Mutex<Option<Frecency>>, state: &Path, cwd: &Path) {
     let loaded = Frecency::load(state, cwd);
     if let Ok(mut slot) = slot.lock() {
         slot.get_or_insert(loaded);
+    }
+}
+
+/// Posted when the worker changed the recents in memory.
+#[derive(Clone, Copy)]
+struct RecentsChanged;
+
+/// Tells the UI that the recents in memory changed, so an open `/cd` picker lists them, as TS's store redraws it.
+/// Waits while the UI queue is full.
+fn recents_changed(proxy: &AppProxy) {
+    while let Err(ProxyError::Full) = proxy.send(RecentsChanged) {
+        std::thread::sleep(Duration::from_millis(5));
     }
 }
 
