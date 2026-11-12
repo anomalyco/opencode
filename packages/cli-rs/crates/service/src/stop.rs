@@ -135,19 +135,24 @@ pub(crate) fn signal(pid: u32, signal: Signal) {
         };
         let _ = kill_process(pid, raw);
     }
-    #[cfg(not(unix))]
-    let _ = (pid, signal);
+    // libuv's `uv_kill` terminates the process for either signal.
+    #[cfg(windows)]
+    {
+        let _ = signal;
+        let _ = opencode_util::win::terminate(pid);
+    }
 }
 
-/// Whether `pid` exists (`process.kill(pid, 0)`; any error counts as gone).
+/// Whether `pid` exists (`process.kill(pid, 0)`; any error counts as gone, but on Windows a process this user may
+/// not open counts as alive).
 pub(crate) fn running(pid: u32) -> bool {
     #[cfg(unix)]
     return i32::try_from(pid)
         .ok()
         .and_then(rustix::process::Pid::from_raw)
         .is_some_and(|pid| rustix::process::test_kill_process(pid).is_ok());
-    #[cfg(not(unix))]
-    return pid == 0;
+    #[cfg(windows)]
+    return opencode_util::win::process_alive(pid);
 }
 
 async fn stopped(pid: u32, poll: Poll) -> bool {
@@ -160,4 +165,23 @@ async fn stopped(pid: u32, poll: Poll) -> bool {
         }
     }
     false
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kill_ends_a_running_process() {
+        // `ping` waits a second between echoes; `timeout` needs a console on stdin.
+        let mut child = std::process::Command::new("ping")
+            .args(["-n", "60", "127.0.0.1"])
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        assert!(running(child.id()));
+        signal(child.id(), Signal::Kill);
+        child.wait().unwrap();
+        assert!(!running(child.id()));
+    }
 }
