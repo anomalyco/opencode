@@ -1,18 +1,16 @@
 import QrScanner from "qr-scanner"
-import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
-import { Button } from "@opencode/ui/button"
+import { createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { pairingLink } from "./pairing"
 import type { RedeemPairing } from "./redeem"
 import {
   createScannerState,
   type ScannerEffect,
-  type ScannerError,
   type ScannerEvent,
   selectScannerView,
   transitionScanner,
 } from "./scanner-machine"
-import "./scanner.css"
+import { PairingScannerView } from "./scanner-view"
 
 // Redeems with the form's own redeem, so the form keeps the token and a failed connection check retries without the
 // spent code; the form gets back a link it can show, and fills it in.
@@ -24,18 +22,6 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
   video.setAttribute("aria-label", language.t("server.connect.camera"))
   video.setAttribute("playsinline", "")
   video.muted = true
-
-  const message = (error: ScannerError) => {
-    if (error.type === "camera") return language.t("server.connect.camera.error")
-
-    if (error.type === "invalid") return language.t("server.connect.scan.invalid")
-
-    if (error.type === "decode") return language.t("server.connect.scan.failed")
-
-    if (error.type === "timeout") return language.t("common.requestFailed")
-
-    return error.message
-  }
 
   onMount(() => {
     const cooldowns = new Map<string, ReturnType<typeof setTimeout>>()
@@ -129,28 +115,8 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
   })
 
   return (
-    <section class="server-connect-scanner" aria-label={language.t("server.connect.scan")}>
-      <p>{language.t("server.connect.scan.description")}</p>
-      <div class="server-connect-video">
-        {video}
-        <Show when={view().overlay}>
-          {(overlay) => (
-            <span role="status" data-busy={overlay() === "redeeming" ? "" : undefined}>
-              {language.t(overlay() === "redeeming" ? "dialog.server.add.checking" : "server.connect.camera.starting")}
-            </span>
-          )}
-        </Show>
-      </div>
-      <Show when={view().error}>
-        {(error) => (
-          <p class="server-connect-error" role="alert">
-            {message(error())}
-          </p>
-        )}
-      </Show>
-      <Button variant="neutral" size="large" onClick={props.onCancel}>
-        {language.t("common.cancel")}
-      </Button>
-    </section>
+    <PairingScannerView view={view()} onCancel={props.onCancel}>
+      {video}
+    </PairingScannerView>
   )
 }

@@ -4,7 +4,7 @@ import { Divider } from "@opencode/ui/divider"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { type Component, Show, Suspense, createMemo, lazy, untrack } from "solid-js"
+import { type Component, type JSX, Show, Suspense, createMemo, lazy, untrack } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
@@ -58,6 +58,27 @@ export const DialogServer: Component<{
     },
   })
 
+  return (
+    <ServerDialogForm mode={props.mode} form={form}>
+      <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
+        <PairingScanner
+          onCancel={() => form.dispatch({ type: "scan.cancelled" })}
+          redeem={form.redeem}
+          onScan={(link) => form.dispatch({ type: "scan.completed", link })}
+        />
+      </Suspense>
+    </ServerDialogForm>
+  )
+}
+
+export function ServerDialogForm(props: {
+  mode: "add" | "edit"
+  form: Pick<ReturnType<typeof createServerConnectController>, "view" | "dispatch">
+  children: JSX.Element
+}) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  const form = props.form
   const view = form.view
   const submit = () => form.dispatch({ type: "submitted" })
   const change = (field: ServerConnectField, value: string) => form.dispatch({ type: "field.changed", field, value })
@@ -94,18 +115,7 @@ export const DialogServer: Component<{
       </DialogHeader>
       <Divider />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
-        <Show
-          when={!view().scanning}
-          fallback={
-            <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
-              <PairingScanner
-                onCancel={() => form.dispatch({ type: "scan.cancelled" })}
-                redeem={form.redeem}
-                onScan={(link) => form.dispatch({ type: "scan.completed", link })}
-              />
-            </Suspense>
-          }
-        >
+        <Show when={!view().scanning} fallback={props.children}>
           <div class="flex w-full min-w-0 flex-col gap-6">
             <Show when={view().signedOut}>
               <p class="settings-server-dialog-notice" role="status">
