@@ -123,10 +123,6 @@ fn is_supported_node_token(token: &str) -> bool {
         .any(|regex| regex.is_match(&trimmed))
 }
 
-fn has_explicit_shape(token: &str) -> bool {
-    EXPLICIT_SHAPE.is_match(js_trim(token))
-}
-
 fn close_of(open: char) -> Option<char> {
     match open {
         '[' => Some(']'),
@@ -401,7 +397,7 @@ struct Parser {
 impl Parser {
     fn track(&mut self, token: &str) -> String {
         let node = parse_node_token(token);
-        let explicit = has_explicit_shape(token);
+        let explicit = EXPLICIT_SHAPE.is_match(js_trim(token));
         let id = node.id.clone();
         match self.nodes.get_mut(&id) {
             None => {
