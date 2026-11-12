@@ -290,6 +290,44 @@ describe("Integration", () => {
     }),
   )
 
+  it.effect("does not pass an existing credential to another OAuth method", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("other")
+      const saved = yield* credentials.create({
+        integrationID,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("original"),
+          access: "access",
+          refresh: "refresh",
+          expires: 1,
+          metadata: { clientID: "oaiapp_original" },
+        }),
+      })
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "Other method" },
+          authorize: (_answer, context) =>
+            Effect.sync(() => {
+              expect(context?.credential).toBeUndefined()
+              return {
+                mode: "code" as const,
+                url: "https://auth.example.com",
+                instructions: "Paste the code",
+                callback: () => Effect.die("unused callback"),
+              }
+            }),
+        }),
+      )
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, credentialID: saved.id })
+      yield* integrations.oauth.cancel({ integrationID, attemptID: attempt.attemptID })
+    }),
+  )
+
   it.effect("completes code OAuth once and stores the credential", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

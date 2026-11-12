@@ -601,7 +601,7 @@ test("a lone method waits on the accounts list and starts once Add account is ch
   expect(selectProviderDialogView(replay([{ type: "back" }], added.state).state).frame).toBe("accounts")
 })
 
-test("reauthorization keeps the selected account across retries and clears it before Add account", () => {
+test("reauthorization keeps the selected account across retries", () => {
   const picked = replay([selected("openai", true, accounts(2))])
   const listed = replay([loaded(picked.state, [oauth])], picked.state)
   const started = replay([{ type: "account.reauthorize", accountID: "cred_2" }], listed.state)
@@ -630,10 +630,6 @@ test("reauthorization keeps the selected account across retries and clears it be
   expect(retried.effects).toContainEqual(
     expect.objectContaining({ credentialID: "cred_2", effect: expect.objectContaining({ type: "start" }) }),
   )
-  const backed = replay([{ type: "back" }], retried.state)
-  const added = replay([{ type: "account.add" }], backed.state)
-  expect(connectEffect(added.effects, "start").type).toBe("start")
-  expect(added.effects.find((effect) => effect.type === "connect.effect")).not.toHaveProperty("credentialID")
 })
 
 test("reauthorization retains the selected account when returning to the method picker", () => {
