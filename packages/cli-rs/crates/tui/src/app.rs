@@ -368,7 +368,11 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let _guard = runtime.enter();
     let data = Data::with_runtime(
         deps.client.clone(),
-        Options { directory: deps.directory.clone(), ..Options::default() },
+        Options {
+            directory: deps.directory.clone(),
+            omit_tool_file_data: !crate::features::system_commands::image_preview(&deps.config.info),
+            ..Options::default()
+        },
         runtime.clone(),
     );
     let files = deps.roots.as_ref().map(|roots| Files {
