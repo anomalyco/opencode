@@ -140,6 +140,10 @@ export function usePromptHistory(currentDraft = emptyPrompt) {
   const history = useHistoryEntries()
   let index = 0
   let draft: PromptInfo | undefined
+  function reset() {
+    index = 0
+    draft = undefined
+  }
   return {
     move(direction: 1 | -1, input: string) {
       const next = index + direction
@@ -147,14 +151,17 @@ export function usePromptHistory(currentDraft = emptyPrompt) {
       if (index < 0 && input && history.entries.at(index)?.text !== input) return
       if (index === 0) draft = structuredClone({ ...currentDraft(), text: input })
       index = next
-      if (next !== 0) return history.entries.at(next)
+      if (next !== 0) {
+        const entry = history.entries.at(next)
+        return entry ? { ...emptyPrompt(), ...structuredClone(unwrap(entry)) } : undefined
+      }
       const restored = draft
       draft = undefined
       return restored
     },
+    reset,
     append(item: PromptInfo) {
-      index = 0
-      draft = undefined
+      reset()
       history.append(item)
     },
   }
