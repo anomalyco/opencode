@@ -4,7 +4,8 @@
 //! with 130 after SIGINT and 143 after SIGTERM, as the TS `runMain` teardown does. Teardown gets 10 s; after that, or on a second
 //! signal, it prints what is still pending to stderr and exits with 1. With a terminal on stdin or stdout,
 //! SIGHUP counts as SIGTERM; without one (nohup, the background service) SIGHUP keeps its default, so nohup's
-//! ignore still holds. While the TUI runs, opentui owns these signals and quits the app itself.
+//! ignore still holds. On Windows, Ctrl+C is SIGINT and closing the console is the SIGHUP. While the TUI runs,
+//! opentui owns these signals and quits the app itself.
 
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -123,13 +124,32 @@ fn listen(shutdown: Arc<Shutdown>, hangup: bool) -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(not(unix))]
-fn listen(shutdown: Arc<Shutdown>, _hangup: bool) -> std::io::Result<()> {
+// Node reports Ctrl+C as SIGINT and closing the console as SIGHUP. Ctrl+Break is SIGBREAK, which TS does not
+// listen to, so it keeps Windows' default and ends the process at once; so does this.
+#[cfg(windows)]
+fn listen(shutdown: Arc<Shutdown>, hangup: bool) -> std::io::Result<()> {
+    use tokio::signal::windows::{ctrl_c, ctrl_close};
+
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    let (mut interrupt, mut close) = {
+        let _guard = runtime.enter();
+        (ctrl_c()?, hangup.then(ctrl_close).transpose()?)
+    };
     std::thread::Builder::new().name("opencode-signals".into()).spawn(move || {
         runtime.block_on(async move {
-            while tokio::signal::ctrl_c().await.is_ok() {
-                shutdown.signal("SIGINT");
+            loop {
+                let close = async {
+                    match &mut close {
+                        Some(close) => close.recv().await,
+                        None => std::future::pending().await,
+                    }
+                };
+                let name = tokio::select! {
+                    _ = interrupt.recv() => "SIGINT",
+                    // Windows ends the process about 5 s after the close event, whatever teardown still does.
+                    _ = close => "SIGTERM",
+                };
+                shutdown.signal(name);
             }
         });
     })?;

@@ -30,8 +30,13 @@ pub fn run(path: &[&'static Spec], argv: &[OsString]) -> error::Result<()> {
         }
         Err(process.exec().into())
     }
-    #[cfg(not(unix))]
-    std::process::exit(process.status()?.code().unwrap_or(1))
+    // Windows has no exec: wait for the command, which gets Ctrl+C and Ctrl+Break from the shared console, and
+    // exit with its code.
+    #[cfg(windows)]
+    {
+        let _ = opencode_util::win::ignore_interrupts();
+        std::process::exit(process.status()?.code().unwrap_or(1))
+    }
 }
 
 /// Asks for the command line. Returns its arguments after the program name, or `None` when the user cancelled or
