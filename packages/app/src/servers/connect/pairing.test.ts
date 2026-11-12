@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { bareServerAddress, legacyPairingLink, pairingLink } from "./pairing"
+import { bareServerAddress, legacyPairingLink, pairingLink, redeemPairingLink } from "./pairing"
 
 describe("pairing link", () => {
   test("reads the server address and code from opencode pair links", () => {
@@ -54,4 +54,36 @@ describe("pairing link", () => {
     expect(legacyPairingLink("http://192.168.1.2:49374/connect")).toBe(false)
     expect(legacyPairingLink("http://192.168.1.2:49374/auth/connect/abc")).toBe(false)
   })
+})
+
+test("redeems codes on servers that predate POST redemption", async () => {
+  const methods: string[] = []
+  const reply = (status: string, body = "") =>
+    `HTTP/1.1 ${status}\r\ncontent-type: application/json\r\ncontent-length: ${body.length}\r\naccess-control-allow-origin: *\r\naccess-control-allow-methods: GET, POST\r\nconnection: close\r\n\r\n${body}`
+  // Servers before POST redemption have no POST route for pairing links and redeem the code on GET.
+  const server = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      data(socket, chunk) {
+        const method = String(chunk).split(" ")[0] ?? ""
+        methods.push(method)
+        if (method === "OPTIONS") return void socket.end(reply("204 No Content"))
+        if (method !== "GET") return void socket.end(reply("404 Not Found"))
+        socket.end(reply("200 OK", JSON.stringify({ token: "session-token" })))
+      },
+    },
+  })
+  const url = `http://127.0.0.1:${server.port}`
+
+  try {
+    expect(await redeemPairingLink({ urls: [url], code: "abc" })).toEqual({
+      type: "paired",
+      pairing: { url, password: "session-token" },
+    })
+    // happy-dom's fetch may add CORS preflights; only the POST and the GET reach the pairing route.
+    expect(methods.filter((method) => method !== "OPTIONS")).toEqual(["POST", "GET"])
+  } finally {
+    server.stop(true)
+  }
 })
