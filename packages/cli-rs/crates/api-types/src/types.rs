@@ -9319,6 +9319,34 @@ pub struct McpResourcesChanged {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalMcpEventData {
+    pub id: String,
+    pub server: String,
+    pub name: String,
+    #[serde(rename = "eventId")]
+    pub event_id: String,
+    pub timestamp: String,
+    pub data: serde_json::Value,
+    #[serde(default)]
+    pub cursor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalMcpEvent {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalMcpEventData,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct V2EventRpc {
     pub id: EventID,
     #[serde(serialize_with = "crate::ser::number")]
@@ -9445,6 +9473,7 @@ pub enum V2Event {
     VcsBranchUpdated(VcsBranchUpdated),
     McpStatusChanged(McpStatusChanged),
     McpResourcesChanged(McpResourcesChanged),
+    ExperimentalMcpEvent(ExperimentalMcpEvent),
     Rpc(V2EventRpc),
     ServerConnected(V2EventServerConnected),
     /// A member this client does not know, kept as it arrived.
@@ -9552,6 +9581,7 @@ impl<'de> Deserialize<'de> for V2Event {
             Some("vcs.branch.updated") => raw.variant().map(Self::VcsBranchUpdated),
             Some("mcp.status.changed") => raw.variant().map(Self::McpStatusChanged),
             Some("mcp.resources.changed") => raw.variant().map(Self::McpResourcesChanged),
+            Some("experimental.mcp.event") => raw.variant().map(Self::ExperimentalMcpEvent),
             Some("server.connected") => raw.variant().map(Self::ServerConnected),
             Some(tag) if tag.starts_with("rpc.") => raw.variant().map(Self::Rpc),
             _ => raw.unknown().map(Self::Unknown),
@@ -9660,6 +9690,7 @@ impl V2Event {
             Self::VcsBranchUpdated(value) => value.r#type.as_str(),
             Self::McpStatusChanged(value) => value.r#type.as_str(),
             Self::McpResourcesChanged(value) => value.r#type.as_str(),
+            Self::ExperimentalMcpEvent(value) => value.r#type.as_str(),
             Self::Rpc(value) => value.r#type.as_str(),
             Self::ServerConnected(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
