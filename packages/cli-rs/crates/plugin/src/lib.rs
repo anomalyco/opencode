@@ -568,9 +568,7 @@ impl abi::Host for Scoped<'_> {
                     let Some(host) = scope.upgrade().map(|scope| scope.host.clone()) else { return };
                     // The reply runs on the effect queue, in order with the effects queued before it.
                     defer(&host, move |_| {
-                        let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else {
-                            return;
-                        };
+                        let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else { return };
                         let replies = scope.replies.borrow().clone();
                         scope.run(|host| replies.iter().for_each(|run| run(host, id, result.clone())));
                     });

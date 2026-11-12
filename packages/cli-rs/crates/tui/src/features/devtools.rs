@@ -82,9 +82,7 @@ pub fn connection_indicator(status: Status, attempt: u32) -> (Indicator, &'stati
 
 /// `runtimeStatus`: the highest delay in the last 6 s.
 pub fn runtime_status(samples: &[Sample]) -> RuntimeStatus {
-    let Some(latest) = samples.last().map(|sample| sample.time) else {
-        return RuntimeStatus::Normal;
-    };
+    let Some(latest) = samples.last().map(|sample| sample.time) else { return RuntimeStatus::Normal };
     let delay = samples
         .iter()
         .filter(|sample| sample.time + STATUS_WINDOW > latest)
@@ -120,9 +118,7 @@ pub fn braille_graph(values: &[f64], width: usize) -> String {
     (0..width)
         .map(|index| {
             let bits = (0..2).fold(0u32, |bits, column| {
-                let Some(Some(value)) = points.get(index * 2 + column) else {
-                    return bits;
-                };
+                let Some(Some(value)) = points.get(index * 2 + column) else { return bits };
                 let scaled = if range == 0.0 { 0.0 } else { (value - min) / range };
                 // `Math.round` rounds halves up.
                 let height = 1 + (scaled * 3.0 + 0.5).floor() as usize;
@@ -246,9 +242,7 @@ fn install_connection(tui: &Rc<Tui>, bar: &Rc<Bar>) {
         }
         bar.render(&tui);
     }));
-    let Some(mut watch) = tui.connection_watch() else {
-        return;
-    };
+    let Some(mut watch) = tui.connection_watch() else { return };
     let proxy = tui.app.proxy();
     tui.app.runtime().spawn(async move {
         loop {
@@ -749,9 +743,7 @@ fn defer(tui: &Tui, run: impl FnOnce(&Tui) + 'static) {
 async fn session_events(client: &opencode_api::client::Client, id: &opencode_api::generated::SessionID) -> Vec<Value> {
     use futures_util::StreamExt;
     let input = ExperimentalSessionLogInput { session_id: id.clone(), after: None, follow: Some(false) };
-    let Ok(response) = client.experimental_session_log(&input).await else {
-        return Vec::new();
-    };
+    let Ok(response) = client.experimental_session_log(&input).await else { return Vec::new() };
     let events: Vec<Value> = SseResponse::<Value>::new(response.response)
         .events(|| {})
         .filter_map(|item| async move { item.ok() })

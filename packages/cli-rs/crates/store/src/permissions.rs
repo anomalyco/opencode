@@ -44,9 +44,7 @@ impl State {
         if let Some(read) = self.permission_reads.get_mut(session) {
             read.record(&request.0, None);
         }
-        let Some(requests) = self.permission.get_mut(session) else {
-            return;
-        };
+        let Some(requests) = self.permission.get_mut(session) else { return };
         let before = requests.len();
         requests.retain(|item| item.id != *request);
         if requests.len() != before {
@@ -79,9 +77,7 @@ impl Data {
                         }
                     };
                 let reread = data.write(|state| {
-                    let Some(read) = Overlay::take(&mut state.permission_reads, &session, ticket) else {
-                        return false;
-                    };
+                    let Some(read) = Overlay::take(&mut state.permission_reads, &session, ticket) else { return false };
                     if state.deleted_since(&session, started) {
                         return false;
                     }

@@ -47,9 +47,7 @@ pub fn apply(event: &Value, tracked: &Tracked, standard_updates: bool) -> (Track
     }
     let current = remaining.remove(&session_id);
     if event.get("type").and_then(Value::as_str) == Some("session.compaction.ended") {
-        let Some(current) = current else {
-            return (remaining, Vec::new());
-        };
+        let Some(current) = current else { return (remaining, Vec::new()) };
         let completed =
             Compaction { reason, ..compaction(&current, Status::Completed { summary: text(data, "text") }) };
         return (remaining, vec![update(&completed, standard_updates)]);

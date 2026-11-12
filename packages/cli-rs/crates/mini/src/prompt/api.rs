@@ -102,9 +102,7 @@ pub async fn find_files(client: &Client, directory: &str, query: &str) -> Vec<St
         r#type: Some(FileSystemEntryType::File),
         limit: None,
     };
-    let Ok(call) = Client::file_find_call(&input) else {
-        return Vec::new();
-    };
+    let Ok(call) = Client::file_find_call(&input) else { return Vec::new() };
     client
         .json::<Value>(call)
         .await

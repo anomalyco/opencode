@@ -793,9 +793,7 @@ pub async fn start_wire(options: WireOptions) -> Wire {
     tokio::spawn(async move {
         let mut lines = BufReader::new(client_read).lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            let Ok(message) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
+            let Ok(message) = serde_json::from_str::<Value>(&line) else { continue };
             reader.receive(message, &outbox);
         }
     });
@@ -870,9 +868,7 @@ impl Reader {
                 }
             }
             (None, Some(id)) => {
-                let Some(sender) = id.as_u64().and_then(|id| lock(&self.pending).remove(&id)) else {
-                    return;
-                };
+                let Some(sender) = id.as_u64().and_then(|id| lock(&self.pending).remove(&id)) else { return };
                 let result = match message.get("error") {
                     Some(error) => Err(RpcError {
                         code: error["code"].as_i64().unwrap_or_default(),

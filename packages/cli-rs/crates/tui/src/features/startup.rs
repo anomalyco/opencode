@@ -184,9 +184,7 @@ fn continue_latest(tui: &Tui, fork_it: bool) {
         ..SessionListInput::default()
     };
     tui.request(async move { client.session_list(&input).await }, move |tui, response| {
-        let Some(session) = response.data.into_iter().next() else {
-            return;
-        };
+        let Some(session) = response.data.into_iter().next() else { return };
         if fork_it {
             return fork(tui, session.id);
         }

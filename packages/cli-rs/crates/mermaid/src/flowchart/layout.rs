@@ -60,9 +60,7 @@ struct NodeSize {
 pub fn layout(source: &Diagram, options: &Options) -> Result<Layout, LayoutError> {
     let direction = source.direction;
     let result = layout_with_direction(source, options, direction, false)?;
-    let Some(max_width) = options.layout_max_width else {
-        return Ok(result);
-    };
+    let Some(max_width) = options.layout_max_width else { return Ok(result) };
     if !direction.horizontal() || result.width <= max_width.max(1) {
         return Ok(result);
     }
@@ -142,16 +140,12 @@ fn layout_with_direction(
                 if edge.order_only || node_ids.contains(edge.from.as_str()) {
                     continue;
                 }
-                let Some(source_frame) = subgraph_bounds.get(&edge.from).cloned() else {
-                    continue;
-                };
+                let Some(source_frame) = subgraph_bounds.get(&edge.from).cloned() else { continue };
                 let target = bounds
                     .get(&edge.to)
                     .map(|node| node.bounds)
                     .or_else(|| subgraph_bounds.get(&edge.to).map(|frame| frame.bounds));
-                let Some(target) = target else {
-                    continue;
-                };
+                let Some(target) = target else { continue };
                 if source_frame.label_side != LabelSide::Top {
                     continue;
                 }
@@ -282,9 +276,7 @@ fn subgraph_contains_endpoint(diagram: &Diagram, subgraph: &Subgraph, endpoint: 
 
 fn edge_direction(diagram: &Diagram, edge: &Edge) -> FlowDirection {
     for subgraph in diagram.subgraphs.iter().rev() {
-        let Some(direction) = subgraph.direction else {
-            continue;
-        };
+        let Some(direction) = subgraph.direction else { continue };
         if subgraph_contains_endpoint(diagram, subgraph, &edge.from)
             && subgraph_contains_endpoint(diagram, subgraph, &edge.to)
         {
@@ -386,9 +378,7 @@ fn rank_gaps(
         }
         if !has_subgraph_endpoint {
             let index = |id: &str| indexes.get(&ranks.get(id).copied().unwrap_or(-1)).copied();
-            let (Some(from), Some(to)) = (index(&edge.from), index(&edge.to)) else {
-                continue;
-            };
+            let (Some(from), Some(to)) = (index(&edge.from), index(&edge.to)) else { continue };
             if from == to {
                 continue;
             }
@@ -402,12 +392,8 @@ fn rank_gaps(
             }
             continue;
         }
-        let Some(span) = endpoint_rank_span(diagram, edge, ranks, &node_ids) else {
-            continue;
-        };
-        let (Some(&start), Some(&end)) = (indexes.get(&span.start), indexes.get(&span.end)) else {
-            continue;
-        };
+        let Some(span) = endpoint_rank_span(diagram, edge, ranks, &node_ids) else { continue };
+        let (Some(&start), Some(&end)) = (indexes.get(&span.start), indexes.get(&span.end)) else { continue };
         let (padding, clearance) = if horizontal {
             let padding = span.unshared.len() as i32 * SUBGRAPH_PADDING_X;
             let clearance = if edge.label.is_empty() {
@@ -780,9 +766,7 @@ fn reduce_rank_crossings(
             crossings = count;
         }
     }
-    let Some(best) = best else {
-        return;
-    };
+    let Some(best) = best else { return };
     let node_of: HashMap<&str, &Node> = by_rank.values().flatten().map(|node| (node.id.as_str(), *node)).collect();
     let reordered: Vec<(i32, Vec<&Node>)> = rank_keys
         .iter()
@@ -881,9 +865,7 @@ fn layout_local_subgraph_directions(
             let siblings = subgraphs.iter().filter(|child| child.parent_id.as_deref() == Some(&parent.id)).count();
             if siblings > 1 { parent.direction } else { None }
         });
-        let Some(direction) = subgraph.direction.or(inherited) else {
-            continue;
-        };
+        let Some(direction) = subgraph.direction.or(inherited) else { continue };
         if direction == diagram.direction {
             continue;
         }
@@ -994,9 +976,7 @@ fn layout_local_subgraph_directions(
                 nodes.iter().filter(|(id, _)| !translations.contains_key(*id)).map(|(_, node)| node.bounds).collect();
             let overlaps = |offset: (i32, i32)| {
                 translations.iter().any(|(id, translation)| {
-                    let Some(bound) = nodes.get(id).map(|node| node.bounds) else {
-                        return false;
-                    };
+                    let Some(bound) = nodes.get(id).map(|node| node.bounds) else { return false };
                     let left = bound.left + translation.0 + offset.0;
                     let top = bound.top + translation.1 + offset.1;
                     external.iter().any(|other| {
@@ -1074,9 +1054,7 @@ pub(crate) fn label_slot(frame: &SubgraphBounds, side: LabelSide) -> Bounds {
 }
 
 fn segment_overlaps_slot(from: Point, to: Point, slot: &Bounds) -> bool {
-    let Some(segment) = segment_between(from, to) else {
-        return false;
-    };
+    let Some(segment) = segment_between(from, to) else { return false };
     let right = slot.left + slot.width - 1;
     let bottom = slot.top + slot.height - 1;
     let span = segment_span(&segment);
@@ -1110,9 +1088,7 @@ pub(crate) fn route_overlaps_slot(
     if route.points.windows(2).any(|pair| segment_overlaps_slot(pair[0], pair[1], slot)) {
         return true;
     }
-    let Some(label) = label_bounds(route) else {
-        return false;
-    };
+    let Some(label) = label_bounds(route) else { return false };
     if !spans_overlap(label.top, label.top + label.height - 1, slot.top, slot.top + slot.height - 1) {
         return false;
     }
@@ -1482,9 +1458,7 @@ fn separate_top_level_items(
     let mut outgoing: IndexMap<String, IndexSet<String>> =
         ranked.iter().map(|item| (item.id.clone(), IndexSet::new())).collect();
     for edge in &diagram.edges {
-        let (Some(from), Some(to)) = (item_of.get(&edge.from), item_of.get(&edge.to)) else {
-            continue;
-        };
+        let (Some(from), Some(to)) = (item_of.get(&edge.from), item_of.get(&edge.to)) else { continue };
         if from == to || !ranked_ids.contains(from) || !ranked_ids.contains(to) {
             continue;
         }

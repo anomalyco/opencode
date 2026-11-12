@@ -98,9 +98,7 @@ impl State {
 
     /// `formSetDraft`.
     pub fn set_draft(&mut self, field: Option<&FormField>, value: &str) {
-        let Some(field) = field.filter(|field| !matches!(field, FormField::External(_))) else {
-            return;
-        };
+        let Some(field) = field.filter(|field| !matches!(field, FormField::External(_))) else { return };
         self.custom.insert(key(field).to_owned(), value.to_owned());
     }
 
@@ -116,9 +114,7 @@ impl State {
 
     /// `formPick`: the selected row answers the field, or opens the custom field.
     pub fn pick(&mut self, form: &FormInfo) {
-        let Some(field) = current(form, self).cloned() else {
-            return;
-        };
+        let Some(field) = current(form, self).cloned() else { return };
         if matches!(field, FormField::External(_)) || textual(Some(&field)) {
             return;
         }
@@ -128,9 +124,7 @@ impl State {
             self.error.clear();
             return;
         }
-        let Some(row) = choices.get(self.selected) else {
-            return;
-        };
+        let Some(row) = choices.get(self.selected) else { return };
         if matches!(field, FormField::Multiselect(_)) {
             let item = match &row.value {
                 FormValue::String(text) => text.clone(),
@@ -149,9 +143,7 @@ impl State {
 
     /// `formCommitInput`: the typed text answers the field, or explains why it cannot.
     pub fn commit(&mut self, form: &FormInfo, text: &str) {
-        let Some(field) = current(form, self).cloned() else {
-            return;
-        };
+        let Some(field) = current(form, self).cloned() else { return };
         if matches!(field, FormField::External(_) | FormField::Boolean(_)) {
             return;
         }
@@ -191,9 +183,7 @@ impl State {
 
     /// `formAcknowledge`.
     pub fn acknowledge(&mut self, form: &FormInfo) {
-        let Some(field) = current(form, self).cloned() else {
-            return;
-        };
+        let Some(field) = current(form, self).cloned() else { return };
         if !matches!(field, FormField::External(_)) || !self.external_ready.contains(key(&field)) {
             return;
         }
@@ -250,9 +240,7 @@ pub fn unsupported(form: &FormInfo) -> Option<String> {
             FormField::External(_) => None,
             FormField::Unknown(value) => {
                 let kind = value.get("type").and_then(|kind| kind.as_str());
-                let Some(kind) = kind else {
-                    return Some("This form uses an unknown field.".to_owned());
-                };
+                let Some(kind) = kind else { return Some("This form uses an unknown field.".to_owned()) };
                 if !value.get("key").is_some_and(serde_json::Value::is_string) {
                     return Some("This form uses an invalid field.".to_owned());
                 }
@@ -307,9 +295,7 @@ pub fn action(form: &FormInfo, state: &State, width: u16) -> &'static str {
     if textual(field) || state.editing {
         return "save";
     }
-    let Some(field) = field.filter(|field| matches!(field, FormField::External(_))) else {
-        return "choose";
-    };
+    let Some(field) = field.filter(|field| matches!(field, FormField::External(_))) else { return "choose" };
     if state.acknowledged(field) {
         return if single(form) { "submit" } else { "next" };
     }

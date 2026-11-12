@@ -198,9 +198,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
                 current = name;
             }
             "merge" => {
-                let Some(first) = rest.first() else {
-                    return Err(error(n, line, "GitGraph merge requires a branch"));
-                };
+                let Some(first) = rest.first() else { return Err(error(n, line, "GitGraph merge requires a branch")) };
                 let branch = strip_quotes(first);
                 if !heads.contains_key(&branch) {
                     return Err(error(n, line, &format!("Unknown branch \"{branch}\"")));
@@ -318,9 +316,7 @@ fn parse_attributes(tokens: &[String], n: usize, line: &str, allowed: &[&str]) -
 }
 
 fn commit_type(value: Option<String>, n: usize, line: &str) -> Result<CommitType, SyntaxError> {
-    let Some(value) = value else {
-        return Ok(CommitType::Normal);
-    };
+    let Some(value) = value else { return Ok(CommitType::Normal) };
     match value.to_uppercase().as_str() {
         "NORMAL" => Ok(CommitType::Normal),
         "REVERSE" => Ok(CommitType::Reverse),
@@ -333,9 +329,7 @@ fn strip_comment(value: &str) -> &str {
     let mut quote: Option<char> = None;
     let mut chars = value.char_indices().peekable();
     while let Some((index, ch)) = chars.next() {
-        let Some(&(_, next)) = chars.peek() else {
-            break;
-        };
+        let Some(&(_, next)) = chars.peek() else { break };
         if (ch == '"' || ch == '\'') && (quote.is_none() || quote == Some(ch)) {
             quote = if quote == Some(ch) { None } else { Some(ch) };
             continue;
@@ -467,9 +461,7 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
             }
         }
         for parent in &commit.parents {
-            let Some(parent) = by_id.get(parent.as_str()) else {
-                continue;
-            };
+            let Some(parent) = by_id.get(parent.as_str()) else { continue };
             if parent.branch == commit.branch {
                 continue;
             }
@@ -537,9 +529,7 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
         }
         let mut cells = Cells::new();
         for branch in &diagram.branches {
-            let Some(span) = spans.get(branch.name.as_str()) else {
-                continue;
-            };
+            let Some(span) = spans.get(branch.name.as_str()) else { continue };
             if span.0 > index || (span.1 <= index && branch.name != commit.branch) {
                 continue;
             }

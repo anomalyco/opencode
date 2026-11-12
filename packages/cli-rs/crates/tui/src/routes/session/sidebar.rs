@@ -120,9 +120,7 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
     let owner = tui.weak();
     let size = Cell::new(app.size());
     row.on_resize(move |cx, _| {
-        let (Some(inner), Some(tui)) = (weak.upgrade(), owner.upgrade()) else {
-            return;
-        };
+        let (Some(inner), Some(tui)) = (weak.upgrade(), owner.upgrade()) else { return };
         if size.replace(cx.app().size()) == cx.app().size() {
             return;
         }
@@ -266,9 +264,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
         let weak = Rc::downgrade(inner);
         let tui = tui.weak();
         move |_: Option<&str>, _: Option<&opentui::input::KeyEvent>| {
-            let (Some(inner), Some(tui)) = (weak.upgrade(), tui.upgrade()) else {
-                return;
-            };
+            let (Some(inner), Some(tui)) = (weak.upgrade(), tui.upgrade()) else { return };
             inner.toggle(&tui);
             tui.dialogs.clear();
         }
@@ -277,9 +273,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
         let weak = Rc::downgrade(inner);
         let tui = tui.weak();
         move |_: Option<&str>, _: Option<&opentui::input::KeyEvent>| {
-            let (Some(inner), Some(tui)) = (weak.upgrade(), tui.upgrade()) else {
-                return;
-            };
+            let (Some(inner), Some(tui)) = (weak.upgrade(), tui.upgrade()) else { return };
             inner.toggle(&tui);
         }
     };

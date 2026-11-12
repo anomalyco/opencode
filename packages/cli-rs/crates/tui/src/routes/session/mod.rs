@@ -121,9 +121,7 @@ impl Session {
         tui.app.spawn(
             async move { futures_util::future::join(synced.0, synced.1).await },
             move |_, (session, messages)| {
-                let (Some(inner), Ok(()), Ok(())) = (weak.upgrade(), session, messages) else {
-                    return;
-                };
+                let (Some(inner), Ok(()), Ok(())) = (weak.upgrade(), session, messages) else { return };
                 if let Some(tui) = inner.tui.upgrade() {
                     scroll::Controls(inner).restore(&tui);
                 }

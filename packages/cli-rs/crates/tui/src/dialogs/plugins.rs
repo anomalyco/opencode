@@ -134,9 +134,7 @@ impl Manager {
 
     /// Builds the list, focused on `focus` when given (back from an error).
     fn open(self: &Rc<Self>, focus: Option<String>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let manager = self.clone();
         tui.dialogs.replace(
             move |cx| {
@@ -272,9 +270,7 @@ impl Manager {
 
     /// Every row: the TUI plugins, then the server plugins, each sorted by label.
     fn entries(&self) -> Vec<Entry> {
-        let Some(tui) = self.tui.upgrade() else {
-            return Vec::new();
-        };
+        let Some(tui) = self.tui.upgrade() else { return Vec::new() };
         let mut local: Vec<Entry> = tui.plugins.entries().into_iter().filter(|entry| entry.id != ID).map(row).collect();
         // A package without a server part runs nothing there; its TUI part has its own row.
         let mut server: Vec<Entry> = self
@@ -379,9 +375,7 @@ impl Manager {
         if !self.open.get() {
             return;
         }
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let select = self.select.borrow().clone();
         if let Some(select) = select {
             select.set_options(self.options(&super::session_list::dialog_theme(&tui)));
@@ -389,9 +383,7 @@ impl Manager {
     }
 
     fn refetch(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let client = tui.data.client().clone();
         let input = PluginListInput { location: self.location() };
         tui.app.spawn(
@@ -411,9 +403,7 @@ impl Manager {
     /// Reads the server plugins again on `plugin.updated` while the list or its error view is open: the subscription
     /// goes with the manager, which the open dialog owns (`plugins.tsx:39`).
     fn follow(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let subscription = crate::features::events::subscribe(
             &tui,
             ["plugin.updated"],
@@ -427,12 +417,8 @@ impl Manager {
     }
 
     fn toggle(self: &Rc<Self>, entry: Option<&Entry>) {
-        let Some(Entry::Tui { id: Some(id), .. }) = self.toggleable(entry).cloned() else {
-            return;
-        };
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(Entry::Tui { id: Some(id), .. }) = self.toggleable(entry).cloned() else { return };
+        let Some(tui) = self.tui.upgrade() else { return };
         if self.locked.get() {
             return;
         }
@@ -440,9 +426,7 @@ impl Manager {
         let manager = self.clone();
         // Deactivating disposes the plugin's keymap layers, so it waits until the key that asked for it is done.
         tui.app.defer(move |_| {
-            let Some(tui) = manager.tui.upgrade() else {
-                return;
-            };
+            let Some(tui) = manager.tui.upgrade() else { return };
             if !tui.plugins.set_active(&crate::plugins::host::host(&tui), &id, !active) {
                 tui.toasts.error(format!("Failed to update plugin {id}"));
                 return;
@@ -454,15 +438,9 @@ impl Manager {
     }
 
     fn update(self: &Rc<Self>, entry: Option<Entry>) {
-        let Some(entry) = entry.filter(|entry| self.updatable(Some(entry))) else {
-            return;
-        };
-        let Some(target) = package(&entry).map(|package| package.target.clone()) else {
-            return;
-        };
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(entry) = entry.filter(|entry| self.updatable(Some(entry))) else { return };
+        let Some(target) = package(&entry).map(|package| package.target.clone()) else { return };
+        let Some(tui) = self.tui.upgrade() else { return };
         let key = self.key(&entry);
         self.pending.borrow_mut().push(key.clone());
         self.refresh();
@@ -490,9 +468,7 @@ impl Manager {
         if self.checking.replace(true) {
             return;
         }
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         self.refresh();
         let client = tui.data.client().clone();
         let input = PluginCheckInput { location: self.location(), ..PluginCheckInput::default() };
@@ -515,9 +491,7 @@ impl Manager {
 
     /// `DialogErrorDetails` for `entry`; Back returns to the list on it.
     fn detail(self: &Rc<Self>, entry: Entry) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let runtime = match entry {
             Entry::Tui { .. } => "tui",
             Entry::Server { .. } => "server",
@@ -538,9 +512,7 @@ impl Manager {
             on_back: Rc::new({
                 let (manager, key) = (self.clone(), self.key(&entry));
                 move || {
-                    let Some(tui) = manager.tui.upgrade() else {
-                        return;
-                    };
+                    let Some(tui) = manager.tui.upgrade() else { return };
                     let (manager, key) = (manager.clone(), key.clone());
                     tui.app.defer(move |_| manager.open(Some(key)));
                 }

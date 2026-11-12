@@ -175,9 +175,7 @@ impl History {
     /// `moveSessionTabHistory`: the open tab to go to, moving the index when there is one.
     pub fn step(&mut self, tabs: &[Tab], active: Option<&str>, forward: bool) -> Option<String> {
         let open = |session: &str| tabs.iter().any(|tab| tab.session_id == session);
-        let Some(active) = active else {
-            return self.at(self.index).filter(|session| open(session)).cloned();
-        };
+        let Some(active) = active else { return self.at(self.index).filter(|session| open(session)).cloned() };
         let candidates: Vec<usize> = if forward {
             ((self.index + 1).max(0) as usize..self.entries.len()).collect()
         } else {

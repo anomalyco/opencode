@@ -162,9 +162,7 @@ impl Composer {
 
 impl Drop for Composer {
     fn drop(&mut self) {
-        let Some(tui) = self.0.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.0.tui.upgrade() else { return };
         tui.terminals.set_picker(None);
         tui.terminals.set_listener(None);
         // A command may drop the view while the keymap runs it (a subagent navigates), so the layers go afterwards.
@@ -179,9 +177,7 @@ impl Inner {
         let open = self.condition(|inner| inner.open.get());
         let run = |action: fn(&Rc<Inner>, &Tui)| {
             bind!(self, |inner, _: Option<&str>, _: Option<&KeyEvent>| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 action(&inner, &tui);
             })
         };
@@ -194,9 +190,7 @@ impl Inner {
         let child_first = TuiCommand::new(
             "session.child.first",
             bind!(self, |inner, tab: Option<&str>, _: Option<&KeyEvent>| {
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
+                let Some(tui) = inner.tui.upgrade() else { return };
                 inner.toggle(&tui, tab);
             }),
         )
@@ -355,9 +349,7 @@ impl Inner {
                         return;
                     }
                     let Some(inner) = weak.upgrade() else { return };
-                    let Some(tui) = inner.tui.upgrade() else {
-                        return;
-                    };
+                    let Some(tui) = inner.tui.upgrade() else { return };
                     inner.active.set(tab);
                     inner.redraw_later(&tui);
                 });
@@ -375,9 +367,7 @@ impl Inner {
                 return;
             }
             let Some(inner) = weak.upgrade() else { return };
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
+            let Some(tui) = inner.tui.upgrade() else { return };
             tui.app.defer(bind!(inner, |inner, _| {
                 if let Some(tui) = inner.tui.upgrade() {
                     inner.close(&tui);

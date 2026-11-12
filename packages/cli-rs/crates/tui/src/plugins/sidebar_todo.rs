@@ -27,9 +27,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     let last: RefCell<Option<Last>> = RefCell::default();
     setup.slot(Placement::append(slot::SIDEBAR_CONTENT), move |read, input, changed| {
-        let Some(session) = input.session_id.as_deref() else {
-            return Render::Hide;
-        };
+        let Some(session) = input.session_id.as_deref() else { return Render::Hide };
         let mut last = last.borrow_mut();
         let fresh = changed.all || changed.local || last.as_ref().is_none_or(|last| last.session != session);
         let last = match &mut *last {

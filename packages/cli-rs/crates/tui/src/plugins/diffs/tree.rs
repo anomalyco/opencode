@@ -49,9 +49,7 @@ pub fn build<'a>(files: impl IntoIterator<Item = &'a str>) -> Tree {
     let mut directories: Vec<(String, usize)> = Vec::new();
     for (file, path) in files.into_iter().enumerate() {
         let segments: Vec<&str> = path.split('/').filter(|segment| !segment.is_empty()).collect();
-        let Some((name, parents)) = segments.split_last() else {
-            continue;
-        };
+        let Some((name, parents)) = segments.split_last() else { continue };
         let mut parent = None;
         let mut directory = String::new();
         for (depth, segment) in parents.iter().enumerate() {

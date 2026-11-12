@@ -75,16 +75,12 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             continue;
         }
         if let Some(captures) = TITLE.captures(line) {
-            let Some(value) = captures.get(1) else {
-                return Err(error(n, line, "Timeline title cannot be empty"));
-            };
+            let Some(value) = captures.get(1) else { return Err(error(n, line, "Timeline title cannot be empty")) };
             title = Some(strip_quotes(value.as_str()));
             continue;
         }
         if let Some(captures) = SECTION.captures(line) {
-            let Some(value) = captures.get(1) else {
-                return Err(error(n, line, "Timeline section cannot be empty"));
-            };
+            let Some(value) = captures.get(1) else { return Err(error(n, line, "Timeline section cannot be empty")) };
             entries.push(Entry::Section(strip_quotes(value.as_str())));
             current = None;
             continue;
@@ -205,9 +201,7 @@ pub fn draw(diagram: &Diagram) -> Result<Grid, SizeError> {
     };
     for (entry, layout) in diagram.entries.iter().zip(&layouts) {
         let (Entry::Period { .. }, Some(layout)) = (entry, layout) else {
-            let Entry::Section(label) = entry else {
-                continue;
-            };
+            let Entry::Section(label) = entry else { continue };
             let lines = split_lines(label);
             for (index, line) in lines.iter().enumerate() {
                 let row = y + index as i32;

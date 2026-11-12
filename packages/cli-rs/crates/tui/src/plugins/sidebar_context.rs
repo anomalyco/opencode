@@ -16,9 +16,7 @@ pub fn plugin() -> abi::Plugin {
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let last: RefCell<Option<Last>> = RefCell::default();
     setup.slot(Placement::append(slot::SIDEBAR_CONTENT), move |read, input, changed| {
-        let Some(session) = input.session_id.as_deref() else {
-            return Render::Hide;
-        };
+        let Some(session) = input.session_id.as_deref() else { return Render::Hide };
         let mut last = last.borrow_mut();
         let fresh = changed.all || last.as_ref().is_none_or(|last| last.session != session);
         let last = match &mut *last {
@@ -170,9 +168,7 @@ pub fn usage(
         SessionMessageInfo::Assistant(message) => Some((start + index, &message.model, message.tokens.as_ref()?)),
         _ => None,
     });
-    let Some((index, model, tokens)) = found else {
-        return (None, start);
-    };
+    let Some((index, model, tokens)) = found else { return (None, start) };
     let total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write;
     if total <= 0.0 {
         return (None, index);

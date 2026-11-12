@@ -41,9 +41,7 @@ fn register(setup: &mut Setup, kinds: Rc<RefCell<HashMap<u64, Kind>>>) {
                     kinds.insert(fence.key, kind);
                     return Fenced::Keep;
                 }
-                let Some(prefix) = prefix else {
-                    return Fenced::Code;
-                };
+                let Some(prefix) = prefix else { return Fenced::Code };
                 prefix
             }
         };

@@ -35,18 +35,14 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         setup.command(command, |host, _| force_submit(host));
     }
     setup.slot(Placement::append("prompt.footer.status"), move |read, input, changed| {
-        let (Some(prompt), Some(session)) = (input.prompt, input.session_id.as_deref()) else {
-            return Render::Hide;
-        };
+        let (Some(prompt), Some(session)) = (input.prompt, input.session_id.as_deref()) else { return Render::Hide };
         if !hint || prompt.shell {
             return Render::Hide;
         }
         if !(changed.all || changed.session(session)) {
             return Render::Keep;
         }
-        let Some(session) = read.session(session) else {
-            return Render::Hide;
-        };
+        let Some(session) = read.session(session) else { return Render::Hide };
         let spans = match session.status {
             SessionStatus::Running => vec![
                 Span::new("⏎ "),

@@ -21,9 +21,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
     });
     setup.slot(Placement::append(slot::SIDEBAR_CONTENT), |read, input, changed| {
-        let Some(session) = input.session_id.as_deref() else {
-            return Render::Hide;
-        };
+        let Some(session) = input.session_id.as_deref() else { return Render::Hide };
         // The servers follow the session's location, the fold the storage.
         if !(changed.all || changed.local || changed.session(session) || !changed.locations.is_empty()) {
             return Render::Keep;

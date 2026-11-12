@@ -85,9 +85,7 @@ impl Viewer {
     }
 
     fn draw(self: &Rc<Self>) {
-        let (Some(tui), Some(cx)) = (self.tui.upgrade(), self.cx.borrow().upgrade()) else {
-            return;
-        };
+        let (Some(tui), Some(cx)) = (self.tui.upgrade(), self.cx.borrow().upgrade()) else { return };
         let app = &cx.app;
         let theme = &cx.theme;
         let index = self.index.get();
@@ -140,9 +138,7 @@ impl Viewer {
 
     /// The image's bytes: a `data:` URI decodes in place, a `media:` ref is read once.
     fn bytes(self: &Rc<Self>, tui: &Tui, uri: &str) -> Load {
-        let Some(hash) = media_hash(uri) else {
-            return data_uri(uri).map_or(Load::Failed, Load::Ready);
-        };
+        let Some(hash) = media_hash(uri) else { return data_uri(uri).map_or(Load::Failed, Load::Ready) };
         if let Some(cached) = self.media.borrow().get(uri) {
             return cached.clone().map_or(Load::Failed, Load::Ready);
         }

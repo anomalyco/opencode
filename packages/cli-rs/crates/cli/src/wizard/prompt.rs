@@ -173,9 +173,7 @@ fn clear_with_error(output: &str, columns: usize, error: &str) -> String {
 }
 
 fn render_error(error: Option<&str>, plain: bool) -> String {
-    let Some(error) = error else {
-        return String::new();
-    };
+    let Some(error) = error else { return String::new() };
     let lines: Vec<&str> = error.split('\n').collect();
     if plain {
         return separate(POINTER_SMALL, &lines.join("\n"));

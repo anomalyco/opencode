@@ -87,9 +87,7 @@ impl Drop for Isolation {
 }
 
 fn stop(pid: u32) {
-    let Some(pid) = Pid::from_raw(pid as i32) else {
-        return;
-    };
+    let Some(pid) = Pid::from_raw(pid as i32) else { return };
     let _ = kill_process(pid, Signal::TERM);
     for _ in 0..200 {
         if test_kill_process(pid).is_err() {
@@ -102,9 +100,7 @@ fn stop(pid: u32) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn typescript_service_status_sees_a_service_rust_started() {
-    let Some(ts_root) = ts_root() else {
-        return;
-    };
+    let Some(ts_root) = ts_root() else { return };
     let isolation = Isolation { root: opencode_util::temp::tempdir().unwrap() };
     for dir in ["home", "state/opencode", "config/opencode", "data", "cache"] {
         std::fs::create_dir_all(isolation.path(dir)).unwrap();

@@ -186,9 +186,7 @@ impl Sessions {
         if self.send_commands(&attached.id, &current).is_err() {
             return;
         }
-        let Ok(mut changes) = self.catalogs.changes(&attached.cwd).await else {
-            return;
-        };
+        let Ok(mut changes) = self.catalogs.changes(&attached.cwd).await else { return };
         let mut previous = current;
         let next = changes.borrow_and_update().clone();
         self.changed(attached, &previous, &next, None);

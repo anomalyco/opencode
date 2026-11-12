@@ -278,9 +278,7 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
     std::fs::create_dir_all(twin_file.parent().unwrap()).unwrap();
     std::fs::write(&twin_file, &original).unwrap();
     for (_, path, value) in &toggles {
-        let Some(result) = support::ts_config(twin.path(), json!({ "update": [[path, value]] })) else {
-            return;
-        };
+        let Some(result) = support::ts_config(twin.path(), json!({ "update": [[path, value]] })) else { return };
         assert!(result.get("ok").is_some(), "{result}");
     }
     assert_eq!(std::fs::read_to_string(&twin_file).unwrap(), text);

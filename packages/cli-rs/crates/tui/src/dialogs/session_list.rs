@@ -87,9 +87,7 @@ pub fn show(tui: &Tui) {
             props.on_select = Some(Rc::new({
                 let weak = weak.clone();
                 move |option: &SelectOption<SessionID>| {
-                    let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else {
-                        return;
-                    };
+                    let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else { return };
                     let id = option.value.clone();
                     let app = tui.app.clone();
                     app.defer(bind!(tui, |tui, _| {
@@ -117,9 +115,7 @@ pub fn show(tui: &Tui) {
                 SelectAction::new("session.rename", "rename", {
                     let weak = weak.clone();
                     move |option: &SelectOption<SessionID>| {
-                        let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else {
-                            return;
-                        };
+                        let Some(tui) = weak.upgrade().and_then(|list| list.tui.upgrade()) else { return };
                         let (id, title) = (option.value.clone(), option.title.clone());
                         let app = tui.app.clone();
                         app.defer(bind!(tui, |tui, _| crate::dialogs::rename::show(&tui, id, Some(title))));
@@ -213,9 +209,7 @@ impl List {
     /// The picker location's info and the projects into the store, then the first read. The list follows the
     /// store's projects and location info while it is open.
     fn load(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let reads = futures_util::future::join(
             tui.data.location_sync_info(Some(&picker_location(&tui))),
             tui.data.project_sync(),
@@ -226,14 +220,10 @@ impl List {
 
     /// Repaints after each store flush that touched the projects or the picker location.
     fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let weak = Rc::downgrade(self);
         tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
-            let (Some(list), Some(revisions)) = (weak.upgrade(), revisions) else {
-                return;
-            };
+            let (Some(list), Some(revisions)) = (weak.upgrade(), revisions) else { return };
             let Some(tui) = list.tui.upgrade() else { return };
             if list.select.borrow().is_none() {
                 return;
@@ -255,9 +245,7 @@ impl List {
 
     /// Reads the list for the current search and scope (the `searchResults` resource).
     fn fetch(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let location = self.location(&tui);
         let (query, all_projects, request) = {
             let mut state = self.state.borrow_mut();
@@ -343,17 +331,13 @@ impl List {
     }
 
     fn toggle_pin(self: &Rc<Self>, id: &SessionID) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         pins::toggle(&tui, id);
         self.refresh();
     }
 
     fn delete(self: &Rc<Self>, id: &SessionID) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         if self.state.borrow().to_delete.as_ref() != Some(id) {
             self.state.borrow_mut().to_delete = Some(id.clone());
             self.refresh_later();
@@ -429,12 +413,8 @@ impl List {
 
     /// `currentProjectName`.
     fn project_name(&self) -> String {
-        let Some(tui) = self.tui.upgrade() else {
-            return String::new();
-        };
-        let Some(current) = self.location(&tui) else {
-            return String::new();
-        };
+        let Some(tui) = self.tui.upgrade() else { return String::new() };
+        let Some(current) = self.location(&tui) else { return String::new() };
         tui.data.read(|store| project_name(store.project(&current.project.id))).unwrap_or_default()
     }
 
@@ -491,9 +471,7 @@ impl List {
 
     /// `options()`.
     fn options(&self) -> Vec<SelectOption<SessionID>> {
-        let Some(tui) = self.tui.upgrade() else {
-            return Vec::new();
-        };
+        let Some(tui) = self.tui.upgrade() else { return Vec::new() };
         let theme = dialog_theme(&tui);
         let tabs = tui.config().tabs.enabled;
         let pinned_ids = if tabs { Vec::new() } else { pins::list(&tui) };

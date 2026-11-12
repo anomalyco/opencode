@@ -59,9 +59,7 @@ struct List {
 
 impl List {
     fn open(self: &Rc<Self>) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let list = self.clone();
         let rows = options(&tui);
         tui.dialogs.replace(
@@ -98,9 +96,7 @@ impl List {
 
     /// `themes.set(name)` without the write.
     fn preview(&self, name: &str) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         if tui.theme.borrow().selected() == name {
             return;
         }
@@ -116,9 +112,7 @@ impl List {
             return;
         }
         // The select filters the rows after it reports the query.
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         let list = self.clone();
         tui.app.defer(move |_| {
             let first = list.select.borrow().as_ref().and_then(|select| select.filtered().into_iter().next());
@@ -129,9 +123,7 @@ impl List {
     }
 
     fn pick(self: &Rc<Self>, name: &str) {
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         self.confirmed.set(true);
         if tui.theme.borrow().selected() != name {
             tui.theme.borrow_mut().config_name(name);
@@ -150,9 +142,7 @@ impl List {
         if self.confirmed.get() {
             return;
         }
-        let Some(tui) = self.tui.upgrade() else {
-            return;
-        };
+        let Some(tui) = self.tui.upgrade() else { return };
         if tui.theme.borrow().selected() == self.initial {
             return;
         }

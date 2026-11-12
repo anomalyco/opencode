@@ -180,9 +180,7 @@ pub fn install(tui: &Rc<Tui>) {
 /// keymap's own handler.
 pub fn install_keys(tui: &Rc<Tui>) {
     tui.app.on_key_capture(bind!(tui, |tui, cx, key| {
-        let Some(pane) = crate::frame::terminal(&tui) else {
-            return;
-        };
+        let Some(pane) = crate::frame::terminal(&tui) else { return };
         let Some(view) = pane.focused() else { return };
         if tui.keymap.is_leader(key) || tui.keymap.leader_active() {
             return;

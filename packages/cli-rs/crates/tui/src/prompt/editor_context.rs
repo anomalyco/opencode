@@ -653,9 +653,7 @@ async fn session(mut socket: Socket, request_id: &mut i64, post: &impl Fn(Event)
     let mut pending = Some(initialize);
     while let Some(Ok(frame)) = socket.next().await {
         let Frame::Text(text) = frame else { continue };
-        let Ok(message) = serde_json::from_str::<Value>(&text) else {
-            continue;
-        };
+        let Ok(message) = serde_json::from_str::<Value>(&text) else { continue };
         let method = message.get("method").and_then(Value::as_str);
         let params = message.get("params").unwrap_or(&Value::Null);
         if method == Some("selection_changed")
@@ -700,9 +698,7 @@ async fn session(mut socket: Socket, request_id: &mut i64, post: &impl Fn(Event)
 /// Whether an `initialize` result decodes as `EditorServerInfoSchema`: an object whose fields, when present, have
 /// their types.
 fn server_info(result: &Value) -> bool {
-    let Some(result) = result.as_object() else {
-        return false;
-    };
+    let Some(result) = result.as_object() else { return false };
     let string_or_absent = |value: Option<&Value>| value.is_none_or(Value::is_string);
     string_or_absent(result.get("protocolVersion"))
         && result.get("serverInfo").is_none_or(|info| {
@@ -744,12 +740,8 @@ pub mod zed {
 
     pub(super) fn resolve_with(sqlite: Option<&Sqlite>, db: &Path, cwd: &Path) -> Option<Option<Selection>> {
         let db = Connection::open(sqlite?, db, READ_ONLY)?;
-        let Some(editor) = active_editor(&db, cwd)? else {
-            return Some(None);
-        };
-        let Some(buffer) = editor.buffer_path.clone() else {
-            return Some(None);
-        };
+        let Some(editor) = active_editor(&db, cwd)? else { return Some(None) };
+        let Some(buffer) = editor.buffer_path.clone() else { return Some(None) };
         let editor_id = editor.editor_id?;
         let mut ranges = selections(&db, editor_id, editor.workspace_id)?;
         ranges.sort();
@@ -801,9 +793,7 @@ pub mod zed {
             .map(|row| (workspace_score(row.workspace_paths.as_deref(), cwd), row))
             .filter(|(score, _)| *score > 0)
             .max_by(|(left, a), (right, b)| left.cmp(right).then(a.timestamp.cmp(&b.timestamp)));
-        let Some((_, row)) = best else {
-            return Some(None);
-        };
+        let Some((_, row)) = best else { return Some(None) };
         if row.kind != "Editor" {
             return None;
         }

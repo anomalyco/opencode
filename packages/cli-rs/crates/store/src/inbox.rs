@@ -200,9 +200,7 @@ impl State {
         if let Some((_, updates)) = self.pending_updates.get_mut(session) {
             updates.insert(inbox.to_owned(), PendingUpdate::Removed);
         }
-        let Some(pending) = self.pending.get_mut(session) else {
-            return;
-        };
+        let Some(pending) = self.pending.get_mut(session) else { return };
         let before = pending.len();
         pending.retain(|item| item.id() != inbox);
         if pending.len() != before {
@@ -223,9 +221,7 @@ impl State {
         if let Some((_, updates)) = self.pending_updates.get_mut(session) {
             updates.insert(inbox.to_owned(), update);
         }
-        let Some(at) = position else {
-            return;
-        };
+        let Some(at) = position else { return };
         let item = &mut self.pending.get_mut(session).expect("found above")[at];
         if item.delivery() == Some(delivery) {
             return;
@@ -244,9 +240,7 @@ impl State {
         let data = &event.data;
         let session = &data.session_id;
         self.outbox.remove(data.inbox_id.as_str());
-        let Some(item) = inbox_item(event) else {
-            return;
-        };
+        let Some(item) = inbox_item(event) else { return };
         if let Some((_, updates)) = self.pending_updates.get_mut(session) {
             updates.insert(item.id().to_owned(), PendingUpdate::Item(Box::new(item.clone())));
         }
@@ -256,9 +250,7 @@ impl State {
             return;
         }
         self.observe(session, data.inbox_id.as_str());
-        let Some(active) = self.compacting.get(session) else {
-            return;
-        };
+        let Some(active) = self.compacting.get(session) else { return };
         let proposed = active.id.clone();
         if proposed != data.inbox_id && self.outbox.remove(proposed.as_str()) {
             self.remove_pending(session, proposed.as_str());
