@@ -4,6 +4,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use opencode_acp::paths::resolve_from;
 use serde_json::{Value, json};
 
 use crate::wire::{
@@ -276,7 +277,7 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
         std::fs::write(dir.path().join(name), content).unwrap();
     }
     std::fs::create_dir(dir.path().join("folder")).unwrap();
-    let file = |name: &str| format!("{root}/{name}");
+    let file = |name: &str| resolve_from(&root, name);
     let acp = start_wire(WireOptions {
         on_prompt: Some(events(|call| {
             let session = call.session_id.as_str();
