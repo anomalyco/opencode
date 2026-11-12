@@ -1,8 +1,8 @@
 # P.4 external plugins (`rs-plugin-loader`)
 
 Row F16. External TUI plugins are native shared libraries behind a stable C ABI (decision O-42, which replaces the
-WASM design of O-7 and O-40). The host opens them with `dlopen` (`opencode_util::dl`), so they load on Linux
-(`.so`) and macOS (`.dylib`); on Windows every plugin fails to load. There is no sandbox: a plugin is code the user
+WASM design of O-7 and O-40). The host opens them with `opencode_util::dl` (`dlopen`, `LoadLibraryW` on Windows), so
+they load on Linux (`.so`), macOS (`.dylib`) and Windows (`.dll`). There is no sandbox: a plugin is code the user
 chose to run on their own machine. No cargo feature gates it.
 
 To write one, start with the quick start in [`crates/plugin-abi/README.md`](../crates/plugin-abi/README.md). It also

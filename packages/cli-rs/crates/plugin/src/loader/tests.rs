@@ -273,6 +273,7 @@ fn discover_lists_subdirectories_by_name() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn local_source_resolves_paths_and_urls_but_not_packages() {
     let dir = Path::new("/home/me/.config/opencode");
@@ -285,6 +286,24 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
     assert_eq!(local_source("file:///a/My%20Plugin", dir), Some("/a/My Plugin".into()));
     assert_eq!(local_source("file://localhost/a/b", dir), Some("/a/b".into()));
     assert_eq!(local_source("file:///a/b/../c", dir), Some("/a/c".into()));
+}
+
+// The same on Windows, where TS `path.isAbsolute` takes a rooted path without a drive, which resolves on the
+// directory's drive, and `fileURLToPath` wants a drive or a host.
+#[cfg(windows)]
+#[test]
+fn local_source_resolves_paths_and_urls_but_not_packages() {
+    let dir = Path::new(r"C:\Users\me\.config\opencode");
+    assert_eq!(local_source("./plugins/x", dir), Some(r"C:\Users\me\.config\opencode\plugins\x".into()));
+    assert_eq!(local_source("../x.wasm", dir), Some(r"C:\Users\me\.config\x.wasm".into()));
+    assert_eq!(local_source("/abs/x", dir), Some(r"C:\abs\x".into()));
+    assert_eq!(local_source(r"\abs\x", dir), Some(r"C:\abs\x".into()));
+    assert_eq!(local_source(r"D:\abs\x", dir), Some(r"D:\abs\x".into()));
+    assert_eq!(local_source("C:x", dir), None);
+    assert_eq!(local_source("file:///D:/abs/y.wasm", dir), Some(r"D:\abs\y.wasm".into()));
+    assert_eq!(local_source("@acme/opencode-tui", dir), None);
+    assert_eq!(local_source("file:///D:/a/My%20Plugin", dir), Some(r"D:\a\My Plugin".into()));
+    assert_eq!(local_source("file:///D:/a/b/../c", dir), Some(r"D:\a\c".into()));
 }
 
 #[test]
