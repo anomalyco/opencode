@@ -461,6 +461,44 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("renames a file when only the case of its name changes", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "same.txt"), "before\n"))
+        expect(
+          yield* executeTool(
+            registry,
+            call(
+              "*** Begin Patch\n*** Update File: same.txt\n*** Move to: Same.txt\n@@\n-before\n+after\n*** End Patch",
+            ),
+          ),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["Same.txt"])
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "Same.txt"), "utf8"))).toBe("after\n")
+      }),
+    ),
+  )
+
+  it.live("keeps a file when only the case of its directory changes", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(path.join(directory, "dir")))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "dir", "same.txt"), "before\n"))
+        expect(
+          yield* executeTool(
+            registry,
+            call(
+              "*** Begin Patch\n*** Update File: dir/same.txt\n*** Move to: Dir/same.txt\n@@\n-before\n+after\n*** End Patch",
+            ),
+          ),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "Dir", "same.txt"), "utf8"))).toBe(
+          "after\n",
+        )
+      }),
+    ),
+  )
+
   it.live("moves a symlink without deleting its target", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
