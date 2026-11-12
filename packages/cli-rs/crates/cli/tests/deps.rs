@@ -25,6 +25,16 @@ type Graph = BTreeMap<String, BTreeSet<&'static str>>;
 fn allow_list_matches_the_graph() {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let manifest = workspace.join("Cargo.toml");
+    // Another host has not downloaded the crates only `TARGET` builds (`errno`, say), whose manifests the graph
+    // reads: fetch them, online. Linux has them from its own build.
+    if !cfg!(target_os = "linux") {
+        let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .args(["fetch", "--locked", "--target", TARGET, "--manifest-path"])
+            .arg(&manifest)
+            .status()
+            .expect("cargo runs");
+        assert!(status.success(), "cargo fetch --target {TARGET} failed");
+    }
     // Features do not change a package's targets or declared dependencies, so one all-features metadata serves the
     // three graphs.
     let metadata: Value = serde_json::from_str(&cargo(
