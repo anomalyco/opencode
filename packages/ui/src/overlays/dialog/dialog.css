@@ -20,8 +20,9 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    width: 480px;
-    height: 368px;
+    width: min(calc(100vw - 32px), 480px);
+    height: min(calc(100vh - 32px), 368px);
+    max-height: calc(100vh - 32px);
     background: var(--v2-background-bg-layer-01);
     box-shadow: var(--v2-elevation-overlay);
     border-radius: 6px;
@@ -158,23 +159,32 @@
     }
   }
 
-  &[data-fit] {
-    [data-slot="dialog-container"] {
-      height: auto;
+  /* Large dialogs keep the top edge a full-height one would have, so content that changes height (a filtered list,
+     a step that fits its content) only moves the bottom edge. */
+  &:is([data-size="large"], [data-size="x-large"]) {
+    align-items: flex-start;
 
-      [data-slot="dialog-content"] {
-        min-height: 0;
-      }
+    [data-slot="dialog-container"] {
+      --dialog-height: min(calc(100vh - 96px), 600px);
+      width: min(calc(100vw - 32px), 880px);
+      height: var(--dialog-height);
+      max-height: var(--dialog-height);
+      margin-top: max(48px, calc((100vh - var(--dialog-height)) / 2));
+      background: var(--v2-background-bg-base);
+      border-radius: 12px;
     }
   }
 
-  &[data-size="large"] [data-slot="dialog-container"] {
-    width: 640px;
-    height: 480px;
+  &[data-size="x-large"] [data-slot="dialog-container"] {
+    --dialog-height: min(calc(100vh - 96px), 680px);
+    width: min(calc(100vw - 32px), 1040px);
   }
 
-  &[data-size="x-large"] [data-slot="dialog-container"] {
-    width: min(calc(100vw - 32px), 980px);
-    height: min(calc(100vh - 92px), 600px);
+  &[data-fit] [data-slot="dialog-container"] {
+    height: auto;
+
+    [data-slot="dialog-content"] {
+      min-height: 0;
+    }
   }
 }

@@ -118,7 +118,7 @@ export function ForkDialog(props: {
   }
 
   return (
-    <Dialog class="command-palette command-palette-compact fork-dialog" fit>
+    <Dialog class="command-palette command-palette-compact fork-dialog" size="large" fit>
       <div class="sr-only">
         <DialogTitle>{language.t("command.session.fork")}</DialogTitle>
       </div>

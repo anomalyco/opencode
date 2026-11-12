@@ -1154,7 +1154,7 @@ test("the location dialog separates added projects from server projects and tags
   await expect(options.nth(0)).toHaveCSS("height", "28px")
   await expect(dialog.locator(".palette-menu-search [data-component='text-input-v2']")).toHaveCSS("height", "28px")
   await expect(dialog.locator(".new-session-location-hints")).toHaveCount(0)
-  await expect(dialog.locator("..")).toHaveCSS("width", "480px")
+  await expect(dialog.locator("..")).toHaveCSS("width", "880px")
   await expect(options.nth(0)).toHaveCSS("display", "flex")
   await expect(names.nth(0).locator(".command-palette-title")).toHaveCSS("font-size", "13px")
   await expect(names.nth(0).locator(".command-palette-title")).toHaveCSS("white-space", "nowrap")

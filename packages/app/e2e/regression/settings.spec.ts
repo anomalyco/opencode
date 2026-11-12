@@ -1926,7 +1926,7 @@ test("providers: the free tier upsell opens Go on its own, sized to its content"
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   // Nothing to go back to: the upsell opened the dialog straight on Go.
   await expect(dialog.getByRole("button", { name: "Navigate back", exact: true })).toHaveCount(0)
-  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
+  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(600)
 })
 
 test("providers: the connect dialog lists connected providers and manages their accounts", async ({ page }) => {
@@ -1978,7 +1978,7 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
   await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
-  await expect.poll(async () => (await container.boundingBox())?.height).toBe(512)
+  await expect.poll(async () => (await container.boundingBox())?.height).toBe(600)
   const picker = await container.boundingBox()
   await openai.click()
 

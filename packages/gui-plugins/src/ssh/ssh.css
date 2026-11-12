@@ -10,14 +10,6 @@
 }
 
 /* The same rules as the app's server dialog in settings.css, which may not be loaded when the palette opens this one. */
-[data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-container"] {
-  width: 480px;
-  max-width: calc(100vw - 32px);
-  height: auto;
-  border-radius: 8px;
-  align-items: stretch;
-}
-
 [data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-content"] {
   align-items: stretch;
   width: 100%;

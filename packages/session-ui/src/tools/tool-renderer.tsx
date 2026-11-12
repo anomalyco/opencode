@@ -2012,7 +2012,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
     String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(output().text) : 0)).length
 
   return (
-    <Dialog fit containerClass="!w-[min(calc(100vw_-_32px),720px)] max-h-[calc(100vh_-_92px)]">
+    <Dialog size="large" fit>
       <DialogHeader>
         <div data-slot="execute-details-title">
           <DialogTitle>{i18n.t("ui.tool.execute")}</DialogTitle>

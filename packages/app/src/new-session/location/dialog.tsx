@@ -482,7 +482,7 @@ function NewSessionLocationDialog(props: {
   }
 
   return (
-    <Dialog class="command-palette new-session-location" size="large">
+    <Dialog class="command-palette new-session-location" size="large" fit>
       <DialogBody class="command-palette-body">
         <div class="palette-menu-search">
           <TextInput
