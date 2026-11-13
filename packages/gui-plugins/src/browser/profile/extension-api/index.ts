@@ -6,6 +6,7 @@ import type { Emit } from "./api"
 import { createContextMenus } from "./context-menus"
 import { createCookies } from "./cookies"
 import { createExtensionHost } from "./host"
+import { createManifests } from "./manifest"
 import { createNotifications } from "./notifications"
 import { createPermissions } from "./permissions"
 import { createPopups } from "./popup"
@@ -34,7 +35,8 @@ export async function createExtensionApis(input: {
   const bus: Bus = {}
   const emit: Emit = (name, args, extension) => bus.emit?.(name, args, extension)
   const extensions = () => input.session.extensions.getAllExtensions()
-  const tabs = createExtensionTabs({ emit, extensions })
+  const manifest = createManifests()
+  const tabs = createExtensionTabs({ emit, extensions, manifest })
   const popups = createPopups({ partition: input.partition, tabs })
 
   const actions = createActions({
@@ -42,6 +44,7 @@ export async function createExtensionApis(input: {
     emit,
     changed: input.changed,
     open: (window, extension, url) => popups.open(window, extension, url),
+    manifest,
   })
 
   const storageSync = createStorageSync({ storage: input.storage, emit })
@@ -51,16 +54,17 @@ export async function createExtensionApis(input: {
     session: input.session,
     directory: input.directory,
     log: input.log,
+    manifest,
     modules: [
       tabs.module,
       actions.module,
       createWebNavigation({ tabs, emit }),
-      createContextMenus({ tabs, emit, extensions }),
-      createCookies({ session: input.session, tabs, emit, extensions }),
-      createPermissions(),
-      createNotifications({ emit }),
+      createContextMenus({ tabs, emit, extensions, manifest }),
+      createCookies({ session: input.session, tabs, emit, extensions, manifest }),
+      createPermissions({ manifest }),
+      createNotifications({ emit, manifest }),
       storageSync.module,
-      createStubs(),
+      createStubs({ manifest }),
     ],
   })
 

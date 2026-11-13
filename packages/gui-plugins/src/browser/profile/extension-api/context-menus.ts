@@ -2,7 +2,8 @@ import { Schema } from "effect"
 import electron, { type ContextMenuParams, type Extension, type MenuItemConstructorOptions } from "electron"
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
-import { declared, reveals, tabInfo, type ExtensionTabs, type PaneTab } from "./tabs"
+import type { Manifests } from "./manifest"
+import { reveals, tabInfo, type ExtensionTabs, type PaneTab } from "./tabs"
 
 const Id = Schema.Union([Schema.String, Schema.Number])
 
@@ -180,6 +181,7 @@ export function createContextMenus(input: {
   tabs: ExtensionTabs
   emit: Emit
   extensions: () => readonly Extension[]
+  manifest: Manifests
 }): ApiModule {
   const menus = new Map<string, readonly MenuItem[]>()
 
@@ -210,7 +212,7 @@ export function createContextMenus(input: {
 
     input.emit(
       "contextMenus.onClicked",
-      [info, snapshot ? tabInfo(snapshot, reveals(declared(extension), snapshot.url)) : undefined],
+      [info, snapshot ? tabInfo(snapshot, reveals(input.manifest(extension), snapshot.url)) : undefined],
       extension.id,
     )
   }

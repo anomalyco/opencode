@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import type { Extension, WebContents, WebFrameMain } from "electron"
+import type { ApiManifest } from "./manifest"
 
 /**
  * One `chrome.*` namespace the profile adds to extension contexts, by its dotted path (`privacy.network.x` is
@@ -74,6 +75,25 @@ export type ApiModule = {
 
 /** Sends `event` (`path.onSomething`) with `args` to the extensions that listen, or only to `extension`. */
 export type Emit = (event: string, args: readonly Wire[], extension?: string) => void
+
+/** The namespace a `path.member` name belongs to: the one whose path is everything before the member. */
+export function namespaceOf(namespaces: readonly ApiNamespace[], name: string) {
+  return namespaces.find(
+    (namespace) => name.startsWith(`${namespace.path}.`) && !name.slice(namespace.path.length + 1).includes("."),
+  )
+}
+
+/**
+ * Whether an extension may use a namespace: the trust check before every call and subscription. Its manifest version
+ * must match the namespace's, and it must declare one of the namespace's permissions when the namespace names any.
+ */
+export function allowed(manifest: ApiManifest, namespace: ApiNamespace | undefined) {
+  if (!namespace) return false
+
+  if (namespace.manifest && namespace.manifest !== manifest.version) return false
+
+  return !namespace.permissions?.length || namespace.permissions.some((item) => manifest.permissions.includes(item))
+}
 
 /** An argument callers may leave out or pass as `null`. */
 export const optional = <S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))

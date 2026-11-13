@@ -2,9 +2,8 @@ import { writeFile } from "node:fs/promises"
 import path from "node:path"
 import { app, webContents, webFrameMain, type Extension, type ServiceWorkerMain, type Session, type WebContents } from "electron"
 import type { Log } from "@opencode/plugin/gui/main"
-import { Option, Schema } from "effect"
-import type { ApiModule, ApiNamespace, Emit, ExtensionContext, Wire } from "./api"
-import { declared } from "./tabs"
+import { allowed, namespaceOf, type ApiModule, type Emit, type ExtensionContext, type Wire } from "./api"
+import type { Manifests } from "./manifest"
 import preloadSource from "./preload.js?raw"
 
 /** A context that listens to an event: a page frame, or the extension's service worker, which is started to hear it. */
@@ -27,6 +26,7 @@ export async function createExtensionHost(input: {
   directory: string
   modules: readonly ApiModule[]
   log: Log
+  manifest: Manifests
 }) {
   const namespaces = input.modules.flatMap((module) => module.namespaces)
   const methods = new Map(input.modules.flatMap((module) => Object.entries(module.methods)))
@@ -67,7 +67,7 @@ export async function createExtensionHost(input: {
     if (!context) throw new Error("This context cannot use extension APIs.")
     const run = methods.get(name)
 
-    if (!run || !allowed(context.extension, namespaceOf(namespaces, name)))
+    if (!run || !allowed(input.manifest(context.extension), namespaceOf(namespaces, name)))
       throw new Error(`chrome.${name} is not available in this browser.`)
 
     // A failure goes back to the extension; the log keeps a trace for support.
@@ -85,7 +85,7 @@ export async function createExtensionHost(input: {
   }
 
   const subscribe = (extension: Extension | undefined, name: string, subscriber: Subscriber) => {
-    if (!extension || !allowed(extension, namespaceOf(namespaces, name))) return
+    if (!extension || !allowed(input.manifest(extension), namespaceOf(namespaces, name))) return
     const byExtension = subscribers.get(name) ?? new Map<string, Subscriber[]>()
     const list = byExtension.get(extension.id) ?? []
     const same = list.some((item) =>
@@ -239,22 +239,3 @@ export async function createExtensionHost(input: {
   }
 }
 
-/** The namespace a `path.member` name belongs to: the one whose path is everything before the member. */
-export function namespaceOf(namespaces: readonly ApiNamespace[], name: string) {
-  return namespaces.find(
-    (namespace) => name.startsWith(`${namespace.path}.`) && !name.slice(namespace.path.length + 1).includes("."),
-  )
-}
-
-const Version = Schema.Struct({ manifest_version: Schema.optional(Schema.Number) })
-
-/** Whether an extension may use a namespace: its manifest version matches and it declares one of its permissions. */
-export function allowed(extension: Pick<Extension, "manifest">, namespace: ApiNamespace | undefined) {
-  if (!namespace) return false
-  const version = Option.getOrUndefined(Schema.decodeUnknownOption(Version)(extension.manifest))?.manifest_version
-
-  if (namespace.manifest && namespace.manifest !== version) return false
-  const permissions = declared(extension).permissions
-
-  return !namespace.permissions?.length || namespace.permissions.some((item) => permissions.includes(item))
-}

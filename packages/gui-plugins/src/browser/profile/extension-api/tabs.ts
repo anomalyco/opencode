@@ -1,6 +1,7 @@
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import type { BrowserWindow, Extension, WebContents } from "electron"
 import { method, none, optional, type ApiModule, type Emit, type ExtensionContext, type Wire } from "./api"
+import type { Manifests } from "./manifest"
 import { globMatch, matchesHost } from "./match-pattern"
 
 /** A tab of a pane in the profile, as the pane hands it to extensions, and what extensions may do with it. */
@@ -121,20 +122,6 @@ export function reveals(manifest: { readonly permissions: readonly string[]; rea
   return manifest.permissions.includes("tabs") || matchesHost(manifest.hosts, url)
 }
 
-const Declared = Schema.Struct({
-  permissions: Schema.optional(Schema.Array(Schema.Unknown)),
-  host_permissions: Schema.optional(Schema.Array(Schema.Unknown)),
-})
-
-/** An extension's declared permissions and host patterns; MV2 lists host patterns among its permissions. */
-export function declared(extension: Pick<Extension, "manifest">) {
-  const manifest = Option.getOrUndefined(Schema.decodeUnknownOption(Declared)(extension.manifest))
-  const permissions = (manifest?.permissions ?? []).filter(Schema.is(Schema.String))
-  const hosts = (manifest?.host_permissions ?? []).filter(Schema.is(Schema.String))
-
-  return { permissions, hosts: [...hosts, ...permissions.filter((item) => item.includes("://") || item === "<all_urls>")] }
-}
-
 /**
  * What `chrome.tabs.query` answers: each tab that matches, as the extension may see it. As in Chrome, the `url` and
  * `title` filters are ignored for a tab whose address and title the extension may not read, so they reveal nothing.
@@ -163,7 +150,11 @@ type Focus = { current?: number; last?: number }
  * the id Chromium's own `tabs.sendMessage`, `tabs.executeScript` and `scripting.executeScript` use, so those keep
  * working on the tabs this reports. A popup's current tab is the active tab of the window it opened over.
  */
-export function createExtensionTabs(input: { emit: Emit; extensions: () => readonly Extension[] }) {
+export function createExtensionTabs(input: {
+  emit: Emit
+  extensions: () => readonly Extension[]
+  manifest: Manifests
+}) {
   const tabs = new Map<number, PaneTab>()
   const popups = new Map<number, number>()
   const windows = new Map<number, BrowserWindow>()
@@ -196,17 +187,17 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
     muted: tab.contents.isAudioMuted(),
   })
 
-  const infoFor = (extension: Pick<Extension, "manifest">, tab: PaneTab) => {
+  const infoFor = (extension: Extension, tab: PaneTab) => {
     const value = snapshot(tab)
 
-    return tabInfo(value, reveals(declared(extension), value.url))
+    return tabInfo(value, reveals(input.manifest(extension), value.url))
   }
 
   // Each extension hears a tab event with what it may see of the tab.
   const emitTab = (name: string, tab: PaneTab, args: (info: Wire, revealed: boolean) => readonly Wire[]) =>
     input.extensions().forEach((extension) => {
       const value = snapshot(tab)
-      const revealed = reveals(declared(extension), value.url)
+      const revealed = reveals(input.manifest(extension), value.url)
       input.emit(name, args(tabInfo(value, revealed), revealed), extension.id)
     })
 
@@ -225,7 +216,7 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
     return tab
   }
 
-  const windowInfo = (extension: Pick<Extension, "manifest">, win: BrowserWindow, populate: boolean) => {
+  const windowInfo = (extension: Extension, win: BrowserWindow, populate: boolean) => {
     const bounds = win.getBounds()
     const state = win.isMinimized() ? "minimized" : win.isFullScreen() ? "fullscreen" : "normal"
 
@@ -339,7 +330,7 @@ export function createExtensionTabs(input: { emit: Emit; extensions: () => reado
           [...tabs.values()].map(snapshot),
           query ?? {},
           { current: currentWindow(context), lastFocused: focus.last },
-          declared(context.extension),
+          input.manifest(context.extension),
         ),
       ),
       "tabs.get": method(Schema.Tuple([Schema.Number]), (context, [id]) => infoFor(context.extension, tabFor(id))),

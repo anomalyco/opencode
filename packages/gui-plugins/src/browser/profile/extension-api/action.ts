@@ -1,7 +1,8 @@
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import electron, { type BrowserWindow, type Extension } from "electron"
 import { closestIcon, extensionPage, readIcon } from "../extensions"
 import { method, none, optional, type ApiModule, type ApiNamespace, type Emit, type ExtensionContext } from "./api"
+import type { Manifests } from "./manifest"
 import { tabInfo, type ExtensionTabs } from "./tabs"
 
 /** What an extension set on its toolbar button: for every tab, or for one tab over that. */
@@ -56,17 +57,6 @@ const Icon = Schema.Struct({
   imageData: optional(Sizes(Pixels)),
 })
 
-const ManifestAction = Schema.Struct({
-  default_title: Schema.optional(Schema.String),
-  default_popup: Schema.optional(Schema.String),
-})
-
-const ActionManifest = Schema.Struct({
-  action: Schema.optional(ManifestAction),
-  browser_action: Schema.optional(ManifestAction),
-  page_action: Schema.optional(ManifestAction),
-})
-
 const MEMBERS = [
   "setTitle",
   "getTitle",
@@ -98,16 +88,13 @@ export function createActions(input: {
   emit: Emit
   changed: () => void
   open: (window: BrowserWindow, extension: string, url: string) => void
+  manifest: Manifests
 }) {
   const states = new Map<string, ActionState>()
 
-  const defaults = (extension: Pick<Extension, "manifest">) => {
-    const manifest = Option.getOrUndefined(Schema.decodeUnknownOption(ActionManifest)(extension.manifest))
+  const defaults = (extension: Extension) => input.manifest(extension).action
 
-    return manifest?.action ?? manifest?.browser_action ?? manifest?.page_action
-  }
-
-  const stateOf = (extension: Pick<Extension, "id" | "manifest">) => {
+  const stateOf = (extension: Extension) => {
     const known = states.get(extension.id)
 
     if (known) return known
@@ -233,7 +220,7 @@ export function createActions(input: {
   return {
     module,
     /** What the extensions menu shows for an extension: its values for the active tab of the last window. */
-    view(extension: Pick<Extension, "id" | "manifest">) {
+    view(extension: Extension) {
       if (!defaults(extension)) return undefined
       const window = input.tabs.lastWindow()
       const values = actionFor(stateOf(extension), window ? input.tabs.activeTab(window)?.id : undefined)
@@ -265,11 +252,7 @@ export function createActions(input: {
         return true
       }
 
-      const manifest = Option.getOrUndefined(
-        Schema.decodeUnknownOption(Schema.Struct({ manifest_version: Schema.Number }))(extension.manifest),
-      )
-
-      const name = manifest?.manifest_version === 2 ? "browserAction" : "action"
+      const name = input.manifest(extension).version === 2 ? "browserAction" : "action"
       input.emit(`${name}.onClicked`, [tab ? tabInfo(tab, true) : undefined], extension.id)
 
       return true

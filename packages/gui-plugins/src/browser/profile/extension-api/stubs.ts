@@ -1,9 +1,6 @@
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import { constant, method, none, type ApiModule, type ApiNamespace, type Wire } from "./api"
-
-const Command = Schema.Struct({ description: Schema.optional(Schema.String) })
-
-const Manifest = Schema.Struct({ commands: Schema.optional(Schema.Record(Schema.String, Command)) })
+import type { Manifests } from "./manifest"
 
 // Browser settings an extension may read or change: here none is under its control, so it reads Chrome's defaults.
 const SETTINGS = {
@@ -31,7 +28,7 @@ const SETTINGS = {
  * list, no browser account, no side panel, settings that stay as they are, and commands without shortcuts. Their
  * events never fire.
  */
-export function createStubs(): ApiModule {
+export function createStubs(input: { manifest: Manifests }): ApiModule {
   const settings = Object.entries(SETTINGS).map(
     ([path]): ApiNamespace => ({ path, permissions: ["privacy"], methods: ["get", "set", "clear"], events: ["onChange"] }),
   )
@@ -143,16 +140,9 @@ export function createStubs(): ApiModule {
       "extension.isAllowedIncognitoAccess": constant(false),
       "extension.setUpdateUrlData": constant(undefined),
       // Shortcuts are not bound here, so each command reports none.
-      "commands.getAll": method(none, (context) => {
-        const manifest = Option.getOrUndefined(Schema.decodeUnknownOption(Manifest)(context.extension.manifest))
-        const commands = manifest?.commands ?? {}
-
-        return Object.entries(commands).map(([name, command]) => ({
-          name,
-          description: command.description ?? "",
-          shortcut: "",
-        }))
-      }),
+      "commands.getAll": method(none, (context) =>
+        input.manifest(context.extension).commands.map((command) => ({ ...command, shortcut: "" })),
+      ),
     },
   }
 }

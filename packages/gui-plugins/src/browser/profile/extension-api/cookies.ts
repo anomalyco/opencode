@@ -3,7 +3,8 @@ import type { Cookie, Extension, Session } from "electron"
 import { cookieURL, PROBE_COOKIE } from "../cookie"
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
-import { declared, type ExtensionTabs } from "./tabs"
+import type { Manifests } from "./manifest"
+import type { ExtensionTabs } from "./tabs"
 
 const Details = Schema.Struct({ url: Schema.String, name: Schema.String, storeId: optional(Schema.String) })
 
@@ -89,10 +90,11 @@ export function createCookies(input: {
   tabs: ExtensionTabs
   emit: Emit
   extensions: () => readonly Extension[]
+  manifest: Manifests
 }): ApiModule {
-  const hostsOf = (extension: Pick<Extension, "manifest">) => declared(extension).hosts
+  const hostsOf = (extension: Extension) => input.manifest(extension).hosts
 
-  const reachable = (extension: Pick<Extension, "manifest">, url: string) => {
+  const reachable = (extension: Extension, url: string) => {
     if (!matchesHost(hostsOf(extension), url) || (URL.canParse(url) && new URL(url).hostname === PROBE_COOKIE.host))
       throw new Error(`No host permission for cookies at url: "${url}".`)
 
@@ -101,7 +103,7 @@ export function createCookies(input: {
 
   const changed = (_event: Electron.Event, cookie: Cookie, cause: string, removed: boolean) =>
     input.extensions().forEach((extension) => {
-      if (!declared(extension).permissions.includes("cookies") || !canSeeCookie(hostsOf(extension), cookie)) return
+      if (!input.manifest(extension).permissions.includes("cookies") || !canSeeCookie(hostsOf(extension), cookie)) return
       input.emit("cookies.onChanged", [{ removed, cookie: cookieInfo(cookie), cause }], extension.id)
     })
 

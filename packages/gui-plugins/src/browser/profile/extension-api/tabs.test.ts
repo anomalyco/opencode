@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { answerQuery, declared, matchesQuery, reveals, tabInfo, type TabSnapshot } from "./tabs"
+import { apiManifest } from "./manifest"
+import { answerQuery, matchesQuery, reveals, tabInfo, type TabSnapshot } from "./tabs"
 
 const tab = (fields: Partial<TabSnapshot>): TabSnapshot => ({
   id: 2,
@@ -58,9 +59,9 @@ test("url and title filters reveal nothing about tabs the extension may not read
 })
 
 test("Manifest V2 host patterns among permissions count as hosts", () => {
-  expect(declared({ manifest: { permissions: ["tabs", "<all_urls>", 7], host_permissions: ["https://a.com/*"] } })).toEqual({
+  expect(apiManifest({ permissions: ["tabs", "<all_urls>", 7], host_permissions: ["https://a.com/*"] })).toMatchObject({
     permissions: ["tabs", "<all_urls>"],
     hosts: ["https://a.com/*", "<all_urls>"],
   })
-  expect(declared({ manifest: "not a manifest" })).toEqual({ permissions: [], hosts: [] })
+  expect(apiManifest("not a manifest")).toMatchObject({ permissions: [], hosts: [], version: undefined })
 })

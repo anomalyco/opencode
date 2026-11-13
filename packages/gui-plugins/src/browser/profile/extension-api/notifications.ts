@@ -1,9 +1,8 @@
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import electron from "electron"
 import { closestIcon, readIcon } from "../extensions"
 import { method, none, optional, type ApiModule, type Emit, type ExtensionContext } from "./api"
-
-const Icons = Schema.Struct({ icons: Schema.optional(Schema.Record(Schema.String, Schema.String)) })
+import type { Manifests } from "./manifest"
 
 const Options = Schema.Struct({
   title: optional(Schema.String),
@@ -18,7 +17,7 @@ const Options = Schema.Struct({
  * shown with its icon, with the extension's own title as the first line. Clicking one tells the extension through
  * `onClicked`; closing it, `onClosed`. Buttons, images and progress are not shown.
  */
-export function createNotifications(input: { emit: Emit }): ApiModule {
+export function createNotifications(input: { emit: Emit; manifest: Manifests }): ApiModule {
   // Shown notifications by extension, then by id.
   const shown = new Map<string, Map<string, Electron.Notification>>()
 
@@ -28,8 +27,7 @@ export function createNotifications(input: { emit: Emit }): ApiModule {
     list.get(id)?.close()
 
     if (!electron.Notification.isSupported()) return id
-    const icons = Option.getOrUndefined(Schema.decodeUnknownOption(Icons)(context.extension.manifest))?.icons
-    const file = icons ? closestIcon(icons) : undefined
+    const file = closestIcon(input.manifest(context.extension).icons)
     const icon = file ? await readIcon(context.extension.path, file) : undefined
 
     // Titled with the extension's name and shown with its icon, so it never passes for one of the app's own.
