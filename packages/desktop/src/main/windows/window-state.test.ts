@@ -1,8 +1,10 @@
-import { describe, expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { describe, expect, mock, test } from "bun:test"
+import { EventEmitter } from "node:events"
+import type { BrowserWindow } from "electron"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { readWindowState, resolveWindowState } from "./window-state"
+import { manageWindowState, readWindowState, resolveWindowState } from "./window-state"
 
 const defaults = { width: 1280, height: 800 }
 
@@ -108,4 +110,34 @@ describe("window state", () => {
     expect(readWindowState(file)).toBeUndefined()
     expect(readWindowState(path.join(dir, "missing.json"))).toBeUndefined()
   })
+})
+
+test("a failed window-state save reports the error and allows closing to continue", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "opencode-window-close-"))
+  const file = path.join(dir, "window.json")
+  const report = mock((_error: Error) => {})
+  const closed = mock(() => {})
+
+  const win = Object.assign(new EventEmitter(), {
+    isDestroyed: () => false,
+    getBounds: () => ({ x: 10, y: 20, width: 800, height: 600 }),
+    isMaximized: () => false,
+    isMinimized: () => false,
+    isFullScreen: () => false,
+  })
+
+  try {
+    writeFileSync(file, "previous state")
+    mkdirSync(`${file}.tmp`)
+    // SAFETY: the fixture implements the window events and getters used for this non-maximized state.
+    manageWindowState(win as BrowserWindow, file, defaults, displays, report)
+    win.on("closed", closed)
+    win.emit("close")
+    expect(() => win.emit("closed")).not.toThrow()
+    expect(closed).toHaveBeenCalledTimes(1)
+    expect(report).toHaveBeenCalledWith(expect.any(Error))
+    expect(readFileSync(file, "utf8")).toBe("previous state")
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

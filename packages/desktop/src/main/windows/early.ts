@@ -31,6 +31,7 @@ export type EarlyWindow = {
   readonly win: BrowserWindow
   readonly state: WindowState
   readonly shownAt: number
+  reportStateError: (error: Error) => void
 }
 
 const current = { state: initialEarlyWindowState<EarlyWindow>() }
@@ -110,11 +111,17 @@ export function createEarlyWindow() {
     },
   })
 
-  manageWindowState(win, file, state, displays)
+  const entry: EarlyWindow = {
+    id,
+    win,
+    state,
+    shownAt: Date.now(),
+    reportStateError: (error) => console.warn("failed to save window state", { file, error }),
+  }
+
+  manageWindowState(win, file, state, displays, (error) => entry.reportStateError(error))
 
   if (deferReveal) win.show()
-
-  const entry: EarlyWindow = { id, win, state, shownAt: Date.now() }
 
   dispatch({ type: "early.created", id, entry })
   win.once("closed", () => dispatch({ type: "early.closed", entry }))
