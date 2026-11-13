@@ -9,6 +9,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
+import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
@@ -25,6 +26,8 @@ const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Session.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
+    // The browser never reads the watcher; a live one subscribes to the OS for every Location these tests boot.
+    Watcher.node.replace(Watcher.configured({ enabled: false })),
   ]),
 )
 
