@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("enables Any only after confirmation and supports resetting the preview", async ({ mount }) => {
   const component = await mount("app-current-session-surface--web-search-request")

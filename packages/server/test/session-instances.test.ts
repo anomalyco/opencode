@@ -22,7 +22,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
 import { Context, Duration, Effect, Layer, LayerMap, RcMap, Schema } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
-import { LanguageModel, LLMClient } from "../../ai/src"
+import { LanguageModel, LLMClient } from "../../ai/src/effect"
 import { OpenAIChat } from "../../ai/src/protocols/openai-chat"
 import { TestLLM } from "../../ai/src/testing"
 import { tempGlobalLayer } from "../../core/test/fixture/global"
@@ -209,14 +209,14 @@ it.live(
       expect(boots).toEqual([first.id, second.id])
 
       for (const config of configs) {
-        yield* llm.push(TestLLM.tool(`call_${config.tool}`, config.tool, {}), TestLLM.text(config.id, config.tool))
+        yield* llm.push(TestLLM.toolCall(`call_${config.tool}`, config.tool, {}), TestLLM.text(config.id, config.tool))
         yield* sessions.resume(config.id)
       }
       expect(executed).toEqual([first.id, second.id])
 
       for (const config of configs) {
         yield* llm.push(TestLLM.text(`generated ${config.id}`, config.tool))
-        expect(yield* sessions.generate({ sessionID: config.id, prompt: "summarize" })).toBe(`generated ${config.id}`)
+        expect((yield* sessions.generate({ sessionID: config.id, prompt: "summarize" })).text).toBe(`generated ${config.id}`)
         yield* sessions.command({ sessionID: config.id, command: "instance-check", text: "" })
         expect(yield* sessions.inbox(config.id)).toMatchObject([
           { type: "user", payload: { text: `command ${config.tool} [${config.tool}]` } },
@@ -225,7 +225,7 @@ it.live(
       expect(commands).toEqual([first.id, second.id])
       expect(
         (yield* llm.requests()).map((request) => ({
-          temperature: request.generation?.temperature,
+          temperature: request.temperature,
           tools: request.tools?.filter((tool) => tool.name.startsWith("instance_")).map((tool) => tool.name),
         })),
       ).toEqual(

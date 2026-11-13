@@ -1,19 +1,26 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import { AIError, LLMEvent, type LanguageModelCompatibility, type LLMRequest } from "../schema/index.js"
+import {
+  AIError,
+  LLMEvent,
+  type LanguageModelCompatibility,
+  type LLMRequest,
+  type Capabilities,
+} from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
+import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 
 // ---------------------------------------------------------------------------
 // Public options and request body
 // ---------------------------------------------------------------------------
 
-export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | (string & {})
+export type ReasoningEffort = OpenResponsesOptions.ReasoningEffort
 
 const Parameters = Schema.Struct({
-  enableWebSearch: Schema.optional(Schema.String),
+  enableWebSearch: Schema.optional(ProviderShared.knownString<"off" | "on" | "auto">()),
   enableWebScraping: Schema.optional(Schema.Boolean),
   enableWebCitations: Schema.optional(Schema.Boolean),
   enableXSearch: Schema.optional(Schema.Boolean),
@@ -26,43 +33,17 @@ const Parameters = Schema.Struct({
 })
 
 const Reasoning = Schema.Struct({
-  effort: Schema.optional(Schema.String),
+  effort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
   enabled: Schema.optional(Schema.Boolean),
-  summary: Schema.optional(Schema.String),
+  summary: Schema.optional(ProviderShared.knownString<"auto" | "concise" | "detailed">()),
 })
 
-export type OptionsInput = {
-  readonly reasoningEffort?: ReasoningEffort
-  readonly reasoning?: {
-    readonly effort?: ReasoningEffort
-    readonly enabled?: boolean
-    readonly summary?: "auto" | "concise" | "detailed" | (string & {})
-  }
-  readonly veniceParameters?: Omit<typeof Parameters.Type, "enableWebSearch"> & {
-    readonly enableWebSearch?: "off" | "on" | "auto" | (string & {})
-  }
-  readonly promptCacheKey?: string
-  readonly promptCacheRetention?: "default" | "extended" | "24h" | (string & {})
-  readonly parallelToolCalls?: boolean
-  readonly maxCompletionTokens?: number
-  readonly maxTokens?: number
-  readonly minP?: number
-  readonly repetitionPenalty?: number
-  readonly stopTokenIds?: readonly number[]
-  readonly logprobs?: boolean
-  readonly topLogprobs?: number
-  readonly maxTemp?: number
-  readonly minTemp?: number
-  readonly responseFormat?: Readonly<Record<string, unknown>>
-  readonly user?: string
-}
-
 const Options = Schema.Struct({
-  reasoningEffort: Schema.optional(Schema.String),
+  reasoningEffort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
   reasoning: Schema.optional(Reasoning),
   veniceParameters: Schema.optional(Parameters),
   promptCacheKey: Schema.optional(Schema.String),
-  promptCacheRetention: Schema.optional(Schema.String),
+  promptCacheRetention: Schema.optional(ProviderShared.knownString<"default" | "extended" | "24h">()),
   parallelToolCalls: Schema.optional(Schema.Boolean),
   maxCompletionTokens: Schema.optional(Schema.Number),
   maxTokens: Schema.optional(Schema.Number),
@@ -76,6 +57,7 @@ const Options = Schema.Struct({
   responseFormat: Schema.optional(JsonObject),
   user: Schema.optional(Schema.String),
 })
+export type OptionsInput = typeof Options.Type
 
 const ToolCall = Schema.Struct({
   ...OpenAIChat.OpenAIChatAssistantToolCall.fields,
@@ -84,7 +66,7 @@ const ToolCall = Schema.Struct({
 const Assistant = Schema.StructWithRest(
   Schema.Struct({
     ...OpenAIChat.OpenAIChatMessage.cases.assistant.schema.fields,
-    tool_calls: optionalArray(ToolCall),
+    tool_calls: optionalArray(Schema.Union([ToolCall, OpenAIChat.OpenAIChatAssistantCustomToolCall])),
     thought_signature: Schema.optional(Schema.String),
   }),
   [JsonObject],
@@ -212,7 +194,7 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
   })
   return {
     ...body,
-    max_completion_tokens: options.maxCompletionTokens ?? options.maxTokens ?? request.generation?.maxTokens,
+    max_completion_tokens: options.maxCompletionTokens ?? options.maxTokens ?? request.maxTokens,
     reasoning_effort: undefined,
     reasoning:
       options.reasoningEffort === undefined
@@ -227,10 +209,10 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
         .filter(([, value]) => value !== undefined)
         .map(([key, value]) => [key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), value]),
     ),
-    prompt_cache_retention: options.promptCacheRetention,
+    prompt_cache_retention: options.promptCacheRetention ?? body.prompt_cache_retention,
     parallel_tool_calls: options.parallelToolCalls,
     min_p: options.minP,
-    top_k: request.generation?.topK,
+    top_k: request.topK,
     repetition_penalty: options.repetitionPenalty,
     stop_token_ids: options.stopTokenIds,
     logprobs: options.logprobs,
@@ -349,8 +331,9 @@ const onHalt = Effect.fn("VeniceChat.onHalt")(function* (state: State) {
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",
-  supportsPromptCacheKey: true,
 } satisfies LanguageModelCompatibility
+
+export const capabilities = { promptCacheKey: true } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "venice-chat",

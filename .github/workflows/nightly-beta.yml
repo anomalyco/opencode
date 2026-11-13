@@ -1,0 +1,23 @@
+name: nightly-beta
+
+# GitHub runs schedules only from the default branch (dev), so this fires once this file is on dev.
+# It tests beta with the full suite on both OSes, then runs beta's quarantined browser tests.
+on:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    if: github.repository == 'anomalyco/opencode'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch beta test runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run check-test.yml --repo "$GITHUB_REPOSITORY" --ref beta
+          gh workflow run check-test.yml --repo "$GITHUB_REPOSITORY" --ref beta -f quarantine=true

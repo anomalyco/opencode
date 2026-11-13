@@ -4,10 +4,18 @@
     <meta charset="UTF-8" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Sized like the app's root, so the sidebar and session fill the window and their rows take pointer input. -->
+    <div id="root" style="display: flex; flex-direction: column; height: 100dvh"></div>
     <script type="module">
       import { mount } from "./windows-menu.fixture.tsx"
-      mount({ server: new URLSearchParams(location.search).get("server") })
+      const params = new URLSearchParams(location.search)
+      mount({
+        server: params.get("server"),
+        path: params.get("path") ?? undefined,
+        os: params.get("os") === "macos" ? "macos" : undefined,
+        openApps: params.get("openApps") === "1",
+        holdOpen: params.get("holdOpen") === "1",
+      })
     </script>
   </body>
 </html>

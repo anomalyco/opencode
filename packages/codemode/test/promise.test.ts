@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Schema } from "effect"
 import { CodeMode, Tool, toolError } from "../src/index.js"
 
-// Wave 5 acceptance suite: first-class promise values. Un-awaited tool calls start eagerly on
-// supervised fibers, `await` settles them, Promise.all/allSettled/race/resolve/reject are
+// Wave 5 acceptance suite: first-class promise values. Un-awaited tool calls start eagerly as
+// host work, `await` settles them, Promise.all/allSettled/race/resolve/reject are
 // ordinary functions over arbitrary arrays mixing promises and plain values, and
 // .then/.catch/.finally chain reactions onto any promise.
 
@@ -1344,7 +1344,7 @@ describe("promise construction", () => {
 })
 
 describe("jobs run to completion", () => {
-  // Effect preempts a fiber after 2,048 operations; these loops are long enough to be preempted mid-job.
+  // The runner pauses a long job to let the host run; the paused job still finishes before any other job starts.
   test("updates to shared state between awaits are not lost", async () => {
     expect(
       await value(`
@@ -1398,5 +1398,267 @@ describe("jobs run to completion", () => {
       { limits: { timeoutMs: 100 } },
     )
     expect(failure.kind).toBe("TimeoutExceeded")
+  })
+})
+
+// Each case logs from several jobs; the program then drains the queue. Expected orders are what Node 25 (V8) logs for
+// the same code.
+const v8Order: ReadonlyArray<readonly [name: string, code: string, expected: Array<string | number>]> = [
+  [
+    "then vs await",
+    `Promise.resolve().then(() => log.push("then")); (async () => { await null; log.push("await") })(); log.push("sync")`,
+    ["sync", "then", "await"],
+  ],
+  [
+    "adopt promise from async fn",
+    `async function f() { return Promise.resolve(1) } f().then(() => log.push("f")); Promise.resolve().then(() => log.push("a")).then(() => log.push("b")).then(() => log.push("c")).then(() => log.push("d"))`,
+    ["a", "b", "f", "c", "d"],
+  ],
+  [
+    "resolve with promise",
+    `new Promise((r) => r(Promise.resolve())).then(() => log.push("adopted")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    [1, 2, "adopted", 3],
+  ],
+  [
+    "await thenable",
+    `(async () => { await { then(r) { log.push("then called"); r(1) } }; log.push("after thenable") })(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    ["then called", 1, "after thenable", 2, 3],
+  ],
+  [
+    "finally",
+    `Promise.resolve(1).finally(() => log.push("fin")).then(() => log.push("after finally")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4))`,
+    ["fin", 1, 2, 3, "after finally", 4],
+  ],
+  [
+    "finally rejected",
+    `Promise.reject(1).finally(() => log.push("fin")).catch(() => log.push("caught")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4))`,
+    ["fin", 1, 2, 3, "caught", 4],
+  ],
+  [
+    "Promise.all",
+    `Promise.all([1, Promise.resolve(2)]).then(() => log.push("all")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    [1, "all", 2, 3],
+  ],
+  [
+    "Promise.all empty",
+    `Promise.all([]).then(() => log.push("all")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2))`,
+    ["all", 1, 2],
+  ],
+  [
+    "Promise.race",
+    `Promise.race([Promise.resolve(1), 2]).then((v) => log.push("race " + v)); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    [1, "race 1", 2, 3],
+  ],
+  [
+    "Promise.allSettled",
+    `Promise.allSettled([Promise.reject(1), 2]).then(() => log.push("settled")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    [1, "settled", 2, 3],
+  ],
+  [
+    "Promise.any",
+    `Promise.any([Promise.reject(1), Promise.resolve(2)]).then(() => log.push("any")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    [1, "any", 2, 3],
+  ],
+  [
+    "async generator",
+    `async function* g() { log.push("start"); yield 1; log.push("mid"); yield 2; log.push("end") } const it = g(); it.next().then((r) => log.push("n1 " + r.value)); it.next().then((r) => log.push("n2 " + r.value)); it.next().then((r) => log.push("n3 " + r.done)); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4))`,
+    ["start", "mid", 1, "n1 1", "end", 2, "n2 2", "n3 true", 3, 4],
+  ],
+  [
+    "async generator return",
+    `async function* g() { try { yield 1 } finally { log.push("cleanup") } } const it = g(); it.next().then(() => it.return(5)).then((r) => log.push("ret " + r.value)); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4)).then(() => log.push(5))`,
+    [1, 2, "cleanup", 3, 4, "ret 5", 5],
+  ],
+  [
+    "for await sync iterable",
+    `(async () => { for await (const x of [1, Promise.resolve(2), 3]) log.push("x" + x) })(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4)).then(() => log.push(5)).then(() => log.push(6))`,
+    [1, "x1", 2, 3, "x2", 4, 5, "x3", 6],
+  ],
+  [
+    "for await async gen",
+    `async function* g() { yield 1; yield 2 } (async () => { for await (const x of g()) log.push("x" + x) })(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4)).then(() => log.push(5)).then(() => log.push(6))`,
+    [1, "x1", 2, 3, "x2", 4, 5, 6],
+  ],
+  [
+    "nested async",
+    `async function a() { log.push("a1"); await b(); log.push("a2") } async function b() { log.push("b1"); await null; log.push("b2") } a(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    ["a1", "b1", "b2", 1, "a2", 2, 3],
+  ],
+  [
+    "await rejected",
+    `(async () => { try { await Promise.reject(1) } catch { log.push("caught") } })(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2))`,
+    ["caught", 1, 2],
+  ],
+  [
+    "then handler returns promise",
+    `Promise.resolve().then(() => Promise.resolve("x")).then((v) => log.push(v)); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4))`,
+    [1, 2, 3, "x", 4],
+  ],
+  [
+    "withResolvers",
+    `const { promise, resolve } = Promise.withResolvers(); promise.then(() => log.push("resolved")); Promise.resolve().then(() => { log.push(1); resolve() }).then(() => log.push(2)).then(() => log.push(3))`,
+    [1, "resolved", 2, 3],
+  ],
+  [
+    "sync generator in async",
+    `function* g() { yield 1; yield 2 } (async () => { for (const x of g()) { await null; log.push("g" + x) } })(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    ["g1", 1, "g2", 2, 3],
+  ],
+  [
+    "async return await",
+    `async function f() { return await Promise.resolve(1) } f().then(() => log.push("f")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    [1, "f", 2, 3],
+  ],
+  [
+    "yield* sync in async gen",
+    `async function* g() { yield* [1, Promise.resolve(2)] } (async () => { for await (const x of g()) log.push("x" + x) })(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4)).then(() => log.push(5)).then(() => log.push(6)).then(() => log.push(7))`,
+    [1, 2, "x1", 3, 4, 5, "x2", 6, 7],
+  ],
+  [
+    "break in for await sync",
+    `(async () => { for await (const x of [1, 2]) { log.push("x" + x); break } log.push("after") })(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4))`,
+    [1, "x1", 2, "after", 3, 4],
+  ],
+  [
+    "for await rejected value",
+    `(async () => { try { for await (const x of [Promise.reject("r")]) log.push(x) } catch (e) { log.push("caught " + e) } })(); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4))`,
+    [1, "caught r", 2, 3, 4],
+  ],
+  [
+    "unhandled then later handled",
+    `const p = Promise.reject(1); Promise.resolve().then(() => p.catch(() => log.push("late catch"))); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))`,
+    [1, "late catch", 2, 3],
+  ],
+  [
+    "generator return in finally",
+    `function* g() { try { yield 1 } finally { yield 2 } } const it = g(); log.push(JSON.stringify(it.next())); log.push(JSON.stringify(it.return(9))); log.push(JSON.stringify(it.next()))`,
+    ['{"value":1,"done":false}', '{"value":2,"done":false}', '{"value":9,"done":true}'],
+  ],
+  [
+    "async gen await in finally",
+    `async function* g() { try { yield 1 } finally { await null; log.push("fin") } } const it = g(); it.next().then(() => it.return(3)).then((r) => log.push("r" + r.value)); Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3)).then(() => log.push(4)).then(() => log.push(5))`,
+    [1, 2, 3, "fin", 4, 5, "r3"],
+  ],
+  [
+    "thenable job then throws",
+    `Promise.resolve({ then() { throw new Error("boom") } }).catch((e) => log.push(e.message)); Promise.resolve().then(() => log.push(1)).then(() => log.push(2))`,
+    [1, "boom", 2],
+  ],
+  [
+    "Promise.try",
+    `Promise.try(() => log.push("ran")).then(() => log.push("try")); Promise.resolve().then(() => log.push(1)).then(() => log.push(2))`,
+    ["ran", "try", 1, 2],
+  ],
+]
+
+describe("job order matches V8", () => {
+  test.each(v8Order)("%s", async (_, code, expected) => {
+    expect(await value(`const log = []; ${code}; for (let i = 0; i < 20; i++) await null; return log`)).toEqual(
+      expected,
+    )
+  })
+})
+
+describe("a program that can never finish", () => {
+  const stalled =
+    "Error: The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. Code Mode has no timers or sleep, so don't wait or poll inside a program."
+
+  // Each program stalls at the await on line `line`, column `column`; an outer await only waits on that one.
+  test.each([
+    ["the program's own await", "await new Promise((r) => r)", 1, 1],
+    [
+      "an async function whose result the program returns",
+      ["async function wait() {", "  await new Promise(() => {})", "}", "return wait()"].join("\n"),
+      2,
+      3,
+    ],
+    [
+      "an async function the program awaits",
+      ["async function wait() {", "  await new Promise(() => {})", "}", "await wait()"].join("\n"),
+      2,
+      3,
+    ],
+    [
+      "a later await in an async body the program awaits",
+      [
+        "const { promise } = Promise.withResolvers()",
+        "const p = (async () => { await null; await promise })()",
+        "await p",
+      ].join("\n"),
+      2,
+      38,
+    ],
+  ])("fails at once, without a timeout, at the stuck await in %s", async (_, code, line, column) => {
+    expect(await error(code)).toEqual({
+      kind: "ExecutionFailure",
+      message: `${stalled} (line ${line}, col ${column})`,
+      location: { line, column },
+    })
+  })
+
+  test("fails when the unsettleable promise is deep inside other async work", async () => {
+    const failure = await error(`
+      const never = async () => { await null; await new Promise(() => {}) }
+      return await Promise.all([never(), Promise.resolve(1)])
+    `)
+    expect(failure.message).toStartWith(stalled)
+  })
+
+  test("cannot be caught by the program", async () => {
+    expect(await error(`try { await new Promise(() => {}) } catch { return "caught" }`)).toEqual({
+      kind: "ExecutionFailure",
+      message: `${stalled} (line 1, col 7)`,
+      location: { line: 1, column: 7 },
+    })
+  })
+
+  test("is not stalled while a tool call that settles a hand-made promise is still running", async () => {
+    expect(
+      await value(`
+        const { promise, resolve } = Promise.withResolvers()
+        tools.host.gated({ id: 1 }).then(resolve)
+        tools.host.open({ id: 1 })
+        return await promise
+      `),
+    ).toBe(1)
+  })
+
+  test("is not stalled while a tool call it waits on is still running", async () => {
+    expect(
+      await value(`
+        const call = tools.host.gated({ id: 1 })
+        await tools.host.open({ id: 1 })
+        return await call
+      `),
+    ).toBe(1)
+  })
+})
+
+describe("host results", () => {
+  test("a tool result settles after the jobs already queued, like I/O", async () => {
+    expect(
+      await value(`
+        const log = []
+        const call = tools.host.echo({ id: 1 }).then(() => log.push("tool"))
+        Promise.resolve().then(() => log.push(1)).then(() => log.push(2)).then(() => log.push(3))
+        await call
+        return log
+      `),
+    ).toEqual([1, 2, 3, "tool"])
+  })
+
+  test("an awaited interruption passes catch and finally and interrupts the program", async () => {
+    const exit = await Effect.runPromiseExit(
+      CodeMode.execute({
+        tools: { host: { interrupt: interruptedTool } },
+        code: `
+          const inner = async () => {
+            try { await tools.host.interrupt({}) } catch { return "caught" } finally { return "finally" }
+          }
+          return await inner().catch(() => "handled")
+        `,
+      }),
+    )
+    expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
   })
 })

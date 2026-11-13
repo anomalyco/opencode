@@ -1,6 +1,11 @@
-/* Desktop controls use the default cursor; the pointer cursor is reserved for links. */
+/* Desktop controls and drag handles use the default cursor; the pointer cursor is reserved for links. */
 :where(
   .cursor-pointer:not(a):not([role="link"]),
+  .cursor-grab,
+  .cursor-grabbing,
+  .active\:cursor-grabbing:active,
+  [data-slot="image-preview-body"][data-zoomed],
+  [data-slot="image-preview-body"][data-dragging],
   .session-service-config,
   [data-component="timeline-detail-control"] input[type="range"],
   .project-settings-server-link,
@@ -10,8 +15,10 @@
   .settings-keybind-button,
   .settings-wsl-catalog-card,
   [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"],
+  file-tree-container.opencode-pierre-file-tree,
   .toast-v2 [data-close-button],
   [data-slot="segmented-control-v2-item"],
+  [data-component="line-comment-v2"][data-variant="display"][data-clickable],
   [data-slot="line-comment-v2-overflow"],
   [data-slot="line-comment-v2-mention-item"],
   [data-slot="text-input-v2-icon-button"],

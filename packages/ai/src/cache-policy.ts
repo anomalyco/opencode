@@ -10,8 +10,18 @@
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
-import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
-import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
+import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
+import {
+  AssistantMessage,
+  type LLMRequest,
+  type Message,
+  SystemMessage,
+  ToolDefinition,
+  ToolMessage,
+  UserMessage,
+  type ContentPart,
+  type ToolEntry,
+} from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
 
 const AUTO: CachePolicyObject = {
@@ -27,12 +37,24 @@ const BREAKPOINT_CAP = 4
 //   - undefined   → "auto" — caching is on by default.
 //   - "auto"      → tools + first/last system + final message boundary.
 //   - "none"      → no auto placement; manual `CacheHint`s still flow.
+//   - `{ ttl }`   → "auto" with that lifetime.
 //   - object form → exactly what the caller asked for.
 const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
-  if (policy === undefined || policy === "auto") return AUTO
   if (policy === "none") return NONE
-  return policy
+  if (typeof policy === "object" && !isAuto(policy)) return policy
+  return AUTO
 }
+
+const isAuto = (policy: CachePolicy | undefined) =>
+  policy === undefined ||
+  policy === "auto" ||
+  (typeof policy === "object" &&
+    policy.tools === undefined &&
+    policy.system === undefined &&
+    policy.messages === undefined)
+
+/** The requested cache lifetime, for routes that send it as a request-level option instead of on markers. */
+export const requestTTL = (request: LLMRequest) => (typeof request.cache === "object" ? request.cache.ttl : undefined)
 
 // Protocols whose wire format ignores inline cache markers (OpenAI's implicit
 // prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
@@ -67,8 +89,8 @@ const gatewayPolicy = (modelID: string): CachePolicyObject => {
   return NONE
 }
 
-const makeHint = (ttlSeconds: number | undefined): CacheHint =>
-  ttlSeconds !== undefined ? new CacheHint({ type: "ephemeral", ttlSeconds }) : new CacheHint({ type: "ephemeral" })
+const makeHint = (ttl: CacheTTL | undefined): CacheHint =>
+  ttl !== undefined ? new CacheHint({ type: "ephemeral", ttl }) : new CacheHint({ type: "ephemeral" })
 
 interface Budget {
   remaining: number
@@ -129,8 +151,7 @@ const markMessageAt = (
   const existing = target.content[markAt]
   if (!existing || !isCacheablePart(existing) || existing.cache || budget.remaining === 0) return messages
   budget.remaining -= 1
-  const nextContent = target.content.map((part, i) => (i === markAt ? { ...existing, cache: hint } : part))
-  const next = new Message({ ...target, content: nextContent })
+  const next = cachePartAt(target, markAt, hint)
   // Single pass over `messages`, substituting the one updated entry. Long
   // conversations call this on every request, so avoid `.map()` here — its
   // closure dispatch and identity copies show up in profiling.
@@ -138,6 +159,22 @@ const markMessageAt = (
   result[index] = next
   return result
 }
+
+const cachePartAt = (message: Message, index: number, hint: CacheHint): Message => {
+  switch (message.role) {
+    case "system":
+      return new SystemMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "user":
+      return new UserMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "assistant":
+      return new AssistantMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+    case "tool":
+      return new ToolMessage({ ...message, content: cacheContentAt(message.content, index, hint) })
+  }
+}
+
+const cacheContentAt = <Part extends ContentPart>(content: ReadonlyArray<Part>, index: number, hint: CacheHint) =>
+  content.map((part, i) => (i === index ? { ...part, cache: hint } : part))
 
 const markMessages = (
   messages: ReadonlyArray<Message>,
@@ -179,21 +216,27 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   const policy = selectPolicy(request)
   if (!policy.tools && !policy.system && !policy.messages) return request
 
-  const hint = makeHint(policy.ttlSeconds)
+  const hint = makeHint(requestTTL(request))
   const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request)) }
   const tools = policy.tools ? markLastTool(request.tools, hint, budget) : request.tools
   const system = policy.system ? markSystemBoundaries(request.system, hint, budget) : request.system
   const messages = policy.messages ? markMessages(request.messages, policy.messages, hint, budget) : request.messages
 
   if (tools === request.tools && system === request.system && messages === request.messages) return request
-  return LLMRequest.update(request, { tools, system, messages })
+  return { ...request, tools, system, messages }
+}
+
+/** Whether the cache policy places inline markers, which then carry the requested lifetime. */
+export const placesMarkers = (request: LLMRequest) => {
+  const policy = selectPolicy(request)
+  return Boolean(policy.tools || policy.system || policy.messages)
 }
 
 // A declared cache format overrides the route allowlist and its model-ID heuristics.
 const selectPolicy = (request: LLMRequest): CachePolicyObject => {
   const format = request.model.compatibility?.cacheFormat
   const route = request.model.route.id
-  const auto = request.cache === undefined || request.cache === "auto"
+  const auto = isAuto(request.cache)
   if (format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
   if (format === "anthropic") return resolve(request.cache)
   if (!RESPECTS_INLINE_HINTS.has(route)) return NONE

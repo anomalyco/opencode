@@ -73,6 +73,15 @@ test("resolves nested config and keybind defaults", () => {
   })
   expect(config.session.new_location).toBe("launch")
   expect(config.session.tps).toBe(true)
+  expect(config.cursor).toEqual({ style: "block", blinking: true })
+  expect(resolve({ cursor: { style: "line" } }, { terminalSuspend: true }).cursor).toEqual({
+    style: "line",
+    blinking: true,
+  })
+  expect(resolve({ cursor: { blinking: false } }, { terminalSuspend: true }).cursor).toEqual({
+    style: "block",
+    blinking: false,
+  })
 })
 
 test("resolves automatic tabs from the terminal environment", () => {
@@ -117,7 +126,7 @@ test("shows the TPS default in session settings", () => {
 test("shows transcript verbosity in session settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
     category: "Session",
-    default: "medium",
+    default: "low",
     values: ["low", "medium", "high"],
   })
 })

@@ -442,6 +442,11 @@ permissions:
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(tmp.path, "agents", "team"), { recursive: true })
             await fs.mkdir(path.join(tmp.path, "modes"), { recursive: true })
+            await fs.mkdir(path.join(tmp.path, "agents", ".opencode", "node_modules", "probe"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "agents", ".opencode", "node_modules", "probe", "README.md"),
+              "# Dependency README",
+            )
             await fs.writeFile(
               path.join(tmp.path, "agents", "reviewer.md"),
               `---
@@ -509,7 +514,61 @@ Use native v2 fields.`,
           expect(themed?.color).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("disabled"))).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("empty"))).toBeUndefined()
+          expect(yield* agents.get(Agent.ID.make(".opencode/node_modules/probe/README"))).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("plan"))).toMatchObject({ system: "Make a plan.", mode: "primary" })
+        }),
+      ),
+    ),
+  )
+
+  it.live("reads agent files that use V2 fields as V2", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "agents"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "named.md"),
+              `---
+name: named
+description: Named reviewer
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+---
+Review only.`,
+            )
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "mixed.md"),
+              `---
+tools:
+  shell: false
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+---
+Mixed fields.`,
+            )
+          })
+          const agents = yield* Agent.Service
+
+          yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+            Effect.provide(Config.testLayer([directoryEntry(tmp.path)])),
+          )
+
+          const named = yield* agents.get(Agent.ID.make("named"))
+          expect(named).toMatchObject({
+            description: "Named reviewer",
+            permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
+          })
+          expect(named?.request.body).toEqual({})
+          const mixed = yield* agents.get(Agent.ID.make("mixed"))
+          expect(mixed).toMatchObject({
+            permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
+          })
+          expect(mixed?.request.body).toEqual({})
         }),
       ),
     ),

@@ -1,5 +1,5 @@
 import { EOL } from "node:os"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { createClient, loadIntegrations } from "./shared"
@@ -17,7 +17,7 @@ export default Runtime.handler(Commands.commands.auth.commands.list, (input) =>
 )
 
 const list = Effect.fn("cli.auth.list")(function* (input) {
-  const client = yield* createClient({ server: Option.getOrUndefined(input.server), standalone: input.standalone })
+  const client = yield* createClient()
   const integrations = (yield* loadIntegrations(client)).filter((integration) => integration.connections.length > 0)
   if (input.format === "json") {
     process.stdout.write(

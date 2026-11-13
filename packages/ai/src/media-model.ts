@@ -4,10 +4,10 @@ import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
 import {
   AIError,
-  HttpOptions,
   InvalidRequestError,
   ModelID,
   ProviderID,
+  type HttpOptions,
   type ProviderOptions,
 } from "./schema/index.js"
 
@@ -24,12 +24,15 @@ export class MediaModel<Route, Options> {
   readonly provider: ProviderID
   readonly route: Route
   readonly http?: HttpOptions
+  /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
+  readonly providerOptions?: ProviderOptions
 
   constructor(input: MediaModel.Input<Route>) {
     this.id = ModelID.make(input.id)
     this.provider = ProviderID.make(input.provider)
     this.route = input.route
     this.http = input.http
+    this.providerOptions = input.providerOptions
   }
 }
 
@@ -41,6 +44,7 @@ export namespace MediaModel {
     readonly provider: string | ProviderID
     readonly route: Route
     readonly http?: HttpOptions
+    readonly providerOptions?: ProviderOptions
   }
 
   /** A protocol plus its canonical start path; `ModelInput.baseURL` overrides `baseURL` per deployment. */
@@ -80,9 +84,15 @@ export const composeRoute = <Request extends MediaRoute.MediaRequest, Event, Res
   collect: (events: ReadonlyArray<Event>) => Effect.Effect<Response, AIError>,
 ): MediaRoute.AnyRoute<Request, Event, Response> => {
   if (isStreamInput(route)) return MediaRoute.stream({ ...composition(route, input), collect })
-  if (isQueuedInput(route)) return MediaRoute.queued(composition(route, input))
+  if (isQueuedInput(route)) return composeQueuedRoute(route, input)
   return MediaRoute.inline(composition(route, input))
 }
+
+/** Compose a queued protocol route input with one deployment through `MediaRoute.queued`. */
+export const composeQueuedRoute = <Request extends MediaRoute.MediaRequest, Response, Token>(
+  route: MediaModel.QueuedRouteInput<Request, Response, Token>,
+  input: MediaRoute.ModelInput,
+) => MediaRoute.queued(composition(route, input))
 
 const composition = <Request extends MediaRoute.MediaRequest, Protocol>(
   route: MediaModel.RouteInput<Request, Protocol>,
@@ -108,10 +118,12 @@ export const tryRequest = <A>(make: () => A): Effect.Effect<A, AIError> =>
   Effect.try({
     try: make,
     catch: (error) =>
-      new AIError({
-        reason: new InvalidRequestError({
-          message: error instanceof Error ? error.message : String(error),
-          cause: error,
-        }),
-      }),
+      error instanceof AIError
+        ? error
+        : new AIError({
+            reason: new InvalidRequestError({
+              message: error instanceof Error ? error.message : String(error),
+              cause: error,
+            }),
+          }),
   })

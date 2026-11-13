@@ -51,10 +51,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "월 $10로 OpenCode Go를 구독하여 최고의 오픈 소스 모델에 안정적으로 액세스하세요.",
   "dialog.usageExceeded.freeTier.actionLabel": "구독",
-  "dialog.usageExceeded.accountRateLimit.title": "Go 한도에 도달했습니다",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "사용량 한도에 도달했습니다. 지금 이 모델을 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "설정 열기",
 
   "ui.sessionTurn.status.delegating": "작업 위임 중",
   "ui.sessionTurn.status.planning": "다음 단계 계획 중",
@@ -151,6 +147,7 @@ export const dict = {
   "ui.common.dismiss": "닫기",
   "ui.common.close": "닫기",
   "ui.common.next": "다음",
+  "ui.common.continue": "계속",
   "ui.common.submit": "제출",
   "ui.common.showMore": "더 보기",
 
@@ -179,7 +176,6 @@ export const dict = {
   "ui.question.answer.none": "(답변 없음)",
   "ui.question.review.notAnswered": "(답변하지 않음)",
   "ui.question.multiHint": "해당하는 항목 모두 선택",
-  "ui.question.singleHint": "하나의 답변을 선택",
   "ui.question.custom.placeholder": "답변 입력…",
 
   "ui.fileSearch.placeholder": "찾기",

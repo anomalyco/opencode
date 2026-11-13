@@ -1,21 +1,52 @@
-import { For } from "solid-js"
-import { IconButton } from "./icon-button"
+import { createEffect, For } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
+import { iconNames } from "@opencode/ui/icons/catalog"
+import { IconButton, type IconButtonProps } from "./icon-button"
+
+type Args = Pick<IconButtonProps, "variant" | "size" | "disabled"> & {
+  icon: string
+  interaction: NonNullable<IconButtonProps["state"]> | "focus"
+  expanded: boolean
+}
+
+const variants = ["neutral", "contrast", "submit", "ghost", "ghost-muted"] satisfies IconButtonProps["variant"][]
+
+const sizes = ["small", "normal", "large"] satisfies IconButtonProps["size"][]
+
+const interactions = ["rest", "hover", "pressed", "focus"] as const
 
 const docs = `### Overview
 Square icon-only button with visual variants and three sizes.
 
 ### API
-- \`icon\`: Icon content.
-- \`variant\`: "neutral" | "contrast" | "submit" | "ghost".
-- \`submit\` shares the contrast styling with regular Composer submit buttons.
-- \`size\`: "small" | "normal" | "large".
-- Inherits Kobalte Button props and native button attributes.
+- \`icon\`: Icon content. Choose a glyph in the panel.
+- \`variant\`: ${variants.join(", ")}. Submit shares the contrast styling with Composer submit buttons.
+- \`size\`: small, normal or large.
+- Inherits native button attributes.
 
 ### States
-- default, hover, pressed, focus, disabled.
-- State selectors are available via pseudo-classes and \`[data-state]\`.
-`
+Default, hover, pressed, keyboard focus and disabled. The state prop pins hover or pressed styling.
+Expanded styles apply to the ghost variants.`
+
+function Preview(args: Args) {
+  return (
+    <IconButton
+      aria-label={args.icon}
+      icon={<Icon name={args.icon} />}
+      variant={args.variant}
+      size={args.size}
+      state={args.interaction === "focus" ? undefined : args.interaction}
+      ref={(button) =>
+        createEffect(() => {
+          // CSS supports a pinned focus ring in addition to the public rest/hover/pressed prop.
+          if (args.interaction === "focus") button.dataset.state = "focus"
+        })
+      }
+      disabled={args.disabled}
+      data-expanded={args.expanded ? "" : undefined}
+    />
+  )
+}
 
 export default {
   title: "UI/IconButton",
@@ -25,84 +56,67 @@ export default {
   parameters: {
     frameHeight: "300px",
     frameBackground: "#fff",
-    docs: {
-      description: {
-        component: docs,
-      },
-    },
+    docs: { description: { component: docs } },
   },
   args: {
-    icon: <Icon name="plus" />,
+    icon: "plus",
     variant: "neutral",
     size: "normal",
-  },
+    interaction: "rest",
+    disabled: false,
+    expanded: false,
+  } satisfies Args,
   argTypes: {
-    icon: {
-      control: false,
-    },
-    variant: {
-      control: "select",
-      options: ["neutral", "contrast", "submit", "ghost"],
-    },
-    size: {
-      control: "select",
-      options: ["small", "normal", "large"],
-    },
+    icon: { control: "select", options: iconNames().sort() },
+    variant: { control: "select", options: variants },
+    size: { control: "select", options: sizes },
+    interaction: { control: "select", options: interactions },
   },
+  render: Preview,
 }
 
 export const Playground = {}
 
 export const Variants = {
-  render: () => (
-    <div style={{ display: "flex", gap: "12px", "align-items": "center", "flex-wrap": "wrap" }}>
-      <IconButton icon={<Icon name="plus" />} variant="neutral" />
-      <IconButton icon={<Icon name="plus" />} variant="contrast" />
-      <IconButton icon={<Icon name="arrow-up" />} variant="submit" />
-      <IconButton icon={<Icon name="plus" />} variant="ghost" />
+  render: (args: Args) => (
+    <div class="flex flex-wrap items-center gap-3">
+      <For each={variants}>
+        {(variant) => (
+          <Preview
+            {...args}
+            variant={variant}
+            icon={variant === "submit" && args.icon === "plus" ? "arrow-up" : args.icon}
+          />
+        )}
+      </For>
     </div>
   ),
 }
 
 export const Sizes = {
-  render: () => (
-    <div style={{ display: "flex", gap: "12px", "align-items": "center", "flex-wrap": "wrap" }}>
-      <IconButton icon={<Icon name="plus" />} size="small" variant="neutral" />
-      <IconButton icon={<Icon name="plus" />} size="normal" variant="neutral" />
-      <IconButton icon={<Icon name="plus" />} size="large" variant="neutral" />
+  render: (args: Args) => (
+    <div class="flex flex-wrap items-center gap-3">
+      <For each={sizes}>{(size) => <Preview {...args} size={size} />}</For>
     </div>
   ),
 }
 
 export const AllStates = {
-  render: () => {
-    const variants = ["neutral", "contrast", "submit", "ghost"] as const
-    const states = ["default", "hover", "pressed", "focus", "disabled"] as const
-
-    return (
-      <div style={{ display: "grid", gap: "12px" }}>
-        <For each={variants}>
-          {(variant) => (
-            <div style={{ display: "grid", gap: "8px" }}>
-              <div style={{ "font-size": "12px", color: "var(--text-weak)", "text-transform": "capitalize" }}>
-                {variant}
-              </div>
-              <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-                <For each={states}>
-                  {(state) => (
-                    <IconButton
-                      icon={<Icon name="plus" />}
-                      variant={variant}
-                      data-state={state === "default" ? undefined : state}
-                      disabled={state === "disabled"}
-                    />
-                  )}
-                </For>
-              </div>
+  render: (args: Args) => (
+    <div class="grid gap-3">
+      <For each={variants}>
+        {(variant) => (
+          <div class="grid gap-2">
+            <div class="text-xs text-text-weak capitalize">{variant}</div>
+            <div class="flex flex-wrap gap-2">
+              <For each={interactions}>
+                {(interaction) => <Preview {...args} interaction={interaction} variant={variant} />}
+              </For>
+              <Preview {...args} variant={variant} disabled />
             </div>
-          )}
-        </For>
-      </div>
-    )
-  },
+          </div>
+        )}
+      </For>
+    </div>
+  ),
 }

@@ -1,15 +1,12 @@
 import { expect } from "bun:test"
 import { spawn } from "node:child_process"
-import { existsSync } from "node:fs"
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, writeFile } from "node:fs/promises"
 import net from "node:net"
-import os from "node:os"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
+import { frame, listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
-
-const pong = { type: "pong", instance_id: "test", pid: process.pid, protocol: 7 }
 
 it.live("rediscovers a same-protocol daemon after its registration rotates", () =>
   Effect.gen(function* () {
@@ -22,7 +19,7 @@ it.live("rediscovers a same-protocol daemon after its registration rotates", () 
       if (receivedToken !== token) return { type: "error", message: "authentication failed" }
       if (request.op === "ping") return { ...pong, instance_id: instance }
       if (request.op === "create") creates++
-      return request.op === "list" ? { type: "terminals", terminals: [] } : { type: "ok" }
+      return request.op === "list" ? { type: "processes", processes: [] } : { type: "ok" }
     })
     yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
     const daemon = yield* makeDaemonTransport(root, "daemon")
@@ -33,7 +30,7 @@ it.live("rediscovers a same-protocol daemon after its registration rotates", () 
     yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
 
     const running = yield* daemon.requestIfRunning({ op: "list" })
-    expect(running).toEqual({ type: "terminals", terminals: [] })
+    expect(running).toEqual({ type: "processes", processes: [] })
 
     token = "newest-token"
     instance = "newest-instance"
@@ -53,11 +50,11 @@ it.live("rediscovers a rotated registration when acquiring a subscription", () =
     yield* listen(socketPath, (_socket, request, receivedToken) => {
       if (receivedToken !== token) return { type: "error", message: "authentication failed" }
       if (request.op === "ping") return { ...pong, instance_id: instance }
-      if (request.op !== "subscribe") return { type: "terminals", terminals: [] }
+      if (request.op !== "subscribe") return { type: "processes", processes: [] }
       subscriptions++
       return {
         type: "attached",
-        terminal: terminal(1),
+        process: terminal(1),
         role: "observer",
         generation: 1,
         requested_offset: 0,
@@ -88,6 +85,78 @@ it.live("rediscovers a rotated registration when acquiring a subscription", () =
   }),
 )
 
+it.live("waits on its own connection until the process exits", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = path.join(directory, "daemon.sock")
+    const waiting: net.Socket[] = []
+    yield* listen(socketPath, (socket, request) => {
+      if (request.op === "ping") return pong
+      if (request.op === "wait" && request.id === 1) {
+        waiting.push(socket)
+        return undefined
+      }
+      return { type: "error", message: "terminal 2 not found" }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+
+    const missing = yield* Effect.flip(daemon.wait(2))
+    expect(missing).toMatchObject({ kind: "request", message: "terminal 2 not found" })
+
+    const fiber = yield* daemon.wait(1).pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* poll(() => waiting.length === 1)
+    waiting[0].end(
+      frame({ type: "exited", exit_code: null, signal: "SIGTERM", final_offset: 3, output_lines: 1, exited_at: 7 }),
+    )
+    expect(yield* Fiber.join(fiber)).toEqual({
+      type: "exited",
+      exit_code: null,
+      signal: "SIGTERM",
+      final_offset: 3,
+      output_lines: 1,
+      exited_at: 7,
+    })
+  }),
+)
+
+it.live("closes the wait connection when the wait is interrupted", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = path.join(directory, "daemon.sock")
+    const waiting: net.Socket[] = []
+    yield* listen(socketPath, (socket, request) => {
+      if (request.op === "ping") return pong
+      waiting.push(socket)
+      return undefined
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+
+    const fiber = yield* daemon.wait(1).pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* poll(() => waiting.length === 1)
+    const closed = new Promise<void>((resolve) => waiting[0].once("close", () => resolve()))
+    yield* Fiber.interrupt(fiber)
+    yield* Effect.promise(() => closed)
+  }),
+)
+
+it.live("reports a daemon that goes away during a wait as unreachable", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = path.join(directory, "daemon.sock")
+    yield* listen(socketPath, (socket, request) => {
+      if (request.op === "ping") return pong
+      socket.destroy()
+      return undefined
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+
+    expect((yield* Effect.flip(daemon.wait(1))).kind).toBe("connect")
+  }),
+)
+
 it.live("retries a start-required request when connection fails before dispatch", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
@@ -95,7 +164,7 @@ it.live("retries a start-required request when connection fails before dispatch"
     const secondSocket = path.join(directory, "second.sock")
     const first = yield* listen(firstSocket, (_socket, request) => {
       if (request.op === "ping") return pong
-      return { type: "terminals", terminals: [] }
+      return { type: "processes", processes: [] }
     })
     yield* Effect.promise(() => writeRegistration(directory, firstSocket))
     const daemon = yield* makeDaemonTransport(root, "daemon")
@@ -151,7 +220,14 @@ it.live("rejects incompatible daemons without replacing or killing them", () =>
     yield* Effect.promise(() =>
       writeFile(
         path.join(directory, "service.json"),
-        JSON.stringify({ instance_id: "old", pid: existing.pid, protocol: 6, socket: "/unused", token: "old" }),
+        JSON.stringify({
+          instance_id: "old",
+          pid: existing.pid,
+          protocol: 7,
+          socket: "/unused",
+          token: "old",
+          features: [],
+        }),
       ),
     )
     const daemon = yield* makeDaemonTransport(root, "daemon", () => Promise.resolve("/missing/opencode-pty"))
@@ -159,7 +235,7 @@ it.live("rejects incompatible daemons without replacing or killing them", () =>
     const optional = yield* Effect.flip(daemon.requestIfRunning({ op: "list" }))
     expect(optional).toMatchObject({
       kind: "protocol",
-      message: "opencode-pty protocol mismatch: daemon=6, client=7",
+      message: "opencode-pty protocol mismatch: daemon=7, client=8",
       pid: existing.pid,
     })
 
@@ -168,36 +244,6 @@ it.live("rejects incompatible daemons without replacing or killing them", () =>
     expect(existing.exitCode).toBeNull()
     expect(existing.signalCode).toBeNull()
     expect(process.kill(existing.pid, 0)).toBeTrue()
-  }),
-)
-
-it.live("moves an inherited legacy registration into the runtime root and keeps its lock file", () =>
-  Effect.gen(function* () {
-    const base = yield* temporaryDirectory()
-    const legacy = path.join(base, "legacy", "inherited")
-    const socketPath = path.join(base, "daemon.sock")
-    yield* listen(socketPath, (_socket, request) => {
-      if (request.op === "ping") return pong
-      return { type: "terminals", terminals: [] }
-    })
-    yield* Effect.promise(async () => {
-      await mkdir(legacy, { recursive: true })
-      await writeFile(path.join(legacy, "service.lock"), "")
-      await writeRegistration(legacy, socketPath)
-    })
-    const lock = yield* Effect.promise(() => stat(path.join(legacy, "service.lock")))
-    const daemon = yield* makeDaemonTransport(path.join(base, "root"), "fresh", undefined, {
-      directory: legacy,
-      instanceID: "test",
-      ticket: "ticket",
-      expiresAt: Date.now() + 60_000,
-    })
-
-    const migrated = path.join(base, "root", "inherited")
-    expect(existsSync(path.join(legacy, "service.json"))).toBeFalse()
-    expect((yield* Effect.promise(() => stat(path.join(migrated, "service.lock")))).ino).toBe(lock.ino)
-    expect(existsSync(path.join(migrated, "service.json"))).toBeTrue()
-    expect(yield* daemon.request({ op: "list" })).toEqual({ type: "terminals", terminals: [] })
   }),
 )
 
@@ -240,6 +286,13 @@ it.live("stops a discovered inherited daemon when adoption fails", () =>
   }),
 )
 
+function poll(ready: () => boolean) {
+  return Effect.gen(function* () {
+    for (let attempt = 0; attempt < 200 && !ready(); attempt++) yield* Effect.sleep(10)
+    expect(ready()).toBeTrue()
+  })
+}
+
 function temporaryRuntime() {
   return Effect.gen(function* () {
     const root = yield* temporaryDirectory()
@@ -249,118 +302,36 @@ function temporaryRuntime() {
   })
 }
 
-function temporaryDirectory() {
-  return Effect.acquireRelease(
-    Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "opencode-pty-test-"))),
-    (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true })),
-  )
-}
-
-function listen(
-  socketPath: string,
-  handle: (socket: net.Socket, request: Record<string, unknown>, token: string) => object | undefined,
-) {
-  return Effect.acquireRelease(
-    Effect.promise(async () => {
-      const sockets = new Set<net.Socket>()
-      const server = net.createServer((socket) => {
-        sockets.add(socket)
-        socket.once("close", () => sockets.delete(socket))
-        void readRequest(socket)
-          .then((envelope) => {
-            const response =
-              envelope.request.op === "own" ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
-            if (response) socket.write(frame(response))
-          })
-          .catch(() => socket.destroy())
-      })
-      await new Promise<void>((resolve, reject) => {
-        server.once("error", reject)
-        server.listen(socketPath, resolve)
-      })
-      return {
-        close: () => {
-          sockets.forEach((socket) => socket.destroy())
-          return close(server)
-        },
-      }
+if (process.platform !== "win32")
+  it.live("gives up at once on a daemon binary that speaks another protocol, and never starts it again", () =>
+    Effect.gen(function* () {
+      const root = yield* temporaryDirectory()
+      const runtime = path.join(root, "runtime")
+      const spawns = path.join(root, "spawns")
+      const binary = path.join(root, "old-opencode-pty")
+      // Registers like an older release would, then idles.
+      yield* Effect.promise(() =>
+        writeFile(
+          binary,
+          [
+            "#!/bin/sh",
+            `echo spawn >> ${JSON.stringify(spawns)}`,
+            'mkdir -p "$3/$5"',
+            `printf '{"instance_id":"old","pid":%s,"protocol":7,"socket":"none","token":"t","features":[]}' $$ > "$3/$5/service.json"`,
+            "exec sleep 30",
+          ].join("\n"),
+          { mode: 0o755 },
+        ),
+      )
+      const daemon = yield* makeDaemonTransport(runtime, "daemon", () => Promise.resolve(binary))
+      const started = Date.now()
+      const first = yield* daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip)
+      expect(first.kind).toBe("protocol")
+      const second = yield* daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip)
+      expect(second.kind).toBe("protocol")
+      // Well under the 5 s spawn timeout: the daemon was not waited on again.
+      expect(Date.now() - started).toBeLessThan(4_000)
+      const count = yield* Effect.promise(() => Bun.file(spawns).text())
+      expect(count.trim().split("\n")).toHaveLength(1)
     }),
-    (server) => Effect.promise(server.close),
   )
-}
-
-function readRequest(socket: net.Socket) {
-  return new Promise<Buffer>((resolve, reject) => {
-    let pending = Buffer.alloc(0)
-    const cleanup = () => {
-      socket.off("data", onData)
-      socket.off("end", onEnd)
-      socket.off("error", onError)
-    }
-    const onData = (value: Buffer) => {
-      pending = Buffer.concat([pending, value])
-      if (pending.length < 4) return
-      const length = pending.readUInt32BE(0)
-      if (pending.length < length + 4) return
-      cleanup()
-      resolve(pending.subarray(4, length + 4))
-    }
-    const onEnd = () => {
-      cleanup()
-      reject(new Error("connection closed before request"))
-    }
-    const onError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
-    socket.on("data", onData)
-    socket.on("end", onEnd)
-    socket.on("error", onError)
-  }).then((payload) => {
-    const envelope: unknown = JSON.parse(payload.toString("utf8"))
-    if (!isRecord(envelope) || typeof envelope.token !== "string" || !isRecord(envelope.request))
-      throw new Error("Invalid test daemon envelope")
-    return { token: envelope.token, request: envelope.request }
-  })
-}
-
-function frame(value: object) {
-  const payload = Buffer.from(JSON.stringify(value))
-  const output = Buffer.allocUnsafe(payload.length + 4)
-  output.writeUInt32BE(payload.length)
-  payload.copy(output, 4)
-  return output
-}
-
-function writeRegistration(directory: string, socket: string, instance = "test", token = "test") {
-  return writeFile(
-    path.join(directory, "service.json"),
-    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 7, socket, token }),
-  )
-}
-
-function terminal(id: number) {
-  return {
-    id,
-    pid: null,
-    title: "test",
-    foreground_process: null,
-    group_id: "ses_test",
-    command: ["test"],
-    cwd: "/tmp",
-    cols: 80,
-    rows: 24,
-    lifecycle: { status: "running" },
-    output_head: 0,
-    output_tail: 0,
-  }
-}
-
-function close(server: net.Server) {
-  if (!server.listening) return Promise.resolve()
-  return new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}

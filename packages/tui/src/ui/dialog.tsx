@@ -96,7 +96,7 @@ export function DialogHeader(
     closeLabel?: string
     onClose?: () => void
     gap?: number
-    /** Faint line below the title. Shown only under the "new-designs" experiment. */
+    /** Muted line below the title. Shown only under the "new-designs" experiment. */
     description?: string
   }>,
 ) {
@@ -111,11 +111,7 @@ export function DialogHeader(
         </text>
       )}
       {props.children}
-      <text
-        fg={newDesigns() ? theme.text.faint : theme.text.muted}
-        flexShrink={0}
-        onMouseUp={() => (props.onClose ?? dialog.clear)()}
-      >
+      <text fg={theme.text.muted} flexShrink={0} onMouseUp={() => (props.onClose ?? dialog.clear)()}>
         {props.closeLabel ?? "esc"}
       </text>
     </box>
@@ -124,7 +120,7 @@ export function DialogHeader(
     <Show when={newDesigns() && props.description} fallback={row()}>
       <box>
         {row()}
-        <text fg={theme.text.faint} wrapMode="word">
+        <text fg={theme.text.muted} wrapMode="word">
           {props.description}
         </text>
       </box>
@@ -145,27 +141,63 @@ export function DialogLayout(
     footer?: DialogFooterProps
     /** Footer shown while the "new-designs" experiment is off. Remove when the experiment graduates. */
     legacyFooter?: JSX.Element
+    /** A `DialogButtons` row, shown in place of the footer in both designs. */
+    buttons?: JSX.Element
     /** Side padding in cells. Defaults to DIALOG_INSET. */
     inset?: number
-    /** Blank rows between the body and the footer under the "new-designs" experiment. Defaults to 1. */
+    /**
+     * Blank rows between the body and the footer under the "new-designs" experiment. Defaults to 1.
+     * 0 lets a raised `DialogBleed` body meet the footer band.
+     */
     footerGap?: number
   }>,
 ) {
   const inset = () => props.inset ?? DIALOG_INSET
   const newDesigns = useNewDesigns()
+  const footerGap = () => (newDesigns() && props.footer && props.buttons === undefined ? (props.footerGap ?? 1) : 1)
   return (
     <box id={props.id} paddingLeft={inset()} paddingRight={inset()} paddingBottom={1} gap={1}>
       {props.header}
-      <box paddingBottom={newDesigns() && props.footer ? (props.footerGap ?? 1) - 1 : 0}>{props.children}</box>
-      <Show when={newDesigns() || props.legacyFooter === undefined} fallback={props.legacyFooter}>
-        <Show when={props.footer}>
-          {(footer) => (
-            <DialogFooter actions={footer().actions} inset={footer().inset}>
-              {footer().children}
-            </DialogFooter>
-          )}
+      <box paddingBottom={Math.max(0, footerGap() - 1)} marginBottom={Math.min(0, footerGap() - 1)}>
+        {props.children}
+      </box>
+      <Show when={props.buttons === undefined} fallback={props.buttons}>
+        <Show when={newDesigns() || props.legacyFooter === undefined} fallback={props.legacyFooter}>
+          <Show when={props.footer}>
+            {(footer) => (
+              <DialogFooter actions={footer().actions} inset={footer().inset}>
+                {footer().children}
+              </DialogFooter>
+            )}
+          </Show>
         </Show>
       </Show>
+    </box>
+  )
+}
+
+export type DialogButton = { label: string; run: () => void }
+
+/** A right-aligned row of buttons; the active one is highlighted. Arrow keys and Enter are bound by the dialog. */
+export function DialogButtons(props: { buttons: DialogButton[]; active: number; onActive?: (index: number) => void }) {
+  const theme = useTheme().surface("dialog")
+  return (
+    <box flexDirection="row" justifyContent="flex-end">
+      <For each={props.buttons}>
+        {(button, index) => (
+          <box
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={props.active === index() ? theme.background.action.primary.focused : undefined}
+            onMouseOver={() => props.onActive?.(index())}
+            onMouseUp={() => button.run()}
+          >
+            <text fg={props.active === index() ? theme.text.action.primary.focused : theme.text.muted}>
+              {button.label}
+            </text>
+          </box>
+        )}
+      </For>
     </box>
   )
 }
@@ -297,7 +329,7 @@ function DialogFooterItem(props: { action: DialogFooterAction; variant: "primary
         onMouseOut={() => setHovered(false)}
         onMouseUp={trigger}
       >
-        <text>{label(theme.text.faint)}</text>
+        <text>{label(theme.text.muted)}</text>
       </box>
     </Show>
   )

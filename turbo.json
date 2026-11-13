@@ -5,38 +5,49 @@
     "bunfig.toml",
     ".npmrc",
     ".github/actions/setup-bun/**",
-    ".github/workflows/test.yml",
+    ".github/workflows/check-test.yml",
     "package.json"
   ],
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
-    "typecheck": {},
-    "@opencode/cli#typecheck": {
-      "dependsOn": ["@opencode/core#typecheck"]
+    // `transit` folds every workspace dependency into the hash, so a change in a dependency re-checks its dependents
+    // instead of replaying their cached result. Local `typecheck` runs `bun check`, which reads dependency sources
+    // directly and needs no build order.
+    "typecheck": {
+      "dependsOn": ["transit"]
+    },
+    // CI checks types with the official TypeScript compiler. tsc -b writes core's declarations for the packages that
+    // reference it, so those packages also wait for core. Package entries replace the generic one, so they repeat
+    // `transit`.
+    "typecheck:tsc": {
+      "dependsOn": ["transit"]
+    },
+    "@opencode/cli#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/sdk#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/server#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/simulation#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/tui#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
     },
     "test:components": {
       "outputs": [],
       "cache": false
-    },
-    "@opencode/sdk#typecheck": {
-      "dependsOn": ["@opencode/core#typecheck"]
-    },
-    "@opencode/server#typecheck": {
-      "dependsOn": ["@opencode/core#typecheck"]
-    },
-    "@opencode/simulation#typecheck": {
-      "dependsOn": ["@opencode/core#typecheck"]
-    },
-    "@opencode/tui#typecheck": {
-      "dependsOn": ["@opencode/core#typecheck"]
     },
     "build": {
       "dependsOn": ["transit"],
       "outputs": ["dist/**"]
     },
     // Workspace packages export their sources, so tests never wait for a dependency's build; the build job in
-    // test.yml checks the library builds. No package has a transit script: it runs nothing and only folds every
+    // check-test.yml checks the library builds. No package has a transit script: it runs nothing and only folds every
     // workspace dependency into the test hash.
     "transit": {
       "dependsOn": ["^transit"]

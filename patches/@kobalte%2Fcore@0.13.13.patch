@@ -1,0 +1,164 @@
+diff --git a/dist/chunk/3ARTUDH2.jsx b/dist/chunk/3ARTUDH2.jsx
+index 4a2cfa59cfd0adec119e46de043c590af12ceb60..f132981eadbeaadeb579fa8e7ccc9fbe70459efc 100644
+--- a/dist/chunk/3ARTUDH2.jsx
++++ b/dist/chunk/3ARTUDH2.jsx
+@@ -197,6 +197,7 @@ function Menu(props) {
+   ]);
+   let pointerGraceTimeoutId = 0;
+   let pointerGraceIntent = null;
++  let pointerGraceOrigin = [0, 0];
+   let pointerDir = "right";
+   const [triggerId, setTriggerId] = createSignal();
+   const [contentId, setContentId] = createSignal();
+@@ -263,7 +264,32 @@ function Menu(props) {
+   };
+   const isPointerMovingToSubmenu = (e) => {
+     const isMovingTowards = pointerDir === pointerGraceIntent?.side;
+-    return isMovingTowards && isPointerInGraceArea(e, pointerGraceIntent?.area);
++    if (!isMovingTowards || !isPointerInGraceArea(e, pointerGraceIntent?.area)) {
++      return false;
++    }
++    // Patched: judge each move of a few pixels by where it points. Heading into the submenu restarts the 300ms grace,
++    // so a slow move still reaches it. Heading past it, like drifting down the menu, ends the grace, so the items the
++    // pointer crosses respond at once instead of staying dead for 300ms.
++    const [originX, originY] = pointerGraceOrigin;
++    const dx = e.clientX - originX;
++    const dy = e.clientY - originY;
++    if (Math.hypot(dx, dy) < 4) {
++      return true;
++    }
++    const [edgeX, edgeStart] = pointerGraceIntent.area[1];
++    const edgeEnd = pointerGraceIntent.area[4][1];
++    const edgeY = originY + dy * Math.max(0, (edgeX - originX) / dx);
++    const advancing = pointerGraceIntent.side === "right" ? dx > 0 : dx < 0;
++    if (!advancing || edgeY < Math.min(edgeStart, edgeEnd) || edgeY > Math.max(edgeStart, edgeEnd)) {
++      pointerGraceIntent = null;
++      return false;
++    }
++    pointerGraceOrigin = [e.clientX, e.clientY];
++    window.clearTimeout(pointerGraceTimeoutId);
++    pointerGraceTimeoutId = window.setTimeout(() => {
++      pointerGraceIntent = null;
++    }, 300);
++    return true;
+   };
+   const onItemEnter = (e) => {
+     if (isPointerMovingToSubmenu(e)) {
+@@ -277,9 +303,12 @@ function Menu(props) {
+     focusContent();
+   };
+   const onTriggerLeave = (e) => {
++    // Patched: pointerleave can't be cancelled, so preventDefault never sets defaultPrevented for the caller to read.
+     if (isPointerMovingToSubmenu(e)) {
+       e.preventDefault();
++      return true;
+     }
++    return false;
+   };
+   createHideOutside({
+     isDisabled: () => {
+@@ -355,7 +384,11 @@ function Menu(props) {
+     onTriggerLeave,
+     setPointerDir: (dir) => pointerDir = dir,
+     setPointerGraceTimeoutId: (id) => pointerGraceTimeoutId = id,
+-    setPointerGraceIntent: (intent) => pointerGraceIntent = intent,
++    setPointerGraceIntent: (intent) => {
++      pointerGraceIntent = intent;
++      // The grace area starts 5px behind the pointer.
++      pointerGraceOrigin = intent ? [intent.area[0][0] + (intent.side === "right" ? 5 : -5), intent.area[0][1]] : [0, 0];
++    },
+     registerNestedMenu,
+     registerItemToParentDomCollection: parentDomCollectionContext?.registerItem,
+     registerTriggerId: createRegisterId(setTriggerId),
+@@ -1503,8 +1536,7 @@ function MenuSubTrigger(props) {
+       }, 300);
+       parentMenuContext?.setPointerGraceTimeoutId(pointerGraceTimeoutId);
+     } else {
+-      parentMenuContext?.onTriggerLeave(e);
+-      if (e.defaultPrevented) {
++      if (parentMenuContext?.onTriggerLeave(e)) {
+         return;
+       }
+       parentMenuContext?.setPointerGraceIntent(null);
+diff --git a/dist/chunk/HGKTPMYY.js b/dist/chunk/HGKTPMYY.js
+index a8fa9b06a97cb3d4d5029fc0c929d78dfdc6edd4..42fb6a330c42eaf0479360cb121c6e2a7c9bd401 100644
+--- a/dist/chunk/HGKTPMYY.js
++++ b/dist/chunk/HGKTPMYY.js
+@@ -119,6 +119,7 @@ function Menu(props) {
+   const [local, others] = splitProps(mergedProps, ["open", "defaultOpen", "onOpenChange"]);
+   let pointerGraceTimeoutId = 0;
+   let pointerGraceIntent = null;
++  let pointerGraceOrigin = [0, 0];
+   let pointerDir = "right";
+   const [triggerId, setTriggerId] = createSignal();
+   const [contentId, setContentId] = createSignal();
+@@ -187,7 +188,32 @@ function Menu(props) {
+   };
+   const isPointerMovingToSubmenu = (e) => {
+     const isMovingTowards = pointerDir === pointerGraceIntent?.side;
+-    return isMovingTowards && isPointerInGraceArea(e, pointerGraceIntent?.area);
++    if (!isMovingTowards || !isPointerInGraceArea(e, pointerGraceIntent?.area)) {
++      return false;
++    }
++    // Patched: judge each move of a few pixels by where it points. Heading into the submenu restarts the 300ms grace,
++    // so a slow move still reaches it. Heading past it, like drifting down the menu, ends the grace, so the items the
++    // pointer crosses respond at once instead of staying dead for 300ms.
++    const [originX, originY] = pointerGraceOrigin;
++    const dx = e.clientX - originX;
++    const dy = e.clientY - originY;
++    if (Math.hypot(dx, dy) < 4) {
++      return true;
++    }
++    const [edgeX, edgeStart] = pointerGraceIntent.area[1];
++    const edgeEnd = pointerGraceIntent.area[4][1];
++    const edgeY = originY + dy * Math.max(0, (edgeX - originX) / dx);
++    const advancing = pointerGraceIntent.side === "right" ? dx > 0 : dx < 0;
++    if (!advancing || edgeY < Math.min(edgeStart, edgeEnd) || edgeY > Math.max(edgeStart, edgeEnd)) {
++      pointerGraceIntent = null;
++      return false;
++    }
++    pointerGraceOrigin = [e.clientX, e.clientY];
++    window.clearTimeout(pointerGraceTimeoutId);
++    pointerGraceTimeoutId = window.setTimeout(() => {
++      pointerGraceIntent = null;
++    }, 300);
++    return true;
+   };
+   const onItemEnter = (e) => {
+     if (isPointerMovingToSubmenu(e)) {
+@@ -201,9 +227,12 @@ function Menu(props) {
+     focusContent();
+   };
+   const onTriggerLeave = (e) => {
++    // Patched: pointerleave can't be cancelled, so preventDefault never sets defaultPrevented for the caller to read.
+     if (isPointerMovingToSubmenu(e)) {
+       e.preventDefault();
++      return true;
+     }
++    return false;
+   };
+   createHideOutside({
+     isDisabled: () => {
+@@ -276,7 +305,11 @@ function Menu(props) {
+     onTriggerLeave,
+     setPointerDir: (dir) => pointerDir = dir,
+     setPointerGraceTimeoutId: (id) => pointerGraceTimeoutId = id,
+-    setPointerGraceIntent: (intent) => pointerGraceIntent = intent,
++    setPointerGraceIntent: (intent) => {
++      pointerGraceIntent = intent;
++      // The grace area starts 5px behind the pointer.
++      pointerGraceOrigin = intent ? [intent.area[0][0] + (intent.side === "right" ? 5 : -5), intent.area[0][1]] : [0, 0];
++    },
+     registerNestedMenu,
+     registerItemToParentDomCollection: parentDomCollectionContext?.registerItem,
+     registerTriggerId: createRegisterId(setTriggerId),
+@@ -1217,8 +1250,7 @@ function MenuSubTrigger(props) {
+       }, 300);
+       parentMenuContext?.setPointerGraceTimeoutId(pointerGraceTimeoutId);
+     } else {
+-      parentMenuContext?.onTriggerLeave(e);
+-      if (e.defaultPrevented) {
++      if (parentMenuContext?.onTriggerLeave(e)) {
+         return;
+       }
+       parentMenuContext?.setPointerGraceIntent(null);
