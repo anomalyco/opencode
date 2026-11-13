@@ -1,6 +1,6 @@
 //! The client's side of containment (synthesis 4.5, phase P4c). Under a parent, the client keeps a run record of its
 //! plugin calls, its session and its draft, with the watchdog over it. After a crash, the client the parent starts
-//! again keeps the plugin the record named disabled (`--skip-plugin`, and `plugin-crashes.json` in the state
+//! again keeps the plugin the record named disabled (the parent's skip list, and `plugin-crashes.json` in the state
 //! directory after that), restores the draft and shows one notice. The parent's half is the CLI's `contain`.
 
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ use crate::prelude::*;
 pub struct Contain {
     /// Keep the run record here, with the watchdog over it: the client runs under a parent.
     pub record: Option<PathBuf>,
-    /// `--skip-plugin`: the plugins a crash named, or `*` for every external plugin.
+    /// The plugins a crash named, or `*` for every external plugin.
     pub skip: Vec<String>,
     /// What the client before this one left in its record.
     pub resume: Option<Left>,

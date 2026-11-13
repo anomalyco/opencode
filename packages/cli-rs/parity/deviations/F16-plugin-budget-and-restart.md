@@ -4,7 +4,7 @@
 
 The TUI times no plugin callback. A slow callback makes the UI slow and nobody is told; a callback that never
 returns freezes the TUI for good. TS has no native plugins, so no plugin can end the process with a segfault, and
-there is nothing to restart. `--skip-plugin` is not a flag: the CLI rejects it as unrecognized.
+there is nothing to restart.
 
 ## Rust
 
@@ -22,8 +22,9 @@ crashes or hangs the client, the parent restores the terminal and starts the cli
 the draft, and one toast names the plugin and the call: `Plugin failed: <id>`, "It crashed the client in `<call>` and
 is disabled", with Enable again. A hang first shows a line over the frozen screen at 0.5 s. The plugin stays
 disabled, listed failed, until the user enables it or its build changes. A crash that names no plugin restarts the
-client with a notice; a second one within 10 minutes restarts it with every external plugin off. The parent passes
-the hidden flag `--skip-plugin` to the new client.
+client with a notice; a second one within 10 minutes restarts it with every external plugin off. The command line
+is the same as TS's: the parent passes what the new client skips and resumes from in memory after a fork, or in the
+environment (`OPENCODE_PLUGIN_SKIP`, `OPENCODE_PLUGIN_RESUME`) to a spawned client.
 
 ## Reason
 

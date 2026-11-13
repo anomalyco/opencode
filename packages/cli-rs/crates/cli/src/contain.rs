@@ -9,18 +9,20 @@
 //! thread), it restores the terminal, drops the keys typed meanwhile, reads the client's run record and starts a new
 //! client:
 //!
-//! - with `--skip-plugin <id>` for each plugin a record of this run named, which the new client keeps disabled;
-//! - after a second crash in 10 minutes that named no plugin, with `--skip-plugin '*'`: every external plugin off;
+//! - skipping each plugin a record of this run named, which the new client keeps disabled;
+//! - after a second crash in 10 minutes that named no plugin, skipping `*`: every external plugin off;
 //! - with `--session` of the session the record holds, and without `--prompt` and `--continue`, which the first
 //!   client acted on;
-//! - with `OPENCODE_PLUGIN_RESUME` naming the record, from which the new client restores the draft and shows one
-//!   notice.
+//! - with the dead client's record, from which the new client restores the draft and shows one notice.
+//!
+//! A forked client gets the skips and the record in memory; a spawned one in `OPENCODE_PLUGIN_SKIP` and
+//! `OPENCODE_PLUGIN_RESUME`. Neither is a flag: the command line equals the TS CLI's.
 //!
 //! At most 2 automatic restarts in 60 s; then the parent exits with a message. Any other end of the client ends the
 //! parent with the same code.
 
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -31,6 +33,8 @@ use opencode_plugin::contain::{Left, record};
 pub const CHILD: &str = "OPENCODE_PLUGIN_CHILD";
 /// Set in the client's environment after a crash: the dead client's record.
 pub const RESUME: &str = "OPENCODE_PLUGIN_RESUME";
+/// Set in the client's environment after a crash: the plugins to keep disabled, by ID, separated by commas.
+pub const SKIP: &str = "OPENCODE_PLUGIN_SKIP";
 /// `0` runs the TUI without a parent, `1` with one, whatever the plugin targets.
 const PARENT: &str = "OPENCODE_PLUGIN_PARENT";
 
@@ -39,22 +43,34 @@ const RESTARTS: (Duration, usize) = (Duration::from_secs(60), 2);
 /// A second crash that names no plugin within this long turns every external plugin off.
 const UNNAMED: Duration = Duration::from_secs(600);
 
-/// Set in a client that runs under a parent: the dead client's record it resumes from, if any.
-static CLIENT: OnceLock<Option<PathBuf>> = OnceLock::new();
+/// What a parent gives the client it starts after a crash.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Resume {
+    /// The dead client's record.
+    record: Option<PathBuf>,
+    /// The plugins to keep disabled, or `*` for every external plugin.
+    skip: Vec<String>,
+}
+
+/// Set in a client that runs under a parent.
+static CLIENT: OnceLock<Resume> = OnceLock::new();
 
 /// Runs first in `main`, before any thread starts. Returns the arguments to run with, in this process or in the client
 /// a fork made; or the exit code of a parent whose client is done.
 pub fn start(raw: Vec<OsString>) -> Result<Vec<OsString>, ExitCode> {
     if std::env::var_os(CHILD).is_some() {
         // A spawned client. The variables go, so nothing it starts takes them for its own.
-        let resume = std::env::var_os(RESUME).map(PathBuf::from);
+        let record = std::env::var_os(RESUME).map(PathBuf::from);
+        let skip = std::env::var(SKIP).unwrap_or_default();
+        let skip = skip.split(',').filter(|id| !id.is_empty()).map(str::to_owned).collect();
         // SAFETY: no other thread runs yet.
         #[allow(unsafe_code)]
         unsafe {
             std::env::remove_var(CHILD);
             std::env::remove_var(RESUME);
+            std::env::remove_var(SKIP);
         }
-        let _ = CLIENT.set(resume);
+        let _ = CLIENT.set(Resume { record, skip });
         return Ok(raw);
     }
     if !wanted(&raw) {
@@ -68,9 +84,14 @@ pub fn record() -> Option<PathBuf> {
     CLIENT.get().map(|_| record::path(std::process::id()))
 }
 
+/// The plugins the parent asks the client to keep disabled.
+pub fn skip() -> Vec<String> {
+    CLIENT.get().map(|client| client.skip.clone()).unwrap_or_default()
+}
+
 /// What the client before this one left in its record, once.
 pub fn resume() -> Option<Left> {
-    let path = CLIENT.get()?.as_ref()?;
+    let path = CLIENT.get()?.record.as_ref()?;
     let left = std::fs::read(path).ok().and_then(|bytes| record::read(&bytes));
     let _ = std::fs::remove_file(path);
     left
@@ -149,14 +170,13 @@ impl Policy {
             }
         }
         self.skip.dedup();
-        Ok(arguments(raw, &self.skip, left.session.as_deref()))
+        Ok(arguments(raw, left.session.as_deref()))
     }
 }
 
-/// `raw` for the next client: without `--prompt`, `--continue`, `--session` and `--skip-plugin`, then with `--session`
-/// of `session` and a `--skip-plugin` for each of `skip`.
-fn arguments(raw: &[OsString], skip: &[String], session: Option<&str>) -> Vec<OsString> {
-    const VALUED: &[&str] = &["--prompt", "--session", "-s", "--skip-plugin"];
+/// `raw` for the next client: without `--prompt`, `--continue` and `--session`, then with `--session` of `session`.
+fn arguments(raw: &[OsString], session: Option<&str>) -> Vec<OsString> {
+    const VALUED: &[&str] = &["--prompt", "--session", "-s"];
     const BARE: &[&str] = &["--continue", "-c"];
     let mut next: Vec<OsString> = Vec::new();
     let mut args = raw.iter();
@@ -184,9 +204,6 @@ fn arguments(raw: &[OsString], skip: &[String], session: Option<&str>) -> Vec<Os
     if let Some(session) = session {
         next.extend(["--session".into(), session.into()]);
     }
-    for id in skip {
-        next.extend(["--skip-plugin".into(), id.into()]);
-    }
     next.extend(rest);
     next
 }
@@ -212,20 +229,20 @@ enum Spawned {
     Failed,
 }
 
-/// Runs the parent's loop: `spawn` starts a client with the next arguments and the dead client's record, `wait` waits
-/// for it, `restore` puts the terminal back. Returns the arguments this process runs the client with, or the parent's
-/// exit code.
+/// Runs the parent's loop: `spawn` starts a client with the next arguments and what it resumes from, `wait` waits for
+/// it, `restore` puts the terminal back. Returns the arguments this process runs the client with, or the parent's exit
+/// code.
 fn supervise_with(
     raw: &[OsString],
-    mut spawn: impl FnMut(&[OsString], Option<&Path>) -> Spawned,
+    mut spawn: impl FnMut(&[OsString], &Resume) -> Spawned,
     mut wait: impl FnMut(u32) -> End,
     mut restore: impl FnMut(),
 ) -> Result<Vec<OsString>, ExitCode> {
     let mut policy = Policy::default();
-    let (mut args, mut resume): (Vec<OsString>, Option<PathBuf>) = (raw.to_vec(), None);
+    let (mut args, mut resume) = (raw.to_vec(), Resume::default());
     let mut first = true;
     loop {
-        let pid = match spawn(&args, resume.as_deref()) {
+        let pid = match spawn(&args, &resume) {
             Spawned::Client => return Ok(args),
             Spawned::Started(pid) => pid,
             // The first client could not start: this process runs it, with no parent.
@@ -234,7 +251,7 @@ fn supervise_with(
         };
         first = false;
         let end = wait(pid);
-        if let Some(path) = resume.take() {
+        if let Some(path) = resume.record.take() {
             let _ = std::fs::remove_file(path);
         }
         let (path, left) = left(pid);
@@ -247,7 +264,7 @@ fn supervise_with(
         };
         restore();
         match policy.next(Instant::now(), raw, &left) {
-            Ok(next) => (args, resume) = (next, Some(path)),
+            Ok(next) => (args, resume) = (next, Resume { record: Some(path), skip: policy.skip.clone() }),
             Err(message) => {
                 let _ = std::fs::remove_file(&path);
                 eprintln!("{message}");
@@ -264,11 +281,10 @@ mod sys {
     use std::ffi::OsString;
     use std::io::Write;
     use std::os::fd::BorrowedFd;
-    use std::path::Path;
     use std::process::ExitCode;
     use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
-    use super::{End, RESET, Spawned};
+    use super::{End, RESET, Resume, Spawned};
 
     /// The client, for the signals the parent passes on.
     static CLIENT: AtomicI32 = AtomicI32::new(0);
@@ -287,7 +303,7 @@ mod sys {
             |_, resume| match unsafe { libc::fork() } {
                 -1 => Spawned::Failed,
                 0 => {
-                    child(resume, me);
+                    child(resume.clone(), me);
                     Spawned::Client
                 }
                 pid => {
@@ -303,7 +319,7 @@ mod sys {
 
     /// In a new client: the signal dispositions it would have had, and what it resumes from. On Linux it dies with the
     /// parent, so a parent killed outright leaves no client on the terminal; elsewhere it outlives such a parent.
-    fn child(resume: Option<&Path>, parent: libc::pid_t) {
+    fn child(resume: Resume, parent: libc::pid_t) {
         // SAFETY: plain dispositions and process attributes, in a process of one thread.
         unsafe {
             for signal in [libc::SIGINT, libc::SIGQUIT, libc::SIGTERM, libc::SIGHUP] {
@@ -315,7 +331,7 @@ mod sys {
             }
         }
         let _ = parent;
-        let _ = super::CLIENT.set(resume.map(Path::to_path_buf));
+        let _ = super::CLIENT.set(resume);
     }
 
     /// In the parent: the terminal's interrupt keys reach the client, which owns them; a request to end goes to it.
@@ -412,7 +428,7 @@ mod sys {
     use std::io::Write;
     use std::process::ExitCode;
 
-    use super::{CHILD, End, RESET, RESUME, Spawned};
+    use super::{CHILD, End, RESET, RESUME, SKIP, Spawned};
 
     /// The parent is this binary again: a small binary of its own was not built (synthesis 4.5 prices both).
     pub fn supervise(raw: Vec<OsString>) -> Result<Vec<OsString>, ExitCode> {
@@ -424,8 +440,8 @@ mod sys {
             &raw,
             |args, resume| {
                 let mut command = std::process::Command::new(&exe);
-                command.args(&args[1..]).env(CHILD, "1");
-                match resume {
+                command.args(&args[1..]).env(CHILD, "1").env(SKIP, resume.skip.join(","));
+                match &resume.record {
                     Some(path) => command.env(RESUME, path),
                     None => command.env_remove(RESUME),
                 };
