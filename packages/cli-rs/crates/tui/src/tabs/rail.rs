@@ -30,6 +30,8 @@ pub struct Rail {
     rows: RefCell<Vec<(i32, i32, Option<String>)>>,
     pulses: RefCell<HashMap<(String, u8), Pulse>>,
     fades: RefCell<HashMap<String, MarkerFade>>,
+    /// Whether the last paint showed a compact tab's spinner, which no pulse ticks.
+    spinning: Cell<bool>,
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
@@ -50,6 +52,7 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
             rows: RefCell::default(),
             pulses: RefCell::default(),
             fades: RefCell::default(),
+            spinning: Cell::new(false),
         },
     )
     .shrink(0.0)
@@ -80,11 +83,16 @@ pub fn animating(rail: &Custom<Rail>) -> bool {
     rail.with(|rail| rail.pulses.borrow().values().any(Pulse::live))
 }
 
-/// Drops the pulses while the rail is hidden, as its tabs unmount.
+pub fn spinning(rail: &Custom<Rail>) -> bool {
+    rail.with(|rail| rail.spinning.get())
+}
+
+/// Drops the pulses and spinners while the rail is hidden, as its tabs unmount.
 pub fn forget(rail: &Custom<Rail>) {
     rail.with(|rail| {
         rail.pulses.borrow_mut().clear();
         rail.fades.borrow_mut().clear();
+        rail.spinning.set(false);
     });
 }
 
@@ -243,6 +251,7 @@ impl Component for Rail {
         let mut pulses = self.pulses.borrow_mut();
         let mut markers = self.fades.borrow_mut();
         let now = tui.app.now();
+        let mut spinning = false;
 
         if compact {
             let below = items
@@ -354,6 +363,7 @@ impl Component for Rail {
                     style = style.bold();
                 }
                 painter.text((width as i32 - glyph.width() as i32) / 2, y, &glyph, style);
+                spinning |= runs && animations && !numbers;
                 continue;
             }
 
@@ -524,7 +534,8 @@ impl Component for Rail {
                 && items.iter().any(|item| item.tab.session_id == *session)
                 && (!matches!(slot, 2 | 3) || last == Some(session.as_str()))
         });
-        if pulses.values().any(Pulse::live) {
+        self.spinning.set(spinning);
+        if spinning || pulses.values().any(Pulse::live) {
             crate::frame::wake(&tui);
         }
         drop(pulses);
