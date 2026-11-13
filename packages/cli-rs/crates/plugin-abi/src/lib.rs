@@ -70,8 +70,10 @@ pub const ABI_MAJOR: u32 = 1;
 /// [`HostRequest::Fetch`], [`HostRequest::Navigate`], [`HostRequest::Dialog`], [`HostRequest::Copy`]), and of mounts and
 /// the prompt ([`Request::Mount`], [`HostRequest::Interactive`], [`HostRequest::Shortcut`],
 /// [`HostRequest::DialogOpen`]), [`Dialog::Select`], [`Request::Wake`], [`Request::RouteMount`],
-/// [`HostRequest::StorageMerge`] and [`Request::FenceGone`].
-pub const ABI_MINOR: u32 = 4;
+/// [`HostRequest::StorageMerge`] and [`Request::FenceGone`]. 1.5 adds [`Dialog::Confirm`] and [`Dialog::Alert`], the
+/// box styling of [`Node::Box`] ([`Border`], [`Edges`], [`Overflow`]) and [`Layout`]'s heights and margins, and the
+/// composer: [`HostRequest::Composer`] and [`HostRequest::ComposerEdit`].
+pub const ABI_MINOR: u32 = 5;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
 pub const ENTRY: &str = "opencode_plugin_v1";
@@ -1377,6 +1379,50 @@ pub enum Dialog {
     /// A list to pick from, with a filter. Enter or a click closes it and runs its `action` with the option's value as
     /// the input; escape closes it.
     Select(Select),
+    /// 1.5: a question with `Cancel` and `Confirm` buttons (TS `dialog.confirm`). A 1.4 host shows nothing.
+    Confirm(Confirm),
+    /// 1.5: a message with `ok` (TS `dialog.alert`). A 1.4 host shows nothing.
+    Alert(Alert),
+}
+
+/// A [`Dialog::Confirm`]. `Confirm` is active as it opens; the arrows and tab move between the buttons, and enter or a
+/// click closes it and runs `action` with `true` for `Confirm` or `false` for `Cancel` as the input, as TS resolves
+/// `true` or `false`. Escape cancels. When another dialog replaces it, nothing runs, as TS resolves `undefined`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Confirm {
+    pub title: String,
+    /// Muted text under the title.
+    pub message: String,
+    /// The buttons' labels, which the host shows in title case.
+    #[serde(default, skip_serializing_if = "ConfirmLabel::is_default")]
+    pub label: ConfirmLabel,
+    pub action: Action,
+}
+
+/// The labels of a [`Confirm`]'s buttons; `confirm` and `cancel` when unset.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfirmLabel {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancel: Option<String>,
+}
+
+impl ConfirmLabel {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// A [`Dialog::Alert`]. Enter, a click on `ok`, escape, and another dialog that replaces it all close it, and then
+/// `action` runs, once, as TS resolves the alert's promise in each case.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Alert {
+    pub title: String,
+    /// Muted text under the title.
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<Action>,
 }
 
 /// A [`Dialog::Select`] (TS `dialog.select`).
