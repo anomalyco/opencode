@@ -77,6 +77,9 @@ export function createHomeSessionsController(home: HomeController) {
   const platform = usePlatform()
   const queryClient = useQueryClient()
   const global = useGlobal()
+  let deleteDialogTimer: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => clearTimeout(deleteDialogTimer))
 
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
@@ -608,7 +611,11 @@ export function createHomeSessionsController(home: HomeController) {
         exporter.exporting({ server, sessionID: session.id }),
       // Let the mobile menu finish dismissing before the dialog becomes the active popup layer.
       showDelete: (server: ServerConnection.Key, session: SessionInfo) => {
-        setTimeout(() => void dialog.show(() => <DeleteDialog server={server} session={session} />))
+        clearTimeout(deleteDialogTimer)
+        deleteDialogTimer = setTimeout(() => {
+          deleteDialogTimer = undefined
+          void dialog.show(() => <DeleteDialog server={server} session={session} />)
+        })
       },
     },
     tab: {

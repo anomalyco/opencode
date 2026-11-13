@@ -157,7 +157,6 @@ test.describe("mobile Home session menu", () => {
   const mobile = devices["Pixel 5"]
   test.use({
     viewport: mobile.viewport,
-    screen: mobile.screen,
     userAgent: mobile.userAgent,
     deviceScaleFactor: mobile.deviceScaleFactor,
     isMobile: mobile.isMobile,
@@ -169,9 +168,25 @@ test.describe("mobile Home session menu", () => {
     const target = row(page, fixture.expected.targetTitle)
     await expect(target).toBeVisible()
 
-    await target.dispatchEvent("contextmenu", { bubbles: true, clientX: 48, clientY: 12 })
-    await expect(page.getByRole("menuitem", { name: "Delete…" })).toBeVisible()
-    await page.getByRole("menuitem", { name: "Delete…" }).tap()
+    await target.dispatchEvent("pointerdown", {
+      bubbles: true,
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 48,
+      clientY: 12,
+      buttons: 1,
+    })
+    const deleteItem = page.getByRole("menuitem", { name: "Delete…" })
+    await expect(deleteItem).toBeVisible()
+    await target.dispatchEvent("pointerup", {
+      bubbles: true,
+      pointerType: "touch",
+      pointerId: 1,
+      clientX: 48,
+      clientY: 12,
+      buttons: 0,
+    })
+    await deleteItem.tap()
 
     await expect(page.getByRole("dialog")).toContainText(`Delete session "${fixture.expected.targetTitle}"?`)
   })
