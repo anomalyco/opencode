@@ -330,6 +330,82 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
     assert!(still, "a closed tab still ticks");
 }
 
+// A busy tab in the background animates with nothing else going on, and stops once it is idle. The strip and the
+// full rail pulse at 20 fps. The compact rail has no pulse: its spinner paints each step of TS's 80 ms interval,
+// 12.5 frames a second. Without a frame source of its own it stalled until input came (the user saw it step 2-3
+// times a second). A rail that hides while its tab works (the terminal narrows to the strip) leaves nothing ticking.
+#[test]
+fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
+    let execution = |kind: &str, seq: u64| {
+        let event = json!({
+            "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": format!("session.execution.{kind}"),
+            "durable": { "aggregateID": "ses_a", "seq": seq, "version": 1 },
+            "data": { "sessionID": "ses_a" },
+        });
+        serde_json::from_value(event).unwrap()
+    };
+    let vertical = json!({ "tabs": { "layout": "vertical" } });
+    for (name, config, compact, busy) in [
+        ("strip", json!({ "tabs": { "layout": "horizontal" } }), false, 160),
+        ("rail", vertical.clone(), false, 160),
+        ("compact rail", vertical, true, 100),
+        // A still glyph or a number needs no frames.
+        ("compact rail, no animations", json!({ "animations": false, "tabs": { "layout": "vertical" } }), true, 0),
+        ("compact rail, numbers", json!({ "tabs": { "layout": "vertical", "indicators": "numbers" } }), true, 0),
+    ] {
+        let h = mount(120, config);
+        h.open("ses_b");
+        h.wait_for("Write the docs");
+        if compact {
+            h.app.drag((41, 10), (5, 10));
+            assert!(h.app.wait_until(WAIT, || h.tui.frame.rail_width(&h.tui) == 6), "{name}");
+        }
+        // The first pass takes the startup's one-off timers. Idle, a retry of a read the fixture leaves unanswered
+        // may still paint once.
+        frames(&h);
+        assert!(frames(&h).len() <= 1, "{name}: idle");
+        // Off the spinner's steps, which count from the tabs' epoch.
+        h.app.advance(std::time::Duration::from_millis(30));
+        h.tui.data.apply(&[execution("started", 1)]);
+        if compact && busy > 0 {
+            // The change lands before the spinner first paints, so only that paint can ask for the next step.
+            assert!(h.app.wait_until(WAIT, || h.tui.tabs.status(&h.tui, "ses_a").busy), "{name}: not busy");
+            h.app.wait_until(std::time::Duration::from_millis(300), || false);
+            let text = h.app.render().text();
+            assert!(text.contains(|glyph| ('⠁'..='⣿').contains(&glyph)), "{name}: no spinner\n{text}");
+            h.app.advance(std::time::Duration::from_millis(80));
+            assert!(h.app.needs_frame(), "{name}: no step after 80 ms");
+        }
+        let busy_frames = frames(&h);
+        assert!((busy..=busy + 2).contains(&busy_frames.len()), "{name}: busy, {} frames", busy_frames.len());
+        if compact {
+            assert!(busy_frames.iter().all(|at| at % 80 == 0), "{name}: off the spinner's steps, {busy_frames:?}");
+        }
+        h.app.resize(60, 30);
+        h.tui.data.apply(&[execution("succeeded", 2)]);
+        frames(&h);
+        assert!(frames(&h).len() <= 1, "{name}: idle again");
+    }
+}
+
+/// The frames painted over 8 s without input, one each time the app asks for one, as `App::event_loop` does, in
+/// milliseconds since the tabs' epoch. The requests in flight land first: their replies are output, not idle.
+fn frames(h: &Tabs) -> Vec<u128> {
+    h.app.wait_until(std::time::Duration::from_millis(300), || {
+        h.app.render();
+        false
+    });
+    (0..8000)
+        .filter_map(|_| {
+            h.app.advance(std::time::Duration::from_millis(1));
+            h.app.needs_frame().then(|| {
+                h.app.render();
+                h.tui.app.now().duration_since(h.tui.tabs.epoch()).as_millis()
+            })
+        })
+        .collect()
+}
+
 #[test]
 fn a_split_panel_shows_beside_the_session_and_resizes() {
     let h = mount(140, json!({ "animations": false, "session": { "sidebar": "hide" } }));
