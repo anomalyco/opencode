@@ -80,6 +80,20 @@ test.each(channels)("channel identity for $channel", ({ channel, appId, feed }) 
   expect(config.deb?.fpm).not.toContain("--rpm-rpmbuild-define=_build_id_links none")
 })
 
+test.each([
+  { channel: "dev", inspect: false },
+  { channel: "beta", inspect: true },
+  { channel: "prod", inspect: false },
+])("Electron fuses for $channel", ({ channel, inspect }) => {
+  // Absent keys keep Electron's defaults: NODE_OPTIONS stays on, the asar and file: fuses stay as they are.
+  expect(load(channel).electronFuses).toEqual({
+    enableCookieEncryption: true,
+    runAsNode: false,
+    enableNodeCliInspectArguments: inspect,
+    resetAdHocDarwinSignature: true,
+  })
+})
+
 test("legacy Linux launcher stays hidden", async () => {
   const desktop = await Bun.file(path.join(import.meta.dirname, "resources/linux/opencode-desktop.desktop")).text()
   expect(desktop).toContain("Exec=/opt/OpenCode/ai.opencode %U")
