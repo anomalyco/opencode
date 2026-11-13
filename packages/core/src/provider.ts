@@ -117,6 +117,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/minimax/images", () => import("@opencode/ai/providers/minimax/images")],
   ["@opencode/ai/providers/minimax/messages", () => import("@opencode/ai/providers/minimax/messages")],
   ["@opencode/ai/providers/minimax/responses", () => import("@opencode/ai/providers/minimax/responses")],
+  ["@opencode/ai/providers/minimax/videos", () => import("@opencode/ai/providers/minimax/videos")],
   ["@opencode/ai/providers/mistral", () => import("@opencode/ai/providers/mistral")],
   ["@opencode/ai/providers/moonshot", () => import("@opencode/ai/providers/moonshot")],
   ["@opencode/ai/providers/moonshot/chat", () => import("@opencode/ai/providers/moonshot/chat")],

@@ -1036,8 +1036,8 @@ The hosted result is represented as a provider-executed tool call and a tool res
 Video generation is a job: `start` submits it and returns at once, and the caller decides when to read its `status`,
 fetch its `result`, or `cancel` it. Nothing polls for you. Every call after `start` takes the model and the job's
 `token`, plain JSON you can store and read back from another process, so recovering after a restart is the same call
-as a normal status read. Models come from `.video(...)` selectors on the `XAI`, `OpenRouter`, `Volcengine` and
-`BytePlus` facades.
+as a normal status read. Models come from `.video(...)` selectors on the `XAI`, `OpenRouter`, `Volcengine`,
+`BytePlus` and `MiniMax` facades.
 
 ```ts
 import { Effect } from "effect"
@@ -1104,6 +1104,18 @@ Provider notes:
   `omni_reference_task_type`, `return_last_frame` and the rest go into the body as-is. `cancel` sends `DELETE`, which
   only cancels a queued task: Ark refuses it for a running one and deletes the record of a finished one. Video URLs
   expire 24 hours after the task finished.
+- **MiniMax** (`MiniMax.configure(...).video(id)`, or `@opencode/ai/providers/minimax/videos`) serves two APIs and picks
+  one by model family: Hailuo and `*-01` models use v1, everything else (H3) uses v2. Video builds its `/v1` and `/v2`
+  paths on the API host, so a `baseURL` shared with images or chat (`https://api.minimax.cn/v1`) loses its trailing
+  `/v1`, and a bare host (`https://api.minimax.io`) works as is. On H3, `start`, `end` and `references` become `content[]` items with `first_frame`, `last_frame` and `reference_image` /
+  `reference_video` / `reference_audio` roles, MiniMax file refs become `mm_file://` URLs, `aspect: "auto"` becomes
+  `ratio: "adaptive"`, and `resolution` is uppercased (`480P`, `2K`). H3 requires `resolution` and `duration`, plus a
+  `ratio` for text-only prompts; nothing is filled in, so MiniMax rejects a request without them. H3 always has sound,
+  so `sound: false` fails before sending. On Hailuo, `start` and `end` map to `first_frame_image` and
+  `last_frame_image`, image references to `subject_reference`, and the result looks up the file's download URL, which
+  expires after one hour. Hailuo is silent and has no aspect field, so `sound: true`, an explicit `aspect`, and video
+  or audio references fail before sending. Cancel works on H3 (only while queued); Hailuo has no cancel. Native fields
+  such as `extra.prompt_expansion_mode` (H3), `prompt_optimizer` (Hailuo) and `callback_url` go under `providerOptions`.
 
 The promise client has the same calls, each accepting `{ signal }`:
 

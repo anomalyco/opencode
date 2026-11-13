@@ -533,6 +533,24 @@ const videos: ReadonlyArray<Case<VideoModel>> = [
     auth: ["authorization", "Bearer ark-key"],
     provider: "volcengine",
   },
+  {
+    name: "minimax",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/videos")
+      return model("MiniMax-H3-Lite", { ...shared, apiKey: "minimax-key" })
+    },
+    url: "https://api.minimax.io/v2/video_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
+  {
+    name: "minimax (minimax-cn, Hailuo)",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/videos")
+      return model("MiniMax-Hailuo-2.3", { ...shared, apiKey: "minimax-key", baseURL: "https://api.minimax.cn" })
+    },
+    url: "https://api.minimax.cn/v1/video_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
 ]
 
 describe("video entrypoints", () => {
