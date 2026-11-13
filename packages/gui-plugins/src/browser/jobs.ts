@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, untrack } from "solid-js"
-import { createLatest, usePlugin, type IpcClient } from "@opencode/plugin/gui"
+import { createKeyed, createLatest, usePlugin, type IpcClient } from "@opencode/plugin/gui"
 import type definition from "./index"
 import { BrowserProfile, type ExtensionCompatibility, type ProfileSource } from "./profile/ipc"
 import {
@@ -33,9 +33,12 @@ export type JobMessage = {
  * The browser profile as one surface drives it: the settings page, or the pane's import prompt. It runs the jobs
  * machine against main's Ipc, one job at a time, and reads the profile again after each. Call it in a component.
  *
- * `finished` runs once per job, when it ends, for what the surface does next, such as reloading the page.
+ * `finished` runs once per job, when it ends, for what the surface does next, such as reloading the page. `cookies`
+ * reads the summary again whenever the profile's cookies change, for a surface that shows the count.
  */
-export function createProfileJobs(input: { readonly finished?: (finished: Finished) => void } = {}) {
+export function createProfileJobs(
+  input: { readonly finished?: (finished: Finished) => void; readonly cookies?: boolean } = {},
+) {
   const ctx = usePlugin<typeof definition>()
   const live = ctx.use(BrowserProfile)
   const preferences = ctx.stores.preferences
@@ -104,7 +107,19 @@ export function createProfileJobs(input: { readonly finished?: (finished: Finish
   onCleanup(() => dispatch({ type: "disposed" }))
 
   const sources = createLatest(key, (_value, signal) => client()?.sources({ signal }) ?? Promise.resolve([]))
-  const summary = createLatest(key, (_value, signal) => client()?.summary({ signal }) ?? Promise.resolve(undefined))
+  const [cookies, setCookies] = createSignal(0)
+
+  // Main says when browsing changed the cookies; the SDK removes the listener when the Ipc's generation ends.
+  if (input.cookies) createKeyed(client, (current) => current.on("cookies", () => setCookies((value) => value + 1)))
+
+  const summary = createLatest(
+    () => {
+      const current = key()
+
+      return current === undefined ? undefined : `${current}:${cookies()}`
+    },
+    (_value, signal) => client()?.summary({ signal }) ?? Promise.resolve(undefined),
+  )
 
   const source = (job: Job) =>
     job.type === "import-browser" ? sources.latest?.find((item) => item.id === job.source) : undefined

@@ -34,6 +34,7 @@ const setup: Plugin.MainSetup = (ctx) => {
           storage: ctx.storage,
           log: ctx.log,
           changed: () => profiles.changed(),
+          cookiesChanged: () => profiles.emit("cookies", {}),
         }),
       )
       .then((value) => {

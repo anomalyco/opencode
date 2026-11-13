@@ -208,4 +208,8 @@ export const BrowserProfile = Ipc.define({
     },
     enable: { input: Schema.Struct({ id: text(64), enabled: Schema.Boolean }) },
   },
+  events: {
+    /** The profile's cookies changed, once a burst of changes settles: read `summary` again. */
+    cookies: Schema.Struct({}),
+  },
 })

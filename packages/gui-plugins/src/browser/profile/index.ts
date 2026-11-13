@@ -44,10 +44,26 @@ export type Profile = Awaited<ReturnType<typeof createBrowserProfile>>
  * server's network, which Chromium sets per partition, so they browse in their own partition that `link` keeps in step
  * with the profile's cookies.
  */
-export async function createBrowserProfile(input: { storage: Storage; log: Log; changed: () => void }) {
+export async function createBrowserProfile(input: {
+  storage: Storage
+  log: Log
+  changed: () => void
+  cookiesChanged: () => void
+}) {
   const session = electron.session.fromPartition(PARTITION)
   session.setUserAgent(browserUserAgent(session.getUserAgent()))
   const persistent = cookiesPersist(session)
+  let settling: ReturnType<typeof setTimeout> | undefined
+
+  // A page sets or clears cookies in bursts; the cookie count hears once the burst settles. The start-up probe is no
+  // one's cookie, so it never moves the count.
+  const cookiesChanged = (_event: Electron.Event, cookie: Electron.Cookie) => {
+    if (cookie.domain?.replace(/^\./, "") === PROBE_COOKIE.host) return
+    clearTimeout(settling)
+    settling = setTimeout(input.cookiesChanged, 400)
+  }
+
+  session.cookies.on("changed", cookiesChanged)
   const stored = input.storage.store("extensions", { schema: Schema.Array(StoredExtension), initial: [] })
   const directory = path.join(app.getPath("userData"), "browser-extensions")
   const errors = new Map<string, string>()
@@ -399,6 +415,8 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       }
     },
     dispose() {
+      session.cookies.off("changed", cookiesChanged)
+      clearTimeout(settling)
       stopFileGuard()
       apis.dispose()
       roots.clear()

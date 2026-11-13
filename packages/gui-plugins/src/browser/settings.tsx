@@ -20,6 +20,7 @@ export default function BrowserSettings() {
   const [results, setResults] = createSignal<ReadonlyMap<string, JobMessage>>(new Map())
 
   const jobs = createProfileJobs({
+    cookies: true,
     finished(finished) {
       const job = finished.job
       const message = jobs.describe(finished)
