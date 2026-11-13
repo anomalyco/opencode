@@ -24,7 +24,11 @@ type Entry = {
 // A box edge this many CSS px from the window edge follows it while the renderer's layout catches up.
 const WINDOW_GUTTER = 24
 
+// A still above MAX_STILL_PIXELS is downscaled to it. Electron cannot capture below native density,
+// so anything above MAX_CAPTURE_PIXELS is not captured at all.
 const MAX_STILL_PIXELS = 16_000_000
+
+const MAX_CAPTURE_PIXELS = 64_000_000
 
 /**
  * The web pages main plugins hand to the host. Each stays hidden until its window's renderer lays
@@ -323,8 +327,18 @@ async function capture(entry: Entry) {
   // Even a small cutout needs a still of the full view at native density.
   const scale = screen.getDisplayMatching((entry.clip?.window ?? entry.window).getBounds()).scaleFactor
 
-  if (width <= 0 || height <= 0 || Math.ceil(width * scale) * Math.ceil(height * scale) > MAX_STILL_PIXELS) return
+  if (width <= 0 || height <= 0 || Math.ceil(width * scale) * Math.ceil(height * scale) > MAX_CAPTURE_PIXELS) return
   const image = await entry.view.webContents.capturePage({ x: 0, y: 0, width, height })
 
-  return image.isEmpty() ? undefined : image
+  if (image.isEmpty()) return
+  const size = image.getSize()
+  const ratio = Math.sqrt(MAX_STILL_PIXELS / (size.width * size.height))
+
+  if (ratio >= 1) return image
+
+  return image.resize({
+    width: Math.max(1, Math.floor(size.width * ratio)),
+    height: Math.max(1, Math.floor(size.height * ratio)),
+    quality: "good",
+  })
 }
