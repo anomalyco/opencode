@@ -52,16 +52,14 @@ export function cookieDetails(cookie: ImportedCookie, now = Date.now() / 1000) {
   if (!host || (!cookie.name && !cookie.value)) return undefined
 
   if (cookie.expires !== undefined && cookie.expires <= now) return undefined
-  const path = cookie.path.startsWith("/") ? cookie.path : "/"
-  const bracketed = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host
   // A host-only cookie takes its host from the URL; `__Host-` cookies must stay host-only.
   const domain = cookie.host.startsWith(".") && !cookie.name.startsWith("__Host-") ? cookie.host : undefined
 
   const details: Electron.CookiesSetDetails = {
-    url: `${cookie.secure ? "https" : "http"}://${bracketed}${path}`,
+    url: cookieURL(cookie),
     name: cookie.name,
     value: cookie.value,
-    path,
+    path: cookie.path.startsWith("/") ? cookie.path : "/",
     secure: cookie.secure,
     httpOnly: cookie.httpOnly,
     sameSite: cookie.sameSite,
@@ -72,6 +70,29 @@ export function cookieDetails(cookie: ImportedCookie, now = Date.now() / 1000) {
   if (cookie.expires !== undefined) details.expirationDate = cookie.expires
 
   return details
+}
+
+/** The address a cookie is sent to: its host, in brackets when it is an IPv6 address, and its path. */
+export function cookieURL(cookie: Pick<ImportedCookie, "host" | "path" | "secure">) {
+  const host = cookie.host.replace(/^\./, "")
+  const bracketed = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host
+
+  return `${cookie.secure ? "https" : "http"}://${bracketed}${cookie.path.startsWith("/") ? cookie.path : "/"}`
+}
+
+/** A cookie of an Electron session, in the shape imports use, so one builder writes both. */
+export function fromElectron(cookie: Electron.Cookie): ImportedCookie {
+  return {
+    // Chromium stores a domain cookie's domain with its leading dot and a host-only cookie's without.
+    host: cookie.domain ?? "",
+    name: cookie.name,
+    value: cookie.value,
+    path: cookie.path ?? "/",
+    secure: cookie.secure ?? false,
+    httpOnly: cookie.httpOnly ?? false,
+    expires: cookie.session ? undefined : cookie.expirationDate,
+    sameSite: cookie.sameSite,
+  }
 }
 
 const JsonCookie = Schema.Struct({

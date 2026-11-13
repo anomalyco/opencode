@@ -9,6 +9,7 @@ import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type Co
 import { snapshotDatabase } from "./database"
 import { createExtensionApis } from "./extension-api"
 import { createFileGuard } from "./file-guard"
+import { createCookieMirror, type CookieMirror } from "./link"
 import {
   displayName,
   extensionIcon,
@@ -69,6 +70,27 @@ export async function createBrowserProfile(input: {
   session.cookies.on("changed", cookiesChanged)
   const stored = input.storage.store("extensions", { schema: Schema.Array(StoredExtension), initial: [] })
   const directory = path.join(app.getPath("userData"), "browser-extensions")
+  // Off until the user turns it on: a remote server's operator could use every sign-in and write cookies back.
+  const sharing = input.storage.store("remote-sign-ins", { schema: Schema.Boolean, initial: false })
+  // Remote servers' partitions, each with its cookie mirror while sign-ins are shared.
+  const links = new Map<Session, CookieMirror | undefined>()
+
+  const mirror = async (other: Session) => {
+    if (links.get(other) || !links.has(other)) return
+    const started = createCookieMirror({ profile: session, other })
+    links.set(other, started)
+    await started.started
+  }
+
+  const unmirror = async (other: Session, forget: boolean) => {
+    const current = links.get(other)
+
+    if (!current) return
+
+    if (links.has(other)) links.set(other, undefined)
+    await current.stop(forget)
+  }
+
   const errors = new Map<string, string>()
   const details = new Map<string, ProfileExtension>()
   const roots = new Map<number, () => readonly string[]>()
@@ -282,15 +304,13 @@ export async function createBrowserProfile(input: {
       const saved = await persistent
       const cookies = await session.cookies.get({})
 
-      return {
-        cookies: cookies.length,
-        sites: new Set(cookies.map((cookie) => siteOf(cookie.domain ?? ""))).size,
-        persistent: saved,
-      }
+      return { cookies: cookies.length, persistent: saved }
     },
     async clear() {
       await session.clearStorageData()
       await session.clearCache()
+      // Remote servers' pages sign out too, whether or not they shared the profile's sign-ins.
+      await Promise.all([...links.keys()].map((other) => other.clearStorageData()))
     },
     async browserExtensions(source: string, profile: string) {
       const folder = await chromiumProfileDirectory(source, profile)
@@ -388,47 +408,38 @@ export async function createBrowserProfile(input: {
       if (!enabled) apis.forget(id)
       await refresh()
     },
+    /** Whether remote servers' pages share the profile's sign-ins; see `link`. */
+    remoteSignIns: () => sharing.value,
     /**
-     * Keeps another partition's cookies in step with the profile's, both ways, for pages that need a remote server's
-     * network. Returns the unlink. Site storage and extensions stay with the profile: Chromium shares neither across
-     * partitions, and in-memory partitions cannot load extensions.
+     * Turns sharing sign-ins with remote servers on or off for every linked partition at once. Turning it off stops
+     * each mirror and removes the shared cookies from the remote partitions.
+     */
+    async shareSignIns(enabled: boolean) {
+      sharing.set(enabled)
+      await Promise.all([...links.keys()].map((other) => (enabled ? mirror(other) : unmirror(other, true))))
+      input.changed()
+    },
+    /**
+     * Registers the partition of a remote server's pages, which need that server's network. Only while the user
+     * shares sign-ins with remote servers (`remoteSignIns`) does its cookie store mirror the profile's, both ways;
+     * otherwise it gets no cookie of the profile and writes none back. Returns the unlink. Site storage and extensions
+     * stay with the profile: Chromium shares neither across partitions, and in-memory partitions cannot load
+     * extensions.
      */
     async link(other: Session) {
       other.setUserAgent(session.getUserAgent())
-      const pending = new Set<string>()
+      links.set(other, undefined)
 
-      const mirror =
-        (target: Session) => (_event: Electron.Event, cookie: Electron.Cookie, cause: string, removed: boolean) => {
-          // An overwrite removes the old value just before it inserts the new one, which the insert carries over.
-          if (cause === "overwrite" || cause === "expired-overwrite") return
-          const key = `${cookie.domain}\n${cookie.path}\n${cookie.name}\n${removed ? "" : cookie.value}`
-
-          // The write this mirror made comes back as a change of the target; it goes no further.
-          if (pending.delete(key)) return
-          pending.add(key)
-
-          const write = removed
-            ? target.cookies.remove(electronCookieURL(cookie), cookie.name)
-            : target.cookies.set(electronCookieDetails(cookie))
-
-          void write.catch(() => pending.delete(key))
-        }
-
-      const toOther = mirror(other)
-      const toProfile = mirror(session)
-      const cookies = await session.cookies.get({})
-      await Promise.all(
-        cookies.map((cookie) => other.cookies.set(electronCookieDetails(cookie)).catch(() => undefined)),
-      )
-      session.cookies.on("changed", toOther)
-      other.cookies.on("changed", toProfile)
+      if (sharing.value) await mirror(other)
 
       return () => {
-        session.cookies.off("changed", toOther)
-        other.cookies.off("changed", toProfile)
+        void unmirror(other, false)
+        links.delete(other)
       }
     },
     dispose() {
+      links.forEach((_mirror, other) => void unmirror(other, false))
+      links.clear()
       session.cookies.off("changed", cookiesChanged)
       clearTimeout(settling)
       stopFileGuard()
@@ -503,35 +514,4 @@ function parseCrxSafely(data: Uint8Array) {
   } catch {
     return undefined
   }
-}
-
-function electronCookieDetails(cookie: Electron.Cookie) {
-  const details: Electron.CookiesSetDetails = {
-    url: electronCookieURL(cookie),
-    name: cookie.name,
-    value: cookie.value,
-    path: cookie.path,
-    secure: cookie.secure,
-    httpOnly: cookie.httpOnly,
-    sameSite: cookie.sameSite,
-  }
-
-  // A host-only cookie takes its host from the URL, and a session cookie has no expiry.
-  if (!cookie.hostOnly) details.domain = cookie.domain
-
-  if (!cookie.session) details.expirationDate = cookie.expirationDate
-
-  return details
-}
-
-function electronCookieURL(cookie: Electron.Cookie) {
-  const host = (cookie.domain ?? "").replace(/^\./, "")
-  const bracketed = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host
-
-  return `${cookie.secure ? "https" : "http"}://${bracketed}${cookie.path ?? "/"}`
-}
-
-/** The registrable part of a cookie's domain, roughly: its last two labels. Only counts sites for the summary. */
-function siteOf(domain: string) {
-  return domain.replace(/^\./, "").split(".").slice(-2).join(".")
 }

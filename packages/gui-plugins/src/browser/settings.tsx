@@ -70,6 +70,19 @@ export default function BrowserSettings() {
             onChange={(links) => preferences.set({ ...preferences.value, links })}
           />
         </ui.SettingsRow>
+        <ui.SettingsRow
+          id="settings-browser-remote"
+          title={ctx.t("settings.remote.title")}
+          description={ctx.t("settings.remote.description")}
+        >
+          <ui.Switch
+            label={ctx.t("settings.remote.title")}
+            hideLabel
+            checked={jobs.remoteSignIns() ?? false}
+            disabled={jobs.remoteSignIns() === undefined}
+            onChange={jobs.shareSignIns}
+          />
+        </ui.SettingsRow>
       </ui.SettingsSection>
       <ui.SettingsSection title={ctx.t("settings.import.title")} footer={<Note>{ctx.t("settings.import.note")}</Note>}>
         <Show when={jobs.unsaved()}>

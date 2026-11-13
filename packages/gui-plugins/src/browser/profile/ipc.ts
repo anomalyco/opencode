@@ -152,10 +152,15 @@ const SourceProfile = { source: text(64), profile: text(512) }
 /**
  * The desktop browser's profile: one set of cookies, site data and extensions for every session, project and server
  * of this desktop app. Its state lists the extensions; it changes after every install, removal and toggle.
+ * `remoteSignIns` is whether remote servers' pages share the profile's cookies, both ways; off by default, and
+ * undefined until the profile loads.
  */
 export const BrowserProfile = Ipc.define({
   id: "browser.profile",
-  state: Schema.Struct({ extensions: Schema.Array(ProfileExtension) }),
+  state: Schema.Struct({
+    extensions: Schema.Array(ProfileExtension),
+    remoteSignIns: Schema.optional(Schema.Boolean),
+  }),
   methods: {
     sources: { output: Schema.Array(ProfileSource) },
     importBrowser: { input: Schema.Struct(SourceProfile), output: ImportResult },
@@ -165,7 +170,9 @@ export const BrowserProfile = Ipc.define({
      * The stored cookies and their sites. `persistent` is false when cookies never reach disk: with cookie encryption
      * on, Chromium keeps them in memory only while the system key store refuses its key, so sign-ins end with the app.
      */
-    summary: { output: Schema.Struct({ cookies: Count, sites: Count, persistent: Schema.Boolean }) },
+    summary: { output: Schema.Struct({ cookies: Count, persistent: Schema.Boolean }) },
+    /** Turns sharing the profile's sign-ins with remote servers' pages on or off; see the state's `remoteSignIns`. */
+    shareSignIns: { input: Schema.Struct({ enabled: Schema.Boolean }) },
     /** Signs out everywhere: deletes every cookie, cache and site's stored data. Extensions stay. */
     clear: {},
     /** The extensions a Chromium profile has installed. */

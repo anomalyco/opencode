@@ -130,7 +130,8 @@ const setup: Plugin.MainSetup = (ctx) => {
 
   // Until a pane or the settings page loads the profile, windows list no extensions; loading pushes the real list.
   const profiles = ctx.provide(BrowserProfile, {
-    state: () => ({ extensions: loaded.value?.extensions() ?? [] }),
+    state: () => ({ extensions: loaded.value?.extensions() ?? [], remoteSignIns: loaded.value?.remoteSignIns() }),
+    shareSignIns: async (input) => (await profile()).shareSignIns(input.enabled),
     sources: async () => (await profile()).sources(),
     importBrowser: async (input) => (await profile()).importBrowser(input.source, input.profile),
     importFile: async (input) => (await profile()).importFile(input.path),

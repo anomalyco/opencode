@@ -123,10 +123,13 @@ export default {
     "OpenCode cannot save sign-ins: macOS did not give it its Keychain key. Sign-ins made here end when OpenCode quits, so importing is off. Quit OpenCode, open it again, and choose Allow when macOS asks.",
   "settings.title": "Browser",
   "settings.description":
-    "One browser for every session, project and server in this app. Sign-ins, site data and extensions stay on this device.",
+    "One browser for every session, project and server in this app. Sign-ins, site data and extensions stay on this device, unless you share sign-ins with remote servers.",
   "settings.links.title": "Open links in the browser pane",
   "settings.links.description":
     "Web links in a session open next to the conversation. To use your system browser, hold Shift while you click.",
+  "settings.remote.title": "Share sign-ins with remote servers",
+  "settings.remote.description":
+    "Remote servers can use your sign-ins: their pages open signed in to your sites, and those sites can change your sign-ins on this device. Turn this on only for servers you trust.",
   "settings.import.title": "Import sign-ins",
   "settings.import.note": "Copies cookies only. The other browser keeps its own.",
   "settings.import.none": "No other browser found on this computer",

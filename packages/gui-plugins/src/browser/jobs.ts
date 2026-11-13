@@ -212,6 +212,10 @@ export function createProfileJobs(
     sourcesLoaded: () => sources.latest !== undefined,
     summary: () => summary.latest,
     extensions: () => client()?.state()?.extensions ?? [],
+    /** Whether remote servers share the profile's sign-ins; undefined until main's profile answers. */
+    remoteSignIns: () => client()?.state()?.remoteSignIns,
+    /** The switch shows main's state, so a call that fails leaves it where it was. */
+    shareSignIns: (enabled: boolean) => void client()?.shareSignIns({ enabled }, { signal: ctx.signal }).catch(() => undefined),
     /** The extensions one Chromium profile has installed. */
     browserExtensions: (source: string, profile: string, signal: AbortSignal) =>
       client()?.browserExtensions({ source, profile }, { signal }) ?? Promise.resolve([]),

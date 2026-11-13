@@ -278,6 +278,11 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     get entries() {
       return [
         { id: "settings-browser-links", title: ctx.t("settings.links.title"), keywords: "links open system browser" },
+        {
+          id: "settings-browser-remote",
+          title: ctx.t("settings.remote.title"),
+          keywords: "remote server sign in cookies share",
+        },
         { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out" },
         {
           id: "settings-browser-import",
