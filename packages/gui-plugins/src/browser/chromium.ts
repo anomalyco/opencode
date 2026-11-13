@@ -831,7 +831,9 @@ export function createBrowserPage(
           signal.removeEventListener("abort", cancel)
         }
 
-        abortError(signal)
+        // The load event comes just before Chromium says the tab stopped loading; report the tab after that. A frame that
+        // still loads after a moment is reported as loading, which it is.
+        await waitFor(() => !contents.isLoading(), signal, 2_000).catch(() => abortError(signal))
 
         return result(state())
       }
