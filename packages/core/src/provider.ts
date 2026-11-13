@@ -93,6 +93,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
   ["@opencode/ai/providers/google/embeddings", () => import("@opencode/ai/providers/google/embeddings")],
   ["@opencode/ai/providers/google/images", () => import("@opencode/ai/providers/google/images")],
+  ["@opencode/ai/providers/google/videos", () => import("@opencode/ai/providers/google/videos")],
   ["@opencode/ai/providers/google-vertex", () => import("@opencode/ai/providers/google-vertex")],
   ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
   ["@opencode/ai/providers/google-vertex/gemini", () => import("@opencode/ai/providers/google-vertex/gemini")],

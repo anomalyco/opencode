@@ -1037,7 +1037,7 @@ Video generation is a job: `start` submits it and returns at once, and the calle
 fetch its `result`, or `cancel` it. Nothing polls for you. Every call after `start` takes the model and the job's
 `token`, plain JSON you can store and read back from another process, so recovering after a restart is the same call
 as a normal status read. Models come from `.video(...)` selectors on the `XAI`, `OpenRouter`, `Volcengine`,
-`BytePlus` and `MiniMax` facades.
+`BytePlus`, `MiniMax` and `Google` facades.
 
 ```ts
 import { Effect } from "effect"
@@ -1116,6 +1116,15 @@ Provider notes:
   expires after one hour. Hailuo is silent and has no aspect field, so `sound: true`, an explicit `aspect`, and video
   or audio references fail before sending. Cancel works on H3 (only while queued); Hailuo has no cancel. Native fields
   such as `extra.prompt_expansion_mode` (H3), `prompt_optimizer` (Hailuo) and `callback_url` go under `providerOptions`.
+- **Google** (`Google.video("gemini-omni-1.2-flash")`) starts a background Gemini Omni interaction. Omni has no
+  role field for media, so `start`, `end` and `references` go into `input` in that order (images, plus video
+  references), and `generation_config.video_config.task` is set to `image_to_video` for frames only or
+  `reference_to_video` for references only; with both, the prompt decides. `duration` becomes
+  `response_format.duration` (`"3s"`), and `aspect` and `resolution` go to `response_format` as is (resolution
+  lowercased); `aspect: "auto"` leaves the ratio out. It rejects `end` without `start` (a lone image reads as the
+  first frame) and `sound: false` (Omni always generates audio). Videos come back as inline bytes. `cancel` posts to
+  `/interactions/{id}/cancel`. `providerOptions` takes native Interactions fields, such as `previous_interaction_id`
+  to edit or extend a generated video, `generation_config.video_config.task`, `service_tier` and `webhook_config`.
 
 The promise client has the same calls, each accepting `{ signal }`:
 
