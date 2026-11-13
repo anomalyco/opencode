@@ -20,7 +20,7 @@ use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 /// The sample plugin (`crates/plugin/examples/sample`) built with `features`, once per test run.
-fn build(features: &str) -> Vec<u8> {
+pub(crate) fn build(features: &str) -> Vec<u8> {
     static BUILT: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
     let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((_, library)) = built.iter().find(|(known, _)| known == features) {
@@ -73,7 +73,7 @@ fn messages(text: &str) -> Value {
     ])
 }
 
-struct Plugins {
+pub(crate) struct Plugins {
     harness: Harness,
     plugin: std::path::PathBuf,
     _root: opencode_util::temp::TempDir,
@@ -82,7 +82,7 @@ struct Plugins {
 deref_harness!(Plugins);
 
 /// The TUI on `route` with the sample's `build` in `<config>/plugins/sample`.
-fn open(route: Route, text: &str, build: &[u8]) -> Plugins {
+pub(crate) fn open(route: Route, text: &str, build: &[u8]) -> Plugins {
     open_with(route, text, build, |_| None)
 }
 

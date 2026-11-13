@@ -3508,4 +3508,153 @@ mod tests {
         assert_eq!(setup.handle(serde_json::from_str(r#"{"type":"wake"}"#).unwrap()).unwrap(), serde_json::Value::Null);
         assert_eq!(runs.get(), 2);
     }
+
+    // Expected: what 1.5 adds reads back as written and leaves out what is unset, so a 1.4 box, layout and dialog keep
+    // their JSON byte for byte, and 1.4 JSON reads as the 1.5 defaults.
+    #[test]
+    fn the_1_5_additions_round_trip_and_keep_the_1_4_wire() {
+        let rows: [(&str, serde_json::Value); 9] = [
+            (r#"{"type":"box","children":[]}"#, serde_json::to_value(Node::column(Vec::new())).unwrap()),
+            (
+                r#"{"type":"box","children":[],"border":{}}"#,
+                serde_json::to_value(Node::column(Vec::new()).border(Border::new())).unwrap(),
+            ),
+            (
+                r#"{"type":"box","children":[],"border":{"sides":{"top":false,"right":false,"bottom":false,"left":true},"style":"heavy","color":"text.muted","title":"t","title_align":"center"}}"#,
+                serde_json::to_value(
+                    Node::column(Vec::new()).border(
+                        Border::new()
+                            .sides(Sides { left: true, ..Sides::NONE })
+                            .style(BorderStyle::Heavy)
+                            .color("text.muted")
+                            .title("t")
+                            .title_align(TitleAlign::Center),
+                    ),
+                )
+                .unwrap(),
+            ),
+            (
+                r#"{"type":"box","children":[],"padding_sides":{"right":1,"left":2},"wrap":true,"overflow":"hidden"}"#,
+                serde_json::to_value(
+                    Node::column(Vec::new())
+                        .padding_sides(Edges::new(0, 1, 0, 2))
+                        .flex_wrap()
+                        .overflow(Overflow::Hidden),
+                )
+                .unwrap(),
+            ),
+            (
+                r#"{"height":{"cells":5},"min_height":{"percent":10.0},"max_height":{"cells":8},"margin":{"top":-1}}"#,
+                serde_json::to_value(
+                    Layout::default()
+                        .height(Width::Cells(5))
+                        .min_height(Width::Percent(10.0))
+                        .max_height(Width::Cells(8))
+                        .margin(Edges::new(-1, 0, 0, 0)),
+                )
+                .unwrap(),
+            ),
+            (
+                r#"{"type":"confirm","title":"T","message":"M","action":{"type":"command","name":"x.a"}}"#,
+                serde_json::to_value(Dialog::Confirm(Confirm {
+                    title: "T".into(),
+                    message: "M".into(),
+                    label: ConfirmLabel::default(),
+                    action: Action::Command { name: "x.a".into(), input: None },
+                }))
+                .unwrap(),
+            ),
+            (
+                r#"{"type":"alert","title":"T","message":"M","action":{"type":"command","name":"x.a"}}"#,
+                serde_json::to_value(Dialog::Alert(Alert {
+                    title: "T".into(),
+                    message: "M".into(),
+                    action: Some(Action::Command { name: "x.a".into(), input: None }),
+                }))
+                .unwrap(),
+            ),
+            (r#"{"type":"composer"}"#, serde_json::to_value(HostRequest::Composer).unwrap()),
+            (
+                r#"{"type":"composer-edit","edit":{"type":"insert","text":"a"}}"#,
+                serde_json::to_value(HostRequest::ComposerEdit { edit: ComposerEdit::Insert { text: "a".into() } })
+                    .unwrap(),
+            ),
+        ];
+        for (json, value) in &rows {
+            assert_eq!(value.to_string(), *json);
+        }
+        let node: Node = serde_json::from_str(rows[3].0).unwrap();
+        assert_eq!(serde_json::to_string(&node).unwrap(), rows[3].0);
+        let layout: Layout = serde_json::from_str(rows[4].0).unwrap();
+        assert_eq!(serde_json::to_string(&layout).unwrap(), rows[4].0);
+        for json in [rows[5].0, rows[6].0] {
+            assert_eq!(serde_json::to_string(&serde_json::from_str::<Dialog>(json).unwrap()).unwrap(), json);
+        }
+        let label = r#"{"type":"confirm","title":"T","message":"M","label":{"confirm":"yes"},"action":{"type":"command","name":"x.a"}}"#;
+        let Dialog::Confirm(confirm) = serde_json::from_str(label).unwrap() else { panic!("not a confirm") };
+        assert_eq!(confirm.label, ConfirmLabel { confirm: Some("yes".into()), cancel: None });
+        let edits = [ComposerEdit::Set { text: "s".into() }, ComposerEdit::Submit];
+        assert_eq!(serde_json::to_string(&edits).unwrap(), r#"[{"type":"set","text":"s"},{"type":"submit"}]"#);
+        let composer = Composer { text: "é".into(), cursor: 2, focused: true };
+        let json = r#"{"text":"é","cursor":2,"focused":true}"#;
+        assert_eq!(serde_json::to_string(&composer).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Composer>(json).unwrap(), composer);
+        // A 1.4 box's JSON reads as a box with none of the 1.5 properties.
+        let old = r#"{"type":"box","row":true,"padding":[1,0],"layout":{"grow":true},"children":[]}"#;
+        assert_eq!(
+            serde_json::from_str::<Node>(old).unwrap(),
+            Node::row(Vec::new()).padding(1, 0).layout(Layout::default().grow())
+        );
+    }
+
+    /// A 1.4 host's `call`: it knows no request of 1.5, which it answers with an error, as `serde` refuses an unknown
+    /// tag; it counts the requests it knows.
+    unsafe extern "C" fn host_1_4(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+        // SAFETY: the test passes a live counter and the request's bytes.
+        let (known, request) = unsafe { (&*ctx.cast::<std::sync::atomic::AtomicUsize>(), request.as_slice()) };
+        let text = String::from_utf8_lossy(request);
+        let newer = ["\"composer\"", "\"composer-edit\"", "\"confirm\"", "\"alert\""];
+        let (status, reply) = match newer.iter().any(|tag| text.contains(&format!("\"type\":{tag}"))) {
+            true => (ERROR, b"unsupported host request (host ABI 1.4)".to_vec()),
+            false => {
+                known.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                (OK, b"null".to_vec())
+            }
+        };
+        unsafe { *out = Owned::from_vec(reply) };
+        status
+    }
+
+    unsafe extern "C" fn free_vec(owned: Owned) {
+        drop(unsafe { owned.into_vec() });
+    }
+
+    // Expected: a 1.5 plugin on a 1.4 host gets what that host offers: no composer, and an edit, a confirm and an alert
+    // that do nothing and fail nothing, while the 1.4 requests still go through.
+    #[test]
+    fn a_1_5_plugin_on_a_1_4_host_gets_what_the_host_offers() {
+        let known = std::sync::atomic::AtomicUsize::new(0);
+        let api = HostApi {
+            size: size_of::<HostApi>(),
+            major: 1,
+            minor: 4,
+            ctx: std::ptr::from_ref(&known).cast_mut().cast(),
+            call: Some(host_1_4),
+            free: Some(free_vec),
+            theme_mode: None,
+            wake: None,
+        };
+        let host = HostHandle { api: &api };
+        assert_eq!(host.composer(), None);
+        host.edit_composer(ComposerEdit::Submit);
+        let action = Action::Command { name: "x.a".into(), input: None };
+        let confirm =
+            Confirm { title: "T".into(), message: "M".into(), label: ConfirmLabel::default(), action: action.clone() };
+        host.dialog(Dialog::Confirm(confirm));
+        host.dialog(Dialog::Alert(Alert { title: "T".into(), message: "M".into(), action: None }));
+        assert_eq!(known.load(std::sync::atomic::Ordering::SeqCst), 0);
+        host.dialog(Dialog::Prompt { title: "T".into(), placeholder: None, action });
+        host.toast(Toast::new(Variant::Info, "a"));
+        assert_eq!(known.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
 }
