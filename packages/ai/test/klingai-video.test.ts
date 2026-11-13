@@ -220,6 +220,17 @@ describe("ai.video.start / Kling", () => {
       request: { model, start: "https://e.test/a.png", providerOptions: { endpoint: "text-to-video" as const } },
       message: "no start or end frame",
     },
+    {
+      name: "native contents sent to an explicit text-to-video endpoint",
+      request: {
+        model,
+        providerOptions: {
+          endpoint: "text-to-video" as const,
+          contents: [{ type: "element", element_id: "el_1", id: "element_1" }],
+        },
+      },
+      message: "no contents input",
+    },
   ])
     it.effect(`rejects ${rejected.name} before sending`, () =>
       Effect.gen(function* () {

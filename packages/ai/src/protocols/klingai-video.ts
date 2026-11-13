@@ -169,6 +169,8 @@ const fromRequest = Effect.fn("KlingVideo.fromRequest")(function* (request: Requ
     )
   if (endpoint === "text-to-video" && (request.start !== undefined || request.end !== undefined))
     return yield* route.unsupported("video.frames", `${route.name} text-to-video has no start or end frame input`)
+  if (endpoint === "text-to-video" && request.providerOptions?.contents !== undefined)
+    return yield* route.unsupported("video.contents", `${route.name} text-to-video has no contents input`)
   const { endpoint: _endpoint, contents: extra, ...native } = request.providerOptions ?? {}
   const first = request.start === undefined ? [] : [{ type: "first_frame", url: yield* image(request.start) }]
   const last = request.end === undefined ? [] : [{ type: "last_frame", url: yield* image(request.end) }]

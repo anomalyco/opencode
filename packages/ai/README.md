@@ -1094,7 +1094,7 @@ Provider notes:
   `contents`; `duration`, `aspect`, `resolution` go to `settings`, `aspect: "auto"` is `adaptive` (left out on
   image-to-video, where the start frame sets the shape), and `sound` is `settings.audio` `native` or `off`. Inline
   images go as bare base64. Reference audio, inline reference videos, and references on models without an Omni
-  endpoint (`kling-3.0`, `kling-3.0-turbo`, Kling 2.x) are rejected, as are frames on an explicit text-to-video endpoint. `providerOptions.endpoint` overrides the
+  endpoint (`kling-3.0`, `kling-3.0-turbo`, Kling 2.x) are rejected, as are frames or `providerOptions.contents` on an explicit text-to-video endpoint. `providerOptions.endpoint` overrides the
   endpoint, `providerOptions.contents` adds native items (Elements, voices, `base_video`, `middle_frame`), and
   `providerOptions.settings` / `options` merge into the native objects, for example `settings.audio: "original"` or
   `options.callback_url`. Kling has no cancel endpoint, and its videos expire 30 days after the task was created.
