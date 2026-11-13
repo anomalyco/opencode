@@ -96,6 +96,8 @@ impl Compaction {
             usage: (status != Status::Running).then(|| tokens.and_then(usage)).flatten(),
             content: text.trim().to_owned(),
         };
+        // `session.markdown` changes in place; the code views stay.
+        self.markdown.conceal(cx.conceal);
         if !self.stale.replace(false) && self.rendered.borrow().as_ref() == Some(&rendered) {
             return;
         }

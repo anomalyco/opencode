@@ -1021,7 +1021,7 @@ impl Inner {
                 (Child::Row(row), Node::Entry(spec)) => row.update(cx, spec),
                 (Child::Thought(view), Node::Entry(spec)) => {
                     if let Some((message, part)) = thought(cx, spec) {
-                        view.update(message, part);
+                        view.update(message, part, cx.conceal);
                     }
                 }
                 (Child::Group(view), Node::Group(group)) => {
@@ -1089,9 +1089,11 @@ impl Thought {
         opencode_ui::markdown::restyle(&self.markdown, thought_colors(cx.theme), cx.thinking_syntax);
     }
 
-    fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning) {
+    fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning, conceal: bool) {
         let content = reasoning::content(part);
         self.root.visible(!content.is_empty());
+        // `session.markdown` changes in place; the code views stay.
+        self.markdown.conceal(conceal);
         if *self.content.borrow() != content {
             self.markdown.set_markdown(content.as_str());
             *self.content.borrow_mut() = content;
