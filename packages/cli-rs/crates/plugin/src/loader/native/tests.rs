@@ -1172,6 +1172,26 @@ fn a_waker_never_outlives_its_target_and_a_late_wake_does_nothing() {
     assert_eq!(GUARDED_RENDERS.get(), renders, "a wake after the plugin was disposed rendered it again");
 }
 
+// Expected (review carbon-pt-4): a claim of an in-process plugin that is still mounted after the plugin was disabled
+// calls it no more, as one through the C ABI does, whose instance is gone.
+#[test]
+fn a_claim_mounted_past_a_disable_calls_the_plugin_no_more() {
+    let host = host();
+    let registry = Registry::define(vec![abi::Plugin { id: "guarded", setup: guarded }.into()], []);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app());
+    let mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    let changed = abi::Changed { all: true, ..abi::Changed::default() };
+    let renders = GUARDED_RENDERS.get();
+    mounted.sync(&*host, Some(&changed));
+    assert!(GUARDED_RENDERS.get() > renders, "a change batch rendered nothing while the plugin ran");
+    assert!(registry.set_active(&dynamic(&host), "guarded", false));
+    let renders = GUARDED_RENDERS.get();
+    mounted.sync(&*host, Some(&changed));
+    assert_eq!(GUARDED_RENDERS.get(), renders, "a claim rendered its plugin after the plugin was disposed");
+    GUARDED.take();
+}
+
 thread_local! {
     /// How often a `lifecycle` dispose callback ran, whatever host it ran with.
     static LIFECYCLE_DISPOSED: Cell<usize> = const { Cell::new(0) };
