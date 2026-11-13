@@ -1,3 +1,5 @@
+import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
 import { expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
@@ -142,6 +144,32 @@ it.effect("groups available models by provider with paging", () =>
     expect(yield* run({ query: "old" })).toMatchObject({ total: 1, providers: [{ models: [gammaOld] }] })
     expect(yield* run({ provider: "other", query: "alpha" })).toEqual({ providers: [], total: 0, next: null })
 
+    yield* catalog.transform((editor) => {
+      for (const id of ["gamma", "gamma-old"]) {
+        editor.models.update(Provider.ID.make("other"), Model.ID.make(id), (model) => {
+          model.modelID = Model.ID.make(`deployment-${id}`)
+        })
+      }
+    })
+    expect(yield* run({ provider: "other" })).toMatchObject({ total: 2, providers: [{ models: [beta, gamma] }] })
+    const config = yield* Config.Test
+    yield* config.setEntries([
+      new Document({
+        type: "document",
+        info: new Info({
+          providers: {
+            other: {
+              models: {
+                "preset-new": { modelID: Model.ID.make("gamma") },
+                "preset-twin": { modelID: Model.ID.make("gamma") },
+                "preset-old": { modelID: Model.ID.make("gamma-old") },
+              },
+            },
+          },
+        }),
+      }),
+    ])
+
     // Presets sharing a family (and target) all survive, but never replace its newest base model.
     yield* catalog.transform((editor) => {
       const provider = editor.get(Provider.ID.make("other"))!
@@ -169,6 +197,12 @@ it.effect("groups available models by provider with paging", () =>
       ],
     })
     expect(yield* run({ provider: "other", all: true })).toMatchObject({ total: 6 })
+    // Read the current configuration on every execution, not only when the tool is registered.
+    yield* config.setEntries([])
+    expect(yield* run({ provider: "other" })).toMatchObject({
+      total: 2,
+      providers: [{ models: [beta, { id: "other/preset-new" }] }],
+    })
   }),
 )
 

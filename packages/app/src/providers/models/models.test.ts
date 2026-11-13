@@ -26,13 +26,16 @@ test("keeps the newest model of each provider and family", () => {
 
 test("keeps every preset without crowding out the newest base model", () => {
   expect(
-    latestModels([
-      { ...model("a", "preset-new", "2026-04-01", "f"), api: { id: "new" } },
-      { ...model("a", "preset-old", "2026-01-01", "f"), api: { id: "old" } },
-      { ...model("a", "preset-twin", "2026-04-01", "f"), api: { id: "new" } },
-      model("a", "old", "2026-01-01", "f"),
-      model("a", "new", "2026-03-01", "f"),
-    ]),
+    latestModels(
+      [
+        { ...model("a", "preset-new", "2026-04-01", "f"), api: { id: "new" } },
+        { ...model("a", "preset-old", "2026-01-01", "f"), api: { id: "old" } },
+        { ...model("a", "preset-twin", "2026-04-01", "f"), api: { id: "new" } },
+        model("a", "old", "2026-01-01", "f"),
+        model("a", "new", "2026-03-01", "f"),
+      ],
+      new Set(["a:preset-new", "a:preset-old", "a:preset-twin"]),
+    ),
   ).toEqual([
     { providerID: "a", modelID: "preset-new" },
     { providerID: "a", modelID: "preset-old" },
@@ -42,9 +45,9 @@ test("keeps every preset without crowding out the newest base model", () => {
 })
 
 test("a tie in release date keeps the first model listed", () => {
-  expect(
-    latestModels([model("a", "first", "2026-01-01", "f"), model("a", "second", "2026-01-01", "f")]),
-  ).toEqual([{ providerID: "a", modelID: "first" }])
+  expect(latestModels([model("a", "first", "2026-01-01", "f"), model("a", "second", "2026-01-01", "f")])).toEqual([
+    { providerID: "a", modelID: "first" },
+  ])
 })
 
 test("groups free models apart from their paid twin", () => {
@@ -70,4 +73,13 @@ test("uniqueModels keeps the first of each model in order", () => {
     { providerID: "b", modelID: "1" },
     { providerID: "a", modelID: "2" },
   ])
+})
+
+test.each(["azure", "catalog"])("deduplicates %s models with different API IDs", (provider) => {
+  expect(
+    latestModels([
+      { ...model(provider, "old", "2026-01-01", "f"), api: { id: "deployment-old" } },
+      { ...model(provider, "new", "2026-03-01", "f"), api: { id: "deployment-new" } },
+    ]),
+  ).toEqual([{ providerID: provider, modelID: "new" }])
 })
