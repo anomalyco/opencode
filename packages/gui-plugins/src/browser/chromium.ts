@@ -479,8 +479,11 @@ export function createBrowserPage(
   )
   // The backgroundThrottling preference does not wake a renderer that starts hidden: one in a tab the pane never
   // showed, or the new one a cross-site navigation starts in a hidden tab. It then renders no frames, so screenshots
-  // and clicks have nothing to capture or hit-test. Setting it again shows that renderer, even while the view is hidden.
-  contents.on("did-navigate", () => contents.setBackgroundThrottling(false))
+  // and clicks have nothing to capture or hit-test. Setting it again shows that renderer, even while the view is hidden,
+  // which costs a hidden tab its frames; so only tabs the agent works in do it, from the agent's first command.
+  contents.on("did-navigate", () => {
+    if (agentDriven) contents.setBackgroundThrottling(false)
+  })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
     dispatch({ type: "navigation.failed", code, description, url, isMainFrame }),
   )
