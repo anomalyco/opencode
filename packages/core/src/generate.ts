@@ -5,7 +5,7 @@ import type { DecisionRequest, DecisionResult, ImageRequest, ImageResult } from 
 import { Money } from "@opencode/schema/money"
 import { SessionID } from "@opencode/schema/session-id"
 import { Context, Effect, Layer, Schema } from "effect"
-import { RequestExecutor, type HttpMiddleware } from "@opencode/ai/route"
+import { RequestExecutor } from "@opencode/ai/route"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient, requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
@@ -91,9 +91,6 @@ export const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const images = yield* ImageClient.Service
     const decisionClient = yield* DecisionClient.Service
-    // With model HTTP hooks, the call gets a fresh client (not the memoized one) on an executor that runs them.
-    const hooked = (http: HttpMiddleware) =>
-      RequestExecutor.middleware(http, Layer.succeed(RequestExecutor.Service, executor))
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
       const resolved = yield* resolver.resolve(input.model).pipe(
@@ -126,7 +123,7 @@ export const layer = Layer.effect(
             // Gateways require session attribution even for a stateless call; no Session is stored.
             headers: { "x-opencode-session": SessionID.create() },
           }),
-          http === undefined ? undefined : { http },
+          { http },
         )
         .pipe(
           ModelRetry.retryOneShot,
@@ -169,9 +166,10 @@ export const layer = Layer.effect(
         aspect: input.aspect,
         resolution: input.resolution,
       }).pipe(
-        http === undefined
-          ? Effect.provideService(ImageClient.Service, images)
-          : Effect.provide(Layer.fresh(ImageClient.layer).pipe(Layer.provide(hooked(http)))),
+        Effect.provideService(ImageClient.Service, {
+          ...images,
+          generate: (request, options) => images.generate(request, { ...options, http }),
+        }),
         ModelRetry.retryOneShot,
         Effect.mapError((error) => providerError(input.model, error)),
       )
@@ -211,9 +209,9 @@ export const layer = Layer.effect(
         ),
         questions: input.questions,
       }).pipe(
-        http === undefined
-          ? Effect.provideService(DecisionClient.Service, decisionClient)
-          : Effect.provide(Layer.fresh(DecisionClient.layer).pipe(Layer.provide(hooked(http)))),
+        Effect.provideService(DecisionClient.Service, {
+          generate: (request) => decisionClient.generate(request, { http }),
+        }),
         ModelRetry.retryOneShot,
         Effect.mapError((error) => providerError(input.model, error)),
       )

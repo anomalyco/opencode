@@ -19,13 +19,13 @@ export const middleware = Effect.fnUntraced(function* (hooks: PluginHooks.Interf
     model: scope.model,
     kind: scope.kind,
   }
-  const any =
+  const hasHooks =
     (yield* hooks.has("model", "experimental.http.request", providerID)) ||
     (yield* hooks.has("model", "experimental.http.response", providerID)) ||
     (session !== undefined &&
       ((yield* hooks.has("session", "http.request", providerID)) ||
         (yield* hooks.has("session", "http.response", providerID))))
-  if (!any) return undefined
+  if (!hasHooks) return undefined
   const http: HttpMiddleware = (req, handler) =>
     Effect.gen(function* () {
       const request = yield* HttpClientRequest.toWeb(req)

@@ -1,6 +1,6 @@
 import { type Context, Effect, Layer, Stream } from "effect"
 import { resultEvents, type AwaitOptions, type Generation, type Observation } from "./generation.js"
-import { RequestExecutor } from "./route/executor.js"
+import { RequestExecutor, type HttpMiddleware } from "./route/executor.js"
 import type { MediaRoute } from "./route/media.js"
 import { AIError, UnsupportedOperationError } from "./schema/index.js"
 
@@ -9,12 +9,21 @@ export interface RoutedRequest<Self extends MediaRoute.MediaRequest, Event, Resp
   readonly model: MediaRoute.MediaRequest["model"] & { readonly route: MediaRoute.AnyRoute<Self, Event, Response> }
 }
 
+/** Per-call options. `http` wraps every HTTP request of the call, polling included. */
+export interface CallOptions extends AwaitOptions {
+  readonly http?: HttpMiddleware
+}
+
 /** `start` and `resume` fail with `UnsupportedOperation` on inline and stream routes. */
 export interface Interface<Req extends RoutedRequest<Req, Event, Response>, Event, Response> {
-  readonly generate: (request: Req, options?: AwaitOptions) => Effect.Effect<Response, AIError>
-  readonly stream: (request: Req, options?: AwaitOptions) => Stream.Stream<Event | Observation, AIError>
-  readonly start: (request: Req) => Effect.Effect<Generation<Response>, AIError>
-  readonly resume: (model: Req["model"], token: unknown) => Effect.Effect<Generation<Response>, AIError>
+  readonly generate: (request: Req, options?: CallOptions) => Effect.Effect<Response, AIError>
+  readonly stream: (request: Req, options?: CallOptions) => Stream.Stream<Event | Observation, AIError>
+  readonly start: (request: Req, options?: Pick<CallOptions, "http">) => Effect.Effect<Generation<Response>, AIError>
+  readonly resume: (
+    model: Req["model"],
+    token: unknown,
+    options?: Pick<CallOptions, "http">,
+  ) => Effect.Effect<Generation<Response>, AIError>
 }
 
 /** One modality's layer and service accessors, dispatching each request on its route's `kind`. */
@@ -31,6 +40,7 @@ export const make = <Self, Req extends RoutedRequest<Req, Event, Response>, Even
     service,
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
+      const execute = (options: Pick<CallOptions, "http"> | undefined) => RequestExecutor.withHttp(executor, options?.http)
       const notQueued = (route: MediaRoute.AnyRoute<Req, Event, Response>, operation: string) =>
         new AIError({
           reason: new UnsupportedOperationError({
@@ -40,39 +50,42 @@ export const make = <Self, Req extends RoutedRequest<Req, Event, Response>, Even
             message: `${route.provider}/${route.id} is not a queued route; use generate or stream`,
           }),
         })
-      const start = (request: Req) => {
+      const start = (request: Req, options?: Pick<CallOptions, "http">) => {
         const route = request.model.route
         if (route.kind !== "queued") return Effect.fail(notQueued(route, "start"))
-        return route.start(request, executor.execute)
+        return route.start(request, execute(options))
       }
       return service.of({
         start,
-        resume: (model, token) => {
+        resume: (model, token, options) => {
           if (model.route.kind !== "queued") return Effect.fail(notQueued(model.route, "resume"))
-          return model.route.resume(model, token, executor.execute)
+          return model.route.resume(model, token, execute(options))
         },
         generate: (request, options) => {
           const route = request.model.route
-          if (route.kind !== "queued") return route.generate(request, executor.execute)
-          return start(request).pipe(Effect.flatMap((generation) => generation.await(options)))
+          if (route.kind !== "queued") return route.generate(request, execute(options))
+          return start(request, options).pipe(Effect.flatMap((generation) => generation.await(options)))
         },
         stream: (request, options) => {
           const route = request.model.route
-          if (route.kind === "stream") return route.stream(request, executor.execute)
+          if (route.kind === "stream") return route.stream(request, execute(options))
           if (route.kind === "queued")
             return Stream.unwrap(
-              start(request).pipe(Effect.map((generation) => resultEvents(generation, input.responseEvents, options))),
+              start(request, options).pipe(
+                Effect.map((generation) => resultEvents(generation, input.responseEvents, options)),
+              ),
             )
-          return Stream.fromIterableEffect(Effect.map(route.generate(request, executor.execute), input.responseEvents))
+          return Stream.fromIterableEffect(Effect.map(route.generate(request, execute(options)), input.responseEvents))
         },
       })
     }),
   ),
-  generate: (request: Req, options?: AwaitOptions) => service.use((client) => client.generate(request, options)),
-  stream: (request: Req, options?: AwaitOptions) =>
+  generate: (request: Req, options?: CallOptions) => service.use((client) => client.generate(request, options)),
+  stream: (request: Req, options?: CallOptions) =>
     Stream.unwrap(service.useSync((client) => client.stream(request, options))),
-  start: (request: Req) => service.use((client) => client.start(request)),
-  resume: (model: Req["model"], token: unknown) => service.use((client) => client.resume(model, token)),
+  start: (request: Req, options?: Pick<CallOptions, "http">) => service.use((client) => client.start(request, options)),
+  resume: (model: Req["model"], token: unknown, options?: Pick<CallOptions, "http">) =>
+    service.use((client) => client.resume(model, token, options)),
 })
 
 export * as MediaClient from "./media-client.js"

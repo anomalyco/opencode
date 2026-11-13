@@ -26,6 +26,7 @@ import { ID, Info, Model, Ref, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Variant } from "@opencode/core/variant"
 import { Money } from "@opencode/schema/money"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
@@ -595,30 +596,28 @@ describe("image and decision generation", () => {
     }),
   )
 
-  // Records each model HTTP hook call and tags the request, so the provider sees which calls were hooked.
-  const hooked: string[] = []
-  const recording = Layer.mock(PluginHooks.Service, {
-    has: () => Effect.succeed(true),
-    trigger: (_domain, name, event) =>
-      Effect.sync(() => {
-        record(String(name), event)
-        return event
-      }),
-  })
-  const record = (name: string, event: unknown) => {
-    if (!(event instanceof Object) || !("kind" in event)) return
-    hooked.push(`${name}:${String(event.kind)}`)
-    if (name === "experimental.http.request" && "request" in event && event.request instanceof Request)
-      event.request.headers.set("x-hook", "1")
-  }
   const hookedIt = testEffect(
-    Generate.layer.pipe(Layer.provide(Layer.mergeAll(mediaResolver, client, mediaModels, recording, executor))),
+    Generate.layer.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(mediaResolver, client, mediaModels, LayerNode.compile(PluginHooks.node), executor),
+      ),
+    ),
   )
 
   hookedIt.effect("runs model HTTP hooks on image and decision provider requests, but not image downloads", () =>
     Effect.gen(function* () {
       requests.length = 0
-      hooked.length = 0
+      const hooked: string[] = []
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("model", "experimental.http.request", (event) =>
+        Effect.sync(() => {
+          hooked.push(`request:${event.kind}`)
+          event.request.headers.set("x-hook", "1")
+        }),
+      )
+      yield* hooks.register("model", "experimental.http.response", (event) =>
+        Effect.sync(() => void hooked.push(`response:${event.kind}`)),
+      )
       const generate = yield* Generate.Service
       yield* generate.image({ model: ref("zai", "glm-image"), prompt: "A fox" })
       yield* generate.decisions({
@@ -626,12 +625,7 @@ describe("image and decision generation", () => {
         input: [{ type: "text", text: "Is this a photo?" }],
         questions: [{ type: "predicate", name: "photo", instructions: "Is this a photo?" }],
       })
-      expect(hooked).toEqual([
-        "experimental.http.request:image",
-        "experimental.http.response:image",
-        "experimental.http.request:decision",
-        "experimental.http.response:decision",
-      ])
+      expect(hooked).toEqual(["request:image", "response:image", "request:decision", "response:decision"])
       expect(requests.map((request) => [request.url, request.headers["x-hook"] ?? "-"])).toEqual([
         ["https://api.z.ai/api/paas/v4/images/generations", "1"],
         ["https://images.example/fox", "-"],

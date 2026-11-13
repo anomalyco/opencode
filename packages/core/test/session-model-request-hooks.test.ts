@@ -4,6 +4,7 @@ import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
+import type { ModelRequestScope } from "@opencode/plugin/effect/model"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Location } from "@opencode/core/location"
 import { ModelHttp } from "@opencode/core/model-http"
@@ -256,8 +257,14 @@ describe("model HTTP hooks", () => {
           seen.push(`session:${event.kind}:${event.sessionID}:${event.request.headers.get("x-model-hook")}`)
         }),
       )
+      yield* hooks.register("session", "http.response", (event) =>
+        Effect.sync(() => void seen.push(`session response:${event.kind}`)),
+      )
+      yield* hooks.register("model", "experimental.http.response", (event) =>
+        Effect.sync(() => void seen.push(`model response:${event.kind}`)),
+      )
       const sent: string[] = []
-      const send = (scope: Parameters<typeof ModelHttp.middleware>[1]) =>
+      const send = (scope: ModelRequestScope) =>
         Effect.gen(function* () {
           const http = yield* ModelHttp.middleware(hooks, scope)
           if (!http) throw new Error("Expected HTTP middleware")
@@ -276,7 +283,14 @@ describe("model HTTP hooks", () => {
         session: { id: session.id, agent: Agent.ID.make("build") },
       })
 
-      expect(seen).toEqual(["model:text:-", "model:primary:ses_hook_kind", "session:primary:ses_hook_kind:1"])
+      expect(seen).toEqual([
+        "model:text:-",
+        "model response:text",
+        "model:primary:ses_hook_kind",
+        "session:primary:ses_hook_kind:1",
+        "session response:primary",
+        "model response:primary",
+      ])
       expect(sent).toEqual(["1", "1"])
     }),
   )
