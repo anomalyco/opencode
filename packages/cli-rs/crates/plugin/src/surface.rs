@@ -137,23 +137,16 @@ impl Surface {
                 let state = self.state.borrow();
                 state.last.is_none() || state.refused
             };
-            let Some((nodes, given)) = self.call_view(host, &theme, full) else { return };
+            let Some(nodes) = self.call_view(host, &theme, full) else { return };
             match self.adopt(host, &theme, nodes) {
                 Ok(()) => {
                     self.state.borrow_mut().refused = false;
                     return;
                 }
                 Err(refused) => {
-                    // Nothing of the refused call stays: the content it gave goes with it.
+                    // Nothing of the refused call stays: no tree names the content it gave, so the next adoption
+                    // releases it, and its memo values go.
                     let mut state = self.state.borrow_mut();
-                    for content in given {
-                        if let Some((text, _)) = state.content.remove(&content) {
-                            book(|ledger| {
-                                ledger.content -= 1;
-                                ledger.content_bytes -= text.len() as i64;
-                            });
-                        }
-                    }
                     let cleared = state.memo.len() as i64;
                     state.memo.clear();
                     book(|ledger| ledger.memo_entries -= cleared);
@@ -184,8 +177,8 @@ impl Surface {
         }
     }
 
-    /// The view's tree, and the content it gave the host; `None` when the call failed.
-    fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Option<(Vec<Node>, Vec<ContentRef>)> {
+    /// The view's tree; `None` when the call failed.
+    fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool) -> Option<Vec<Node>> {
         let palette = self.palette_of(host, theme);
         let rect = self.root.rect();
         // Before its first frame a surface has no size of its own; the terminal's stands in.
@@ -220,7 +213,6 @@ impl Surface {
             return None;
         }
         state.next = next;
-        let handles = given.iter().map(|(handle, _)| *handle).collect();
         for (handle, text) in given {
             book(|ledger| {
                 ledger.content += 1;
@@ -228,7 +220,7 @@ impl Surface {
             });
             state.content.insert(handle, (text, revision + 1));
         }
-        Some((vec![node?], handles))
+        Some(vec![node?])
     }
 
     /// Adopts `nodes`, or refuses them and changes nothing.

@@ -70,7 +70,11 @@ fn root(host: &TestHost) -> View {
 
 /// Adopts `nodes` into `tree` in `host`'s theme.
 fn apply(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::Node]) -> Result<(), Refused> {
-    let act: Act = Rc::new(|_| {});
+    apply_acting(host, tree, parent, nodes, Rc::new(|_| {}))
+}
+
+/// [`apply`], with clicks running `act`.
+fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::Node], act: Act) -> Result<(), Refused> {
     let theme = host.theme();
     let slot = |_: &View, _: &str| -> Option<SlotMount> { None };
     let source = |source: &v2::Source| match source {
@@ -261,8 +265,37 @@ impl Generator<'_> {
         let path = self.rng.pick(&paths).clone();
         let used: HashSet<String> = ids(tree).into_iter().collect();
         self.ids = IDS.iter().copied().filter(|id| !used.contains(*id)).collect();
+        let op = self.rng.below(7);
+        if op == 5 {
+            // A subtree with an id moves to the front of another box, where a keep may name it.
+            let moving: Vec<&Vec<usize>> =
+                paths.iter().filter(|path| !path.is_empty() && at(tree, path).id().is_some()).collect();
+            let targets: Vec<&Vec<usize>> =
+                paths.iter().filter(|path| matches!(at(tree, path), v2::Node::Box { .. })).collect();
+            if moving.is_empty() || targets.is_empty() {
+                return;
+            }
+            let (from, to) = ((*self.rng.pick(&moving)).clone(), (*self.rng.pick(&targets)).clone());
+            if to.starts_with(&from) {
+                return;
+            }
+            let (index, parent) = from.split_last().unwrap();
+            let (v2::Node::Box { children, .. } | v2::Node::Scroll { children, .. }) = at(tree, parent) else {
+                return;
+            };
+            let subtree = children.remove(*index);
+            // The removal shifts a target that comes after it under the same parent.
+            let mut to = to;
+            if to.len() > parent.len() && to[..parent.len()] == *parent && to[parent.len()] > *index {
+                to[parent.len()] -= 1;
+            }
+            if let v2::Node::Box { children, .. } = at(tree, &to) {
+                children.insert(0, subtree);
+            }
+            return;
+        }
         let node = at(tree, &path);
-        match self.rng.below(6) {
+        match op {
             0 => {
                 // The same kind and id, with new properties.
                 let id = node.id().map(str::to_owned);
@@ -308,8 +341,11 @@ impl Generator<'_> {
                 }
             }
             4 => {
-                if let v2::Node::Text { spans, .. } = node {
-                    *spans = self.spans();
+                if let v2::Node::Text { spans, fg, .. } = node {
+                    match self.chance(50) {
+                        true => *spans = self.spans(),
+                        false => *fg = self.chance(70).then(|| self.color()),
+                    }
                 } else if let v2::Node::Box { bg, .. } = node {
                     *bg = Some(self.color());
                 }
@@ -452,8 +488,10 @@ impl Model for Reconcile {
         let host = host(theme_index);
         let parent = root(&host);
         let mut tree = Tree::default();
-        // The last accepted tree, keeps written out.
+        // The last accepted tree, keeps written out, and as it came, which a theme switch adopts again as a surface
+        // does.
         let mut last: Vec<v2::Node> = Vec::new();
+        let mut adopted: Vec<v2::Node> = Vec::new();
         for (step, command) in commands.iter().enumerate() {
             let fail = |property, detail: String| Some(Failure { property, step, detail });
             let before = host.app.render();
@@ -463,7 +501,7 @@ impl Model for Reconcile {
                     *host.theme.borrow_mut() = theme(theme_index);
                     if !last.is_empty() {
                         let work = reconcile::work();
-                        if let Err(refused) = apply(&host, &mut tree, &parent, &last) {
+                        if let Err(refused) = apply(&host, &mut tree, &parent, &adopted) {
                             return fail("reconcile-fresh", format!("the last tree again was refused: {refused}"));
                         }
                         let done = reconcile::work().since(work);
@@ -477,7 +515,10 @@ impl Model for Reconcile {
                 Command::Tree(nodes) => {
                     let expected = valid(nodes, &last);
                     match (apply(&host, &mut tree, &parent, nodes), expected) {
-                        (Ok(()), true) => last = expand(nodes, &last).unwrap(),
+                        (Ok(()), true) => {
+                            last = expand(nodes, &last).unwrap();
+                            adopted = nodes.clone();
+                        }
                         (Err(_), false) => {
                             // no-effects: a refused tree leaves the frame as it was.
                             if host.app.render() != before {
@@ -683,6 +724,10 @@ fn a_refused_tree_changes_nothing() {
     let inside =
         vec![v2::Node::column(vec![v2::Node::Keep { key: "cards".into() }, v2::Node::text(vec![]).with_id("card-1")])];
     assert_eq!(apply(&host, &mut tree, &parent, &inside), Err(Refused::Duplicate("card-1".into())));
+    // A keep of a card inside a kept list.
+    let nested =
+        vec![v2::Node::column(vec![v2::Node::Keep { key: "cards".into() }, v2::Node::Keep { key: "card-1".into() }])];
+    assert_eq!(apply(&host, &mut tree, &parent, &nested), Err(Refused::Duplicate("card-1".into())));
     assert_eq!(reconcile::work().since(before), Work::default());
     assert_eq!(host.app.render(), frame);
     // The guard: the same change without the fault differs.
@@ -726,4 +771,93 @@ fn the_host_scrolls_a_scroll_and_keeps_its_offset_by_id() {
     assert_eq!(top(&host), scrolled, "a revision keeps the offset");
     apply(&host, &mut tree, &parent, &scrolling("other", 40, Some(30))).unwrap();
     assert_eq!(top(&host), "row 0", "a new id starts at the top");
+}
+
+// Expected: a click that changes to another click runs the new one, on a box and on a text, with their widgets kept.
+#[test]
+fn a_changed_click_runs_the_new_action() {
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    let ran: Rc<RefCell<Vec<String>>> = Rc::default();
+    let act: Act = {
+        let ran = ran.clone();
+        Rc::new(move |action| {
+            let abi::Action::Command { name, .. } = action;
+            ran.borrow_mut().push(name.clone());
+        })
+    };
+    let nodes = |name: &str| {
+        let click = abi::Click::command(name, None);
+        vec![v2::Node::column(vec![
+            v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("box")])]).on_click(click.clone()),
+            v2::Node::text(vec![abi::Span::new("text")]).on_click(click),
+        ])]
+    };
+    for name in ["x.first", "x.second"] {
+        apply_acting(&host, &mut tree, &parent, &nodes(name), act.clone()).unwrap();
+        host.app.render();
+        host.app.click(1, 0);
+        host.app.click(1, 1);
+        host.app.advance(std::time::Duration::from_millis(1));
+    }
+    assert_eq!(*ran.borrow(), ["x.first", "x.first", "x.second", "x.second"]);
+}
+
+// Expected: a scroll with no height that does not grow is no taller than its parent, so the wheel scrolls it.
+#[test]
+fn a_scroll_without_a_height_fits_its_parent() {
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    let lines = (0..40).map(|row| v2::Node::text(vec![abi::Span::new(format!("row {row}"))])).collect();
+    apply(&host, &mut tree, &parent, &[v2::Node::scroll(lines)]).unwrap();
+    assert!(host.app.render().text().starts_with("row 0"));
+    host.app.scroll(2, 5, true);
+    assert!(!host.app.render().text().starts_with("row 0"), "the wheel moved nothing");
+}
+
+// Expected: a text under the pointer that is written in place keeps its pointer color, as a kept element stays
+// hovered.
+#[test]
+fn a_hovered_text_written_in_place_stays_hovered() {
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    let text = |words: &str| vec![v2::Node::text(vec![abi::Span::new(words)]).fg("text.muted")];
+    let hovered = |words: &str| {
+        let mut nodes = text(words);
+        if let v2::Node::Text { hover_fg, .. } = &mut nodes[0] {
+            *hover_fg = Some("text.base".into());
+        }
+        nodes
+    };
+    apply(&host, &mut tree, &parent, &hovered("first")).unwrap();
+    host.app.render();
+    host.app.hover(1, 0);
+    let over = host.app.render().cells[1].fg;
+    apply(&host, &mut tree, &parent, &hovered("second")).unwrap();
+    assert_eq!(host.app.render().cells[1].fg, over);
+    assert_ne!(over, host.theme().text.muted, "the pointer changed nothing");
+}
+
+// Expected (`no-effects`): a tree that shows content the mount does not hold is refused, and changes nothing.
+#[test]
+fn a_tree_with_unknown_content_is_refused() {
+    let host = host(0);
+    let parent = root(&host);
+    let mut tree = Tree::default();
+    apply(&host, &mut tree, &parent, &cards(2, &[], false)).unwrap();
+    let frame = host.app.render();
+    let diff = v2::Node::Diff {
+        id: None,
+        content: v2::Source::Content(v2::ContentRef(7)),
+        view: v2::DiffView::Unified,
+        filetype: None,
+    };
+    assert_eq!(
+        apply(&host, &mut tree, &parent, &[v2::Node::column(vec![diff])]),
+        Err(Refused::Content(v2::ContentRef(7)))
+    );
+    assert_eq!(host.app.render(), frame);
 }

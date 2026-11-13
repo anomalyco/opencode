@@ -276,8 +276,8 @@ impl Tree {
                 return Err(Refused::Unknown(key.clone()));
             }
         }
-        // An id of the tree may not be one inside a subtree it keeps.
-        for id in &ids {
+        // An id of the tree, or a keep, may not be one inside a subtree it keeps.
+        for id in ids.iter().chain(&keeps) {
             let mut above = self.ids.get(id).cloned().flatten();
             while let Some(ancestor) = above {
                 if keeps.contains(&ancestor) {
@@ -413,8 +413,11 @@ impl Pass<'_, '_> {
         if let Node::Keep { key } = new {
             let kept = self.kept.remove(key).expect("a validated keep names a held subtree");
             count(|work| work.kept += 1);
+            // In a new theme the kept subtree is reconciled with itself, which restyles it; a Markdown in it, which
+            // takes its theme as it is built, is built again.
             if self.restyle {
-                restyle_tree(&kept, self.env);
+                let node = unfold(&kept);
+                return self.reconcile(kept, &node);
             }
             // The kept subtree's widget is where the placeholder was.
             return Ok(kept);
@@ -550,10 +553,18 @@ impl Pass<'_, '_> {
             // A keep in a parent that is built again: the subtree moves into the new widgets.
             let kept = self.kept.remove(key).expect("a validated keep names a held subtree");
             count(|work| work.kept += 1);
-            if self.restyle {
-                restyle_tree(&kept, env);
+            if !self.restyle {
+                return kept;
             }
-            return kept;
+            let node = unfold(&kept);
+            return match self.reconcile(kept, &node) {
+                Ok(mounted) => mounted,
+                Err(replaced) => {
+                    let (old, built) = *replaced;
+                    self.doom(old);
+                    built
+                }
+            };
         }
         count(|work| work.created += 1);
         let (widget, extra, children): (AnyWidget, Extra, Vec<Mounted>) = match node {
@@ -891,10 +902,13 @@ fn restyle(mounted: &Mounted, env: &Env<'_>) {
     count(|work| work.set += 1);
 }
 
-/// [`restyle`] for a kept subtree, whose nodes are not visited otherwise.
-fn restyle_tree(mounted: &Mounted, env: &Env<'_>) {
-    restyle(mounted, env);
-    mounted.children.iter().for_each(|child| restyle_tree(child, env));
+/// The node a mounted subtree shows, children included.
+fn unfold(mounted: &Mounted) -> Node {
+    let mut node = mounted.node.clone();
+    if let Node::Box { children, .. } | Node::Scroll { children, .. } = &mut node {
+        *children = mounted.children.iter().map(unfold).collect();
+    }
+    node
 }
 
 /// Shows the hand over `widget` and runs the click in the cell it returns on the press or the release of the left
