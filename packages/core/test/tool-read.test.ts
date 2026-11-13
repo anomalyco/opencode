@@ -233,7 +233,7 @@ describe("ReadTool", () => {
       })
       expect(result).toMatchObject({
         status: "error",
-        error: { message: "limit must be at least 1. Omit limit to use the default." },
+        error: { message: "Limit must be a positive integer" },
       })
       expect(assertions).toEqual([])
       expect(readCalls).toEqual([])
