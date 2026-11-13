@@ -214,6 +214,38 @@ describe("New timeline projection", () => {
     expect(groups([...launched, said, report], grouped)).toEqual(["context:launch", "events:report"])
     expect(groups([...launched, report], detailed)).toEqual(["events:launch", "events:report"])
   })
+
+  test("a move shows only when it changes where the session is", () => {
+    const moved = (id: string, created: number, from: string, to: string): SessionMessageInfo => ({
+      id,
+      type: "location-switched",
+      location: { directory: to },
+      previous: { location: { directory: from } },
+      time: { created },
+    })
+
+    const messages: SessionMessageInfo[] = [
+      { id: "user", type: "user", text: "Go", time: { created: 0 } },
+      moved("into", 1, "/repo", "/repo-worktree"),
+      moved("again", 2, "/repo-worktree", "/repo-worktree"),
+      moved("back", 3, "/repo-worktree", "/repo"),
+    ]
+
+    const notices = createRoot((dispose) => {
+      const projection = createNextTimelineProjection({
+        sessionMessages: () => messages,
+        status: () => ({ type: "idle" }),
+        timelineDetail: () => detailed,
+      })
+
+      const result = projection.rows().flatMap((row) => (Predicate.isTagged(row, "Notice") ? [row.messageID] : []))
+      dispose()
+
+      return result
+    })
+
+    expect(notices).toEqual(["into", "back"])
+  })
 })
 
 describe("workedDuration", () => {

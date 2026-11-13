@@ -11,7 +11,6 @@ import {
   thoughtOpens,
   toolFailed,
   toolStopped,
-  userShellOpens,
 } from "./rules"
 import { timelineStatus } from "./status"
 
@@ -110,12 +109,10 @@ describe("echoesUserShell", () => {
 })
 
 describe("details", () => {
-  test("shell details decide whether a command's whole output shows, for the agent's commands and the user's", () => {
+  test("shell details decide whether an agent's command opens to its whole output", () => {
     expect(contentOpens(preset("everything"), tool("shell"))).toBe(true)
     expect(contentOpens(preset("compact"), tool("shell"))).toBe(false)
     expect(contentOpens(preset("compact"), tool("execute"))).toBe(false)
-    expect(userShellOpens(preset("everything"))).toBe(true)
-    expect(userShellOpens(preset("compact"))).toBe(false)
   })
 
   test("thinking details stream the live thought in view, and every finished thought starts closed", () => {
