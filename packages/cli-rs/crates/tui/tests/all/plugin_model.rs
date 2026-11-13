@@ -1080,21 +1080,7 @@ fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
 
 /// Shrunk traces of defects the model found and that are not fixed, each with the property it fails. Each must still
 /// fail, so a fix fails the test until its row moves to [`FIXED`].
-const OPEN: &[(&str, &str, &[Command])] = &[
-    // Review bigboi-5: a failure is told again once the manager stopped listing it.
-    (
-        "a-failure-is-told-again-after-the-row-cleared",
-        "reported-once",
-        &[
-            Command::Arm(Fault::Setup),
-            Command::Reload(2),
-            Command::Toggle,
-            Command::Toggle,
-            Command::Arm(Fault::Setup),
-            Command::Reload(PROMPTING),
-        ],
-    ),
-];
+const OPEN: &[(&str, &str, &[Command])] = &[];
 
 /// Shrunk traces that failed once and pass now.
 const FIXED: &[(&str, &[Command])] = &[
@@ -1155,6 +1141,18 @@ const FIXED: &[(&str, &[Command])] = &[
     (
         "a-failed-enable-leaves-the-plugin-disabled",
         &[Command::Toggle, Command::Arm(Fault::Setup), Command::Toggle, Command::Reload(2)],
+    ),
+    // Review bigboi-5: a failure is told again once the manager stopped listing it, as TS compares listed failures.
+    (
+        "a-failure-is-told-again-after-the-row-cleared",
+        &[
+            Command::Arm(Fault::Setup),
+            Command::Reload(2),
+            Command::Toggle,
+            Command::Toggle,
+            Command::Arm(Fault::Setup),
+            Command::Reload(PROMPTING),
+        ],
     ),
     // Review bigboi-2, the positive control: a candidate that passes keeps the prompt its setup asked for.
     ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),

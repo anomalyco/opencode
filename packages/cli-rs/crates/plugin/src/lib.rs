@@ -1429,9 +1429,10 @@ impl Registry {
     /// live.
     pub fn live(&self, id: &str, generation: u64) -> bool {
         self.with_plugin(id, |plugin| {
-            plugin.active.as_ref().is_some_and(|(_, registration)| {
-                registration.generation == generation && !registration.panicked()
-            })
+            plugin
+                .active
+                .as_ref()
+                .is_some_and(|(_, registration)| registration.generation == generation && !registration.panicked())
         })
         .unwrap_or(false)
     }
