@@ -3,7 +3,7 @@ import electron, { type ContextMenuParams, type Extension, type MenuItemConstruc
 import { method, none, optional, type ApiModule, type Emit } from "./api"
 import { matchesHost } from "./match-pattern"
 import type { Manifests } from "./manifest"
-import { reveals, tabInfo, type ExtensionTabs, type PaneTab } from "./tabs"
+import { privateFile, reveals, tabInfo, type ExtensionTabs, type PaneTab } from "./tabs"
 
 const Id = Schema.Union([Schema.String, Schema.Number])
 
@@ -219,6 +219,7 @@ export function createContextMenus(input: {
 
   const release = input.tabs.watch((tab) => {
     const shown = (_event: Electron.Event, params: ContextMenuParams) => {
+      if ([params.pageURL, params.frameURL, params.linkURL, params.srcURL].some(privateFile)) return
       const target = menuTarget(params)
 
       const template = input.extensions().flatMap((extension): MenuItemConstructorOptions[] => {

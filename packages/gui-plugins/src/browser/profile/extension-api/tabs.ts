@@ -115,12 +115,17 @@ export function tabInfo(tab: TabSnapshot, revealed: boolean) {
     mutedInfo: { muted: tab.muted },
   }
 
-  return revealed ? { ...info, url: tab.url, title: tab.title } : info
+  return revealed && !privateFile(tab.url) ? { ...info, url: tab.url, title: tab.title } : info
+}
+
+/** Extensions are loaded without file access; the workspace's internal preview origin is private too. */
+export function privateFile(url: string) {
+  return /^(?:blob:)?(?:file|oc-preview):/i.test(url)
 }
 
 /** Whether an extension may read a tab's URL and title. */
 export function reveals(manifest: { readonly permissions: readonly string[]; readonly hosts: readonly string[] }, url: string) {
-  return manifest.permissions.includes("tabs") || matchesHost(manifest.hosts, url)
+  return !privateFile(url) && (manifest.permissions.includes("tabs") || matchesHost(manifest.hosts, url))
 }
 
 /**
