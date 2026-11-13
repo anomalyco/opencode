@@ -28,7 +28,6 @@ const layer = Layer.effect(
     const pending = new Set<object>()
     let closed = false
     const holdUnsafe = () => {
-      if (closed) return Effect.void
       const token = {}
       pending.add(token)
       ready.closeUnsafe()
