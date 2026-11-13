@@ -7,7 +7,7 @@ import { Cause, Deferred, Effect, ManagedRuntime, Option, Queue, Schedule, Schem
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
-import { createBrowserPage, guardSession, type BrowserPage, type Shared } from "./chromium"
+import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { agentRefusal, destinationOrigin, fileURLWithin, refusal } from "./policy"
@@ -37,6 +37,7 @@ import {
   type PaneState,
 } from "./pane-machine"
 import { createBrowserRestoreStore } from "./restore"
+import { guardSession } from "./session-guard"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
 
