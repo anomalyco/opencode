@@ -44,7 +44,7 @@ describe("ai.video.start / Seedance", () => {
         .start({
           model,
           prompt: "The kitten yawns at the camera",
-          start: Media.fromDataUrl("data:image/png;base64,AQID"),
+          start: Media.image(Media.fromDataUrl("data:image/png;base64,AQID")),
           end: "https://example.test/last.png",
           duration: "5 seconds",
           aspect: "16:9",
