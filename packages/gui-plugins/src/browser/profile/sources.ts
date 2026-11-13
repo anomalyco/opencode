@@ -221,7 +221,8 @@ export async function readSource(id: string, profile: string): Promise<CookieRea
 
   if (definition.engine === "firefox") return readFirefoxCookies(target.directory).catch(readFailure)
 
-  if (definition.engine === "safari") return readFile(target.directory).then(parseBinaryCookies, readFailure)
+  if (definition.engine === "safari")
+    return readFile(target.directory).then((data) => parseBinaryCookies(data) ?? { failure: "read" }, readFailure)
   const key = await chromiumKey(definition).catch(() => undefined)
 
   if (!key) return { failure: "key" }
@@ -381,7 +382,7 @@ async function chromiumKey(definition: Definition): Promise<ChromiumKey | undefi
 
     // The Keychain prompt names `security`, and its Always Allow would let any process read the key through it; the
     // window tells the user to choose Allow. Naming OpenCode needs an in-process SecItemCopyMatching (a native module).
-    const password = await run("security", [
+    const password = await run("/usr/bin/security", [
       "find-generic-password",
       "-w",
       "-a",
@@ -390,14 +391,16 @@ async function chromiumKey(definition: Definition): Promise<ChromiumKey | undefi
       definition.keychain.service,
     ])
 
-    return { type: "cbc", v10: deriveCbcKey(password.trim(), 1003), v11: undefined }
+    return { type: "cbc", v10: deriveCbcKey(password.replace(/\r?\n$/, ""), 1003), v11: undefined }
   }
 
   // Linux: `v10` values use a fixed password; `v11` the one the desktop keyring holds, if any.
+  const tool = await first(["/usr/bin/secret-tool", "/bin/secret-tool"])
+
   const passwords = await Promise.all(
-    (definition.keyring ?? []).map((application) =>
-      run("secret-tool", ["lookup", "application", application]).then(
-        (value) => value.trim(),
+    (tool ? (definition.keyring ?? []) : []).map((application) =>
+      run(tool ?? "", ["lookup", "application", application]).then(
+        (value) => value.replace(/\r?\n$/, ""),
         () => "",
       ),
     ),
@@ -420,7 +423,7 @@ async function unprotect(blob: Uint8Array) {
     "[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Unprotect($b,$null,'CurrentUser'))"
 
   const output = await run(
-    "powershell.exe",
+    windowsPowerShell(),
     ["-NoProfile", "-NonInteractive", "-Command", script],
     Buffer.from(blob).toString("base64"),
   )
@@ -447,7 +450,7 @@ export async function windowsIcons(files: readonly string[]) {
     "$o|ConvertTo-Json -Compress"
 
   const output = await run(
-    "powershell.exe",
+    windowsPowerShell(),
     ["-NoProfile", "-NonInteractive", "-Command", script],
     files.join("\n"),
   ).catch(() => "")
@@ -457,13 +460,39 @@ export async function windowsIcons(files: readonly string[]) {
   return new Map(Object.entries(icons).map(([file, data]) => [file, `data:image/png;base64,${data}`]))
 }
 
+/**
+ * Windows PowerShell in the system directory. `SystemRoot` is used only when it is an absolute drive path, so a
+ * relative or odd value never points the key's unwrapping at another program.
+ */
+function windowsPowerShell() {
+  const root = process.env.SystemRoot
+  const system = root && /^[A-Za-z]:\\[^"<>|?*]*$/.test(root) ? root : "C:\\Windows"
+
+  return path.win32.join(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+}
+
+/**
+ * Runs a helper program by its absolute path, without a shell and in its own directory, so neither `PATH` nor the
+ * app's working directory can put another program in its place. It gets `input` on stdin and 60 seconds.
+ */
 function run(command: string, args: readonly string[], input?: string) {
   return new Promise<string>((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] })
+    if (!path.isAbsolute(command)) return reject(new Error(`${command} is not an absolute path`))
+    const child = spawn(command, args, {
+      cwd: path.dirname(command),
+      shell: false,
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "ignore"],
+    })
     const chunks: Buffer[] = []
     const timer = setTimeout(() => child.kill(), 60_000)
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk))
-    child.on("error", reject)
+    // A program that exits before it reads its input must not leave an unhandled pipe error behind.
+    child.stdin.on("error", () => undefined)
+    child.on("error", (cause) => {
+      clearTimeout(timer)
+      reject(cause)
+    })
     child.on("close", (code) => {
       clearTimeout(timer)
 
