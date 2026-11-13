@@ -253,6 +253,30 @@ explicit values replace the fallbacks. Add `disabled: true` to hide a model from
 }
 ```
 
+### Model wildcard overrides
+
+Use `*` to match any sequence and `?` to match one character in a provider's model IDs.
+For example, disable the catalog and enable only a curated alias, even when its base is disabled.
+
+```jsonc title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "*": { "disabled": true },
+        "curated": { "modelID": "gpt-6.1-sol", "disabled": false },
+      },
+    },
+  },
+}
+```
+
+- Matching patterns apply in declaration order, then literal model entries override them regardless of their position in the document.
+- Later config documents take precedence, including their wildcard overrides.
+- Patterns match catalog and discovered models and explicitly declared literal IDs. Unmatched patterns create no models.
+- Wildcards apply only to keys in `providers.<id>.models`, including integration config, not provider IDs or settings keys.
+
 ## Reasoning
 
 For an OpenAI-compatible model that streams reasoning in a custom assistant-message field, set
