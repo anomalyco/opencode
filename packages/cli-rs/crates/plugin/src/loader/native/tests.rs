@@ -1172,7 +1172,7 @@ fn a_waker_never_outlives_its_target_and_a_late_wake_does_nothing() {
     assert_eq!(GUARDED_RENDERS.get(), renders, "a wake after the plugin was disposed rendered it again");
 }
 
-/// Toasts as it sets up and as it is disposed, when it also asks for a reply that must not come.
+/// Toasts as it sets up and as it is disposed, when it also asks for a reply that must not come. Its command panics.
 fn lifecycle(setup: &mut abi::Setup) -> Result<(), String> {
     setup.host().toast(abi::Toast::new(abi::Variant::Info, "setup"));
     setup.on_dispose(|host| {
@@ -1180,6 +1180,8 @@ fn lifecycle(setup: &mut abi::Setup) -> Result<(), String> {
         host.fetch(abi::Fetch { method: "GET".into(), path: "/disposed".into(), ..abi::Fetch::default() });
     });
     setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
+    let panic = abi::Command { name: "lifecycle.panic".to_owned(), ..abi::Command::default() };
+    setup.command(panic, |_, _| panic!("lifecycle command panicked"));
     Ok(())
 }
 
@@ -1189,12 +1191,13 @@ fn lifecycle_failing(setup: &mut abi::Setup) -> Result<(), String> {
     Err("lifecycle failed".to_owned())
 }
 
-/// `setup` in process, or `create` through the C ABI's byte shims, set up, then disabled: its status after setup, and
-/// the toasts and fetches of the whole run.
+/// `setup` in process, or `create` through the C ABI's byte shims, set up, its command run if `panic` asks, then
+/// disabled: its status after setup, and the toasts and fetches of the whole run.
 fn lifecycled(
     setup: fn(&mut abi::Setup) -> Result<(), String>,
     create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
     loopback: bool,
+    panic: bool,
 ) -> (Entry, Vec<String>, usize) {
     let host = host();
     let registry = Registry::define(Vec::new(), []);
@@ -1226,6 +1229,10 @@ fn lifecycled(
         }
     }
     let entry = registry.entries().into_iter().find(|entry| entry.id == "lifecycle").unwrap();
+    if panic {
+        host.keymap().dispatch("lifecycle.panic", None);
+        host.app.advance(Duration::from_millis(1));
+    }
     registry.set_active(&dynamic(&host), "lifecycle", false);
     host.app.advance(Duration::from_millis(1));
     host.reply();
@@ -1239,20 +1246,34 @@ fn lifecycled(
 // runs it as it fails, leaves the plugin failed and not active, and acts the same on both paths.
 #[test]
 fn setup_and_dispose_effects_are_the_same_on_both_paths() {
-    let direct = lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), false);
+    let direct = lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), false, false);
     assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Active, true));
     assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
-    let through = lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), true);
+    let through = lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), true, false);
     assert_eq!((through.1, through.2), (direct.1, direct.2));
 
-    let direct = lifecycled(lifecycle_failing, abi::export_plugin!(@loopback "lifecycle", lifecycle_failing), false);
+    let failing = abi::export_plugin!(@loopback "lifecycle", lifecycle_failing);
+    let direct = lifecycled(lifecycle_failing, failing, false, false);
     assert_eq!((direct.0.status.clone(), direct.0.active), (Status::Failed("lifecycle failed".to_owned()), false));
     assert_eq!((direct.1.as_slice(), direct.2), (["setup", "dispose"].map(String::from).as_slice(), 0));
-    let through = lifecycled(lifecycle_failing, abi::export_plugin!(@loopback "lifecycle", lifecycle_failing), true);
+    let through = lifecycled(lifecycle_failing, failing, true, false);
     assert_eq!(
         (through.0.status, through.0.active, through.1, through.2),
         (direct.0.status, false, direct.1, direct.2)
     );
+}
+
+// Expected (4.14, plugins-pt): a plugin that failed is called no more, so its dispose callback does not run as it is
+// disabled, on both paths; the same plugin without the panic does run it.
+#[test]
+fn a_failed_plugin_gets_no_dispose_on_both_paths() {
+    for loopback in [false, true] {
+        let (_, toasts, fetches) =
+            lifecycled(lifecycle, abi::export_plugin!(@loopback "lifecycle", lifecycle), loopback, true);
+        let calls: Vec<&str> =
+            toasts.iter().map(String::as_str).filter(|toast| ["setup", "dispose"].contains(toast)).collect();
+        assert_eq!((calls, fetches), (vec!["setup"], 0), "through the C ABI: {loopback}");
+    }
 }
 
 // Expected (bigboi-1): a setup that fails or panics after it registered a dispose callback runs it while the host is
