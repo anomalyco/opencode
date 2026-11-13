@@ -194,6 +194,27 @@ fn the_composer_reads_and_edits_the_same_on_both_carriers() {
     }
 }
 
+// Expected: a set starts the history over, as TS's `ref.set` does, so up then recalls the newest entry.
+#[test]
+fn a_set_starts_the_history_over() {
+    let setup = session(Carrier::Linked);
+    for (count, text) in [(1, "one"), (2, "two")] {
+        setup.app.type_text(text);
+        setup.app.press("return");
+        setup.wait_request("POST", "/api/session/ses_a/prompt", count);
+        setup.wait("the clear", || setup.textarea().text().is_empty());
+    }
+    setup.app.press("up");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "one");
+    setup.tui.keymap.dispatch("p0a.set", Some("fresh"));
+    setup.wait("the set", || setup.textarea().text() == "fresh");
+    // The first up moves to the start of the text, the second to the newest entry.
+    setup.app.press("up");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "two");
+}
+
 // Expected (`no-effects`): a call that sets, inserts and submits the composer and opens a confirm and an alert, then
 // panics, leaves the composer's text, sends no prompt and opens no dialog, on both carriers. Guard: the same call
 // without the panic does all of it.
