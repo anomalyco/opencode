@@ -9,7 +9,7 @@ use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::{Diff, DiffColors, DiffGutter, DiffView};
 
-use crate::theme::Theme;
+use crate::theme::{Paints, Theme};
 
 /// One hunk of a patch: its `@@` line, and the file headers followed by the hunk alone.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,6 +106,48 @@ pub fn view(
     gutter_padding: u32,
 ) -> View {
     view_with(app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding)
+}
+
+/// [`view`], restyled in place by `paints`: the diffs keep their code and its highlight.
+#[allow(clippy::too_many_arguments)]
+pub fn view_painted(
+    app: &App,
+    theme: &Theme,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+    paints: &Paints,
+) -> View {
+    let (column, parts) = build(app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding);
+    for part in parts {
+        paints.keep(move |theme| {
+            let look = look(theme);
+            match &part {
+                Part::Header(row, text) => {
+                    row.bg(look.hunk_header_bg);
+                    text.fg(look.hunk_header).bg(look.hunk_header_bg);
+                }
+                Part::Diff(diff) => {
+                    diff.syntax_theme(crate::code::syntax_theme(theme)).colors(look.colors);
+                    let (left, right) = diff.code_views();
+                    for code in [left, right] {
+                        code.fg(look.text);
+                    }
+                }
+            }
+        });
+    }
+    column
+}
+
+/// A widget of a patch view that takes the theme's colors.
+enum Part {
+    /// A later hunk's `@@` row and its text.
+    Header(View, Text),
+    Diff(Diff),
 }
 
 fn look(theme: &Theme) -> Look {
@@ -265,7 +307,22 @@ pub fn view_with(
     wrap: WrapMode,
     gutter_padding: u32,
 ) -> View {
+    build(app, look, syntax, patch, view, filetype, wrap, gutter_padding).0
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build(
+    app: &App,
+    look: &Look,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+) -> (View, Vec<Part>) {
     crate::grammars::register();
+    let mut parts = Vec::new();
     let gutter =
         DiffGutter { padding_left: 1 + gutter_padding, min_digits: Some(last_line(patch).to_string().len() as u32) };
     let column = View::new(app).width(Length::Percent(100.0));
@@ -273,7 +330,9 @@ pub fn view_with(
         if index > 0 {
             let header = format!(" {}", hunk.header.unwrap_or_default());
             let header = Text::new(app, header).fg(look.hunk_header).bg(look.hunk_header_bg);
-            column.add(&View::new(app).width(Length::Percent(100.0)).height(1).bg(look.hunk_header_bg).child(&header));
+            let row = View::new(app).width(Length::Percent(100.0)).height(1).bg(look.hunk_header_bg).child(&header);
+            column.add(&row);
+            parts.push(Part::Header(row, header));
         }
         let diff = Diff::new(app)
             .view(view)
@@ -288,8 +347,9 @@ pub fn view_with(
             code.fg(look.text).focusable(false);
         }
         column.add(&diff);
+        parts.push(Part::Diff(diff));
     }
-    column
+    (column, parts)
 }
 
 /// The largest line number the patch's `@@` lines reach on either side, at least 1.
