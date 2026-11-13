@@ -4,7 +4,6 @@ import {
   transitionProviderConnect,
   type ProviderConnectEffect,
   type ProviderConnectEvent,
-  type ProviderConnectMethod,
   type ProviderConnectScreen,
   type ProviderConnectState,
   type ProviderConnectTransition,
@@ -344,14 +343,10 @@ export function providerBackTarget(state: ProviderDialogState): ProviderBackTarg
 /** Which dialog shell the step uses: the searchable list, the model choice, or a provider step. */
 export type ProviderDialogFrame = "picker" | "models" | "accounts" | "provider"
 
-/**
- * The header path of a provider step: the provider list, the provider, and the sign-in method when there was a
- * choice of methods. A crumb with a `target` links back to that step; the last one is where the dialog is.
- */
+/** The header path of a provider step: the provider list, then the provider. A crumb with a `target` links back. */
 export type ProviderDialogCrumb =
   | { readonly kind: "root"; readonly target?: "picker" }
   | { readonly kind: "provider"; readonly target?: "accounts" | "methods" }
-  | { readonly kind: "method"; readonly method: ProviderConnectMethod }
 
 export type ProviderDialogBody =
   | { readonly kind: "picker" }
@@ -386,7 +381,7 @@ export function selectProviderDialogView(state: ProviderDialogState) {
     frame,
     connect,
     body,
-    crumbs: crumbs(state, connect, target),
+    crumbs: crumbs(state, target),
     // Closing on a stray backdrop click would abandon a sign-in the user is finishing in the browser.
     preventBackdropDismiss: !!provider && !provider.closed && !!connect?.authorizing,
     completed: state.completed,
@@ -396,19 +391,13 @@ export function selectProviderDialogView(state: ProviderDialogState) {
 
 export type ProviderDialogView = ReturnType<typeof selectProviderDialogView>
 
-function crumbs(
-  state: ProviderDialogState,
-  connect: ReturnType<typeof selectProviderConnectView> | undefined,
-  target: ProviderBackTarget | undefined,
-): readonly ProviderDialogCrumb[] {
+function crumbs(state: ProviderDialogState, target: ProviderBackTarget | undefined): readonly ProviderDialogCrumb[] {
   if (state.status !== "provider" || state.step.kind === "models") return []
 
-  const root: ProviderDialogCrumb = { kind: "root", target: state.standalone ? undefined : "picker" }
-  const provider: ProviderDialogCrumb = { kind: "provider", target: target === "picker" ? undefined : target }
-
-  if (target !== "methods" || !connect?.method) return [root, provider]
-
-  return [root, provider, { kind: "method", method: connect.method }]
+  return [
+    { kind: "root", target: state.standalone ? undefined : "picker" },
+    { kind: "provider", target: target === "picker" ? undefined : target },
+  ]
 }
 
 function selectBody(

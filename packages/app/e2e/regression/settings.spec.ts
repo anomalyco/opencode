@@ -1802,9 +1802,7 @@ test("providers: OpenCode Console signs in from its method list", async ({ page,
   await methods.getByRole("button", { name: "OpenCode Console account", exact: true }).click()
   await expect(await popup).toHaveURL(url)
 
-  // The method joins the header path once there was a choice of methods.
   const signIn = page.getByRole("dialog", { name: "Connect OpenCode Console", exact: true })
-  await expect(signIn.getByRole("navigation")).toContainText("OpenCode Console account")
   await expect(signIn.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
   await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
 })

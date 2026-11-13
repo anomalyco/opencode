@@ -233,7 +233,6 @@ test("Back from a failed Console refresh returns to the sign-in methods", () => 
   expect(selectProviderDialogView(failed.state).crumbs).toEqual([
     { kind: "root", target: "picker" },
     { kind: "provider", target: "methods" },
-    { kind: "method", method: oauth },
   ])
 
   expect(selectProviderDialogView(replay([goBack(failed.state)], failed.state).state).body).toEqual({ kind: "methods" })

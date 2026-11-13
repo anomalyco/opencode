@@ -166,15 +166,10 @@ export const DialogConnectProvider: Component<{
                   <For each={view().crumbs}>
                     {(crumb, index) => {
                       const last = () => index() === view().crumbs.length - 1
-                      const target = () => (crumb.kind === "method" ? undefined : crumb.target)
+                      const target = () => crumb.target
 
-                      const label = () => {
-                        if (crumb.kind === "root") return language.t("provider.connect.breadcrumb.root")
-
-                        if (crumb.kind === "method") return methodLabel(language, crumb.method)
-
-                        return providerName()
-                      }
+                      const label = () =>
+                        crumb.kind === "root" ? language.t("provider.connect.breadcrumb.root") : providerName()
 
                       const content = () => (
                         <>
