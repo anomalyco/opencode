@@ -34,6 +34,9 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("p0b.theme"), move |host, input| {
         toast(host, format!("p0b theme {}", host.set_theme(input.unwrap_or_default())));
     });
+    setup.command(command("p0b.install"), |host, input| {
+        host.install_theme(input.unwrap_or_default(), json!({ "theme": {} }));
+    });
     setup.command(command("p0b.variant"), move |host, _| {
         let (high, default) = (host.set_variant(Some("high")), host.set_variant(None));
         toast(host, format!("p0b variant {high} {default}"));
@@ -88,8 +91,9 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
         let reachable = read.keymap_commands().iter().any(|command| command.id == "p0b.open");
         let pending: Vec<String> = read.keymap_pending().into_iter().map(|key| key.key).collect();
         let continues = read.keymap_active().iter().filter(|key| key.continues).count();
+        let installed = read.themes().iter().any(|name| name == "p0b-theme");
         let text = format!(
-            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{}",
+            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{} i:{installed}",
             input.width,
             read.theme().unwrap_or_default(),
             tabs.join(","),
@@ -216,6 +220,29 @@ fn a_plugin_selects_a_theme_it_knows() {
         h.wait_for("p0b theme false");
         assert_eq!(h.tui.theme.borrow().selected(), "nord");
     }
+}
+
+// Expected (TS 1.x `api.theme.install`): an installed theme is written to the config's themes directory and then
+// listed, without being selected; a name that is not a plain file name installs nothing. On both paths.
+#[test]
+fn a_plugin_installs_a_theme() {
+    for loopback in [false, true] {
+        let (h, _memory, root) = home(loopback, 140, json!({}));
+        h.wait_for("p0b w140 opencode");
+        h.tui.keymap.dispatch("p0b.install", Some("../p0b-theme"));
+        h.tui.keymap.dispatch("p0b.install", Some("p0b-theme"));
+        h.wait_for(" i:true");
+        assert_eq!(h.tui.theme.borrow().selected(), "opencode");
+        let written: Vec<_> = walk(root.path()).into_iter().filter(|path| path.ends_with("p0b-theme.json")).collect();
+        assert_eq!(written.len(), 1, "loopback {loopback}: {written:?}");
+        assert!(written[0].parent().is_some_and(|dir| dir.ends_with("themes")), "{written:?}");
+    }
+}
+
+/// Every file under `dir`.
+fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let entries = std::fs::read_dir(dir).into_iter().flatten().flatten();
+    entries.flat_map(|entry| if entry.path().is_dir() { walk(&entry.path()) } else { vec![entry.path()] }).collect()
 }
 
 // Expected: the streaming deltas the store applies reach the plugin once a change batch, in order, which `on_event`
