@@ -2139,16 +2139,20 @@ fn a_host_call_from_another_thread_is_refused() {
     assert!(host.edits.borrow().is_empty());
 }
 
-/// The host table of the last `raw` instance, and how its render answers: 0 with `hide`, 1 with a result the host
-/// refuses, 2 with `hide` and no effects asked for.
-static RAW_HOST: std::sync::atomic::AtomicPtr<HostApi> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
-static RAW_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
-/// The statuses the host answered the raw render's requests with.
-static RAW_STATUSES: Mutex<Vec<i32>> = Mutex::new(Vec::new());
+// Per thread: each test runs its plugin on its own thread, so tests that run at once share none of them.
+thread_local! {
+    /// The host table of the last `raw` instance.
+    static RAW_HOST: Cell<*mut HostApi> = const { Cell::new(std::ptr::null_mut()) };
+    /// How the raw render answers: 0 with `hide`, 1 with a result the host refuses, 2 with `hide` and no effects asked
+    /// for.
+    static RAW_MODE: Cell<u8> = const { Cell::new(0) };
+    /// The statuses the host answered the raw render's requests with.
+    static RAW_STATUSES: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
+}
 
 /// A plugin written against the C ABI without the SDK: one 1.4 slot claim and one storage key.
 unsafe extern "C" fn raw_create(host: *const HostApi, _: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32 {
-    RAW_HOST.store(host.cast_mut(), Ordering::SeqCst);
+    RAW_HOST.set(host.cast_mut());
     let manifest = r#"{"id":"raw","commands":[],"fences":[],"slots":[{"kind":"append","path":"home.footer","render":true}],"routes":[],"storage":["k"],"render":2}"#;
     // SAFETY: the loader passes valid pointers; the instance pointer is never read.
     unsafe {
@@ -2163,10 +2167,10 @@ unsafe extern "C" fn raw_create(host: *const HostApi, _: Bytes, instance: *mut *
 unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
     // SAFETY: the loader passes the request for the call.
     let request = String::from_utf8_lossy(unsafe { request.as_slice() }).into_owned();
-    let mode = RAW_MODE.load(Ordering::SeqCst);
+    let mode = RAW_MODE.get();
     // A 1.3 fence render, which may ask for effects: they apply with a result the host draws, not with one it refuses.
     if request.contains(r#""type":"fence""#) {
-        let table = Table(RAW_HOST.load(Ordering::SeqCst));
+        let table = Table(RAW_HOST.get());
         table.call(r#"{"type":"toast","variant":"info","message":"from a fence"}"#);
         table.call(r#"{"type":"storage-set","key":"k","value":"{\"a\":1}"}"#);
         let answer = if mode == 1 { r#"{"nonsense":1}"# } else { "null" };
@@ -2177,15 +2181,26 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
     let answer = match request.contains(r#""type":"render""#) {
         true => {
             if mode != 2 {
-                let table = Table(RAW_HOST.load(Ordering::SeqCst));
+                let table = Table(RAW_HOST.get());
                 let asks = [
                     r#"{"type":"composer-edit","edit":{"type":"submit"}}"#,
                     r#"{"type":"toast","variant":"info","message":"from a render"}"#,
                     r#"{"type":"dialog","dialog":{"type":"alert","title":"T","message":"M"}}"#,
                     r#"{"type":"storage-set","key":"k","value":"{\"a\":1}"}"#,
+                    // 1.6 (review bigboi-13).
+                    r#"{"type":"set-variant","variant":"high"}"#,
+                    r#"{"type":"set-model","provider":"p","model":"m"}"#,
+                    r#"{"type":"tab","edit":{"type":"focus","session":"ses_1"}}"#,
+                    r#"{"type":"clear-selection"}"#,
+                    r#"{"type":"foreground","command":"true"}"#,
+                    r#"{"type":"title","title":"t"}"#,
+                    r#"{"type":"set-theme","name":"nord"}"#,
+                    r#"{"type":"install-theme","name":"x","theme":{"theme":{}}}"#,
                 ];
                 let statuses = asks.iter().map(|ask| table.call(ask).0);
-                RAW_STATUSES.lock().unwrap().extend(statuses);
+                RAW_STATUSES.with_borrow_mut(|known| known.extend(statuses));
+                // A read of 1.6 is answered.
+                assert_eq!(table.call(r#"{"type":"variants"}"#).0, abi::OK);
             }
             if mode == 1 { r#"{"type":"nonsense"}"# } else { r#"{"type":"hide"}"# }
         }
@@ -2201,8 +2216,8 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
 #[test]
 fn a_render_that_asks_for_effects_gets_none() {
     let outcome = |mode: u8| {
-        RAW_MODE.store(mode, Ordering::SeqCst);
-        RAW_STATUSES.lock().unwrap().clear();
+        RAW_MODE.set(mode);
+        RAW_STATUSES.take();
         let host = host();
         let api = PluginApi {
             size: size_of::<PluginApi>(),
@@ -2222,21 +2237,22 @@ fn a_render_that_asks_for_effects_gets_none() {
         let parent = View::new(host.app());
         let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
         host.app.advance(Duration::from_millis(1));
-        let statuses = std::mem::take(&mut *RAW_STATUSES.lock().unwrap());
+        let statuses = RAW_STATUSES.take();
         let seen = (
             host.edits.borrow().len(),
             host.toasts.borrow().len(),
             host.dialogs.borrow().len(),
             host.storage.borrow().get("plugin.raw.k").cloned(),
             entry(&registry.entries(), "raw.so").status.clone(),
+            host.verbs.borrow().len() + host.programs.borrow().len(),
         );
         (statuses, seen)
     };
     let quiet = outcome(2);
-    assert_eq!(quiet.1, (0, 0, 0, None, Status::Active));
+    assert_eq!(quiet.1, (0, 0, 0, None, Status::Active, 0));
     for mode in [0, 1] {
         let (statuses, seen) = outcome(mode);
-        assert_eq!(statuses, [abi::ERROR; 4], "mode {mode}");
+        assert_eq!(statuses, [abi::ERROR; 12], "mode {mode}");
         assert_eq!(seen, quiet.1, "mode {mode}");
     }
 }
@@ -2248,7 +2264,7 @@ unsafe extern "C" fn raw_create_1_3(
     instance: *mut *mut c_void,
     out: *mut Owned,
 ) -> i32 {
-    RAW_HOST.store(host.cast_mut(), Ordering::SeqCst);
+    RAW_HOST.set(host.cast_mut());
     let manifest = r#"{"id":"raw","commands":[],"fences":["raw"],"slots":[],"routes":[],"storage":["k"]}"#;
     // SAFETY: the loader passes valid pointers; the instance pointer is never read.
     unsafe {
@@ -2263,7 +2279,7 @@ unsafe extern "C" fn raw_create_1_3(
 #[test]
 fn a_refused_render_result_leaves_no_effects() {
     let outcome = |mode: u8| {
-        RAW_MODE.store(mode, Ordering::SeqCst);
+        RAW_MODE.set(mode);
         let host = host();
         let api = PluginApi {
             size: size_of::<PluginApi>(),
