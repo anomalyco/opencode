@@ -285,6 +285,7 @@ function GroupItem(props: {
       <Match when={currentToolGroupedRead(tool())}>
         <CurrentReadToolGroup
           tools={props.tools}
+          names={2}
           open={props.toolOpen?.(tool().id)}
           onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
           onSizeChange={props.onSizeChange}
@@ -542,7 +543,7 @@ function activityLabel(group: SessionMessageAssistantTool[], i18n: UiI18n) {
   const main = {
     // A few files read better by name; past that, the count says more than a list that truncates.
     edit:
-      files.length <= 3
+      files.length <= 2
         ? files.map((path) => getFilename(path)).join(", ")
         : i18n.plural("ui.timeline.activity.files", files.length),
     run: commands[0]!,

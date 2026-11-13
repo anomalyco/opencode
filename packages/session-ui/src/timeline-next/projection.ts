@@ -314,18 +314,14 @@ function constructRows(input: Input) {
     }),
   ]
 
-  // Like the TUI, a queued compaction waits after the active turn and ahead of every undelivered input:
-  // steers, which own turns, and synthetic notices, which ride at the end of the active one.
-  const pendingAt = rows.findIndex(
-    (row) =>
-      input.pendingInputIDs?.has(row.userMessageID) ||
-      (Predicate.isTagged(row, "Notice") && input.pendingInputIDs?.has(row.messageID)),
-  )
+  // Like the TUI, a queued compaction waits after the active turn and ahead of every steer still waiting for delivery.
+  // Notices waiting for delivery are already in the active turn, since they report what happened.
+  const pendingAt = rows.findIndex((row) => input.pendingInputIDs?.has(row.userMessageID))
 
   rows.splice(
     pendingAt < 0 ? rows.length : pendingAt,
     0,
-    // Live status ends the work the model has seen, so it stays above everything still waiting for delivery.
+    // Live status ends the turn, so it stays above the input the user steered in, which waits for the agent to reply.
     ...(input.status.type !== "idle" && activeMessageID && (pendingAt >= 0 || input.queuedCompactionIDs.length > 0)
       ? [new TimelineRow.Activity({ userMessageID: activeMessageID })]
       : []),
@@ -380,7 +376,11 @@ function constructTurns(input: Input) {
     if (echoesUserShell(message, userShellIDs)) return
 
     if (isNotice(message)) {
-      if (current) current.entries.push({ type: "notice", message })
+      // A notice still waiting for delivery, such as a subagent reporting back, already happened, so it joins the
+      // working turn above the status line, even when input the user steered in meanwhile waits below it.
+      const turn = input.pendingInputIDs?.has(message.id) ? (execution?.turn ?? current) : current
+
+      if (turn) turn.entries.push({ type: "notice", message })
       else leading.push(message)
 
       return
