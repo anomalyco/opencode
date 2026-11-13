@@ -373,7 +373,7 @@ export const make = (input: Input, mediaType?: string): Asset => {
 
 const BASE64 = /^[A-Za-z0-9+/\-_\s]*={0,2}\s*$/
 
-// 64 characters decode to 48 bytes, enough for every signature `detectMediaType` reads.
+// Sample up to 48 bytes; compatible brands beyond the sample are ignored.
 const sniffBase64 = (value: string) => {
   const head = Result.getOrUndefined(Base64.decode(value.slice(0, 64)))
   return head === undefined ? undefined : detectMediaType(head)

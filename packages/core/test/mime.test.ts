@@ -13,6 +13,10 @@ describe("Mime.detect", () => {
     expect(Mime.detect(bytes)).toBe(mime)
   })
 
+  test("keeps text with ftyp at byte four readable", () => {
+    expect(Mime.detect(Buffer.from("someftyp text here"))).toBe("text/plain")
+  })
+
   test("tells ISO-BMFF brands apart", () => {
     expect(Mime.detect(ftyp("000000206674797061766966000000004d695072617669666d6961666d696631"))).toBe("image/avif")
     expect(Mime.detect(ftyp("000000186674797061766973000000006d73663161766973"))).toBe("image/avif")
