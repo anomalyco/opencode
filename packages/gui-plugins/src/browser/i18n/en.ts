@@ -63,7 +63,6 @@ export default {
   "history.clear": "Clear history",
   "extensions.menu": "Extensions",
   "extensions.manage": "Manage extensions",
-  "extensions.remote": "Extensions run in sessions on this computer",
   "extensions.added": "Added {{name}}.",
   "extensions.added.partial": "Added {{name}}. Some of its features don't work here.",
   "extensions.added.unsupported": "Added {{name}}. It probably won't work here.",

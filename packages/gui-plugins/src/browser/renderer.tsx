@@ -281,7 +281,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
         { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out" },
         {
           id: "settings-browser-import",
-          title: ctx.t("settings.import.browser.title"),
+          title: ctx.t("settings.import.title"),
           keywords: "import cookies chrome edge firefox safari helium arc brave sign in",
         },
         { id: "settings-browser-extensions", title: ctx.t("settings.extensions.title"), keywords: "extensions" },
