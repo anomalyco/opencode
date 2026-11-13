@@ -2064,8 +2064,10 @@ fn a_call_that_panics_has_no_effects() {
     }
 }
 
-/// The host table the last `catching` instance got, as a C plugin keeps it.
-static CAUGHT: std::sync::atomic::AtomicPtr<HostApi> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+thread_local! {
+    /// The host table the last `catching` instance of this thread got, as a C plugin keeps it.
+    static CAUGHT: Cell<*mut HostApi> = const { Cell::new(std::ptr::null_mut()) };
+}
 
 unsafe extern "C" fn catching(
     host: *const HostApi,
@@ -2073,7 +2075,7 @@ unsafe extern "C" fn catching(
     instance: *mut *mut c_void,
     out: *mut Owned,
 ) -> i32 {
-    CAUGHT.store(host.cast_mut(), Ordering::SeqCst);
+    CAUGHT.set(host.cast_mut());
     // SAFETY: the loader passes what `PluginApi::create` documents.
     unsafe { abi::runtime::create("threads", |_| Ok(()), host, options, instance, out) }
 }
@@ -2121,7 +2123,7 @@ fn a_host_call_from_another_thread_is_refused() {
     let (definition, error) = define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("threads.so", error));
-    let table = Table(CAUGHT.load(Ordering::SeqCst));
+    let table = Table(CAUGHT.get());
     let toast = |message: &str| format!(r#"{{"type":"toast","variant":"info","message":"{message}"}}"#);
     let edit = r#"{"type":"composer-edit","edit":{"type":"submit"}}"#;
     for request in [toast("from a thread"), edit.to_owned(), r#"{"type":"composer"}"#.to_owned()] {
@@ -2137,6 +2139,74 @@ fn a_host_call_from_another_thread_is_refused() {
     let toasts: Vec<_> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
     assert_eq!(toasts, ["from the UI thread"]);
     assert!(host.edits.borrow().is_empty());
+}
+
+// Expected (carbon-5, after P0a's check): each read and verb of 1.6 that a C plugin sends from a thread of its own is
+// refused with an error, as every host call is there, and touches nothing; from the UI thread each is served. In
+// process a `&dyn Host` or `&dyn Read` cannot reach another thread (the doctests on `abi::Host` and `abi::Read`).
+#[test]
+fn a_1_6_host_call_from_another_thread_is_refused() {
+    let host = host();
+    let api = PluginApi {
+        size: size_of::<PluginApi>(),
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 4,
+        create: Some(catching),
+        call: Some(abi::runtime::call),
+        destroy: Some(abi::runtime::destroy),
+        free: Some(abi::runtime::free),
+        describe: None,
+    };
+    let load = |registry: &Registry| {
+        let (definition, error) =
+            define(&dynamic(&host), Library::from_table(&api, HOST_MINOR).unwrap(), None).unwrap();
+        registry.load(&dynamic(&host), definition.external("threads.so", error));
+        Table(CAUGHT.get())
+    };
+    let requests = [
+        r#"{"type":"variants"}"#,
+        r#"{"type":"tabs-enabled"}"#,
+        r#"{"type":"tabs"}"#,
+        r#"{"type":"keymap-pending"}"#,
+        r#"{"type":"keymap-active"}"#,
+        r#"{"type":"keymap-commands"}"#,
+        r#"{"type":"shortcuts","name":"x"}"#,
+        r#"{"type":"selection"}"#,
+        r#"{"type":"theme"}"#,
+        r#"{"type":"themes"}"#,
+        r#"{"type":"set-variant"}"#,
+        r#"{"type":"set-model","provider":"p","model":"m"}"#,
+        r#"{"type":"tab","edit":{"type":"open","session":"ses_1"}}"#,
+        r#"{"type":"clear-selection"}"#,
+        r#"{"type":"foreground","command":"true"}"#,
+        r#"{"type":"title","title":"t"}"#,
+        r#"{"type":"set-theme","name":"opencode"}"#,
+        r#"{"type":"install-theme","name":"x","theme":{"theme":{}}}"#,
+    ];
+    let registry = Registry::define(Vec::new(), []);
+    let table = load(&registry);
+    for request in requests {
+        let (status, text, _) = std::thread::spawn(move || table.call(request)).join().unwrap();
+        assert_eq!(status, abi::ERROR, "{request}: {text}");
+        assert!(text.contains("UI thread"), "{request}: {text}");
+    }
+    // Disabling destroys the instance, which applies what it asked for: nothing.
+    assert!(registry.set_active(&dynamic(&host), "threads", false));
+    host.app.advance(Duration::from_millis(1));
+    assert!(host.verbs.borrow().is_empty(), "{:?}", host.verbs.borrow());
+    assert!(host.programs.borrow().is_empty());
+
+    // The same from the UI thread: each is served, and its verbs run.
+    let registry = Registry::define(Vec::new(), []);
+    let table = load(&registry);
+    for request in requests {
+        let (status, text, _) = table.call(request);
+        assert_eq!(status, abi::OK, "{request}: {text}");
+    }
+    assert!(registry.set_active(&dynamic(&host), "threads", false));
+    host.app.advance(Duration::from_millis(1));
+    assert!(!host.verbs.borrow().is_empty());
 }
 
 // Per thread: each test runs its plugin on its own thread, so tests that run at once share none of them.
