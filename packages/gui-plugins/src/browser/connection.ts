@@ -22,6 +22,7 @@ export type Registration = {
   zoom(tabID: Browser.TabID, zoom: Zoom): void
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
+  reveal(tabID: Browser.TabID): Promise<void>
   close(): void
 }
 
@@ -77,6 +78,7 @@ export function openBinding(input: {
     },
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
+    reveal: (tabID) => ready.then(() => client.reveal({ binding, tabID })),
     close() {
       if (status.closed) return
       status.closed = true

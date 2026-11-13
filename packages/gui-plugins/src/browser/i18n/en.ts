@@ -1,4 +1,5 @@
 export default {
+  "external.reveal": "Show file in folder",
   "model.timedOut": "The browser took too long to load",
   "command.open": "Open browser",
   "command.reload": "Reload browser page",

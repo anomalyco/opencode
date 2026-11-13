@@ -1,8 +1,7 @@
-import { realpath, stat } from "node:fs/promises"
-import { fileURLToPath, pathToFileURL } from "node:url"
 import { net, type Session } from "electron"
 import { previewScheme } from "@opencode/gui-plugins/schemes"
 import { previewResource } from "../preview"
+import { workspaceFile } from "../workspace-file"
 
 export function createPreviews(session: Session) {
   const grants = new Map<string, () => readonly string[]>()
@@ -20,17 +19,11 @@ export function createPreviews(session: Session) {
     const file = previewResource(request.url, host, initiator, grant())
 
     if (!file) return Response.error()
-    // Check the resolved target too: a symlink or junction under the workspace is not a grant for its destination.
-    const target = await realpath(fileURLToPath(file)).catch(() => undefined)
+    const target = await workspaceFile(file, grant())
 
-    if (!target || !(await stat(target)).isFile()) return Response.error()
-    const href = pathToFileURL(target).href
-    const roots = await Promise.all(grant().map((root) => realpath(root)))
-
-    if (!roots.some((root) => href.startsWith(`${pathToFileURL(root).href.replace(/\/$/, "")}/`)) || !grants.has(host))
-      return Response.error()
+    if (!target || !grants.has(host)) return Response.error()
     const range = request.headers.get("range")
-    const response = await net.fetch(href, { method: request.method, headers: range ? { range } : undefined })
+    const response = await net.fetch(target.href, { method: request.method, headers: range ? { range } : undefined })
     const headers = new Headers(response.headers)
     headers.set("Cross-Origin-Resource-Policy", "same-origin")
     headers.set("Content-Security-Policy", "frame-ancestors 'self'")

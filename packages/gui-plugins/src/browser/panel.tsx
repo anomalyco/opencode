@@ -22,7 +22,7 @@ import {
   type MountedSession,
   type SessionScreen,
 } from "@opencode/plugin/gui"
-import { addressParts, connection, loopback } from "./address"
+import { addressParts, connection, externalAction } from "./address"
 import {
   ADDRESS_HINT_MAX_LENGTH,
   addressSuggestions,
@@ -236,15 +236,18 @@ export default function SessionBrowserPane(props: {
 
   // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the
   // server runs here too.
-  const reachable = () => {
-    const url = address()
+  const reachable = () => externalAction(address(), props.session.server.local)
 
-    if (!URL.canParse(url)) return false
-    const parsed = new URL(url)
+  const externalLabel = () => address().startsWith("file:") ? "external.reveal" : "external.open"
 
-    if (parsed.protocol === "file:") return props.session.server.local
+  const openExternal = () => {
+    const tab = state()
 
-    return /^https?:$/.test(parsed.protocol) && (props.session.server.local || !loopback(parsed.hostname))
+    if (!tab || !reachable()) return
+
+    if (externalAction(tab.url, props.session.server.local) === "reveal") return props.model.revealFile(props.session, tab.id)
+
+    if (externalAction(tab.url, props.session.server.local) === "browser") system.openExternal(tab.url)
   }
 
   const closeOverlay = () => dispatchOverlay({ type: "overlay.cancelled" })
@@ -656,15 +659,15 @@ export default function SessionBrowserPane(props: {
                     icon={<Icon name="outline-globe-plus" />}
                   />
                 </Tooltip>
-                <Tooltip placement="top" value={plugin.t(reachable() ? "external.open" : "external.unavailable")}>
+                <Tooltip placement="top" value={plugin.t(reachable() ? externalLabel() : "external.unavailable")}>
                   <IconButton
                     type="button"
                     variant="ghost-muted"
                     size="small"
-                    aria-label={plugin.t("external.open")}
+                    aria-label={plugin.t(externalLabel())}
                     disabled={!reachable()}
                     onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => system.openExternal(address())}
+                    onClick={openExternal}
                     icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
                   />
                 </Tooltip>
@@ -801,8 +804,8 @@ export default function SessionBrowserPane(props: {
                 <Menu.Item disabled={!address()} onSelect={copyLink}>
                   {plugin.t("link.copy")}
                 </Menu.Item>
-                <Menu.Item disabled={!reachable()} onSelect={() => system.openExternal(address())}>
-                  {plugin.t("external.menu")}
+                <Menu.Item disabled={!reachable()} onSelect={openExternal}>
+                  {plugin.t(address().startsWith("file:") ? "external.reveal" : "external.menu")}
                 </Menu.Item>
                 <Menu.Separator />
                 <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("settings.open")}</Menu.Item>

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { addressParts, resolveAddress } from "./address"
+import { addressParts, externalAction, resolveAddress } from "./address"
 import { remember, suggest } from "./history"
 
 test("the address field navigates to what reads as an address and searches for anything else", () => {
@@ -103,4 +103,14 @@ test("history keeps one newest-first visit per URL and suggests addresses that c
       visits,
     ),
   ).toHaveLength(30)
+})
+
+test("a local preview may be revealed by tab ID but never launched by URL", () => {
+  for (const suffix of ["html", "exe", "bat", "cmd", "lnk", "ps1", "app"]) {
+    expect(externalAction(`file:///repo/test.${suffix}`, true)).toBe("reveal")
+    expect(externalAction(`file:///repo/test.${suffix}`, false)).toBeUndefined()
+  }
+
+  expect(externalAction("https://example.org", false)).toBe("browser")
+  expect(externalAction("oc-preview://other/repo/x", true)).toBeUndefined()
 })

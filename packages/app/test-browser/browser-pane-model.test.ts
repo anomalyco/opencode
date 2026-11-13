@@ -47,6 +47,7 @@ function fixture() {
     zoom: async () => undefined,
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
+    reveal: async () => undefined,
     close: async () => undefined,
     state: () => undefined,
     on: (_name, listener) => {

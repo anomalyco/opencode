@@ -38,6 +38,7 @@ import {
 } from "./pane-machine"
 import { createBrowserRestoreStore } from "./restore"
 import { guardSession } from "./session-guard"
+import { workspaceFile } from "./workspace-file"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
 
@@ -359,6 +360,16 @@ export function createBrowserPane(input: {
     async clearSite(window: number, binding: string, tabID: Browser.TabID) {
       owned(window, binding)
       await page(binding, tabID)?.clearSite()
+    },
+    async reveal(window: number, binding: string, tabID: Browser.TabID) {
+      owned(window, binding)
+      const tab = page(binding, tabID)
+      const url = tab?.state().url
+      const file = url && await workspaceFile(url, selectFileRoots(machine.state, binding))
+
+      if (!file || !tab || page(binding, tabID) !== tab || tab.state().url !== url) throw new Error("browser.address.workspace")
+      // Reveal a regular file in its folder; never hand even a validated file to its executable association.
+      electron.shell.showItemInFolder(file.path)
     },
     async command(window: number, binding: string, command: Browser.Action) {
       owned(window, binding)

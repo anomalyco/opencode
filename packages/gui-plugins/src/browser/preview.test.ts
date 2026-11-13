@@ -9,8 +9,9 @@ const view = "oc-preview://first/work/repo%20%231/index.html?q=1#anchor"
 
 test("a workspace address round-trips without ever loading a native file origin", () => {
   expect(previewAddress(file, "first", roots)).toBe(view)
-  expect(previewFile(view, "first")).toBe(file)
-  expect(previewFile(view, "second")).toBeUndefined()
+  expect(previewFile(view, "first", roots)).toBe(file)
+  expect(previewFile(view, "second", roots)).toBeUndefined()
+  expect(previewFile("oc-preview://first/work/other/notes.html", "first", roots)).toBeUndefined()
   expect(previewAddress(file, undefined, roots)).toBeUndefined()
   expect(previewAddress(file, "first", [])).toBeUndefined()
 })

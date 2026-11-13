@@ -10,18 +10,19 @@ export function previewAddress(address: string, host: string | undefined, roots:
   return `${previewScheme}://${host}${file.slice("file://".length)}`
 }
 
-export function previewFile(address: string, host: string | undefined) {
+export function previewFile(address: string, host: string | undefined, roots: readonly string[]) {
   const prefix = `${previewScheme}://${host}/`
 
   if (!host || !address.startsWith(prefix) || address.startsWith(`${prefix}/`)) return
 
-  return `file:///${address.slice(prefix.length)}`
+  const file = `file:///${address.slice(prefix.length)}`
+
+  return fileURLWithin(file, roots) ? file : undefined
 }
 
 /** The browser may open a preview; only that preview's origin may request its resources, including from a worker. */
 export function previewResource(address: string, host: string, initiator: string | undefined, roots: readonly string[]) {
   if (initiator !== undefined && initiator !== `${previewScheme}://${host}`) return
-  const file = previewFile(address, host)
 
-  return file && fileURLWithin(file, roots) ? file : undefined
+  return previewFile(address, host, roots)
 }

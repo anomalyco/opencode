@@ -51,7 +51,6 @@ import {
   downloadOwner,
   excludedFrames,
   extensionURL,
-  fileURLWithin,
   localFileURL,
   normalizeURL,
   refusal,
@@ -60,6 +59,7 @@ import {
 import type { PaneElement } from "./ipc"
 import { previewAddress, previewFile } from "./preview"
 import { previewScheme } from "../schemes"
+import { workspaceFile } from "./workspace-file"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
@@ -254,7 +254,8 @@ export function createBrowserPage(
   })
 
   const contents = view.webContents
-  const displayURL = (url: string) => previewFile(url, options.previewHost) ?? url
+  const preview = (url: string) => previewFile(url, options.previewHost, policy.fileRoots ?? [])
+  const displayURL = (url: string) => preview(url) ?? (/^(?:oc-preview|file):/i.test(url) ? "about:blank" : url)
   const detachNetwork = options.network?.attach(contents)
   contents.on("before-mouse-event", (_event, mouse) => {
     // The agent's own input arrives while its command runs.
@@ -480,11 +481,21 @@ export function createBrowserPage(
     if (agentDriven) contents.setBackgroundThrottling(false)
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
-    dispatch({ type: "navigation.failed", code, description, url: displayURL(url), isMainFrame }),
+    dispatch({ type: "navigation.failed", code, description, url: /^(?:oc-preview|file):/i.test(url) ? state().url : url, isMainFrame }),
   )
-  contents.on("did-navigate-in-page", (_event, url, isMainFrame) =>
-    dispatch({ type: "navigation.in-page", url: displayURL(url), title: contents.getTitle(), isMainFrame }),
-  )
+  contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+    if (!isMainFrame) return
+    const report = (address: string) => dispatch({ type: "navigation.in-page", url: address, title: contents.getTitle(), isMainFrame })
+
+    if (!/^(?:oc-preview|file):/i.test(url)) return report(url)
+    const file = preview(url)
+
+    if (!file) return
+    // History API routes never pass the protocol handler. Keep the last validated address for virtual routes.
+    void workspaceFile(file, policy.fileRoots ?? []).then((target) => {
+      if (target && !closed() && !contents.isDestroyed() && contents.getURL() === url) report(file)
+    })
+  })
   contents.on("dom-ready", () => dispatch({ type: "document.ready" }))
   contents.on("page-title-updated", () => dispatch({ type: "title.updated", title: contents.getTitle() }))
   contents.on("page-favicon-updated", (_event, favicons) => dispatch({ type: "icon.updated", favicons }))
@@ -506,7 +517,7 @@ export function createBrowserPage(
 
     const local = /^file:/i.test(event.url) || event.url.startsWith(`${previewScheme}:`)
 
-    if (local && fileURLWithin(previewFile(event.url, options.previewHost) ?? "", policy.fileRoots ?? [])) return
+    if (local && preview(event.url)) return
 
     if (!local && (!event.isMainFrame || allowedDestination(event.url, policy))) return
     event.preventDefault()
@@ -519,7 +530,7 @@ export function createBrowserPage(
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
   contents.setWindowOpenHandler(({ url, disposition }) =>
     url === "about:blank" || destinationOrigin(url) || extensionURL(url, policy.extensions ?? []) ||
-    fileURLWithin(previewFile(url, options.previewHost) ?? "", policy.fileRoots ?? [])
+    preview(url)
       ? {
           action: "allow",
           outlivesOpener: true,

@@ -608,6 +608,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     site: (session: Session, tabID: Browser.TabID) => registration(session)?.site(tabID),
     /** Deletes the page's cookies and stored data, and reloads it. */
     clearSite: (session: Session, tabID: Browser.TabID) => registration(session)?.clearSite(tabID),
+    revealFile: (session: Session, tabID: Browser.TabID) => registration(session)?.reveal(tabID),
     /** Pages the browser showed, newest first. */
     visits: () => history.value.visits,
     clearHistory: () => {
