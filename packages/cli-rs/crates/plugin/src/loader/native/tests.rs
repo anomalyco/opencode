@@ -2480,6 +2480,9 @@ fn a_1_5_library_gets_what_a_1_4_host_offers() {
 thread_local! {
     /// The injected clock of [`late`]'s monitor.
     static LATE_CLOCK: std::cell::Cell<Duration> = const { std::cell::Cell::new(Duration::ZERO) };
+    /// The run record of [`late`]'s monitor, and what it named inside `late.run`.
+    static LATE_RECORD: std::cell::RefCell<Option<Arc<crate::contain::Record>>> = const { std::cell::RefCell::new(None) };
+    static LATE_SEEN: std::cell::RefCell<Option<(String, &'static str)>> = const { std::cell::RefCell::new(None) };
 }
 
 /// A plugin whose `late.run` toasts, then takes 150 ms on the injected clock; `late.ok` takes nothing.
@@ -2488,6 +2491,12 @@ fn late(setup: &mut abi::Setup) -> Result<(), String> {
         |name: &str| abi::Command { name: name.to_owned(), title: name.to_owned(), ..abi::Command::default() };
     setup.command(command("late.ok"), |_, _| {});
     setup.command(command("late.run"), |host, _| {
+        let seen = LATE_RECORD.with_borrow(|record| {
+            let record = record.as_ref()?;
+            let (slot, kind, _) = record.running()?;
+            Some((record.named(slot)?, *crate::contain::record::KINDS.get(usize::from(kind))?))
+        });
+        LATE_SEEN.set(seen);
         host.toast(abi::Toast::new(abi::Variant::Info, "late"));
         LATE_CLOCK.set(LATE_CLOCK.get() + Duration::from_millis(150));
     });
@@ -2495,7 +2504,8 @@ fn late(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 // Expected (synthesis 4.4, 4.14): a call that overruns did return, so what it asked for happens; then an external
-// plugin fails with the call and its time, and is told once. For a built-in an overrun is a host bug: it runs on.
+// plugin fails with the call and its time, and is told once. For a built-in an overrun is a host bug: it runs on. On
+// both paths the call is timed and named in the run record while it runs (`record-balanced`).
 #[test]
 fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
     for through in [false, true] {
@@ -2503,6 +2513,9 @@ fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
         let registry = Registry::define(Vec::new(), []);
         let base = std::time::Instant::now();
         registry.monitor().set_clock(move || base + LATE_CLOCK.get());
+        let dir = opencode_util::temp::tempdir().unwrap();
+        LATE_RECORD.set(Some(registry.monitor().attach_record(&dir.path().join("run")).unwrap()));
+        LATE_SEEN.set(None);
         match through {
             true => {
                 let loaded = loopback_described(&dynamic(&host), abi::export_plugin!(@loopback_described "late", late));
@@ -2529,5 +2542,7 @@ fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
             false => (vec!["late".to_owned()], Status::Active),
         };
         assert_eq!((toasts, status), expected, "through the C ABI: {through}");
+        assert_eq!(LATE_SEEN.take(), Some(("late".to_owned(), "run-command")), "through the C ABI: {through}");
+        LATE_RECORD.set(None);
     }
 }
