@@ -148,7 +148,7 @@ export const dict = {
   "provider.connect.title": "Conectează {{provider}}",
   "provider.connect.method.apiKey": "Cheie API",
   "provider.connect.status.inProgress": "Autorizare în curs…",
-  "provider.connect.status.waiting": "Se așteaptă autorizarea…",
+  "provider.connect.status.waiting": "Se așteaptă autorizarea",
   "provider.connect.status.failed": "Autorizare eșuată: {{error}}",
   "provider.connect.apiKey.description":
     "Introdu cheia API {{provider}} pentru a-ți conecta contul și a folosi modelele {{provider}} în OpenCode.",
@@ -835,7 +835,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Migrarea datelor {{current}}/{{total}}",
   "command.session.location.cycle": "Schimbă locația sesiunii",
   "dialog.provider.anthropic.note": "Acces direct la modelele Claude prin cheia API",
-  "provider.connect.title.anthropicProMax": "Autentificare cu Anthropic",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Anulează încărcarea fișierului {{filename}}",
   "prompt.toast.uploadFailed.title": "Încărcarea a eșuat",

@@ -106,13 +106,15 @@ function PlainLabel() {
 }
 
 export const Variants = {
-  render: () => (
+  args: { subagents: "separate" },
+  argTypes: { subagents: { options: ["separate", "grouped", "hidden"] } },
+  render: (args: { subagents: "separate" | "grouped" | "hidden" }) => (
     <div class="min-h-screen bg-v2-background-bg-base py-4">
       <Frame title="A. Dot-matrix spinner while running, no icon when done (production)">
         <CurrentSessionProviders document={productionDocument}>
           <SessionTimeline
             document={productionDocument}
-            timelineDetail={{ ...timelinePresets[2].value, subagents: { placement: "separate" } }}
+            timelineDetail={{ ...timelinePresets[2].value, subagents: { placement: args.subagents } }}
           />
         </CurrentSessionProviders>
       </Frame>

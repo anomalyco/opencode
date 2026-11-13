@@ -189,11 +189,6 @@ export function liveThinkingShows(detail: TimelineDetail) {
   return detail.thinking.placement !== "hidden"
 }
 
-/** A command the user ran always shows, whole where shell details expand and its last lines otherwise. */
-export function userShellOpens(detail: TimelineDetail) {
-  return detail.shell.details === "expanded"
-}
-
 /** The notice the agent gets about a command the user ran repeats that command's own card, so it never shows. */
 export function echoesUserShell(message: SessionMessageInfo, userShellIDs: ReadonlySet<string>) {
   const shellID = message.type === "synthetic" ? message.metadata?.shellID : undefined
@@ -208,7 +203,7 @@ export function echoesUserShell(message: SessionMessageInfo, userShellIDs: Reado
 
 /**
  * Where a notice shows. What the user did and what changed the session always stands on its own. Background work
- * reports its outcome as its own row, following the setting its launch follows: a subagent's the subagent setting, a
+ * reports its outcome as an event, following the setting its launch follows: a subagent's the subagent setting, a
  * shell's the shell setting.
  */
 export function noticePlacement(detail: TimelineDetail, message: SessionMessageInfo): TimelinePlacement {
@@ -234,6 +229,11 @@ export function sessionEvent(message: SessionMessageInfo) {
     return true
 
   return goal(message)
+}
+
+/** A move to where the session already is changes nothing, so it shows nothing. */
+export function movedInPlace(message: SessionMessageInfo) {
+  return message.type === "location-switched" && message.previous?.location.directory === message.location.directory
 }
 
 /** A goal the user set, which reads as their own message. */

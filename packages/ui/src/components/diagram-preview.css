@@ -1,0 +1,95 @@
+[data-component="diagram-preview"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+
+  /* The diagram is shown over the dialog stack's overlay, fitted to the window with room for the controls under it. */
+  [data-slot="diagram-preview-content"] {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="diagram-preview-content"][data-expanded] {
+      animation: diagram-preview-in 150ms ease-out;
+    }
+  }
+
+  [data-slot="diagram-preview-body"] {
+    position: absolute;
+    inset: 44px clamp(8px, 3vw, 36px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    overflow: hidden;
+    user-select: none;
+    /* A zoomed diagram fades out in the padding instead of being cut at the edge; a fitted one never reaches it. */
+    mask-image:
+      linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
+      linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+    mask-composite: intersect;
+
+    &[data-zoomed] {
+      cursor: grab;
+      touch-action: pinch-zoom;
+    }
+
+    &[data-dragging] {
+      cursor: grabbing;
+    }
+  }
+
+  [data-slot="diagram-preview-canvas"] {
+    flex: none;
+    border-radius: var(--radius-md);
+    background: var(--v2-background-bg-layer-02);
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+    transform-origin: center;
+
+    > svg {
+      display: block;
+    }
+  }
+
+  [data-slot="diagram-preview-controls"] {
+    position: absolute;
+    bottom: 12px;
+    inset-inline: 0;
+    width: fit-content;
+    margin-inline: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--v2-background-bg-layer-01);
+    box-shadow: var(--v2-elevation-floating);
+  }
+
+  [data-slot="diagram-preview-zoom-level"] {
+    min-width: 52px;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot="diagram-preview-divider"] {
+    width: 1px;
+    height: 16px;
+    margin-inline: 2px;
+    background: var(--v2-border-border-base);
+  }
+}
+
+@keyframes diagram-preview-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}

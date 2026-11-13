@@ -149,10 +149,9 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "နောက်ထပ်ပံ့ပိုးပေးသူ 70+ ကိုကြည့်ပါ။",
   "dialog.provider.viewAll": "နောက်ထပ်ဝန်ဆောင်မှုပေးသူများကို ပြပါ။",
   "provider.connect.title": "{{provider}} ကို ချိတ်ဆက်ပါ။",
-  "provider.connect.title.anthropicProMax": "Anthropic ဖြင့် အကောင့်ဝင်ပါ",
   "provider.connect.method.apiKey": "API သော့",
   "provider.connect.status.inProgress": "ခွင့်ပြုချက် လုပ်ဆောင်နေသည်…",
-  "provider.connect.status.waiting": "ခွင့်ပြုချက်ကို စောင့်ဆိုင်းနေသည်…",
+  "provider.connect.status.waiting": "ခွင့်ပြုချက်ကို စောင့်ဆိုင်းနေသည်",
   "provider.connect.status.failed": "ခွင့်ပြုချက် မအောင်မြင်ပါ- {{error}}",
   "provider.connect.apiKey.description":
     "သင့်အကောင့်ကို ချိတ်ဆက်ရန်နှင့် OpenCode တွင် {{provider}} မော်ဒယ်များကို အသုံးပြုရန် သင်၏ {{provider}} API သော့ကို ထည့်သွင်းပါ။",

@@ -553,6 +553,22 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("leaves legacy credentials out of in-memory databases", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(
+      path.join(tmp.path, "auth.json"),
+      JSON.stringify({ openai: { type: "oauth", refresh: "refresh", access: "access", expires: 123 } }),
+    )
+
+    const rows = await Effect.runPromise(
+      Database.Service.use((database) => database.db.all(sql`SELECT id FROM credential`)).pipe(
+        Effect.provide(Database.layer({ path: ":memory:" })),
+        Effect.provideService(Global.Service, Global.make({ data: tmp.path })),
+      ),
+    )
+    expect(rows).toEqual([])
+  })
+
   test("bootstraps a fresh database when the legacy credential file is malformed", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "auth.json"), "not json")

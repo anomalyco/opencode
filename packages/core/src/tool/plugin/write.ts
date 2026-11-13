@@ -21,16 +21,8 @@ export const Input = Schema.Struct({
   content: Schema.String.annotate({ description: "Content to write to the file" }),
 })
 
-export const Output = Schema.Struct({
-  operation: Schema.Literal("write"),
-  target: Schema.String,
-  resource: Schema.String,
-  existed: Schema.Boolean,
-})
+export const Output = Schema.String
 export type Output = typeof Output.Type
-
-export const toModelContent = (output: Output) =>
-  `${output.existed ? "Wrote" : "Created"} file successfully: ${output.resource}`
 
 /** Deferred write UX integrations remain visible at the model-facing seam. */
 // TODO: Publish watcher/file-edit events after watcher integration exists.
@@ -52,16 +44,10 @@ export const Plugin = {
           input: Input,
           output: Output,
           execute: (input, context) =>
-            Effect.gen(function* () {
-              const written = yield* fileWrite.write(input, context)
-              return {
-                operation: written.operation,
-                target: written.target,
-                resource: written.resource,
-                existed: written.existed,
-              }
-            }).pipe(
-              Effect.map((output) => ({ output, content: toModelContent(output) })),
+            fileWrite.write(input, context).pipe(
+              Effect.map((written) => ({
+                output: `${written.existed ? "Wrote" : "Created"} file successfully: ${written.resource}`,
+              })),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
             ),
         }),

@@ -1,14 +1,3 @@
-.ssh-prompt {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-family: var(--font-family-mono);
-  font-size: 12px;
-  line-height: var(--line-height-compact);
-  max-height: 200px;
-  overflow: auto;
-  user-select: text;
-}
-
 /* The same rules as the app's server dialog in settings.css, which may not be loaded when the palette opens this one. */
 [data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-container"] {
   width: 480px;

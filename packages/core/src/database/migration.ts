@@ -21,7 +21,7 @@ export type Migration = {
 
 // Not serialized here: the Database layer holds a lock scoped to the database
 // it is bootstrapping, since two instances over one file must not race.
-export function apply(db: Database) {
+export function apply(db: Database, options = { legacyCredentials: true }) {
   return Effect.gen(function* () {
     // OpenCode owns the unprefixed table namespace. Embedders sharing this
     // database may own underscore-prefixed tables, which bootstrap ignores.
@@ -36,7 +36,7 @@ export function apply(db: Database) {
     yield* db.transaction((tx) =>
       Effect.gen(function* () {
         yield* schema.up(tx)
-        yield* legacyCredentials.up(tx)
+        if (options.legacyCredentials) yield* legacyCredentials.up(tx)
         yield* tx.run(
           sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
         )

@@ -204,20 +204,23 @@ export const make = (options: Options = {}) => {
         options,
       )
     },
-    /** Write an asset's bytes like `Media.write`, downloading `url` sources through the executor. */
+    /** Write an asset's bytes like `Media.write`: streamed through a temporary file that replaces `path` on success. */
     write: async (asset: Media.Asset, path: string, options?: RunOptions) => {
-      const { writeFile } = await import("node:fs/promises")
-      return run(
-        asset.bytes().pipe(
-          Effect.flatMap((data) =>
-            Effect.tryPromise({
-              try: (signal) => writeFile(path, data, { signal }),
-              catch: (cause) => fileError(`Failed to write media file ${path}`, cause),
-            }),
-          ),
-        ),
-        options,
-      )
+      const { open, rename, rm } = await import("node:fs/promises")
+      const temporary = `${path}.${crypto.randomUUID()}.tmp`
+      try {
+        const file = await open(temporary, "w")
+        try {
+          for await (const chunk of iterate(asset.stream(), options)) await file.write(chunk)
+        } finally {
+          await file.close()
+        }
+        await rename(temporary, path)
+      } catch (cause) {
+        await rm(temporary, { force: true })
+        if (cause instanceof AIError || cause === options?.signal?.reason) throw cause
+        throw fileError(`Failed to write media file ${path}`, cause)
+      }
     },
     request: LLM.request,
     generate,
@@ -238,10 +241,14 @@ export const make = (options: Options = {}) => {
         input: ImageRequestInput<Model> | ImageRequest,
         options?: AwaitOptions & RunOptions,
       ) => iterate(Image.stream(input, options), options),
+      /** Submit a generation on a queued route and return its `{ id }` at once; nothing polls. */
       start: <const Model extends ImageModel>(input: ImageRequestInput<Model> | ImageRequest, options?: RunOptions) =>
-        run(Image.start(input), options).then(handle),
-      resume: (model: ImageModel, token: unknown, options?: RunOptions) =>
-        run(Image.resume(model, token), options).then(handle),
+        run(Image.start(input), options),
+      /** One status read for a job ID. */
+      status: (model: ImageModel, id: string, options?: RunOptions) => run(Image.status(model, id), options),
+      /** The finished images; fails while the job is still running. */
+      result: (model: ImageModel, id: string, options?: RunOptions) => run(Image.result(model, id), options),
+      cancel: (model: ImageModel, id: string, options?: RunOptions) => run(Image.cancel(model, id), options),
     },
     decision: {
       request: Decision.request,
@@ -254,6 +261,17 @@ export const make = (options: Options = {}) => {
       request: Embedding.request,
       generate: <const Model extends EmbeddingModel>(input: EmbeddingRequestInput<Model>, options?: RunOptions) =>
         run(Embedding.generate(input), options),
+    },
+    video: {
+      request: Video.request,
+      /** Submit a generation and return its `{ id }` at once; nothing polls. */
+      start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
+        run(Video.start(input), options),
+      /** One status read for a job ID. */
+      status: (model: VideoModel, id: string, options?: RunOptions) => run(Video.status(model, id), options),
+      /** The finished videos; fails while the job is still running. */
+      result: (model: VideoModel, id: string, options?: RunOptions) => run(Video.result(model, id), options),
+      cancel: (model: VideoModel, id: string, options?: RunOptions) => run(Video.cancel(model, id), options),
     },
     /** Experimental: may change without compatibility guarantees. */
     experimental: {
@@ -284,21 +302,6 @@ export const make = (options: Options = {}) => {
         ) => run(Transcription.start(input), options).then(handle),
         resume: (model: TranscriptionModel, token: unknown, options?: RunOptions) =>
           run(Transcription.resume(model, token), options).then(handle),
-      },
-      video: {
-        request: Video.request,
-        start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
-          run(Video.start(input), options).then(handle),
-        generate: <const Model extends VideoModel>(
-          input: VideoRequestInput<Model> | VideoRequest,
-          options?: AwaitOptions & RunOptions,
-        ) => run(Video.generate(input, { poll: options?.poll }), options),
-        resume: (model: VideoModel, token: unknown, options?: RunOptions) =>
-          run(Video.resume(model, token), options).then(handle),
-        stream: <const Model extends VideoModel>(
-          input: VideoRequestInput<Model> | VideoRequest,
-          options?: AwaitOptions & RunOptions,
-        ) => iterate(Video.stream(input, { poll: options?.poll }), options),
       },
     },
     dispose: () => runtime.dispose(),

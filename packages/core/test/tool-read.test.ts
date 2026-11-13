@@ -223,6 +223,23 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("rejects a zero limit before reading", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-zero-limit", name: "read", input: { path: "README.md", limit: 0 } },
+      })
+      expect(result).toMatchObject({
+        status: "error",
+        error: { message: "Limit must be a positive integer" },
+      })
+      expect(assertions).toEqual([])
+      expect(readCalls).toEqual([])
+    }),
+  )
+
   it.effect("asks for external_directory approval before reading an external absolute path", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
@@ -1130,6 +1147,7 @@ describe("ReadTool", () => {
       readResult = new ReadToolFileSystem.TextPage({
         type: "text-page",
         content: "hello",
+        lineCount: 1,
         mime: "text/plain",
         offset: 2,
         truncated: true,
@@ -1170,6 +1188,7 @@ describe("ReadTool", () => {
       readResult = new ReadToolFileSystem.TextPage({
         type: "text-page",
         content: "nine\nten",
+        lineCount: 2,
         mime: "text/plain",
         offset: 9,
         truncated: true,

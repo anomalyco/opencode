@@ -865,25 +865,47 @@ export function CurrentReadToolGroup(props: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   onSizeChange?: () => void
+  /** Names each file once, and up to this many while closed; past that the closed row says how many files. */
+  names?: number
 }) {
   const i18n = useI18n()
   const [state, setState] = createStore({ truncated: false })
   const disclosure = createDisclosure({ open: () => props.open, onOpenChange: (open) => props.onOpenChange?.(open) })
   const open = disclosure.open
-  const expandable = () => open() || state.truncated
 
   const pending = createMemo(() =>
     props.tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
 
-  const files = createMemo(() =>
-    props.tools.flatMap((tool) => {
+  const files = createMemo(() => {
+    const reads = props.tools.flatMap((tool) => {
       const input = toolInput(currentToolInput(tool))
       const name = getFilename(input.path ?? "")
 
-      return name ? [{ id: tool.id, name, args: readArgs(input) }] : []
-    }),
+      return name ? [{ id: tool.id, path: input.path ?? "", name, args: readArgs(input) }] : []
+    })
+
+    if (props.names === undefined) return reads
+
+    // A file read in several ranges is named once, without one range standing for the rest.
+    return [
+      ...reads
+        .reduce((unique, file) => {
+          const seen = unique.get(file.path)
+
+          return unique.set(file.path, seen ? { ...seen, args: [] } : file)
+        }, new Map<string, (typeof reads)[number]>())
+        .values(),
+    ]
+  })
+
+  const summary = createMemo(() =>
+    props.names !== undefined && !open() && files().length > props.names
+      ? i18n.plural("ui.timeline.activity.files", files().length)
+      : undefined,
   )
+
+  const expandable = () => open() || state.truncated || !!summary()
 
   let list: HTMLSpanElement | undefined
 
@@ -925,20 +947,27 @@ export function CurrentReadToolGroup(props: {
                   <TextShimmer text={i18n.t("ui.tool.read")} active={pending()} />
                 </span>
                 <span ref={list} data-slot="basic-tool-tool-subtitle">
-                  <Index each={files()}>
-                    {(file, index) => (
-                      <>
-                        <Show when={index > 0}> </Show>
-                        <span data-slot="read-tool-group-file" data-timeline-part-id={file().id}>
-                          {file().name}
-                          <For each={file().args}>
-                            {(arg) => <span data-slot="basic-tool-tool-arg">{` ${arg}`}</span>}
-                          </For>
-                          <Show when={index < files().length - 1}>,</Show>
-                        </span>
-                      </>
-                    )}
-                  </Index>
+                  <Show
+                    when={summary()}
+                    fallback={
+                      <Index each={files()}>
+                        {(file, index) => (
+                          <>
+                            <Show when={index > 0}> </Show>
+                            <span data-slot="read-tool-group-file" data-timeline-part-id={file().id}>
+                              {file().name}
+                              <For each={file().args}>
+                                {(arg) => <span data-slot="basic-tool-tool-arg">{` ${arg}`}</span>}
+                              </For>
+                              <Show when={index < files().length - 1}>,</Show>
+                            </span>
+                          </>
+                        )}
+                      </Index>
+                    }
+                  >
+                    {(text) => text()}
+                  </Show>
                 </span>
               </div>
             </div>
@@ -1897,7 +1926,7 @@ export function ConsoleCopy(props: { text: string; label: string }) {
 
   return (
     <div data-slot="bash-copy">
-      <Tooltip value={label()} placement="top">
+      <Tooltip value={label()} placement="top" forceOpen={copy.copied() || undefined}>
         <IconButton
           icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
           size="normal"
@@ -2096,7 +2125,11 @@ function ExecuteDetailsSection(props: {
       <header data-slot="execute-details-section-header">
         <span data-slot="execute-details-section-label">{props.label}</span>
         <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
-        <Tooltip value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
+        <Tooltip
+          value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel}
+          placement="top"
+          forceOpen={copy.copied() || undefined}
+        >
           <IconButton
             icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
             size="normal"

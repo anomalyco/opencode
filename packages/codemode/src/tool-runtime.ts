@@ -1,5 +1,5 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
-import type { Json } from "./vm/data.js"
+import type { Json } from "./data.js"
 import type { DiagnosticKind } from "./codemode.js"
 import { toolError } from "./tool-error.js"
 import {
@@ -545,7 +545,24 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
     )
   }
   if (node.tool === undefined) {
-    throw new ToolRuntimeError("UnknownTool", `Tool '${segments.join(".")}' is not callable.`)
+    const name = segments.join(".")
+    const under = index.filter((entry) => entry.description.path.startsWith(`${name}.`))
+    const ranked = rank(under, segments.at(-1) ?? "", index)
+    const shown = [...ranked, ...under.filter((entry) => !ranked.includes(entry))]
+      .slice(0, 3)
+      .map((entry) => toolExpression(entry.description.path))
+    const more = under.length - shown.length
+    throw new ToolRuntimeError(
+      "UnknownTool",
+      shown.length === 0
+        ? `Tool '${name}' is not callable.`
+        : `Tool '${name}' is not callable, it is a namespace. Did you mean ${new Intl.ListFormat("en", { type: "disjunction" }).format(shown)}?`,
+      [
+        more > 0
+          ? `${more} more under '${name}'. Use search({ namespace: ${JSON.stringify(name)} }) to list them.`
+          : "Use search to find available tools.",
+      ],
+    )
   }
   return node.tool
 }

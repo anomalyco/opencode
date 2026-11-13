@@ -153,10 +153,9 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "Xem hơn 70 nhà cung cấp khác",
   "dialog.provider.viewAll": "Hiển thị thêm nhà cung cấp",
   "provider.connect.title": "Kết nối {{provider}}",
-  "provider.connect.title.anthropicProMax": "Đăng nhập bằng Anthropic",
   "provider.connect.method.apiKey": "Khóa API",
   "provider.connect.status.inProgress": "Đang ủy quyền…",
-  "provider.connect.status.waiting": "Đang chờ ủy quyền…",
+  "provider.connect.status.waiting": "Đang chờ ủy quyền",
   "provider.connect.status.failed": "Ủy quyền thất bại: {{error}}",
   "provider.connect.apiKey.description":
     "Nhập khóa API {{provider}} để kết nối tài khoản và sử dụng các mô hình {{provider}} trong OpenCode.",

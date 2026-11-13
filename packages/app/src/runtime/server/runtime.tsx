@@ -34,6 +34,7 @@ import { createSessionMessageHandoffs } from "@/session/handoff"
 import { createServerNotificationState } from "@/shell/notifications/notification"
 import { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { useCurrentRoute } from "@/shell/state/layout"
+import { createSessionPreferences } from "@/shell/state/session-preferences"
 import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
@@ -53,6 +54,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
   init: () => {
     const server = useServers()
     const models = createGlobalModels()
+    const sessionPreferences = createSessionPreferences()
     const notificationCoordinator = createNotificationCoordinator()
     const owner = getOwner()
 
@@ -80,6 +82,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
                 () => server.local(effect.conn),
                 server.projects.forServer(effect.key),
                 notificationCoordinator,
+                sessionPreferences,
               ),
               dispose,
             }),
@@ -125,6 +128,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
         retry: serverHealth.retry,
       },
       models,
+      sessionPreferences,
       /** Runs each keyed sound and system notification once across windows; notifications only while none has focus. */
       notifications: notificationCoordinator,
       /** The live controller of a server, or undefined while it is unlisted or rejects our credentials. Reactive. */
@@ -199,6 +203,7 @@ function createServerController(
   isLocal: Accessor<boolean>,
   projects: ReturnType<typeof createServerProjects>,
   notificationCoordinator: ReturnType<typeof createNotificationCoordinator>,
+  sessionPreferences: ReturnType<typeof createSessionPreferences>,
 ) {
   const language = useLanguage()
   const settings = useSettings()
@@ -256,7 +261,17 @@ function createServerController(
 
   const sync = createServerSyncContext(sdk, data)
   const autoApprove = createPermissionAutoApprover({ sdk, data })
-  const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
+  onCleanup(data.on("session.deleted", (event) => sessionPreferences.forget(connKey, event.data.sessionID)))
+
+  const notification = createServerNotificationState({
+    sdk,
+    data,
+    key: connKey,
+    coordinator: notificationCoordinator,
+    muted: (id) => sessionPreferences.muted(connKey, id),
+    preferencesLoaded: sessionPreferences.ready.promise,
+  })
+
   // Owned by the server, so a first prompt's handoff outlives the draft that sent it.
   const handoff = createSessionMessageHandoffs({ sdk, data })
 

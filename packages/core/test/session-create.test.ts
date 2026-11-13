@@ -31,7 +31,6 @@ import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
-import { SubagentMetadata } from "@opencode/core/session/subagent-metadata"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { Workspace } from "@opencode/core/workspace"
 import { Expected } from "./lib/session-message"
@@ -472,42 +471,6 @@ describe("Session.create", () => {
       expect(
         yield* session.setMetadata({ sessionID: Session.ID.create(), metadata: replacement }).pipe(Effect.flip),
       ).toBeInstanceOf(Session.NotFoundError)
-    }),
-  )
-
-  it.effect("does not inherit the per-link subagent notify switch through children", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-
-      const parent = yield* session.create({
-        location,
-        metadata: { threadID: "t1", "subagent.notify": false },
-      })
-      const child = yield* session.create({ parentID: parent.id })
-      expect(child.metadata).toEqual({ threadID: "t1" })
-      expect(SubagentMetadata.notify(child.metadata)).toBe(true)
-
-      const silent = yield* session.create({ parentID: parent.id, metadata: { "subagent.notify": false } })
-      expect(silent.metadata).toEqual({ "subagent.notify": false })
-      expect(SubagentMetadata.notify(silent.metadata)).toBe(false)
-    }),
-  )
-
-  it.effect("strips the per-link subagent notify switch when forking", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({
-        location,
-        metadata: { threadID: "t1", "subagent.notify": false },
-      })
-      yield* session.prompt({ sessionID: parent.id, text: "Fork context", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-
-      const forked = yield* session.fork({ sessionID: parent.id })
-      expect(forked.metadata).toEqual({ threadID: "t1" })
-      expect(SubagentMetadata.notify(forked.metadata)).toBe(true)
     }),
   )
 

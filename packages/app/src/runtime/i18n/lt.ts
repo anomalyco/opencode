@@ -161,7 +161,7 @@ export const dict = {
   "provider.connect.title": "Prijunkite {{provider}}",
   "provider.connect.method.apiKey": "API raktas",
   "provider.connect.status.inProgress": "Vykdoma prieigos teisė…",
-  "provider.connect.status.waiting": "Laukiama įgaliojimo…",
+  "provider.connect.status.waiting": "Laukiama įgaliojimo",
   "provider.connect.status.failed": "Autorizacija nepavyko: {{error}}",
   "provider.connect.apiKey.description":
     "Įveskite {{provider}} API raktą, kad susietumėte paskyrą ir naudotumėte {{provider}} modelius programoje OpenCode.",
@@ -851,7 +851,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "Perkeliami duomenys {{current}}/{{total}}",
   "command.session.location.cycle": "Keisti seanso vietą",
   "dialog.provider.anthropic.note": "Tiesioginė prieiga prie „Claude“ modelių naudojant API raktą",
-  "provider.connect.title.anthropicProMax": "Prisijungti naudojant „Anthropic“",
   "prompt.toast.uploading.percent": "{{percent}} %",
   "prompt.toast.uploading.cancelFile": "Atšaukti failo {{filename}} įkėlimą",
   "prompt.toast.uploadFailed.title": "Įkelti nepavyko",

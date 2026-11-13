@@ -149,7 +149,7 @@ export const dict = {
   "provider.connect.title": "Свържете {{provider}}",
   "provider.connect.method.apiKey": "API ключ",
   "provider.connect.status.inProgress": "В ход е оторизация…",
-  "provider.connect.status.waiting": "Чака се оторизация…",
+  "provider.connect.status.waiting": "Чака се оторизация",
   "provider.connect.status.failed": "Упълномощаването е неуспешно: {{error}}",
   "provider.connect.apiKey.description":
     "Въведете своя {{provider}} API ключ, за да свържете акаунта си и да използвате {{provider}} модели в OpenCode.",
@@ -826,7 +826,6 @@ export const dict = {
   "workspace.delete.location": "Местоположение",
   "command.session.location.cycle": "Смяна на местоположението на сесията",
   "dialog.provider.anthropic.note": "Директен достъп до моделите Claude чрез API ключ",
-  "provider.connect.title.anthropicProMax": "Вход с Anthropic",
   "prompt.toast.uploading.cancelFile": "Отказ от качването на {{filename}}",
   "prompt.toast.uploadFailed.title": "Качването е неуспешно",
   "prompt.toast.uploading.percent": "{{percent}}%",

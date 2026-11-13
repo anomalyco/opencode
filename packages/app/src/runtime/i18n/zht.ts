@@ -165,12 +165,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "查看另外 70 多個提供者",
 
   "dialog.provider.viewAll": "查看更多提供者",
-
   "provider.connect.title": "連線 {{provider}}",
-  "provider.connect.title.anthropicProMax": "登入 Anthropic",
+
   "provider.connect.method.apiKey": "API 金鑰",
   "provider.connect.status.inProgress": "正在授權…",
-  "provider.connect.status.waiting": "等待授權…",
+  "provider.connect.status.waiting": "等待授權",
   "provider.connect.status.failed": "授權失敗: {{error}}",
   "provider.connect.apiKey.description":
     "輸入你的 {{provider}} API 金鑰以連線帳戶，並在 OpenCode 中使用 {{provider}} 模型。",

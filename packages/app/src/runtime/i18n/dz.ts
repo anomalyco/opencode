@@ -836,7 +836,6 @@ export const dict = {
   "toast.migration.progress.working.progress": "གནད་སྡུད་གནས་སྤོ་འབད་དོ་ {{current}}/{{total}}",
   "command.session.location.cycle": "ལཱ་ཡུན་གྱི་ས་གནས་སོར།",
   "dialog.provider.anthropic.note": "API ལྡེ་མིག་བརྒྱུད་དེ་ Claude དཔེ་ཚད་ཚུ་ལུ་ཐད་ཀར་འཛུལ་སྤྱོད།",
-  "provider.connect.title.anthropicProMax": "Anthropic ཐོག་ལས་ནང་བསྐྱོད།",
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}} སྐྱེལ་བཙུགས་འབད་ནི་ཆ་མེད་བཏང་།",
   "prompt.toast.uploadFailed.title": "སྐྱེལ་བཙུགས་འཐུས་ཤོར།",

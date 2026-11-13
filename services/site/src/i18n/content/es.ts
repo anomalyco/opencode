@@ -466,7 +466,7 @@ export const content = {
     },
     colors: {
       title: "Colores",
-      body: "El logo y el logotipo usan una sola tinta con tres opacidades, y una tinta más clara para fondos oscuros. Los valores de abajo son esa tinta sobre blanco o sobre #0B0B0B, como en los archivos estándar. Haz clic en un valor para copiarlo.",
+      body: "El logo y el logotipo usan una sola tinta con tres opacidades, y una tinta más clara para fondos oscuros. Los valores de abajo son los colores de los archivos estándar. Úsalos solo para el logo y el logotipo, no para otros textos ni fondos. Haz clic en un valor para copiarlo.",
       palettes: {
         light: {
           name: "Claro",

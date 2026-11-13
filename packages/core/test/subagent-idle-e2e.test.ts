@@ -267,13 +267,6 @@ const harness = Effect.fnUntraced(function* (input?: HarnessInput) {
 const outputSessionID = (value: unknown) =>
   Schema.decodeUnknownSync(Schema.Struct({ sessionID: Session.ID }))(value).sessionID
 
-const messageText = (message: SessionMessage.Info) =>
-  message.type === "assistant"
-    ? message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n\n")
-    : message.type === "synthetic"
-      ? message.text
-      : ""
-
 const deliveredReports = (app: { readonly sessions: Session.Interface }, sessionID: Session.ID) =>
   app.sessions
     .context(sessionID)
@@ -509,54 +502,6 @@ describe("subagent idle reports end to end", () => {
         // A grandchild's shell is named in the child's background list, but the grandchild
         // never sends its own `<subagent>` report to the root.
         expect(rootReports.some((report) => report.text.includes(`<subagent sessionID="${grandchildID}"`))).toBe(false)
-        expect(yield* h.jobs.pendingBackground).toEqual([])
-      }),
-    30_000,
-  )
-
-  e2e.live(
-    "a silent middle keeps its loud grandchild from skipping a level",
-    () =>
-      Effect.gen(function* () {
-        const h = yield* harness({
-          config: {
-            experimental: { subagent_depth: 2 },
-            permissions: [{ action: "*", resource: "*", effect: "allow" }],
-          },
-        })
-        yield* h.llm.serve(
-          script({
-            reviewer: [
-              TestLLM.toolCall("call-grandchild", SubagentTool.name, {
-                agent: "fallback",
-                description: "grandchild review",
-                prompt: "review the grandchild fixture",
-              }),
-              TestLLM.text("silent child launched grandchild", "child-turn-1"),
-              TestLLM.text("silent child saw grandchild", "child-turn-2"),
-            ],
-            fallback: [TestLLM.text("grandchild answer", "grandchild-turn-1")],
-            build: [TestLLM.text("parent ack", "parent-1")],
-          }),
-        )
-
-        const launched = yield* h.call("call-silent-child", {
-          notify: false,
-          description: "silent child review",
-        })
-        const childID = outputSessionID(launched.metadata)
-        expect((yield* h.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
-
-        yield* waitForReports(h, childID, 1)
-        const report = (yield* deliveredReports(h, childID))[0]!
-        const grandchildID = Schema.decodeUnknownSync(Session.ID)(report.metadata?.childID)
-        expect((yield* h.sessions.get(grandchildID)).metadata).toBeUndefined()
-        expect((yield* h.sessions.context(childID)).map(messageText)).toContain("silent child saw grandchild")
-
-        // The grandchild reported to the silent child, and the silent child never reported up.
-        expect(yield* deliveredReports(h, h.parent.id)).toEqual([])
-        expect((yield* h.sessions.inbox(h.parent.id)).filter((item) => item.type === "synthetic")).toEqual([])
-        expect((yield* h.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
         expect(yield* h.jobs.pendingBackground).toEqual([])
       }),
     30_000,

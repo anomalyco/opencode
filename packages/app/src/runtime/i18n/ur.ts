@@ -154,10 +154,9 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "مزید 70 فراہم کنندگان دیکھیں",
   "dialog.provider.viewAll": "مزید فراہم کنندگان دکھائیں۔",
   "provider.connect.title": "\u2068{{provider}}\u2069 سے منسلک ہوں",
-  "provider.connect.title.anthropicProMax": "Anthropic کے ساتھ لاگ ان کریں",
   "provider.connect.method.apiKey": "API کلید",
   "provider.connect.status.inProgress": "اجازت حاصل کی جا رہی ہے…",
-  "provider.connect.status.waiting": "اجازت کا انتظار ہے…",
+  "provider.connect.status.waiting": "اجازت کا انتظار ہے",
   "provider.connect.status.failed": "اجازت حاصل نہیں ہو سکی: \u2068{{error}}\u2069",
   "provider.connect.apiKey.description":
     "اپنا اکاؤنٹ منسلک کرنے اور OpenCode میں \u2068{{provider}}\u2069 ماڈلز استعمال کرنے کے لیے اپنی \u2068{{provider}}\u2069 API کلید درج کریں۔",

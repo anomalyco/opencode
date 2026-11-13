@@ -204,6 +204,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const sessions = createServerSessionEntries({
     server: server.key,
     known: createKnownServerSessions(() => server.ctx),
+    apply: server.ctx.data.session.apply,
     projects: server.ctx.projects.list,
     fixed: server.ctx.projects.fixed,
     load: async (search, signal) => {
