@@ -30,7 +30,8 @@ use windows_sys::Win32::System::Console::{
     STD_ERROR_HANDLE, STD_INPUT_HANDLE, SetConsoleCtrlHandler, SetConsoleMode, SetStdHandle,
 };
 use windows_sys::Win32::System::LibraryLoader::{
-    GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW, LoadLibraryW,
+    GetProcAddress, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32,
+    LoadLibraryExW,
 };
 use windows_sys::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
 use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
@@ -135,8 +136,14 @@ pub fn os_release() -> Option<String> {
     (status >= 0).then(|| format!("{}.{}.{}", info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber))
 }
 
-/// Loads the library at `path`, or by name through the loader's search order when it has no separator
-/// (`LoadLibraryW`). Each `/` becomes `\`, as `LoadLibraryW` needs. Errors name the path.
+/// Loads the library at `path`, or by name when it is not absolute (`LoadLibraryExW`). Each `/` becomes `\`, as the
+/// loader needs. Errors name the path.
+///
+/// The library and its dependencies are searched for only in the application's directory, System32 and the
+/// directories added with `AddDllDirectory` (`LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`), and for a library given by its
+/// absolute path also in that library's own directory (`LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR`, which needs a full path).
+/// The current directory and `PATH` are not searched: the current directory is the project, which must not supply a
+/// dependency of a plugin (rich-plugins 3.9).
 ///
 /// # Safety
 ///
@@ -147,8 +154,12 @@ pub unsafe fn load_library(path: &OsStr) -> io::Result<NonNull<c_void>> {
         .map(|unit| if unit == u16::from(b'/') { u16::from(b'\\') } else { unit })
         .chain([0])
         .collect();
-    // SAFETY: `wide` is NUL-terminated. The caller vouches for the initializers.
-    let module = unsafe { LoadLibraryW(wide.as_ptr()) };
+    let flags = match Path::new(path).is_absolute() {
+        true => LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        false => LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+    };
+    // SAFETY: `wide` is NUL-terminated and the reserved handle is null. The caller vouches for the initializers.
+    let module = unsafe { LoadLibraryExW(wide.as_ptr(), std::ptr::null_mut(), flags) };
     NonNull::new(module).ok_or_else(|| named(path.display(), io::Error::last_os_error()))
 }
 
