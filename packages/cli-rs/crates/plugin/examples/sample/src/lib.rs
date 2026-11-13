@@ -14,6 +14,8 @@
 mod fence;
 mod fetch;
 mod home;
+#[cfg(feature = "p0a")]
+mod p0a;
 mod prompt;
 mod slot;
 #[cfg(feature = "abi-1-3")]
@@ -31,6 +33,9 @@ use opencode_plugin_abi::{
     export_plugin,
 };
 use serde_json::json;
+
+#[cfg(feature = "p0a")]
+use opencode_plugin_abi as abi;
 
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
 
@@ -71,6 +76,8 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     home::setup(setup)?;
     fetch::setup(setup)?;
     prompt::setup(setup)?;
+    #[cfg(feature = "p0a")]
+    p0a::setup(setup)?;
     if cfg!(feature = "app") {
         setup.slot(Placement::append("app"), |_, _, _| {
             Render::Show(Node::text([Span::new("sample app: under the route")]))
