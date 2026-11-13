@@ -309,9 +309,12 @@ impl Loader {
         };
         // The registry asks the running build whether it panicked, without the last reload's failure.
         reload.take();
-        if registry.failed_load(target, &error) {
-            *reload.borrow_mut() = Some(format!("{error} (previous version still active)"));
-        }
+        // Told as listed, as TS compares the failures it lists: a failure that left the previous version running
+        // is new after the same error without it.
+        let error = match registry.failed_load(target, &error) {
+            true => reload.borrow_mut().insert(format!("{error} (previous version still active)")).clone(),
+            false => error,
+        };
         self.tell(host, registry, target, error);
         true
     }
