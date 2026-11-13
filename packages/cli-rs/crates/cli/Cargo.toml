@@ -37,6 +37,7 @@ opencode-latex.workspace = true
 opencode-local.workspace = true
 opencode-mermaid.workspace = true
 opencode-mini.workspace = true
+opencode-plugin.workspace = true
 opencode-service.workspace = true
 opencode-store.workspace = true
 opencode-tui.workspace = true
@@ -45,6 +46,7 @@ opencode-util.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["termios", "event", "pty"] }
+libc.workspace = true
 
 [target.'cfg(not(unix))'.dependencies]
 opentui.workspace = true

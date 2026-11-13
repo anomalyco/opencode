@@ -4,6 +4,7 @@ mod args;
 mod askpass;
 mod commands;
 mod completions;
+mod contain;
 mod env;
 mod help;
 mod output;
@@ -28,7 +29,11 @@ fn main() -> ExitCode {
     if let Some(port) = askpass::port() {
         return ExitCode::from(askpass::run(&port));
     }
-    let raw: Vec<_> = std::env::args_os().collect();
+    // Before any thread starts: the TUI may run under a parent that restarts it after a plugin crash.
+    let raw = match contain::start(std::env::args_os().collect()) {
+        Ok(raw) => raw,
+        Err(code) => return code,
+    };
     // Bun decodes the arguments the same way, with U+FFFD for bytes that are not UTF-8. Nothing reads the raw
     // arguments again.
     let args: Vec<String> = raw.iter().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect();
