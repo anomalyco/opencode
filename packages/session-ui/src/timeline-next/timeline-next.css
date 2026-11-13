@@ -323,13 +323,15 @@
 }
 
 /* An event row opens to the subagents and shells it counts, each read like a nested row and leading to its session or
-   to the call that ran it. */
+   to the call that ran it. An opened activity group lists the ones it started or heard back from the same way. */
 [data-timeline="next"] [data-component="timeline-event-list"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding-top: 4px;
+}
 
+[data-timeline="next"] :is([data-component="timeline-event-list"], [data-slot="context-tool-group-item"]) {
   [data-slot="timeline-event-item"] {
     display: flex;
     align-items: center;
@@ -376,7 +378,7 @@
     color: var(--v2-text-text-base);
   }
 
-  [data-component="tag"] {
+  [data-slot="timeline-event-item"] [data-component="tag"] {
     flex-shrink: 0;
   }
 }
@@ -517,6 +519,7 @@
   }
 
   [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
+  [data-component="context-tool-group-list"] [data-slot="timeline-event-item"],
   [data-component="timeline-event-list"] [data-slot="timeline-event-item"] {
     min-height: var(--line-height-compact);
   }
@@ -581,9 +584,19 @@
     --timeline-status-space: var(--timeline-gap-l);
   }
 
+  /* The background hint's 24px button is centred on the 16px line and reaches 4px past it. A row clips at its own
+     height, so in a row the lane keeps that room below the line, whether or not the hint shows, so the input waiting
+     below does not move when it comes and goes. */
+  &[data-in-row] {
+    --timeline-status-hint-overflow: calc((24px - var(--line-height-compact)) / 2);
+    height: calc(var(--line-height-compact) + var(--timeline-status-space) + var(--timeline-status-hint-overflow));
+    padding-bottom: var(--timeline-status-hint-overflow);
+  }
+
   &[data-collapsed] {
     height: 0;
     padding-top: 0;
+    padding-bottom: 0;
     overflow: hidden;
   }
 
