@@ -15,6 +15,10 @@ import { sseEvents } from "./lib/sse.js"
 
 const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
 const xai = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" })
+const assemblyai = AssemblyAI.configure({ apiKey: "test", baseURL: "https://assemblyai.test" }).transcription(
+  "universal-2",
+)
+const audio = Media.url("https://audio.test/hello.mp3")
 
 const chatBody = sseEvents(
   { choices: [{ delta: { content: "Hello" } }] },
@@ -25,7 +29,7 @@ const chatBody = sseEvents(
 /**
  * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, xAI video
  * requests with a pending submission that succeeds on the second poll, speech with raw audio or SSE audio deltas, OpenAI
- * transcription with JSON or SSE text deltas, AssemblyAI transcripts that complete on the first poll, and `slow.test`
+ * transcription with JSON or SSE text deltas, AssemblyAI transcripts that complete on the second poll, and `slow.test`
  * chat completions that send one text delta and never finish.
  */
 const executor = (seen: Array<string>) =>
@@ -94,10 +98,17 @@ const executor = (seen: Array<string>) =>
             return input.respond(JSON.stringify({ id: "tr_1", status: "queued" }), {
               headers: { "content-type": "application/json" },
             })
-          if (web.url.endsWith("/v2/transcript/tr_1"))
-            return input.respond(JSON.stringify({ id: "tr_1", status: "completed", text: "Hello there." }), {
-              headers: { "content-type": "application/json" },
-            })
+          if (web.url.endsWith("/v2/transcript/tr_1")) {
+            const polls = seen.filter((url) => url.endsWith("/v2/transcript/tr_1")).length
+            return input.respond(
+              JSON.stringify(
+                polls === 1
+                  ? { id: "tr_1", status: "processing" }
+                  : { id: "tr_1", status: "completed", text: "Hello there." },
+              ),
+              { headers: { "content-type": "application/json" } },
+            )
+          }
           if (web.url.endsWith("/videos/generations"))
             return input.respond(JSON.stringify({ request_id: "req_1" }), {
               headers: { "content-type": "application/json" },
@@ -171,36 +182,30 @@ describe("AI promise client", () => {
     await ai.dispose()
   })
 
-  test("starts, awaits, and resumes video generations over the same runtime", async () => {
+  test("starts video jobs and reads their status and result by token over the same runtime", async () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
     const model = xai.video("grok-imagine-video-1.5")
 
-    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
-    expect(generation.id).toBe("req_1")
-    expect(generation.status).toBe("running")
-    expect(generation.token).toEqual({ requestID: "req_1" })
+    const job = await ai.video.start({ model, prompt: "A kite" })
+    expect(job).toEqual({ id: "req_1", token: { requestID: "req_1" } })
 
-    const refreshed = await generation.refresh()
-    expect(refreshed.status).toBe("running")
-    expect(refreshed.progress).toBe(0.5)
-
-    const response = await refreshed.await({ poll: { interval: 10 } })
+    const token: unknown = JSON.parse(JSON.stringify(job.token))
+    expect(await ai.video.status(model, token)).toEqual({ status: "running", progress: 0.5 })
+    expect(await ai.video.status(model, token)).toEqual({ status: "completed" })
+    const response = await ai.video.result(model, token)
     expect(response.video).toBeInstanceOf(Media.Asset)
     expect(response.video.source).toMatchObject({ type: "url", url: "https://vidgen.x.ai/out.mp4" })
+    expect(await ai.video.cancel(model, token).catch((error: unknown) => error)).toMatchObject({
+      reason: { _tag: "UnsupportedOperation" },
+    })
 
-    const resumed = await ai.experimental.video.resume(model, JSON.parse(JSON.stringify(generation.token)))
-    expect(resumed.status).toBe("completed")
-    expect((await resumed.await()).videos).toHaveLength(1)
-
-    const events: Array<string> = []
-    for await (const event of ai.experimental.video.stream({ model, prompt: "A kite" }, { poll: { interval: 10 } })) {
-      events.push(event.type)
-    }
-    expect(events).toEqual(["video", "finish"])
-
-    expect(seen[0]).toBe("https://xai.test/v1/videos/generations")
-    expect(seen.filter((url) => url.endsWith("/videos/req_1")).length).toBeGreaterThanOrEqual(5)
+    expect(seen).toEqual([
+      "https://xai.test/v1/videos/generations",
+      "https://xai.test/v1/videos/req_1",
+      "https://xai.test/v1/videos/req_1",
+      "https://xai.test/v1/videos/req_1",
+    ])
     await ai.dispose()
   })
 
@@ -229,11 +234,8 @@ describe("AI promise client", () => {
 
   test("exposes a generation's snapshot and terminal state", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const generation = await ai.experimental.video.start({
-      model: xai.video("grok-imagine-video-1.5"),
-      prompt: "A kite",
-    })
-    expect(generation.snapshot).toEqual({ id: "req_1", status: "running" })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
+    expect(generation.snapshot).toEqual({ id: "tr_1", status: "queued" })
     expect(generation.terminal).toBe(false)
     const refreshed = await generation.refresh()
     expect(refreshed.terminal).toBe(false)
@@ -243,16 +245,13 @@ describe("AI promise client", () => {
 
   test("observes a started generation's events and fetches its result", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const generation = await ai.experimental.video.start({
-      model: xai.video("grok-imagine-video-1.5"),
-      prompt: "A kite",
-    })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
 
     const events: Array<string> = []
     for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
     expect(events).toEqual(["generation-progress", "generation-finished"])
-    expect(generation.status).toBe("running")
-    expect((await generation.result()).video.source).toMatchObject({ url: "https://vidgen.x.ai/out.mp4" })
+    expect(generation.status).toBe("queued")
+    expect((await generation.result()).text).toBe("Hello there.")
     await ai.dispose()
   })
 
@@ -392,10 +391,7 @@ describe("AI promise client", () => {
     expect(midStreamFailure).toBe(midStream.signal.reason)
     expect(midStreamFailure).toMatchObject({ name: "AbortError" })
 
-    const generation = await ai.experimental.video.start({
-      model: xai.video("grok-imagine-video-1.5"),
-      prompt: "A kite",
-    })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
     const polling = new AbortController()
     const events: Array<string> = []
     const eventsFailure = await Array.fromAsync(
@@ -598,7 +594,7 @@ describe("AI promise client", () => {
   test("the default client is created lazily", () => {
     expect(typeof AI.ai.generate).toBe("function")
     expect(typeof AI.ai.image.generate).toBe("function")
-    expect(typeof AI.ai.experimental.video.start).toBe("function")
+    expect(typeof AI.ai.video.start).toBe("function")
     expect(typeof AI.ai.experimental.speech.generate).toBe("function")
   })
 })
