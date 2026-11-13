@@ -245,8 +245,24 @@ A claim's first render gets `Changed::all`. After that, a mounted claim or route
 - with `woken` after each of the plugin's commands and its event, reply, mount, route-mount and wake handlers
   (queued after their effects, and coalesced), so a handler's change shows without a wake; and after a wake.
 
-The host rebuilds a claim's widgets only when its node differs from the last one; `Keep` keeps them, so a render that
-`Changed` shows is unaffected returns at once.
+A node that differs from the last one is reconciled into the widgets the claim has: a node of the same kind in the same
+place keeps its widget and gets only what changed, so its state stays (a hovered text, a scroll offset). A theme
+switch renders a route's claims again in place. `Keep` keeps everything, so a render that `Changed` shows is
+unaffected returns at once.
+
+### Contract 2.0 surfaces (P1, in process only)
+
+`Setup::surface(v2::Surface)` registers a surface of the rich-plugin contract (`opencode_plugin_abi::v2`), shown as
+a route or a slot claim. Its view returns a keyed tree: a node may carry an `id`, unique in the tree, and the host
+keeps the widget of a node whose id and kind stay. `View::memo(key, value, build)` returns `Node::Keep` when `value`
+equals the one the subtree was last built from in this mount; the host then adopts that subtree as it is. Each
+showing is a mount with a new generation, which owns the widgets, the memo table and the content handles of
+`View::content`; all of it goes when the surface closes. A tree with an id twice, a keep of an id the host does not
+hold, or a handle the mount lacks is refused whole: nothing of it shows, the host asks at once for a whole tree
+(`SurfaceInput::full`), and a second refusal in a row fails the plugin. A theme switch restyles the widgets with no
+call, unless the surface reads the palette (`Surface::palette`). A `Diff` or `Markdown` may name a tool call's output
+(`Source::PartOutput`) instead of carrying it. The schema is `crates/plugin-abi/schema/v2.json`, generated from the
+types. Surfaces of an external plugin are not mounted until the C ABI of 2.0.
 
 ### Storage
 
