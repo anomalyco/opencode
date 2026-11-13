@@ -1076,8 +1076,6 @@ fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
 /// Shrunk traces of defects the model found and that are not fixed, each with the property it fails. Each must still
 /// fail, so a fix fails the test until its row moves to [`FIXED`].
 const OPEN: &[(&str, &str, &[Command])] = &[
-    // Review bigboi-1: a failed plugin's replacement of `home.footer` still wins the slot and hides the footer.
-    ("a-failed-slot-replacement-gives-the-slot-back", "lifecycle", &[Command::Arm(Fault::Command), Command::Run]),
     // Review bigboi-5: a failure is told again once the manager stopped listing it.
     (
         "a-failure-is-told-again-after-the-row-cleared",
@@ -1096,12 +1094,6 @@ const OPEN: &[(&str, &str, &[Command])] = &[
         "a-failed-enable-leaves-the-plugin-disabled",
         "lifecycle",
         &[Command::Toggle, Command::Arm(Fault::Setup), Command::Toggle, Command::Reload(2)],
-    ),
-    // Review bigboi-6: dropping the TUI destroys a failed instance, which runs its dispose callback.
-    (
-        "a-failed-plugin-is-not-disposed-when-dropped",
-        "lifecycle",
-        &[Command::Route, Command::Arm(Fault::Command), Command::Run],
     ),
 ];
 
@@ -1156,6 +1148,10 @@ const FIXED: &[(&str, &[Command])] = &[
         "a-failed-reload-of-a-failed-plugin-can-be-enabled",
         &[Command::Arm(Fault::Command), Command::Run, Command::Reload(BAD), Command::Toggle],
     ),
+    // Review bigboi-1: a failed plugin's replacement of `home.footer` gives the slot back.
+    ("a-failed-slot-replacement-gives-the-slot-back", &[Command::Arm(Fault::Command), Command::Run]),
+    // Review bigboi-6: dropping the TUI does not destroy a failed instance, which would run its dispose callback.
+    ("a-failed-plugin-is-not-disposed-when-dropped", &[Command::Route, Command::Arm(Fault::Command), Command::Run]),
     // Review bigboi-2, the positive control: a candidate that passes keeps the prompt its setup asked for.
     ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),
 ];

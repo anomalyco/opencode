@@ -1980,7 +1980,8 @@ impl Setup<'_> {
 
     /// Runs `run` when the host disposes the plugin: on deactivation, unload, reload, when setup fails after it was
     /// registered, and when the host exits. Callbacks run in reverse order, before the plugin's state drops, each
-    /// whatever the others do. Stop the plugin's threads here or when its state drops.
+    /// whatever the others do. Stop the plugin's threads here or when its state drops. After a call of the plugin
+    /// panicked they never run, as the host calls a failed plugin no more and keeps its instance.
     pub fn on_dispose(&mut self, run: impl FnOnce(&dyn Host) + 'static) {
         self.registered.disposers.push(Box::new(run));
     }
