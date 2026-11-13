@@ -50,6 +50,93 @@ export function extensionURL(input: string, extensions: ReadonlyArray<string>) {
   return url.protocol === "chrome-extension:" && extensions.includes(url.hostname)
 }
 
+/**
+ * Whether a URL or origin belongs to an extension: its pages, frames and the blob: URLs it makes. Such a document runs
+ * with the extension's `chrome.*` access, which the agent must never gain.
+ */
+export function extensionOrigin(input: string) {
+  if (!URL.canParse(input)) return false
+  const url = new URL(input)
+
+  const protocol =
+    url.protocol === "blob:" && URL.canParse(url.pathname) ? new URL(url.pathname).protocol : url.protocol
+
+  return /^(?:chrome|moz|safari-web|ms-browser)-extension:$|^extension:$/.test(protocol)
+}
+
+/** Actions that only take a tab away from its document, which the agent may run on an extension page to leave it. */
+const leaving = ["navigate", "back", "forward", "stop"]
+
+/**
+ * Why the agent may not run `action` in a tab whose main frame shows `page`, or undefined when it may. The agent never
+ * opens an extension page, and never reads or acts on one, even one the user opened: evaluating there would run with
+ * the extension's privileges. The user's own commands do not pass through here.
+ */
+export function agentRefusal(
+  action: { readonly type: string; readonly url?: string },
+  page: { readonly url: string; readonly origin: string },
+) {
+  if ((action.type === "navigate" || action.type === "tabs.open") && action.url && extensionOrigin(action.url.trim()))
+    return `Agent browser tools cannot open extension pages such as ${action.url.trim()}: an extension page runs with that extension's privileges. Ask the user to open it from the extensions menu.`
+
+  if (leaving.includes(action.type) || (!extensionOrigin(page.url) && !extensionOrigin(page.origin))) return
+
+  return `This tab shows an extension page (${page.url}). Agent browser tools cannot read or act on extension pages, because they run with that extension's privileges. Navigate this tab to a web page, or use another tab.`
+}
+
+type FrameTree = {
+  readonly frame: {
+    readonly id: string
+    readonly parentId?: string
+    readonly url: string
+    readonly name?: string
+    readonly securityOrigin?: string
+  }
+  readonly childFrames?: ReadonlyArray<FrameTree>
+}
+
+/**
+ * The tab's frames the agent may see and target: the main frame's tree, then each out-of-process frame's under its
+ * parent. A frame of an extension, such as a password manager's autofill overlay, is left out with every frame inside
+ * it, so the page around it stays usable while no frameID, ref or snapshot reaches into it.
+ */
+export function agentFrames(
+  root: FrameTree,
+  children: ReadonlyArray<{ readonly parentID: string; readonly tree: FrameTree }>,
+) {
+  const result: { id: string; parentID?: string; url: string; name: string }[] = []
+
+  const walk = (tree: FrameTree, parentID?: string) => {
+    if (result.some((frame) => frame.id === tree.frame.id)) return
+    const parent = tree.frame.parentId || parentID
+
+    if (parent && (extensionOrigin(tree.frame.url) || extensionOrigin(tree.frame.securityOrigin ?? ""))) return
+
+    if (parent && !result.some((frame) => frame.id === parent)) return
+
+    result.push(
+      parent
+        ? { id: tree.frame.id, parentID: parent, url: tree.frame.url, name: tree.frame.name ?? "" }
+        : { id: tree.frame.id, url: tree.frame.url, name: tree.frame.name ?? "" },
+    )
+    tree.childFrames?.forEach((child) => walk(child, tree.frame.id))
+  }
+
+  walk(root)
+  // A frame nested in another out-of-process frame joins once its parent has; one under a left-out frame never does.
+  const pending = [...children]
+
+  while (pending.length) {
+    const ready = pending.findIndex((child) => result.some((frame) => frame.id === child.parentID))
+
+    if (ready < 0) break
+    const [child] = pending.splice(ready, 1)
+    walk(child.tree, child.parentID)
+  }
+
+  return result
+}
+
 export type Policy = { readonly fileRoots?: ReadonlyArray<string>; readonly extensions?: ReadonlyArray<string> }
 
 export function allowedDestination(input: string, policy?: Policy) {

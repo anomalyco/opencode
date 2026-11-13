@@ -16,6 +16,18 @@ test("built-in browser skill uses a virtual skill:// URI", () => {
   expect(String(BrowserSkill.info.path)).toBe("skill://browser/SKILL.md")
 })
 
+test("URL normalization refuses extension pages, which would run with the extension's privileges", () => {
+  for (const url of [
+    "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html",
+    "moz-extension://x/popup.html",
+  ]) {
+    expect(() => navigate(url)).toThrow(`Agent browser tools cannot open extension pages such as ${url}`)
+    expect(() => BrowserTools.normalizeAction({ type: "tabs.open", url })).toThrow(
+      "Agent browser tools cannot open extension pages",
+    )
+  }
+})
+
 test("URL normalization rejects filesystem paths instead of treating them as hostnames", () => {
   // 58 calls passed a local file to tabs.open or navigate; the error names it and says what to call instead.
   for (const path of [

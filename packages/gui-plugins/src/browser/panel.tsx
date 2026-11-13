@@ -50,7 +50,7 @@ import {
   type OverlayEvent,
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
-import { BrowserProfile } from "./profile/ipc"
+import { BrowserProfile, type ProfileExtension } from "./profile/ipc"
 import {
   initialSiteState,
   SITE_CLEAR_TIMEOUT_MS,
@@ -62,6 +62,9 @@ import {
 } from "./site-machine"
 
 const RECENT = 5
+
+/** An element a component reads after render, such as a button a native view anchors to. */
+type ElementRef = { element?: HTMLElement }
 
 export default function SessionBrowserPane(props: {
   tab: Accessor<PanelTab>
@@ -91,6 +94,27 @@ export default function SessionBrowserPane(props: {
     const current = profile()
 
     return current.status === "active" ? (current.value.state()?.extensions ?? []) : []
+  }
+
+  // The extensions button, which an extension's popup opens under.
+  const extensionsButton: ElementRef = {}
+
+  // An extension's button opens its popup or tells it of the click; one without a button opens its options page.
+  const chooseExtension = (extension: ProfileExtension) => {
+    const current = profile()
+    const rect = extensionsButton.element?.getBoundingClientRect()
+
+    const fallback = () => {
+      const page = extension.options ?? extension.popup
+
+      if (page) props.model.openURL(props.session, page)
+    }
+
+    if (current.status !== "active" || !rect) return fallback()
+    const anchor = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    void current.value.click({ id: extension.id, anchor }).then((handled) => {
+      if (!handled) fallback()
+    }, fallback)
   }
 
   const page = () => {
@@ -690,6 +714,9 @@ export default function SessionBrowserPane(props: {
               <Tooltip placement="top" value={plugin.t("extensions.menu")}>
                 <Menu.Trigger
                   as={IconButton}
+                  ref={(element: HTMLElement) => {
+                    extensionsButton.element = element
+                  }}
                   variant="ghost-muted"
                   size="large"
                   data-action="browser-extensions"
@@ -702,15 +729,29 @@ export default function SessionBrowserPane(props: {
                   <For each={extensions()}>
                     {(extension) => (
                       <Menu.Item
-                        disabled={!extension.enabled || !(extension.popup ?? extension.options)}
-                        onSelect={() => {
-                          const page = extension.popup ?? extension.options
-
-                          if (page) props.model.openURL(props.session, page)
-                        }}
+                        disabled={
+                          !extension.enabled ||
+                          extension.action?.enabled === false ||
+                          !(extension.action ?? extension.popup ?? extension.options)
+                        }
+                        onSelect={() => chooseExtension(extension)}
                       >
-                        <Glyph image={extension.icon} fallback="extensions" class="!size-4" />
-                        <span class="min-w-0 truncate">{extension.name}</span>
+                        <Glyph image={extension.action?.icon ?? extension.icon} fallback="extensions" class="!size-4" />
+                        <span class="min-w-0 flex-1 truncate">{extension.action?.title ?? extension.name}</span>
+                        <Show when={extension.action?.badge}>
+                          {(badge) => (
+                            <span
+                              class="shrink-0 rounded-[3px] px-1 text-[10px] font-[530] leading-[14px]"
+                              classList={{ "text-v2-text-text-muted": !extension.action?.badgeColor }}
+                              style={{
+                                "background-color": extension.action?.badgeColor,
+                                color: extension.action?.badgeColor ? (extension.action.badgeTextColor ?? "#ffffff") : undefined,
+                              }}
+                            >
+                              {badge()}
+                            </span>
+                          )}
+                        </Show>
                       </Menu.Item>
                     )}
                   </For>

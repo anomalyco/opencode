@@ -7,30 +7,19 @@ const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Sch
 
 /**
  * A part of an extension that does not work in this browser, by what the user would notice.
- * - `blocking`: blocking or changing requests (`webRequestBlocking`, `declarativeNetRequest`).
- * - `network`: watching requests (`webRequest`).
- * - `toolbar`: a toolbar button without a popup, which only tells the extension it was clicked.
- * - `popup`: a toolbar popup about the current page; here it opens as a tab of its own.
- * - `menus`: right-click menu items. `shortcuts`: keyboard shortcuts. `native`: an app on the computer.
- * - `signin`: signing in with a browser account. `sidePanel`: a side panel. `notifications`: system notifications.
- * - `navigation`: following page navigation. `cookies`: reading and changing cookies.
+ * - `network`: watching requests (`webRequest`) from a service worker.
+ * - `shortcuts`: keyboard shortcuts. `native`: an app on the computer.
+ * - `signin`: signing in with a browser account. `sidePanel`: a side panel.
  * - `browserData`: history, bookmarks, sessions and downloads. `settings`: browser settings such as privacy or fonts.
  * - `addressBar`: an address bar keyword. `newTab`: replacing the new tab page. `devtools`: a developer tools panel.
  * - `access`: asking for more access after install. `userScripts`: user scripts. `other`: any other missing API.
  */
 export const ExtensionFeature = Schema.Literals([
-  "blocking",
   "network",
-  "toolbar",
-  "popup",
-  "menus",
   "shortcuts",
   "native",
   "signin",
   "sidePanel",
-  "notifications",
-  "navigation",
-  "cookies",
   "browserData",
   "settings",
   "addressBar",
@@ -48,12 +37,11 @@ export type ExtensionFeature = typeof ExtensionFeature.Type
  * - `supported`: everything it declares works here.
  * - `partial`: it runs, but `missing` does not work.
  * - `unsupported`: it will not do its job here, for `cause`: `startup`, its background script needs an API this
- *   browser lacks and stops when it starts; `blocking`, it blocks or changes requests; `native`, it needs an app on
- *   the computer.
+ *   browser lacks and stops when it starts.
  */
 export const ExtensionCompatibility = Schema.Struct({
   level: Schema.Literals(["supported", "partial", "unsupported"]),
-  cause: Schema.optional(Schema.Literals(["startup", "blocking", "native"])),
+  cause: Schema.optional(Schema.Literals(["startup"])),
   missing: Schema.Array(ExtensionFeature),
 })
 
@@ -75,6 +63,20 @@ export const ProfileExtension = Schema.Struct({
   /** Why an enabled extension did not load. */
   error: Schema.optional(Schema.String),
   compatibility: ExtensionCompatibility,
+  /**
+   * Its toolbar button, for an extension that has one: what it set for the active tab of the last window. `icon`
+   * replaces the extension's own while set; `badge` is the short text over it, in `badgeColor` and `badgeTextColor`.
+   */
+  action: Schema.optional(
+    Schema.Struct({
+      title: Schema.optional(Schema.String),
+      icon: Schema.optional(Schema.String.check(Schema.isStartingWith("data:image/"))),
+      badge: Schema.optional(Schema.String),
+      badgeColor: Schema.optional(Schema.String),
+      badgeTextColor: Schema.optional(Schema.String),
+      enabled: Schema.Boolean,
+    }),
+  ),
 })
 
 export type ProfileExtension = typeof ProfileExtension.Type
@@ -192,6 +194,18 @@ export const BrowserProfile = Ipc.define({
       output: InstallResult,
     },
     remove: { input: Schema.Struct({ id: text(64) }) },
+    /**
+     * The user chose an extension in the pane's extensions menu, whose button sits at `anchor` in the window's
+     * content, in CSS pixels: its popup opens under it, or the extension hears the click. False when the extension
+     * has no toolbar button, so the window opens its options page instead.
+     */
+    click: {
+      input: Schema.Struct({
+        id: text(64),
+        anchor: Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number }),
+      }),
+      output: Schema.Boolean,
+    },
     enable: { input: Schema.Struct({ id: text(64), enabled: Schema.Boolean }) },
   },
 })

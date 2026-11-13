@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test"
 import {
+  agentFrames,
+  agentRefusal,
   allowedDestination,
   committedLoad,
   destinationOrigin,
+  extensionOrigin,
   fileURLWithin,
   localFileURL,
   normalizeURL,
@@ -119,4 +122,84 @@ test("only the pages of a loaded extension open, so its popup and options can sh
   ).toEqual([true, false, false])
   expect(allowedDestination("chrome-extension://nngceckbapebfimnlniiiahkandclblb/popup/index.html")).toBe(false)
   expect(refusal("chrome-extension://nngceckbapebfimnlniiiahkandclblb/options.html", { extensions })).toBeUndefined()
+})
+
+const extensionPage = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/options.html"
+
+const web = { url: "https://example.com/", origin: "https://example.com" }
+
+test("the agent cannot open an extension page in a tab", () => {
+  expect(agentRefusal({ type: "navigate", url: extensionPage }, web)).toStartWith(
+    `Agent browser tools cannot open extension pages such as ${extensionPage}`,
+  )
+  expect(agentRefusal({ type: "tabs.open", url: ` ${extensionPage}` }, web)).toStartWith(
+    "Agent browser tools cannot open extension pages",
+  )
+  expect(agentRefusal({ type: "navigate", url: "moz-extension://x/popup.html" }, web)).toBeDefined()
+})
+
+test("the agent cannot read or act on an extension page, even one the user opened", () => {
+  const opened = { url: extensionPage, origin: "chrome-extension://nngceckbapebfimnlniiiahkandclblb" }
+
+  for (const type of [
+    "evaluate",
+    "snapshot",
+    "click",
+    "fill",
+    "screenshot",
+    "console",
+    "network.list",
+    "files.list",
+    "dialog",
+    "wait",
+  ])
+    expect(agentRefusal({ type }, opened)).toStartWith(`This tab shows an extension page (${extensionPage})`)
+  // A blank page or blob an extension opened runs as that extension too.
+  expect(agentRefusal({ type: "evaluate" }, { url: "about:blank", origin: opened.origin })).toBeDefined()
+  expect(agentRefusal({ type: "evaluate" }, { url: `blob:${opened.origin}/0b6f7c2e`, origin: "null" })).toBeDefined()
+
+  // Taking the tab elsewhere is allowed; the page checks again where it lands.
+  for (const type of ["navigate", "back", "forward", "stop"])
+    expect(agentRefusal({ type, url: "https://example.com/" }, opened)).toBeUndefined()
+})
+
+test("an extension's frame in a web page is no frame the agent can list or target", () => {
+  const frames = agentFrames(
+    {
+      frame: { id: "main", url: "https://example.com/", securityOrigin: "https://example.com" },
+      childFrames: [
+        { frame: { id: "ad", parentId: "main", url: "https://ads.example/", name: "ad" } },
+        {
+          frame: { id: "overlay", parentId: "main", url: "about:blank", securityOrigin: "chrome-extension://abc" },
+          childFrames: [{ frame: { id: "inner", parentId: "overlay", url: "https://example.com/inner" } }],
+        },
+      ],
+    },
+    [
+      // Out-of-process frames: the extension's own, one nested in it, and a web one.
+      { parentID: "main", tree: { frame: { id: "autofill", url: "chrome-extension://abc/menu.html" } } },
+      { parentID: "autofill", tree: { frame: { id: "nested", url: "https://example.org/" } } },
+      { parentID: "ad", tree: { frame: { id: "video", url: "https://video.example/" } } },
+    ],
+  )
+
+  expect(frames.map((frame) => frame.id)).toEqual(["main", "ad", "video"])
+  expect(extensionOrigin("chrome-extension://abc")).toBe(true)
+  expect(extensionOrigin("https://example.com")).toBe(false)
+})
+
+test("a web tab stays fully usable by the agent", () => {
+  for (const type of ["evaluate", "snapshot", "click", "screenshot", "files.get"])
+    expect(agentRefusal({ type }, web)).toBeUndefined()
+  expect(agentRefusal({ type: "navigate", url: "https://example.org/" }, web)).toBeUndefined()
+  expect(
+    agentRefusal({ type: "tabs.open", url: "localhost:3000" }, { url: "about:blank", origin: "null" }),
+  ).toBeUndefined()
+})
+
+test("the user still opens extension pages the agent may not", () => {
+  const extensions = ["nngceckbapebfimnlniiiahkandclblb"]
+
+  expect(refusal(extensionPage, { extensions })).toBeUndefined()
+  expect(agentRefusal({ type: "navigate", url: extensionPage }, web)).toBeDefined()
 })

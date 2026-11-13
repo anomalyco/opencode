@@ -7,6 +7,8 @@ import { fileURLWithin } from "../policy"
 import { extensionCompatibility } from "./compatibility"
 import { browserUserAgent, cookieDetails, parseCookieFile, type CookieRead } from "./cookie"
 import { snapshotDatabase } from "./database"
+import { createExtensionApis } from "./extension-api"
+import { createFileGuard } from "./file-guard"
 import {
   displayName,
   extensionIcon,
@@ -55,10 +57,14 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
   const icons = new Map<string, string | undefined>()
 
   // Documents are guarded by the page; subresources (img, script, fetch) must not read file: URLs outside the roots
-  // of the page that asked either. One listener serves every page, so each page registers its roots by id.
-  session.webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (request, callback) => {
-    const allowed = request.webContentsId === undefined ? undefined : roots.get(request.webContentsId)
-    callback({ cancel: !fileURLWithin(request.url, allowed?.() ?? []) })
+  // of the page that asked either. One guard serves every page, so each page registers its roots by id.
+  const stopFileGuard = createFileGuard({
+    session,
+    allowed: (request) => {
+      const allowed = request.webContentsId === undefined ? undefined : roots.get(request.webContentsId)
+
+      return fileURLWithin(request.url, allowed?.() ?? [])
+    },
   })
 
   const describe = async (record: StoredExtension): Promise<ProfileExtension | undefined> => {
@@ -92,6 +98,15 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
     })
     input.changed()
   }
+
+  const apis = await createExtensionApis({
+    session,
+    partition: PARTITION,
+    directory,
+    storage: input.storage,
+    log: input.log,
+    changed: input.changed,
+  })
 
   const load = async (record: StoredExtension) => {
     if (session.extensions.getExtension(record.id)) return
@@ -182,9 +197,22 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
 
       return () => void roots.delete(webContentsId)
     },
+    /** The pane's tabs and windows as extensions see them; the pane registers each tab of the profile. */
+    extensionTabs: apis.tabs,
     /** Extensions loaded now, whose pages may open in a tab. */
     extensionIDs: () => session.extensions.getAllExtensions().map((extension) => extension.id),
-    extensions: () => stored.value.flatMap((record) => details.get(record.id) ?? []),
+    extensions: () =>
+      stored.value.flatMap((record) => {
+        const described = details.get(record.id)
+        const loaded = session.extensions.getExtension(record.id)
+        const action = loaded ? apis.action(loaded) : undefined
+
+        if (!described) return []
+
+        return action ? [{ ...described, action }] : [described]
+      }),
+    /** The user chose an extension in a window's extensions menu; see `ExtensionApis.click`. */
+    clickExtension: apis.click,
     /** The browsers to import from, the one used last first, each with its application's icon. */
     async sources() {
       const listed = await listSources()
@@ -307,6 +335,7 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       const record = stored.value.find((item) => item.id === id)
 
       if (session.extensions.getExtension(id)) session.extensions.removeExtension(id)
+      apis.forget(id)
       stored.set(stored.value.filter((item) => item.id !== id))
       errors.delete(id)
 
@@ -325,6 +354,8 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       if (enabled) await load(next)
 
       if (!enabled && session.extensions.getExtension(id)) session.extensions.removeExtension(id)
+
+      if (!enabled) apis.forget(id)
       await refresh()
     },
     /**
@@ -368,7 +399,8 @@ export async function createBrowserProfile(input: { storage: Storage; log: Log; 
       }
     },
     dispose() {
-      session.webRequest.onBeforeRequest(null)
+      stopFileGuard()
+      apis.dispose()
       roots.clear()
       session.extensions.getAllExtensions().forEach((extension) => session.extensions.removeExtension(extension.id))
     },

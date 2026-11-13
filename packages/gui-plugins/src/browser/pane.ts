@@ -10,7 +10,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { destinationOrigin, fileURLWithin, refusal } from "./policy"
+import { agentRefusal, destinationOrigin, fileURLWithin, refusal } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
@@ -77,8 +77,9 @@ export function createBrowserPane(input: {
 }) {
   const machine: PaneMachine = { state: createPaneState() }
   const handles = new Map<string, Handle>()
-  // Each page of the profile's partition may load file: subresources inside its own session's workspace only.
-  const fileGrants = new WeakMap<BrowserPage, () => void>()
+  // Each page of the profile's partition may load file: subresources inside its own session's workspace only, and is
+  // a tab its extensions see. The release of both, by page.
+  const grants = new WeakMap<BrowserPage, () => void>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
@@ -230,7 +231,7 @@ export function createBrowserPane(input: {
                       dispatchBinding(binding, { type: "request.targeted", requestID, tabID: command.action.tabID })
                     reply(
                       requestID,
-                      await execute(binding, command, abort.signal).then(
+                      await execute(binding, command, abort.signal, "agent").then(
                         (result) => ({ type: "success" as const, result }),
                         (cause: unknown) => browserFailure(command.action, cause),
                       ),
@@ -365,9 +366,11 @@ export function createBrowserPane(input: {
       if (reason) throw new Error(reason)
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
       // the tab goes on loading. It is not a failed request; a page that fails to load reports its own error.
-      await execute(binding, { action: command, files: [] }, new AbortController().signal).catch((error: Error) => {
-        if (!("code" in error) || error.code !== "ERR_ABORTED") throw error
-      })
+      await execute(binding, { action: command, files: [] }, new AbortController().signal, "user").catch(
+        (error: Error) => {
+          if (!("code" in error) || error.code !== "ERR_ABORTED") throw error
+        },
+      )
     },
     async close(window: number, binding: string) {
       owned(window, binding)
@@ -392,6 +395,13 @@ export function createBrowserPane(input: {
 
   function dispatchBinding(binding: string, event: BindingEvent) {
     dispatch({ type: "binding", binding, event })
+
+    // Extensions hear which tab is active in a window.
+    if (event.type === "tab.focused" && handles.get(binding)?.shared) {
+      const focused = page(binding, event.tabID)
+
+      if (focused) input.profile.extensionTabs.activated(focused.contents.id)
+    }
   }
 
   function perform(effect: PaneEffect) {
@@ -459,7 +469,7 @@ export function createBrowserPane(input: {
   }
 
   function release(page: BrowserPage) {
-    fileGrants.get(page)?.()
+    grants.get(page)?.()
     const done = page.dispose()
     const settled = done.catch(() => undefined)
     disposals.set(page, done)
@@ -577,11 +587,15 @@ export function createBrowserPane(input: {
       },
     })
 
-    if (handle.shared)
-      fileGrants.set(
-        page,
-        input.profile.allowFiles(page.contents.id, () => selectFileRoots(machine.state, binding)),
-      )
+    if (handle.shared) {
+      const files = input.profile.allowFiles(page.contents.id, () => selectFileRoots(machine.state, binding))
+      const tab = input.profile.extensionTabs.register(extensionTab(binding, id, page, win, focused))
+      grants.set(page, () => {
+        files()
+        tab()
+      })
+    }
+
     handle.pages.set(attempt, page)
     dispatchBinding(binding, { type: "tab.opened", tabID: id, attempt, tab: options.restore ?? page.state() })
     // Straight to the window, not through the server report: the embed is local to this desktop.
@@ -593,6 +607,57 @@ export function createBrowserPane(input: {
     return page
   }
 
+  /**
+   * A tab as extensions drive it, through the same paths and address policy as the window's and the agent's commands:
+   * `chrome.tabs.create` opens a tab in this pane, `update` navigates or focuses it, `remove` closes it.
+   */
+  function extensionTab(
+    binding: string,
+    tabID: Browser.TabID,
+    page: BrowserPage,
+    win: BrowserWindow,
+    focused: () => boolean,
+  ) {
+    const guarded = (url: string) => {
+      const reason = refusal(url, { fileRoots: selectFileRoots(machine.state, binding), extensions: extensions(binding) })
+
+      if (reason) throw new Error(`This browser does not open ${url}.`)
+
+      return url
+    }
+
+    return {
+      contents: page.contents,
+      window: win,
+      focused,
+      open: async (url: string, active: boolean) => {
+        const opened = await execute(
+          binding,
+          { action: { type: "tabs.open", url: guarded(url), focus: active }, files: [] },
+          new AbortController().signal,
+          "user",
+        )
+
+        const created = Option.getOrUndefined(Schema.decodeUnknownOption(Schema.Struct({ id: Browser.TabID }))(opened.value))
+        const contents = created ? load(binding, created.id)?.contents : undefined
+
+        if (!contents) throw new Error("The tab did not open.")
+
+        return contents
+      },
+      focus: () => dispatchBinding(binding, { type: "tab.focused", tabID }),
+      close: () => dispatchBinding(binding, { type: "tab.closed", tabID }),
+      navigate: async (url: string) => {
+        await execute(
+          binding,
+          { action: { type: "navigate", tabID, url: guarded(url) }, files: [] },
+          new AbortController().signal,
+          "user",
+        )
+      },
+    }
+  }
+
   /** Reports the page's state after a command, which may have changed it without a page event yet. */
   function refresh(binding: string, tabID: Browser.TabID, page: BrowserPage) {
     const attempt = selectPageAttempt(machine.state, binding, tabID)
@@ -601,7 +666,7 @@ export function createBrowserPane(input: {
     dispatchBinding(binding, { type: "tab.published", tabID, attempt, tab: page.state() })
   }
 
-  async function execute(binding: string, command: Browser.Command, signal: AbortSignal) {
+  async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user") {
     const action = command.action
 
     if (signal.aborted)
@@ -619,6 +684,10 @@ export function createBrowserPane(input: {
     }
 
     if (action.type === "tabs.open") {
+      // The page refuses the agent's navigation to an extension page too; refusing first leaves no blank tab behind.
+      const refused = origin === "agent" ? agentRefusal(action, { url: "about:blank", origin: "null" }) : undefined
+
+      if (refused) throw new Error(refused)
       const page = create(binding)
       const tabID = page.state().id
 
@@ -627,7 +696,7 @@ export function createBrowserPane(input: {
 
       // A new page already loads about:blank, so only another address needs a navigation.
       if (action.url !== undefined)
-        await page.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal)
+        await page.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
       refresh(binding, tabID, page)
 
       return { value: page.state(), files: [] }
@@ -659,7 +728,7 @@ export function createBrowserPane(input: {
 
     if (!target) throw new Error("Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID.")
     await target.ready
-    const result = await target.execute(command, signal)
+    const result = await target.execute(command, signal, origin)
     refresh(binding, action.tabID, target)
 
     return result
