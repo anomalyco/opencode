@@ -7,7 +7,7 @@ use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use opencode_plugin_abi::{self as abi, Fence, Fenced, Line};
+use opencode_plugin_abi::{self as abi, Fence, Fenced, Line, v2};
 use opencode_ui::theme::Theme;
 use opentui::input::{MouseButton, MouseEventKind};
 use opentui::keymap::Disposer;
@@ -15,7 +15,7 @@ use opentui::prelude::*;
 use opentui::style::Color;
 use opentui::widget::CodeBlock;
 
-use crate::{Claimed, Host, SlotInput, SlotMount, slot};
+use crate::{Claimed, Host, SlotInput, reconcile, slot};
 
 /// A slot claim's render on either path: in process it reads the host directly, over the C ABI it asks the plugin.
 pub(crate) type SlotRender = Rc<dyn Fn(&dyn Host, &abi::SlotInput, &abi::Changed) -> abi::Render>;
@@ -23,8 +23,9 @@ pub(crate) type SlotRender = Rc<dyn Fn(&dyn Host, &abi::SlotInput, &abi::Changed
 pub(crate) type MountFn = Rc<dyn Fn(&dyn Host, &abi::SlotInput, bool)>;
 
 /// A mounted slot claim of the one API: the node its render returned, rendered again with each change batch, each
-/// change the host pushes ([`Host::watch`]), and each wake. Its widgets are rebuilt only when the node differs. The
-/// slots its node nests ([`abi::Node::Slot`]) stay mounted until then, and get each change batch it gets.
+/// change the host pushes ([`Host::watch`]), and each wake. A node that differs, or a new theme, is reconciled into
+/// the widgets it has ([`reconcile`]): what stayed keeps its widget. The slots its node nests ([`abi::Node::Slot`])
+/// stay mounted while they stay in place, and get each change batch it gets.
 pub(crate) struct Mount {
     root: View,
     owner: Weak<dyn Host>,
@@ -37,10 +38,12 @@ pub(crate) struct Mount {
     input: RefCell<abi::SlotInput>,
     /// What it shows: `None` before the first render, `Some(None)` while hidden.
     shown: RefCell<Option<Option<abi::Node>>>,
-    /// The slots its node nests.
-    slots: RefCell<Vec<SlotMount>>,
-    /// The texts its node's hover handlers change, which hold them weakly so the texts drop with the node.
-    hovers: RefCell<Vec<Rc<Text>>>,
+    /// Its widgets, and the slots its node nests.
+    tree: RefCell<reconcile::Tree>,
+    /// The layout of its node, which the root takes.
+    layout: Cell<Option<abi::Layout>>,
+    /// The mounted slots, once it nests one: a slot that mounts or goes moves the claims that degrade onto it.
+    live: RefCell<Option<Rc<crate::slot::Live>>>,
     watch: RefCell<Option<Disposer>>,
     /// The renders for a new size in the current frame.
     resized: Cell<u8>,
@@ -79,8 +82,9 @@ impl Mount {
             slot_input: slot_input.clone(),
             input: RefCell::new(input),
             shown: RefCell::new(None),
-            slots: RefCell::default(),
-            hovers: RefCell::default(),
+            tree: RefCell::default(),
+            layout: Cell::new(None),
+            live: RefCell::new(None),
             watch: RefCell::new(None),
             resized: Cell::new(0),
         });
@@ -149,65 +153,91 @@ impl Mount {
             abi::Render::Hide => None,
             abi::Render::Show(node) => Some(node),
         };
-        if self.shown.borrow().as_ref() == Some(&node) {
+        let theme = host.theme();
+        let hidden = matches!(&*self.shown.borrow(), Some(None)) && node.is_none();
+        if hidden || (self.shown.borrow().as_ref() == Some(&node) && self.tree.borrow().styled_in(&theme)) {
             return;
         }
-        self.root.clear();
-        // TS's `<Slot>` is a fragment, so the node's own layout places it in the slot's parent: the root takes it, and
-        // the node fills the root, which stretches it across. Each draw starts the root's layout over, so nothing of an
-        // earlier node's stays.
-        self.root
-            .width(Length::Auto)
-            .grow(0.0)
-            .shrink(0.0)
-            .min_width(Length::Undefined)
-            .height(Length::Auto)
-            .min_height(Length::Undefined)
-            .max_height(Length::Undefined);
-        [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left]
-            .into_iter()
-            .for_each(|edge| drop(self.root.margin_edge(edge, 0)));
-        let mut slots = Vec::new();
-        let mut hovers = Vec::new();
-        if let Some(node) = &node {
-            let mut inner = node.clone();
-            if let abi::Node::Box { layout, .. } | abi::Node::Text { layout, .. } = &mut inner {
-                lay_out(&self.root, layout);
-                layout.width = None;
-                layout.grow = false;
-                layout.margin = None;
-                // The root takes the heights too, so a percent is of the slot's parent once; the node fills the root's
-                // height, and with a maximum it shrinks to the root's, also when it asked not to shrink. Yoga lets an item
-                // shrink below its content.
-                let (sized, capped) =
-                    (layout.height.is_some() || layout.min_height.is_some(), layout.max_height.is_some());
-                (layout.height, layout.min_height, layout.max_height) = (None, None, None);
-                if sized {
-                    layout.grow = true;
+        let mut tree = self.tree.borrow_mut();
+        match &node {
+            None => tree.clear(&self.root),
+            Some(node) => {
+                // TS's `<Slot>` is a fragment, so the node's own layout places it in the slot's parent: the root takes
+                // it, and the node fills the root, which stretches it across.
+                let mut inner = node.clone();
+                let mut taken = abi::Layout::default();
+                if let abi::Node::Box { layout, .. } | abi::Node::Text { layout, .. } = &mut inner {
+                    taken = *layout;
+                    layout.width = None;
+                    layout.grow = false;
+                    layout.margin = None;
+                    // The root takes the heights too, so a percent is of the slot's parent once; the node fills the
+                    // root's height, and with a maximum it shrinks to the root's, also when it asked not to shrink.
+                    // Yoga lets an item shrink below its content.
+                    let (sized, capped) =
+                        (layout.height.is_some() || layout.min_height.is_some(), layout.max_height.is_some());
+                    (layout.height, layout.min_height, layout.max_height) = (None, None, None);
+                    if sized {
+                        layout.grow = true;
+                    }
+                    if capped {
+                        layout.shrink = Some(true);
+                    }
                 }
-                if capped {
-                    layout.shrink = Some(true);
+                if self.layout.get() != Some(taken) {
+                    // A new layout starts the root's over, so nothing of an earlier node's stays.
+                    self.root
+                        .width(Length::Auto)
+                        .grow(0.0)
+                        .shrink(0.0)
+                        .min_width(Length::Undefined)
+                        .height(Length::Auto)
+                        .min_height(Length::Undefined)
+                        .max_height(Length::Undefined);
+                    [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left]
+                        .into_iter()
+                        .for_each(|edge| drop(self.root.margin_edge(edge, 0)));
+                    lay_out(&self.root, &taken);
+                    self.layout.set(Some(taken));
+                }
+                let owner = self.owner.clone();
+                let act: Act = Rc::new(move |action| act(&owner, action));
+                let slot = |parent: &View, path: &str| {
+                    if !nests(&self.path, path) {
+                        log::warn!("a claim in slot {} cannot show slot {path}: it is not a slot inside it", self.path);
+                        return None;
+                    }
+                    let mounted = host.slot(parent, path, &self.slot_input)?;
+                    if let Some(live) = mounted.live() {
+                        *self.live.borrow_mut() = Some(live.clone());
+                    }
+                    Some(mounted)
+                };
+                let source = |source: &v2::Source| match source {
+                    v2::Source::Text(text) => Some(Rc::from(text.as_str())),
+                    _ => None,
+                };
+                let env = reconcile::Env {
+                    host,
+                    theme: &theme,
+                    act: &act,
+                    slot: &slot,
+                    source: &source,
+                    content: &|_| false,
+                };
+                // A tree of ABI 1.x has no ids and no keeps, so nothing in it can be refused.
+                if let Err(refused) = tree.apply(&env, &self.root, &[v2::Node::from(inner)]) {
+                    log::error!("a claim in slot {}: {refused}", self.path);
                 }
             }
-            let owner = self.owner.clone();
-            let act: Act = Rc::new(move |action| act(&owner, action));
-            let markdown = |text: &str| host.markdown(text);
-            add(host.app(), &host.theme(), &self.root, &inner, &act, &mut hovers, &markdown, &mut |parent, path| {
-                if !nests(&self.path, path) {
-                    log::warn!("a claim in slot {} cannot show slot {path}: it is not a slot inside it", self.path);
-                    return;
-                }
-                slots.extend(host.slot(parent, path, &self.slot_input));
-            });
         }
-        let dropped = self.slots.replace(slots);
-        let live = dropped.iter().chain(self.slots.borrow().iter()).find_map(|slot| slot.live().cloned());
-        drop(dropped);
-        *self.hovers.borrow_mut() = hovers;
+        let slots_changed = tree.slots_changed();
+        drop(tree);
         self.root.visible(node.is_some());
         *self.shown.borrow_mut() = Some(node);
         // The slots it nests may have mounted or gone, which moves the claims that degrade onto their ancestors.
-        if let Some(live) = live {
+        let live = self.live.borrow().clone();
+        if let (true, Some(live)) = (slots_changed, live) {
             crate::settle(host, &live);
         }
         host.app().request_redraw();
@@ -234,7 +264,7 @@ impl Claimed for Rc<Mount> {
 
     fn sync(&self, host: &dyn Host, changed: &abi::Changed) {
         self.draw(host, changed);
-        self.slots.borrow().iter().for_each(|slots| slots.sync(host, Some(changed)));
+        self.tree.borrow().each_slot(&mut |slots| slots.sync(host, Some(changed)));
     }
 }
 
@@ -408,7 +438,7 @@ fn clickable(widget: &impl Widget, click: Option<&abi::Click>, act: &Act) {
     });
 }
 
-fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
+pub(crate) fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
     match layout.width {
         Some(abi::Width::Cells(cells)) => drop(widget.width(cells)),
         Some(abi::Width::Percent(percent)) => drop(widget.width(Length::percent(percent))),
@@ -485,7 +515,7 @@ fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
 }
 
 /// `span` styled in `theme`, in `fg` without a color of its own.
-fn styled(theme: &Theme, span: &abi::Span, fg: Option<Color>) -> Span<'static> {
+pub(crate) fn styled(theme: &Theme, span: &abi::Span, fg: Option<Color>) -> Span<'static> {
     let mut attributes = Attributes::NONE;
     for (set, attribute) in [
         (span.bold, Attributes::BOLD),
@@ -742,7 +772,7 @@ pub fn color_of(theme: &Theme, color: &abi::Color) -> Option<Color> {
     self::color(theme, Some(color))
 }
 
-fn color(theme: &Theme, value: Option<&abi::Color>) -> Option<Color> {
+pub(crate) fn color(theme: &Theme, value: Option<&abi::Color>) -> Option<Color> {
     match value? {
         abi::Color::Rgba(rgba) => Some(Color::rgba(rgba.r, rgba.g, rgba.b, rgba.a)),
         abi::Color::Token(token) => resolve(theme, token),
