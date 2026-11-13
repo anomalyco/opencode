@@ -194,8 +194,7 @@ test("a workspace or request with a stray % is never allowed outside, and always
   ).toBe(true)
 })
 
-// Needs `policy.ts` to stop decoding raw roots as URLs (assigned to its owner); then this passes and loses `failing`.
-test.failing("a workspace with a % in its name loads its own files", () => {
+test("a workspace with a % in its name loads its own files", () => {
   const root = path.resolve("workspaces", "100%-done")
 
   expect(verdict(root, path.join(root, "index.html"))).toBe("allowed")
