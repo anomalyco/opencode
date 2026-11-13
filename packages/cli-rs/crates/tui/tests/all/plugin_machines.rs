@@ -179,11 +179,11 @@ struct ExpectedFailures {
 }
 
 impl ExpectedFailures {
-    fn new(rows: &Value) -> Self {
+    /// This client's rows of each of `rows`.
+    fn new(rows: &[&Value]) -> Self {
         let known = rows
-            .as_array()
-            .unwrap()
             .iter()
+            .flat_map(|rows| rows.as_array().unwrap())
             .filter(|row| row[0] == "rust")
             .map(|row| {
                 // A deviation file, or an open finding of `steps/plugins-pt.md`.
@@ -316,14 +316,14 @@ fn faulted<'a>(cycles: &[Vec<&'a str>]) -> BTreeSet<Vec<&'a str>> {
 }
 
 /// Replays `paths` of the life machine, and panics with the shrunk path of the first difference that is not a known
-/// row. Returns the known rows it met.
-fn check(paths: impl IntoIterator<Item = Vec<&'static str>>) -> ExpectedFailures {
+/// row of `rows`. Returns the known rows it met.
+fn check(paths: impl IntoIterator<Item = Vec<&'static str>>, rows: &[&Value]) -> ExpectedFailures {
     let machine = &CORPUS["machines"]["life"];
-    let mut known = ExpectedFailures::new(&machine["xfail"]);
+    let mut known = ExpectedFailures::new(rows);
     for path in paths {
         let Some(failure) = replay(machine, &path, &mut known) else { continue };
         let path = shrink(path, |candidate| {
-            replay(machine, candidate, &mut ExpectedFailures::new(&machine["xfail"])).as_ref() == Some(&failure)
+            replay(machine, candidate, &mut ExpectedFailures::new(rows)).as_ref() == Some(&failure)
         });
         panic!("life {path:?}: {failure}");
     }
@@ -336,17 +336,19 @@ static CORPUS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| serde_js
 // and the known rows are exactly the differences.
 #[test]
 fn the_plugin_life_follows_the_shared_fixture() {
-    check(traces(&CORPUS, &CORPUS["machines"]["life"], false)).check();
+    let life = &CORPUS["machines"]["life"];
+    check(traces(&CORPUS, life, false), &[&life["xfail"]]).check();
 }
 
 // Expected: the same along the file's seeded walks.
 #[test]
 fn the_plugin_life_follows_the_shared_fixture_on_walks() {
-    check(traces(&CORPUS, &CORPUS["machines"]["life"], true));
+    let life = &CORPUS["machines"]["life"];
+    check(traces(&CORPUS, life, true), &[&life["xfail"]]);
 }
 
 // Expected: the same after one action of two normal cycles is dropped, repeated or swapped. An action a state has no
-// edge for does nothing.
+// edge for does nothing. The known rows are the machine's and the fault trials' own.
 #[test]
 fn the_plugin_life_recovers_from_a_dropped_repeated_or_swapped_action() {
     let cycles: Vec<Vec<&str>> = CORPUS["faults"]["life"]["cycles"]
@@ -355,5 +357,5 @@ fn the_plugin_life_recovers_from_a_dropped_repeated_or_swapped_action() {
         .iter()
         .map(|cycle| cycle.as_str().unwrap().split(' ').collect())
         .collect();
-    check(faulted(&cycles));
+    check(faulted(&cycles), &[&CORPUS["machines"]["life"]["xfail"], &CORPUS["faults"]["life"]["xfail"]]);
 }
