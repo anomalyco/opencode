@@ -14,10 +14,14 @@
  },
  "routes": [],
  "steps": [
-  {"type":"hello "},
+  {"type":"hello world"},
+  {"keys":["left","left","left","left","left"]},
   {"keys":["f8"]},
   {"type":"!"},
-  {"checkpoint":"inserted","until":"hello inserted!","fixture":"P.1/p0a-composer/inserted"}
+  {"checkpoint":"inserted","until":"hello inserted!world","masks":[{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"}],"fixture":"P.1/p0a-composer/inserted"},
+  {"keys":["f9"]},
+  {"type":"?"},
+  {"checkpoint":"set","until":"set by the plugin?","masks":[{"x":39,"y":28,"width":22,"height":1,"reason":"TS plugin loading notice (F16)"}],"fixture":"P.1/p0a-composer/set"}
  ],
  "requests": {
   "writes": [],

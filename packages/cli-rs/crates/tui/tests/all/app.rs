@@ -329,8 +329,8 @@ fn app_plugin() -> abi::Plugin {
     abi::Plugin { id: "parity.app", setup }
 }
 
-/// `parity/plugins/p0a/tui.tsx`: F6 asks a confirm, F7 shows an alert, F8 inserts into the composer, and the probe's
-/// styled box is appended to `home.footer`.
+/// `parity/plugins/p0a/tui.tsx`: F6 asks a confirm, F7 shows an alert, F8 inserts into the composer, F9 sets it, and
+/// the probe's styled box is appended to `home.footer`.
 fn p0a_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let command = |name: &str, key: Option<&str>| abi::Command {
@@ -343,7 +343,7 @@ fn p0a_plugin() -> abi::Plugin {
             host.dialog(abi::Dialog::Confirm(abi::Confirm {
                 title: "Delete the draft?".to_owned(),
                 message: "It cannot be undone.".to_owned(),
-                label: abi::ConfirmLabel { confirm: Some("delete".to_owned()), cancel: None },
+                label: abi::ConfirmLabel { confirm: Some("delete".to_owned()), cancel: Some("keep".to_owned()) },
                 action: then("parity.p0a.answered"),
             }));
         });
@@ -362,6 +362,9 @@ fn p0a_plugin() -> abi::Plugin {
         });
         setup.command(command("parity.p0a.insert", Some("f8")), |host, _| {
             host.edit_composer(abi::ComposerEdit::Insert { text: "inserted".to_owned() });
+        });
+        setup.command(command("parity.p0a.set", Some("f9")), |host, _| {
+            host.edit_composer(abi::ComposerEdit::Set { text: "set by the plugin".to_owned() });
         });
         setup.slot(Placement::append(slot::HOME_FOOTER), |_, _, _| Render::Show(crate::plugin_p0a::probe::styled()));
         Ok(())
