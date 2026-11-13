@@ -438,6 +438,7 @@ export async function createBrowserProfile(input: {
 
       if (session.extensions.getExtension(id)) session.extensions.removeExtension(id)
       apis.forget(id)
+      apis.uninstall(id)
       stored.set(stored.value.filter((item) => item.id !== id))
       errors.delete(id)
 

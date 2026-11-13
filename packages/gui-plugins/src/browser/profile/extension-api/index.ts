@@ -44,6 +44,7 @@ export async function createExtensionApis(input: {
     open: (window, extension, url) => popups.open(window, extension, url),
   })
 
+  const storageSync = createStorageSync({ storage: input.storage, emit })
   await mkdir(input.directory, { recursive: true })
 
   const host = await createExtensionHost({
@@ -58,7 +59,7 @@ export async function createExtensionApis(input: {
       createCookies({ session: input.session, tabs, emit, extensions }),
       createPermissions(),
       createNotifications({ emit }),
-      createStorageSync({ storage: input.storage, emit }),
+      storageSync.module,
       createStubs(),
     ],
   })
@@ -84,6 +85,10 @@ export async function createExtensionApis(input: {
     forget(id: string) {
       host.forget(id)
       actions.forget(id)
+    },
+    /** Deletes what an extension kept in this app, as when the user removes it. */
+    uninstall(id: string) {
+      storageSync.remove(id)
     },
     dispose() {
       popups.close()
