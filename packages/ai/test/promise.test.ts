@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect, Layer, Schema } from "effect"
@@ -8,12 +8,17 @@ import { AIError, LLMEvent, Media } from "../src/effect.js"
 import { SpeechEvent, TranscriptionEvent } from "../src/experimental.js"
 import { RequestExecutor, type StreamOptions } from "../src/route.js"
 import { AI } from "../src/index.js"
-import { AssemblyAI, OpenAI, Runway } from "../src/providers.js"
+import { AssemblyAI, OpenAI, XAI } from "../src/providers.js"
 import { handlerLayer, json } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
 
 const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+const xai = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" })
+const assemblyai = AssemblyAI.configure({ apiKey: "test", baseURL: "https://assemblyai.test" }).transcription(
+  "universal-2",
+)
+const audio = Media.url("https://audio.test/hello.mp3")
 
 const chatBody = sseEvents(
   { choices: [{ delta: { content: "Hello" } }] },
@@ -22,9 +27,9 @@ const chatBody = sseEvents(
 )
 
 /**
- * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, Runway video
- * tasks with a queued submission that succeeds on the second poll, speech with raw audio or SSE audio deltas, OpenAI
- * transcription with JSON or SSE text deltas, AssemblyAI transcripts that complete on the first poll, and `slow.test`
+ * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, xAI video
+ * requests with a pending submission that succeeds on the second poll, speech with raw audio or SSE audio deltas, OpenAI
+ * transcription with JSON or SSE text deltas, AssemblyAI transcripts that complete on the second poll, and `slow.test`
  * chat completions that send one text delta and never finish.
  */
 const executor = (seen: Array<string>) =>
@@ -93,19 +98,28 @@ const executor = (seen: Array<string>) =>
             return input.respond(JSON.stringify({ id: "tr_1", status: "queued" }), {
               headers: { "content-type": "application/json" },
             })
-          if (web.url.endsWith("/v2/transcript/tr_1"))
-            return input.respond(JSON.stringify({ id: "tr_1", status: "completed", text: "Hello there." }), {
-              headers: { "content-type": "application/json" },
-            })
-          if (web.url.endsWith("/text_to_video"))
-            return input.respond(JSON.stringify({ id: "task_1" }), { headers: { "content-type": "application/json" } })
-          if (web.url.endsWith("/tasks/task_1")) {
-            const polls = seen.filter((url) => url.endsWith("/tasks/task_1")).length
+          if (web.url.endsWith("/v2/transcript/tr_1")) {
+            const polls = seen.filter((url) => url.endsWith("/v2/transcript/tr_1")).length
             return input.respond(
               JSON.stringify(
                 polls === 1
-                  ? { status: "RUNNING", progress: 0.5 }
-                  : { status: "SUCCEEDED", output: ["https://runway.test/out.mp4"], cost: { credits: 5 } },
+                  ? { id: "tr_1", status: "processing" }
+                  : { id: "tr_1", status: "completed", text: "Hello there." },
+              ),
+              { headers: { "content-type": "application/json" } },
+            )
+          }
+          if (web.url.endsWith("/videos/generations"))
+            return input.respond(JSON.stringify({ request_id: "req_1" }), {
+              headers: { "content-type": "application/json" },
+            })
+          if (web.url.endsWith("/videos/req_1")) {
+            const polls = seen.filter((url) => url.endsWith("/videos/req_1")).length
+            return input.respond(
+              JSON.stringify(
+                polls === 1
+                  ? { status: "pending", progress: 50 }
+                  : { status: "done", video: { url: "https://vidgen.x.ai/out.mp4" } },
               ),
               { headers: { "content-type": "application/json" } },
             )
@@ -168,37 +182,54 @@ describe("AI promise client", () => {
     await ai.dispose()
   })
 
-  test("starts, awaits, and resumes video generations over the same runtime", async () => {
+  test("starts video jobs and reads their status and result by token over the same runtime", async () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const model = xai.video("grok-imagine-video-1.5")
 
-    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
-    expect(generation.id).toBe("task_1")
-    expect(generation.status).toBe("queued")
-    expect(generation.token).toEqual({ taskID: "task_1" })
+    const job = await ai.video.start({ model, prompt: "A kite" })
+    expect(job).toEqual({ id: "req_1" })
 
-    const refreshed = await generation.refresh()
-    expect(refreshed.status).toBe("running")
-    expect(refreshed.progress).toBe(0.5)
-
-    const response = await refreshed.await({ poll: { interval: 10 } })
+    // The ID is plain text: store it and read the job back from any process.
+    const id = job.id
+    expect(await ai.video.status(model, id)).toEqual({ status: "running", progress: 0.5 })
+    expect(await ai.video.status(model, id)).toEqual({ status: "completed" })
+    const response = await ai.video.result(model, id)
     expect(response.video).toBeInstanceOf(Media.Asset)
-    expect(response.video.source).toMatchObject({ type: "url", url: "https://runway.test/out.mp4" })
-    expect(response.usage).toEqual({ type: "credits", credits: 5 })
+    expect(response.video.source).toMatchObject({ type: "url", url: "https://vidgen.x.ai/out.mp4" })
+    expect(await ai.video.cancel(model, id).catch((error: unknown) => error)).toMatchObject({
+      reason: { _tag: "UnsupportedOperation" },
+    })
 
-    const resumed = await ai.experimental.video.resume(model, JSON.parse(JSON.stringify(generation.token)))
-    expect(resumed.status).toBe("completed")
-    expect((await resumed.await()).videos).toHaveLength(1)
+    expect(seen).toEqual([
+      "https://xai.test/v1/videos/generations",
+      "https://xai.test/v1/videos/req_1",
+      "https://xai.test/v1/videos/req_1",
+      "https://xai.test/v1/videos/req_1",
+    ])
+    await ai.dispose()
+  })
 
-    const events: Array<string> = []
-    for await (const event of ai.experimental.video.stream({ model, prompt: "A kite" }, { poll: { interval: 10 } })) {
-      events.push(event.type)
-    }
-    expect(events).toEqual(["video", "finish"])
-
-    expect(seen[0]).toBe("https://runway.test/v1/text_to_video")
-    expect(seen.filter((url) => url.endsWith("/tasks/task_1")).length).toBeGreaterThanOrEqual(5)
+  test("rejects image job calls on an inline route without a request", async () => {
+    const seen: Array<string> = []
+    const ai = AI.make({ layer: executor(seen) })
+    const model = openai.image("gpt-image-2")
+    const reasons = await Promise.all(
+      [
+        ai.image.start({ model, prompt: "A lighthouse" }),
+        ai.image.status(model, "job_1"),
+        ai.image.result(model, "job_1"),
+        ai.image.cancel(model, "job_1"),
+      ].map((call) => call.then(() => undefined).catch((error: unknown) => error)),
+    )
+    expect(reasons).toEqual(
+      ["start", "status", "result", "cancel"].map((operation) =>
+        expect.objectContaining({
+          reason: expect.objectContaining({ _tag: "UnsupportedOperation", operation: `image.${operation}` }),
+        }),
+      ),
+    )
+    expect(seen).toEqual([])
     await ai.dispose()
   })
 
@@ -227,9 +258,8 @@ describe("AI promise client", () => {
 
   test("exposes a generation's snapshot and terminal state", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
-    expect(generation.snapshot).toEqual({ id: "task_1", status: "queued", progress: undefined, position: undefined })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
+    expect(generation.snapshot).toEqual({ id: "tr_1", status: "queued" })
     expect(generation.terminal).toBe(false)
     const refreshed = await generation.refresh()
     expect(refreshed.terminal).toBe(false)
@@ -239,14 +269,13 @@ describe("AI promise client", () => {
 
   test("observes a started generation's events and fetches its result", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
 
     const events: Array<string> = []
     for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
     expect(events).toEqual(["generation-progress", "generation-finished"])
     expect(generation.status).toBe("queued")
-    expect((await generation.result()).video.source).toMatchObject({ url: "https://runway.test/out.mp4" })
+    expect((await generation.result()).text).toBe("Hello there.")
     await ai.dispose()
   })
 
@@ -261,6 +290,14 @@ describe("AI promise client", () => {
       expect(asset.mediaType).toBe("image/png")
       await ai.write(asset, join(dir, "copy.png"))
       expect(await ai.bytes(await ai.file(join(dir, "copy.png")))).toEqual(png)
+
+      // A failed download leaves the existing file as it was and cleans up its temporary file.
+      const failed = await ai
+        .write(Media.url("https://cdn.test/expired.png"), join(dir, "copy.png"))
+        .catch((error: unknown) => error)
+      expect(failed instanceof AIError && failed.reason.http?.status).toBe(404)
+      expect(await ai.bytes(await ai.file(join(dir, "copy.png")))).toEqual(png)
+      expect((await readdir(dir)).sort()).toEqual(["copy.png", "source.bin"])
     } finally {
       await rm(dir, { recursive: true })
       await ai.dispose()
@@ -386,8 +423,7 @@ describe("AI promise client", () => {
     expect(midStreamFailure).toBe(midStream.signal.reason)
     expect(midStreamFailure).toMatchObject({ name: "AbortError" })
 
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
     const polling = new AbortController()
     const events: Array<string> = []
     const eventsFailure = await Array.fromAsync(
@@ -590,7 +626,7 @@ describe("AI promise client", () => {
   test("the default client is created lazily", () => {
     expect(typeof AI.ai.generate).toBe("function")
     expect(typeof AI.ai.image.generate).toBe("function")
-    expect(typeof AI.ai.experimental.video.start).toBe("function")
+    expect(typeof AI.ai.video.start).toBe("function")
     expect(typeof AI.ai.experimental.speech.generate).toBe("function")
   })
 })

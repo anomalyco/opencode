@@ -259,13 +259,15 @@
   }
 }
 
-.fork-dialog .search-list-results {
+.fork-dialog .search-list-results,
+.fork-dialog [data-slot="search-list-section"] {
   gap: 2px;
   padding-top: 0;
 }
 
 .fork-dialog [data-slot="search-list-row"] {
   height: 28px;
+  gap: 12px;
   padding-inline: 8px;
 }
 
