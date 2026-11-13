@@ -166,13 +166,22 @@ fn versions_follow_the_abi_rules() {
     // The current build is 1.5; a 1.0 build has the shorter table and still loads and works on this 1.5 host.
     let current = build("");
     assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 5, version: Some("0.1.0".to_owned()) });
-    // A 1.4 build, from before the 1.5 additions, loads and draws as before.
+    // A plugin built on the frozen 1.4 crate, from before 1.5, draws its fence and its slot and runs its command.
     let v1_4 = build("abi-1-4");
     assert_eq!(Native.inspect(&v1_4).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
     let fresh = crate::loader::tests::host();
     let registry = active(&fresh, &v1_4);
     let screen = markdown(&fresh, &registry, "```sample\nfour\n```\n");
-    assert!(screen.contains("SAMPLE v1 FOUR"), "{screen}");
+    assert!(screen.contains("SAMPLE 1.4 FOUR"), "{screen}");
+    let parent = View::new(fresh.app());
+    let _mounted = registry.mount(&*fresh, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    fresh.app().root().clear();
+    fresh.app().root().add(&parent);
+    fresh.app.render();
+    assert!(fresh.app.text().contains("  sample plugin 1.4: home.footer"), "{}", fresh.app.text());
+    assert!(matches!(fresh.keymap().dispatch("sample.hello", None), RunResult::Ok));
+    fresh.app.advance(Duration::from_millis(1));
+    assert_eq!(*fresh.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from sample 1.4")]);
     let old = build("abi-1-0");
     assert_eq!(Native.inspect(&old).unwrap(), Inspected { major: 1, minor: 0, version: None });
     let host = host();
@@ -1979,4 +1988,92 @@ fn a_refused_render_result_leaves_no_effects() {
     };
     assert_eq!(outcome(0), (vec!["from a fence".to_owned()], Some("{\"a\":1}".to_owned())));
     assert_eq!(outcome(1), (Vec::new(), None));
+}
+
+/// What the frozen 1.4 host saw: the type of each request it decoded, and `refused` for each it could not.
+static OLD_SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// A 1.4 host's `call`: it decodes each request with the frozen 1.4 types, as a 1.4 host does, answers one it cannot
+/// decode with an error, and the rest with `null`.
+unsafe extern "C" fn old_host_call(_: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+    // SAFETY: the plugin passes the request for the call.
+    let bytes = unsafe { request.as_slice() };
+    let (status, reply, seen) = match serde_json::from_slice::<opencode_plugin_abi_1_4::HostRequest>(bytes) {
+        Ok(request) => {
+            let json = serde_json::to_value(&request).unwrap();
+            (abi::OK, b"null".to_vec(), format!("{} {}", json["type"].as_str().unwrap(), json["message"]))
+        }
+        Err(error) => (abi::ERROR, error.to_string().into_bytes(), "refused".to_owned()),
+    };
+    OLD_SEEN.lock().unwrap().push(seen);
+    // SAFETY: `out` is valid for writes during the call.
+    unsafe { *out = Owned::from_vec(reply) };
+    status
+}
+
+unsafe extern "C" fn old_host_free(owned: Owned) {
+    // SAFETY: `old_host_call` made it with `Owned::from_vec`.
+    drop(unsafe { owned.into_vec() });
+}
+
+// Expected (bigboi 10): the 1.5 sample library loads on a 1.4 host, which accepts its minimum minor; that host refuses
+// its 1.5 requests (a confirm, an alert, a composer edit and read) with an error, decodes its other requests, and draws
+// its 1.5 box without the 1.5 properties, which the 1.4 types do not read.
+#[test]
+fn a_1_5_library_gets_what_a_1_4_host_offers() {
+    use opencode_plugin_abi_1_4 as old;
+    let library = Library::open(&build("p0a"), 4).unwrap();
+    let api = HostApi {
+        size: size_of::<HostApi>(),
+        major: 1,
+        minor: 4,
+        ctx: std::ptr::null_mut(),
+        call: Some(old_host_call),
+        free: Some(old_host_free),
+        theme_mode: None,
+        wake: None,
+    };
+    let call = |handle: *mut c_void, request: &old::Request| {
+        let json = serde_json::to_vec(request).unwrap();
+        let mut out = Owned::EMPTY;
+        // SAFETY: `handle` is live, and `out` goes back to the library's `free`.
+        unsafe {
+            let status = (library.call)(handle, Bytes::new(&json), &mut out);
+            let bytes = out.to_vec();
+            (library.free)(out);
+            (status, bytes)
+        }
+    };
+    let (mut handle, mut out) = (std::ptr::null_mut(), Owned::EMPTY);
+    // SAFETY: the pointers are valid for the call, and `api` outlives the instance.
+    let (status, manifest) = unsafe {
+        let status = (library.create)(&api, Bytes::new(b""), &mut handle, &mut out);
+        let bytes = out.to_vec();
+        (library.free)(out);
+        (status, bytes)
+    };
+    assert_eq!(status, abi::OK, "{}", String::from_utf8_lossy(&manifest));
+    let manifest: old::Manifest = serde_json::from_slice(&manifest).unwrap();
+    OLD_SEEN.lock().unwrap().clear();
+    for name in ["p0a.confirm", "p0a.alert", "p0a.set", "p0a.read"] {
+        let request = old::Request::Command { name: name.to_owned(), input: Some("x".to_owned()) };
+        assert_eq!(call(handle, &request).0, abi::OK, "{name}");
+    }
+    let seen = std::mem::take(&mut *OLD_SEEN.lock().unwrap());
+    assert_eq!(seen, ["refused", "refused", "refused", "refused", "toast \"no composer\""]);
+    // The probe's box, the last claim of the home footer that renders.
+    let claim = manifest.slots.iter().rposition(|claim| claim.render && claim.path == "home.footer").unwrap();
+    let request = old::Request::Render { claim, input: old::SlotInput::default(), changed: old::Changed::everything() };
+    let (status, render) = call(handle, &request);
+    assert_eq!(status, abi::OK);
+    let json: serde_json::Value = serde_json::from_slice(&render).unwrap();
+    assert!(json["node"]["border"].is_object(), "{json}");
+    let old::Render::Show(old::Node::Box { children, .. }) = serde_json::from_value(json).unwrap() else {
+        panic!("not a box");
+    };
+    assert_eq!(children.len(), 2);
+    if let Some(destroy) = library.destroy {
+        // SAFETY: `handle` came from `create` and is destroyed once.
+        unsafe { destroy(handle) };
+    }
 }
