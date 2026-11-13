@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { Plugin } from "@opencode/plugin/effect"
-import { Context, Deferred, Effect, Fiber, Layer } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer, Option } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -81,7 +81,18 @@ it.live(
         const response = yield* request("GET", route).pipe(Effect.timeout("2 seconds"))
         expect(response.status).toBe(200)
       }
-      const get = yield* request("GET", "/api/provider/custom").pipe(Effect.forkScoped)
+      const get = yield* request("GET", "/api/provider/custom").pipe(Effect.timeout("2 seconds"))
+      expect(get.status).toBe(404)
+      expect(yield* Effect.promise(() => get.json())).toMatchObject({
+        _tag: "ProviderNotFoundError",
+        providerID: "custom",
+      })
+      const pending = yield* Effect.all(
+        [providers, models, search].map((fiber) => Fiber.await(fiber).pipe(Effect.timeoutOption("500 millis"))),
+        { concurrency: "unbounded" },
+      )
+      expect(pending.every(Option.isNone)).toBeTrue()
+
       yield* Deferred.succeed(release, undefined)
       const list = yield* Fiber.join(providers)
       expect(list.status).toBe(200)
@@ -91,11 +102,6 @@ it.live(
       })
       expect((yield* Fiber.join(models)).status).toBe(200)
       expect((yield* Fiber.join(search)).status).toBe(400)
-      const provider = yield* Fiber.join(get)
-      expect(provider.status).toBe(200)
-      expect(yield* Effect.promise(() => provider.json())).toMatchObject({
-        data: expect.objectContaining({ id: "custom" }),
-      })
     }),
   15_000,
 )
