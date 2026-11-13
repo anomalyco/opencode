@@ -1154,6 +1154,18 @@ const FIXED: &[(&str, &[Command])] = &[
             Command::Reload(PROMPTING),
         ],
     ),
+    // Review carbon-pt-7, mutant C: an enable that fails keeps the failure the manager listed.
+    (
+        "a-failed-enable-keeps-the-listed-failure",
+        &[
+            Command::Arm(Fault::Command),
+            Command::Run,
+            Command::Arm(Fault::Setup),
+            Command::Reload(2),
+            Command::Arm(Fault::Setup),
+            Command::Toggle,
+        ],
+    ),
     // Review bigboi-2, the positive control: a candidate that passes keeps the prompt its setup asked for.
     ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),
 ];

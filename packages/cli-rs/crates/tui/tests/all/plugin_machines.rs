@@ -81,6 +81,8 @@ impl Life {
         ARMED.set(false);
         let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
         let root = opencode_util::temp::tempdir().unwrap();
+        // The project root, so the loader looks for plugins in this directory and none above it.
+        std::fs::create_dir(root.path().join(".git")).unwrap();
         let config = root.path().join("config");
         // The manager labels an external plugin by its directory, so the reader finds its row as in TS.
         let dir = config.join("plugins").join("parity.life");
