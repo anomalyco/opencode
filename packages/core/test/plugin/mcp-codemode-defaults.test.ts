@@ -22,17 +22,22 @@ it.effect("applies Code Mode defaults for known MCP servers unless codemode is c
       {
         name: "cloudflare code mode",
         server: { type: "remote", url: "https://mcp.cloudflare.com/mcp/" },
-        codemode: undefined,
+        codemode: false,
+      },
+      {
+        name: "cloudflare",
+        server: { type: "remote", url: "https://mcp.cloudflare.com/mcp" },
+        codemode: false,
       },
       {
         name: "cloudflare raw tools",
         server: { type: "remote", url: "https://mcp.cloudflare.com/mcp?codemode=false" },
-        codemode: undefined,
+        codemode: false,
       },
       {
         name: "cloudflare docs",
         server: { type: "remote", url: "https://docs.mcp.cloudflare.com/mcp" },
-        codemode: undefined,
+        codemode: false,
       },
       {
         name: "explicit true",

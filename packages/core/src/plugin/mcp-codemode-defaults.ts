@@ -7,7 +7,11 @@ import { Effect } from "effect"
 // nested inside OpenCode's. A server with `codemode` set in config is left exactly as configured.
 
 // These servers are Code Mode themselves, so OpenCode Code Mode is turned off for them (`codemode: false`).
-const urls = [/^https:\/\/executor\.sh\/[^/]+\/mcp$/]
+const urls = [
+  /^https:\/\/executor\.sh\/[^/]+\/mcp$/,
+  /^https:\/\/mcp\.cloudflare\.com\/mcp$/,
+  /^https:\/\/docs\.mcp\.cloudflare\.com\/mcp$/,
+]
 
 // PostHog wraps all of its tools in one server-side Code Mode tool unless the client asks for "tools" mode, so OpenCode
 // Code Mode stays on and PostHog's is turned off. PostHog also reads `?mode=`, but the header wins over it and leaves
