@@ -146,11 +146,12 @@ fn read(setup: &Setup) -> String {
     setup.wait_gone("composer ");
     setup.tui.keymap.dispatch("p0a.read", None);
     let screen = setup.wait_for("composer ");
-    let line = screen.lines().find(|line| line.contains("composer ")).unwrap();
-    // From the read to its focus, without the toast's frame around it.
-    let start = line.find("composer ").unwrap();
-    let end = ["true", "false"].iter().find_map(|focus| line.rfind(focus).map(|at| at + focus.len())).unwrap();
-    line[start..end].to_owned()
+    // The toast's rows from the read on, without its frame, joined where the toast wrapped them.
+    let rows = screen.lines().skip_while(|line| !line.contains("composer ")).take(3);
+    let text = rows.map(|row| row.trim().trim_matches('┃').trim()).collect::<Vec<_>>().join(" ");
+    let start = text.find("composer ").unwrap();
+    let end = ["true", "false"].iter().find_map(|focus| text.find(focus).map(|at| at + focus.len()));
+    text[start..end.unwrap_or_else(|| panic!("no focus in the read:\n{screen}"))].to_owned()
 }
 
 // Expected: a plugin reads the composer's text, its cursor as a byte offset and its focus; an insert goes in at the
@@ -191,6 +192,25 @@ fn the_composer_reads_and_edits_the_same_on_both_carriers() {
         setup.tui.keymap.dispatch("p0a.alert", None);
         setup.wait_for("Heads up");
         assert_eq!(read(&setup), "composer \"later\" at 5, focused false", "{carrier:?}");
+    }
+}
+
+// Expected (bigboi 6, carbon-p0a-5): the cursor a plugin reads is the byte where its insert goes: after a tab, which
+// takes two columns in the buffer, across a line break, after a combining mark, a ZWJ emoji and wide characters.
+#[test]
+fn the_cursor_read_is_where_an_insert_goes() {
+    let setup = session(Carrier::Linked);
+    for (text, lefts) in [("a\tb", 1), ("\tab\ncd", 4), ("e\u{301}x", 1), ("👨‍👩‍👧x", 1), ("日本語", 1)]
+    {
+        setup.tui.keymap.dispatch("p0a.set", Some(text));
+        setup.wait("the set", || setup.textarea().text() == text);
+        (0..lefts).for_each(|_| setup.app.press("left"));
+        let read = read(&setup);
+        let cursor: usize =
+            read.rsplit(" at ").next().and_then(|rest| rest.split(',').next()?.parse().ok()).expect(&read);
+        setup.tui.keymap.dispatch("p0a.insert", Some("|"));
+        setup.wait("the insert", || setup.textarea().text().contains('|'));
+        assert_eq!(setup.textarea().text().find('|'), Some(cursor), "{text:?}: {read}");
     }
 }
 
