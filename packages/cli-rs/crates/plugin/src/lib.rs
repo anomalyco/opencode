@@ -9,6 +9,7 @@ pub mod node;
 pub mod reconcile;
 mod route;
 pub mod slot;
+pub mod surface;
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
@@ -212,6 +213,10 @@ pub type Deltas = Rc<dyn Fn(&[abi::types::V2Event])>;
 pub(crate) trait Claimed {
     fn root(&self) -> View;
     fn sync(&self, _host: &dyn Host, _changed: &abi::Changed) {}
+    /// Takes the host's theme in place; false when the claim must mount again instead.
+    fn restyle(&self, _host: &dyn Host) -> bool {
+        false
+    }
 }
 
 impl Claimed for View {
@@ -454,6 +459,20 @@ fn in_process(plugin: abi::Plugin) -> Definition {
                 scope.call("render-route", host, |read| render(read, changed)).unwrap_or(abi::Render::Hide)
             });
             setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
+        }
+        for surface in api.surfaces() {
+            let called = scope.clone();
+            let call: surface::Call = Rc::new(move |host, view| called.call("view", host, |read| view(read)).is_some());
+            let failing = scope.clone();
+            let fail: surface::Fail = Rc::new(move |error| {
+                let layer = failing.layer.borrow_mut().take();
+                crate::fail(&failing.host, &failing.id, &failing.failure, layer, &failing.activation, error);
+            });
+            let commands = match &surface.place {
+                abi::v2::Place::Route(name) => route::commands(&scoped, name),
+                abi::v2::Place::Slot(_) => Vec::new(),
+            };
+            setup.surface(surface.clone(), commands, call, fail, &activation);
         }
         // Disposal removes the plugin's commands, runs its dispose callbacks, then drops its replies and wakes.
         setup.on_dispose(move || scope.dispose(&mut api));
@@ -1166,10 +1185,63 @@ impl Setup<'_> {
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
         self.route(name, move |host| {
-            let view = route::View::new(host, owner.clone(), render.clone(), commands.clone(), mount.clone());
-            activation.track(Rc::downgrade(&view.mount) as Weak<dyn Drawn>);
+            let (view, mounted) =
+                route::View::new(host, owner.clone(), render.clone(), commands.clone(), mount.clone());
+            activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
             Box::new(view)
         });
+    }
+
+    /// Registers a surface of contract 2.0, on either place: each showing is a new mount ([`surface::Surface`]),
+    /// whose views run through `call`; `activation` draws its mounts again.
+    pub(crate) fn surface(
+        &mut self,
+        surface: abi::v2::Surface,
+        commands: Vec<TuiCommand>,
+        call: surface::Call,
+        fail: surface::Fail,
+        activation: &Rc<Activation>,
+    ) {
+        let (owner, activation) = (Rc::downgrade(self.host), activation.clone());
+        match surface.place.clone() {
+            abi::v2::Place::Route(name) => {
+                let key = name.clone();
+                self.route(name, move |host| {
+                    let mounted = surface::Surface::new(
+                        host,
+                        owner.clone(),
+                        &surface,
+                        &key,
+                        "",
+                        &SlotInput::default(),
+                        call.clone(),
+                        fail.clone(),
+                    );
+                    activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
+                    Box::new(route::View::wrap(host, Box::new(mounted), commands.clone()))
+                });
+            }
+            abi::v2::Place::Slot(at) => {
+                let path = at.path.clone();
+                self.slot(
+                    slot::placement(&abi::SlotClaim { kind: at.kind, path: at.path, render: true, mount: false }),
+                    move |host, input| {
+                        let mounted = surface::Surface::new(
+                            host,
+                            owner.clone(),
+                            &surface,
+                            &path,
+                            &path,
+                            input,
+                            call.clone(),
+                            fail.clone(),
+                        );
+                        activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
+                        Box::new(mounted)
+                    },
+                );
+            }
+        }
     }
 
     /// Registers the route `Route::Plugin { id, name }` shows (TS `ui.router.register`).
@@ -1863,6 +1935,11 @@ pub struct RouteMount(Box<dyn Claimed>);
 impl RouteMount {
     pub fn root(&self) -> View {
         self.0.root()
+    }
+
+    /// Takes the host's theme in place, keeping its widgets and their state; false when it must mount again.
+    pub fn restyle(&self, host: &dyn Host) -> bool {
+        self.0.restyle(host)
     }
 
     /// Draws what `changed` changed; `None` when a change batch changed nothing.

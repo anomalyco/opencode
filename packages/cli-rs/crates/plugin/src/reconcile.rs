@@ -215,6 +215,19 @@ impl Tree {
         walk(&self.nodes, f);
     }
 
+    /// Calls `f` with the source of each Markdown and Diff the tree shows, kept subtrees included.
+    pub fn each_source(&self, f: &mut dyn FnMut(&Source)) {
+        fn walk(nodes: &[Mounted], f: &mut dyn FnMut(&Source)) {
+            for node in nodes {
+                if let Node::Markdown { source, .. } | Node::Diff { content: source, .. } = &node.node {
+                    f(source);
+                }
+                walk(&node.children, f);
+            }
+        }
+        walk(&self.nodes, f);
+    }
+
     /// The ids the tree holds.
     pub fn ids(&self) -> impl Iterator<Item = &str> {
         self.ids.keys().map(String::as_str)

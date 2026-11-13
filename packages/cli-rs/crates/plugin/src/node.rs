@@ -266,6 +266,13 @@ impl Claimed for Rc<Mount> {
         self.draw(host, changed);
         self.tree.borrow().each_slot(&mut |slots| slots.sync(host, Some(changed)));
     }
+
+    /// A render of ABI 1.x reads its colors from the host, so it renders again, and its widgets take the new theme in
+    /// place.
+    fn restyle(&self, host: &dyn Host) -> bool {
+        self.sync(host, &abi::Changed::everything());
+        true
+    }
 }
 
 /// Sets `list` to `items` through `set`, reusing its elements, so a host that refills one [`abi::Changed`] with a
@@ -292,7 +299,7 @@ pub fn assign(text: &mut String, value: &str) {
 pub type Act = Rc<dyn Fn(&abi::Action)>;
 
 /// Runs `action` on `host` once the event that caused it is handled, outside every plugin callback.
-fn act(host: &Weak<dyn Host>, action: &abi::Action) {
+pub(crate) fn act(host: &Weak<dyn Host>, action: &abi::Action) {
     let Some(strong) = host.upgrade() else { return };
     let (host, action) = (host.clone(), action.clone());
     strong.app().defer(move |_| {

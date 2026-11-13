@@ -39,4 +39,10 @@ impl RouteView for Plugin {
             crate::plugins::host::changed(tui, changes, |changed| content.sync(tui, changed));
         }
     }
+
+    /// A plugin's route keeps its widgets and their state, its scroll offsets among them; the diff viewer and the
+    /// missing route mount again.
+    fn restyle(&self, tui: &Tui) -> bool {
+        self.content.as_ref().is_some_and(|content| content.restyle(tui))
+    }
 }
