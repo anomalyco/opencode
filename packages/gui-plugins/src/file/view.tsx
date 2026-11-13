@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack } from "solid-js"
+import { createMemo, createSignal, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode/session-ui/file"
@@ -8,6 +8,10 @@ import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comm
 import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
+import type File from "./index"
 import { createKeyed, usePlugin, type LineRange, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { artifactKind } from "@opencode/util/artifact"
 import ArtifactView from "./artifact-view"
@@ -79,6 +83,10 @@ type ShownSessions = { current: MountedSession; previous?: MountedSession }
 function createScrollSync(input: {
   context: () => Omit<FileScrollContext, "scroller">
   get: () => FileScrollPos | undefined
+  target: () => LineRange | undefined
+  prepare: (range: LineRange) => boolean
+  complete: (position: FileScrollPos) => void
+  cancel: () => void
   write: (sessionKey: string, scrollKey: string, position: FileScrollPos) => void
 }) {
   const scroller: ScrollTarget = {}
@@ -119,7 +127,10 @@ function createScrollSync(input: {
     })
   }
 
-  const interacted = () => dispatch(FILE_SCROLL_INTERACTED)
+  const interacted = () => {
+    input.cancel()
+    dispatch(FILE_SCROLL_INTERACTED)
+  }
 
   const getCode = () => {
     const el = scroller.element
@@ -170,6 +181,26 @@ function createScrollSync(input: {
 
     sync()
 
+    const range = input.target()
+
+    const root = el.querySelector("diffs-container")?.shadowRoot
+    const start = root?.querySelector<HTMLElement>(`[data-line="${Math.min(range?.start ?? 0, range?.end ?? 0)}"]`)
+    const end = root?.querySelector<HTMLElement>(`[data-line="${Math.max(range?.start ?? 0, range?.end ?? 0)}"]`)
+
+    if (range && start && end) {
+      const bounds = el.getBoundingClientRect()
+      const first = start.getBoundingClientRect()
+      const last = end.getBoundingClientRect()
+      const height = last.bottom - first.top
+      el.scrollTop += first.top - bounds.top - Math.max(0, (el.clientHeight - height) / 2)
+      input.complete({ x: code()[0]?.scrollLeft ?? el.scrollLeft, y: el.scrollTop })
+
+      return
+    }
+
+    // Virtual rows must first enter the render window; its ready callback retries with measured row bounds.
+    if (range && input.prepare(range)) return
+
     if (code().length > 0) {
       for (const item of code()) {
         if (item.scrollLeft !== pos.x) item.scrollLeft = pos.x
@@ -185,6 +216,8 @@ function createScrollSync(input: {
 
   // Scroll events a restore or a layout clamp fires arrive while restoring and are not the user's to store.
   const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+    if (input.target()) dispatch(FILE_SCROLL_RESTORE_REQUESTED)
+
     if (!canSaveFileScroll(untrack(scrollState))) return
 
     if (code().length === 0) sync()
@@ -200,7 +233,12 @@ function createScrollSync(input: {
 
   createKeyed(
     () => ({ ...input.context(), scroller: hasScroller() }),
-    (context) => dispatch({ type: "context.synced", context }),
+    (context) => {
+      const previous = untrack(scrollState)
+
+      if (previous.status !== "disposed" && previous.context.shown && !context.shown) input.cancel()
+      dispatch({ type: "context.synced", context })
+    },
     { equals: sameFileScrollContext },
   )
 
@@ -215,7 +253,20 @@ function createScrollSync(input: {
     makeEventListener(el, "touchstart", interacted, { passive: true, capture: true })
     makeEventListener(el, "keydown", interacted, { capture: true })
     setHasScroller(true)
+
+    // Wrapped virtual rows reconcile their heights after drawing. Re-measure an active link target after that layout.
+    const observer = new ResizeObserver(() => {
+      if (input.target()) dispatch(FILE_SCROLL_RESTORE_REQUESTED)
+    })
+
+    onMount(() => {
+      const content = el.firstElementChild
+
+      if (content) observer.observe(content)
+    })
     onCleanup(() => {
+      observer.disconnect()
+
       if (scroller.element !== el) return
       scroller.element = undefined
       setCode([])
@@ -223,7 +274,10 @@ function createScrollSync(input: {
     })
   }
 
-  onCleanup(() => dispatch({ type: "disposed" }))
+  onCleanup(() => {
+    input.cancel()
+    dispatch({ type: "disposed" })
+  })
 
   return {
     handleScroll,
@@ -235,7 +289,7 @@ function createScrollSync(input: {
 }
 
 export function SessionFileView(props: { session: MountedSession; screen: SessionScreen; id: string }) {
-  const ctx = usePlugin()
+  const ctx = usePlugin<typeof File>()
   const layout = ctx.layout
   const shared = useShared()
   const fileComponent = useFileComponent()
@@ -302,6 +356,12 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       }
     },
     get: () => layout.scroll.get(props.session, key()),
+    target: () => shared.reveal.get(props.session.key, path() ?? ""),
+    prepare: (range) => state.find?.reveal?.(range) ?? false,
+    complete: (position) => {
+      layout.scroll.set(props.session, key(), position)
+    },
+    cancel: () => shared.reveal.clear(props.session.key, path() ?? ""),
     write: (sessionKey, scrollKey, position) => {
       const session = [props.session, shown.previous].find((item) => item?.key === sessionKey)
 
@@ -478,33 +538,38 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
 
   const renderFile = () => (
     <div class="relative overflow-hidden pb-40">
-      <Dynamic
-        component={fileComponent}
-        mode="text"
-        file={{
-          name: path() ?? "",
-          contents: contents(),
-          cacheKey: cacheKey(),
-        }}
-        enableLineSelection
-        enableGutterUtility
-        selectedLines={commentsUi.selected() ?? selectedLines()}
-        commentedLines={commentedLines()}
-        onRendered={scrollSync.requestRestore}
-        annotations={commentsUi.annotations()}
-        renderAnnotation={commentsUi.renderAnnotation}
-        renderGutterUtility={commentsUi.renderGutterUtility}
-        onLineSelected={(range: LineRange | null) => {
-          commentsUi.onLineSelected(range)
-        }}
-        onLineSelectionEnd={(range: LineRange | null) => {
-          commentsUi.onLineSelectionEnd(range)
-        }}
-        search={search}
-        class="select-text"
-        // Media and previews have their own viewers below; the code view only ever shows text.
-        media={{ mode: "off" }}
-      />
+      <Show when={ctx.stores.viewer.value.wrap ? "wrap" : "scroll"} keyed>
+        {(overflow) => (
+          <Dynamic
+            component={fileComponent}
+            mode="text"
+            overflow={overflow}
+            file={{
+              name: path() ?? "",
+              contents: contents(),
+              cacheKey: cacheKey(),
+            }}
+            enableLineSelection
+            enableGutterUtility
+            selectedLines={commentsUi.selected() ?? selectedLines()}
+            commentedLines={commentedLines()}
+            onRendered={scrollSync.requestRestore}
+            annotations={commentsUi.annotations()}
+            renderAnnotation={commentsUi.renderAnnotation}
+            renderGutterUtility={commentsUi.renderGutterUtility}
+            onLineSelected={(range: LineRange | null) => {
+              commentsUi.onLineSelected(range)
+            }}
+            onLineSelectionEnd={(range: LineRange | null) => {
+              commentsUi.onLineSelectionEnd(range)
+            }}
+            search={search}
+            class="select-text"
+            // Media and previews have their own viewers below; the code view only ever shows text.
+            media={{ mode: "off" }}
+          />
+        )}
+      </Show>
     </div>
   )
 
@@ -512,14 +577,34 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   // It reads the text itself: `Show` tracks its fallback, so passing the content in would rebuild the view, scrolled to
   // the top, each time a reread stores a new content object.
   const codeView = () => (
-    <div
-      data-scrollable
-      class="min-h-0 flex-1 overflow-y-auto"
-      ref={scrollSync.setViewport}
-      onScroll={scrollSync.handleScroll}
-    >
-      {renderFile()}
-    </div>
+    <>
+      <div class="flex shrink-0 justify-end px-3 pb-2">
+        <Tooltip value={ctx.t("view.wordWrap")}>
+          <IconButton
+            variant="ghost"
+            size="large"
+            state={ctx.stores.viewer.value.wrap ? "pressed" : "rest"}
+            aria-label={ctx.t("view.wordWrap")}
+            aria-pressed={ctx.stores.viewer.value.wrap}
+            icon={<Icon name="word-wrap" size="normal" />}
+            onClick={() => {
+              scrollSync.interacted()
+              void ctx.stores.viewer.update((draft) => {
+                draft.wrap = !draft.wrap
+              })
+            }}
+          />
+        </Tooltip>
+      </div>
+      <div
+        data-scrollable
+        class="min-h-0 flex-1 overflow-y-auto"
+        ref={scrollSync.setViewport}
+        onScroll={scrollSync.handleScroll}
+      >
+        {renderFile()}
+      </div>
+    </>
   )
 
   return (
