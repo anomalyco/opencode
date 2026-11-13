@@ -380,7 +380,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   // A server whose plugin lacked the browser RPC may have it once its plugins finish loading, its event stream
-  // reconnects or a restarted server replaces its controller. Leaving the list ends the watch too: its next session
+  // reconnects, or a restarted server replaces its controller. Leaving the list ends the watch too: its next session
   // asks again.
   const watchServer = (serverID: string) => {
     servers.get(serverID)?.()
@@ -398,7 +398,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           (data) => {
             if (data !== marked) return changed()
             onCleanup(data.on("server.connected", changed))
-            // Plugins load after the server starts, so the browser RPC can arrive after the first attach asked for it.
             onCleanup(data.on("plugin.updated", changed))
           },
           { otherwise: changed },

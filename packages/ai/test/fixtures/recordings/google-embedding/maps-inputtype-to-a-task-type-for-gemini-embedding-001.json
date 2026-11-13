@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:google-embedding",
+      "provider:google",
+      "protocol:google-embed-content"
+    ],
+    "name": "google-embedding/maps-inputtype-to-a-task-type-for-gemini-embedding-001",
+    "recordedAt": "2026-11-09T06:56:10.031Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"requests\":[{\"model\":\"models/gemini-embedding-001\",\"content\":{\"parts\":[{\"text\":\"The invoice was charged twice.\"}]},\"taskType\":\"RETRIEVAL_QUERY\",\"outputDimensionality\":64}]}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": "{\n  \"embeddings\": [\n    {\n      \"values\": [\n        0.04013612,\n        -0.01537641,\n        -0.00894363,\n        -0.045427274,\n        0.015747963,\n        -0.009066882,\n        0.034106165,\n        0.008299592,\n        -0.029671155,\n        0.0073614777,\n        0.011705497,\n        -0.008064136,\n        -0.012201166,\n        -0.023549316,\n        0.12342585,\n        0.011068751,\n        -0.003649386,\n        -0.0046033487,\n        -0.011378856,\n        0.008659822,\n        -0.024897752,\n        0.001241405,\n        -0.0016047506,\n        0.032963928,\n        0.014408621,\n        -0.011485396,\n        0.011547241,\n        -0.0087663345,\n        0.029018002,\n        0.01399287,\n        -0.0005734975,\n        0.009806568,\n        -0.033623748,\n        0.013897123,\n        0.027592098,\n        -0.001526048,\n        0.024996622,\n        -0.0028200862,\n        -0.0016486795,\n        -0.019535935,\n        -0.0060296683,\n        0.020810796,\n        -0.014712436,\n        0.0027340506,\n        -0.021106219,\n        -0.022350833,\n        0.0039701443,\n        0.010802266,\n        -0.0124504585,\n        -0.0040887143,\n        -0.0062737963,\n        -0.018470604,\n        0.021161897,\n        -0.16764373,\n        0.018159335,\n        -0.015530227,\n        -0.025055906,\n        -0.026749635,\n        0.002768487,\n        -0.03824891,\n        -0.010511027,\n        0.014685062,\n        -0.015881633,\n        -0.042950973\n      ]\n    }\n  ]\n}\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"requests\":[{\"model\":\"models/gemini-embedding-001\",\"content\":{\"parts\":[{\"text\":\"The invoice was charged twice.\"}]},\"taskType\":\"RETRIEVAL_DOCUMENT\",\"outputDimensionality\":64}]}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": "{\n  \"embeddings\": [\n    {\n      \"values\": [\n        0.0067660585,\n        -0.008564701,\n        0.006918798,\n        -0.0653632,\n        0.010584768,\n        0.0019771366,\n        0.024187071,\n        0.00468459,\n        -0.022482483,\n        -0.0011979828,\n        0.01025464,\n        -0.012994005,\n        0.010501545,\n        -0.008400968,\n        0.1354296,\n        -0.003842612,\n        -0.009868842,\n        0.0045481804,\n        -0.012495539,\n        0.010945229,\n        -0.012774331,\n        0.0018108432,\n        0.004564442,\n        0.024119604,\n        0.0096224435,\n        0.0008170349,\n        0.013087967,\n        0.0028655464,\n        0.038301487,\n        0.013128475,\n        0.008370898,\n        0.01710832,\n        -0.02379502,\n        0.006764786,\n        0.028454835,\n        0.01613345,\n        0.013660678,\n        0.0013027737,\n        0.003783348,\n        -0.0053537926,\n        -0.0019457041,\n        0.022436744,\n        -0.021374583,\n        0.0048431614,\n        0.0014370559,\n        -0.0071425945,\n        -0.0075106425,\n        0.0035781835,\n        -0.002726382,\n        -0.0017613088,\n        0.00242477,\n        -0.012590718,\n        0.0015917314,\n        -0.23083314,\n        0.006775061,\n        -0.013197291,\n        -0.020559328,\n        -0.01887775,\n        0.011951808,\n        -0.03615789,\n        -0.017971825,\n        0.011554768,\n        -0.017077072,\n        -0.033402666\n      ]\n    }\n  ]\n}\n"
+      }
+    }
+  ]
+}

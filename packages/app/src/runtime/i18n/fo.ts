@@ -337,7 +337,6 @@ export const dict = {
   "session.new.project.search": "Leita verkætlanir",
   "session.new.project.add": "Legg verkætlan til",
   "session.new.workspace.runIn": "Koyr setu í",
-  "session.new.workspace.triggerLocal": "Lokal",
   "session.new.workspace.local": "Lokal goymsla",
   "session.new.git.none": "Nei Git",
   "session.header.open.finder": "Finder",

@@ -41,6 +41,8 @@ import { PageTitle } from "~/component/site/sticky-title"
 import { AgentRulesButton } from "~/component/site/agent-rules-button"
 import { inlineKey } from "~/lib/direction"
 import { placeMenu } from "~/component/site/place-menu"
+import { fitDrawings, snapLogos, startDrawings } from "~/component/site/brand-drawings"
+import { checkPath, copyPath } from "~/component/site/icon-paths"
 
 export default function Brand() {
   const i18n = useI18n()
@@ -75,30 +77,7 @@ export default function Brand() {
   createEffect(on(language.locale, () => requestAnimationFrame(() => (fitDrawings(), snapLogos())), { defer: true }))
 
   onMount(() => {
-    // While the page scrolls, rows passing under a resting pointer would light up one after another
-    // (a flicker). The content ignores the pointer until scrolling has stopped for 150ms.
-    const state: { idle?: ReturnType<typeof setTimeout> } = {}
-    // Written once per scroll, not per event: it restyles the whole page.
-    const scrolling = () => {
-      if (state.idle === undefined) document.documentElement.dataset.scrolling = ""
-      clearTimeout(state.idle)
-      state.idle = setTimeout(() => {
-        state.idle = undefined
-        delete document.documentElement.dataset.scrolling
-      }, 150)
-    }
-    window.addEventListener("scroll", scrolling, { passive: true })
-    onCleanup(() => {
-      window.removeEventListener("scroll", scrolling)
-      clearTimeout(state.idle)
-      delete document.documentElement.dataset.scrolling
-    })
-    const observer = new ResizeObserver(snapLogos)
-    observer.observe(document.documentElement)
-    void document.fonts.ready.then(() => {
-      fitDrawings()
-      snapLogos()
-    })
+    onCleanup(startDrawings())
     // The animated stroke diagram plays once, when it first comes into view.
     const play = new IntersectionObserver(
       (entries) => {
@@ -112,10 +91,7 @@ export default function Brand() {
       { threshold: 0.6 },
     )
     document.querySelectorAll('[data-component="stroke-diagram"]').forEach((element) => play.observe(element))
-    onCleanup(() => {
-      observer.disconnect()
-      play.disconnect()
-    })
+    onCleanup(() => play.disconnect())
   })
 
   /** Copies text, or the text a URL serves, and marks `key` as copied for a moment. */
@@ -141,12 +117,21 @@ export default function Brand() {
 
   /** A square icon button next to Download: the copy icon turns into a check. */
   // `detail` names the asset ("the logo (light)"); `of` reads "Copy SVG of the logo", else "… for the logo".
-  const CopyButton = (props: { label: string; detail: string; of?: boolean; done: boolean; onClick: () => void }) => (
+  // `url`, the file it copies, is for the static page's script (src/client/islands/brand.ts).
+  const CopyButton = (props: {
+    label: string
+    detail: string
+    of?: boolean
+    url?: string
+    done: boolean
+    onClick: () => void
+  }) => (
     <button
       type="button"
       data-component="site-button"
       data-variant="neutral"
       data-slot="copy-square"
+      data-url={props.url}
       data-tip={props.label}
       data-tip-align="center"
       aria-label={i18n.t(props.of ? "brand.ui.actionOf" : "brand.ui.actionFor", {
@@ -200,97 +185,113 @@ export default function Brand() {
           {item.icon}
         </a>
       )
-    // Every style is in the markup and CSS shows the chosen one (data-style), so the server's default
-    // and the saved setting hydrate the same nodes.
+    // In development every style is in the markup and CSS shows the chosen one (data-style), so the
+    // server's default and the saved setting hydrate the same nodes; production has only the default.
     const copyAction = props.actions.find((action) => action.copy)
     return (
       <div data-slot="actions" data-style={style()} data-design="brandAssetActions">
-        <div data-variant="menu copy">
-          <AssetMenu
-            actions={props.actions.filter((action) => !action.copy)}
-            detail={props.detail}
-            done={done}
-            run={run}
-          />
-          {copyAction ? (
-            <CopyButton
-              label={copyAction.label}
+        <Show when={import.meta.env.DEV || siteSettings.brandAssetActions === "menu copy"}>
+          <div data-variant="menu copy">
+            <AssetMenu
+              actions={props.actions.filter((action) => !action.copy)}
               detail={props.detail}
-              of
-              done={done(copyAction) ?? false}
-              onClick={() => run(copyAction)}
+              done={done}
+              run={run}
             />
-          ) : null}
-        </div>
-        <div data-variant="menu">
-          <AssetMenu actions={props.actions} detail={props.detail} done={done} run={run} />
-        </div>
-        <div data-variant="split">
-          <Item
-            action={props.actions[0]}
-            class="site-button"
-            label={i18n.t("download.action.download")}
-            tip={i18n.t("brand.ui.downloadLabel", { label: props.actions[0].label })}
-          />
-          <AssetMenu actions={props.actions.slice(1)} detail={props.detail} done={done} run={run} chevronOnly />
-        </div>
-        <div data-variant="icons">
-          <For each={props.actions}>
-            {(action) => (
-              <Item
-                action={action}
-                class="site-button"
-                icon={action.copy ? <CopyIcon /> : action.label.includes("SVG") ? <VectorIcon /> : <ImageIcon />}
-                tip={action.copy ? action.label : i18n.t("brand.ui.downloadLabel", { label: action.label })}
+            {copyAction ? (
+              <CopyButton
+                label={copyAction.label}
+                detail={props.detail}
+                of
+                url={copyAction.href}
+                done={done(copyAction) ?? false}
+                onClick={() => run(copyAction)}
               />
-            )}
-          </For>
-        </div>
-        <div data-variant="text links">
-          <span data-slot="links">
+            ) : null}
+          </div>
+        </Show>
+        <Show when={import.meta.env.DEV || siteSettings.brandAssetActions === "menu"}>
+          <div data-variant="menu">
+            <AssetMenu actions={props.actions} detail={props.detail} done={done} run={run} />
+          </div>
+        </Show>
+        <Show when={import.meta.env.DEV || siteSettings.brandAssetActions === "split"}>
+          <div data-variant="split">
+            <Item
+              action={props.actions[0]}
+              class="site-button"
+              label={i18n.t("download.action.download")}
+              tip={i18n.t("brand.ui.downloadLabel", { label: props.actions[0].label })}
+            />
+            <AssetMenu actions={props.actions.slice(1)} detail={props.detail} done={done} run={run} chevronOnly />
+          </div>
+        </Show>
+        <Show when={import.meta.env.DEV || siteSettings.brandAssetActions === "icons"}>
+          <div data-variant="icons">
             <For each={props.actions}>
-              {(action, index) => (
-                <>
-                  {index() > 0 ? <span aria-hidden="true"> · </span> : null}
-                  <Item action={action} label={done(action) ? i18n.t("site.action.copied") : action.label} />
-                </>
+              {(action) => (
+                <Item
+                  action={action}
+                  class="site-button"
+                  icon={action.copy ? <CopyIcon /> : action.label.includes("SVG") ? <VectorIcon /> : <ImageIcon />}
+                  tip={action.copy ? action.label : i18n.t("brand.ui.downloadLabel", { label: action.label })}
+                />
               )}
             </For>
-          </span>
-        </div>
-        <div data-variant="svg copy">
-          <For each={props.actions.filter((action) => !action.copy)}>
-            {(action) => (
-              <Item
-                action={action}
-                class="site-button"
-                label={action.label}
-                icon={<DownloadIcon />}
-                tip={i18n.t("brand.ui.downloadLabel", { label: action.label })}
+          </div>
+        </Show>
+        <Show when={import.meta.env.DEV || siteSettings.brandAssetActions === "text links"}>
+          <div data-variant="text links">
+            <span data-slot="links">
+              <For each={props.actions}>
+                {(action, index) => (
+                  <>
+                    {index() > 0 ? <span aria-hidden="true"> · </span> : null}
+                    <Item action={action} label={done(action) ? i18n.t("site.action.copied") : action.label} />
+                  </>
+                )}
+              </For>
+            </span>
+          </div>
+        </Show>
+        <Show when={import.meta.env.DEV || siteSettings.brandAssetActions === "svg copy"}>
+          <div data-variant="svg copy">
+            <For each={props.actions.filter((action) => !action.copy)}>
+              {(action) => (
+                <Item
+                  action={action}
+                  class="site-button"
+                  label={action.label}
+                  icon={<DownloadIcon />}
+                  tip={i18n.t("brand.ui.downloadLabel", { label: action.label })}
+                />
+              )}
+            </For>
+            {copyAction ? (
+              <CopyButton
+                label={copyAction.label}
+                detail={props.detail}
+                url={copyAction.href}
+                done={done(copyAction) ?? false}
+                onClick={() => run(copyAction)}
               />
-            )}
-          </For>
-          {copyAction ? (
-            <CopyButton
-              label={copyAction.label}
-              detail={props.detail}
-              done={done(copyAction) ?? false}
-              onClick={() => run(copyAction)}
-            />
-          ) : null}
-        </div>
-        <div data-variant="hover reveal">
-          <For each={props.actions}>
-            {(action) => (
-              <Item
-                action={action}
-                class="site-button"
-                label={action.label}
-                icon={action.copy ? <CopyIcon /> : <DownloadIcon />}
-              />
-            )}
-          </For>
-        </div>
+            ) : null}
+          </div>
+        </Show>
+        <Show when={import.meta.env.DEV || siteSettings.brandAssetActions === "hover reveal"}>
+          <div data-variant="hover reveal">
+            <For each={props.actions}>
+              {(action) => (
+                <Item
+                  action={action}
+                  class="site-button"
+                  label={action.label}
+                  icon={action.copy ? <CopyIcon /> : <DownloadIcon />}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
         <span data-slot="sr-only" aria-live="polite">
           {live()}
         </span>
@@ -398,7 +399,7 @@ export default function Brand() {
   }
 
   type BadgeGroup = { label: string; title: string; alt: string; body: string }
-  const badgeFonts: BadgeFont[] = ["sans", "mono", "mono caps"]
+  const badgeFonts: BadgeFont[] = import.meta.env.DEV ? ["sans", "mono", "mono caps"] : [siteSettings.badgeFont]
 
   // The badge size shown in every preview and used by every Markdown copy; Shields stays at 20px.
   const [badgeSize, setBadgeSize] = createSignal(20)
@@ -515,25 +516,46 @@ export default function Brand() {
   const BadgeCard = (props: { group: BadgeGroup; style: BadgeStyle; theme: "light" | "dark"; font: BadgeFont }) => {
     const size = () => (props.style.sizes.includes(badgeSize()) ? badgeSize() : props.style.sizes[0])
     const theme = () => lower(i18n.t(props.theme === "light" ? "site.theme.light" : "site.theme.dark"))
-    const detail = () =>
-      i18n.t("brand.ui.badgeName", {
-        style: props.style.name.toLowerCase(),
+    // The card's files and labels with {{id}}, {{style}} (its name) and {{size}} left in: filled in here,
+    // and in the markup for the static page's script to fill in as they change (src/client/islands/brand.ts).
+    const templates = () => {
+      const detail = i18n.t("brand.ui.badgeName", {
+        style: "{{style}}",
         group: lower(props.group.title),
         theme: theme(),
       })
-    const zip = () => badgeZip(props.group.label, props.style.id, props.font, props.theme)
+      const asset = i18n.t("brand.ui.badgeAsset", { name: detail, size: "{{size}}" })
+      return {
+        src: badgeFile(props.group.label, "{{id}}", props.theme, "{{size}}", "svg", props.font),
+        zip: badgeZip(props.group.label, "{{id}}", props.font, props.theme),
+        markdown: badgeMarkdown(props.group.label, props.group.alt, "{{id}}", "{{size}}", props.font, props.theme),
+        alt: `${props.group.alt}, {{style}}, ${theme()}, {{size}}px`,
+        zipLabel: i18n.t("brand.ui.downloadSizes", { detail }),
+        asset,
+        copyLabel: i18n.t("brand.ui.actionFor", { label: i18n.t("brand.ui.copyMarkdown"), detail: asset }),
+      }
+    }
+    const fill = (template: string) =>
+      template
+        .replaceAll("{{id}}", props.style.id)
+        .replaceAll("{{style}}", props.style.name.toLowerCase())
+        .replaceAll("{{size}}", String(size()))
+    const zip = () => fill(templates().zip)
     const markdown = () => `markdown:${props.group.label}-${props.style.id}-${props.theme}-${props.font}`
     return (
-      <li>
+      <li
+        data-src={templates().src}
+        data-zip={templates().zip}
+        data-copy-text={templates().markdown}
+        data-alt={templates().alt}
+        data-zip-label={templates().zipLabel}
+        data-copy-label={templates().copyLabel}
+      >
         <div data-slot="preview" data-tone={props.theme} data-badge={props.style.id}>
           <Show when={props.style.sizes.length > 1}>
             <SizeSwitcher />
           </Show>
-          <BadgePreview
-            src={badgeFile(props.group.label, props.style.id, props.theme, size(), "svg", props.font)}
-            size={size()}
-            alt={`${props.group.alt}, ${props.style.name.toLowerCase()}, ${theme()}, ${size()}px`}
-          />
+          <BadgePreview src={fill(templates().src)} size={size()} alt={fill(templates().alt)} />
         </div>
         <div data-slot="meta">
           <span data-slot="name">
@@ -545,21 +567,16 @@ export default function Brand() {
               download={zip().split("/").pop()}
               data-component="site-button"
               data-variant="neutral"
-              aria-label={i18n.t("brand.ui.downloadSizes", { detail: detail() })}
+              aria-label={fill(templates().zipLabel)}
             >
               {i18n.t("download.action.download")}
               <DownloadIcon />
             </a>
             <CopyButton
               label={i18n.t("brand.ui.copyMarkdown")}
-              detail={i18n.t("brand.ui.badgeAsset", { name: detail(), size: size() })}
+              detail={fill(templates().asset)}
               done={copied() === markdown()}
-              onClick={() =>
-                copy(
-                  markdown(),
-                  badgeMarkdown(props.group.label, props.group.alt, props.style.id, size(), props.font, props.theme),
-                )
-              }
+              onClick={() => copy(markdown(), fill(templates().markdown))}
             />
             <span data-slot="sr-only" aria-live="polite">
               {copied() === markdown() ? i18n.t("site.action.copied") : ""}
@@ -606,6 +623,8 @@ export default function Brand() {
               aria-selected={badgeStyle() === style.id ? "true" : "false"}
               aria-controls={props.panel}
               tabIndex={badgeStyle() === style.id ? 0 : -1}
+              data-id={style.id}
+              data-sizes={style.sizes.join(" ")}
               onClick={() => void chooseBadgeStyle(style.id)}
               onKeyDown={(event) => {
                 const keys: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1 }
@@ -629,8 +648,8 @@ export default function Brand() {
   /**
    * The badges in the layout from Settings › Badge layout: "tabs" (default), quiet style tabs over one
    * Light and Dark pair; or "rows", a row per style with its pair, as the logo and wordmark sections.
-   * Every font and both layouts are in the markup and CSS shows the chosen ones, so the server and the
-   * saved settings hydrate the same nodes.
+   * In development every font and both layouts are in the markup and CSS shows the chosen ones, so the
+   * server and the saved settings hydrate the same nodes; production has only the defaults.
    */
   const Badges = (props: { group: BadgeGroup }) => (
     <div
@@ -642,39 +661,43 @@ export default function Brand() {
       <For each={badgeFonts}>
         {(font) => (
           <div data-variant={font}>
-            <div data-slot="tabs-layout">
-              <StyleTabs panel={`badges-${props.group.label}-${font.replace(" ", "-")}`} />
-              <div
-                role="tabpanel"
-                id={`badges-${props.group.label}-${font.replace(" ", "-")}`}
-                aria-label={i18n.t("brand.ui.badge", { title: props.group.title })}
-              >
-                <ul data-slot="badge-grid">
-                  <For each={["light", "dark"] as const}>
-                    {(theme) => {
-                      const style = () =>
-                        content().integrations.badges.styles.find((item) => item.id === badgeStyle()) ??
-                        content().integrations.badges.styles[0]
-                      return <BadgeCard group={props.group} style={style()} theme={theme} font={font} />
-                    }}
-                  </For>
-                </ul>
+            <Show when={import.meta.env.DEV || siteSettings.badgeLayout === "tabs"}>
+              <div data-slot="tabs-layout">
+                <StyleTabs panel={`badges-${props.group.label}-${font.replace(" ", "-")}`} />
+                <div
+                  role="tabpanel"
+                  id={`badges-${props.group.label}-${font.replace(" ", "-")}`}
+                  aria-label={i18n.t("brand.ui.badge", { title: props.group.title })}
+                >
+                  <ul data-slot="badge-grid">
+                    <For each={["light", "dark"] as const}>
+                      {(theme) => {
+                        const style = () =>
+                          content().integrations.badges.styles.find((item) => item.id === badgeStyle()) ??
+                          content().integrations.badges.styles[0]
+                        return <BadgeCard group={props.group} style={style()} theme={theme} font={font} />
+                      }}
+                    </For>
+                  </ul>
+                </div>
               </div>
-            </div>
-            <div data-slot="rows-layout">
-              <For each={content().integrations.badges.styles}>
-                {(style) => (
-                  <div data-slot="row">
-                    <h4>{style.name}</h4>
-                    <ul data-slot="badge-grid">
-                      <For each={["light", "dark"] as const}>
-                        {(theme) => <BadgeCard group={props.group} style={style} theme={theme} font={font} />}
-                      </For>
-                    </ul>
-                  </div>
-                )}
-              </For>
-            </div>
+            </Show>
+            <Show when={import.meta.env.DEV || siteSettings.badgeLayout === "rows"}>
+              <div data-slot="rows-layout">
+                <For each={content().integrations.badges.styles}>
+                  {(style) => (
+                    <div data-slot="row">
+                      <h4>{style.name}</h4>
+                      <ul data-slot="badge-grid">
+                        <For each={["light", "dark"] as const}>
+                          {(theme) => <BadgeCard group={props.group} style={style} theme={theme} font={font} />}
+                        </For>
+                      </ul>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
           </div>
         )}
       </For>
@@ -1653,63 +1676,6 @@ function Callout(props: { x: number; y: number; drop: number; label: string }) {
   )
 }
 
-/**
- * Widens each annotated drawing's viewBox (and its size, so it keeps 1:1) to take in its labels, whose
- * length depends on the language and the font: an <svg> clips anything outside its viewBox. The clear-
- * space drawings grow on both sides by the same amount, so the logo stays on the figure's centre line.
- */
-function fitDrawings() {
-  document
-    .querySelectorAll<SVGSVGElement>(
-      '[data-page="brand"] :is(svg[data-component="clear-space"], svg[data-component="pixel-grid"])',
-    )
-    .forEach((svg) => {
-      const original = (svg.dataset.viewBox ??= svg.getAttribute("viewBox") ?? "").split(" ").map(Number)
-      const texts = [...svg.querySelectorAll<SVGTextElement>("text")].map((text) => text.getBBox())
-      if (original.length !== 4 || texts.every((box) => box.width === 0)) return
-      const pad = 2
-      const left = Math.max(0, ...texts.map((box) => original[0] - box.x + pad))
-      const right = Math.max(0, ...texts.map((box) => box.x + box.width - (original[0] + original[2]) + pad))
-      const top = Math.max(0, ...texts.map((box) => original[1] - box.y + pad))
-      const bottom = Math.max(0, ...texts.map((box) => box.y + box.height - (original[1] + original[3]) + pad))
-      const symmetric = svg.dataset.component === "clear-space"
-      const grow = {
-        left: Math.ceil(symmetric ? Math.max(left, right) : left),
-        right: Math.ceil(symmetric ? Math.max(left, right) : right),
-        top: Math.ceil(top),
-        bottom: Math.ceil(bottom),
-      }
-      const box = [
-        original[0] - grow.left,
-        original[1] - grow.top,
-        original[2] + grow.left + grow.right,
-        original[3] + grow.top + grow.bottom,
-      ]
-      svg.setAttribute("viewBox", box.join(" "))
-      svg.setAttribute("width", String(box[2]))
-      svg.setAttribute("height", String(box[3]))
-    })
-}
-
-/**
- * Nudges every logo on the page onto whole pixels. Sizes are whole-pixel steps already; centering and the
- * text above can still leave a fractional offset, so each logo is translated by the remainder.
- */
-function snapLogos() {
-  const logos = [
-    ...document.querySelectorAll<HTMLElement | SVGSVGElement>(
-      '[data-page="brand"] :is([data-slot="preview"] img, svg[data-slot="mark"], svg[data-slot="wordmark"], [data-component="clear-space"], [data-component="pixel-grid"])',
-    ),
-  ]
-  logos.forEach((logo) => (logo.style.translate = ""))
-  const rects = logos.map((logo) => logo.getBoundingClientRect())
-  logos.forEach((logo, index) => {
-    const dx = Math.round(rects[index].x) - rects[index].x
-    const dy = Math.round(rects[index].y) - rects[index].y
-    if (dx || dy) logo.style.translate = `${dx}px ${dy}px`
-  })
-}
-
 /** One action on an asset: a download, or copying the SVG at `href`. */
 // `group` starts a titled part of the menu ("" for a plain divider); `value` is text to copy instead of
 // the file at `href`.
@@ -1727,7 +1693,7 @@ function svgActions(file: string, png: string, svg: string, copy: string): Asset
 function CheckIcon() {
   return (
     <svg data-slot="download-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M4 10.5L8 14.5L16 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
+      <path d={checkPath} stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
     </svg>
   )
 }
@@ -1765,7 +1731,7 @@ function VectorIcon() {
 function CopyIcon() {
   return (
     <svg data-slot="download-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M7.5 7.5V3.75H16.25V12.5H12.5M3.75 7.5H12.5V16.25H3.75V7.5Z" stroke="currentColor" stroke-width="1.5" />
+      <path d={copyPath} stroke="currentColor" stroke-width="1.5" />
     </svg>
   )
 }
@@ -1801,6 +1767,24 @@ function PixelGrid(props: { good: boolean; cell: number }) {
     const inner = cover(x[1], x[2], y[2], y[3])
     return { i, j, fill: cellFill(code, inner) }
   }).filter((cell) => cell.fill)
+  // Each run of same-coloured cells in a row as one rectangle, grown down over the rows below with the
+  // same run: the pixels of a square per cell in a fraction of the markup. Rectangles, not paths, as
+  // crispEdges rounds a path's edges differently when the drawing sits on a fraction of a pixel.
+  const runs = cells.reduce<{ i: number; j: number; n: number; fill?: string }[]>((list, cell) => {
+    const last = list.at(-1)
+    if (!last || last.fill !== cell.fill || last.j !== cell.j || last.i + last.n !== cell.i)
+      return [...list, { ...cell, n: 1 }]
+    last.n++
+    return list
+  }, [])
+  const blocks = runs.reduce<((typeof runs)[number] & { rows: number })[]>((list, run) => {
+    const above = list.find(
+      (block) => block.i === run.i && block.n === run.n && block.fill === run.fill && block.j + block.rows === run.j,
+    )
+    if (!above) return [...list, { ...run, rows: 1 }]
+    above.rows++
+    return list
+  }, [])
   const grid = [
     ...Array.from({ length: gridSize[0] + 1 }, (_, k) => {
       const x = left + k * c + (k === gridSize[0] ? -0.5 : 0.5)
@@ -1821,9 +1805,15 @@ function PixelGrid(props: { good: boolean; cell: number }) {
       viewBox={`0 0 ${left + width + 8} ${top + height + 34}`}
     >
       <g shape-rendering="crispEdges">
-        <For each={cells}>
-          {(cell) => (
-            <rect x={left + cell.i * c} y={top + cell.j * c} width={c} height={c} style={{ fill: cell.fill }} />
+        <For each={blocks}>
+          {(block) => (
+            <rect
+              x={left + block.i * c}
+              y={top + block.j * c}
+              width={block.n * c}
+              height={block.rows * c}
+              style={{ fill: block.fill }}
+            />
           )}
         </For>
         <path data-slot="grid" d={grid} />

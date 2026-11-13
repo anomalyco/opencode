@@ -215,10 +215,12 @@ ID, a short `description`, and a complete `prompt`.
 Ask the explore subagent to map the authentication flow and return the key files.
 ```
 
-Foreground calls wait for the result. `background: true` returns immediately
-and notifies the parent when the child finishes. Pass the returned `sessionID`
-to continue that same child conversation. Only subagent-mode agents can be
-used, and the default nesting depth is one.
+Subagents always run in the background. The call returns immediately with a
+`sessionID`, and the parent receives a `<subagent>` message when the child goes
+idle, and again after each later round of work, so it can keep working or end
+its turn without waiting. Pass the returned `sessionID` to continue that same
+child conversation; a follow-up to a running child joins its current run. Only
+subagent-mode agents can be used, and the default nesting depth is one.
 
 Permission: `subagent` with the selected agent ID as its resource.
 
@@ -234,8 +236,10 @@ Read package.json and README.md in parallel, then return their relevant setup de
 
 The runtime has no direct filesystem access, imports, or timers. It provides
 `fetch` for HTTP requests; everything else goes through tools in its catalog.
-Denying `execute` with resource `*` removes Code Mode and every tool reached only
-through it, including MCP tools from servers that do not set `codemode: false`.
+Denying `execute` with resource `*` removes Code Mode. The tools it would reach,
+including MCP tools from servers that do not set `codemode: false`, are then
+listed as direct tools, each with its full definition in every request. Deny
+those tools too if the agent should not have them.
 Nested built-in and MCP tools still enforce their own permissions, and plugin
 tools enforce the permissions they assert.
 

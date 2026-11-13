@@ -1,6 +1,6 @@
-import type { Builtins } from "../interpreter/intrinsics.js"
-import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
-import { syntaxError, typeError } from "../interpreter/model.js"
+import type { Builtins } from "../runtime/intrinsics.js"
+import { constructor, type Method, methods, prototypeFrom, receiver } from "../runtime/native.js"
+import { syntaxError, typeError } from "../runtime/model.js"
 import {
   define,
   defineAccessor,
@@ -11,8 +11,8 @@ import {
   coerceToNumber,
   coerceToString,
   type Value,
-} from "../interpreter/objects.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
+} from "../runtime/objects.js"
+import type { Interpreter } from "../runtime/interpreter.js"
 
 const flagProperties = [
   "hasIndices",
@@ -31,10 +31,15 @@ const regexFailureReason = (error: unknown): string =>
 const escapeRegexHint =
   'To match special characters like ( ) [ ] { } + * ? . literally, escape them with a backslash (e.g. "\\\\(") or test for them with String.includes instead.'
 
-export const toHostRegex = (arg: Value, method: string, extraFlags = ""): RegExp => {
-  if (arg instanceof RegExpObj) return arg.regex
+/** Runs host regex work on a RegExp argument, sharing its `lastIndex`, or on a pattern string compiled for the call. */
+export const withHostRegex = <T>(arg: Value, method: string, extraFlags: string, work: (regex: RegExp) => T): T => {
+  if (arg instanceof RegExpObj) return arg.use(work)
   // Anything else is a pattern string, as `new RegExp(arg)` would read it: undefined is the empty pattern.
   const source = arg === undefined ? "" : coerceToString(arg)
+  return work(compilePattern(source, method, extraFlags))
+}
+
+const compilePattern = (source: string, method: string, extraFlags: string): RegExp => {
   try {
     return new RegExp(source, extraFlags)
   } catch (error) {
@@ -58,14 +63,14 @@ export const matchToValue = (builtins: Builtins, match: RegExpMatchArray): Arr =
 
 export const constructRegExp = (builtins: Builtins, args: Array<Value>, proto: Obj = builtins.RegExp): RegExpObj => {
   const first = args[0]
-  const pattern = first instanceof RegExpObj ? first.regex.source : first === undefined ? "" : coerceToString(first)
+  const pattern = first instanceof RegExpObj ? first.source : first === undefined ? "" : coerceToString(first)
   const flagsArg = args[1]
   if (flagsArg !== undefined && typeof flagsArg !== "string") {
     throw syntaxError(
       `RegExp flags must be a string of flag characters (e.g. "g", "gi"), not ${flagsArg === null ? "null" : typeof flagsArg}.`,
     )
   }
-  const flags = flagsArg ?? (first instanceof RegExpObj ? first.regex.flags : "")
+  const flags = flagsArg ?? (first instanceof RegExpObj ? first.flags : "")
   try {
     return new RegExpObj(proto, pattern, flags)
   } catch (error) {
@@ -100,15 +105,15 @@ export const regexpGlobal = <R>(ctx: Interpreter<R>) => {
   ])
 
   const self = (thisValue: Value, name: string) => receiver(RegExpObj, thisValue, `RegExp.prototype.${name}`)
-  defineAccessor(proto, "source", (thisValue) => self(thisValue, "source").regex.source)
-  defineAccessor(proto, "flags", (thisValue) => self(thisValue, "flags").regex.flags)
-  // The host regex holds the only lastIndex, so exec/test and the String methods share one counter.
+  defineAccessor(proto, "source", (thisValue) => self(thisValue, "source").source)
+  defineAccessor(proto, "flags", (thisValue) => self(thisValue, "flags").flags)
+  // One lastIndex per RegExp, so exec/test and the String methods share one counter.
   defineAccessor(
     proto,
     "lastIndex",
-    (thisValue) => self(thisValue, "lastIndex").regex.lastIndex,
+    (thisValue) => self(thisValue, "lastIndex").lastIndex,
     (thisValue, value) => {
-      self(thisValue, "lastIndex").regex.lastIndex = coerceToNumber(value)
+      self(thisValue, "lastIndex").lastIndex = coerceToNumber(value)
     },
   )
   for (const name of flagProperties) defineAccessor(proto, name, (thisValue) => self(thisValue, name).regex[name])
@@ -117,7 +122,8 @@ export const regexpGlobal = <R>(ctx: Interpreter<R>) => {
     1,
     (thisValue, args) => {
       const value = self(thisValue, name)
-      const matched = value.regex.exec(coerceToString(args[0]))
+      const input = coerceToString(args[0])
+      const matched = value.use((regex) => regex.exec(input))
       if (name === "test") return matched !== null
       return matched === null ? null : matchToValue(builtins, matched)
     },

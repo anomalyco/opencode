@@ -1,4 +1,3 @@
-import "./legal-print.css"
 import { createContext, createSignal, For, Match, onMount, Show, Switch, useContext } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { encode } from "uqr"

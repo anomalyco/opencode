@@ -647,7 +647,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.generate",
             summary: "Generate text from session context",
-            description: "Generate transient text from the current session context without mutating session history.",
+            description:
+              "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
           }),
         ),
     )

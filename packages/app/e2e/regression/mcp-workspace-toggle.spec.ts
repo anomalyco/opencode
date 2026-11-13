@@ -69,7 +69,9 @@ async function open(
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
 
     if (input.surface === "settings") {
-      await page.keyboard.press("Control+,")
+      // Settings opens with the platform's command key, which the app reads from navigator.platform.
+      const mac = await page.evaluate(() => /(Mac|iPod|iPhone|iPad)/.test(navigator.platform))
+      await page.keyboard.press(mac ? "Meta+," : "Control+,")
 
       return panel.getByRole("tab", { name: "Extensions", exact: true }).click()
     }

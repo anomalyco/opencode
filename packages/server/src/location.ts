@@ -1,9 +1,10 @@
 import { FileSystem } from "@opencode/core/filesystem"
 import { Location } from "@opencode/core/location"
+import { Plugin } from "@opencode/core/plugin"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
-import { LocationNotFoundError, InvalidRequestError } from "@opencode/protocol/errors"
+import { LocationNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
@@ -31,6 +32,22 @@ export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
     ),
   )
 }
+
+// Temporary: managed policy is applied by the last internal plugin, and State shows each registration as soon as it is
+// made, so until activation finishes a provider the policy denies is still listed and usable. Only the endpoints that
+// list or use providers wait. Remove once a plugin batch becomes visible only when it ends.
+export const awaitPlugins = Plugin.awaitActivation.pipe(
+  Effect.timeoutOrElse({
+    duration: "5 seconds",
+    orElse: () =>
+      Effect.fail(
+        new ServiceUnavailableError({
+          message: "Location plugins did not finish activating",
+          service: "plugin",
+        }),
+      ),
+  }),
+)
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {

@@ -1,7 +1,7 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import { isRecord } from "@opencode/util/record"
-import { Effect, Option, Schema } from "effect"
+import { Clock, Effect, Option, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
@@ -13,8 +13,9 @@ import { Agent } from "../../agent.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
+import type { Session } from "@opencode/schema/session"
 import { SharedCache } from "../../shared-cache.js"
-import { activeCredential } from "./credential-settings.js"
+import { activeCredential, credentialSettings } from "./credential-settings.js"
 import { ProviderRefresh } from "./refresh.js"
 import type { PluginInternal } from "../internal.js"
 
@@ -45,6 +46,11 @@ const User = Schema.Struct({
   ),
 })
 const decodeUser = Schema.decodeUnknownOption(User)
+const AutoRoute = Schema.Struct({
+  session_token: Schema.String,
+  expires_at: Schema.Number,
+  selected_model: Schema.Struct({ id: Schema.String }),
+})
 const JsonBody = Schema.fromJsonString(Schema.Unknown)
 const decodeBody = Schema.decodeUnknownOption(JsonBody)
 
@@ -164,6 +170,14 @@ export const GithubCopilotPlugin = define({
     const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
     const outbound = yield* FetchHttpClient.Fetch
+    // Each Session keeps the model Copilot's Auto router picked until its token nears expiry, the Session is compacted,
+    // or the account changes. The token unlocks the pick and its Auto discount; Copilot rejects it for any other model.
+    const routes = new Map<Session.ID, { model: string; account: string; token?: string; until: number }>()
+    // The endpoint saved at login serves requests until the first refresh reads the account's current one, so an
+    // Enterprise login doesn't send its token to the public host while that refresh is still running.
+    const login = yield* credentialSettings(ctx, "github-copilot", (value) =>
+      value.type === "oauth" ? { baseURL: copilotBaseURL(value.metadata) } : {},
+    )
     const discovered = yield* ProviderRefresh.start({
       integrationID: "github-copilot",
       initial: {} as {
@@ -245,12 +259,15 @@ export const GithubCopilotPlugin = define({
       const item = evt.get(Provider.ID.githubCopilot)
       if (!item) return
       const loaded = discovered.current
+      const url = loaded.baseURL ?? (typeof login.settings.baseURL === "string" ? login.settings.baseURL : baseURL())
       if (loaded.models) {
+        const router = CopilotModels.autoModel(url, loaded.models)
         evt.add({
           info: item.provider,
-          models: Array.from(
-            CopilotModels.derive(loaded.baseURL ?? baseURL(), loaded.models, Array.from(item.models.values())).values(),
-          ),
+          models: [
+            ...CopilotModels.derive(url, loaded.models, Array.from(item.models.values())).values(),
+            ...(router ? [router] : []),
+          ],
           sourceConnection: loaded.connection,
         })
         return
@@ -267,7 +284,7 @@ export const GithubCopilotPlugin = define({
               : model.package === "@opencode/ai/providers/openai"
                 ? "responses"
                 : undefined,
-            loaded.baseURL ?? baseURL(),
+            url,
           )
           model.package = route.package
           model.settings = Provider.mergeOverlay(model.settings, { baseURL: route.baseURL })
@@ -294,6 +311,82 @@ export const GithubCopilotPlugin = define({
           evt.headers["X-Interaction-Type"] = interaction
           evt.headers["X-Interaction-Id"] = session ? SessionAffinity.get(session) : evt.sessionID
           if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
+          const route = routes.get(evt.sessionID)
+          if (route?.token && route.model === evt.model.id) evt.headers["Copilot-Session-Token"] = route.token
+        }),
+      { providerID: Provider.ID.githubCopilot },
+    )
+    const route = Effect.fn("GithubCopilotPlugin.route")(function* (sessionID: Session.ID) {
+      const loaded = discovered.current
+      if (!loaded.baseURL || !loaded.token || !loaded.models) return
+      const user = yield* ctx.session.context({ sessionID }).pipe(
+        Effect.map((messages) => messages.findLast((message) => message.type === "user")),
+        Effect.orElseSucceed(() => undefined),
+      )
+      const headers = (yield* providers.get(Provider.ID.githubCopilot))?.headers ?? {}
+      const picked = yield* HttpClient.filterStatusOk(http)
+        .execute(
+          HttpClientRequest.post(`${loaded.baseURL}/auto`).pipe(
+            HttpClientRequest.setHeaders({
+              ...headers,
+              Authorization: `Bearer ${loaded.token}`,
+              "User-Agent": App.useragent(ctx.app),
+              "X-GitHub-Api-Version": apiVersion,
+            }),
+            HttpClientRequest.bodyJsonUnsafe({
+              prompt: user?.text ?? "",
+              ...(user?.files?.some((file) => file.mime.startsWith("image/")) ? { has_image: true } : {}),
+            }),
+          ),
+        )
+        .pipe(
+          Effect.flatMap(HttpClientResponse.schemaBodyJson(AutoRoute)),
+          Effect.timeout("5 seconds"),
+          Effect.tapError((cause) => Effect.logWarning("Copilot Auto routing failed", { cause })),
+          Effect.option,
+        )
+      const now = yield* Clock.currentTimeMillis
+      if (Option.isSome(picked) && loaded.models.has(picked.value.selected_model.id))
+        return {
+          model: picked.value.selected_model.id,
+          account: loaded.token,
+          token: picked.value.session_token,
+          // Route again before the token can expire mid-request.
+          until: picked.value.expires_at * 1000 - 5 * 60_000,
+        }
+      const models = Array.from(loaded.models.values())
+      const fallback =
+        models.find((model) => model.is_chat_fallback) ?? models.find((model) => model.billing?.auto_discount)
+      // Retry routing soon when the router fails or picks a model this client cannot serve.
+      return fallback && { model: fallback.id, account: loaded.token, until: now + 5 * 60_000 }
+    })
+    yield* ctx.session.hook(
+      "experimental.model.resolve",
+      (evt) =>
+        Effect.gen(function* () {
+          // Titles use Copilot's utility model, so they never route.
+          if (evt.model.id !== CopilotModels.auto || evt.kind === "title") return
+          const now = yield* Clock.currentTimeMillis
+          const cached = routes.get(evt.sessionID)
+          const current =
+            cached && cached.until > now && cached.account === discovered.current.token
+              ? cached
+              : yield* route(evt.sessionID)
+          if (!current) return
+          for (const [id, route] of routes) if (route.until <= now) routes.delete(id)
+          routes.set(evt.sessionID, current)
+          evt.model = Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make(current.model) })
+        }),
+      { providerID: Provider.ID.githubCopilot },
+    )
+    // Compaction rewrites the prompt, so the request after it routes again, like Copilot's own clients. The compaction
+    // request itself still carries the current pick's token.
+    yield* ctx.session.hook(
+      "compaction",
+      (evt) =>
+        Effect.sync(() => {
+          const route = routes.get(evt.sessionID)
+          if (route) route.until = 0
         }),
       { providerID: Provider.ID.githubCopilot },
     )
@@ -328,8 +421,7 @@ export const GithubCopilotPlugin = define({
         Effect.gen(function* () {
           // The Messages route sends the token as `x-api-key`, the OpenAI routes as a bearer token.
           const token =
-            evt.request.headers.get("x-api-key") ??
-            evt.request.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
+            evt.request.headers.get("x-api-key") ?? evt.request.headers.get("authorization")?.replace(/^Bearer\s+/i, "")
           if (!token) return
           const text = yield* Effect.promise(() => evt.request.clone().text())
           const body = Option.getOrUndefined(decodeBody(text))

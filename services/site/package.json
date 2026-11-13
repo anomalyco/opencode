@@ -66,6 +66,7 @@
     "miniflare": "5.20260930.0-alpha",
     "pagefind": "1.5.2",
     "playwright-core": "1.59.1",
+    "remark-directive": "4.0.0",
     "remark-gfm": "4.0.1",
     "remark-smartypants": "3.0.3",
     "satori": "0.63.2",

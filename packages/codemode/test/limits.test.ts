@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
-import { CodeMode, Tool } from "./lib/index.js"
-import { MAX_ARRAY_LENGTH, MAX_PENDING_PROMISES, MAX_STRING_LENGTH } from "../src/interpreter/limits.js"
+import { CodeMode, Tool } from "../src/index.js"
+import { MAX_ARRAY_LENGTH, MAX_PENDING_PROMISES, MAX_STRING_LENGTH } from "../src/runtime/limits.js"
 
 const runtime = CodeMode.make({ tools: {} })
 
@@ -40,7 +40,7 @@ describe("one built-in cannot build an unbounded value", () => {
   })
 
   // split and matchAll share the same result check but must build ten million items first to reach it,
-  // which is too slow for CI.
+  // which is too slow for CI; flat() over MAX_ARRAY_LENGTH (10M) elements still needs a 15s budget on Windows.
   test("arrays: constructor, length, Array.from, concat, flat", async () => {
     expect(await value(`return Array(${A}).length`)).toBe(A)
     for (const code of [
@@ -54,7 +54,7 @@ describe("one built-in cannot build an unbounded value", () => {
         "RangeError: Invalid array length",
       )
     }
-  })
+  }, 15_000)
 
   test("promises: too many pending at once, while settled ones do not count", async () => {
     const n = MAX_PENDING_PROMISES

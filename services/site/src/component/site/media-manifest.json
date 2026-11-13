@@ -134,59 +134,59 @@
       [800, "hevc", "1bfc3877", 90]
     ],
     "/product-videos/heroes/desktop-landscape-dark.mp4": [
-      [1280, "av1", "87488462", 5, "phone"],
+      [1344, "av1", "786fbf2f", 8, "lo"],
       [1920, "av1", "476dd57a", 8],
-      [1280, "hevc", "f9408e0f", 120, "phone"],
+      [1344, "hevc", "0ec0f786", 120, "lo"],
       [1920, "hevc", "4a955f68", 150]
     ],
     "/product-videos/heroes/desktop-landscape-light.mp4": [
-      [1280, "av1", "166905a1", 5, "phone"],
+      [1344, "av1", "15c689fc", 8, "lo"],
       [1920, "av1", "461fb508", 8],
-      [1280, "hevc", "27a6e47e", 120, "phone"],
+      [1344, "hevc", "abbd4c51", 120, "lo"],
       [1920, "hevc", "d0bae749", 150]
     ],
     "/product-videos/heroes/mini-landscape-dark.mp4": [
-      [1280, "av1", "47ac0990", 5, "phone"],
-      [1280, "hevc", "a0d62021", 120, "phone"]
+      [1344, "av1", "3b3f1848", 8, "lo"],
+      [1344, "hevc", "5fd0a3a4", 120, "lo"]
     ],
     "/product-videos/heroes/mini-landscape-light.mp4": [
-      [1280, "av1", "d1ec2aa0", 5, "phone"],
-      [1280, "hevc", "cf388476", 120, "phone"]
+      [1344, "av1", "53928eae", 8, "lo"],
+      [1344, "hevc", "8bd6c6da", 120, "lo"]
     ],
     "/product-videos/heroes/mobile-landscape-dark.mp4": [
-      [1280, "av1", "968f138e", 5, "phone"],
+      [1344, "av1", "bafd5cce", 8, "lo"],
       [1920, "av1", "2d4e37e8", 8],
-      [1280, "hevc", "dd010af3", 120, "phone"],
+      [1344, "hevc", "89e31924", 120, "lo"],
       [1920, "hevc", "731d098b", 150]
     ],
     "/product-videos/heroes/mobile-landscape-light.mp4": [
-      [1280, "av1", "968f138e", 5, "phone"],
+      [1344, "av1", "bafd5cce", 8, "lo"],
       [1920, "av1", "2d4e37e8", 8],
-      [1280, "hevc", "dd010af3", 120, "phone"],
+      [1344, "hevc", "89e31924", 120, "lo"],
       [1920, "hevc", "731d098b", 150]
     ],
     "/product-videos/heroes/sdk-landscape-dark.mp4": [
-      [1280, "av1", "034290df", 5, "phone"],
+      [1344, "av1", "a224db24", 8, "lo"],
       [1920, "av1", "29015746", 8],
-      [1280, "hevc", "05b60004", 120, "phone"],
+      [1344, "hevc", "a5d12f85", 120, "lo"],
       [1920, "hevc", "d644d9f8", 150]
     ],
     "/product-videos/heroes/sdk-landscape-light.mp4": [
-      [1280, "av1", "e9956023", 5, "phone"],
+      [1344, "av1", "c1c71f19", 8, "lo"],
       [1920, "av1", "8bbc435d", 8],
-      [1280, "hevc", "39c3c112", 120, "phone"],
+      [1344, "hevc", "8e891c4e", 120, "lo"],
       [1920, "hevc", "2b6ebcca", 150]
     ],
     "/product-videos/heroes/terminal-landscape-dark.mp4": [
-      [1280, "av1", "c5372903", 5, "phone"],
+      [1344, "av1", "36d71505", 8, "lo"],
       [1920, "av1", "2b371817", 8],
-      [1280, "hevc", "d717c7ac", 120, "phone"],
+      [1344, "hevc", "6ab989de", 120, "lo"],
       [1920, "hevc", "0f4dba50", 150]
     ],
     "/product-videos/heroes/terminal-landscape-light.mp4": [
-      [1280, "av1", "ea1f17d7", 5, "phone"],
+      [1344, "av1", "2495c008", 8, "lo"],
       [1920, "av1", "51bebb60", 8],
-      [1280, "hevc", "61386db5", 120, "phone"],
+      [1344, "hevc", "04f5da93", 120, "lo"],
       [1920, "hevc", "3e2fb1e7", 150]
     ],
     "/product-videos/more/mini-portrait.mp4": [[720, "av1", "1bdc53ec", 4]]

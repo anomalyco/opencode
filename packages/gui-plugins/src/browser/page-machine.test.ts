@@ -6,6 +6,7 @@ import {
   documentTab,
   documentVisible,
   isDocumentLoading,
+  isNavigationPending,
   transitionDocument,
   type DocumentEvent,
   type DocumentState,
@@ -348,5 +349,81 @@ test("a disposed document ignores every later event", () => {
     const next = transitionDocument(closed, event)
     expect(next.state).toBe(closed)
     expect(next.effects).toEqual([])
+  })
+})
+
+describe("a screenshot waits for a pending navigation", () => {
+  const start = (url: string): DocumentEvent => ({
+    type: "navigation.started",
+    url,
+    isMainFrame: true,
+    isSameDocument: false,
+  })
+
+  test("a main-frame navigation is pending until it commits", () => {
+    const pending = replay([start("https://alpha.example/login"), { type: "loading.started" }], shown())
+    expect(isNavigationPending(pending.state)).toBe(true)
+
+    const redirected = replay([start("https://beta.example/home")], pending.state)
+    expect(isNavigationPending(redirected.state)).toBe(true)
+
+    const committed = replay(
+      [
+        {
+          type: "navigation.committed",
+          url: "https://beta.example/home",
+          status: 200,
+          statusText: "OK",
+          title: "Home",
+        },
+      ],
+      redirected.state,
+    )
+
+    expect(isNavigationPending(committed.state)).toBe(false)
+  })
+
+  test("a failed, cancelled or downloaded navigation stops being pending", () => {
+    const failed = replay(
+      [
+        start("https://gone.example/"),
+        {
+          type: "navigation.failed",
+          code: -105,
+          description: "ERR_NAME_NOT_RESOLVED",
+          url: "https://gone.example/",
+          isMainFrame: true,
+        },
+      ],
+      shown(),
+    )
+
+    expect(isNavigationPending(failed.state)).toBe(false)
+
+    const download = replay(
+      [
+        start("https://alpha.example/report.zip"),
+        { type: "loading.started" },
+        { type: "loading.stopped", title: "Alpha" },
+      ],
+      shown(),
+    )
+
+    expect(isNavigationPending(download.state)).toBe(false)
+  })
+
+  test("same-document and subframe navigations and closed pages are never pending", () => {
+    const local = replay(
+      [
+        { type: "navigation.started", url: "https://alpha.example/#top", isMainFrame: true, isSameDocument: true },
+        { type: "navigation.started", url: "https://ads.example/", isMainFrame: false, isSameDocument: false },
+      ],
+      shown(),
+    )
+
+    expect(isNavigationPending(local.state)).toBe(false)
+
+    const closed = replay([start("https://beta.example/"), { type: "disposed" }], shown())
+    expect(isNavigationPending(closed.state)).toBe(false)
   })
 })
