@@ -87,7 +87,10 @@ try {
   if (registered !== undefined && alive(registered.pid)) process.kill(registered.pid, "SIGKILL")
   owner.kill("SIGKILL")
   await owner.exited
-  await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  // Windows can hold the killed services' files for a few seconds more.
+  await fs
+    .rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    .catch(() => console.warn(`Could not remove ${root}; delete it by hand.`))
 }
 
 // Windows has no SIGSTOP, so suspend and resume every thread of the process through ntdll instead.
