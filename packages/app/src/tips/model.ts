@@ -59,7 +59,7 @@ export function createTipToasts() {
       action: {
         label: "tips.browse.install",
         run: () => platform.openExternal(
-            "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg?utm_source=opencode-desktop&utm_medium=tip&utm_campaign=tip-browse",
+            "https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg?utm_source=opencode-desktop&utm_campaign=tip-browse",
           ),
       },
     },
@@ -71,7 +71,7 @@ export function createTipToasts() {
         label: "tips.hex.install",
         // anoma.ly/hex 404s with a query string; the trailing slash is required.
         run: () =>
-          platform.openExternal("https://anoma.ly/hex/?utm_source=opencode-desktop&utm_medium=tip&utm_campaign=tip-hex"),
+          platform.openExternal("https://anoma.ly/hex/?utm_source=opencode-desktop&utm_campaign=tip-hex"),
       },
     },
     {
