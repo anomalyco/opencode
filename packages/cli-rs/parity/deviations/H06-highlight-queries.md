@@ -13,17 +13,19 @@ for cell. Here is what still differs:
 - **OCaml and F# are not linked** (O-122). TS highlights them; Rust shows their code in the text color. Their parse
   tables are the largest of the TUI's grammars (OCaml 15.4 MB and F# 14.2 MB of object code): the stripped Linux
   release binary is 103.5 MB without them and 120.6 MB with them.
-- **Kotlin is not linked.** TS uses fwcd's `tree-sitter-kotlin` 0.3.8, and that crate needs tree-sitter older than
-  0.23. fwcd's `main` (0.4.0) builds, but the 0.3.8 query does not load against it (`Invalid node type "null"`). The
-  crates that build with tree-sitter 0.27 follow `main` too: `tree-sitter-kotlin-sg` 0.4.1 (ast-grep) has no `"null"`,
-  `"!in"` or `"!is"` nodes, and `tree-sitter-kotlin-codanna` 0.3.9 has no `"!in"`. Kotlin shows in the text color.
+- **Kotlin is not linked.** TS highlights it; Rust shows its code in the text color. TS uses fwcd's
+  `tree-sitter-kotlin` 0.3.8, and that crate needs tree-sitter older than 0.23. fwcd's `main` (0.4.0) builds, but
+  the 0.3.8 query does not load against it (`Invalid node type "null"`). The crates that build with tree-sitter 0.27
+  follow `main` too: `tree-sitter-kotlin-sg` 0.4.1 (ast-grep) has no `"null"`, `"!in"` or `"!is"` nodes, and
+  `tree-sitter-kotlin-codanna` 0.3.9 has no `"!in"`, so TS's query does not compile against either.
 - **Swift is not linked, and neither client highlights it.** The cached TS query fails against the 0.7.1 grammar in
   web-tree-sitter too (`Bad node name 'nil_literal'`), so Core skips Swift.
 - **Other grammar versions.** Vue uses `tree-sitter-vue-next` 0.1.0 (TS: anomalyco's fork
   0.1.2). Clojure uses `tree-sitter-clojure-orchard` 0.2.9 (TS: anomalyco's fork 0.0.1). Vim uses `tree-sitter-vim` 0.4.0
   (TS: 0.8.1). Nix uses `tree-sitter-nix` 0.3.0 (TS: a WASM build from ast-grep). The crates TS pins at these versions
-  need an older tree-sitter or do not exist on crates.io. The queries load against all four, so the node names agree.
-  The parses can still differ on syntax that the grammar versions handle differently.
+  need an older tree-sitter or do not exist on crates.io. The queries load against all four, so the node names agree,
+  and their U.4b snippets match TS cell for cell. The parses can still differ on syntax that the grammar versions
+  handle differently.
 - **Rust and Markdown use opentui-rust's crate versions:** `tree-sitter-rust` 0.24.2 (TS: 0.24.0) and
   `tree-sitter-md` 0.5.4 (TS: 0.5.1). Cargo allows one version per crate in a build.
 - **Markdown injections are opentui-rust's,** not the nvim-treesitter query Core uses. Core's query names a fence's
