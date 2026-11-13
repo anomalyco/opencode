@@ -3,8 +3,12 @@ export * as Mime from "./mime.js"
 export function detect(bytes: Uint8Array) {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
-  if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif"
-  if (startsWith(bytes, [0x42, 0x4d])) return "image/bmp"
+  if (
+    startsWith(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) ||
+    startsWith(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61])
+  )
+    return "image/gif"
+  if (startsWith(bytes, [0x42, 0x4d]) && isBmpHeader(bytes)) return "image/bmp"
   if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"
   if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50]))
     return "image/webp"
@@ -47,6 +51,13 @@ function ascii(bytes: Uint8Array, start: number, end: number) {
 
 function startsWith(bytes: Uint8Array, prefix: number[]) {
   return prefix.every((value, index) => bytes[index] === value)
+}
+
+// "BM" alone is two ASCII letters; require a known DIB header size so text keeps falling through to isText.
+function isBmpHeader(bytes: Uint8Array) {
+  if (bytes.length < 18) return false
+  const dibSize = new DataView(bytes.buffer, bytes.byteOffset).getUint32(14, true)
+  return dibSize === 12 || dibSize === 16 || dibSize === 40 || dibSize === 52 || dibSize === 56 || dibSize === 64 || dibSize === 108 || dibSize === 124
 }
 
 function isText(bytes: Uint8Array) {
