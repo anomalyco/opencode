@@ -647,10 +647,11 @@ impl Reference {
                 }
             }
             // Escape answers a confirm `false` and closes an alert, which then run their action; it closes the others.
-            Some(Command::Escape) => match self.dialog.take() {
-                Some((Dialog::Confirm | Dialog::Alert, a, _)) => self.confirm = Some(a),
-                _ => {}
-            },
+            Some(Command::Escape) => {
+                if let Some((Dialog::Confirm | Dialog::Alert, a, _)) = self.dialog.take() {
+                    self.confirm = Some(a);
+                }
+            }
             // A confirmed prompt or select runs `probe.run` once the frame comes. The panel has no action and stays.
             Some(Command::Enter) => self.enter(),
             Some(Command::Home) => self.page = Page::Home,
