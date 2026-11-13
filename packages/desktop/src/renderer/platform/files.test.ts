@@ -35,6 +35,41 @@ function fileApi(events: string[]): Parameters<typeof createDesktopFiles>[0] {
 }
 
 describe("desktop attachment files", () => {
+  test("reports Windows app launch and resolution failures instead of falling back to Explorer", async () => {
+    const events: string[] = []
+
+    const files = createDesktopFiles(
+      {
+        ...fileApi(events),
+        openPath: async (_path, app) => {
+          events.push(String(app))
+
+          throw new Error("spawn missing-editor ENOENT")
+        },
+      },
+      "windows",
+    )
+
+    await expect(files.openPath("C:\\project with spaces", "missing-editor")).rejects.toThrow("ENOENT")
+    expect(events).toEqual(["missing-editor"])
+
+    const unresolved = createDesktopFiles(
+      {
+        ...fileApi(events),
+        resolveAppPath: async () => {
+          throw new Error("resolution failed")
+        },
+        openPath: async () => {
+          events.push("unexpected launch")
+        },
+      },
+      "windows",
+    )
+
+    await expect(unresolved.openPath("C:\\project", "code")).rejects.toThrow("resolution failed")
+    expect(events).toEqual(["missing-editor"])
+  })
+
   test("returns the native browser launch result and forwards clipboard text", async () => {
     const events: string[] = []
     const files = createDesktopFiles({ ...fileApi(events), openBrowser: async () => false }, "macos")

@@ -8,6 +8,7 @@ import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { launchDetached } from "./launch"
 
 export type Interface = ReturnType<typeof make>
 
@@ -151,16 +152,17 @@ function make(
         )
       }
 
-      yield* Effect.tryPromise(() =>
-        new Promise<void>((resolve, reject) => {
-          const command =
-            process.platform === "darwin"
-              ? { file: "open", arguments: ["-a", application, target] }
-              : { file: application, arguments: [target] }
+      // macOS `open` is a short-lived launcher: wait for its result so a missing
+      // application still reports an error, without waiting for the app itself.
+      if (process.platform === "darwin") {
+        return yield* Effect.tryPromise(() =>
+          new Promise<void>((resolve, reject) => {
+            execFile("open", ["-a", application, target], (error) => (error ? reject(error) : resolve()))
+          }),
+        )
+      }
 
-          execFile(command.file, command.arguments, (error) => (error ? reject(error) : resolve()))
-        }),
-      )
+      yield* Effect.tryPromise(() => launchDetached(application, [target]))
     }),
     revealPath: Effect.fn("DesktopFiles.revealPath")(function* (target: string) {
       const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
