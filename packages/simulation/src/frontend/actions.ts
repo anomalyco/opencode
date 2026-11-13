@@ -146,9 +146,15 @@ export function snapshot(harness: Harness): SimulationProtocol.Frontend.Semantic
   })
 }
 
-export function matches(harness: Pick<Harness, "screen">, text: string) {
+// Render first: an idle renderer may not have drawn the latest changes, so
+// the last buffer can lag the UI indefinitely.
+export const matches = Effect.fn("SimulationActions.matches")(function* (
+  harness: Pick<Harness, "renderOnce" | "screen">,
+  text: string,
+) {
+  yield* Effect.tryPromise(() => harness.renderOnce())
   return harness.screen().includes(text)
-}
+})
 
 export const capture = Effect.fn("SimulationActions.capture")(function* (harness: Harness) {
   yield* Effect.tryPromise(() => harness.renderOnce())
