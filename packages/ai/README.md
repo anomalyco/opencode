@@ -1036,7 +1036,7 @@ The hosted result is represented as a provider-executed tool call and a tool res
 Video generation is a job: `start` submits it and returns at once, and the caller decides when to read its `status`,
 fetch its `result`, or `cancel` it. Nothing polls for you. Every call after `start` takes the model and the job's
 `token`, plain JSON you can store and read back from another process, so recovering after a restart is the same call
-as a normal status read. Models come from `.video(...)` selectors on the `XAI` facade.
+as a normal status read. Models come from `.video(...)` selectors on the `XAI` and `OpenRouter` facades.
 
 ```ts
 import { Effect } from "effect"
@@ -1086,6 +1086,13 @@ Provider notes:
   `reference_audios`, and `sound` to `generate_audio`, and leaves `aspect: "auto"` out when a start frame sets the
   shape. It has no reference video input. `providerOptions.mode: "edit" | "extend"` sends a native `video: { url }`
   source to `/videos/edits` or `/videos/extensions`.
+- **OpenRouter** (`OpenRouter.configure(...).video("google/veo-3.1")`) maps `start` and `end` to `frame_images`,
+  references to `input_references` by kind (`image_url`, `video_url`, `audio_url`), `sound` to `generate_audio`, and
+  `resolution` to its spelling (`4k` → `4K`), and leaves `aspect: "auto"` out so models that can follow the input image do.
+  Frames and references are both sent; when both are present OpenRouter keeps the frames and drops the references. It
+  rejects reference videos or audio that aren't http(s) URLs (inline images work). Routing and upstream parameters go under `providerOptions.provider` (`only`, `order`,
+  `options: { <slug>: {...} }`), and `providerOptions.previous_job_id` edits or extends a finished job. Results are
+  OpenRouter content URLs that download with the API key, which the asset carries; there is no cancel endpoint.
 
 The promise client has the same calls, each accepting `{ signal }`:
 

@@ -8,6 +8,8 @@ import {
   type EmbeddingModel,
   ImageClient,
   type ImageModel,
+  VideoClient,
+  type VideoModel,
 } from "../../src/effect.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, observe, type Call } from "../lib/http.js"
@@ -24,6 +26,15 @@ const sentImage = (model: ImageModel) =>
     yield* ai.image
       .generate({ model, prompt: "A red circle" })
       .pipe(Effect.exit, Effect.provide(ImageClient.layer.pipe(Layer.provide(record(calls)))))
+    return calls
+  })
+
+const sentVideo = (model: VideoModel) =>
+  Effect.gen(function* () {
+    const calls: Array<Call> = []
+    yield* ai.video
+      .start({ model, prompt: "A red circle" })
+      .pipe(Effect.exit, Effect.provide(VideoClient.layer.pipe(Layer.provide(record(calls)))))
     return calls
   })
 
@@ -64,7 +75,7 @@ interface Case<Model> {
 
 const expectRequest = (
   calls: ReadonlyArray<Call>,
-  model: ImageModel | DecisionModel | EmbeddingModel,
+  model: ImageModel | VideoModel | DecisionModel | EmbeddingModel,
   entry: Case<unknown>,
 ) => {
   expect(calls).toHaveLength(1)
@@ -487,6 +498,29 @@ describe("image entrypoints", () => {
       Effect.gen(function* () {
         const model = yield* Effect.promise(entry.load)
         expectRequest(yield* sentImage(model), model, entry)
+      }),
+    )
+})
+
+const videos: ReadonlyArray<Case<VideoModel>> = [
+  {
+    name: "openrouter",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openrouter/videos")
+      return model("x-ai/grok-imagine-video-1.5-lite", { ...shared, apiKey: "openrouter-key" })
+    },
+    url: "https://openrouter.ai/api/v1/videos",
+    auth: ["authorization", "Bearer openrouter-key"],
+    provider: "openrouter",
+  },
+]
+
+describe("video entrypoints", () => {
+  for (const entry of videos)
+    it.effect(`providers/${entry.name}/videos sends a configured request`, () =>
+      Effect.gen(function* () {
+        const model = yield* Effect.promise(entry.load)
+        expectRequest(yield* sentVideo(model), model, entry)
       }),
     )
 })
