@@ -154,13 +154,14 @@ pub struct HostApi {
     pub minor: u32,
     pub ctx: *mut c_void,
     /// Handles a [`HostRequest`] and writes the JSON result into `out`. A plugin treats a null entry, or a null
-    /// `free`, as a host that answers every request with an error.
+    /// `free`, as a host that answers every request with an error. Only on the thread that calls into the plugin (the
+    /// UI thread): a call from another thread is refused with [`ERROR`] and does nothing; that thread calls `wake`.
     pub call: Option<unsafe extern "C" fn(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32>,
     /// Frees a buffer `call` wrote.
     pub free: Option<unsafe extern "C" fn(owned: Owned)>,
     // 1.2
     /// Whether the page theme is dark ([`THEME_DARK`]) or light ([`THEME_LIGHT`]), as TS plugins read
-    /// `api.themeMode`.
+    /// `api.themeMode`. Only on the UI thread, as `call`: another thread gets [`THEME_DARK`].
     pub theme_mode: Option<unsafe extern "C" fn(ctx: *mut c_void) -> u32>,
     // 1.3
     /// Asks the host to request the rows of the plugin's mounted slot claims and routes again, on its UI thread.
@@ -1879,6 +1880,17 @@ pub trait Read {
 
 /// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
 /// callback has returned, and effects run in the order they were asked for.
+///
+/// A host is the UI thread's: a plugin's own thread cannot take one, and wakes the host with a [`Waker`] instead.
+///
+/// ```compile_fail,E0277
+/// # use opencode_plugin_abi::*;
+/// fn command(host: &dyn Host) {
+///     std::thread::scope(|threads| {
+///         threads.spawn(|| host.edit_composer(ComposerEdit::Submit));
+///     });
+/// }
+/// ```
 pub trait Host: Read {
     /// Stores `value`, an object or an array, under one of the plugin's declared storage keys. [`Read::storage_get`]
     /// reads it back at once; the host writes it to disk later, and claims render again with [`Changed::local`]. The
