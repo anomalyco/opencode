@@ -13,7 +13,7 @@ import type { Effect } from "effect"
  * promise of an asynchronous global and by throwing from a synchronous one. Functions inside a global object are
  * called the same way, named by their path (`fs.readFile`).
  *
- * Programs can also `import` or `require` a global by its Node module name; see `interpreter/modules.ts`.
+ * Programs can also `import` or `require` a global by its Node module name; see `runtime/modules.ts`.
  */
 export type Extension<Globals extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> = {
   readonly name: string
@@ -61,6 +61,14 @@ export const make = <const Globals extends Readonly<Record<string, unknown>>>(
 }
 
 const asyncGlobals = new WeakSet<Function>()
+
+/** A live fetch response whose I/O is owned by the host for the lifetime of the program. */
+export class StreamingResponse {
+  constructor(
+    readonly response: Response,
+    readonly redirected = response.redirected,
+  ) {}
+}
 const AsyncFunction = (async () => {}).constructor
 
 /** Marks a global that returns a Promise or an Effect, so a denied call rejects its promise instead of throwing. */

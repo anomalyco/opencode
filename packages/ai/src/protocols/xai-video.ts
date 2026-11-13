@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
+import { VideoModel, VideoResponse, seconds, type VideoRequest } from "../video.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "xai-video", name: "xAI Video", provider: "xai" })
@@ -20,11 +20,13 @@ export const STATUS_PATH = "/videos"
 // ---------------------------------------------------------------------------
 
 /**
- * Provider-native options. Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`,
- * `resolution`, `audio`) live on the request. `mode` selects the endpoint a `video` input is sent to.
+ * Provider-native options. Common fields (`start`, `end`, `references`, `duration`, `aspect`, `resolution`,
+ * `sound`) live on the request. `mode` sends the request to the edit or extension endpoint with a native
+ * `video: { url }` source; `reference_audios` takes preset `voice_id`s.
  */
 export type XAIVideoOptions = {
   readonly mode?: "edit" | "extend"
+  readonly video?: { readonly url: string } | { readonly file_id: string }
   readonly reference_audios?: ReadonlyArray<{ readonly voice_id: string }>
 } & Record<string, unknown>
 
@@ -88,10 +90,22 @@ const nativeOptions = (options: XAIVideoOptions | undefined) => {
 }
 
 const fromRequest = Effect.fn("XAIVideo.fromRequest")(function* (request: Request) {
-  const image = request.frames?.first === undefined ? undefined : yield* mediaInput(request.frames.first)
-  const lastFrame = request.frames?.last === undefined ? undefined : yield* mediaInput(request.frames.last)
-  const video = request.video === undefined ? undefined : yield* mediaInput(request.video)
-  const references = yield* Effect.forEach(request.references ?? [], mediaInput)
+  const references = request.references ?? []
+  if (references.some((asset) => asset.kind === "video"))
+    return yield* route.unsupported("video.references", `${route.name} has no reference video input`)
+  const image = request.start === undefined ? undefined : yield* mediaInput(request.start)
+  const lastFrame = request.end === undefined ? undefined : yield* mediaInput(request.end)
+  const images = yield* Effect.forEach(
+    references.filter((asset) => asset.kind !== "audio"),
+    mediaInput,
+  )
+  const audios = yield* Effect.forEach(
+    references.filter((asset) => asset.kind === "audio"),
+    (asset) =>
+      ProviderShared.mediaReference(asset, route.provider, route.name).pipe(
+        Effect.map((reference) => ({ url: reference.value })),
+      ),
+  )
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -99,12 +113,13 @@ const fromRequest = Effect.fn("XAIVideo.fromRequest")(function* (request: Reques
         prompt: request.prompt,
         image,
         last_frame: lastFrame,
-        reference_images: references.length === 0 ? undefined : references,
-        video,
-        duration: request.durationSeconds,
-        aspect_ratio: request.aspect,
+        reference_images: images.length === 0 ? undefined : images,
+        reference_audios: audios.length === 0 ? undefined : audios,
+        duration: request.duration === undefined ? undefined : seconds(request.duration),
+        // xAI follows the input image's shape when a start frame is set, which is what `auto` asks for.
+        aspect_ratio: request.aspect === "auto" && request.start !== undefined ? undefined : request.aspect,
         resolution: request.resolution,
-        generate_audio: request.audio,
+        generate_audio: request.sound,
       },
       nativeOptions(request.providerOptions),
       request.http?.body,
@@ -187,16 +202,16 @@ const statusPath = (token: Token) => `${STATUS_PATH}/${token.requestID}`
 
 export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
   token: Token,
-  unsupported: ["n", "seed", "negativePrompt"],
   start: { body: { from: fromRequest }, decode: decodeStart },
   status: { path: statusPath, decode: decodeStatus },
   result: { path: statusPath, decode: decodeResult },
 })
 
-// A source video goes to `/videos/edits` unless `providerOptions.mode` asks for an extension.
+// `providerOptions.mode` sends the native `video` source to the edit or extension endpoint.
 const startPath = (request: Request) => {
-  if (request.video === undefined) return PATH
-  return request.providerOptions?.mode === "extend" ? EXTEND_PATH : EDIT_PATH
+  if (request.providerOptions?.mode === "edit") return EDIT_PATH
+  if (request.providerOptions?.mode === "extend") return EXTEND_PATH
+  return PATH
 }
 
 export const model = (input: MediaRoute.ModelInput) =>

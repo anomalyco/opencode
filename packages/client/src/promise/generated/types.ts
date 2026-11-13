@@ -31,6 +31,8 @@ export type ProviderTransport = "http" | "websocket"
 
 export type ProviderEncoding = "zstd" | "gzip" | "none"
 
+export type ProviderTls = { cert: string; key: string; passphrase?: string }
+
 export type AgentColor = string
 
 export type PermissionEffect = "allow" | "deny" | "ask"
@@ -1065,6 +1067,7 @@ export type ProviderSettings = {
   cache?: ProviderCache
   transport?: ProviderTransport
   encoding?: ProviderEncoding
+  tls?: ProviderTls
 } & { [x: string]: any }
 
 export type ModelSettings = { compaction?: ProviderCompaction; cache?: ProviderCache; encoding?: ProviderEncoding } & {
@@ -1079,6 +1082,7 @@ export type ConfigProviderSettings = {
   cache?: ProviderCache
   transport?: ProviderTransport
   encoding?: ProviderEncoding
+  tls?: ProviderTls
 } & { [x: string]: JsonValue | null }
 
 export type ConfigModelSettings = {

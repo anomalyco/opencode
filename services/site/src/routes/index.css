@@ -194,7 +194,7 @@
       align-items: center;
       padding: 1px 0.75rem 0;
       background: light-dark(var(--link), color-mix(in srgb, var(--link) 65%, #000));
-      color: #fff;
+      color: var(--on-accent);
       font-weight: 700;
       text-transform: uppercase;
     }
@@ -288,7 +288,7 @@
     &[data-style="chip"] [data-slot="new"] {
       padding: 4px 8px;
       background: light-dark(var(--link), color-mix(in srgb, var(--link) 65%, #000));
-      color: #fff;
+      color: var(--on-accent);
       line-height: 1;
     }
 
