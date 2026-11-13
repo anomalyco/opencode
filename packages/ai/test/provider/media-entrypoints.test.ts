@@ -582,6 +582,21 @@ describe("video entrypoints", () => {
     )
 })
 
+describe("video entrypoint model options", () => {
+  // Model-level options from settings (as models.dev or config set them) become defaults on every request.
+  for (const entry of [
+    { name: "xai", modelID: "grok-imagine-video-1.5", load: () => import("@opencode/ai/providers/xai/videos") },
+    { name: "google", modelID: "gemini-omni-1.2-flash", load: () => import("@opencode/ai/providers/google/videos") },
+  ])
+    it.effect(`providers/${entry.name}/videos keeps provider options from settings`, () =>
+      Effect.gen(function* () {
+        const { model } = yield* Effect.promise(entry.load)
+        const calls = yield* sentVideo(model(entry.modelID, { apiKey: "key", future_option: true }))
+        expect(JSON.parse(calls[0].body).future_option).toBe(true)
+      }),
+    )
+})
+
 describe("decision entrypoints", () => {
   for (const entry of decisions)
     it.effect(`providers/${entry.name}/decisions sends a configured request`, () =>

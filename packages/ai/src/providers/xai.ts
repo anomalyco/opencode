@@ -100,7 +100,8 @@ export const configure = (input: Config = {}) => {
     chat,
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       XAIImages.model({ ...media, id: modelID, providerOptions }),
-    video: (modelID: string | ModelID) => XAIVideo.model({ ...media, id: modelID }),
+    video: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      XAIVideo.model({ ...media, id: modelID, providerOptions }),
     configure,
   }
 }
@@ -114,7 +115,10 @@ export const imageModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
-export const videoModel = (modelID: string, settings?: Settings) => configure(toConfig(settings)).video(modelID)
+export const videoModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).video(modelID, input.providerOptions)
+}
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image

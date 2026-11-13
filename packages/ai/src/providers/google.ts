@@ -74,7 +74,8 @@ export const configure = (input: Config = {}) => {
       interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       GoogleImages.model({ ...media, id: modelID, providerOptions }),
-    video: (modelID: string | ModelID) => GoogleInteractionsVideo.model({ ...media, id: modelID }),
+    video: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+      GoogleInteractionsVideo.model({ ...media, id: modelID, providerOptions }),
     speech: (modelID: string | ModelID) => GoogleSpeech.model({ ...media, id: modelID }),
     transcription: (modelID: string | ModelID) => GoogleTranscription.model({ ...media, id: modelID }),
     embedding: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -94,7 +95,10 @@ export const imageModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
-export const videoModel = (modelID: string, settings?: Settings) => configure(toConfig(settings)).video(modelID)
+export const videoModel = (modelID: string, settings?: Settings) => {
+  const input = toConfig(settings)
+  return configure(input).video(modelID, input.providerOptions)
+}
 export const embeddingModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).embedding(modelID, input.providerOptions)
