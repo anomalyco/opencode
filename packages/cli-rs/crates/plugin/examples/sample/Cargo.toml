@@ -23,7 +23,6 @@ still = []
 p0a = []
 # Builds that pretend to target another ABI version, for the version tests.
 abi-1-0 = []
-abi-1-4 = []
 minor-newer = []
 major-2 = []
 requires-future = []
@@ -31,10 +30,13 @@ requires-future = []
 abi-1-3 = ["dep:abi-1-3"]
 # The same 1.3 plugin exported with the 1.0 table, without `describe`: the old wire behind the shortest table.
 abi-1-0-wire = ["abi-1-3"]
+# A 1.4 plugin (`src/v1_4.rs`) on the frozen 1.4 ABI crate, for the version tests.
+abi-1-4 = ["dep:abi-1-4"]
 
 [dependencies]
 opencode-plugin-abi = { path = "../../../plugin-abi" }
 serde_json = "1"
 abi-1-3 = { package = "opencode-plugin-abi-1-3", path = "abi-1-3", optional = true }
+abi-1-4 = { package = "opencode-plugin-abi-1-4", path = "abi-1-4", optional = true }
 
 [workspace]

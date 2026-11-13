@@ -7,9 +7,10 @@
 //! server request with a live panel ([`fetch`]), and a prompt footer claim whose mounts fetch ([`prompt`]) are on
 //! the one API of ABI 1.4; the slot rows and the route are still the 1.3 surface. Callbacks reach the host only
 //! through the host they are called with. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI
-//! 1.3, on a frozen copy of that crate; `abi-1-0-wire` exports it with the 1.0 table.
+//! 1.3, on a frozen copy of that crate; `abi-1-0-wire` exports it with the 1.0 table. The `abi-1-4` feature builds
+//! [`v1_4`], a plugin written against ABI 1.4 on a frozen copy of that crate.
 
-#![cfg_attr(feature = "abi-1-3", allow(dead_code, unused_imports))]
+#![cfg_attr(any(feature = "abi-1-3", feature = "abi-1-4"), allow(dead_code, unused_imports))]
 
 mod fence;
 mod fetch;
@@ -20,6 +21,8 @@ mod prompt;
 mod slot;
 #[cfg(feature = "abi-1-3")]
 mod v1_3;
+#[cfg(feature = "abi-1-4")]
+mod v1_4;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -178,10 +181,6 @@ export_plugin!("sample", setup);
 // Built against ABI 1.0: the shorter table, without `describe`.
 #[cfg(feature = "abi-1-0")]
 export_plugin!(@v1_0 "sample", setup);
-
-// Built against ABI 1.4, as a plugin from before the 1.5 additions reports itself.
-#[cfg(feature = "abi-1-4")]
-export_plugin!(@version 1, 4, 4, "sample", setup);
 
 // Built against a minor version newer than any host, without requiring it.
 #[cfg(feature = "minor-newer")]
