@@ -47,8 +47,11 @@ export const Plugin = {
       mode: "off" as const,
     }))
 
-    // Assigned after `rpc` exists; the `set` handler above only runs later, so the placeholder is never observed.
-    let publish: (next: Advisor.State) => Effect.Effect<void> = () => Effect.void
+    // Only called from the `set` handler, which runs after `rpc` below is assigned.
+    const publish = (next: Advisor.State): Effect.Effect<void> =>
+      rpc.events
+        .emit("changed", next)
+        .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to publish an advisor change", { cause })))
     const rpc = yield* ctx.rpc
       .register(Advisor.Definition, {
         get: () => Effect.succeed(state),
@@ -63,10 +66,6 @@ export const Plugin = {
           }),
       })
       .pipe(Effect.orDie)
-    publish = (next: Advisor.State) =>
-      rpc.events
-        .emit("changed", next)
-        .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to publish an advisor change", { cause })))
 
     // `full` comes from the registered tool, not live state: a secure call never sends the transcript, even if the
     // user switches to full mode while it runs.
