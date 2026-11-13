@@ -712,6 +712,7 @@ fn a_claim_root_takes_each_layout_as_mounted_fresh() {
         Render::Show(boxed(Layout::default().max_height(Width::Cells(1)))),
         Render::Show(tall(Layout::default().max_height(Width::Cells(2)))),
         Render::Show(tall(Layout::default().max_height(Width::Percent(50.0)))),
+        Render::Show(tall(Layout::default().max_height(Width::Cells(2)).shrink(false))),
     ];
     // The cells of a 6-row column slot that shows `shown`, which the claim's render reads.
     let mounted = |shown: &Rc<std::cell::RefCell<Render>>| {
@@ -737,7 +738,7 @@ fn a_claim_root_takes_each_layout_as_mounted_fresh() {
         assert!(host.app.render().cells == fresh.app.render().cells, "{render:?}");
     }
     // The painted rows: 4 from the top; 50% of the 6 rows after a one-row margin; at least 3; at most 1; five rows of
-    // content cut to at most 2, and to at most 50%.
+    // content cut to at most 2, to at most 50%, and to at most 2 although the node does not shrink.
     for (index, painted) in [
         (0, vec![0, 1, 2, 3]),
         (3, vec![1, 2, 3]),
@@ -745,6 +746,7 @@ fn a_claim_root_takes_each_layout_as_mounted_fresh() {
         (5, vec![0]),
         (6, vec![0, 1]),
         (7, vec![0, 1, 2]),
+        (8, vec![0, 1]),
     ] {
         *live.borrow_mut() = renders[index].clone();
         mount.sync(&*host, Some(&abi::Changed::everything()));
