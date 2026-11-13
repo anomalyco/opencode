@@ -172,6 +172,7 @@ fn count(host: &dyn Read) -> u64 {
     feature = "abi-1-0",
     feature = "abi-1-4",
     feature = "abi-1-3",
+    feature = "requires-1-5",
     feature = "minor-newer",
     feature = "major-2",
     feature = "requires-future"
@@ -181,6 +182,10 @@ export_plugin!("sample", setup);
 // Built against ABI 1.0: the shorter table, without `describe`.
 #[cfg(feature = "abi-1-0")]
 export_plugin!(@v1_0 "sample", setup);
+
+// Needs the 1.5 host, as a plugin built around the composer asks.
+#[cfg(feature = "requires-1-5")]
+export_plugin!("sample", setup, requires_minor = 5);
 
 // Built against a minor version newer than any host, without requiring it.
 #[cfg(feature = "minor-newer")]

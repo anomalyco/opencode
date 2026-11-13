@@ -38,7 +38,8 @@ Versions only grow by appending:
   answers a request it does not know with an error. A plugin that cannot work without a newer host sets
   `requires_minor`, and the host refuses it: "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update
   opencode-native". `export_plugin!` sets `requires_minor` to 4, because only a 1.4 host sends the render requests the
-  SDK answers. So a 1.5 plugin loads on a 1.4 host, which answers the 1.5 requests with an error: there `composer()`
+  SDK answers; `export_plugin!(id, setup, requires_minor = 5)` asks for a newer host, and `Read::abi_minor()` reads the
+  host's minor. So a 1.5 plugin loads on a 1.4 host, which answers the 1.5 requests with an error: there `composer()`
   reads `None`, and an `edit_composer`, a `Confirm` and an `Alert` do nothing. A 1.4 host draws a 1.5 box without its
   1.5 properties, which it does not read.
 - 1.4 renders are opt-in on the wire. `Setup` sets `Manifest::render` to 2 (`RENDER`), and a 1.4 claim sets
@@ -118,7 +119,9 @@ input changes.
 
 ### What a callback may do
 
-Every call into a plugin runs on the UI thread, so a callback must return quickly.
+Every call into a plugin runs on the UI thread, so a callback must return quickly. `HostApi::call` and
+`HostApi::theme_mode` serve that thread only: a call from another thread is refused with `ERROR` (and the theme reads
+dark), and touches nothing of the host; a plugin's own thread calls `wake`.
 
 - A render (a fence, a slot claim or a route) gets a `Read`. It reads and returns a value, and has no effects. Reads
   are pure, also inside the `messages` visitor: a catalog that is not loaded reads as `None`, the host starts the
@@ -131,8 +134,13 @@ Every call into a plugin runs on the UI thread, so a callback must return quickl
   each read is one `HostRequest`, and `messages` hands the visitor the plugin's own copy.
 - Setup, a command, and the handlers of events, replies, mounts, route mounts, wakes and disposal get a `Host`: the
   reads, and effects. Effects wait until the outermost plugin callback returns and then run in the order they were
-  asked for, on the same queue as the built-ins' effects, so a plugin never reenters itself through the host. Over
-  the ABI, a request into a plugin that is already running is dropped and logged.
+  asked for, on the same queue as the built-ins' effects, so a plugin never reenters itself through the host. The
+  host runs that queue before it routes its next message, so a store signal never overtakes an effect asked for
+  while the one before it was handled. Over the ABI, a request into a plugin that is already running is dropped and
+  logged; during a render request of 1.4 on (`RenderFence`, `Render`, `RenderRoute`) every effect request is refused
+  with an error, and a result the host cannot decode leaves no effect and puts back the storage it wrote. What a
+  dispose callback that panics asked for is dropped (1.5 `Checkpoint` and `Rollback`, which the SDK sends around
+  each); the other callbacks keep theirs.
 - The effects: `storage_set` and `storage_merge`; `dispatch(name, input)`, which runs any registered command, palette
   or not; `toast(Toast { variant, title, message, session })`, which with a `session` offers "Open" unless that
   session's family is on screen (a toast without a title takes the session's); `attention(Attention { title, message,
@@ -146,13 +154,20 @@ Every call into a plugin runs on the UI thread, so a callback must return quickl
   { title, message, label, action }` (TS `dialog.confirm`): `Confirm` runs the action with the input `true`, `Cancel`
   and escape with `false`, and a dialog that replaces it runs nothing, as TS resolves `true`, `false` or `undefined`;
   or an `Alert { title, message, action }` (TS `dialog.alert`), whose action runs once after it closes, by enter,
-  escape, or another dialog, as TS resolves its promise in each case.
+  escape, or another dialog, as TS resolves its promise in each case. Every dialog of a plugin belongs to the
+  activation that showed it: it closes when that activation ends (disable, failure, a reload that passed), and an
+  answer reaches nobody once the activation is not live, not even a command of the host or another plugin that the
+  action names. A reload that fails keeps the running activation and its dialog.
 - The composer (1.5): `composer()` reads the composer on screen, on home or in a session: its text as it shows it (a
   compact paste is its label), the cursor as a byte offset into that text, and whether it has focus; `None` without a
-  composer. `edit_composer` takes `Set { text }` (TS `ref.set`: the text and its attachments are replaced, the cursor
+  composer, and while a session hides it for a permission, a form, a missing location or the drawer, where TS
+  unmounts it. `edit_composer` takes `Set { text }` (TS `ref.set`: the text and its attachments are replaced, the cursor
   goes to the end, the mode stays), `Insert { text }` (at the cursor, in place of a selection, as typing it does) and
-  `Submit` (as enter does, with or without focus; TS `ref.submit`). The edits go through the composer's own edit path,
-  and like every effect they wait for the call to return, so a call that panics edits nothing.
+  `Submit` (as enter does, with or without focus; TS `ref.submit`), which does nothing while a home form disables the
+  composer or another pane has the input, as TS's `submit` refuses a disabled prompt. Behind an ordinary dialog the
+  composer shows, so a submit sends and the dialog stays open. A set tells the completion of the new text, as TS's
+  `setText` does. The edits go through the composer's own edit path, and like every effect they wait for the call to
+  return, so a call that panics edits nothing.
 - A command of `Scope::Route(name)` runs while that route shows (`/stats`' escape); `description` and `arguments`
   (the slash command keeps its text and passes it as the input) show in the palette and the prompt.
 
@@ -286,9 +301,11 @@ saved, as in TS.
 
 `crates/plugin/examples/sample` is a small `cdylib` with its own workspace and `Cargo.lock`, so it is not a member of
 the client's workspace and the other crates build as before. Its features select variants: `v2` draws differently
-and `setup-fails` fails (the reload tests); `abi-1-0`, `abi-1-4`, `minor-newer`, `major-2`, and `requires-future`
-pretend to target other ABI versions; `abi-1-3` is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and
-`abi-1-0-wire` is that plugin behind the 1.0 table. `p0a` adds the 1.5 probe (`src/p0a.rs`): a confirm, an alert, the
+and `setup-fails` fails (the reload tests); `abi-1-0`, `minor-newer`, `major-2`, and `requires-future` pretend to
+target other ABI versions; `abi-1-3` is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and
+`abi-1-0-wire` is that plugin behind the 1.0 table; `abi-1-4` is a plugin on the frozen 1.4 SDK (`sample/abi-1-4`),
+whose types the loader's tests also use as a 1.4 host's decoder of the 1.5 sample, and `requires-1-5` asks for a 1.5
+host. `p0a` adds the 1.5 probe (`src/p0a.rs`): a confirm, an alert, the
 composer's read and edits, and a styled box. The tests build each variant once per test run into
 `target/sample-plugin`: the loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in
 `crates/tui/tests/all/plugins.rs`. `crates/tui/tests/all/plugin_p0a.rs` runs the same probe linked, through the C
