@@ -238,9 +238,7 @@ pub fn add(
             match padding_sides {
                 Some(edges) => {
                     for (edge, cells) in edges_of(edges) {
-                        if cells > 0 {
-                            view.padding_edge(edge, cells);
-                        }
+                        view.padding_edge(edge, cells.max(0));
                     }
                 }
                 None => {
@@ -672,7 +670,8 @@ mod tests {
 
     // Expected: what the 1.5 properties of a box do, read from a fresh layout's rects and cells: a border without a
     // color is white and takes a cell on each side it draws; a negative padding counts as 0; a negative margin moves
-    // the box over its neighbor; the minimum and maximum bound the height its children ask for.
+    // the box over its neighbor; a height, its minimum and its maximum bound the height its children ask for; and a
+    // box that hides its overflow does not draw what is past its height.
     #[test]
     fn a_box_lays_out_its_1_5_properties() {
         let app = TestApp::new(30, 12);
@@ -701,26 +700,34 @@ mod tests {
                 .flat_map(|y| (0..capture.width).map(move |x| (x, y)))
                 .find(|(x, y)| capture.cell(*x, *y).is_some_and(|cell| cell.symbol == "x"));
             let corner = capture.cell(boxed.screen_x as u32, boxed.screen_y as u32).cloned().unwrap();
-            (boxed, child, corner)
+            let drawn = capture.cells.iter().filter(|cell| cell.symbol == "x").count();
+            (boxed, child, corner, drawn)
         };
-        let (plain, plain_child, _) = draw(abi::Node::column(rows(1)));
-        let (bordered, child, corner) = draw(abi::Node::column(rows(1)).border(abi::Border::new()));
+        let (plain, plain_child, _, _) = draw(abi::Node::column(rows(1)));
+        let (bordered, child, corner, _) = draw(abi::Node::column(rows(1)).border(abi::Border::new()));
         assert_eq!((corner.symbol.as_str(), corner.fg), ("┌", Color::rgb(255, 255, 255)));
         assert_eq!((bordered.width, bordered.height), (plain.width + 2.0, plain.height + 2.0));
         assert_eq!(child, Some((bordered.screen_x as u32 + 1, bordered.screen_y as u32 + 1)));
         let left = abi::Border::new().sides(abi::Sides { left: true, ..abi::Sides::NONE });
-        let (ruled, _, corner) = draw(abi::Node::column(rows(1)).border(left));
+        let (ruled, _, corner, _) = draw(abi::Node::column(rows(1)).border(left));
         assert_eq!((ruled.width, ruled.height, corner.symbol.as_str()), (plain.width + 1.0, plain.height, "│"));
-        let (_, padded, _) = draw(abi::Node::column(rows(1)).padding_sides(abi::Edges::all(-2)));
+        let (_, padded, _, _) = draw(abi::Node::column(rows(1)).padding_sides(abi::Edges::all(-2)));
         assert_eq!(padded, plain_child);
         let shifted = abi::Layout::default().margin(abi::Edges::new(0, 0, 0, -1));
-        let (moved, _, _) = draw(abi::Node::column(rows(1)).layout(shifted));
+        let (moved, _, _, _) = draw(abi::Node::column(rows(1)).layout(shifted));
         assert_eq!(moved.screen_x, plain.screen_x - 1.0);
         let at_least = abi::Layout::default().min_height(abi::Width::Cells(4));
         assert_eq!(draw(abi::Node::column(rows(1)).layout(at_least)).0.height, 4.0);
         let at_most = abi::Layout::default().max_height(abi::Width::Cells(2));
         assert_eq!(draw(abi::Node::column(rows(5)).overflow(abi::Overflow::Hidden).layout(at_most)).0.height, 2.0);
         assert_eq!(draw(abi::Node::column(rows(5))).0.height, 5.0);
+        let fixed = abi::Layout::default().height(abi::Width::Cells(3));
+        assert_eq!(draw(abi::Node::column(rows(1)).layout(fixed)).0.height, 3.0);
+        // A box one row high with two rows in it draws the second below itself, unless it hides what overflows.
+        let low = abi::Layout::default().height(abi::Width::Cells(1));
+        let rigid = || rows(2).into_iter().map(|row| row.layout(abi::Layout::default().shrink(false))).collect();
+        assert_eq!(draw(abi::Node::column(rigid()).layout(low)).3, 2);
+        assert_eq!(draw(abi::Node::column(rigid()).overflow(abi::Overflow::Hidden).layout(low)).3, 1);
     }
 
     // Expected: a fence's key moves to the widget that replaces its block's widget, and goes once that widget is
