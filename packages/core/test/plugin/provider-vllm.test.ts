@@ -10,6 +10,7 @@ import { Provider } from "@opencode/core/provider"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect } from "bun:test"
 import { Duration, Effect, Layer, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -96,6 +97,48 @@ describe("VLLMPlugin", () => {
           expect(yield* modelState.get(providerID, Model.ID.make("foreign-model"))).toBeUndefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("waits for a slow endpoint instead of dropping its models", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const arrived = Promise.withResolvers<void>()
+        const release = Promise.withResolvers<void>()
+        return {
+          arrived,
+          release,
+          server: Bun.serve({
+            port: 0,
+            fetch: async (request) => {
+              if (new URL(request.url).pathname === "/health") return new Response()
+              arrived.resolve()
+              await release.promise
+              return Response.json({ object: "list", data: [remoteModel("slow-model")] })
+            },
+          }),
+        }
+      }),
+      ({ arrived, release, server }) =>
+        Effect.gen(function* () {
+          const modelState = yield* Model.Service
+          yield* addPlugin(server.url.origin)
+          yield* Effect.promise(() => arrived.promise)
+          // The request is still open after ten seconds, as it is for a remote host that is slow to connect.
+          yield* TestClock.adjust("10 seconds")
+          release.resolve()
+          expect(
+            yield* eventually(
+              modelState.get(Provider.ID.make("vllm"), Model.ID.make("slow-model")),
+              (model) => model !== undefined,
+            ),
+          ).toBeDefined()
+        }),
+      ({ release, server }) =>
+        Effect.promise(() => {
+          release.resolve()
+          return server.stop(true)
+        }),
     ),
   )
 

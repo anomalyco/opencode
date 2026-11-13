@@ -24,6 +24,10 @@ export type LocalModel = {
   readonly type?: "chat" | "decision"
 }
 
+// Remote and tunnelled hosts can take several seconds to connect. Discovery runs in the background, so waiting
+// only delays when the models appear.
+const requestTimeout = "15 seconds"
+
 export type LocalDiscoveryClient = ReturnType<typeof createClient>
 
 export function createLocalProviderPlugin<Discovered>(input: {
@@ -55,7 +59,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
             ? undefined
             : input.origin)
         const source = { current: configured(yield* config.entries(), input.providerID, defaultOrigin, suffix) }
-        const loaded = { models: [] as readonly Discovered[], connected: false, hash: "[]" }
+        const loaded = { models: [] as readonly Discovered[], connected: false, hash: "[]", failing: false }
 
         yield* ctx.integration.transform((integrations) => {
           // A key connection lives on the integration (env keys only exist while it does), so keep it then.
@@ -125,6 +129,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
 
         const refresh = Effect.fn("LocalProviderPlugin.refresh")(function* () {
           const result = yield* discover()
+          loaded.failing = false
           if (!result?.models || result.source !== source.current) return
           const hash = JSON.stringify([result.connected, result.models])
           if (hash === loaded.hash) return
@@ -136,8 +141,19 @@ export function createLocalProviderPlugin<Discovered>(input: {
         })
 
         // Keep the last successful inventory through transient outages instead of flickering model availability.
-        yield* refresh().pipe(Effect.ignore, Effect.repeat(Schedule.spaced(interval)), Effect.forkScoped)
-        yield* ProviderRefresh.onSwitch(input.providerID, refresh().pipe(Effect.ignore))
+        // Only a configured endpoint is expected to answer, and it is reported once per outage.
+        const attempt = refresh().pipe(
+          Effect.catch((cause) => {
+            if (!source.current.explicit || loaded.failing) return Effect.void
+            loaded.failing = true
+            return Effect.logWarning(`failed to discover ${input.name} models`, {
+              baseURL: source.current.baseURL,
+              cause,
+            })
+          }),
+        )
+        yield* attempt.pipe(Effect.repeat(Schedule.spaced(interval)), Effect.forkScoped)
+        yield* ProviderRefresh.onSwitch(input.providerID, attempt)
         const reload = Effect.fn("LocalProviderPlugin.reload")(function* () {
           const next = configured(yield* config.entries(), input.providerID, defaultOrigin, suffix)
           if (
@@ -150,9 +166,10 @@ export function createLocalProviderPlugin<Discovered>(input: {
           loaded.models = []
           loaded.connected = false
           loaded.hash = "[]"
+          loaded.failing = false
           yield* ctx.integration.reload()
           yield* ctx.provider.reload()
-          yield* refresh().pipe(Effect.ignore)
+          yield* attempt
         })
         yield* ctx.event
           .subscribe({ types: ["config.updated"] })
@@ -175,11 +192,11 @@ function createClient(
   return {
     root,
     apiKey,
-    get: (path: string) => http.execute(auth(HttpClientRequest.get(endpoint(path)))).pipe(Effect.timeout("1 second")),
+    get: (path: string) => http.execute(auth(HttpClientRequest.get(endpoint(path)))).pipe(Effect.timeout(requestTimeout)),
     getJson: <A, I>(path: string, schema: Schema.Codec<A, I>) =>
       http
         .execute(auth(HttpClientRequest.get(endpoint(path))))
-        .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)), Effect.timeout("1 second")),
+        .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)), Effect.timeout(requestTimeout)),
     postJson: <B, BI, A, AI>(
       path: string,
       bodySchema: Schema.Codec<B, BI>,
@@ -190,7 +207,7 @@ function createClient(
         HttpClientRequest.schemaBodyJson(bodySchema)(body),
         Effect.flatMap(http.execute),
         Effect.flatMap(HttpClientResponse.schemaBodyJson(responseSchema)),
-        Effect.timeout("1 second"),
+        Effect.timeout(requestTimeout),
       ),
   }
 }
@@ -205,9 +222,10 @@ function configured(entries: readonly Entry[], providerID: string, origin: strin
         : ""
   ).replace(/\/+$/, "")
   const apiKey = typeof settings?.apiKey === "string" ? settings.apiKey : undefined
-  if (!URL.canParse(baseURL)) return { baseURL, apiKey }
+  const explicit = typeof settings?.baseURL === "string"
+  if (!URL.canParse(baseURL)) return { baseURL, apiKey, explicit }
   const url = new URL(baseURL)
-  if (url.protocol !== "http:" && url.protocol !== "https:") return { baseURL, apiKey }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return { baseURL, apiKey, explicit }
   const prefix = url.pathname.replace(/\/+$/, "").replace(suffix, "")
   const endpoint = (path: string) => {
     const next = new URL(url)
@@ -216,5 +234,5 @@ function configured(entries: readonly Entry[], providerID: string, origin: strin
     next.hash = ""
     return next.toString()
   }
-  return { baseURL, apiKey, root: endpoint(""), endpoint }
+  return { baseURL, apiKey, explicit, root: endpoint(""), endpoint }
 }
