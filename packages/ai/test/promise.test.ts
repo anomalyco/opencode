@@ -210,6 +210,29 @@ describe("AI promise client", () => {
     await ai.dispose()
   })
 
+  test("rejects image job calls on an inline route without a request", async () => {
+    const seen: Array<string> = []
+    const ai = AI.make({ layer: executor(seen) })
+    const model = openai.image("gpt-image-2")
+    const reasons = await Promise.all(
+      [
+        ai.image.start({ model, prompt: "A lighthouse" }),
+        ai.image.status(model, "job_1"),
+        ai.image.result(model, "job_1"),
+        ai.image.cancel(model, "job_1"),
+      ].map((call) => call.then(() => undefined).catch((error: unknown) => error)),
+    )
+    expect(reasons).toEqual(
+      ["start", "status", "result", "cancel"].map((operation) =>
+        expect.objectContaining({
+          reason: expect.objectContaining({ _tag: "UnsupportedOperation", operation: `image.${operation}` }),
+        }),
+      ),
+    )
+    expect(seen).toEqual([])
+    await ai.dispose()
+  })
+
   test("forwards per-call options to generate, stream, and loop, and checks compaction support", async () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor([]) })

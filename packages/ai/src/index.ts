@@ -241,10 +241,14 @@ export const make = (options: Options = {}) => {
         input: ImageRequestInput<Model> | ImageRequest,
         options?: AwaitOptions & RunOptions,
       ) => iterate(Image.stream(input, options), options),
+      /** Submit a generation on a queued route and return its `{ id }` at once; nothing polls. */
       start: <const Model extends ImageModel>(input: ImageRequestInput<Model> | ImageRequest, options?: RunOptions) =>
-        run(Image.start(input), options).then(handle),
-      resume: (model: ImageModel, token: unknown, options?: RunOptions) =>
-        run(Image.resume(model, token), options).then(handle),
+        run(Image.start(input), options),
+      /** One status read for a job ID. */
+      status: (model: ImageModel, id: string, options?: RunOptions) => run(Image.status(model, id), options),
+      /** The finished images; fails while the job is still running. */
+      result: (model: ImageModel, id: string, options?: RunOptions) => run(Image.result(model, id), options),
+      cancel: (model: ImageModel, id: string, options?: RunOptions) => run(Image.cancel(model, id), options),
     },
     decision: {
       request: Decision.request,
