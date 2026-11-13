@@ -80,8 +80,6 @@ pub struct Loader {
     seen: RefCell<HashMap<String, Seen>>,
     /// The targets of the last reconcile, so a removed one leaves the registry whatever its status.
     listed: RefCell<Vec<String>>,
-    /// The last failure of each target since it last loaded, so a reconcile tells only of a new one.
-    failed: RefCell<HashMap<String, String>>,
     /// The targets logged as skipped.
     skipped: RefCell<HashSet<String>>,
     /// The targets whose last build was refused for an ID another plugin has, with that ID; each loads again once it is
@@ -98,7 +96,6 @@ impl Loader {
             configured: RefCell::new(configured),
             seen: RefCell::default(),
             listed: RefCell::default(),
-            failed: RefCell::default(),
             skipped: RefCell::default(),
             waiting: RefCell::default(),
         }
@@ -185,7 +182,6 @@ impl Loader {
             .collect::<Vec<_>>();
         for target in stale.into_iter().chain(removed) {
             self.seen.borrow_mut().remove(&target);
-            self.failed.borrow_mut().remove(&target);
             self.waiting.borrow_mut().remove(&target);
             registry.unload(host, &target);
             registry.set_unloaded(&target, None);
@@ -222,6 +218,9 @@ impl Loader {
 
     fn reconcile_target(&self, host: &Rc<dyn Host>, registry: &Registry, target: &Target) -> bool {
         let name = target.target.as_str();
+        // What the manager lists before this reconcile: a failure is told only when it is not listed already.
+        let listed = registry.entries().into_iter().find(|entry| entry.target.as_deref() == Some(name));
+        let listed = listed.map(|entry| entry.status);
         let skip = |reason: &str| {
             let status = Some(Status::Skipped(reason.to_owned()));
             let changed = registry
@@ -245,7 +244,7 @@ impl Loader {
         let bytes = match std::fs::read(&file) {
             Ok(bytes) => bytes,
             Err(error) => {
-                return self.fail(&**host, registry, name, 0, format!("{}: {error}", file.display()));
+                return self.fail(&**host, registry, &listed, name, 0, format!("{}: {error}", file.display()));
             }
         };
         // Setup runs with the options, so new options load the build again (TS `sameGeneration`).
@@ -266,7 +265,7 @@ impl Loader {
         });
         let (definition, error) = match loaded {
             Ok(loaded) => loaded,
-            Err(error) => return self.fail(&**host, registry, name, digest, error),
+            Err(error) => return self.fail(&**host, registry, &listed, name, digest, error),
         };
         log::info!("plugin {} loaded from {}", definition.id, file.display());
         let reload: Rc<RefCell<Option<String>>> = Rc::default();
@@ -287,10 +286,10 @@ impl Loader {
             ..definition
         };
         match registry.load(host, definition.external(name, failure)) {
-            Some(failed) if failed.kept => return self.fail(&**host, registry, name, digest, failed.error),
+            Some(failed) if failed.kept => return self.fail(&**host, registry, &listed, name, digest, failed.error),
             // The plugin is listed as failed, and enabling it runs this build's setup again.
-            Some(failed) => self.tell(&**host, registry, name, failed.error),
-            None => drop(self.failed.borrow_mut().remove(name)),
+            Some(failed) => self.tell(&**host, registry, &listed, name, failed.error),
+            None => {}
         }
         self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
         true
@@ -298,7 +297,15 @@ impl Loader {
 
     /// Records that the build of `target` failed: the running previous version, if any, keeps running and
     /// reports the failure; otherwise the target is listed as failed. A new failure tells the host.
-    fn fail(&self, host: &dyn Host, registry: &Registry, target: &str, digest: u64, error: String) -> bool {
+    fn fail(
+        &self,
+        host: &dyn Host,
+        registry: &Registry,
+        listed: &Option<Status>,
+        target: &str,
+        digest: u64,
+        error: String,
+    ) -> bool {
         log::error!("plugin {target} failed to load: {error}");
         let reload = match self.seen.borrow_mut().entry(target.to_owned()) {
             Entry::Occupied(mut seen) => {
@@ -315,14 +322,15 @@ impl Loader {
             true => reload.borrow_mut().insert(format!("{error} (previous version still active)")).clone(),
             false => error,
         };
-        self.tell(host, registry, target, error);
+        self.tell(host, registry, listed, target, error);
         true
     }
 
-    /// Tells the host that `target` failed with `error`, unless it said so last. The host names the plugin by the ID
-    /// its build described, and by `target` only when no build of it ever described one.
-    fn tell(&self, host: &dyn Host, registry: &Registry, target: &str, error: String) {
-        if self.failed.borrow_mut().insert(target.to_owned(), error.clone()).as_ref() != Some(&error) {
+    /// Tells the host that `target` failed with `error`, unless the manager `listed` that failure before this reconcile
+    /// (TS `context.tsx` compares the failures it lists). The host names the plugin by the ID its build described, and by
+    /// `target` only when no build of it ever described one.
+    fn tell(&self, host: &dyn Host, registry: &Registry, listed: &Option<Status>, target: &str, error: String) {
+        if listed.as_ref() != Some(&Status::Failed(error)) {
             let id = registry.with_target(target, |plugin| plugin.definition.id.clone());
             host.failed(id.as_deref().unwrap_or(target));
         }
