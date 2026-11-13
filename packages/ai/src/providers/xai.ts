@@ -114,6 +114,7 @@ export const imageModel = (modelID: string, settings?: Settings) => {
   const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
+export const videoModel = (modelID: string, settings?: Settings) => configure(toConfig(settings)).video(modelID)
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image

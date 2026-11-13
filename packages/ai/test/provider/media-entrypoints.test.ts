@@ -561,6 +561,15 @@ const videos: ReadonlyArray<Case<VideoModel>> = [
     auth: ["x-goog-api-key", "google-key"],
     provider: "google",
   },
+  {
+    name: "xai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/xai/videos")
+      return model("grok-imagine-video-1.5", { ...shared, apiKey: "xai-key" })
+    },
+    url: "https://api.x.ai/v1/videos/generations",
+    auth: ["authorization", "Bearer xai-key"],
+  },
 ]
 
 describe("video entrypoints", () => {
