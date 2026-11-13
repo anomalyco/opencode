@@ -35,7 +35,8 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
         toast(host, format!("p0b theme {}", host.set_theme(input.unwrap_or_default())));
     });
     setup.command(command("p0b.variant"), move |host, _| {
-        toast(host, format!("p0b variant {}", host.set_variant(Some("high"))));
+        let (high, default) = (host.set_variant(Some("high")), host.set_variant(None));
+        toast(host, format!("p0b variant {high} {default}"));
     });
     setup.command(command("p0b.selection"), move |host, _| {
         toast(host, format!("p0b selection {:?}", host.selection()));
@@ -82,8 +83,9 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
         let tabs: Vec<String> = read.tabs().into_iter().map(|tab| tab.session_id).collect();
         let reachable = read.keymap_commands().iter().any(|command| command.id == "p0b.open");
         let pending: Vec<String> = read.keymap_pending().into_iter().map(|key| key.key).collect();
+        let continues = read.keymap_active().iter().filter(|key| key.continues).count();
         let text = format!(
-            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{}",
+            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{}",
             input.width,
             read.theme().unwrap_or_default(),
             tabs.join(","),
@@ -92,8 +94,9 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             read.variants().len(),
             deltas.borrow(),
             exited.borrow(),
+            continues.min(1),
         );
-        abi::Render::Show(abi::Node::text([abi::Span::new(text)]))
+        abi::Render::Show(abi::Node::text([abi::Span::new(text).link("https://opencode.ai/p0b")]))
     });
     setup.sized(abi::Placement::append("home.footer"));
     Ok(())
@@ -132,26 +135,32 @@ fn home(loopback: bool, width: u16, config: Value) -> (Harness, Memory, opencode
 }
 
 // Expected: a sized claim reads its laid-out width and renders again when a resize changes it; it reads the theme,
-// the palette's key, that its own hidden command can be reached, and no variants without a model; a variant without a
-// model is refused. On both paths.
+// the palette's key, that its own hidden command can be reached, and no variants without a model; a variant, also the
+// default, is refused without a model, as TS refuses it. Its span is an OSC 8 link. On both paths.
 #[test]
 fn a_claim_reads_its_width_the_theme_and_the_keymap() {
     for loopback in [false, true] {
         let (h, _memory, _root) = home(loopback, 100, json!({}));
-        h.wait_for("p0b w100 opencode [] ctrl+p true  0 d: x:-");
+        let screen = h.wait_for("p0b w100 opencode [] ctrl+p true  0 d: x:-");
+        let row = screen.lines().position(|line| line.contains("p0b w100")).unwrap();
+        let column = screen.lines().nth(row).unwrap().find("p0b").unwrap();
+        let link = opencode_tui::features::links::link_at(h.app.app(), column as u16, row as u16);
+        assert_eq!(link.as_deref(), Some("https://opencode.ai/p0b"), "loopback {loopback}");
         h.app.resize(90, 30);
         h.wait_for("p0b w90 ");
         h.tui.keymap.dispatch("p0b.variant", None);
-        h.wait_for("p0b variant false");
+        h.wait_for("p0b variant false false");
     }
 }
 
-// Expected: the pending keys read as the TUI shows them, and the claim renders again as the sequence starts and ends.
+// Expected: the pending keys read as the TUI shows them, the active keys include one that continues a sequence (the
+// leader), and the claim renders again as the sequence starts and ends.
 #[test]
 fn a_claim_follows_the_pending_keys() {
     for loopback in [false, true] {
         let (h, _memory, _root) = home(loopback, 120, json!({}));
         h.wait_for("p0b w120 ");
+        h.wait_for(" c1");
         h.app.press("ctrl+x");
         h.wait_for("true ctrl+x 0");
         h.app.press("escape");

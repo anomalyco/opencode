@@ -1060,6 +1060,23 @@ pub fn markdown(tui: &Tui) -> opentui::widget::Markdown {
 mod tests {
     use super::*;
 
+    // Expected: a plugin installs a theme only under a plain file name in the themes directory.
+    #[test]
+    fn an_installed_theme_has_a_plain_file_name() {
+        for (name, plain) in [
+            ("nord-2", true),
+            ("my_theme.v2", true),
+            ("", false),
+            (".hidden", false),
+            ("../escape", false),
+            ("a/b", false),
+            ("a\\b", false),
+            ("tôkyo", false),
+        ] {
+            assert_eq!(theme_name(name), plain, "{name:?}");
+        }
+    }
+
     // Expected: a watched directory that is removed and made again gets a fresh watch, and a directory that left
     // the list loses its watch.
     #[test]
