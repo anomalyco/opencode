@@ -148,7 +148,7 @@ export const dict = {
   "provider.connect.title": "დაკავშირება {{provider}}",
   "provider.connect.method.apiKey": "API გასაღები",
   "provider.connect.status.inProgress": "ავტორიზაცია მიმდინარეობს…",
-  "provider.connect.status.waiting": "ველოდები ავტორიზაციას…",
+  "provider.connect.status.waiting": "ველოდები ავტორიზაციას",
   "provider.connect.status.failed": "ავტორიზაცია ვერ მოხერხდა: {{error}}",
   "provider.connect.apiKey.description":
     "შეიყვანეთ თქვენი {{provider}} API გასაღები თქვენი ანგარიშის დასაკავშირებლად და გამოიყენეთ {{provider}} მოდელები OpenCode-ში.",
@@ -820,7 +820,6 @@ export const dict = {
   "workspace.delete.location": "მდებარეობა",
   "command.session.location.cycle": "სესიის მდებარეობის შეცვლა",
   "dialog.provider.anthropic.note": "Claude-ის მოდელებზე პირდაპირი წვდომა API გასაღებით",
-  "provider.connect.title.anthropicProMax": "Anthropic-ით შესვლა",
   "prompt.toast.uploading.cancelFile": "{{filename}} ფაილის ატვირთვის გაუქმება",
   "prompt.toast.uploadFailed.title": "ატვირთვა ვერ მოხერხდა",
   "prompt.toast.uploading.percent": "{{percent}}%",
