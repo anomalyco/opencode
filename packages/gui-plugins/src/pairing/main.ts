@@ -13,6 +13,7 @@ import {
   type PairingMainEffect,
   type ServiceRequest,
 } from "./main-machine"
+import { createNearby } from "./nearby"
 
 type Waiter = { resolve: (value: boolean | undefined) => void; reject: (error: Error) => void }
 
@@ -115,7 +116,16 @@ const setup: Plugin.MainSetup = (ctx) => {
   if (stored.value) dispatch({ type: "screen.set", enabled: true, started: false })
   ctx.onCleanup(() => dispatch({ type: "disposed" }))
 
-  ctx.provide(Pairing, {
+  const nearby = createNearby(ctx, {
+    enableRemote: async () => {
+      await service({ kind: "set-remote", enabled: true })
+    },
+    changed: () => provider.changed(),
+    paired: (result) => provider.emit("nearbyResult", result),
+  })
+
+  const provider = ctx.provide(Pairing, {
+    state: () => ({ nearby: nearby.prompt() }),
     remote: async (_, caller) => (await service({ kind: "get-remote" }, caller.signal)) === true,
     // Changing the setting stops the service, and starting it again brings it back. A window that closes meanwhile
     // does not cancel the change.
@@ -124,6 +134,11 @@ const setup: Plugin.MainSetup = (ctx) => {
     },
     screenActive,
     setScreenActive: (enabled) => dispatch({ type: "screen.set", enabled, started: screenActive() }),
+    discoverable: () => nearby.discoverable(),
+    setDiscoverable: (enabled) => nearby.setDiscoverable(enabled),
+    approveNearby: (id) => nearby.approve(id),
+    cancelNearby: (id) => nearby.cancel(id),
+    snoozeNearby: (input) => nearby.snooze(input.id, input.scope),
   })
 }
 

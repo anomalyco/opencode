@@ -505,10 +505,25 @@ import { Ipc } from "@opencode/plugin/gui"
 /**
  * Turns on remote access and keeps this machine's display awake while another device uses it. The window asks the
  * local server for its remote address and pairing codes through its own `ServerRef`; remote access, which changes
- * the background service's settings through the CLI, and the display sleep blocker need the main process.
+ * the background service's settings through the CLI, the display sleep blocker, and nearby pairing (announcing this
+ * machine over mDNS and running the code exchange with a phone) need the main process.
  */
+/**
+ * A nearby phone asking to pair, with the code both screens show, until the pairing ends. `approved` once the user
+ * chose Pair; `offers` the snoozes worth showing, only once requests have been busy.
+ */
+export const NearbyPrompt = Schema.Struct({
+  id: Schema.String,
+  device: Schema.String,
+  code: Schema.String,
+  approved: Schema.Boolean,
+  offers: Schema.Struct({ device: Schema.Boolean, all: Schema.Boolean }),
+})
+
 export const Pairing = Ipc.define({
   id: "pairing",
+  /** The nearby phone waiting for the user's answer, if any. */
+  state: Schema.Struct({ nearby: Schema.NullOr(NearbyPrompt) }),
   methods: {
     /** Whether remote access is on: the background service serves an OpenTunnel address. */
     remote: { output: Schema.Boolean },
@@ -521,6 +536,22 @@ export const Pairing = Ipc.define({
     screenActive: { output: Schema.Boolean },
     /** Holds or releases the display sleep blocker, and remembers the choice. */
     setScreenActive: { input: Schema.Boolean },
+    /** Whether nearby phones can find this machine, or null while the `nearby_pairing` flag is off. */
+    discoverable: { output: Schema.NullOr(Schema.Boolean) },
+    /** Starts or stops announcing this machine to nearby phones, and remembers the choice. */
+    setDiscoverable: { input: Schema.Boolean },
+    /** The user checked the codes match and pairs the phone with this id. An unknown id does nothing. */
+    approveNearby: { input: Schema.String },
+    /** The user declines the phone with this id. An unknown id does nothing. */
+    cancelNearby: { input: Schema.String },
+    /** Declines the phone with this id and refuses requests from that device, or from every device, for a while. */
+    snoozeNearby: {
+      input: Schema.Struct({ id: Schema.String, scope: Schema.Literals(["device", "all"]) }),
+    },
+  },
+  events: {
+    /** A pairing the user agreed to ended: the phone connected, or it failed. */
+    nearbyResult: Schema.Struct({ device: Schema.String, paired: Schema.Boolean }),
   },
 })
 ```
@@ -556,6 +587,7 @@ import {
   type PairingMainEffect,
   type ServiceRequest,
 } from "./main-machine"
+import { createNearby } from "./nearby"
 
 type Waiter = { resolve: (value: boolean | undefined) => void; reject: (error: Error) => void }
 
@@ -658,7 +690,16 @@ const setup: Plugin.MainSetup = (ctx) => {
   if (stored.value) dispatch({ type: "screen.set", enabled: true, started: false })
   ctx.onCleanup(() => dispatch({ type: "disposed" }))
 
-  ctx.provide(Pairing, {
+  const nearby = createNearby(ctx, {
+    enableRemote: async () => {
+      await service({ kind: "set-remote", enabled: true })
+    },
+    changed: () => provider.changed(),
+    paired: (result) => provider.emit("nearbyResult", result),
+  })
+
+  const provider = ctx.provide(Pairing, {
+    state: () => ({ nearby: nearby.prompt() }),
     remote: async (_, caller) => (await service({ kind: "get-remote" }, caller.signal)) === true,
     // Changing the setting stops the service, and starting it again brings it back. A window that closes meanwhile
     // does not cancel the change.
@@ -667,6 +708,11 @@ const setup: Plugin.MainSetup = (ctx) => {
     },
     screenActive,
     setScreenActive: (enabled) => dispatch({ type: "screen.set", enabled, started: screenActive() }),
+    discoverable: () => nearby.discoverable(),
+    setDiscoverable: (enabled) => nearby.setDiscoverable(enabled),
+    approveNearby: (id) => nearby.approve(id),
+    cancelNearby: (id) => nearby.cancel(id),
+    snoozeNearby: (input) => nearby.snooze(input.id, input.scope),
   })
 }
 
@@ -679,7 +725,7 @@ export default setup
 
 ```tsx
 import { lazy, onCleanup, Suspense } from "solid-js"
-import { Command, SettingsPage, type Plugin } from "@opencode/plugin/gui"
+import { Command, createKeyed, SettingsPage, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Pairing } from "./contract"
 import type definition from "./index"
@@ -699,6 +745,62 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       .list()
       .map((id) => servers.get(id))
       .find((server) => server?.builtin)
+
+  // Main reports the nearby phone asking to pair in its state. Each window shows it as a toast, wherever the user is,
+  // replaced as the prompt changes and closed when it ends; only the code exchange's outcome gets a toast of its own.
+  createKeyed(pairing, (client) => {
+    createKeyed(
+      // A copy: the state updates in place, so comparing it with itself would never see the offers change.
+      () => {
+        const prompt = client.state()?.nearby
+
+        return prompt ? { ...prompt, offers: { ...prompt.offers } } : undefined
+      },
+      (prompt) => {
+        const toast = prompt.approved
+          ? ctx.toast.show({
+              title: ctx.t("nearby.waiting", { device: prompt.device }),
+              description: ctx.t("nearby.waitingDetail"),
+              variant: "loading",
+              persistent: true,
+              actions: [{ label: ctx.t("common.cancel"), run: () => void client.cancelNearby(prompt.id).catch(() => undefined) }],
+            })
+          : ctx.toast.show({
+              title: ctx.t("nearby.title", { device: prompt.device }),
+              description: ctx.t("nearby.description", { code: `${prompt.code.slice(0, 3)} ${prompt.code.slice(3)}` }),
+              icon: "server",
+              persistent: true,
+              actions: [
+                { label: ctx.t("nearby.pair"), run: () => void client.approveNearby(prompt.id).catch(() => undefined) },
+                { label: ctx.t("nearby.decline"), run: () => void client.cancelNearby(prompt.id).catch(() => undefined) },
+                ...(prompt.offers.device
+                  ? [{ label: ctx.t("nearby.snoozeDevice"), run: () => snooze(prompt.id, "device") }]
+                  : []),
+                ...(prompt.offers.all ? [{ label: ctx.t("nearby.snoozeAll"), run: () => snooze(prompt.id, "all") }] : []),
+              ],
+            })
+
+        onCleanup(() => toast.dismiss())
+      },
+      {
+        equals: (previous, next) =>
+          previous.id === next.id &&
+          previous.approved === next.approved &&
+          previous.offers.device === next.offers.device &&
+          previous.offers.all === next.offers.all,
+      },
+    )
+
+    const snooze = (id: string, scope: "device" | "all") => void client.snoozeNearby({ id, scope }).catch(() => undefined)
+
+    return client.on("nearbyResult", (result) =>
+      ctx.toast.show(
+        result.paired
+          ? { title: ctx.t("nearby.paired", { device: result.device }), variant: "success" }
+          : { title: ctx.t("nearby.failed", { device: result.device }), variant: "error" },
+      ),
+    )
+  })
 
   ctx.add(SettingsPage, {
     id: "pairing",

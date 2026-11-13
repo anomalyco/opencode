@@ -37,6 +37,8 @@
     "@solid-primitives/scheduled": "1.5.3",
     "@tanstack/solid-query": "5.91.4",
     "@tanstack/solid-virtual": "catalog:",
+    "bonjour-service": "1.4.4",
+    "dbus-next": "0.10.2",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#e91e38a9ceb13c566ddfa15185a9393849f712a9",

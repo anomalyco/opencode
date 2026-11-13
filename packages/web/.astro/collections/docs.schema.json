@@ -1,0 +1,643 @@
+{
+  "$ref": "#/definitions/docs",
+  "definitions": {
+    "docs": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "editUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "default": true
+        },
+        "head": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tag": {
+                "type": "string",
+                "enum": [
+                  "title",
+                  "base",
+                  "link",
+                  "style",
+                  "meta",
+                  "script",
+                  "noscript",
+                  "template"
+                ]
+              },
+              "attrs": {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "not": {}
+                    }
+                  ]
+                }
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "tag"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "tableOfContents": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "minHeadingLevel": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 6,
+                  "default": 2
+                },
+                "maxHeadingLevel": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 6,
+                  "default": 3
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "default": {
+            "minHeadingLevel": 2,
+            "maxHeadingLevel": 3
+          }
+        },
+        "template": {
+          "type": "string",
+          "enum": [
+            "doc",
+            "splash"
+          ],
+          "default": "doc"
+        },
+        "hero": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "tagline": {
+              "type": "string"
+            },
+            "image": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "alt": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "file": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "file"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "alt": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "dark": {
+                      "type": "string"
+                    },
+                    "light": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "dark",
+                    "light"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "html": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "html"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "link": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string",
+                    "enum": [
+                      "primary",
+                      "secondary",
+                      "minimal"
+                    ],
+                    "default": "primary"
+                  },
+                  "icon": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "up-caret",
+                          "down-caret",
+                          "right-caret",
+                          "left-caret",
+                          "up-arrow",
+                          "down-arrow",
+                          "right-arrow",
+                          "left-arrow",
+                          "bars",
+                          "translate",
+                          "pencil",
+                          "pen",
+                          "document",
+                          "add-document",
+                          "setting",
+                          "external",
+                          "download",
+                          "cloud-download",
+                          "moon",
+                          "sun",
+                          "laptop",
+                          "open-book",
+                          "information",
+                          "magnifier",
+                          "forward-slash",
+                          "close",
+                          "error",
+                          "warning",
+                          "approve-check-circle",
+                          "approve-check",
+                          "rocket",
+                          "star",
+                          "puzzle",
+                          "list-format",
+                          "random",
+                          "comment",
+                          "comment-alt",
+                          "heart",
+                          "github",
+                          "gitlab",
+                          "bitbucket",
+                          "codePen",
+                          "farcaster",
+                          "discord",
+                          "gitter",
+                          "twitter",
+                          "x.com",
+                          "mastodon",
+                          "codeberg",
+                          "youtube",
+                          "threads",
+                          "linkedin",
+                          "twitch",
+                          "azureDevOps",
+                          "microsoftTeams",
+                          "instagram",
+                          "stackOverflow",
+                          "telegram",
+                          "rss",
+                          "facebook",
+                          "email",
+                          "phone",
+                          "reddit",
+                          "patreon",
+                          "signal",
+                          "slack",
+                          "matrix",
+                          "hackerOne",
+                          "openCollective",
+                          "blueSky",
+                          "discourse",
+                          "zulip",
+                          "pinterest",
+                          "tiktok",
+                          "astro",
+                          "alpine",
+                          "pnpm",
+                          "biome",
+                          "bun",
+                          "mdx",
+                          "apple",
+                          "linux",
+                          "homebrew",
+                          "nix",
+                          "starlight",
+                          "pkl",
+                          "node",
+                          "cloudflare",
+                          "vercel",
+                          "netlify",
+                          "deno",
+                          "jsr",
+                          "nostr",
+                          "backstage",
+                          "confluence",
+                          "jira",
+                          "storybook",
+                          "vscode",
+                          "jetbrains",
+                          "zed",
+                          "vim",
+                          "figma",
+                          "sketch",
+                          "npm",
+                          "sourcehut",
+                          "substack",
+                          "seti:folder",
+                          "seti:bsl",
+                          "seti:mdo",
+                          "seti:salesforce",
+                          "seti:asm",
+                          "seti:bicep",
+                          "seti:bazel",
+                          "seti:c",
+                          "seti:c-sharp",
+                          "seti:html",
+                          "seti:cpp",
+                          "seti:clojure",
+                          "seti:coldfusion",
+                          "seti:config",
+                          "seti:crystal",
+                          "seti:crystal_embedded",
+                          "seti:json",
+                          "seti:css",
+                          "seti:csv",
+                          "seti:xls",
+                          "seti:cu",
+                          "seti:cake",
+                          "seti:cake_php",
+                          "seti:d",
+                          "seti:word",
+                          "seti:elixir",
+                          "seti:elixir_script",
+                          "seti:hex",
+                          "seti:elm",
+                          "seti:favicon",
+                          "seti:f-sharp",
+                          "seti:git",
+                          "seti:go",
+                          "seti:godot",
+                          "seti:gradle",
+                          "seti:grails",
+                          "seti:graphql",
+                          "seti:hacklang",
+                          "seti:haml",
+                          "seti:mustache",
+                          "seti:haskell",
+                          "seti:haxe",
+                          "seti:jade",
+                          "seti:java",
+                          "seti:javascript",
+                          "seti:jinja",
+                          "seti:julia",
+                          "seti:karma",
+                          "seti:kotlin",
+                          "seti:dart",
+                          "seti:liquid",
+                          "seti:livescript",
+                          "seti:lua",
+                          "seti:markdown",
+                          "seti:argdown",
+                          "seti:info",
+                          "seti:clock",
+                          "seti:maven",
+                          "seti:nim",
+                          "seti:github",
+                          "seti:notebook",
+                          "seti:nunjucks",
+                          "seti:npm",
+                          "seti:ocaml",
+                          "seti:odata",
+                          "seti:perl",
+                          "seti:php",
+                          "seti:pipeline",
+                          "seti:pddl",
+                          "seti:plan",
+                          "seti:happenings",
+                          "seti:powershell",
+                          "seti:prisma",
+                          "seti:pug",
+                          "seti:puppet",
+                          "seti:purescript",
+                          "seti:python",
+                          "seti:react",
+                          "seti:rescript",
+                          "seti:R",
+                          "seti:ruby",
+                          "seti:rust",
+                          "seti:sass",
+                          "seti:spring",
+                          "seti:slim",
+                          "seti:smarty",
+                          "seti:sbt",
+                          "seti:scala",
+                          "seti:ethereum",
+                          "seti:stylus",
+                          "seti:svelte",
+                          "seti:swift",
+                          "seti:db",
+                          "seti:terraform",
+                          "seti:tex",
+                          "seti:default",
+                          "seti:twig",
+                          "seti:typescript",
+                          "seti:tsconfig",
+                          "seti:vala",
+                          "seti:vite",
+                          "seti:vue",
+                          "seti:wasm",
+                          "seti:wat",
+                          "seti:xml",
+                          "seti:yml",
+                          "seti:prolog",
+                          "seti:zig",
+                          "seti:zip",
+                          "seti:wgt",
+                          "seti:illustrator",
+                          "seti:photoshop",
+                          "seti:pdf",
+                          "seti:font",
+                          "seti:image",
+                          "seti:svg",
+                          "seti:sublime",
+                          "seti:code-search",
+                          "seti:shell",
+                          "seti:video",
+                          "seti:audio",
+                          "seti:windows",
+                          "seti:jenkins",
+                          "seti:babel",
+                          "seti:bower",
+                          "seti:docker",
+                          "seti:code-climate",
+                          "seti:eslint",
+                          "seti:firebase",
+                          "seti:firefox",
+                          "seti:gitlab",
+                          "seti:grunt",
+                          "seti:gulp",
+                          "seti:ionic",
+                          "seti:platformio",
+                          "seti:rollup",
+                          "seti:stylelint",
+                          "seti:yarn",
+                          "seti:webpack",
+                          "seti:lock",
+                          "seti:license",
+                          "seti:makefile",
+                          "seti:heroku",
+                          "seti:todo",
+                          "seti:ignored"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^\\<svg"
+                      }
+                    ]
+                  },
+                  "attrs": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "text",
+                  "link"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "lastUpdated": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "integer",
+                  "format": "unix-time"
+                }
+              ]
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "prev": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "link": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "link": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "sidebar": {
+          "type": "object",
+          "properties": {
+            "order": {
+              "type": "number"
+            },
+            "label": {
+              "type": "string"
+            },
+            "hidden": {
+              "type": "boolean",
+              "default": false
+            },
+            "badge": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "variant": {
+                      "type": "string",
+                      "enum": [
+                        "note",
+                        "danger",
+                        "success",
+                        "caution",
+                        "tip",
+                        "default"
+                      ],
+                      "default": "default"
+                    },
+                    "class": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "attrs": {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "not": {}
+                  }
+                ]
+              },
+              "default": {}
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "banner": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "additionalProperties": false
+        },
+        "pagefind": {
+          "type": "boolean",
+          "default": true
+        },
+        "draft": {
+          "type": "boolean",
+          "default": false
+        },
+        "$schema": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

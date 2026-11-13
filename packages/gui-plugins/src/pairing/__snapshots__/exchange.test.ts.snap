@@ -1,0 +1,12 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`vectors: commitment, code and keys match across implementations 1`] = `
+{
+  "code": "933098",
+  "commitment": "6c695fd61cc8d15b7d54e5b34c82074ec2f5246f6fce0ff04e467adda4078dd6",
+  "desktopKey": "a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a209",
+  "dp": "cf8d36869a5bd655c86686f96090eb33a46fba8d0092b7c06390b311dd041063",
+  "pd": "25861ae03f5d4d86c4e4e51e3a14fa048b2495405dbce4def121544ed4d9203c",
+  "phoneKey": "ce8d3ad1ccb633ec7b70c17814a5c76ecd029685050d344745ba05870e587d59",
+}
+`;

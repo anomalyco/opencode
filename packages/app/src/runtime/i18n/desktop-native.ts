@@ -242,6 +242,7 @@ export const DESKTOP_NATIVE_ENGLISH = {
     "OpenCode uses files on network volumes for projects you open and commands you run there.",
   "desktop.removableVolumesUsage":
     "OpenCode uses files on removable volumes for projects you open and commands you run there.",
+  "desktop.localNetworkUsage": "OpenCode lets the OpenCode app on nearby devices find this computer to pair with it.",
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "File",
   "desktop.menu.edit": "Edit",

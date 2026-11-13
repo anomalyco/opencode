@@ -50,6 +50,9 @@ export default defineConfig(({ command }) => {
         minify: command === "build",
         rolldownOptions: {
           input: { index: "src/main/index.ts" },
+          // dbus-next (pairing's Avahi announcement) requires these only for the session bus and abstract sockets,
+          // never for the system bus it uses, and survives their absence.
+          external: ["x11", "usocket"],
           output: {
             format: "es",
             // DesktopPaths resolves resources from the main output directory,

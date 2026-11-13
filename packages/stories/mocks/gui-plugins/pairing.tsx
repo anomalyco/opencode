@@ -15,7 +15,12 @@ import "@/settings/settings.css"
  * setting and its three retries fail; later reads and changes work.
  */
 export function pairingRemote(input: { enabled: boolean; fails?: boolean; screenFails?: boolean }) {
-  const state = { enabled: input.enabled, screen: false, screenFailures: input.screenFails ? 4 : 0 }
+  const state = {
+    enabled: input.enabled,
+    screen: false,
+    screenFailures: input.screenFails ? 4 : 0,
+    discoverable: true,
+  }
   const server: PairingServer = {
     client: {
       server: {
@@ -48,6 +53,13 @@ export function pairingRemote(input: { enabled: boolean; fails?: boolean; screen
     setScreenActive: async (enabled) => {
       state.screen = enabled
     },
+    discoverable: async () => state.discoverable,
+    setDiscoverable: async (enabled) => {
+      state.discoverable = enabled
+    },
+    approveNearby: async () => undefined,
+    cancelNearby: async () => undefined,
+    snoozeNearby: async () => undefined,
     state: () => undefined,
     on: () => () => undefined,
   }
