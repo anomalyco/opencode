@@ -51,8 +51,13 @@ Versions only grow by appending:
   and `HostRequest::ComposerEdit`. Each new field is left out of the JSON while unset, so 1.4 JSON reads as before and
   a 1.4 plugin's requests are unchanged.
 - Only a deliberate major-version break refuses a plugin. The host reads `major` before anything else, and the
-  plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.5);
+  plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-native loads ABI 1.x plugins (up to 1.6);
   rebuild the plugin against opencode-plugin-abi 1".
+- 1.5 is P0a's (dialogs, box styling, the composer). 1.6 adds the small reads and verbs (below), as new
+  `HostRequest`s, one `Request` (`Deltas`) and optional fields, and no table entry. `export_plugin!` still requires
+  1.4: on an older host a 1.6 read returns its default (`None`, empty, `false`), a verb does nothing and answers
+  `false`, `Setup::sized` gives 0, `on_deltas` is never called, a span's link is dropped, and an `xlarge` panel is sent
+  again as `large`.
 
 A Rust-ABI `dylib` was rejected because it breaks with every compiler or crate version.
 
@@ -78,11 +83,23 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 | `on_dispose` | `on_dispose(run(&dyn Host))` |
 | `api.themeMode` | `Read::theme_mode()` |
 | the composer (`renderer.currentFocusedEditor`, the composer's `ref`) | `Read::composer()` and `Host::edit_composer(ComposerEdit)` (1.5) |
+| `onSizeChange` and `this.width` in a slot (1.6) | `sized(Placement)` for the claim registered last there: `SlotInput::width` and `height`, and a render with `Changed::size` when they change |
+| `data.on("session.*.delta")` (1.6) | `on_deltas(run(&dyn Host, &[V2Event]))`, once a change batch |
+| `ui.model.current`, `ui.model.variant.list/set` (1.6) | `Read::model`, `Read::variants`, `Host::set_variant(Option<&str>) -> bool`; and `Host::set_model(provider, model)` |
+| `ui.tabs.enabled/list/open/focus/move/close` (1.6) | `Read::tabs_enabled`, `Read::tabs`, `Host::edit_tab(TabEdit) -> bool` |
+| `keymap.pending/active/commands/shortcuts` (1.6) | `Read::keymap_pending`, `keymap_active`, `keymap_commands`, `shortcuts(name)` |
+| `renderer.getSelection()`, `clearSelection()` (1.6) | `Read::selection`, `Host::clear_selection`; a plugin cannot set the range |
+| `renderer.suspend()`, a program, `resume()` (1.6) | `Host::foreground(Foreground { command, args, cwd }) -> RequestId`; the exit code comes to `on_reply` |
+| `renderer.setTerminalTitle` (1.6) | `Host::set_title(title)` |
+| 1.x `api.theme.selected/has/set/install` (1.6) | `Read::theme`, `Read::themes`, `Host::set_theme(name) -> bool`, `Host::install_theme(name, json)` |
+| `<a href>` in a text (1.6) | `Span::link(url)`, an OSC 8 link |
+| `dialog.set({ size: "xlarge" })` (1.6) | `PanelSize::XLarge` |
 
 `Setup::options()` holds the `options` of the plugin's `plugins` entry as JSON text. `Setup::host()` is the host
 while setup runs; no callback can keep it (a compile error).
 
-A `Line` is a list of spans with text, colors, and bold, italic, underline, dim and strikethrough. A color is a theme
+A `Line` is a list of spans with text, colors, bold, italic, underline, dim and strikethrough, and since 1.6 an OSC
+8 `link` (a terminal without OSC 8 shows the text alone). A color is a theme
 token path (`text.muted`, `markdown.heading`), a scale step (`categorical.3.300`), `#rrggbb`, or an `Rgba`, sent as
 `#rrggbbaa`, so plugins follow the theme; `Read::color(token)` resolves one to an `Rgba`. The host draws rows without
 wrapping. A fence returns `Fenced::{Code, Keep, Lines { lines, fg, drag }}`, with `Fence::key` naming the block across
@@ -130,8 +147,12 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   `vcs` per location, `model`, `limits`, `providers`, `info` (the version, the terminal size, where the TUI works,
   how many plugins failed), `route`, `interactive` (whether the session pane owns the input, TS `useInteractivity`),
   `shortcut(name)` (a command's first key), `dialog_open(key)`, `composer` (1.5), `storage_get`, `color` and
-  `theme_mode`. Over the ABI
-  each read is one `HostRequest`, and `messages` hands the visitor the plugin's own copy.
+  `theme_mode`; since 1.6
+  `variants` (of the model the next prompt uses), `tabs_enabled` and `tabs` (each tab's root session, title, and
+  whether it is on screen, busy, waits on the user or has unread activity or an error), `keymap_pending`,
+  `keymap_active`, `keymap_commands` and `shortcuts(name)` as the TUI shows keys, `selection` (the text the mouse
+  selected), `theme` (the selected theme's name) and `themes` (every name). Over the ABI each read is one
+  `HostRequest`, and `messages` hands the visitor the plugin's own copy.
 - Setup, a command, and the handlers of events, replies, mounts, route mounts, wakes and disposal get a `Host`: the
   reads, and effects. Effects wait until the outermost plugin callback returns and then run in the order they were
   asked for, on the same queue as the built-ins' effects, so a plugin never reenters itself through the host. The
@@ -147,10 +168,25 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   notify, sound })`, a notification and a sound as the user's `attention` settings allow; `open_route(name)` and
   `navigate(Route)` (home, a session, or a plugin's route); `dialog(Dialog)`; `copy(text, then)`, which copies and
   runs `then` once copied; `edit_composer(ComposerEdit)` (1.5); and `fetch`.
+- The verbs of 1.6. Three answer at once whether they will act, as their TS counterparts return a boolean, and act
+  once the call returns: `set_variant(variant)` (`false` without a model, or for a variant it lacks; `None` is the
+  default), `edit_tab(TabEdit::{Open, Focus, Move, Close})` (`false` while tabs are off, `Move` of a tab that is not
+  open, `Close` with no tab matched; `Open` adds a tab without showing it, `Focus` shows it), and `set_theme(name)`
+  (`false` for a theme the TUI does not have; it saves `theme.name` as the theme dialog does). The rest act once the
+  call returns: `set_model(provider, model)` as the model dialog picks one (a model the TUI does not list is
+  ignored), `clear_selection`, `set_title(title)` (also with `terminal.title: false`; the TUI sets its own title again
+  with its next change, and clears a plugin's on exit), `install_theme(name, json)` (written as
+  `<config>/themes/<name>.json`, then listed; a name that is not a plain file name is refused), and
+  `foreground(Foreground)`.
+- `foreground` gives the terminal to the program as the TUI does for `$EDITOR`: the TUI restores the terminal, waits
+  for the program, and sets the terminal up again; input sent meanwhile is dropped. It runs in `cwd`, else where the
+  TUI works. The reply to its `RequestId` is `{ "code": <exit code or null> }`, or the error when it did not start. A
+  second program asked for in the same turn replaces the first, whose reply never comes.
 - A `Dialog` is a `Prompt`, whose text goes to its action as the input; a `Select { title, placeholder, options,
   current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the input; a `Panel { key,
   size, title, subtitle, body, actions, binds, bleed, centered }`, which changes in place while its key is open and
-  keeps where its body is scrolled; or `Close { key }`, which closes that panel. Since 1.5 it may also be a `Confirm
+  keeps where its body is scrolled (`size` is `medium`, `large`, or since 1.6 `xlarge`, as TS's dialog
+  sizes); or `Close { key }`, which closes that panel. Since 1.5 it may also be a `Confirm
   { title, message, label, action }` (TS `dialog.confirm`): `Confirm` runs the action with the input `true`, `Cancel`
   and escape with `false`, and a dialog that replaces it runs nothing, as TS resolves `true`, `false` or `undefined`;
   or an `Alert { title, message, action }` (TS `dialog.alert`), whose action runs once after it closes, by enter,
@@ -178,8 +214,10 @@ A claim's first render gets `Changed::all`. After that, a mounted claim or route
 - with each change batch of the store: `sessions` whose info or status changed, `lists` whose message list changed,
   `messages` that changed in place, and `locations` whose catalogs changed;
 - with `local` when the host's own state changes: the selected model, the usage limits, the settings, the plugins'
-  storage (also another client's write), or the count of failed plugins;
-- with `size` on a resize, and with `all` when `interactive` changes;
+  storage (also another client's write), the count of failed plugins, and since 1.6 the open tabs, the pending keys
+  and the themes;
+- with `size` on a resize, and with `all` when `interactive` changes; a claim of `sized` also with `size` when its own
+  size changes, in the frame that laid it out;
 - with `woken` after each of the plugin's commands and its event, reply, mount, route-mount and wake handlers
   (queued after their effects, and coalesced), so a handler's change shows without a wake; and after a wake.
 
@@ -211,8 +249,13 @@ callback is not sent.
 
 `on_event(types, run)` gets the server events of those types, after the store applied their batch, while the plugin
 is active. The streaming deltas (`session.text.delta`, `session.reasoning.delta`, `session.tool.input.delta`,
-`session.compaction.delta`) never arrive. If the UI thread falls more than 1024 events behind, the oldest are
+`session.compaction.delta`) never arrive there. If the UI thread falls more than 1024 events behind, the oldest are
 skipped.
+
+`on_deltas(run)` (1.6) gets them instead: every delta the store applied since the last call, oldest first, in one
+call a change batch and never an empty one, also for a session whose messages the TUI has not loaded. While a plugin
+has such a handler the store keeps at most 4096 between calls and drops the oldest past that; without one the store
+keeps none. TS calls a `data.on` handler once a delta; a plugin that counts deltas counts the events in the slice.
 
 ### Fences
 
@@ -311,6 +354,9 @@ composer's read and edits, and a styled box. The tests build each variant once p
 `crates/tui/tests/all/plugins.rs`. `crates/tui/tests/all/plugin_p0a.rs` runs the same probe linked, through the C
 ABI's byte shims, and as the library, and the P-APP scenarios `P.1/p0a-dialogs` and `P.1/p0a-composer` check its
 dialogs, its box and a composer edit against TS (`parity/plugins/p0a`).
+With the option `"reads": true` the sample also uses the reads and verbs of 1.6
+(`sample/src/reads.rs`), which the loader test `the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library`
+runs in process and from the library; `crates/tui/tests/all/plugin_reads.rs` runs them in the TUI on both paths.
 
 `crates/plugin/examples/hello` is the README's quick start. `crates/plugin-abi/tests/sdk.rs` checks that the README
 shows it as it is and that it builds on the SDK alone. The loader test
