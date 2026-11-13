@@ -1403,8 +1403,8 @@ describe("ShellTool", () => {
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(settled.metadata).toMatchObject({ timeout: true })
+              expect(settled.output).not.toHaveProperty("timeout")
               expect(settled.output).toMatchObject({
-                timeout: true,
                 exitCode: settled.metadata?.exit ?? null,
               })
               if (!isWindows) expect(settled.output.signal).toBe("SIGTERM")

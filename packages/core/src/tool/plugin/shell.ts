@@ -74,8 +74,6 @@ const StructuredOutput = Schema.Struct({
   signal: Schema.optionalKey(Schema.String),
   shellID: Schema.optionalKey(Schema.String),
   pid: Schema.optionalKey(NonNegativeInt),
-  timeout: Schema.optionalKey(Schema.Boolean),
-  killed: Schema.optionalKey(Schema.String),
 })
 
 type Output = ReturnType<typeof ShellResult.output> & {
@@ -94,7 +92,7 @@ const resultMessages = (output: Output, timeout?: number) => {
 const toolResult = (output: Output, timeout?: number) => {
   return {
     output: {
-      ...Struct.omit(output, ["exit", "status", "truncated"]),
+      ...Struct.omit(output, ["exit", "status", "truncated", "timeout", "killed"]),
       exitCode: output.exit ?? null,
     },
     content: resultMessages(output, timeout).map((text) => ({
