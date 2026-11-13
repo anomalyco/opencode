@@ -9,7 +9,7 @@
 # the real opentui.h, because its build.rs only checks that they exist and that the header matches the bindings.
 #
 # Usage: sh script/check-windows.sh [extra cargo clippy arguments...]
-# Set ZIG to the Zig command. The default is `zig`, or `zig 0.17.0` (OpenTUI's version) when `zig` is anyzig, which
+# Set ZIG to the Zig command. The default is `zig`, or `zig 0.17.1` (OpenTUI's version) when `zig` is anyzig, which
 # needs a version outside a Zig project.
 set -eu
 
@@ -20,7 +20,7 @@ if [ -n "${ZIG:-}" ]; then
 elif zig version > /dev/null 2>&1; then
     zig=zig
 else
-    zig='zig 0.17.0'
+    zig='zig 0.17.1'
 fi
 target=x86_64-pc-windows-msvc
 # .cargo/config.toml's directory, unless the shell names another one.
