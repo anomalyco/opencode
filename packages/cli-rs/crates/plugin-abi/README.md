@@ -113,18 +113,34 @@ error.
 
 ## Which binaries load
 
-A plugin binary carries its ABI version. The host, ABI 1.4, loads every 1.x binary:
+A plugin binary carries its ABI version. The host, ABI 1.5, loads every 1.x binary:
 
 | Built with | Loads | What the host sends it |
 | --- | --- | --- |
 | The 1.0 SDK (the 1.0 table, without `describe`) | yes | The requests of 1.0 to 1.3, as below. The host learns the plugin's ID by running setup once at load and destroying that instance; what that instance asks for is dropped |
 | The 1.1 to 1.3 SDK | yes | The requests of 1.0 to 1.3: fences, slots and routes draw styled rows |
 | The 1.4 SDK | yes; a 1.3 host refuses it, naming both versions | The 1.4 requests |
+| The 1.5 SDK | yes; a 1.3 host refuses it, and a 1.4 host loads it and offers what it has: `composer()` reads `None`, and `edit_composer`, `Dialog::Confirm` and `Dialog::Alert` do nothing | The 1.4 requests; 1.5 adds only what the plugin asks of the host |
 | A 2.x SDK | no: "plugin ABI 2.0 is not supported: … rebuild the plugin against opencode-plugin-abi 1" | — |
 
 A binary of an older SDK keeps the safety of its own SDK. A 1.3 `Waker` is a raw pointer to the host, and so is
 the `Waker` of a 1.4 build from before `Waker` became `Clone`. Such a plugin must stop its threads before its state
 drops; a 1.4 build of today's SDK cannot wake a host that is gone.
+
+## Moving from the 1.4 SDK to 1.5
+
+A 1.4 plugin keeps working unbuilt, and builds on the 1.5 SDK unchanged unless it writes a `Node::Box` or a `Layout`
+as a struct literal: both have new fields, so such a literal needs `..` with a default (`Layout::default()`), or the
+builders (`Node::column`, `Node::row`, `.border(…)`, `.padding_sides(…)`). 1.5 adds:
+
+- `Dialog::Confirm` and `Dialog::Alert`, TS `dialog.confirm` and `dialog.alert`. A confirm runs its action with the
+  input `true` or `false`; an alert runs its action once it closes, however it closes.
+- On a `Node::Box`: `border(Border)` (sides, style, color, a title and its alignment), `padding_sides(Edges)`,
+  `flex_wrap()` and `overflow(Overflow::Hidden)`. On a `Layout`: `height`, `min_height`, `max_height` and
+  `margin(Edges)`. A border without a color is white, as TS draws it; name a token such as `border.base` to follow the
+  theme.
+- The composer: `Read::composer()` (its text, the cursor as a byte offset, and its focus) and
+  `Host::edit_composer(ComposerEdit::{Set, Insert, Submit})`, which go through the composer's own edit path.
 
 ## Moving from the 1.3 SDK to 1.4
 
