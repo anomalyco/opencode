@@ -1,6 +1,6 @@
 export * as PlanPlugin from "./plan.js"
 
-import { Message, ToolFailure, UserMessage } from "@opencode/ai/effect"
+import { Message, ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
 import type { SessionEvent } from "@opencode/schema/session-event"
@@ -63,8 +63,9 @@ export const Plugin = define({
       if (!text) return Effect.void
       const part = { ...Message.text(text), transient: true }
       const last = event.messages.at(-1)
+      // A spread keeps the stored metadata that later hooks read on this message; a new UserMessage would drop it.
       if (last?.role === "user")
-        event.messages[event.messages.length - 1] = new UserMessage({ ...last, content: [...last.content, part] })
+        event.messages[event.messages.length - 1] = { ...last, content: [...last.content, part] }
       else event.messages.push(Message.user([part]))
       return ctx.session
         .synthetic({ sessionID: event.sessionID, text, resume: false })

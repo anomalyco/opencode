@@ -112,7 +112,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
   return { persisted, contextHook, toolHook, files: Environment.makeFiles(driver), planAgent }
 })
 
-const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => ({
+const request = (agent: Agent.ID, messages: SessionContext["messages"]): SessionContext => ({
   sessionID,
   agent,
   model: { id: Model.ID.make("test-model"), providerID: Provider.ID.make("test") },
@@ -191,6 +191,21 @@ describe("plan plugin reminders", () => {
       expect(messages).toHaveLength(3)
       expect(messages[2]?.role).toBe("user")
       expect(messages[2]?.content).toEqual([{ ...Message.text(persisted[0]!), transient: true }])
+    }),
+  )
+
+  it.effect("keeps the stored metadata of the prompt a reminder is appended to", () =>
+    Effect.gen(function* () {
+      const { persisted, contextHook } = yield* run()
+      // Context hooks that run after this one read the stored message's metadata on the request message.
+      const messages = [{ ...Message.user("what agent are you?"), metadata: { source: "plugin" } }]
+      yield* contextHook(request(plan, messages))
+      expect(messages).toHaveLength(1)
+      expect(messages[0]?.metadata).toEqual({ source: "plugin" })
+      expect(messages[0]?.content).toEqual([
+        Message.text("what agent are you?"),
+        { ...Message.text(persisted[0]!), transient: true },
+      ])
     }),
   )
 

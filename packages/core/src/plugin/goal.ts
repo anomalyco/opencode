@@ -1,6 +1,6 @@
 export * as GoalPlugin from "./goal.js"
 
-import { isContextOverflowFailure, Message, UserMessage } from "@opencode/ai/effect"
+import { isContextOverflowFailure, Message } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionIdleBackground } from "@opencode/plugin/effect/session"
 import { Goal } from "@opencode/schema/goal"
@@ -226,8 +226,9 @@ export const Plugin = define({
           if (event.messages.some((message) => message.role === "user" && textOf(message).includes(objective))) return
           const part = { ...Message.text(render(REMINDER, { objective: escape(goal.objective) })), transient: true }
           const last = event.messages.at(-1)
+          // A spread keeps the stored metadata that later hooks read on this message; a new UserMessage would drop it.
           if (last?.role === "user")
-            event.messages[event.messages.length - 1] = new UserMessage({ ...last, content: [...last.content, part] })
+            event.messages[event.messages.length - 1] = { ...last, content: [...last.content, part] }
           else event.messages.push(Message.user([part]))
         }),
         Effect.catchCause((cause) => Effect.logWarning("failed to remind the model of the goal", { cause })),
